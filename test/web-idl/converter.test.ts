@@ -14,24 +14,24 @@ describe('Cached converters', () => {
   it('reuses converters and prepared conversions for the same type, binding, and realm', () => {
     const { first, second, binding } = fixture();
     const type = sequence(idlType.long);
-    const converter = binding.getConverter(type, second);
+    const converter = binding.getConverter(binding.assembly.getIDLType(type), second);
 
-    expect(binding.getConverter(type, second)).toBe(converter);
+    expect(binding.getConverter(binding.assembly.getIDLType(type), second)).toBe(converter);
     expect(converter.binding).toBe(binding);
     expect(converter.realm).toBe(second);
-    expect(binding.getConverter(type)).not.toBe(converter);
-    expect(binding.getConverter(type).realm).toBe(first);
-    expect(converter.declaredType).toBe(type);
-    expect(converter.resolvedType).toBe(binding.assembly.getConversionRules(type).resolvedType);
-    expect(binding.getConverter(type).resolvedType).toBe(converter.resolvedType);
+    expect(binding.getConverter(binding.assembly.getIDLType(type))).not.toBe(converter);
+    expect(binding.getConverter(binding.assembly.getIDLType(type)).realm).toBe(first);
+    expect(converter).not.toHaveProperty('declaredType');
+    expect(converter.type).toBe(binding.assembly.getIDLType(type));
+    expect(binding.getConverter(binding.assembly.getIDLType(type)).type).toBe(converter.type);
     const otherBinding = binding.world.getRealmBinding(second)!;
-    expect(otherBinding.getConverter(type).resolvedType).toBe(converter.resolvedType);
-    expect(otherBinding.getConverter(type).extendedAttributes).toBe(converter.extendedAttributes);
+    expect(otherBinding.getConverter(otherBinding.assembly.getIDLType(type)).type).toBe(converter.type);
+    expect(otherBinding.getConverter(otherBinding.assembly.getIDLType(type)).extendedAttributes).toBe(converter.extendedAttributes);
     expect(converter.getJSToIDLSteps()).toBe(converter.getJSToIDLSteps());
     expect(converter.getIDLToJSSteps()).toBe(converter.getIDLToJSSteps());
 
-    const element = converter.forType(idlType.long);
-    expect(element).toBe(binding.getConverter(idlType.long, second));
+    const element = converter.forType(binding.assembly.getIDLType(idlType.long));
+    expect(element).toBe(binding.getConverter(binding.assembly.getIDLType(idlType.long), second));
     expect(element.binding).toBe(binding);
     expect(element.realm).toBe(second);
   });
@@ -47,37 +47,35 @@ describe('Cached converters', () => {
     ]);
     clampWorld.register(realm, (ctx) => ({ realm: ctx.realm }));
     rangeWorld.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const clamp = clampWorld.getRealmBinding(realm)!.getConverter(type);
-    const range = rangeWorld.getRealmBinding(realm)!.getConverter(type);
+    const clamp = clampWorld.getRealmBinding(realm)!.getConverter(clampWorld.getRealmBinding(realm)!.assembly.getIDLType(type));
+    const range = rangeWorld.getRealmBinding(realm)!.getConverter(rangeWorld.getRealmBinding(realm)!.assembly.getIDLType(type));
 
     expect(clamp).not.toBe(range);
-    expect(clamp.integerMode).toBe('clamp');
-    expect(range.integerMode).toBe('enforce-range');
+    expect(clamp.type).toMatchObject({ kind: 'integer', integerMode: 'clamp' });
+    expect(range.type).toMatchObject({ kind: 'integer', integerMode: 'enforce-range' });
     expect(clamp.jsToIDL(300)).toBe(127);
     expect(() => range.jsToIDL(300)).toThrow(realm.intrinsics.typeError);
   });
 
   it('retains use-specific rules without changing the underlying descriptor', () => {
     const { binding } = fixture();
-    const plain = binding.getConverter(idlType.Uint8Array);
+    const plain = binding.getConverter(binding.assembly.getIDLType(idlType.Uint8Array));
     const type = annotated(idlType.Uint8Array, xattr('AllowShared', 'AllowResizable'));
-    const shared = binding.getConverter(type);
+    const shared = binding.getConverter(binding.assembly.getIDLType(type));
     expect(shared).not.toBe(plain);
-    expect(shared.declaredType).toBe(type);
-    expect(shared.resolvedType).toBe(idlType.Uint8Array);
-    expect(shared.allowShared).toBe(true);
-    expect(shared.allowResizable).toBe(true);
+    expect(shared.type).toBe(binding.assembly.getIDLType(type));
+    expect(shared.type).toMatchObject({ kind: 'buffer-source', name: 'Uint8Array' });
+    expect(shared.type).toMatchObject({ allowShared: true, allowResizable: true });
     expect(shared.extendedAttributes).toEqual([
       { kind: 'no-arguments', name: 'AllowShared' },
       { kind: 'no-arguments', name: 'AllowResizable' },
     ]);
-    expect(plain.allowShared).toBe(false);
-    expect(plain.allowResizable).toBe(false);
+    expect(plain.type).toMatchObject({ allowShared: false, allowResizable: false });
 
-    const string = binding.getConverter(annotated(idlType.DOMString, xattr('LegacyNullToEmptyString')));
-    expect(string.nullToEmptyString).toBe(true);
+    const string = binding.getConverter(binding.assembly.getIDLType(annotated(idlType.DOMString, xattr('LegacyNullToEmptyString'))));
+    expect(string.type).toMatchObject({ nullToEmptyString: true });
     expect(string.jsToIDL(null)).toBe('');
-    expect(string.forType(idlType.DOMString).jsToIDL(null)).toBe('null');
+    expect(string.forType(binding.assembly.getIDLType(idlType.DOMString)).jsToIDL(null)).toBe('null');
   });
 
   it('identifies legacy callback declarations without weakening ordinary conversion', () => {
@@ -89,13 +87,13 @@ describe('Cached converters', () => {
     world.register(realm, (ctx) => ({ realm: ctx.realm }));
     const binding = world.getRealmBinding(realm)!;
     const type = nullable(reference('Handler'));
-    const converter = binding.getConverter(type);
+    const converter = binding.getConverter(binding.assembly.getIDLType(type));
     const convert = converter.getJSToIDLSteps();
 
     expect(converter.legacyCallback).toBe(binding.assembly.callbackFunctions.get('Handler'));
-    expect(converter.legacyCallback).toBe(binding.getConverter(type).legacyCallback);
-    expect(binding.getConverter(reference('Handler')).legacyCallback).toBeNull();
-    expect(binding.getConverter(sequence(type)).legacyCallback).toBeNull();
+    expect(converter.legacyCallback).toBe(binding.getConverter(binding.assembly.getIDLType(type)).legacyCallback);
+    expect(binding.getConverter(binding.assembly.getIDLType(reference('Handler'))).legacyCallback).toBeNull();
+    expect(binding.getConverter(binding.assembly.getIDLType(sequence(type))).legacyCallback).toBeNull();
     expect(() => convert(5)).toThrow(realm.intrinsics.typeError);
     expect(() => convert({})).toThrow(realm.intrinsics.typeError);
     expect(() => converter.jsToIDL(5)).toThrow(realm.intrinsics.typeError);

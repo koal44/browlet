@@ -25,8 +25,9 @@ import their siblings directly.
 | `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL result descriptors |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
 | `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
-| `assembly.ts` | Compose the assembled collections and answer type queries across them |
-| `assembled.ts` | Construct assembled definitions and collections, with member searches and implementation-class lookup |
+| `assembly/assembly.ts` | Compose the assembled collections, assemble type uses, and answer type queries |
+| `assembly/types.ts` | Realm-independent type contracts with resolved definitions, nested types, and applicable conversion rules |
+| `assembly/assembled.ts` | Construct assembled definitions and collections, with member searches and implementation-class lookup |
 | `binding/world.ts` | Own definitions and identity across registered realms |
 | `binding/context.ts` | Expose boundary operations, resolve injected arguments, and supply typed implementation Promises |
 | `environment.ts` | Environment, realm-facility, and callback-lifecycle contracts supplied to Web IDL |
@@ -35,7 +36,7 @@ import their siblings directly.
 | `binding/register.ts` | Connect assembled declarations to implementation factories, members, and explicit bindings |
 | `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, captured-context restoration, and implementation-callable identity |
 | `binding/realm/overload.ts` | Select a callable and convert its arguments for invocation |
-| `converters/factory.ts` | Select the converter subclass for a declared type |
+| `converters/factory.ts` | Select the converter subclass for an assembled type |
 | `converters/converter.ts` | Base Converter, shared rules and ownership, defaults, and conversion error boundaries |
 | `converters/` | Type-specific Converter subclasses and IDL-to-implementation conversion |
 | `values/` | Runtime IDL dictionaries, callbacks, promises, and iterable/iterator state |
@@ -60,18 +61,25 @@ Promise constructor that uses its conversion operations. Platform records call
 bindings hold reusable machinery. `value.ts` describes plain records, sequences,
 maplike/setlike entries, and the relationship between descriptors and value types.
 Those containers need no additional wrapping.
-Shared assembly remains at the subsystem root; the factory lives with the converters it selects.
-Assembly owns realm-independent rules. Converter subclasses retain those rules,
-a binding, an allocation realm, and prepared input/output steps.
+`assembly/` owns the assembled definitions, compiled IDL types, and realm-independent
+rules shared by bindings and converters. Converter subclasses retain those rules,
+a binding, an allocation realm, and prepared input/output steps; their factory
+lives with the converters it selects.
+Runtime types distinguish `any`, `undefined`, `boolean`, `bigint`, `object`, and
+`symbol` directly. Each has its own converter; integer, floating-point, and string
+converters share their related algorithms and prepare fixed conversion choices
+once. Core's compact `simple` declaration syntax does not survive assembly.
 
-Consumers use the `converters/`, `values/`, and `binding/realm/` indexes;
+Consumers use the `assembly/`, `converters/`, `values/`, and `binding/realm/` indexes;
 modules within those folders import their siblings directly. Infra also offers
 an index, while direct foundation imports remain available for narrow consumers,
 including standalone Core.
 
-Group imports by dependency: Infra, JS Engine, Core, assembly and conversion
-foundations, then collaborating binding, converter, and value modules. Keep
-type-only owner references visible alongside the relevant module imports.
+Order imports from foundations upward: Infra, JS Engine, and Core share one
+block, followed by environment and assembly contracts, values, converters, and
+binding collaborators. Keep small import lists compact; a large group of sibling
+imports can have its own block. Keep type-only owner references alongside their
+related module imports.
 
 ## Declaring an interface
 
@@ -81,6 +89,14 @@ and their peers create definitions; `attr()`, `roAttr()`, `op()`, `ctor()`, and
 type helpers describe the boundary. `serializeDefinitions()` emits IDL syntax.
 `defineInterface()` produces a `PrimaryInterfaceDefinition`; its partials and
 included mixins are combined into an `AssembledInterface` during assembly.
+
+Assembly rejects unresolved types, duplicate primary names, orphan partials or
+includes, and inheritance or typedef cycles. Declaration mistakes are internal
+errors at construction, rather than deferred conversion failures. Forward
+references and recursive dictionary values remain valid; an unimplemented
+conversion for a recognized type is a separate runtime limitation.
+Composition must supply every referenced declaration, including type identities
+whose implementations are still pending.
 
 Automatic member binding calls implementation methods and accessors. A readonly
 attribute may also expose a stored implementation field. Use explicit bindings
@@ -234,7 +250,9 @@ output converter for implementation results without creating a separate IDL cont
 Concrete conversion descriptors retain known TypeScript results, such as a
 number for `idlType.long` or a `IDLPromise` for `promise(...)`. Named
 references and dynamically selected types still need the runtime assembly;
-their generic results remain `unknown`. `ctx.jsToImpl()` additionally uses
+their generic results remain `unknown` until the assembled category is known. A
+converter for an assembled dictionary returns `IDLDictionary`, for example.
+`ctx.jsToImpl()` additionally uses
 the descriptor's implementation payload type, after consuming intermediate IDL representations. That payload must not be used to type the intermediate IDL value.
 
 ## Registration and environment composition
@@ -317,34 +335,46 @@ inherited attribute lookups, and collection declarations on first use, including
 absent collection declarations. Collection contents remain per object.
 Their collections own implementation-class
 lookup, namespace membership, inheritance ordering, candidate-type searches,
-typedef expansion, and proxy recognition. Member types still contain symbolic
-references; `DefinitionAssembly` resolves them within that world. Resolved types,
-candidate lists, and comparison keys are cached per descriptor on first use.
-One lazy type analysis supplies candidate classifications, nullability, container
-element types, and the numeric type for integer defaults. JSON type checks retain completed
-answers separately, without retaining intermediate dictionary traversal results.
-These maps live with the assembly. Retain type descriptors in declarations or
-module constants instead of constructing them during invocation. The assembly
-also retains derived sequence types used by Promise aggregates and observable
-array assignment. Conversion still reads and converts each incoming value anew.
-`getCandidateTypes()` ignores annotations for overload selection;
-`getConversionCandidates()` preserves conversion attributes in their original order.
-Union conversion retains its category selections and referenced definitions on first
-use. Each annotated use of a type retains its own integer conversion mode and
-buffer/string rules. Nullable and union branches inherit enclosing annotations
-through descriptors prepared once; sequence elements, dictionary members, and other
-container contents keep their own declared types. Conversion does not merge or
-search attribute arrays per value. Assembly prepares `ConversionRules`, retained
-privately by each converter alongside its binding and allocation/error realm.
-Converters in different bindings and realms share the same rules object when they
-use the same assembly and descriptor. Forwarding getters expose the rules:
-`converter.declaredType` retains the original descriptor; `converter.resolvedType` exposes the type
-after resolving outer aliases and annotations. `binding.getConverter(type, realm)`
-selects and reuses a subclass for that binding, descriptor, and conversion realm, defaulting to
-`binding.realm` when the second argument is omitted. Shared converters and their type
-descriptors must remain unchanged after creation. Each realm binding owns a
-WeakMap keyed by conversion realm, whose maps retain converters by descriptor.
-This preserves sharing without keeping discarded conversion realms alive.
+typedef expansion, and proxy recognition. Assembly first indexes named definitions,
+then compiles their member, argument, and result types. This permits forward
+references and recursive dictionaries without retaining unresolved runtime types.
+The temporary construction work is discarded when assembly finishes.
+
+`WebIDLType` describes Core declaration syntax. `assembly.getIDLType(type)` is the
+input boundary that produces a cached `IDLType`. The two contracts are independent:
+an `IDLType` has no declaration generic or source descriptor. Names link directly
+to assembled interfaces, dictionaries, callbacks, enumerations, or proxies.
+Containers contain IDL element, key, or result types. Integer, string, and buffer
+types carry their applicable conversion rules; annotations and aliases are no
+longer runtime dispatch cases. Type inference preserves buffer and implementation
+payload types without retaining declaration syntax.
+
+Candidate lists and comparison keys are cached on first use. One lazy type
+analysis supplies candidate classifications, nullability, container element types,
+and the numeric type for integer defaults. JSON type checks retain completed
+answers without retaining intermediate dictionary traversal results. These maps
+live with the assembly. It also retains derived sequence descriptors used by
+Promise aggregates and observable array assignment.
+
+`getCandidateTypes()` supplies flattened assembled candidates with conversion
+attributes in their original order. Union conversion retains typed category
+selections, so a dictionary candidate already identifies its dictionary. Nullable
+and union branches inherit enclosing annotations during assembly; container
+contents keep their own annotations. Shared declarations are never mutated, and
+conversion does not merge or search attribute arrays per value.
+
+Each converter retains its `type`, binding, and allocation/error realm. Its
+specific IDL type is enforced by the subclass constructor. Converters in
+different bindings and realms share the same IDL type for the same source use
+in one assembly. `binding.getConverter(type, realm)` accepts only `IDLType`,
+retaining its result typing and any sequence-specific conversion methods. The
+realm defaults to `binding.realm`. Public `BindingContext` conversion methods
+and Promise result declarations compile incoming declaration syntax before
+entering this machinery. Shared converters and types remain unchanged after creation.
+Each realm binding owns a WeakMap keyed by conversion realm, whose maps retain
+converters by IDL type. This preserves sharing without keeping discarded
+conversion realms alive. Runtime values and their container representations are
+unchanged; assembling a type does not allocate a wrapper for each value.
 Prepared input/output steps live on the converter and retain no incoming values.
 Dictionary converters for different references share preparation by assembled
 dictionary, binding, and realm. Preparation remains lazy for recursive dictionaries.

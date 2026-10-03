@@ -42,7 +42,7 @@ export {
 export type {
   ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, StringifierMember, ArgumentDefinition,
   WebIDLType, AnnotatedType, AsyncSequenceType, NullableType, UnionType,
-  SimpleType, ReferenceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
+  SimpleType, StringType, ReferenceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposure, ExtendedAttribute, NamedArgumentsExtendedAttribute,

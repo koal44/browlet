@@ -1,10 +1,8 @@
 import { isObject } from '../../js-engine/index';
-
 import type { CallbackExceptionBehavior } from '../core/index';
 
-import type { AssembledCallbackFunction, AssembledCallbackInterface } from '../assembled';
 import type { WebIDLRealm } from '../environment';
-
+import type { AssembledCallbackFunction, AssembledCallbackInterface } from '../assembly/index';
 import type { CallbackBinding, StampedCallbackFunction } from '../binding/realm/callback';
 
 /** An author callback object with its declaration, realm, and captured callback context. */

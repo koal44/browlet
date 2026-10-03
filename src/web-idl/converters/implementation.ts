@@ -1,16 +1,17 @@
-import { endOfIteration, type AsyncIterator, type InternalPromise } from '../../infra/index';
+import {
+  endOfIteration, type AsyncIterator, type InternalPromise, type PromiseResultType,
+} from '../../infra/index';
+import type { CallbackExceptionBehavior, ImplementationClass } from '../core/index';
 
-import { implementationType, type WebIDLType, type CallbackExceptionBehavior, type ImplementationClass, type ReferenceType } from '../core/index';
-
-import type { AssembledCallable } from '../assembled';
-
-import type { BindingContext } from '../binding/context';
-import type { RealmBinding } from '../binding/realm';
-import { CallbackFunctionStamper, type StampedCallbackFunction, type CallbackInvoker } from '../binding/realm/callback';
-
+import type { IDLType, AssembledCallable } from '../assembly/index';
 import {
   IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary, IDLPromise, type IDLSequence,
 } from '../values/index';
+import type { BindingContext } from '../binding/context';
+import type { RealmBinding } from '../binding/realm';
+import {
+  CallbackFunctionStamper, type StampedCallbackFunction, type CallbackInvoker,
+} from '../binding/realm/callback';
 
 /** Prepare and perform IDL-to-implementation conversion using one realm's binding machinery. */
 export class ImplementationConverter {
@@ -40,20 +41,19 @@ export class ImplementationConverter {
   }
 
   /** Prepare conversion from a declared IDL value to the representation its implementation consumes. */
-  createConverter(type: WebIDLType, options: ImplConversionOptions): ImplConverter {
+  createConverter(type: IDLType, options: ImplConversionOptions): ImplConverter {
     const realmBinding = this.#binding;
     const assembly = realmBinding.assembly;
     if (options.callbackDictionary || options.implClasses?.length) {
       return (value, context) => this.idlToImpl(value, type, options, context);
     }
-    const resolved = assembly.getConversionRules(type).resolvedType;
-    if (resolved.kind === 'nullable') {
-      const convert = this.createConverter(resolved.type, options);
+    if (type.kind === 'nullable') {
+      const convert = this.createConverter(type.innerType, options);
       return (value, context, callbackThis) => value === null ? null : convert(value, context, callbackThis);
     }
     if (assembly.canPassToImpl(type)) return (value) => value;
-    if (resolved.kind === 'sequence') {
-      const convertElement = this.createConverter(resolved.type, {
+    if (type.kind === 'sequence') {
+      const convertElement = this.createConverter(type.elementType, {
         callbackExceptionBehavior: options.callbackExceptionBehavior,
       });
       const convert: ImplConverter<IDLSequence, IDLSequence> = (values, context) => {
@@ -65,44 +65,42 @@ export class ImplementationConverter {
       };
       return convert as ImplConverter;
     }
-    if (resolved.kind === 'reference') {
-      const callbackAssembled = assembly.callbackFunctions.get(resolved.name);
-      if (callbackAssembled) {
-        let resultConverter: ImplConverter | undefined;
-        // A callback can return its own type; prepare that converter only if invoked.
-        const convertResult: ImplConverter = !assembly.canPassToImpl(callbackAssembled.primary.returns)
+    if (type.kind === 'callback-function') {
+      const callbackAssembled = type.assembled;
+      let resultConverter: ImplConverter | undefined;
+      // A callback can return its own type; prepare that converter only if invoked.
+      const convertResult: ImplConverter = !assembly.canPassToImpl(callbackAssembled.returns)
           ? (value, context) => (resultConverter ??= this.createConverter(
-            callbackAssembled.primary.returns, {},
+            callbackAssembled.returns, {},
           ))(value, context)
           : (value) => value;
-        const convert: ImplConverter<IDLCallbackFunction, StampedCallbackFunction> = (value, context, callbackThis) =>
-          this.#bindCallbackFunction(
-            value, options.callbackExceptionBehavior, context, callbackThis,
-            realmBinding.callbacks.getInvoker(callbackAssembled, value.realm), convertResult,
-          );
+      const convert: ImplConverter<IDLCallbackFunction, StampedCallbackFunction> = (value, context, callbackThis) =>
+        this.#bindCallbackFunction(
+          value, options.callbackExceptionBehavior, context, callbackThis,
+          realmBinding.callbacks.getInvoker(callbackAssembled, value.realm), convertResult,
+        );
         // The declared callback converter is the sole producer at this boundary.
-        return convert as ImplConverter;
-      }
-      const assembled = assembly.dictionaries.get(resolved.name);
-      if (assembled) {
-        // Recursive dictionary declarations need the plan only when a value reaches this type.
-        let members: { name: string; convert: ImplConverter; }[] | undefined;
-        const convert: ImplConverter<IDLDictionary, Record<string, unknown>> = (value, context, callbackThis) => {
-          members ??= assembled.getMembersToConvert(assembly).map((member) => ({
-            name: member.name,
-            convert: this.createConverter(member.type, {
-              callbackExceptionBehavior: member.primary.callbackExceptionBehavior ?? options.callbackExceptionBehavior,
-            }),
-          }));
-          const { record } = value;
-          for (const member of members) {
-            if (!Object.hasOwn(record, member.name)) continue;
-            record[member.name] = member.convert(record[member.name], context, callbackThis);
-          }
-          return record;
-        };
-        return convert as ImplConverter;
-      }
+      return convert as ImplConverter;
+    }
+    if (type.kind === 'dictionary') {
+      const assembled = type.assembled;
+      // Recursive dictionary declarations need the plan only when a value reaches this type.
+      let members: { name: string; convert: ImplConverter; }[] | undefined;
+      const convert: ImplConverter<IDLDictionary, Record<string, unknown>> = (value, context, callbackThis) => {
+        members ??= assembled.getMembersToConvert(assembly).map((member) => ({
+          name: member.name,
+          convert: this.createConverter(member.type, {
+            callbackExceptionBehavior: member.primary.callbackExceptionBehavior ?? options.callbackExceptionBehavior,
+          }),
+        }));
+        const { record } = value;
+        for (const member of members) {
+          if (!Object.hasOwn(record, member.name)) continue;
+          record[member.name] = member.convert(record[member.name], context, callbackThis);
+        }
+        return record;
+      };
+      return convert as ImplConverter;
     }
     return (value, context, callbackThis) => this.idlToImpl(value, type,
       callbackThis === undefined ? options : { ...options, callbackThis: IDLCallbackFunction.is(value) ? callbackThis : undefined },
@@ -110,7 +108,7 @@ export class ImplementationConverter {
   }
 
   /** Convert IDL values for implementation use; author coercion and validation have already happened. */
-  idlToImpl(value: unknown, type: WebIDLType | undefined, options: ImplConversionOptions, context: BindingContext): unknown {
+  idlToImpl(value: unknown, type: IDLType | undefined, options: ImplConversionOptions, context: BindingContext): unknown {
     const realmBinding = this.#binding;
     if (options.callbackDictionary !== undefined) {
       const dictionaryType = options.callbackDictionary;
@@ -219,7 +217,7 @@ export class ImplementationConverter {
   #promiseToImpl<Result>(value: IDLPromise, convertValue: (value: unknown) => Result, P: typeof InternalPromise): InternalPromise<Result> {
     const converter = this.#binding.getConverter(value.type, value.realm);
     return P.fromNative(value.promise, (value) =>
-      convertValue(converter.jsToIDL(value)), implementationType<Result>(value.type));
+      convertValue(converter.jsToIDL(value)), value.type as IDLType & PromiseResultType<Result>);
   }
 
   /** Retain an implementation callable with the IDL callback's realm and invocation policy. */
@@ -236,7 +234,7 @@ export class ImplementationConverter {
 
     // The IDL callback retains its construction entry; this callable only binds invocation.
     const convert = convertResult ?? ((result: unknown, context: BindingContext) =>
-      this.idlToImpl(result, cbValue.assembled.primary.returns, {}, context));
+      this.idlToImpl(result, cbValue.assembled.returns, {}, context));
     const boundCallback = CallbackFunctionStamper.stamp(function callback(this: unknown, ...argumentsList: unknown[]) {
       const result = invoker.invoke(cbValue, argumentsList, exceptionBehavior, callbackThis ?? this);
       return convert(result, context);
@@ -252,7 +250,7 @@ type ImplConverter<Value = unknown, Result = unknown> = (
 ) => Result;
 
 type ImplConversionOptions = {
-  callbackDictionary?: ReferenceType;
+  callbackDictionary?: IDLType;
   callbackExceptionBehavior?: CallbackExceptionBehavior;
   callbackThis?: unknown;
   implClasses?: ImplementationClass[];

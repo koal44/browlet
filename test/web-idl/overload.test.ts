@@ -6,8 +6,9 @@ import {
   type Definition, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { AssembledCallable, AssembledOverloads } from '../../src/web-idl/assembled';
+import {
+  DefinitionAssembly, AssembledArgument, AssembledCallable, AssembledOverloads, type IDLOperation,
+} from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { createOverloadResolver, resolveOverload } from '../../src/web-idl/binding/realm/overload';
@@ -19,7 +20,7 @@ describe('Web IDL effective overload sets', () => {
       { name: 'label', type: idlType.DOMString },
       { name: 'mode', optional: true, default: 'default', type: idlType.DOMString },
       { name: 'values', type: idlType.double, variadic: true },
-    ]);
+    ], binding);
     const overloads = new AssembledOverloads([callable], binding.assembly);
     const resolve = mode === 'prepared'
       ? createOverloadResolver(overloads, binding)
@@ -37,7 +38,7 @@ describe('Web IDL effective overload sets', () => {
     const callable = operation([
       { name: 'values', optional: true, default: emptySequence, type: sequence(idlType.double) },
       { name: 'label', optional: true, type: idlType.DOMString },
-    ]);
+    ], binding);
     const resolve = createOverloadResolver(new AssembledOverloads([callable], binding.assembly), binding);
     const first = resolve([]).values;
     const values = first[0] as number[];
@@ -51,10 +52,10 @@ describe('Web IDL effective overload sets', () => {
   it('selects by value category and converts the selected arguments', () => {
     const options = defineDictionary({ name: 'Options', members: [] });
     const binding = createBinding([options]);
-    const string = namedOperation('string', idlType.DOMString);
-    const boolean = namedOperation('boolean', idlType.boolean);
-    const dictionary = namedOperation('dictionary', reference('Options'));
-    const sequence_ = namedOperation('sequence', sequence(idlType.long));
+    const string = namedOperation('string', idlType.DOMString, binding);
+    const boolean = namedOperation('boolean', idlType.boolean, binding);
+    const dictionary = namedOperation('dictionary', reference('Options'), binding);
+    const sequence_ = namedOperation('sequence', sequence(idlType.long), binding);
     const overloads = new AssembledOverloads([string, boolean, dictionary, sequence_], binding.assembly);
     const resolveArguments = (...values: unknown[]) =>
       resolveOverload(overloads, values, binding);
@@ -207,7 +208,7 @@ describe('Web IDL effective overload sets', () => {
       extendedAttributes: [{ kind: 'no-arguments', name: 'Clamp' }],
       name: 'value',
       type: idlType.byte,
-    }]);
+    }], binding);
 
     expect(resolve([callable], [300], binding)).toEqual({
       callable,
@@ -217,8 +218,8 @@ describe('Web IDL effective overload sets', () => {
 
   it('selects and converts a frozen-array overload for an iterable object', () => {
     const binding = createBinding([]);
-    const string = namedOperation('string', idlType.DOMString);
-    const frozen = namedOperation('frozen', frozenArray(idlType.long));
+    const string = namedOperation('string', idlType.DOMString, binding);
+    const frozen = namedOperation('frozen', frozenArray(idlType.long), binding);
     let iteratorGets = 0;
     const iterable = {
       get [Symbol.iterator]() {
@@ -243,8 +244,8 @@ describe('Web IDL effective overload sets', () => {
     ['frozen array', frozenArray(idlType.double)],
   ] as const)('realizes %s element conversion errors after overload selection', (_name, type) => {
     const binding = createBinding([]);
-    const string = namedOperation('string', idlType.DOMString);
-    const iterable = namedOperation('iterable', type);
+    const string = namedOperation('string', idlType.DOMString, binding);
+    const iterable = namedOperation('iterable', type, binding);
 
     expect(() => resolve([string, iterable], [[Symbol('element')]], binding))
       .toThrow(binding.realm.intrinsics.typeError);
@@ -272,8 +273,8 @@ describe('Web IDL effective overload sets', () => {
 
   it.fails('selects a symbol overload for a symbol value', () => {
     const binding = createBinding([]);
-    const symbol = namedOperation('symbol', idlType.symbol);
-    const string = namedOperation('string', idlType.DOMString);
+    const symbol = namedOperation('symbol', idlType.symbol, binding);
+    const string = namedOperation('string', idlType.DOMString, binding);
     const value = Symbol('value');
 
     // Web IDL declares symbol and DOMString distinguishable, but its overload
@@ -287,13 +288,13 @@ describe('Web IDL effective overload sets', () => {
   it('selects optional and platform-object overloads', () => {
     const nodeIDL = defineInterface({ name: 'Node', members: [] });
     const binding = createBinding([nodeIDL]);
-    const optional = new AssembledCallable({
+    const optional = assembleOperation({
       arguments: [{ name: 'value', optional: true, type: idlType.DOMString }],
       kind: 'operation',
       name: 'optional',
       returns: idlType.undefined,
-    } satisfies OperationMember);
-    const numeric = namedOperation('numeric', idlType.long);
+    } satisfies OperationMember, binding);
+    const numeric = namedOperation('numeric', idlType.long, binding);
 
     expect(resolve([optional, numeric], [undefined], binding)).toEqual({
       callable: optional,
@@ -306,8 +307,8 @@ describe('Web IDL effective overload sets', () => {
     if (!assembled) throw new Error('Missing Node interface');
     binding.initializePlatformObject(platformObject, assembled, implInst);
 
-    const node = namedOperation('node', reference('Node'));
-    const string = namedOperation('string', idlType.DOMString);
+    const node = namedOperation('node', reference('Node'), binding);
+    const string = namedOperation('string', idlType.DOMString, binding);
     const selected = resolve([node, string], [platformObject], binding);
     expect(selected.callable).toBe(node);
     expect(selected.values).toHaveLength(1);
@@ -318,7 +319,7 @@ describe('Web IDL effective overload sets', () => {
       is: (value) => value === hostObject,
       name: 'HostObject',
     })]);
-    const host = namedOperation('host', reference('HostObject'));
+    const host = namedOperation('host', reference('HostObject'), hostBinding);
     expect(resolve([host, string], [hostObject], hostBinding)).toEqual({
       callable: host,
       values: [hostObject],
@@ -327,7 +328,7 @@ describe('Web IDL effective overload sets', () => {
 
   it('fills omitted optional arguments after selecting the callable', () => {
     const binding = createBinding([]);
-    const callable = new AssembledCallable({
+    const callable = assembleOperation({
       arguments: [
         { default: false, name: 'enabled', optional: true, type: idlType.boolean },
         { name: 'label', optional: true, type: idlType.DOMString },
@@ -335,7 +336,7 @@ describe('Web IDL effective overload sets', () => {
       kind: 'operation',
       name: 'configure',
       returns: idlType.undefined,
-    } satisfies OperationMember);
+    } satisfies OperationMember, binding);
 
     expect(resolve([callable], [], binding)).toEqual({
       callable,
@@ -346,24 +347,34 @@ describe('Web IDL effective overload sets', () => {
 
 function operation(
   argumentsList: OperationMember['arguments'],
-): AssembledCallable<OperationMember> {
-  return new AssembledCallable({
+  binding: RealmBinding,
+): AssembledCallable<IDLOperation> {
+  return assembleOperation({
     arguments: argumentsList,
     kind: 'operation',
     name: 'f',
     returns: idlType.undefined,
-  });
+  }, binding);
 }
 
 function namedOperation(
   name: string,
   type: OperationMember['arguments'][number]['type'],
-): AssembledCallable<OperationMember> {
-  return new AssembledCallable({
+  binding: RealmBinding,
+): AssembledCallable<IDLOperation> {
+  return assembleOperation({
     arguments: [{ name: 'value', type }],
     kind: 'operation',
     name,
     returns: idlType.undefined,
+  }, binding);
+}
+
+function assembleOperation(member: OperationMember, binding: RealmBinding): AssembledCallable<IDLOperation> {
+  return new AssembledCallable({
+    ...member,
+    arguments: member.arguments.map((argument) => new AssembledArgument(argument, binding.assembly)),
+    returns: binding.assembly.getIDLType(member.returns),
   });
 }
 
@@ -378,7 +389,7 @@ function createBinding(
 }
 
 function resolve(
-  callables: AssembledCallable<OperationMember>[],
+  callables: AssembledCallable<IDLOperation>[],
   argumentsList: unknown[],
   binding: RealmBinding,
 ) {

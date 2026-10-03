@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
+
+import { getMemberBinding } from '../support/web-idl-binding';
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
@@ -214,10 +216,10 @@ describe('Web IDL initial objects', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new WidgetImpl();
-    interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
+    getMemberBinding(interfaceBinding, value).attributeSteps = {
       get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
     };
-    interfaceBinding.getOrCreateMemberBinding(factory).constructorBehavior = {
+    getMemberBinding(interfaceBinding, factory).constructorBehavior = {
       kind: 'initialize',
       steps: function(value) {
         Reflect.set(this, 'value', value);
@@ -277,10 +279,10 @@ describe('Web IDL initial objects', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new PartialWidgetImpl();
-    interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
+    getMemberBinding(interfaceBinding, value).attributeSteps = {
       get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
     };
-    interfaceBinding.getOrCreateMemberBinding(factory).constructorBehavior = {
+    getMemberBinding(interfaceBinding, factory).constructorBehavior = {
       kind: 'initialize',
       steps: function(value) {
         Reflect.set(this, 'value', value);
@@ -320,11 +322,11 @@ describe('Web IDL initial objects', () => {
       const assembled = binding.resolveInterface('Widget');
       const interfaceBinding = binding.getImplementationBinding(assembled);
       interfaceBinding.createImplementation = () => new WidgetImpl();
-      interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
+      getMemberBinding(interfaceBinding, value).attributeSteps = {
         get(receiver) { return Reflect.get(receiver!.implInst, 'value') as unknown; },
       };
       for (const factory of [numericFactory, stringFactory]) {
-        interfaceBinding.getOrCreateMemberBinding(factory).constructorBehavior = {
+        getMemberBinding(interfaceBinding, factory).constructorBehavior = {
           kind: 'initialize',
           steps: function(value) { Reflect.set(this, 'value', `${name}:${typeof value}:${String(value)}`); },
         };
@@ -438,10 +440,10 @@ describe('Web IDL initial objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getImplementationBinding(binding.resolveInterface(declaredIDL.name)).getOrCreateMemberBinding(stringifier).stringificationBehavior = function() {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(declaredIDL.name)), stringifier).stringificationBehavior = function() {
       return Reflect.get(this, 'text');
     };
-    binding.getImplementationBinding(binding.resolveInterface(attributedIDL.name)).getOrCreateMemberBinding(attribute).attributeSteps = {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(attributedIDL.name)), attribute).attributeSteps = {
       get(receiver) {
         return Reflect.get(receiver!.implInst, 'name') as unknown;
       },

@@ -1,9 +1,9 @@
+import { idlType } from './types';
 import { defineCallbackFunction, defineTypedef } from './declarations';
+import { annotated, arg, reference, union, xattr } from './helpers';
 import {
   domExceptionIDL, quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';
-import { annotated, arg, reference, union, xattr } from './helpers';
-import { idlType } from './types';
 
 /*
  * callback Function = any (any... arguments);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {

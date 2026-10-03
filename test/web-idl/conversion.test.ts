@@ -1,13 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import type { IDLType, IDLFloatType } from '../../src/web-idl/assembly/index';
 import type { Converter } from '../../src/web-idl/converters/converter';
 import type { IDLValue } from '../../src/web-idl/values/value';
-import type { WebIDLType } from '../../src/web-idl/core/index';
-import type { FrozenArrayConverter } from '../../src/web-idl/converters/sequence';
 import type { IDLDictionary } from '../../src/web-idl/values/dictionary';
-import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
   annotated, asyncSequence, decimal, defineCallbackFunction, defineDictionary, defineEnumeration, defineProxyObject,
   defineInterface, definePartialDictionary, defineTypedef, emptyDictionary, emptySequence, frozenArray,
@@ -15,10 +12,10 @@ import {
   sequence, union, xattr, type Definition,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
-import { RealmBinding } from '../../src/web-idl/binding/realm';
+import type { RealmBinding } from '../../src/web-idl/binding/realm';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (mode) => {
-  const jsToIDL = <Type extends WebIDLType>(value: unknown, converter: Converter<Type>): IDLValue<Type> =>
+  const jsToIDL = <Type extends IDLType>(value: unknown, converter: Converter<Type>): IDLValue<Type> =>
     mode === 'direct' ? converter.jsToIDL(value) : converter.getJSToIDLSteps()(value);
   const idlToJS = (value: unknown, converter: Converter): unknown =>
     mode === 'direct' ? converter.idlToJS(value) : converter.getIDLToJSSteps()(value);
@@ -34,13 +31,13 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     ]);
     const object = {};
     for (const type of [nullable(reference('Handler')), reference('OptionalHandler')]) {
-      const converter = binding.getConverter(type);
+      const converter = binding.getConverter(binding.assembly.getIDLType(type));
       expectRealmTypeError(() => jsToIDL(1, converter), realm);
       expectRealmTypeError(() => jsToIDL(object, converter), realm);
       expect(jsToIDL(null, converter)).toBeNull();
     }
 
-    const nonnullable = binding.getConverter(reference('HandlerAlias'));
+    const nonnullable = binding.getConverter(binding.assembly.getIDLType(reference('HandlerAlias')));
     expectRealmTypeError(() => jsToIDL(object, nonnullable), realm);
   });
 
@@ -55,7 +52,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       { type: record(idlType.DOMString, callback), value: { handler: {} } },
     ];
     for (const { type, value } of cases) {
-      const converter = binding.getConverter(type);
+      const converter = binding.getConverter(binding.assembly.getIDLType(type));
       expectRealmTypeError(() => jsToIDL(value, converter), realm);
     }
   });
@@ -69,11 +66,11 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const { binding, realm } = createBinding([definition]);
     const type = reference('HostObject');
 
-    expect(jsToIDL(object, binding.getConverter(type))).toBe(object);
-    expect(idlToJS(object, binding.getConverter(type))).toBe(object);
-    expect(jsToIDL(object, binding.getConverter(union(type, idlType.DOMString)))).toBe(object);
+    expect(jsToIDL(object, binding.getConverter(binding.assembly.getIDLType(type)))).toBe(object);
+    expect(idlToJS(object, binding.getConverter(binding.assembly.getIDLType(type)))).toBe(object);
+    expect(jsToIDL(object, binding.getConverter(binding.assembly.getIDLType(union(type, idlType.DOMString))))).toBe(object);
     expectRealmTypeError(
-      () => jsToIDL({}, binding.getConverter(type)),
+      () => jsToIDL({}, binding.getConverter(binding.assembly.getIDLType(type))),
       realm,
     );
   });
@@ -85,31 +82,119 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       kind: 'no-arguments', name: 'EnforceRange',
     } as const;
 
-    expect(jsToIDL(257, binding.getConverter(idlType.byte))).toBe(1);
-    expect(jsToIDL(-1, binding.getConverter(idlType.octet))).toBe(255);
-    expect(jsToIDL(Infinity, binding.getConverter(idlType.long))).toBe(0);
-    expect(jsToIDL(2.5, binding.getConverter(annotated(idlType.byte, xattr(clamp)))))
+    expect(jsToIDL(257, binding.getConverter(binding.assembly.getIDLType(idlType.byte)))).toBe(1);
+    expect(jsToIDL(-1, binding.getConverter(binding.assembly.getIDLType(idlType.octet)))).toBe(255);
+    expect(jsToIDL(Infinity, binding.getConverter(binding.assembly.getIDLType(idlType.long)))).toBe(0);
+    expect(jsToIDL(2.5, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.byte, xattr(clamp))))))
       .toBe(2);
-    expect(jsToIDL(3.5, binding.getConverter(annotated(idlType.byte, xattr(clamp)))))
+    expect(jsToIDL(3.5, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.byte, xattr(clamp))))))
       .toBe(4);
-    expect(jsToIDL(NaN, binding.getConverter(annotated(idlType.byte, xattr(clamp)))))
+    expect(jsToIDL(NaN, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.byte, xattr(clamp))))))
       .toBe(0);
     expectRealmTypeError(
-      () => jsToIDL(128, binding.getConverter(annotated(idlType.byte, xattr(enforceRange)))),
+      () => jsToIDL(128, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.byte, xattr(enforceRange))))),
       realm,
     );
 
-    expect(jsToIDL(1.337, binding.getConverter(idlType.float))).toBe(Math.fround(1.337));
+    expect(jsToIDL(1.337, binding.getConverter(binding.assembly.getIDLType(idlType.float)))).toBe(Math.fround(1.337));
     expectRealmTypeError(
-      () => jsToIDL(Infinity, binding.getConverter(idlType.double)),
+      () => jsToIDL(Infinity, binding.getConverter(binding.assembly.getIDLType(idlType.double))),
       realm,
     );
-    expect(jsToIDL(true, binding.getConverter(idlType.bigint))).toBe(1n);
-    expect(jsToIDL('10', binding.getConverter(idlType.bigint))).toBe(10n);
+    expect(jsToIDL(true, binding.getConverter(binding.assembly.getIDLType(idlType.bigint)))).toBe(1n);
+    expect(jsToIDL('10', binding.getConverter(binding.assembly.getIDLType(idlType.bigint)))).toBe(10n);
     expectRealmTypeError(
-      () => jsToIDL({ valueOf: () => 1 }, binding.getConverter(idlType.bigint)),
+      () => jsToIDL({ valueOf: () => 1 }, binding.getConverter(binding.assembly.getIDLType(idlType.bigint))),
       realm,
     );
+  });
+
+  it('preserves integer bounds, non-finite handling, and rounding across prepared modes', () => {
+    const { binding, realm } = createBinding();
+    const cases = [
+      [idlType.byte, -128, 127],
+      [idlType.octet, 0, 255],
+      [idlType.short, -32768, 32767],
+      [idlType.unsignedShort, 0, 65535],
+      [idlType.long, -2147483648, 2147483647],
+      [idlType.unsignedLong, 0, 4294967295],
+      [idlType.longLong, -9007199254740991, 9007199254740991],
+      [idlType.unsignedLongLong, 0, 9007199254740991],
+    ] as const;
+
+    for (const [type, minimum, maximum] of cases) {
+      const wrap = binding.getConverter(binding.assembly.getIDLType(type));
+      const clamp = binding.getConverter(binding.assembly.getIDLType(annotated(type, xattr('Clamp'))));
+      const enforce = binding.getConverter(binding.assembly.getIDLType(annotated(type, xattr('EnforceRange'))));
+      for (const converter of [wrap, clamp, enforce]) {
+        expect(jsToIDL(minimum, converter)).toBe(minimum);
+        expect(jsToIDL(maximum, converter)).toBe(maximum);
+        expect(jsToIDL(-0, converter)).toBe(0);
+        expectRealmTypeError(() => jsToIDL(Symbol('number'), converter), realm);
+        let coercions = 0;
+        expect(jsToIDL({ valueOf() { coercions++; return 2.5; } }, converter)).toBe(2);
+        expect(coercions).toBe(1);
+      }
+      for (const value of [NaN, Infinity, -Infinity]) {
+        expect(jsToIDL(value, wrap)).toBe(0);
+        expectRealmTypeError(() => jsToIDL(value, enforce), realm);
+      }
+      expect(jsToIDL(NaN, clamp)).toBe(0);
+      expect(jsToIDL(-Infinity, clamp)).toBe(minimum);
+      expect(jsToIDL(Infinity, clamp)).toBe(maximum);
+      expect(jsToIDL(minimum - 1, clamp)).toBe(minimum);
+      expect(jsToIDL(maximum + 1, clamp)).toBe(maximum);
+      expect(jsToIDL(3.5, clamp)).toBe(4);
+      expect(jsToIDL(-0.5, clamp)).toBe(0);
+      expectRealmTypeError(() => jsToIDL(minimum - 1, enforce), realm);
+      expectRealmTypeError(() => jsToIDL(maximum + 1, enforce), realm);
+    }
+  });
+
+  it('preserves floating-point restrictions, rounding, and negative zero', () => {
+    const { binding, realm } = createBinding();
+    const float = binding.getConverter(binding.assembly.builtinTypes.float);
+    const unrestrictedFloat = binding.getConverter(binding.assembly.builtinTypes.unrestrictedFloat);
+    const double = binding.getConverter(binding.assembly.builtinTypes.double);
+    const unrestrictedDouble = binding.getConverter(binding.assembly.builtinTypes.unrestrictedDouble);
+
+    const converters: Converter<IDLFloatType>[] = [float, unrestrictedFloat, double, unrestrictedDouble];
+    for (const converter of converters) {
+      expect(jsToIDL(-0, converter)).toBe(-0);
+      expectRealmTypeError(() => jsToIDL(1n, converter), realm);
+    }
+    for (const value of [NaN, Infinity, -Infinity]) {
+      expectRealmTypeError(() => jsToIDL(value, float), realm);
+      expectRealmTypeError(() => jsToIDL(value, double), realm);
+      expect(jsToIDL(value, unrestrictedFloat)).toBe(value);
+      expect(jsToIDL(value, unrestrictedDouble)).toBe(value);
+    }
+    expectRealmTypeError(() => jsToIDL(Number.MAX_VALUE, float), realm);
+    expect(jsToIDL(Number.MAX_VALUE, unrestrictedFloat)).toBe(Infinity);
+    expect(jsToIDL(Number.MAX_VALUE, double)).toBe(Number.MAX_VALUE);
+    expect(jsToIDL(1.337, unrestrictedFloat)).toBe(Math.fround(1.337));
+    expect(jsToIDL(1.337, unrestrictedDouble)).toBe(1.337);
+  });
+
+  it('keeps identity and validation distinct for any, undefined, boolean, object, and symbol', () => {
+    const { binding, realm } = createBinding();
+    const types = binding.assembly.builtinTypes;
+    const object = { valueOf() { throw new Error('Must not coerce'); } };
+    const callable = () => {};
+    const symbol = Symbol('value');
+    for (const value of [object, callable, symbol, null, undefined, 1n]) {
+      expect(jsToIDL(value, binding.getConverter(types.any))).toBe(value);
+      expect(jsToIDL(value, binding.getConverter(types.undefined))).toBeUndefined();
+      expect(idlToJS(value, binding.getConverter(types.undefined))).toBeUndefined();
+    }
+    expect(jsToIDL(object, binding.getConverter(types.boolean))).toBe(true);
+    expect(jsToIDL(0, binding.getConverter(types.boolean))).toBe(false);
+    expect(jsToIDL(object, binding.getConverter(types.object))).toBe(object);
+    expect(jsToIDL(callable, binding.getConverter(types.object))).toBe(callable);
+    expect(jsToIDL(symbol, binding.getConverter(types.symbol))).toBe(symbol);
+    expectRealmTypeError(() => jsToIDL(null, binding.getConverter(types.object)), realm);
+    expectRealmTypeError(() => jsToIDL(symbol, binding.getConverter(types.object)), realm);
+    expectRealmTypeError(() => jsToIDL(Object(symbol), binding.getConverter(types.symbol)), realm);
   });
 
   it('applies each conversion\'s attributes when a union descriptor is reused', () => {
@@ -118,10 +203,10 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const clamped = annotated(type, xattr('Clamp'));
     const enforced = annotated(type, xattr('EnforceRange'));
 
-    expect(jsToIDL(300, binding.getConverter(clamped))).toBe(127);
-    expectRealmTypeError(() => jsToIDL(300, binding.getConverter(enforced)), realm);
-    expect(jsToIDL(300, binding.getConverter(type))).toBe(44);
-    expect(jsToIDL(300, binding.getConverter(clamped))).toBe(127);
+    expect(jsToIDL(300, binding.getConverter(binding.assembly.getIDLType(clamped)))).toBe(127);
+    expectRealmTypeError(() => jsToIDL(300, binding.getConverter(binding.assembly.getIDLType(enforced))), realm);
+    expect(jsToIDL(300, binding.getConverter(binding.assembly.getIDLType(type)))).toBe(44);
+    expect(jsToIDL(300, binding.getConverter(binding.assembly.getIDLType(clamped)))).toBe(127);
   });
 
   it('keeps annotation rules scoped to each use of a nullable alias', () => {
@@ -135,11 +220,11 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     ]);
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect(jsToIDL(300, clamped.binding.getConverter(type, clamped.realm))).toBe(127);
-      expectRealmTypeError(() => jsToIDL(300, enforced.binding.getConverter(type, enforced.realm)), enforced.realm);
-      expect(jsToIDL(300, clamped.binding.getConverter(member, clamped.realm))).toBe(44);
-      expect(jsToIDL(null, clamped.binding.getConverter(type, clamped.realm))).toBeNull();
-      expect(jsToIDL(true, clamped.binding.getConverter(type, clamped.realm))).toBe(true);
+      expect(jsToIDL(300, clamped.binding.getConverter(clamped.binding.assembly.getIDLType(type), clamped.realm))).toBe(127);
+      expectRealmTypeError(() => jsToIDL(300, enforced.binding.getConverter(enforced.binding.assembly.getIDLType(type), enforced.realm)), enforced.realm);
+      expect(jsToIDL(300, clamped.binding.getConverter(clamped.binding.assembly.getIDLType(member), clamped.realm))).toBe(44);
+      expect(jsToIDL(null, clamped.binding.getConverter(clamped.binding.assembly.getIDLType(type), clamped.realm))).toBeNull();
+      expect(jsToIDL(true, clamped.binding.getConverter(clamped.binding.assembly.getIDLType(type), clamped.realm))).toBe(true);
     }
   });
 
@@ -148,9 +233,9 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const sequences = annotated(nullable(union(sequence(idlType.byte), idlType.boolean)), xattr('Clamp'));
     const records = annotated(record(idlType.DOMString, idlType.byte), xattr('Clamp'));
 
-    expect(jsToIDL([300], binding.getConverter(sequences))).toEqual([44]);
-    expect(jsToIDL({ value: 300 }, binding.getConverter(records))).toEqual(new Map([['value', 44]]));
-    expect(jsToIDL([300], binding.getConverter(sequence(annotated(idlType.byte, xattr('Clamp')))))).toEqual([127]);
+    expect(jsToIDL([300], binding.getConverter(binding.assembly.getIDLType(sequences)))).toEqual([44]);
+    expect(jsToIDL({ value: 300 }, binding.getConverter(binding.assembly.getIDLType(records)))).toEqual(new Map([['value', 44]]));
+    expect(jsToIDL([300], binding.getConverter(binding.assembly.getIDLType(sequence(annotated(idlType.byte, xattr('Clamp'))))))).toEqual([127]);
   });
 
   it('converts strings and enumerations with their distinct failure rules', () => {
@@ -163,21 +248,21 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       kind: 'no-arguments', name: 'LegacyNullToEmptyString',
     } as const;
 
-    expect(jsToIDL(null, binding.getConverter(idlType.DOMString))).toBe('null');
-    expect(jsToIDL(null, binding.getConverter(annotated(idlType.DOMString, xattr(legacyNull))))).toBe('');
-    expect(jsToIDL(null, binding.getConverter(annotated(idlType.USVString, xattr(legacyNull))))).toBe('');
-    expect(jsToIDL('\uD800', binding.getConverter(idlType.USVString))).toBe('\uFFFD');
-    expect(jsToIDL('first', binding.getConverter(reference('Choice')))).toBe('first');
+    expect(jsToIDL(null, binding.getConverter(binding.assembly.getIDLType(idlType.DOMString)))).toBe('null');
+    expect(jsToIDL(null, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.DOMString, xattr(legacyNull)))))).toBe('');
+    expect(jsToIDL(null, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.USVString, xattr(legacyNull)))))).toBe('');
+    expect(jsToIDL('\uD800', binding.getConverter(binding.assembly.getIDLType(idlType.USVString)))).toBe('\uFFFD');
+    expect(jsToIDL('first', binding.getConverter(binding.assembly.getIDLType(reference('Choice'))))).toBe('first');
     expectRealmTypeError(
-      () => jsToIDL(Symbol('value'), binding.getConverter(idlType.DOMString)),
+      () => jsToIDL(Symbol('value'), binding.getConverter(binding.assembly.getIDLType(idlType.DOMString))),
       realm,
     );
     expectRealmTypeError(
-      () => jsToIDL('😞', binding.getConverter(idlType.ByteString)),
+      () => jsToIDL('😞', binding.getConverter(binding.assembly.getIDLType(idlType.ByteString))),
       realm,
     );
     expectRealmTypeError(
-      () => jsToIDL('third', binding.getConverter(reference('Choice'))),
+      () => jsToIDL('third', binding.getConverter(binding.assembly.getIDLType(reference('Choice')))),
       realm,
     );
   });
@@ -194,13 +279,13 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     ]) {
       let caught: unknown;
       try {
-        jsToIDL(value, binding.getConverter(type));
+        jsToIDL(value, binding.getConverter(binding.assembly.getIDLType(type)));
       } catch (error) {
         caught = error;
       }
       expect(caught).toBe(authorError);
       expectRealmTypeError(
-        () => jsToIDL({ [Symbol.toPrimitive]: () => ({}) }, binding.getConverter(type)),
+        () => jsToIDL({ [Symbol.toPrimitive]: () => ({}) }, binding.getConverter(binding.assembly.getIDLType(type))),
         realm,
       );
     }
@@ -209,7 +294,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
   it('realizes record key and value failures in the conversion realm', () => {
     const { binding } = createBinding();
     const realm = new Realm();
-    const converter = binding.getConverter(record(idlType.DOMString, idlType.double), realm);
+    const converter = binding.getConverter(binding.assembly.getIDLType(record(idlType.DOMString, idlType.double)), realm);
 
     expectRealmTypeError(() => jsToIDL({ [Symbol('key')]: 1 }, converter), realm);
     expectRealmTypeError(() => jsToIDL({ value: Symbol('value') }, converter), realm);
@@ -225,22 +310,22 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
 
     for (let i = 0; i < 2; i++) {
       text = '';
-      expect(jsToIDL(value, first.binding.getConverter(type, first.realm))).toBe('');
+      expect(jsToIDL(value, first.binding.getConverter(first.binding.assembly.getIDLType(type), first.realm))).toBe('');
       text = '__proto__';
-      expect(jsToIDL(value, first.binding.getConverter(type, first.realm))).toBe('__proto__');
-      expectRealmTypeError(() => jsToIDL(value, second.binding.getConverter(type, second.realm)), second.realm);
+      expect(jsToIDL(value, first.binding.getConverter(first.binding.assembly.getIDLType(type), first.realm))).toBe('__proto__');
+      expectRealmTypeError(() => jsToIDL(value, second.binding.getConverter(second.binding.assembly.getIDLType(type), second.realm)), second.realm);
       text = 'constructor';
-      expect(jsToIDL(value, second.binding.getConverter(type, second.realm))).toBe('constructor');
-      expectRealmTypeError(() => jsToIDL(value, first.binding.getConverter(type, first.realm)), first.realm);
-      expect(jsToIDL(12, first.binding.getConverter(type, first.realm))).toBe(12);
-      expect(jsToIDL(12, second.binding.getConverter(type, second.realm))).toBe(12);
+      expect(jsToIDL(value, second.binding.getConverter(second.binding.assembly.getIDLType(type), second.realm))).toBe('constructor');
+      expectRealmTypeError(() => jsToIDL(value, first.binding.getConverter(first.binding.assembly.getIDLType(type), first.realm)), first.realm);
+      expect(jsToIDL(12, first.binding.getConverter(first.binding.assembly.getIDLType(type), first.realm))).toBe(12);
+      expect(jsToIDL(12, second.binding.getConverter(second.binding.assembly.getIDLType(type), second.realm))).toBe(12);
     }
     expect(conversions).toBe(10);
   });
 
   it('realizes BigInt syntax failures without replacing author SyntaxErrors', () => {
     const { binding, realm } = createBinding();
-    expect(() => jsToIDL('not an integer', binding.getConverter(idlType.bigint)))
+    expect(() => jsToIDL('not an integer', binding.getConverter(binding.assembly.getIDLType(idlType.bigint))))
       .toThrow(realm.intrinsics.syntaxError);
 
     const authorError = new SyntaxError('author conversion');
@@ -248,7 +333,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     try {
       jsToIDL({
         [Symbol.toPrimitive]() { throw authorError; },
-      }, binding.getConverter(idlType.bigint));
+      }, binding.getConverter(binding.assembly.getIDLType(idlType.bigint)));
     } catch (error) {
       caught = error;
     }
@@ -285,14 +370,14 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const input = Object.create(null) as Record<string, unknown>;
     Object.defineProperties(input, source);
 
-    const dictionary = jsToIDL(input, binding.getConverter(reference('Options'))) as IDLDictionary;
+    const dictionary = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(reference('Options')))) as IDLDictionary;
 
     expect(reads).toEqual(['a', 'z', 'b', 'y']);
     expect(Object.entries(dictionary.record)).toEqual([
       ['a', 1], ['z', 2], ['b', true], ['y', 4],
     ]);
 
-    const output = idlToJS(dictionary, binding.getConverter(reference('Options'))) as Record<string, unknown>;
+    const output = idlToJS(dictionary, binding.getConverter(binding.assembly.getIDLType(reference('Options')))) as Record<string, unknown>;
     expect(Object.getPrototypeOf(output)).toBe(binding.realm.intrinsics.objectPrototype);
     expect(output).toMatchObject({ a: 1, b: true, y: 4, z: 2 });
   });
@@ -307,12 +392,12 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     });
     const { binding, realm } = createBinding([options]);
 
-    const dictionary = jsToIDL({ name: 'example' }, binding.getConverter(reference('Options'))) as IDLDictionary;
+    const dictionary = jsToIDL({ name: 'example' }, binding.getConverter(binding.assembly.getIDLType(reference('Options')))) as IDLDictionary;
     expect(Object.entries(dictionary.record)).toEqual([
       ['enabled', false], ['name', 'example'],
     ]);
     expectRealmTypeError(
-      () => jsToIDL(undefined, binding.getConverter(reference('Options'))),
+      () => jsToIDL(undefined, binding.getConverter(binding.assembly.getIDLType(reference('Options')))),
       realm,
     );
   });
@@ -343,12 +428,12 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     let reads = 0;
     const input = { get value() { reads++; return value; }, wrapped: 300 };
 
-    const first = jsToIDL(input, binding.getConverter(type)) as IDLDictionary;
+    const first = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(type))) as IDLDictionary;
     expect(Object.entries(first.record)).toEqual([['value', 127], ['items', []], ['wrapped', 44]]);
-    expect(idlToJS(first, binding.getConverter(type))).toEqual({ value: 127, items: [], wrapped: 44 });
+    expect(idlToJS(first, binding.getConverter(binding.assembly.getIDLType(type)))).toEqual({ value: 127, items: [], wrapped: 44 });
 
     value = 3.5;
-    const second = jsToIDL(input, binding.getConverter(type)) as IDLDictionary;
+    const second = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(type))) as IDLDictionary;
     expect(Object.entries(second.record)).toEqual([['value', 4], ['items', []], ['wrapped', 44]]);
     expect(reads).toBe(2);
     expect(second.record.items).not.toBe(first.record.items);
@@ -369,7 +454,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     });
     const { binding } = createBinding([options]);
 
-    expect(jsToIDL(undefined, binding.getConverter(reference('Options')))).toMatchObject({ record: { integer: 9007199254740993n, single: Math.fround(1.337) } });
+    expect(jsToIDL(undefined, binding.getConverter(binding.assembly.getIDLType(reference('Options'))))).toMatchObject({ record: { integer: 9007199254740993n, single: Math.fround(1.337) } });
   });
 
   it('reads dictionary proxies once per member and preserves present undefined defaults', () => {
@@ -398,9 +483,9 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       ownKeys() { throw new Error('Dictionary conversion must not enumerate its input'); },
     });
 
-    const converted = jsToIDL(input, binding.getConverter(type));
+    const converted = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(type)));
     expect(steps).toEqual(['get a', 'convert a', 'get b', 'get c', 'get d']);
-    const result = idlToJS(converted, binding.getConverter(type));
+    const result = idlToJS(converted, binding.getConverter(binding.assembly.getIDLType(type)));
     expect(result).toEqual({ a: 3, b: undefined, d: 7 });
     expect(Object.getPrototypeOf(result)).toBe(binding.realm.intrinsics.objectPrototype);
     expect(Object.hasOwn(result as object, 'b')).toBe(true);
@@ -408,7 +493,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
 
     steps.length = 0;
     fail = true;
-    expect(() => jsToIDL(input, binding.getConverter(type))).toThrow(failure);
+    expect(() => jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(type)))).toThrow(failure);
     expect(steps).toEqual(['get a', 'convert a']);
   });
 
@@ -429,17 +514,17 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const { binding } = createBinding([options, holder]);
     let current = 3;
     const input = { child: { get value() { return current; } } };
-    const first = jsToIDL(input, binding.getConverter(node)) as IDLDictionary;
+    const first = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(node))) as IDLDictionary;
     current = 7;
-    const second = jsToIDL(input, binding.getConverter(node)) as IDLDictionary;
+    const second = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(node))) as IDLDictionary;
     expect((first.record.child as IDLDictionary).record.value).toBe(3);
     expect((second.record.child as IDLDictionary).record.value).toBe(7);
     expect(second.record.items).not.toBe(first.record.items);
     expect(second.record.items).not.toBe((second.record.child as IDLDictionary).record.items);
 
     const defaults = reference(holder.name);
-    const a = (jsToIDL({}, binding.getConverter(defaults)) as IDLDictionary).record.options as IDLDictionary;
-    const b = (jsToIDL({}, binding.getConverter(defaults)) as IDLDictionary).record.options as IDLDictionary;
+    const a = (jsToIDL({}, binding.getConverter(binding.assembly.getIDLType(defaults))) as IDLDictionary).record.options as IDLDictionary;
+    const b = (jsToIDL({}, binding.getConverter(binding.assembly.getIDLType(defaults))) as IDLDictionary).record.options as IDLDictionary;
     (a.record.items as unknown[]).push(1);
     expect(b.record.items).toEqual([]);
     expect(b).not.toBe(a);
@@ -452,9 +537,9 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const { binding, realm } = createBinding([options]);
     const other = new Realm();
     const type = reference(options.name);
-    expect(jsToIDL({ value: 3 }, binding.getConverter(type))).toMatchObject({ record: { value: 3 } });
-    expectRealmTypeError(() => jsToIDL({ value: Infinity }, binding.getConverter(type, other)), other);
-    expectRealmTypeError(() => jsToIDL({ value: Infinity }, binding.getConverter(type)), realm);
+    expect(jsToIDL({ value: 3 }, binding.getConverter(binding.assembly.getIDLType(type)))).toMatchObject({ record: { value: 3 } });
+    expectRealmTypeError(() => jsToIDL({ value: Infinity }, binding.getConverter(binding.assembly.getIDLType(type), other)), other);
+    expectRealmTypeError(() => jsToIDL({ value: Infinity }, binding.getConverter(binding.assembly.getIDLType(type))), realm);
   });
 
   it('copies sequences and records without losing observable ordering', () => {
@@ -470,20 +555,20 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       },
     };
 
-    const idlSequence = jsToIDL(iterable, binding.getConverter(sequence(idlType.long)));
+    const idlSequence = jsToIDL(iterable, binding.getConverter(binding.assembly.getIDLType(sequence(idlType.long))));
     expect(idlSequence).toEqual([1, 2]);
     expect(iteratorGets).toBe(1);
 
-    const jsSequence = idlToJS(idlSequence, binding.getConverter(sequence(idlType.long)));
+    const jsSequence = idlToJS(idlSequence, binding.getConverter(binding.assembly.getIDLType(sequence(idlType.long))));
     expect(jsSequence).toEqual([1, 2]);
     expect(jsSequence).toBeInstanceOf(realm.intrinsics.array);
     expect(jsSequence).not.toBe(idlSequence);
 
     const input = { d: '5', c: 6 };
-    const idlRecord = jsToIDL(input, binding.getConverter(record(idlType.DOMString, idlType.double)));
+    const idlRecord = jsToIDL(input, binding.getConverter(binding.assembly.getIDLType(record(idlType.DOMString, idlType.double))));
     expect([...idlRecord]).toEqual([['d', 5], ['c', 6]]);
 
-    const jsRecord = idlToJS(idlRecord, binding.getConverter(record(idlType.DOMString, idlType.double))) as Record<string, unknown>;
+    const jsRecord = idlToJS(idlRecord, binding.getConverter(binding.assembly.getIDLType(record(idlType.DOMString, idlType.double)))) as Record<string, unknown>;
     expect(Object.keys(jsRecord)).toEqual(['d', 'c']);
     expect(Object.getPrototypeOf(jsRecord)).toBe(realm.intrinsics.objectPrototype);
   });
@@ -501,22 +586,23 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       },
     };
 
-    const value = jsToIDL(source, binding.getConverter(frozenArray(idlType.long)));
+    const value = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(frozenArray(idlType.long))));
 
     expect(value).toEqual([1, 2]);
     expect(value).toBeInstanceOf(realm.intrinsics.array);
     expect(Object.isFrozen(value)).toBe(true);
     expect(iteratorGets).toBe(1);
-    expect(idlToJS(value, binding.getConverter(frozenArray(idlType.long)))).toBe(value);
+    expect(idlToJS(value, binding.getConverter(binding.assembly.getIDLType(frozenArray(idlType.long))))).toBe(value);
     expect(Reflect.set(value, '0', 3)).toBe(false);
 
     const frozenSource = Object.freeze(['3']);
-    const copied = jsToIDL(frozenSource, binding.getConverter(frozenArray(idlType.long)));
+    const copied = jsToIDL(frozenSource, binding.getConverter(binding.assembly.getIDLType(frozenArray(idlType.long))));
     expect(copied).toEqual([3]);
     expect(copied).not.toBe(frozenSource);
 
     const frozenType = frozenArray(idlType.long);
-    const converter = binding.getConverter(frozenType) as FrozenArrayConverter<typeof frozenType>;
+    const type = binding.assembly.getIDLType(frozenType);
+    const converter = binding.getConverter(type);
     const created = converter.createFrozenArray([4]);
     expect(created).toEqual([4]);
     expect(created).toBeInstanceOf(realm.intrinsics.array);
@@ -526,9 +612,9 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const method = iterable[Symbol.iterator];
     expect(converter.jsToIDLIterable(iterable, method)).toEqual([5]);
 
-    expect(jsToIDL(['6'], binding.getConverter(union(frozenArray(idlType.long), idlType.DOMString)))).toEqual([6]);
+    expect(jsToIDL(['6'], binding.getConverter(binding.assembly.getIDLType(union(frozenArray(idlType.long), idlType.DOMString))))).toEqual([6]);
     expectRealmTypeError(
-      () => jsToIDL(1, binding.getConverter(frozenArray(idlType.long))),
+      () => jsToIDL(1, binding.getConverter(binding.assembly.getIDLType(frozenArray(idlType.long)))),
       realm,
     );
   });
@@ -544,7 +630,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     };
     const type = union(frozenArray(idlType.long), idlType.DOMString);
 
-    const result = jsToIDL(source, binding.getConverter(type));
+    const result = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(type)));
 
     expect(result).toEqual([7]);
     expect(result).toBeInstanceOf(realm.intrinsics.array);
@@ -553,7 +639,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
   });
 
   it('converts buffer source types by brand, backing buffer, and annotations', () => {
-    const { binding, realm } = createBinding(webIDLCommonDefinitions);
+    const { binding, realm } = createBinding();
     const allowResizable = {
       kind: 'no-arguments', name: 'AllowResizable',
     } as const;
@@ -598,54 +684,54 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       'buffer-source-detached-view.js',
     ) as object;
 
-    expect(jsToIDL(arrayBuffer, binding.getConverter(idlType.ArrayBuffer)))
+    expect(jsToIDL(arrayBuffer, binding.getConverter(binding.assembly.getIDLType(idlType.ArrayBuffer))))
       .toBe(arrayBuffer);
-    expect(idlToJS(arrayBuffer, binding.getConverter(idlType.ArrayBuffer)))
+    expect(idlToJS(arrayBuffer, binding.getConverter(binding.assembly.getIDLType(idlType.ArrayBuffer))))
       .toBe(arrayBuffer);
-    expect(jsToIDL(uint8, binding.getConverter(idlType.Uint8Array))).toBe(uint8);
-    expect(jsToIDL(detachedView, binding.getConverter(idlType.DataView)))
+    expect(jsToIDL(uint8, binding.getConverter(binding.assembly.getIDLType(idlType.Uint8Array)))).toBe(uint8);
+    expect(jsToIDL(detachedView, binding.getConverter(binding.assembly.getIDLType(idlType.DataView))))
       .toBe(detachedView);
     expectRealmTypeError(
-      () => jsToIDL(uint8, binding.getConverter(idlType.Uint16Array)),
+      () => jsToIDL(uint8, binding.getConverter(binding.assembly.getIDLType(idlType.Uint16Array))),
       realm,
     );
 
     expectRealmTypeError(
-      () => jsToIDL(resizable, binding.getConverter(idlType.ArrayBuffer)),
+      () => jsToIDL(resizable, binding.getConverter(binding.assembly.getIDLType(idlType.ArrayBuffer))),
       realm,
     );
-    expect(jsToIDL(resizable, binding.getConverter(annotated(idlType.ArrayBuffer, xattr(allowResizable))))).toBe(resizable);
+    expect(jsToIDL(resizable, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.ArrayBuffer, xattr(allowResizable)))))).toBe(resizable);
 
-    expect(jsToIDL(shared, binding.getConverter(idlType.SharedArrayBuffer)))
+    expect(jsToIDL(shared, binding.getConverter(binding.assembly.getIDLType(idlType.SharedArrayBuffer))))
       .toBe(shared);
     expectRealmTypeError(
-      () => jsToIDL(growableShared, binding.getConverter(idlType.SharedArrayBuffer)),
+      () => jsToIDL(growableShared, binding.getConverter(binding.assembly.getIDLType(idlType.SharedArrayBuffer))),
       realm,
     );
-    expect(jsToIDL(growableShared, binding.getConverter(annotated(idlType.SharedArrayBuffer, xattr(allowResizable))))).toBe(growableShared);
+    expect(jsToIDL(growableShared, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.SharedArrayBuffer, xattr(allowResizable)))))).toBe(growableShared);
     expectRealmTypeError(
-      () => jsToIDL(sharedView, binding.getConverter(idlType.Uint8Array)),
+      () => jsToIDL(sharedView, binding.getConverter(binding.assembly.getIDLType(idlType.Uint8Array))),
       realm,
     );
-    expect(jsToIDL(sharedView, binding.getConverter(annotated(idlType.Uint8Array, xattr(allowShared))))).toBe(sharedView);
+    expect(jsToIDL(sharedView, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.Uint8Array, xattr(allowShared)))))).toBe(sharedView);
     expectRealmTypeError(
-      () => jsToIDL(growableView, binding.getConverter(annotated(idlType.Uint8Array, xattr(allowShared)))),
+      () => jsToIDL(growableView, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.Uint8Array, xattr(allowShared))))),
       realm,
     );
-    expect(jsToIDL(growableView, binding.getConverter(annotated(idlType.Uint8Array, xattr(allowShared, allowResizable))))).toBe(growableView);
+    expect(jsToIDL(growableView, binding.getConverter(binding.assembly.getIDLType(annotated(idlType.Uint8Array, xattr(allowShared, allowResizable)))))).toBe(growableView);
 
-    expect(jsToIDL(arrayBuffer, binding.getConverter(reference('BufferSource')))).toBe(arrayBuffer);
-    expect(jsToIDL(uint8, binding.getConverter(reference('BufferSource')))).toBe(uint8);
+    expect(jsToIDL(arrayBuffer, binding.getConverter(binding.assembly.getIDLType(reference('BufferSource'))))).toBe(arrayBuffer);
+    expect(jsToIDL(uint8, binding.getConverter(binding.assembly.getIDLType(reference('BufferSource'))))).toBe(uint8);
     expectRealmTypeError(
-      () => jsToIDL(shared, binding.getConverter(reference('BufferSource'))),
+      () => jsToIDL(shared, binding.getConverter(binding.assembly.getIDLType(reference('BufferSource')))),
       realm,
     );
     expectRealmTypeError(
-      () => jsToIDL(sharedView, binding.getConverter(reference('BufferSource'))),
+      () => jsToIDL(sharedView, binding.getConverter(binding.assembly.getIDLType(reference('BufferSource')))),
       realm,
     );
-    expect(jsToIDL(shared, binding.getConverter(reference('AllowSharedBufferSource')))).toBe(shared);
-    expect(jsToIDL(sharedView, binding.getConverter(reference('AllowSharedBufferSource')))).toBe(sharedView);
+    expect(jsToIDL(shared, binding.getConverter(binding.assembly.getIDLType(reference('AllowSharedBufferSource'))))).toBe(shared);
+    expect(jsToIDL(sharedView, binding.getConverter(binding.assembly.getIDLType(reference('AllowSharedBufferSource'))))).toBe(sharedView);
   });
 
   it('combines buffer annotations through aliases, nullable types, and union members', () => {
@@ -659,11 +745,11 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     const view = new Uint8Array(new SharedArrayBuffer(4, { maxByteLength: 8 }));
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect(jsToIDL(view, binding.getConverter(resizable))).toBe(view);
-      expectRealmTypeError(() => jsToIDL(view, binding.getConverter(type)), realm);
-      expectRealmTypeError(() => jsToIDL(view, binding.getConverter(idlType.Uint8Array)), realm);
-      expect(jsToIDL(null, binding.getConverter(resizable))).toBeNull();
-      expect(idlToJS(view, binding.getConverter(resizable))).toBe(view);
+      expect(jsToIDL(view, binding.getConverter(binding.assembly.getIDLType(resizable)))).toBe(view);
+      expectRealmTypeError(() => jsToIDL(view, binding.getConverter(binding.assembly.getIDLType(type))), realm);
+      expectRealmTypeError(() => jsToIDL(view, binding.getConverter(binding.assembly.getIDLType(idlType.Uint8Array))), realm);
+      expect(jsToIDL(null, binding.getConverter(binding.assembly.getIDLType(resizable)))).toBeNull();
+      expect(idlToJS(view, binding.getConverter(binding.assembly.getIDLType(resizable)))).toBe(view);
     }
   });
 
@@ -680,9 +766,9 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     if (!assembled) throw new Error('Missing Node interface');
     binding.initializePlatformObject(platformObject, assembled, implInst);
 
-    expect(jsToIDL(platformObject, binding.getConverter(union(reference('Node'), idlType.DOMString)))).toBe(implInst);
-    expect(jsToIDL(['1', 2], binding.getConverter(union(sequence(idlType.long), idlType.DOMString)))).toEqual([1, 2]);
-    expect(jsToIDL(undefined, binding.getConverter(union(reference('Options'), idlType.boolean)))).toMatchObject({ record: { capture: false } });
+    expect(jsToIDL(platformObject, binding.getConverter(binding.assembly.getIDLType(union(reference('Node'), idlType.DOMString))))).toBe(implInst);
+    expect(jsToIDL(['1', 2], binding.getConverter(binding.assembly.getIDLType(union(sequence(idlType.long), idlType.DOMString))))).toEqual([1, 2]);
+    expect(jsToIDL(undefined, binding.getConverter(binding.assembly.getIDLType(union(reference('Options'), idlType.boolean))))).toMatchObject({ record: { capture: false } });
 
     let conversions = 0;
     const numeric = {
@@ -691,10 +777,10 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
         return 5n;
       },
     };
-    expect(jsToIDL(numeric, binding.getConverter(union(idlType.long, idlType.bigint)))).toBe(5n);
+    expect(jsToIDL(numeric, binding.getConverter(binding.assembly.getIDLType(union(idlType.long, idlType.bigint))))).toBe(5n);
     expect(conversions).toBe(1);
 
-    expect(jsToIDL(undefined, binding.getConverter(union(nullable(idlType.DOMString), idlType.boolean)))).toBeNull();
+    expect(jsToIDL(undefined, binding.getConverter(binding.assembly.getIDLType(union(nullable(idlType.DOMString), idlType.boolean))))).toBeNull();
   });
 
   it('reads current iterators and dictionary fields when reusing union candidates', () => {
@@ -715,20 +801,20 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       get value() { return String(++fieldGets); },
     };
 
-    const sequenceValue = jsToIDL(source, binding.getConverter(type));
+    const sequenceValue = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(type)));
     expect(sequenceValue).toEqual([7]);
-    expect(idlToJS(sequenceValue, binding.getConverter(type))).toBeInstanceOf(realm.intrinsics.array);
+    expect(idlToJS(sequenceValue, binding.getConverter(binding.assembly.getIDLType(type)))).toBeInstanceOf(realm.intrinsics.array);
     expect(fieldGets).toBe(0);
     iterable = false;
     for (let i = 1; i <= 2; i++) {
-      const dictionary = jsToIDL(source, binding.getConverter(type));
+      const dictionary = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(type)));
       expect(dictionary).toMatchObject({ record: { value: i } });
-      const platform = idlToJS(dictionary, binding.getConverter(type));
+      const platform = idlToJS(dictionary, binding.getConverter(binding.assembly.getIDLType(type)));
       expect(platform).toEqual({ value: i });
       expect(Object.getPrototypeOf(platform)).toBe(realm.intrinsics.objectPrototype);
     }
     expect(iteratorGets).toBe(3);
-    expect(jsToIDL(true, binding.getConverter(type))).toBe(true);
+    expect(jsToIDL(true, binding.getConverter(binding.assembly.getIDLType(type)))).toBe(true);
     expect(iteratorGets).toBe(3);
   });
 
@@ -743,7 +829,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       asyncSequence(idlType.long),
       idlType.DOMString,
     );
-    expect(idlToJS(jsToIDL(asyncIterable, binding.getConverter(asyncSequenceUnion)), binding.getConverter(asyncSequenceUnion))).toBe(asyncIterable);
+    expect(idlToJS(jsToIDL(asyncIterable, binding.getConverter(binding.assembly.getIDLType(asyncSequenceUnion))), binding.getConverter(binding.assembly.getIDLType(asyncSequenceUnion)))).toBe(asyncIterable);
   });
 });
 
@@ -751,12 +837,9 @@ function createBinding(
   definitions: Definition[] = [],
 ): { binding: RealmBinding; realm: Realm; } {
   const realm = new Realm();
-  const binding = new RealmBinding(
-    new DefinitionAssembly(definitions),
-    realm,
-    new BindingWorld(definitions), (ctx) => ({ realm: ctx.realm }),
-  );
-  return { binding, realm };
+  const world = new BindingWorld(definitions);
+  world.register(realm, (ctx) => ({ realm: ctx.realm }));
+  return { binding: world.getRealmBinding(realm)!, realm };
 }
 
 function expectRealmTypeError(

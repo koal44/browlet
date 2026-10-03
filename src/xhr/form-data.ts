@@ -52,8 +52,8 @@ export class FormDataImpl {
      * XHR §4 delegates this branch to HTML's construct-the-entry-list
      * algorithm. HTMLFormElement, form ownership, successful controls, and
      * the formdata event are not implemented yet. Keep this guard for the
-     * point at which HTMLFormElement becomes a resolvable IDL interface; until
-     * then Web IDL rejects the argument at that earlier missing dependency.
+     * point at which HTMLFormElement gains an implementation; its declaration
+     * currently supplies only the type identity used for argument conversion.
      */
     if (form !== undefined) {
       throw new InternalError(
@@ -152,11 +152,6 @@ export const formDataIDL = defineInterface({
     constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),
   members: [
-    /*
-     * HTMLFormElement is deliberately unresolved until HTML forms exist.
-     * This preserves the normative signature and makes the missing dependency
-     * observable instead of accepting and ignoring a supplied form.
-     */
     ctor([
       arg('form', reference('HTMLFormElement'), { optional: true }),
       arg('submitter', nullable(reference('HTMLElement')), {

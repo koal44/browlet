@@ -1,33 +1,21 @@
 import { InternalError } from '../../infra/index';
-
 import { isObject } from '../../js-engine/index';
 
-import type { WebIDLType } from '../core/index';
-
-import type { AssembledCallbackFunction, AssembledCallbackInterface } from '../assembled';
-import type { ConversionRules } from '../assembly';
-import { Converter, type ConversionSteps } from './converter';
 import type { WebIDLRealm } from '../environment';
-
+import type {
+  IDLCallbackFunctionType, IDLCallbackInterfaceType, AssembledCallbackFunction,
+} from '../assembly/index';
+import { IDLCallbackFunction, IDLCallbackInterface } from '../values/index';
 import { getPlatformRecord } from '../binding/platform';
-import type { RealmBinding } from '../binding/realm';
 import { CallbackFunctionStamper } from '../binding/realm/callback';
 
-import { IDLCallbackFunction, IDLCallbackInterface } from '../values/index';
+import { Converter, type ConversionSteps } from './converter';
 
 /** Capture an author function's realm and callback context for later invocation. */
-export class CallbackFunctionConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
-  /** Declaration selected once when this converter is created. */
-  assembled: AssembledCallbackFunction;
-
-  constructor(rules: ConversionRules<Type>, binding: RealmBinding, realm: WebIDLRealm, assembled: AssembledCallbackFunction) {
-    super(rules, binding, realm);
-    this.assembled = assembled;
-  }
-
+export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = IDLCallbackFunctionType> extends Converter<Type> {
   // https://webidl.spec.whatwg.org/#es-callback-function
   protected createInputSteps(): ConversionSteps<IDLCallbackFunction> {
-    const assembled = this.assembled;
+    const assembled = this.type.assembled;
     return (value) => {
       if (typeof value !== 'function') {
         return this.throwTypeError(`${assembled.primary.name} is not callable`);
@@ -42,7 +30,7 @@ export class CallbackFunctionConverter<Type extends WebIDLType = WebIDLType> ext
     return (value) => {
       if (typeof value === 'function') return CallbackFunctionStamper.getObject(value);
       if (IDLCallbackFunction.is(value)) return value.object;
-      throw new InternalError(`IDL callback function ${this.assembled.primary.name} is not callable`);
+      throw new InternalError(`IDL callback function ${this.type.assembled.primary.name} is not callable`);
     };
   }
 
@@ -63,17 +51,9 @@ export class CallbackFunctionConverter<Type extends WebIDLType = WebIDLType> ext
 }
 
 /** Capture an author callback object while leaving operation lookup until invocation. */
-export class CallbackInterfaceConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
-  /** Declaration selected once when this converter is created. */
-  assembled: AssembledCallbackInterface;
-
-  constructor(rules: ConversionRules<Type>, binding: RealmBinding, realm: WebIDLRealm, assembled: AssembledCallbackInterface) {
-    super(rules, binding, realm);
-    this.assembled = assembled;
-  }
-
+export class CallbackInterfaceConverter<Type extends IDLCallbackInterfaceType = IDLCallbackInterfaceType> extends Converter<Type> {
   protected createInputSteps(): ConversionSteps<IDLCallbackInterface> {
-    const assembled = this.assembled;
+    const assembled = this.type.assembled;
     return (value) => {
       if (!isObject(value)) return this.throwTypeError(`${assembled.primary.name} is not an object`);
       return new IDLCallbackInterface(assembled, value, getCallbackRealm(value, this.realm), this.realm.callbacks.captureContext(), this.binding.callbacks);
@@ -82,7 +62,7 @@ export class CallbackInterfaceConverter<Type extends WebIDLType = WebIDLType> ex
 
   protected override createOutputSteps(): ConversionSteps<object> {
     return (value) => {
-      if (!IDLCallbackInterface.is(value)) throw new InternalError(`Expected an IDL callback interface for ${this.assembled.primary.name}`);
+      if (!IDLCallbackInterface.is(value)) throw new InternalError(`Expected an IDL callback interface for ${this.type.assembled.primary.name}`);
       return value.object;
     };
   }

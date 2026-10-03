@@ -1,11 +1,7 @@
 import { InternalError } from '../../../infra/index';
-
 import { isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
-import type { OperationMember } from '../../core/index';
-
-import type { AssembledCallable, AssembledInterface } from '../../assembled';
-
+import type { IDLOperation, AssembledCallable, AssembledInterface } from '../../assembly/index';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 import { isNamedPropertiesObject } from './global';
@@ -94,8 +90,8 @@ export class LegacyPlatformObjectBinding {
   createPropertyMetadata(
     assembled: AssembledInterface,
   ): LegacyPropertyMetadata | null {
-    const indexedGetter = assembled.findSpecialOperation('getter', 'unsigned long', this.#binding.assembly);
-    const namedGetter = assembled.findSpecialOperation('getter', 'DOMString', this.#binding.assembly);
+    const indexedGetter = assembled.findSpecialOperation('getter', 'unsigned long');
+    const namedGetter = assembled.findSpecialOperation('getter', 'DOMString');
     if (!indexedGetter && !namedGetter) return null;
 
     let indexed: IndexedProperties | undefined;
@@ -107,7 +103,7 @@ export class LegacyPlatformObjectBinding {
       indexed = {
         getter: indexedGetter,
         assembled,
-        setter: assembled.findSpecialOperation('setter', 'unsigned long', this.#binding.assembly),
+        setter: assembled.findSpecialOperation('setter', 'unsigned long'),
         steps,
       };
     }
@@ -119,11 +115,11 @@ export class LegacyPlatformObjectBinding {
         throw new InternalError('Missing supported property names implementation');
       }
       named = {
-        deleter: assembled.findSpecialOperation('deleter', 'DOMString', this.#binding.assembly),
+        deleter: assembled.findSpecialOperation('deleter', 'DOMString'),
         getter: namedGetter,
         assembled,
         overrideBuiltIns: assembled.inheritsExtendedAttribute('LegacyOverrideBuiltIns'),
-        setter: assembled.findSpecialOperation('setter', 'DOMString', this.#binding.assembly),
+        setter: assembled.findSpecialOperation('setter', 'DOMString'),
         steps,
         unenumerable: assembled.inheritsExtendedAttribute('LegacyUnenumerableNamedProperties'),
         unforgeableNames: assembled.getUnforgeablePropertyNames(),
@@ -133,11 +129,11 @@ export class LegacyPlatformObjectBinding {
   }
 
   // Project predicate: select indexed and named operations supported by this binding.
-  supportsSpecialOperation(operation: OperationMember): boolean {
+  supportsSpecialOperation(operation: IDLOperation): boolean {
     const key = operation.arguments[0];
     if (!key) return false;
-    const type = this.#binding.assembly.getUnannotatedType(key.type);
-    return type.kind === 'simple' &&
+    const type = key.type;
+    return (type.kind === 'integer' || type.kind === 'string') &&
       (type.name === 'DOMString' || (operation.special !== 'deleter' && type.name === 'unsigned long'));
   }
 
@@ -513,7 +509,7 @@ export class LegacyPlatformObjectBinding {
 
   // Extracted from Web IDL §3.9.7 Abstract operations — convert the value for an indexed or named property
   // setter.
-  #convertSetterValue(setter: AssembledCallable<OperationMember>, value: unknown): unknown {
+  #convertSetterValue(setter: AssembledCallable<IDLOperation>, value: unknown): unknown {
     const valueArgument = setter.arguments[1];
     if (!valueArgument) {
       throw new InternalError('Legacy property setter has no value argument');
@@ -541,10 +537,8 @@ export class LegacyPlatformObjectBinding {
     const steps = this.#binding.getMemberBinding(properties.assembled, deleter.primary)?.operationSteps;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
-    const returnType = this.#binding.assembly.getUnannotatedType(deleter.primary.returns);
-    return returnType.kind !== 'simple' ||
-      returnType.name !== 'boolean' ||
-      result !== false;
+    const returnType = deleter.primary.returns;
+    return returnType.kind !== 'boolean' || result !== false;
   }
 
   // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
@@ -656,18 +650,18 @@ export type LegacyPropertyMetadata = {
 };
 
 type IndexedProperties = {
-  getter: AssembledCallable<OperationMember>;
+  getter: AssembledCallable<IDLOperation>;
   assembled: AssembledInterface;
-  setter: AssembledCallable<OperationMember> | undefined;
+  setter: AssembledCallable<IDLOperation> | undefined;
   steps: IndexedPropertySteps;
 };
 
 type NamedProperties = {
-  deleter: AssembledCallable<OperationMember> | undefined;
-  getter: AssembledCallable<OperationMember>;
+  deleter: AssembledCallable<IDLOperation> | undefined;
+  getter: AssembledCallable<IDLOperation>;
   assembled: AssembledInterface;
   overrideBuiltIns: boolean;
-  setter: AssembledCallable<OperationMember> | undefined;
+  setter: AssembledCallable<IDLOperation> | undefined;
   steps: NamedPropertySteps;
   unenumerable: boolean;
   unforgeableNames: Set<string>;

@@ -7,7 +7,7 @@ import { createBoundExecution, registerRealm } from '../../../src/browlet/bindin
 import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
 import { parseURL, type URLRecord } from '../../../src/url/url';
-import { DefinitionAssembly } from '../../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 import { RealmBinding } from '../../../src/web-idl/binding/realm';
 import { IDLCallbackFunction } from '../../../src/web-idl/values/callback';
 
@@ -162,7 +162,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     );
     Reflect.set(incumbentRealm.realm.global, 'callback', callback);
     Reflect.set(incumbentRealm.realm.global, 'convert', (value: unknown) =>
-      incumbentContext.getConverter(reference('LifecycleCallback')).jsToIDL(value));
+      incumbentContext.getConverter(incumbentContext.assembly.getIDLType(reference('LifecycleCallback'))).jsToIDL(value));
     const callbackValue = incumbentRealm.realm.evaluate(
       'convert(callback)',
       'convert-callback.js',
@@ -230,7 +230,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
-      context.getConverter(reference('LifecycleCallback')).jsToIDL(value));
+      context.getConverter(context.assembly.getIDLType(reference('LifecycleCallback'))).jsToIDL(value));
     const callbackValue = entry.realm.evaluate(
       'convert(() => {})',
       'create-reentrant-callback.js',

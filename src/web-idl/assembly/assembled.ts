@@ -1,17 +1,18 @@
-import { InternalError } from '../infra/index';
+import { InternalError } from '../../infra/index';
+import {
+  hasExtendedAttribute, type CallbackFunctionDefinition, type CallbackInterfaceDefinition,
+  type DictionaryDefinition, type DictionaryMember, type EnumerationDefinition, type ProxyObjectDefinition,
+  type TypedefDefinition, type PartialDictionaryDefinition, type PrimaryInterfaceDefinition,
+  type PartialInterfaceDefinition, type InterfaceMixinDefinition, type PartialInterfaceMixinDefinition,
+  type NamespaceDefinition, type PartialNamespaceDefinition, type Definition, type IncludesDefinition,
+  type ArgumentDefinition, type ExtendedAttribute, type ImplementationClass, type StringifierMember,
+  type WebIDLType, type SerialSteps, type TransferSteps, type AttributeMember, type OperationMember,
+  type ConstantMember, type ConstructorMember, type IterableMember, type AsyncIterableMember,
+  type MaplikeMember, type SetlikeMember, type NamedArgumentsExtendedAttribute, type InterfaceMember,
+  type MixinMember, type NamespaceMember,
+} from '../core/index';
 
-import { hasExtendedAttribute, reference } from './core/index';
-import type {
-  CallbackFunctionDefinition, CallbackInterfaceDefinition, DictionaryDefinition, DictionaryMember,
-  ConstructorMember, EnumerationDefinition, MaplikeMember, ProxyObjectDefinition, SetlikeMember,
-  TypedefDefinition, PartialDictionaryDefinition, PrimaryInterfaceDefinition, InterfaceMember,
-  PartialInterfaceDefinition, InterfaceMixinDefinition, MixinMember, PartialInterfaceMixinDefinition,
-  NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition, Definition, IncludesDefinition,
-  ArgumentDefinition, AttributeMember, ExtendedAttribute, ImplementationClass,
-  NamedArgumentsExtendedAttribute, OperationMember, ReferenceType, StringifierMember, WebIDLType,
-  SerialSteps, TransferSteps,
-} from './core/index';
-
+import { undefinedType, type IDLType, type IDLInterfaceType } from './types';
 import type { DefinitionAssembly } from './assembly';
 
 /** An interface with its parent, partial declarations, and included mixin members. */
@@ -31,15 +32,15 @@ export class AssembledInterface {
   /** Transfer steps for this exact interface. */
   transferSteps: TransferSteps | undefined;
 
-  /** Stable named reference used when resolving implementation-class types. */
-  type: ReferenceType;
-  /** Prepared argument contracts, keyed by the declarations used for member binding. */
+  /** Compiled interface type reused for implementation-class references. */
+  type: IDLInterfaceType;
+  /** Prepared argument contracts, keyed by compiled members. */
   callables = new AssembledCallables();
 
   /** Legacy factory declarations grouped by exposed name, with overloads prepared on first use. */
   #legacyFactoriesByName = new Map<string, {
-    callables: AssembledCallable<NamedArgumentsExtendedAttribute>[];
-    overloads?: AssembledOverloads<AssembledCallable<NamedArgumentsExtendedAttribute>>;
+    callables: AssembledCallable<IDLNamedArguments>[];
+    overloads?: AssembledOverloads<AssembledCallable<IDLNamedArguments>>;
   }>();
 
   /** Oldest ancestor through this interface, retained after the first inheritance query. */
@@ -47,13 +48,13 @@ export class AssembledInterface {
   /** Primary declarations supplied by this interface and its ancestors. */
   #implementedPrimaries: Set<PrimaryInterfaceDefinition> | undefined;
   /** Member identities contributed by this interface, its mixins, and its ancestors. */
-  #includedMembers: Set<InterfaceMember | MixinMember> | undefined;
+  #includedMembers: Set<IDLInterfaceMember> | undefined;
   /** Nearest matching ancestor attribute for each queried inherited accessor. */
-  #inheritedAttributes = new Map<AttributeMember, AttributeMember>();
+  #inheritedAttributes = new Map<IDLAttribute, IDLAttribute>();
   /** Own maplike/setlike declaration; undefined is unexamined and null means absent. */
-  #collectionMember: MaplikeMember | SetlikeMember | null | undefined;
+  #collectionMember: IDLMaplike | IDLSetlike | null | undefined;
   /** Nearest ancestor's maplike/setlike declaration, with the same unexamined/absent states. */
-  #inheritedCollectionMember: MaplikeMember | SetlikeMember | null | undefined;
+  #inheritedCollectionMember: IDLMaplike | IDLSetlike | null | undefined;
   /** Whether own members declare [Default] toJSON; undefined means unexamined. */
   #hasDefaultToJSON: boolean | undefined;
   /** Whether own or inherited members declare toJSON; undefined means unexamined. */
@@ -63,25 +64,31 @@ export class AssembledInterface {
   /** JSON-compatible attributes and their inherited getters, before realm exposure checks. */
   #defaultToJSONAttributes: DefaultToJSONAttribute[] | undefined;
 
-  constructor(primary: PrimaryInterfaceDefinition, partials: PartialInterfaceDefinition[] = []) {
+  constructor(primary: PrimaryInterfaceDefinition, partials: PartialInterfaceDefinition[] = [], finish: AssemblySteps[]) {
     this.primary = primary;
     this.name = primary.name;
     this.partials = partials;
     this.serialSteps = primary.serialSteps;
     this.transferSteps = primary.transferSteps;
-    this.type = reference(primary.name);
-    for (const definition of [primary, ...partials]) {
-      for (const attribute of definition.extendedAttributes ?? []) {
-        if (attribute.kind !== 'named-arguments' || attribute.name !== 'LegacyFactoryFunction') continue;
-        this.callables.add(attribute);
-        let factory = this.#legacyFactoriesByName.get(attribute.value);
-        if (!factory) {
-          factory = { callables: [] };
-          this.#legacyFactoriesByName.set(attribute.value, factory);
+    this.type = { kind: 'interface', assembled: this, attributes: [] };
+    finish.push((assembly) => {
+      for (const definition of [primary, ...partials]) {
+        for (const attribute of definition.extendedAttributes ?? []) {
+          if (attribute.kind !== 'named-arguments' || attribute.name !== 'LegacyFactoryFunction') continue;
+          const factoryMember = {
+            ...attribute,
+            arguments: attribute.arguments.map((argument) => new AssembledArgument(argument, assembly)),
+          };
+          this.callables.add(factoryMember);
+          let factory = this.#legacyFactoriesByName.get(attribute.value);
+          if (!factory) {
+            factory = { callables: [] };
+            this.#legacyFactoriesByName.set(attribute.value, factory);
+          }
+          factory.callables.push(this.callables.get(factoryMember));
         }
-        factory.callables.push(this.callables.get(attribute));
       }
-    }
+    });
   }
 
   /** Whether this interface or one of its ancestors has the requested primary declaration. */
@@ -109,7 +116,7 @@ export class AssembledInterface {
   }
 
   /** Whether the member belongs to this interface or an ancestor. */
-  includesMember(member: InterfaceMember | MixinMember): boolean {
+  includesMember(member: IDLInterfaceMember): boolean {
     if (!this.#includedMembers) {
       this.#includedMembers = new Set();
       for (const assembled of this.getInheritanceChain()) {
@@ -120,7 +127,7 @@ export class AssembledInterface {
   }
 
   /** Find the nearest ancestor's matching attribute for an inherited accessor. */
-  getInheritedAttribute(attribute: AttributeMember): AttributeMember {
+  getInheritedAttribute(attribute: IDLAttribute): IDLAttribute {
     const cached = this.#inheritedAttributes.get(attribute);
     if (cached) return cached;
     let assembled = this.parentAssembled;
@@ -144,12 +151,12 @@ export class AssembledInterface {
   }
 
   /** Find a directly contributed member of the requested kind, retaining its exposure source. */
-  findMemberByKind<Kind extends InterfaceMember['kind']>(kind: Kind): InterfaceMemberEntry<Kind> | undefined {
+  findMemberByKind<Kind extends IDLInterfaceMember['kind']>(kind: Kind): InterfaceMemberEntry<Kind> | undefined {
     return this.members.find((entry): entry is InterfaceMemberEntry<Kind> => entry.member.kind === kind);
   }
 
   /** Find the maplike or setlike declaration, optionally continuing through ancestors. */
-  getCollectionMember(includeInherited = false): MaplikeMember | SetlikeMember | undefined {
+  getCollectionMember(includeInherited = false): IDLMaplike | IDLSetlike | undefined {
     if (this.#collectionMember === undefined) {
       this.#collectionMember = null;
       for (const { member } of this.members) {
@@ -188,7 +195,7 @@ export class AssembledInterface {
     placement: MemberPlacement,
     include: OperationFilter,
     assembly: DefinitionAssembly,
-  ): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
+  ): Map<string, AssembledOverloads<AssembledCallable<IDLOperation>>> {
     return groupOperations(this.members, this.callables,
       (operation, entry) => belongsAt(operation, placement) && include(operation, entry), assembly);
   }
@@ -199,25 +206,24 @@ export class AssembledInterface {
   findSpecialOperation(
     special: 'deleter' | 'getter' | 'setter',
     keyType: 'DOMString' | 'unsigned long',
-    assembly: DefinitionAssembly,
-  ): AssembledCallable<OperationMember> | undefined {
+  ): AssembledCallable<IDLOperation> | undefined {
     for (const { member } of this.members) {
       if (member.kind !== 'operation' || member.special !== special) continue;
       const callable = this.callables.get(member);
       const key = callable.arguments[0];
       if (!key) continue;
-      const type = assembly.getUnannotatedType(key.type);
-      if (type.kind === 'simple' && type.name === keyType) return callable;
+      const type = key.type;
+      if ((type.kind === 'integer' || type.kind === 'string') && type.name === keyType) return callable;
     }
-    return this.parentAssembled?.findSpecialOperation(special, keyType, assembly);
+    return this.parentAssembled?.findSpecialOperation(special, keyType);
   }
 
   /** Prepare constructors accepted by the caller's exposure check. */
   getConstructors(
     include: (entry: AssembledInterfaceMember) => boolean,
     assembly: DefinitionAssembly,
-  ): AssembledOverloads<AssembledCallable<ConstructorMember>> {
-    const constructors: AssembledCallable<ConstructorMember>[] = [];
+  ): AssembledOverloads<AssembledCallable<IDLConstructor>> {
+    const constructors: AssembledCallable<IDLConstructor>[] = [];
     for (const entry of this.members) {
       if (entry.member.kind === 'constructor' && include(entry)) constructors.push(this.callables.get(entry.member));
     }
@@ -342,7 +348,7 @@ export class AssembledInterface {
   getLegacyFactoryOverloads(
     name: string,
     assembly: DefinitionAssembly,
-  ): AssembledOverloads<AssembledCallable<NamedArgumentsExtendedAttribute>> {
+  ): AssembledOverloads<AssembledCallable<IDLNamedArguments>> {
     const factory = this.#legacyFactoriesByName.get(name);
     if (!factory) {
       throw new InternalError(`${this.name} has no legacy factory function ${name}`);
@@ -368,20 +374,26 @@ export class AssembledCallbackInterface {
   /** Original callback-interface declaration, including any custom implementation adapter. */
   primary: CallbackInterfaceDefinition;
   /** Prepared operations used to convert callback arguments and results. */
-  operationsByName = new Map<string, AssembledCallable<OperationMember>>();
+  operationsByName = new Map<string, AssembledCallable<IDLOperation>>();
 
-  constructor(primary: CallbackInterfaceDefinition) {
+  /** Constants and operations with compiled argument and result types. */
+  members: (IDLConstant | IDLOperation)[] = [];
+
+  constructor(primary: CallbackInterfaceDefinition, finish: AssemblySteps[]) {
     this.primary = primary;
-    for (const member of primary.members) {
-      if (member.kind !== 'operation' || member.name === undefined) continue;
-      if (!this.operationsByName.has(member.name)) {
-        this.operationsByName.set(member.name, new AssembledCallable(member));
+    finish.push((assembly) => {
+      this.members = primary.members.map((member) => assembleMember(member, assembly));
+      for (const member of this.members) {
+        if (member.kind !== 'operation' || member.name === undefined) continue;
+        if (!this.operationsByName.has(member.name)) {
+          this.operationsByName.set(member.name, new AssembledCallable(member));
+        }
       }
-    }
+    });
   }
 
   /** Find the declared operation required by callback invocation. */
-  getOperation(name: string): AssembledCallable<OperationMember> {
+  getOperation(name: string): AssembledCallable<IDLOperation> {
     const operation = this.operationsByName.get(name);
     if (!operation) {
       throw new InternalError(
@@ -393,7 +405,7 @@ export class AssembledCallbackInterface {
 
   /** Only exposed callback interfaces with constants receive a legacy interface object. */
   hasInterfaceObject(): boolean {
-    return this.primary.exposed !== undefined && this.primary.members.some((member) => member.kind === 'constant');
+    return this.primary.exposed !== undefined && this.members.some((member) => member.kind === 'constant');
   }
 }
 
@@ -457,19 +469,23 @@ export class AssembledOverloads<Callable extends AssembledCallable = AssembledCa
 }
 
 /** Prepared arguments for an operation, constructor, callback, or other declaration taking arguments. */
-export class AssembledCallable<Primary extends CallableDeclaration = CallableDeclaration> {
-  /** Original declaration; this object describes a callable but is not itself a function. */
+export class AssembledCallable<Primary extends CallableContract = CallableContract> {
+  /** Compiled member or callback metadata; this contract is not itself a function. */
   primary: Primary;
-  /** Declared arguments with conversion attributes incorporated into their types. */
+  /** Arguments with aliases, nested types, and applicable conversion rules resolved. */
   arguments: AssembledArgument[];
   /** The final argument's contract, reused for every value in a variadic tail. */
   variadicArgument: AssembledArgument | undefined;
   /** Smallest argument count admitted after omitting the optional and variadic suffix. */
   minimumArgumentCount: number;
 
+  /** Compiled return contract; constructors and iterable declarations return undefined here. */
+  returns: IDLType;
+
   constructor(primary: Primary) {
     this.primary = primary;
-    this.arguments = (primary.arguments ?? []).map((argument) => new AssembledArgument(argument));
+    this.returns = primary.returns ?? undefinedType;
+    this.arguments = primary.arguments ?? [];
     const last = this.arguments.at(-1);
     this.variadicArgument = last?.optionality === 'variadic' ? last : undefined;
     let minimum = this.arguments.length;
@@ -485,38 +501,53 @@ export class AssembledCallable<Primary extends CallableDeclaration = CallableDec
 
 /** An argument with its applicable conversion attributes incorporated into its type. */
 export class AssembledArgument {
-  /** Original argument declaration, including its default and binding options. */
-  primary: ArgumentDefinition;
+  /** Declaration metadata used for defaulting and implementation binding. */
+  primary: Omit<ArgumentDefinition, 'type' | 'callbackDictionary'> & { callbackDictionary?: IDLType; };
   /** Conversion descriptor including applicable attributes such as [Clamp]. */
-  type: WebIDLType;
+  type: IDLType;
   /** Whether the argument is required, optional, or repeated in a variadic tail. */
   optionality: ArgumentOptionality;
 
-  constructor(primary: ArgumentDefinition) {
-    this.primary = primary;
-    this.type = assembleMemberType(primary.type, primary.extendedAttributes);
+  constructor(primary: ArgumentDefinition, assembly: DefinitionAssembly) {
+    const { type, callbackDictionary, ...options } = primary;
+    this.primary = callbackDictionary ? { ...options, callbackDictionary: assembly.getIDLType(callbackDictionary) } : options;
+    this.type = assembly.getIDLType(assembleMemberType(type, primary.extendedAttributes));
     this.optionality = primary.variadic ? 'variadic' : primary.optional ? 'optional' : 'required';
   }
 }
 
 /** A dictionary member with its conversion type prepared independently of its incoming value. */
 export class AssembledDictionaryMember {
-  /** Original member declaration, including its default and binding options. */
-  primary: DictionaryMember;
+  /** Declaration metadata used for defaulting and implementation binding. */
+  primary: Omit<DictionaryMember, 'type'>;
   /** Property name read from the incoming dictionary object. */
   name: string;
   /** Conversion descriptor including applicable member attributes. */
-  type: WebIDLType;
+  type: IDLType;
 
-  constructor(primary: DictionaryMember) {
-    this.primary = primary;
+  constructor(primary: DictionaryMember, assembly: DefinitionAssembly) {
+    const { type, ...options } = primary;
+    this.primary = options;
     this.name = primary.name;
-    this.type = assembleMemberType(primary.type, primary.extendedAttributes);
+    this.type = assembly.getIDLType(assembleMemberType(type, primary.extendedAttributes));
   }
 }
 
 /** A callback function's argument and result contract. */
-export class AssembledCallbackFunction extends AssembledCallable<CallbackFunctionDefinition> {
+export class AssembledCallbackFunction extends AssembledCallable<Omit<CallbackFunctionDefinition, 'arguments' | 'returns'>> {
+  constructor(primary: CallbackFunctionDefinition, finish: AssemblySteps[]) {
+    const { arguments: argumentsList, returns, ...metadata } = primary;
+    super(metadata);
+    finish.push((assembly) => {
+      this.returns = assembly.getIDLType(returns);
+      this.arguments = argumentsList.map((argument) => new AssembledArgument(argument, assembly));
+      this.variadicArgument = this.arguments.at(-1)?.optionality === 'variadic' ? this.arguments.at(-1) : undefined;
+      let minimum = this.arguments.length;
+      while (minimum > 0 && this.arguments[minimum - 1]!.optionality !== 'required') minimum--;
+      this.minimumArgumentCount = minimum;
+    });
+  }
+
   /** Whether legacy callback attributes accept non-object values as null. */
   treatsNonObjectAsNull(): boolean {
     return hasExtendedAttribute(this.primary.extendedAttributes, 'LegacyTreatNonObjectAsNull');
@@ -537,16 +568,18 @@ export class AssembledNamespace {
   /** Attributes grouped by declared placement before realm exposure checks. */
   #attributesByPlacement = new Map<MemberPlacement, AttributeEntry<AssembledNamespaceMember>[]>();
 
-  constructor(primary: NamespaceDefinition, partials: PartialNamespaceDefinition[] = []) {
+  constructor(primary: NamespaceDefinition, partials: PartialNamespaceDefinition[] = [], finish: AssemblySteps[]) {
     this.primary = primary;
     this.partials = partials;
-    for (const member of primary.members) this.members.push({ member, source: primary });
-    for (const partial of partials) {
-      for (const member of partial.members) this.members.push({ member, source: partial });
-    }
-    for (const { member } of this.members) {
-      if (member.kind === 'operation') this.callables.add(member);
-    }
+    finish.push((assembly) => {
+      for (const member of primary.members) this.members.push({ member: assembleMember(member, assembly), source: primary });
+      for (const partial of partials) {
+        for (const member of partial.members) this.members.push({ member: assembleMember(member, assembly), source: partial });
+      }
+      for (const { member } of this.members) {
+        if (member.kind === 'operation') this.callables.add(member);
+      }
+    });
   }
 
   /** Select attributes by their declared placement; binding applies the realm's exposure conditions. */
@@ -565,7 +598,7 @@ export class AssembledNamespace {
     placement: MemberPlacement,
     include: OperationFilter,
     assembly: DefinitionAssembly,
-  ): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
+  ): Map<string, AssembledOverloads<AssembledCallable<IDLOperation>>> {
     return groupOperations(this.members, this.callables,
       (operation, entry) => belongsAt(operation, placement) && include(operation, entry), assembly);
   }
@@ -658,7 +691,7 @@ export class AssembledInterfaces {
   /** The same interfaces indexed by the implementation classes declared for them. */
   byImplClass = new Map<ImplementationClass, AssembledInterface>();
 
-  constructor(definitions: Definition[]) {
+  constructor(definitions: Definition[], finish: AssemblySteps[]) {
     const mixinsByName = new Map<string, InterfaceMixinDefinition>();
     const interfacePartialsByName = new Map<string, PartialInterfaceDefinition[]>();
     const mixinPartialsByName = new Map<string, PartialInterfaceMixinDefinition[]>();
@@ -686,35 +719,72 @@ export class AssembledInterfaces {
     for (const definition of definitions) {
       if (definition.kind !== 'interface') continue;
       this.byName.set(definition.name, new AssembledInterface(
-        definition, interfacePartialsByName.get(definition.name),
+        definition, interfacePartialsByName.get(definition.name), finish,
       ));
     }
 
-    for (const assembled of this.values()) {
-      assembleInterface(
-        assembled,
-        this,
-        mixinsByName,
-        mixinPartialsByName,
-        includesByInterfaceName.get(assembled.name),
-      );
-      const definition = assembled.primary;
-      // https://html.spec.whatwg.org/multipage/structured-data.html#serializable-objects
-      // https://html.spec.whatwg.org/multipage/structured-data.html#transferable-objects
-      // Steps require exactly one marker; a marker alone can describe unfinished support.
-      for (const [name, steps] of [
-        ['Serializable', definition.serialSteps],
-        ['Transferable', definition.transferSteps],
-      ] as const) {
-        const markers = definition.extendedAttributes?.filter(
-          (attribute) => attribute.kind !== 'raw' && attribute.name === name,
-        ) ?? [];
-        if (markers.length === 0 && !steps) continue;
-        if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
-          throw new InternalError(`${definition.name} must declare exactly one [${name}] marker`);
-        }
+    for (const name of interfacePartialsByName.keys()) {
+      if (!this.byName.has(name)) throw new InternalError(`Partial interface ${name} has no primary interface`);
+    }
+    for (const name of mixinPartialsByName.keys()) {
+      if (!mixinsByName.has(name)) throw new InternalError(`Partial mixin ${name} has no primary mixin`);
+    }
+    for (const [name, includes] of includesByInterfaceName) {
+      if (!this.byName.has(name)) throw new InternalError(`Includes target ${name} is not an interface`);
+      const included = new Set<string>();
+      for (const include of includes) {
+        if (!mixinsByName.has(include.mixin)) throw new InternalError(`Includes source ${include.mixin} is not a mixin`);
+        if (included.has(include.mixin)) throw new InternalError(`Duplicate includes statement: ${name} includes ${include.mixin}`);
+        included.add(include.mixin);
       }
-      const implementation = definition.implementation;
+    }
+    for (const assembled of this.values()) {
+      const { inherits } = assembled.primary;
+      if (!inherits) continue;
+      const parent = this.get(inherits);
+      if (!parent) throw new InternalError(`Interface ${assembled.name} inherits unknown interface ${inherits}`);
+      assembled.parentAssembled = parent;
+    }
+    validateInheritance(this.values());
+
+    finish.push((assembly) => {
+      // Compile every mixin, including unused ones, so invalid member types cannot hide there.
+      const mixinMembers = new Map<string, AssembledInterfaceMember[]>();
+      for (const mixin of mixinsByName.values()) {
+        const members: AssembledInterfaceMember[] = [];
+        for (const source of [mixin, ...mixinPartialsByName.get(mixin.name) ?? []]) {
+          for (const member of source.members) members.push({ member: assembleMember(member, assembly), source });
+        }
+        mixinMembers.set(mixin.name, members);
+      }
+      for (const assembled of this.values()) {
+        assembleInterface(
+          assembled,
+          mixinMembers,
+          includesByInterfaceName.get(assembled.name),
+          assembly,
+        );
+        const definition = assembled.primary;
+        // https://html.spec.whatwg.org/multipage/structured-data.html#serializable-objects
+        // https://html.spec.whatwg.org/multipage/structured-data.html#transferable-objects
+        // Steps require exactly one marker; a marker alone can describe unfinished support.
+        for (const [name, steps] of [
+          ['Serializable', definition.serialSteps],
+          ['Transferable', definition.transferSteps],
+        ] as const) {
+          const markers = definition.extendedAttributes?.filter(
+            (attribute) => attribute.kind !== 'raw' && attribute.name === name,
+          ) ?? [];
+          if (markers.length === 0 && !steps) continue;
+          if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
+            throw new InternalError(`${definition.name} must declare exactly one [${name}] marker`);
+          }
+        }
+
+      }
+    });
+    for (const assembled of this.values()) {
+      const implementation = assembled.primary.implementation;
       if (implementation) this.byImplClass.set(implementation.implClass, assembled);
     }
   }
@@ -744,7 +814,7 @@ export class AssembledInterfaces {
   }
 
   /** Resolve an implementation class to the IDL name declared in this assembly. */
-  getReference(implClass: ImplementationClass): ReferenceType {
+  getType(implClass: ImplementationClass): IDLInterfaceType {
     const assembled = this.byImplClass.get(implClass);
     if (!assembled) throw new InternalError('No interface declares the referenced implementation class');
     return assembled.type;
@@ -795,11 +865,11 @@ export class AssembledInterfaces {
 
 /** Index callback interfaces by name and identify declarations with legacy interface objects. */
 export class AssembledCallbackInterfaces extends Map<string, AssembledCallbackInterface> {
-  constructor(definitions: Definition[]) {
+  constructor(definitions: Definition[], finish: AssemblySteps[]) {
     super();
     for (const definition of definitions) {
       if (definition.kind === 'callback-interface') {
-        this.set(definition.name, new AssembledCallbackInterface(definition));
+        this.set(definition.name, new AssembledCallbackInterface(definition, finish));
       }
     }
   }
@@ -814,11 +884,11 @@ export class AssembledCallbackInterfaces extends Map<string, AssembledCallbackIn
 
 /** Index callback functions by their IDL names. */
 export class AssembledCallbackFunctions extends Map<string, AssembledCallbackFunction> {
-  constructor(definitions: Definition[]) {
+  constructor(definitions: Definition[], finish: AssemblySteps[]) {
     super();
     for (const definition of definitions) {
       if (definition.kind === 'callback-function') {
-        this.set(definition.name, new AssembledCallbackFunction(definition));
+        this.set(definition.name, new AssembledCallbackFunction(definition, finish));
       }
     }
   }
@@ -826,7 +896,7 @@ export class AssembledCallbackFunctions extends Map<string, AssembledCallbackFun
 
 /** Combine namespace fragments and index the assembled namespaces by IDL name. */
 export class AssembledNamespaces extends Map<string, AssembledNamespace> {
-  constructor(definitions: Definition[]) {
+  constructor(definitions: Definition[], finish: AssemblySteps[]) {
     super();
     const partialsByName = new Map<string, PartialNamespaceDefinition[]>();
     for (const definition of definitions) {
@@ -834,15 +904,18 @@ export class AssembledNamespaces extends Map<string, AssembledNamespace> {
     }
     for (const definition of definitions) {
       if (definition.kind === 'namespace') {
-        this.set(definition.name, new AssembledNamespace(definition, partialsByName.get(definition.name)));
+        this.set(definition.name, new AssembledNamespace(definition, partialsByName.get(definition.name), finish));
       }
+    }
+    for (const name of partialsByName.keys()) {
+      if (!this.has(name)) throw new InternalError(`Partial namespace ${name} has no primary namespace`);
     }
   }
 }
 
 /** Assemble dictionary fragments and inheritance, indexed by IDL name. */
 export class AssembledDictionaries extends Map<string, AssembledDictionary> {
-  constructor(definitions: Definition[]) {
+  constructor(definitions: Definition[], finish: AssemblySteps[]) {
     super();
     const partialsByName = new Map<string, PartialDictionaryDefinition[]>();
     for (const definition of definitions) {
@@ -853,9 +926,22 @@ export class AssembledDictionaries extends Map<string, AssembledDictionary> {
         this.set(definition.name, new AssembledDictionary(definition, partialsByName.get(definition.name)));
       }
     }
+    for (const name of partialsByName.keys()) {
+      if (!this.has(name)) throw new InternalError(`Partial dictionary ${name} has no primary dictionary`);
+    }
+    for (const assembled of this.values()) {
+      const { inherits, name } = assembled.primary;
+      if (!inherits) continue;
+      const parent = this.get(inherits);
+      if (!parent) throw new InternalError(`Dictionary ${name} inherits unknown dictionary ${inherits}`);
+      assembled.parentAssembled = parent;
+    }
+    validateInheritance(this.values());
 
-    const visited = new Set<AssembledDictionary>();
-    for (const assembled of this.values()) assembleDictionary(assembled, this, visited);
+    finish.push((assembly) => {
+      const visited = new Set<AssembledDictionary>();
+      for (const assembled of this.values()) assembleDictionary(assembled, visited, assembly);
+    });
   }
 }
 
@@ -871,11 +957,17 @@ export class AssembledEnumerations extends Map<string, AssembledEnumeration> {
 
 /** Resolve alias chains without deciding how a caller uses the resulting type. */
 export class AssembledTypedefs extends Map<string, AssembledTypedef> {
-  constructor(definitions: Definition[]) {
+  constructor(definitions: Definition[], finish: AssemblySteps[]) {
     super();
     for (const definition of definitions) {
       if (definition.kind === 'typedef') this.set(definition.name, new AssembledTypedef(definition));
     }
+    const visited = new Set<WebIDLType>();
+    const visiting = new Set<WebIDLType>();
+    for (const assembled of this.values()) validateTypedef(assembled.primary.type, this, visited, visiting);
+    finish.push((assembly) => {
+      for (const name of this.keys()) assembly.getNamedType(name);
+    });
   }
 
   /** Strip aliases and annotations, optionally retaining the encountered conversion attributes. */
@@ -924,16 +1016,16 @@ export class AssembledProxyObjects extends Map<string, AssembledProxyObject> {
   }
 }
 
-/** Retain prepared callables under their original member-binding identities. */
+/** Retain prepared callables under their compiled member identities. */
 class AssembledCallables {
-  /** Prepared arguments keyed by the original declaration used during member binding. */
-  #byPrimary = new Map<CallableDeclaration, AssembledCallable>();
+  /** Prepared callables keyed by the compiled members used during binding. */
+  #byPrimary = new Map<CallableContract, AssembledCallable>();
 
-  add(primary: CallableDeclaration): void {
+  add(primary: CallableContract): void {
     if (!this.#byPrimary.has(primary)) this.#byPrimary.set(primary, new AssembledCallable(primary));
   }
 
-  get<Primary extends CallableDeclaration>(primary: Primary): AssembledCallable<Primary> {
+  get<Primary extends CallableContract>(primary: Primary): AssembledCallable<Primary> {
     const assembled = this.#byPrimary.get(primary);
     if (!assembled) throw new InternalError('Callable does not belong to this assembled definition');
     // Each entry retains the exact declaration used as its key.
@@ -941,7 +1033,7 @@ class AssembledCallables {
   }
 }
 
-type CallableDeclaration = { arguments?: ArgumentDefinition[]; };
+type CallableContract = { name?: string; arguments?: AssembledArgument[]; returns?: IDLType; };
 type ArgumentOptionality = 'required' | 'optional' | 'variadic';
 type OverloadCandidates<Callable extends AssembledCallable> = {
   callables: Callable[];
@@ -953,17 +1045,17 @@ type StringifierEntry = InterfaceMemberEntry<'stringifier' | 'attribute'>;
 export type MemberPlacement = 'regular' | 'static' | 'unforgeable';
 
 /** An attribute with the declaration that controls its exposure. */
-type AttributeEntry<Member> = Member & { member: AttributeMember; };
+type AttributeEntry<Member> = Member & { member: IDLAttribute; };
 
 /** A JSON-compatible attribute and the declaration supplying its inherited getter. */
 export type DefaultToJSONAttribute = AssembledInterfaceMember & {
   assembled: AssembledInterface;
-  member: AttributeMember;
-  implementation: AttributeMember;
+  member: IDLAttribute;
+  implementation: IDLAttribute;
 };
 
 export type AssembledInterfaceMember = {
-  member: InterfaceMember | MixinMember;
+  member: IDLInterfaceMember;
   /** The declaring construct supplies exposure conditions for this member. */
   source:
     | PrimaryInterfaceDefinition
@@ -972,18 +1064,18 @@ export type AssembledInterfaceMember = {
     | PartialInterfaceMixinDefinition;
 };
 
-type InterfaceMemberEntry<Kind extends InterfaceMember['kind']> = AssembledInterfaceMember & {
-  member: Extract<InterfaceMember, { kind: Kind; }>;
+type InterfaceMemberEntry<Kind extends IDLInterfaceMember['kind']> = AssembledInterfaceMember & {
+  member: Extract<IDLInterfaceMember, { kind: Kind; }>;
 };
 
 export type AssembledNamespaceMember = {
-  member: NamespaceMember;
+  member: IDLNamespaceMember;
   /** The declaring namespace or partial supplies this member's exposure conditions. */
   source: NamespaceDefinition | PartialNamespaceDefinition;
 };
 
 type OperationFilter = (
-  operation: OperationMember,
+  operation: IDLOperation,
   entry: AssembledInterfaceMember | AssembledNamespaceMember,
 ) => boolean;
 
@@ -991,24 +1083,17 @@ type OperationFilter = (
 // https://webidl.spec.whatwg.org/#idl-interface-mixins
 function assembleInterface(
   assembled: AssembledInterface,
-  interfaces: AssembledInterfaces,
-  mixinsByName: Map<string, InterfaceMixinDefinition>,
-  mixinPartialsByName: Map<string, PartialInterfaceMixinDefinition[]>,
-  includes?: IncludesDefinition[],
+  mixinMembers: Map<string, AssembledInterfaceMember[]>,
+  includes: IncludesDefinition[] | undefined,
+  assembly: DefinitionAssembly,
 ): void {
   const definition = assembled.primary;
-  if (definition.inherits) assembled.parentAssembled = interfaces.get(definition.inherits);
-  for (const member of definition.members) assembled.members.push({ member, source: definition });
+  for (const member of definition.members) assembled.members.push({ member: assembleMember(member, assembly), source: definition });
   for (const partial of assembled.partials) {
-    for (const member of partial.members) assembled.members.push({ member, source: partial });
+    for (const member of partial.members) assembled.members.push({ member: assembleMember(member, assembly), source: partial });
   }
   for (const include of includes ?? []) {
-    const mixin = mixinsByName.get(include.mixin);
-    if (!mixin) continue;
-    for (const member of mixin.members) assembled.members.push({ member, source: mixin });
-    for (const partial of mixinPartialsByName.get(mixin.name) ?? []) {
-      for (const member of partial.members) assembled.members.push({ member, source: partial });
-    }
+    assembled.members.push(...mixinMembers.get(include.mixin)!);
   }
   for (const { member } of assembled.members) {
     if (member.kind === 'operation' || member.kind === 'constructor' || member.kind === 'async-iterable') {
@@ -1020,17 +1105,14 @@ function assembleInterface(
 // https://webidl.spec.whatwg.org/#js-dictionary
 function assembleDictionary(
   assembled: AssembledDictionary,
-  dictionaries: AssembledDictionaries,
   visited: Set<AssembledDictionary>,
+  assembly: DefinitionAssembly,
 ): void {
   if (visited.has(assembled)) return;
   visited.add(assembled);
 
   const definition = assembled.primary;
-  if (definition.inherits) {
-    assembled.parentAssembled = dictionaries.get(definition.inherits);
-    if (assembled.parentAssembled) assembleDictionary(assembled.parentAssembled, dictionaries, visited);
-  }
+  if (assembled.parentAssembled) assembleDictionary(assembled.parentAssembled, visited, assembly);
 
   const members = [...definition.members];
   for (const partial of assembled.partials) members.push(...partial.members);
@@ -1041,7 +1123,55 @@ function assembleDictionary(
     return 0;
   });
   if (assembled.parentAssembled) assembled.members.push(...assembled.parentAssembled.members);
-  for (const member of members) assembled.members.push(new AssembledDictionaryMember(member));
+  for (const member of members) assembled.members.push(new AssembledDictionaryMember(member, assembly));
+}
+
+// Visit each ancestry once; only an unfinished path can contain an inheritance cycle.
+function validateInheritance<Assembled extends {
+  primary: { name: string; };
+  parentAssembled: Assembled | undefined;
+}>(definitions: Iterable<Assembled>): void {
+  const visited = new Set<Assembled>();
+  const visiting = new Set<Assembled>();
+  for (const assembled of definitions) {
+    for (let current: Assembled | undefined = assembled; current && !visited.has(current); current = current.parentAssembled) {
+      if (visiting.has(current)) throw new InternalError(`Inheritance cycle involving ${current.primary.name}`);
+      visiting.add(current);
+    }
+    for (const current of visiting) visited.add(current);
+    visiting.clear();
+  }
+}
+
+// Expanding an alias must terminate, including aliases nested in containers.
+// Named interfaces and dictionaries end expansion, so recursive value shapes remain valid.
+function validateTypedef(
+  type: WebIDLType, typedefs: AssembledTypedefs,
+  visited: Set<WebIDLType>, visiting: Set<WebIDLType>,
+): void {
+  if (visited.has(type)) return;
+  if (visiting.has(type)) throw new InternalError('Typedef expansion contains a cycle');
+  visiting.add(type);
+  switch (type.kind) {
+    case 'reference': {
+      const assembled = typedefs.get(type.name);
+      if (assembled) validateTypedef(assembled.primary.type, typedefs, visited, visiting);
+      break;
+    }
+    case 'annotated': case 'nullable': case 'sequence': case 'async-sequence':
+    case 'frozen-array': case 'observable-array': case 'promise':
+      validateTypedef(type.type, typedefs, visited, visiting);
+      break;
+    case 'union':
+      for (const member of type.types) validateTypedef(member, typedefs, visited, visiting);
+      break;
+    case 'record':
+      validateTypedef(type.key, typedefs, visited, visiting);
+      validateTypedef(type.value, typedefs, visited, visiting);
+      break;
+  }
+  visiting.delete(type);
+  visited.add(type);
 }
 
 function appendValuesByName<Value>(
@@ -1074,8 +1204,8 @@ function groupOperations(
   callables: AssembledCallables,
   include: OperationFilter,
   assembly: DefinitionAssembly,
-): Map<string, AssembledOverloads<AssembledCallable<OperationMember>>> {
-  const groups = new Map<string, AssembledCallable<OperationMember>[]>();
+): Map<string, AssembledOverloads<AssembledCallable<IDLOperation>>> {
+  const groups = new Map<string, AssembledCallable<IDLOperation>[]>();
   for (const entry of members) {
     const operation = entry.member;
     if (operation.kind !== 'operation' || !operation.name || !include(operation, entry)) continue;
@@ -1085,7 +1215,7 @@ function groupOperations(
     if (group) group.push(callable);
     else groups.set(key, [callable]);
   }
-  const overloads = new Map<string, AssembledOverloads<AssembledCallable<OperationMember>>>();
+  const overloads = new Map<string, AssembledOverloads<AssembledCallable<IDLOperation>>>();
   for (const [name, group] of groups) overloads.set(name, new AssembledOverloads(group, assembly));
   return overloads;
 }
@@ -1095,7 +1225,7 @@ const typeExtendedAttributeNames = new Set([
 ]);
 
 function belongsAt(
-  member: AttributeMember | OperationMember | StringifierMember,
+  member: IDLAttribute | IDLOperation | StringifierMember,
   placement: MemberPlacement,
 ): boolean {
   const isStatic = member.kind !== 'stringifier' && member.static === true;
@@ -1106,4 +1236,53 @@ function belongsAt(
     'LegacyUnforgeable',
   );
   return placement === 'unforgeable' ? unforgeable : !unforgeable;
+}
+
+/** Construction work held only until the assembly has indexed all named definitions. */
+export type AssemblySteps = (assembly: DefinitionAssembly) => void;
+
+export type IDLAttribute = Omit<AttributeMember, 'type'> & { type: IDLType; };
+export type IDLConstant = Omit<ConstantMember, 'type'> & { type: IDLType; };
+export type IDLOperation = Omit<OperationMember, 'returns' | 'arguments'> & { returns: IDLType; arguments: AssembledArgument[]; };
+export type IDLConstructor = Omit<ConstructorMember, 'arguments'> & { arguments: AssembledArgument[]; };
+export type IDLIterable = Omit<IterableMember, 'key' | 'value'> & { key?: IDLType; value: IDLType; };
+export type IDLAsyncIterable = Omit<AsyncIterableMember, 'key' | 'value' | 'arguments'> & { key?: IDLType; value: IDLType; arguments?: AssembledArgument[]; };
+export type IDLMaplike = Omit<MaplikeMember, 'key' | 'value'> & { key: IDLType; value: IDLType; };
+export type IDLSetlike = Omit<SetlikeMember, 'value'> & { value: IDLType; };
+export type IDLNamedArguments = Omit<NamedArgumentsExtendedAttribute, 'arguments'> & { arguments: AssembledArgument[]; };
+export type IDLInterfaceMember = IDLAttribute | IDLConstant | IDLOperation | IDLConstructor | IDLIterable | IDLAsyncIterable | IDLMaplike | IDLSetlike | StringifierMember;
+export type IDLNamespaceMember = IDLAttribute | IDLConstant | IDLOperation;
+
+type MemberFromDeclaration<Member> =
+  Member extends AttributeMember ? IDLAttribute : Member extends ConstantMember ? IDLConstant
+    : Member extends OperationMember ? IDLOperation : Member extends ConstructorMember ? IDLConstructor
+      : Member extends IterableMember ? IDLIterable : Member extends AsyncIterableMember ? IDLAsyncIterable
+        : Member extends MaplikeMember ? IDLMaplike : Member extends SetlikeMember ? IDLSetlike : StringifierMember;
+
+function assembleMember<Member extends InterfaceMember | MixinMember | NamespaceMember>(
+  member: Member, assembly: DefinitionAssembly,
+): MemberFromDeclaration<Member>;
+function assembleMember(member: InterfaceMember | MixinMember | NamespaceMember, assembly: DefinitionAssembly): IDLInterfaceMember {
+  switch (member.kind) {
+    case 'attribute': case 'constant':
+      return { ...member, type: assembly.getIDLType(assembleMemberType(member.type, member.extendedAttributes)) };
+    case 'operation':
+      return {
+        ...member, returns: assembly.getIDLType(member.returns),
+        arguments: member.arguments.map((argument) => new AssembledArgument(argument, assembly)),
+      };
+    case 'constructor':
+      return { ...member, arguments: member.arguments.map((argument) => new AssembledArgument(argument, assembly)) };
+    case 'async-iterable':
+      return {
+        ...member, key: member.key && assembly.getIDLType(member.key), value: assembly.getIDLType(member.value),
+        arguments: member.arguments?.map((argument) => new AssembledArgument(argument, assembly)),
+      };
+    case 'iterable':
+      return { ...member, key: member.key && assembly.getIDLType(member.key), value: assembly.getIDLType(member.value) };
+    case 'maplike':
+      return { ...member, key: assembly.getIDLType(member.key), value: assembly.getIDLType(member.value) };
+    case 'setlike': return { ...member, value: assembly.getIDLType(member.value) };
+    case 'stringifier': return member;
+  }
 }

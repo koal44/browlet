@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
+
+import { getMemberBinding } from '../support/web-idl-binding';
 import { itPassesWith } from '../test-runtime';
 
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { getImplementationRecord } from '../../src/web-idl/binding/platform';
@@ -313,7 +315,7 @@ describe('Web IDL maplike declarations', () => {
     let calls = 0;
 
     const binding = createBinding(definition);
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(clear).operationSteps = () => { calls++; };
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), clear).operationSteps = () => { calls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
 
     call(object, 'clear');
@@ -342,7 +344,7 @@ describe('Web IDL maplike declarations', () => {
     let staticCalls = 0;
 
     const binding = createBinding(definition);
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(staticSet).operationSteps = () => { staticCalls++; };
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), staticSet).operationSteps = () => { staticCalls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 
@@ -500,7 +502,7 @@ describe('Web IDL setlike declarations', () => {
     let staticCalls = 0;
 
     const binding = createBinding(definition);
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(staticAdd).operationSteps = () => { staticCalls++; };
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), staticAdd).operationSteps = () => { staticCalls++; };
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     const Interface = getInstalledInterface(binding.install(), definition.name);
 

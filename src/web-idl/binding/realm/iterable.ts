@@ -1,17 +1,12 @@
 import { InternalError, Stamper } from '../../../infra/index';
-
 import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../../js-engine/index';
 
-import { reference, type IterableMember } from '../../core/index';
-
-import type { AssembledInterface } from '../../assembled';
-
+import type { IDLIterable, AssembledInterface } from '../../assembly/index';
+import { IDLCallbackFunction } from '../../values/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance, type PlatformRecord,
 } from '../platform';
 import type { RealmBinding } from '../realm';
-
-import { IDLCallbackFunction } from '../../values/index';
 
 // Value pairs use the implementation's existing entry tuples.
 export type ValuePair<Key = unknown, Value = unknown> = [key: Key, value: Value];
@@ -28,7 +23,7 @@ export class SynchronousIterableBinding {
   defineMethods(
     target: object,
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
   ): void {
     if (member.key === undefined) {
       this.defineIndexedMethods(target, true);
@@ -56,7 +51,7 @@ export class SynchronousIterableBinding {
   #definePairIterationMethods(
     target: object,
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
   ): void {
     const entries = this.#createIteratorMethod(
       assembled, member, 'key+value', 'entries', '%Symbol.iterator%'
@@ -85,7 +80,7 @@ export class SynchronousIterableBinding {
   // Project factory for the entries, keys, and values functions in Web IDL §3.7.9 Iterable declarations.
   #createIteratorMethod(
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
@@ -112,14 +107,14 @@ export class SynchronousIterableBinding {
   // Project factory for the forEach function in Web IDL §3.7.9 Iterable declarations.
   #createForEachMethod(
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
   ): JSFunction {
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
         const receiver = this.#getReceiverRecord(
           thisArgument, assembled, 'forEach'
         );
-        const callback = this.#binding.getConverter(functionType).jsToIDL(argumentsList[0]);
+        const callback = this.#binding.getConverter(this.#binding.assembly.getNamedType('Function')).jsToIDL(argumentsList[0]);
         if (!IDLCallbackFunction.is(callback)) {
           throw new InternalError('Function conversion did not produce a callback');
         }
@@ -147,7 +142,7 @@ export class SynchronousIterableBinding {
   // Project cache for Web IDL §3.7.9.2 Iterator prototype object.
   #getIteratorPrototypeObject(
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
   ): object {
     const implementationBinding = this.#binding.getImplementationBinding(assembled);
     if (implementationBinding.iteratorPrototype) return implementationBinding.iteratorPrototype;
@@ -173,7 +168,7 @@ export class SynchronousIterableBinding {
   // Web IDL §3.7.9.2 Iterator prototype object — next steps.
   #next(
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
     thisArgument: unknown,
   ): object {
     if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
@@ -217,7 +212,7 @@ export class SynchronousIterableBinding {
   // Extracted from Web IDL §3.7.9.2 Iterator prototype object — iterator result: select and convert the value.
   #convertPairResult(
     [key, value]: ValuePair,
-    member: IterableMember,
+    member: IDLIterable,
     kind: IterationKind,
     binding: RealmBinding,
   ): unknown {
@@ -241,7 +236,7 @@ export class SynchronousIterableBinding {
   #getValuePairs(
     implInst: StampedImplInstance,
     assembled: AssembledInterface,
-    member: IterableMember,
+    member: IDLIterable,
   ): ValuePair[] {
     const steps = this.#binding.getMemberBinding(assembled, member)?.valuePairsSteps;
     if (!steps) {
@@ -309,5 +304,3 @@ type DefaultIterator = {
 };
 
 type IterationKind = 'key' | 'key+value' | 'value';
-
-const functionType = reference('Function');

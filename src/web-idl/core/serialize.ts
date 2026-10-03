@@ -1,9 +1,9 @@
 import { InternalError } from '../../infra/internal-error';
 
-import type { Definition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './declarations';
 import type {
   ArgumentDefinition, ConstantValue, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass, WebIDLType,
 } from './types';
+import type { Definition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './declarations';
 
 // Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
 export function serializeDefinitions<Env>(

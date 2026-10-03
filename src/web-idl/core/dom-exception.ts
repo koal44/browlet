@@ -1,12 +1,12 @@
 import { ExceptionRequestStamper, RangeError } from '../../infra/exceptions';
 import { Stamper } from '../../infra/stamper';
 
+import { emptyDictionary, idlType } from './types';
+import type { SerialSteps } from './structured-data';
 import { defineDictionary, defineInterface } from './declarations';
 import {
   arg, constant, ctor, dictMember, impl, integer, nullable, roAttr, reference, xattr,
 } from './helpers';
-import type { SerialSteps } from './structured-data';
-import { emptyDictionary, idlType } from './types';
 
 // https://webidl.spec.whatwg.org/#idl-exceptions
 

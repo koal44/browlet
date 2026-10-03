@@ -1,26 +1,17 @@
 import { createEnvironment } from '../js-engine/execution-fixture';
 import type { AbortSignalCapability } from '../../src/js-engine/index';
 import type { FetchEnvironment } from '../../src/fetch/environment';
-import {
-  FetchBody, bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL,
-} from '../../src/fetch/body';
-import {
-  HeadersImpl, headersIDL, headersInitIDL, type HeadersGuard,
-} from '../../src/fetch/headers';
-import {
-  RequestImpl, FetchRequest, requestCacheIDL, requestCredentialsIDL,
-  requestDestinationIDL, requestDuplexIDL, requestIDL, requestIncludesBodyIDL,
-  requestInfoIDL, requestInitIDL, requestModeIDL, requestPriorityIDL, requestRedirectIDL,
-} from '../../src/fetch/request';
-import {
-  ResponseImpl, FetchResponse, responseIDL, responseIncludesBodyIDL, responseInitIDL,
-  responseTypeIDL,
-} from '../../src/fetch/response';
+import { fetchIDLDefinitions } from '../../src/fetch/index';
+import { fetchGlobalScopeIDL } from '../../src/fetch/fetch-global';
+import { FetchBody } from '../../src/fetch/body';
+import { HeadersImpl, type HeadersGuard } from '../../src/fetch/headers';
+import { RequestImpl, FetchRequest } from '../../src/fetch/request';
+import { ResponseImpl, FetchResponse } from '../../src/fetch/response';
 import { fileIDLDefinitions } from '../../src/file/index';
 import { streamsIDLDefinitions, ReadableStreamImpl } from '../../src/streams/index';
 import { urlIDLDefinitions } from '../../src/url/api';
 import { parseURL } from '../../src/url/url';
-import { BindingWorld } from '../../src/web-idl/index';
+import { BindingWorld, defineInterface } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { createClientEnvironment, createFetchUserAgent, type ClientEnvironment } from './client-fixture';
@@ -55,9 +46,13 @@ export function createFetchFixture(world?: BindingWorld<ClientEnvironment>) {
 }
 
 export const fetchDefinitions = [
-  ...streamsIDLDefinitions, ...fileIDLDefinitions, ...xhrIDLDefinitions, ...urlIDLDefinitions,
-  headersInitIDL, headersIDL, xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
-  requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,
-  requestCredentialsIDL, requestCacheIDL, requestRedirectIDL, requestDuplexIDL, requestPriorityIDL,
-  requestIDL, requestIncludesBodyIDL, responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
+  // There is no WindowOrWorkerGlobalScope in this standalone host.
+  ...fetchIDLDefinitions.filter((definition) => definition !== fetchGlobalScopeIDL),
+  ...streamsIDLDefinitions, ...fileIDLDefinitions,
+  ...xhrIDLDefinitions, ...urlIDLDefinitions,
+  // Cross-specification type identities; this host does not expose DOM or form APIs.
+  // Those conversions are exercised through the browser's complete declarations.
+  defineInterface({ name: 'AbortSignal', members: [] }),
+  defineInterface({ name: 'HTMLElement', members: [] }),
+  defineInterface({ name: 'HTMLFormElement', inherits: 'HTMLElement', members: [] }),
 ];

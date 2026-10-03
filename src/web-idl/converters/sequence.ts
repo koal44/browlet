@@ -1,25 +1,22 @@
 import { InternalError } from '../../infra/index';
-
 import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js-engine/index';
 
-import type { SequenceType, FrozenArrayType, WebIDLType } from '../core/index';
-
+import type { IDLSequenceType, IDLFrozenArrayType } from '../assembly/index';
+import type { IDLSequence } from '../values/index';
 import { Converter, type ConversionSteps } from './converter';
 
-import type { IDLSequence } from '../values/index';
-
 /** Convert iterable elements and allocate author arrays in the selected realm. */
-export class SequenceConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
+export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType = IDLSequenceType> extends Converter<Type> {
   /** Reused element conversion with its own annotations and this converter's realm. */
   #element?: Converter;
 
   protected get element(): Converter {
-    return this.#element ??= this.forType((this.resolvedType as SequenceType | FrozenArrayType).type);
+    return this.#element ??= this.forType(this.type.elementType);
   }
 
   // https://webidl.spec.whatwg.org/#es-sequence
   protected createInputSteps(): ConversionSteps<readonly unknown[]> {
-    const description = this.resolvedType.kind === 'frozen-array' ? 'frozen array' : 'sequence';
+    const description = this.type.kind === 'frozen-array' ? 'frozen array' : 'sequence';
     return (value) => {
       if (!isObject(value)) this.throwTypeError(`A ${description} value must be an object`);
       const method = getMethod(value, Symbol.iterator, this.realm);
@@ -63,7 +60,7 @@ export class SequenceConverter<Type extends WebIDLType = WebIDLType> extends Con
 }
 
 /** A frozen-array input projects converted elements immediately; output preserves that array. */
-export class FrozenArrayConverter<Type extends WebIDLType = WebIDLType> extends SequenceConverter<Type> {
+export class FrozenArrayConverter<Type extends IDLFrozenArrayType = IDLFrozenArrayType> extends SequenceConverter<Type> {
   /** Element projection used to create each incoming frozen array. */
   #project?: ConversionSteps<unknown[]>;
 

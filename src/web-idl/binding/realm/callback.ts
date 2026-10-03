@@ -1,18 +1,13 @@
 import { InternalError, Stamper } from '../../../infra/index';
-
 import { isCallable, isConstructor, isObject } from '../../../js-engine/index';
+import type { CallbackExceptionBehavior } from '../../core/index';
 
-import type { CallbackExceptionBehavior, OperationMember } from '../../core/index';
-
-import type { AssembledCallable, AssembledCallbackFunction } from '../../assembled';
 import type { WebIDLRealm } from '../../environment';
-
+import type { IDLOperation, AssembledCallable, AssembledCallbackFunction } from '../../assembly/index';
+import { IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface } from '../../values/index';
+import type { ConversionSteps } from '../../converters/index';
 import { getImplementationRecord } from '../platform';
 import type { RealmBinding } from '../realm';
-
-import { IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface } from '../../values/index';
-
-import type { ConversionSteps } from '../../converters/index';
 
 /** Share callback invocation contracts without retaining individual author callback objects. */
 export class CallbackBinding {
@@ -97,20 +92,20 @@ export class CallbackInvoker {
   #realm: WebIDLRealm;
 
   constructor(assembled: CallbackCallable, binding: RealmBinding, realm: WebIDLRealm) {
-    const assembly = binding.assembly;
     this.#realm = realm;
     this.#argumentConverters = assembled.arguments.map((argument) =>
       binding.getConverter(argument.type, realm).getIDLToJSSteps());
     this.#variadicConverter = assembled.variadicArgument && this.#argumentConverters.at(-1);
     this.#primitiveArguments = assembled.arguments.every((argument) => {
-      const type = assembly.getUnannotatedType(argument.type);
+      const type = argument.type;
       // The undefined type discards a supplied value instead of preserving it.
-      return type.kind === 'simple' && type.name !== 'undefined' && assembly.isPrimitiveType(type);
+      return type.kind === 'integer' || type.kind === 'float' || type.kind === 'string' ||
+        type.kind === 'boolean' || type.kind === 'bigint' || type.kind === 'symbol';
     });
-    this.jsToIDLResult = binding.getConverter(assembled.primary.returns, realm).getJSToIDLSteps();
-    const returns = assembly.getUnannotatedType(assembled.primary.returns);
+    this.jsToIDLResult = binding.getConverter(assembled.returns, realm).getJSToIDLSteps();
+    const returns = assembled.returns;
     this.returnsPromise = returns.kind === 'promise';
-    this.canReportExceptions = returns.kind === 'simple' && (returns.name === 'undefined' || returns.name === 'any');
+    this.canReportExceptions = returns.kind === 'undefined' || returns.kind === 'any';
   }
 
   /** Invoke the callback's author function using its associated realm and captured context. */
@@ -207,7 +202,7 @@ export class CallbackInvoker {
   }
 }
 
-export type CallbackCallable = AssembledCallbackFunction | AssembledCallable<OperationMember>;
+export type CallbackCallable = AssembledCallbackFunction | AssembledCallable<IDLOperation>;
 
 /** An implementation callable retaining its original callback's conversion and realm. */
 export type StampedCallbackFunction = CallableFunction & CallbackFunctionStamper;

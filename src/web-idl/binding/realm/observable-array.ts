@@ -1,7 +1,6 @@
 import { createObservableArray, type ObservableArrayHandle } from '../../../infra/index';
 
-import { idlType, type AttributeMember, type WebIDLType } from '../../core/index';
-
+import type { IDLType, IDLAttribute } from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 
@@ -16,8 +15,8 @@ export class ObservableArrayBinding {
   // Project helper: retrieve the platform value for an observable-array attribute.
   get(
     record: PlatformRecord,
-    attribute: AttributeMember,
-    elementType: WebIDLType,
+    attribute: IDLAttribute,
+    elementType: IDLType,
   ): unknown[] {
     return this.#getHandle(record, attribute, elementType).value;
   }
@@ -25,8 +24,8 @@ export class ObservableArrayBinding {
   // Project helper: retrieve the observable-array attribute's retained backing list.
   getBackingList(
     record: PlatformRecord,
-    attribute: AttributeMember,
-    elementType: WebIDLType,
+    attribute: IDLAttribute,
+    elementType: IDLType,
   ): unknown[] {
     return this.#getHandle(record, attribute, elementType).backingList;
   }
@@ -34,8 +33,8 @@ export class ObservableArrayBinding {
   // Extracted from Web IDL §3.7.6 Attributes — replace an observable array's contents in an attribute setter.
   replace(
     record: PlatformRecord,
-    attribute: AttributeMember,
-    elementType: WebIDLType,
+    attribute: IDLAttribute,
+    elementType: IDLType,
     value: unknown,
   ): void {
     const values = this.#binding.getConverter(this.#binding.assembly.getSequenceType(elementType)).jsToIDL(value);
@@ -46,8 +45,8 @@ export class ObservableArrayBinding {
   // with Infra's backing list.
   #getHandle(
     record: PlatformRecord,
-    attribute: AttributeMember,
-    elementType: WebIDLType,
+    attribute: IDLAttribute,
+    elementType: IDLType,
   ): ObservableArrayHandle<unknown, unknown> {
     let attributes = record.observableArrays;
     if (!attributes) {
@@ -85,7 +84,7 @@ export class ObservableArrayBinding {
         )
         : undefined,
       toJavaScript: outputConverter.getIDLToJSSteps(),
-      toNumber: this.#binding.getConverter(idlType.unrestrictedDouble).getJSToIDLSteps(),
+      toNumber: this.#binding.getConverter(this.#binding.assembly.builtinTypes.unrestrictedDouble).getJSToIDLSteps(),
     });
     attributes.set(attribute, handle);
     return handle;

@@ -1,17 +1,10 @@
 import { InternalError } from '../../../infra/index';
-
 import { getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod } from '../../../js-engine/index';
 
-import type { WebIDLType } from '../../core/index';
-
-import type { AssembledArgument, AssembledCallable, AssembledOverloads } from '../../assembled';
-
+import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads } from '../../assembly/index';
+import { IDLAsyncSequence } from '../../values/index';
 import { getPlatformRecord, isPlatformObject } from '../platform';
 import type { RealmBinding } from '../realm';
-
-import { IDLAsyncSequence } from '../../values/index';
-
-import type { SequenceConverter } from '../../converters/index';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */
 export function createOverloadResolver<Callable extends AssembledCallable>(
@@ -103,12 +96,12 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   if (i === distinguishingIndex && asyncSequenceMethod) {
     const type = selected.getArgument(i)!.type;
-    const asyncSequence = binding.assembly.getUnionCandidates(type).typesByKind.get('async-sequence')?.resolvedType;
-    if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
+    const asyncSequence = binding.assembly.getUnionCandidates(type).asyncSequence;
+    if (!asyncSequence) {
       throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
     values.push(new IDLAsyncSequence(
-      argumentsList[i] as object, asyncSequence.type, asyncSequenceMethod.method, asyncSequenceMethod.type,
+      argumentsList[i] as object, asyncSequence.elementType, asyncSequenceMethod.method, asyncSequenceMethod.type,
     ));
     i++;
   }
@@ -116,15 +109,10 @@ export function resolveOverload<Callable extends AssembledCallable>(
   if (i === distinguishingIndex && method) {
     const type = selected.getArgument(i)!.type;
     const candidate = binding.assembly.getUnionCandidates(type).array;
-    const sequenceLike = candidate?.resolvedType;
-    if (
-      !sequenceLike ||
-      (sequenceLike.kind !== 'sequence' &&
-        sequenceLike.kind !== 'frozen-array')
-    ) {
+    if (!candidate) {
       throw new InternalError('Iterator method selected a non-sequence-like overload');
     }
-    const converter = binding.getConverter(candidate.declaredType) as SequenceConverter;
+    const converter = binding.getConverter(candidate);
     values.push(converter.jsToIDLIterable(argumentsList[i] as object, method));
     i++;
   }
@@ -177,8 +165,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
       const type = callable.getArgument(index)!.type;
       return assembly.includesNullableType(type) ||
         assembly.getCandidateTypes(type).some((candidate) =>
-          candidate.kind === 'reference' &&
-          assembly.dictionaries.has(candidate.name));
+          candidate.kind === 'dictionary');
     });
     if (matches.length > 0) return { candidates: matches };
   }
@@ -187,7 +174,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     matches = candidates.filter((callable) => {
       const type = callable.getArgument(index)!.type;
       return containsImplementedInterface(type, value, binding) ||
-        assembly.hasSimpleCandidate(type, 'object');
+        assembly.hasCandidateKind(type, 'object');
     });
     if (matches.length > 0) return { candidates: matches };
   }
@@ -198,21 +185,21 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
       matches = candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
         return assembly.hasArrayBufferCandidate(type) ||
-          assembly.hasSimpleCandidate(type, 'object');
+          assembly.hasCandidateKind(type, 'object');
       });
       if (matches.length > 0) return { candidates: matches };
     } else if (bufferName === 'DataView') {
       matches = candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
-        return assembly.hasSimpleCandidate(type, 'DataView') ||
-          assembly.hasSimpleCandidate(type, 'object');
+        return assembly.hasBufferCandidate(type, 'DataView') ||
+          assembly.hasCandidateKind(type, 'object');
       });
       if (matches.length > 0) return { candidates: matches };
     } else if (bufferName) {
       matches = candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
-        return assembly.hasSimpleCandidate(type, bufferName) ||
-          assembly.hasSimpleCandidate(type, 'object');
+        return assembly.hasBufferCandidate(type, bufferName) ||
+          assembly.hasCandidateKind(type, 'object');
       });
       if (matches.length > 0) return { candidates: matches };
     }
@@ -222,9 +209,8 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     matches = candidates.filter((callable) => {
       const type = callable.getArgument(index)!.type;
       return assembly.getCandidateTypes(type).some((candidate) =>
-        candidate.kind === 'reference'
-          ? assembly.callbackFunctions.has(candidate.name)
-          : candidate.kind === 'simple' && candidate.name === 'object');
+        candidate.kind === 'callback-function' ||
+        candidate.kind === 'object');
     });
     if (matches.length > 0) return { candidates: matches };
   }
@@ -280,12 +266,8 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     matches = candidates.filter((callable) => {
       const type = callable.getArgument(index)!.type;
       return assembly.getCandidateTypes(type).some((candidate) => {
-        if (candidate.kind === 'reference') {
-          return assembly.callbackInterfaces.has(candidate.name) ||
-            assembly.dictionaries.has(candidate.name);
-        }
-        return candidate.kind === 'record' ||
-          candidate.kind === 'simple' && candidate.name === 'object';
+        return candidate.kind === 'callback-interface' || candidate.kind === 'dictionary' ||
+          candidate.kind === 'record' || candidate.kind === 'object';
       });
     });
     if (matches.length > 0) return { candidates: matches };
@@ -293,7 +275,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
 
   if (typeof value === 'boolean') {
     matches = candidates.filter((callable) =>
-      assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'boolean'));
+      assembly.hasCandidateKind(callable.getArgument(index)!.type, 'boolean'));
     if (matches.length > 0) return { candidates: matches };
   }
 
@@ -305,7 +287,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
 
   if (typeof value === 'bigint') {
     matches = candidates.filter((callable) =>
-      assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'bigint'));
+      assembly.hasCandidateKind(callable.getArgument(index)!.type, 'bigint'));
     if (matches.length > 0) return { candidates: matches };
   }
 
@@ -318,15 +300,15 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'boolean'));
+    assembly.hasCandidateKind(callable.getArgument(index)!.type, 'boolean'));
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'bigint'));
+    assembly.hasCandidateKind(callable.getArgument(index)!.type, 'bigint'));
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasSimpleCandidate(callable.getArgument(index)!.type, 'any'));
+    assembly.hasCandidateKind(callable.getArgument(index)!.type, 'any'));
   if (matches.length > 0) return { candidates: matches };
 
   return throwTypeError(binding, 'No overload matches the argument value');
@@ -348,19 +330,17 @@ function convertArgument(
 
 // Project helper: test candidate types against a platform object's implemented interfaces.
 function containsImplementedInterface(
-  type: WebIDLType,
+  type: IDLType,
   value: unknown,
   binding: RealmBinding,
 ): boolean {
   return binding.assembly.getCandidateTypes(type).some((candidate) => {
-    if (candidate.kind !== 'reference') return false;
-    const assembled = binding.assembly.interfaces.get(candidate.name);
-    if (assembled) {
+    if (candidate.kind === 'interface') {
       const record = getPlatformRecord(value);
       return record?.binding.world === binding.world &&
-        record.implements(assembled);
+        record.implements(candidate.assembled);
     }
-    return binding.assembly.proxyObjects.get(candidate.name)?.is(value) ?? false;
+    return candidate.kind === 'proxy-object' && candidate.assembled.is(value);
   });
 }
 

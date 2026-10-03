@@ -1,15 +1,15 @@
 import { InternalError } from '../../../infra/index';
-
 import { isObject, type JSFunction } from '../../../js-engine/index';
-
 import {
-  idlType, hasExtendedAttribute, type AttributeMember, type AttributeFunctionSteps, type OperationMember,
-  type StringifierMember, type WebIDLType, type ExtendedAttribute,
+  hasExtendedAttribute, type AttributeFunctionSteps, type StringifierMember, type ExtendedAttribute,
 } from '../../core/index';
 
 import {
-  AssembledInterface, type AssembledCallable, type AssembledNamespace, type AssembledOverloads,
-} from '../../assembled';
+  AssembledInterface, type IDLType, type IDLAttribute, type IDLOperation, type AssembledCallable,
+  type AssembledNamespace, type AssembledOverloads,
+} from '../../assembly/index';
+import { IDLPromise } from '../../values/index';
+import { CallbackFunctionConverter, type Converter, type ConversionSteps } from '../../converters/index';
 
 import type { PlatformRecord, StampedImplInstance } from '../platform';
 import type { AsyncIteratorSteps } from './async-iterable';
@@ -18,10 +18,6 @@ import type { ValuePairsSteps } from './iterable';
 import type { IndexedPropertySteps, NamedPropertySteps } from './legacy';
 import type { ObservableArraySteps } from './observable-array';
 import { createOverloadResolver } from './overload';
-
-import { IDLPromise } from '../../values/index';
-
-import { type Converter, type ConversionSteps, CallbackFunctionConverter } from '../../converters/index';
 
 /** Registered implementation steps and platform functions for one member in one realm. */
 export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
@@ -55,7 +51,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   /** Retain the function returned by this attribute in its receiver's realm. */
   getAttributeFunction(
     this: MemberBinding<MemberOwner>,
-    attribute: AttributeMember,
+    attribute: IDLAttribute,
     createSteps: () => AttributeFunctionSteps,
   ): JSFunction {
     if (this.#attributeFunction) return this.#attributeFunction;
@@ -75,7 +71,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   // https://webidl.spec.whatwg.org/#dfn-attribute-getter
   getAttributeGetter(
     this: MemberBinding<MemberOwner>,
-    attribute: AttributeMember,
+    attribute: IDLAttribute,
   ): JSFunction {
     if (this.#getter) return this.#getter;
     const { binding: realmBinding, assembled } = this.#implementationBinding;
@@ -140,7 +136,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   // https://webidl.spec.whatwg.org/#dfn-attribute-setter
   getAttributeSetter(
     this: MemberBinding<MemberOwner>,
-    attribute: AttributeMember,
+    attribute: IDLAttribute,
   ): JSFunction | undefined {
     if (this.#setter) return this.#setter;
     const { binding: realmBinding, assembled } = this.#implementationBinding;
@@ -161,9 +157,9 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     }
     const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
     const observableArrayElementType = realmBinding.assembly.getObservableArrayElementType(attribute.type);
-    const type = realmBinding.assembly.getUnannotatedType(attribute.type);
-    const enumeration = type.kind === 'reference' ? realmBinding.assembly.enumerations.get(type.name) : undefined;
-    const inputConverter = realmBinding.getConverter(enumeration ? idlType.DOMString : attribute.type);
+    const type = attribute.type;
+    const enumeration = type.kind === 'enumeration' ? type.assembled : undefined;
+    const inputConverter = realmBinding.getConverter(enumeration ? realmBinding.assembly.builtinTypes.DOMString : attribute.type);
     const legacyCallback = inputConverter.legacyCallback;
     const convertInput = legacyCallback
       ? CallbackFunctionConverter.createAttributeSteps(inputConverter, legacyCallback)
@@ -243,7 +239,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   getOperationFunction(
     this: MemberBinding<MemberOwner>,
     name: string,
-    operations: AssembledOverloads<AssembledCallable<OperationMember>>,
+    operations: AssembledOverloads<AssembledCallable<IDLOperation>>,
   ): JSFunction {
     if (this.#operation) return this.#operation;
     const { binding: realmBinding, assembled } = this.#implementationBinding;
@@ -308,7 +304,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   /** Retain the realm-owned stringifier function and its prepared conversions. */
   getStringifierFunction(
     this: MemberBinding<AssembledInterface>,
-    stringifier: StringifierMember | AttributeMember,
+    stringifier: StringifierMember | IDLAttribute,
   ): JSFunction {
     if (this.#stringifier) return this.#stringifier;
     const { binding: realmBinding, assembled } = this.#implementationBinding;
@@ -352,7 +348,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           }
           value = Reflect.apply(behavior, object, []);
         }
-        return realmBinding.getConverter(idlType.DOMString).idlToJS(value);
+        return realmBinding.getConverter(realmBinding.assembly.builtinTypes.DOMString).idlToJS(value);
       },
       { length: 0, name: 'toString' },
     );
@@ -361,13 +357,12 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — reject promise results when invocation
   // throws.
   #handlePromiseException(
-    type: WebIDLType,
+    type: IDLType,
     exception: unknown,
     converter: Converter,
   ): Promise<unknown> {
-    const promiseType = this.#implementationBinding.binding.assembly.getUnannotatedType(type);
-    if (promiseType.kind !== 'promise') throw exception;
-    return IDLPromise.rejected(exception, promiseType.type, converter.realm, converter.binding.realizeException).promise;
+    if (type.kind !== 'promise') throw exception;
+    return IDLPromise.rejected(exception, type.resultType, converter.realm, converter.binding.realizeException).promise;
   }
 }
 

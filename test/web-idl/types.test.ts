@@ -1,15 +1,91 @@
 import { describe, expect, it } from 'vitest';
 
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import {
-  annotated, defineDictionary, defineEnumeration, defineTypedef, frozenArray, idlType,
-  nullable, record, reference, sequence, union, xattr,
+  annotated, arg, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
+  defineInterface, defineNamespace, defineTypedef, frozenArray, idlType,
+  nullable, op, record, reference, roAttr, sequence, union, xattr,
 } from '../../src/web-idl/core/index';
-import { serializeType } from '../../src/web-idl/core/index';
 
 describe('Web IDL types', () => {
-  it('gets flattened member types from nested unions', () => {
+  it('links named targets and container elements without retaining unresolved runtime types', () => {
+    const assembly = new DefinitionAssembly([
+      defineDictionary({ name: 'Options', members: [{ name: 'next', type: nullable(reference('Options')) }] }),
+      defineTypedef({ name: 'OptionsAlias', type: reference('Options') }),
+    ]);
+    const element = reference('OptionsAlias');
+    const declared = sequence(element);
+    const type = assembly.getIDLType(declared);
+    expect(type.kind).toBe('sequence');
+    expect(type.elementType.kind).toBe('dictionary');
+    if (type.elementType.kind !== 'dictionary') throw new Error('Expected an assembled dictionary');
+    expect(type.elementType.assembled).toBe(assembly.dictionaries.get('Options'));
+    const next = type.elementType.assembled.members[0]!.type;
+    expect(next.kind).toBe('nullable');
+    if (next.kind !== 'nullable' || next.innerType.kind !== 'dictionary') throw new Error('Expected a recursive dictionary');
+    expect(next.innerType.assembled).toBe(type.elementType.assembled);
+    expect(type.elementType).toBe(assembly.getIDLType(element));
+    expect(assembly.getIDLType(declared)).toBe(type);
+    expect(type).not.toHaveProperty('declaredType');
+    expect(declared.type).toBe(element);
+    expect(element).toEqual({ kind: 'reference', name: 'OptionsAlias' });
+  });
+
+  it('compiles member and callback contracts after registering forward references', () => {
+    const attribute = roAttr('options', reference('Options'));
+    const operation = op('apply', reference('Step'), [arg('count', idlType.byte, xattr('Clamp'))]);
+    const callbackOperation = op('accept', reference('Options'), [arg('step', reference('Step'))]);
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Consumer', members: [attribute, operation] }),
+      defineNamespace({ name: 'Tools', members: [operation] }),
+      defineCallbackInterface({ name: 'Listener', members: [callbackOperation] }),
+      defineCallbackFunction({ name: 'Step', arguments: [arg('options', reference('Options'))], returns: reference('Step') }),
+      defineTypedef({ name: 'Options', type: reference('OptionsRecord') }),
+      defineDictionary({ name: 'OptionsRecord', members: [] }),
+    ]);
+    const assembled = assembly.interfaces.get('Consumer')!;
+    const compiledAttribute = assembled.findMemberByKind('attribute')!.member;
+    const compiledOperation = assembled.findMemberByKind('operation')!.member;
+    const step = assembly.callbackFunctions.get('Step')!;
+    const options = assembly.dictionaries.get('OptionsRecord')!;
+
+    expect(compiledAttribute.type).toMatchObject({ kind: 'dictionary', assembled: options });
+    expect(compiledOperation.returns).toMatchObject({ kind: 'callback-function', assembled: step });
+    expect(compiledOperation.arguments[0]!.type).toMatchObject({ kind: 'integer', integerMode: 'clamp' });
+    expect(assembly.namespaces.get('Tools')!.members[0]!.member)
+      .toMatchObject({ returns: compiledOperation.returns, arguments: compiledOperation.arguments });
+    const callback = assembly.callbackInterfaces.get('Listener')!.getOperation('accept');
+    expect(callback.returns).toMatchObject({ kind: 'dictionary', assembled: options });
+    expect(callback.arguments[0]!.type).toMatchObject({ kind: 'callback-function', assembled: step });
+    expect(step.returns).toMatchObject({ kind: 'callback-function', assembled: step });
+    expect(step.arguments[0]!.type).toMatchObject({ kind: 'dictionary', assembled: options });
+
+    expect(attribute.type).toEqual(reference('Options'));
+    expect(operation.returns).toEqual(reference('Step'));
+    expect(operation.arguments[0]!.type).toBe(idlType.byte);
+  });
+
+  it('applies annotations to nullable and union branches while keeping container contents independent', () => {
     const assembly = new DefinitionAssembly([]);
+    const byte = idlType.byte;
+    const declared = annotated(nullable(union(byte, sequence(byte))), xattr('Clamp'));
+    const type = assembly.getIDLType(declared);
+    expect(type).toMatchObject({
+      kind: 'nullable', innerType: {
+        kind: 'union', memberTypes: [
+          { kind: 'integer', name: 'byte', integerMode: 'clamp' },
+          { kind: 'sequence', elementType: { kind: 'integer', name: 'byte', integerMode: 'wrap' } },
+        ],
+      },
+    });
+    expect(assembly.getIDLType(byte)).toMatchObject({ kind: 'integer', integerMode: 'wrap' });
+    expect(assembly.getIDLType(declared)).toBe(type);
+  });
+
+  it('gets flattened member types from nested unions', () => {
+    const assembly = new DefinitionAssembly(
+      ['Node', 'Event', 'XMLHttpRequest', 'NodeList'].map((name) => defineInterface({ name, members: [] })),
+    );
     const type = annotated(
       union(
         reference('Node'),
@@ -21,14 +97,14 @@ describe('Web IDL types', () => {
     );
 
     expect(
-      assembly.getFlattenedMemberTypes(type).map((member) => serializeType(member)),
+      assembly.getFlattenedMemberTypes(assembly.getIDLType(type)).map((member) => assembly.getOverloadTypeKey(member)),
     ).toEqual([
-      'Node',
+      'reference:Node',
       'sequence<long>',
-      'Event',
-      'XMLHttpRequest',
+      'reference:Event',
+      'reference:XMLHttpRequest',
       'DOMString',
-      'sequence<(sequence<double> or NodeList)>',
+      'sequence<(sequence<double> or reference:NodeList)>',
     ]);
   });
 
@@ -44,23 +120,23 @@ describe('Web IDL types', () => {
     for (const [assembly, name] of [
       [strings, 'DOMString'], [numbers, 'long'], [strings, 'DOMString'],
     ] as const) {
-      expect(assembly.getCandidateTypes(type).map((candidate) => serializeType(candidate)))
-        .toEqual([name, 'sequence<boolean>']);
-      expect(assembly.getConversionCandidates(type).map((candidate) => serializeType(candidate.resolvedType)))
-        .toEqual([name, 'sequence<boolean>']);
-      expect(assembly.getOverloadTypeKey(type)).toBe(`(${name} or sequence<boolean>)`);
-      expect(assembly.hasStringCandidate(type)).toBe(name === 'DOMString');
-      expect(assembly.hasNumericCandidate(type)).toBe(name === 'long');
-      expect(assembly.hasSequenceCandidate(type)).toBe(true);
-      expect(assembly.hasSimpleCandidate(type, 'boolean')).toBe(false);
-      expect(assembly.getSoleNumericTypeName(type)).toBe(name === 'long' ? 'long' : undefined);
-      expect(assembly.findSequenceElementType(type)).toBe(idlType.boolean);
-      expect(assembly.findRecordValueType(type)).toBeUndefined();
+      expect(assembly.getCandidateTypes(assembly.getIDLType(type))).toMatchObject([
+        { kind: name === 'long' ? 'integer' : 'string', name },
+        { kind: 'sequence', elementType: { kind: 'boolean' } },
+      ]);
+      expect(assembly.getOverloadTypeKey(assembly.getIDLType(type))).toBe(`(${name} or sequence<boolean>)`);
+      expect(assembly.hasStringCandidate(assembly.getIDLType(type))).toBe(name === 'DOMString');
+      expect(assembly.hasNumericCandidate(assembly.getIDLType(type))).toBe(name === 'long');
+      expect(assembly.hasSequenceCandidate(assembly.getIDLType(type))).toBe(true);
+      expect(assembly.hasCandidateKind(assembly.getIDLType(type), 'boolean')).toBe(false);
+      expect(assembly.getSoleNumericTypeName(assembly.getIDLType(type))).toBe(name === 'long' ? 'long' : undefined);
+      expect(assembly.findSequenceElementType(assembly.getIDLType(type))).toBe(assembly.builtinTypes.boolean);
+      expect(assembly.findRecordValueType(assembly.getIDLType(type))).toBeUndefined();
     }
 
-    const stringKey = strings.getConversionTypeKey(type);
-    expect(numbers.getConversionTypeKey(type)).not.toBe(stringKey);
-    expect(strings.getConversionTypeKey(type)).toBe(stringKey);
+    const stringKey = strings.getConversionTypeKey(strings.getIDLType(type));
+    expect(numbers.getConversionTypeKey(numbers.getIDLType(type))).not.toBe(stringKey);
+    expect(strings.getConversionTypeKey(strings.getIDLType(type))).toBe(stringKey);
   });
 
   it('classifies candidates without including their container contents', () => {
@@ -71,20 +147,20 @@ describe('Web IDL types', () => {
     const type = union(nullable(idlType.ArrayBuffer), array, reference('Choice'));
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect(assembly.hasStringCandidate(type)).toBe(true);
-      expect(assembly.hasNumericCandidate(type)).toBe(false);
-      expect(assembly.hasArrayBufferCandidate(type)).toBe(true);
-      expect(assembly.hasArrayBufferCandidate(idlType.SharedArrayBuffer)).toBe(true);
-      expect(assembly.hasArrayBufferCandidate(sequence(idlType.ArrayBuffer))).toBe(false);
-      expect(assembly.hasSequenceCandidate(type)).toBe(true);
-      expect(assembly.hasCandidateKind(type, 'frozen-array')).toBe(true);
-      expect(assembly.hasCandidateKind(type, 'sequence')).toBe(false);
-      expect(assembly.includesNullableType(type)).toBe(true);
-      expect(assembly.includesUndefined(type)).toBe(false);
-      expect(assembly.findSequenceElementType(array)).toBeUndefined();
-      expect(assembly.getSoleNumericTypeName(sequence(idlType.long))).toBeUndefined();
-      expect(assembly.getSoleNumericTypeName(idlType.bigint)).toBe('bigint');
-      expect(assembly.hasNumericCandidate(idlType.bigint)).toBe(false);
+      expect(assembly.hasStringCandidate(assembly.getIDLType(type))).toBe(true);
+      expect(assembly.hasNumericCandidate(assembly.getIDLType(type))).toBe(false);
+      expect(assembly.hasArrayBufferCandidate(assembly.getIDLType(type))).toBe(true);
+      expect(assembly.hasArrayBufferCandidate(assembly.getIDLType(idlType.SharedArrayBuffer))).toBe(true);
+      expect(assembly.hasArrayBufferCandidate(assembly.getIDLType(sequence(idlType.ArrayBuffer)))).toBe(false);
+      expect(assembly.hasSequenceCandidate(assembly.getIDLType(type))).toBe(true);
+      expect(assembly.hasCandidateKind(assembly.getIDLType(type), 'frozen-array')).toBe(true);
+      expect(assembly.hasCandidateKind(assembly.getIDLType(type), 'sequence')).toBe(false);
+      expect(assembly.includesNullableType(assembly.getIDLType(type))).toBe(true);
+      expect(assembly.includesUndefined(assembly.getIDLType(type))).toBe(false);
+      expect(assembly.findSequenceElementType(assembly.getIDLType(array))).toBeUndefined();
+      expect(assembly.getSoleNumericTypeName(assembly.getIDLType(sequence(idlType.long)))).toBeUndefined();
+      expect(assembly.getSoleNumericTypeName(assembly.getIDLType(idlType.bigint))).toBe('bigint');
+      expect(assembly.hasNumericCandidate(assembly.getIDLType(idlType.bigint))).toBe(false);
     }
   });
 
@@ -102,12 +178,12 @@ describe('Web IDL types', () => {
     ]);
 
     for (let attempt = 0; attempt < 2; attempt++) {
-      expect(sequences.findSequenceElementType(type)).toBe(idlType.long);
-      expect(sequences.findRecordValueType(type)).toBeUndefined();
-      expect(records.findSequenceElementType(type)).toBeUndefined();
-      expect(records.findRecordValueType(type)).toBe(idlType.long);
-      expect(dictionaries.findSequenceElementType(type)).toBeUndefined();
-      expect(dictionaries.findRecordValueType(type)).toBeUndefined();
+      expect(sequences.findSequenceElementType(sequences.getIDLType(type))).toBe(sequences.builtinTypes.long);
+      expect(sequences.findRecordValueType(sequences.getIDLType(type))).toBeUndefined();
+      expect(records.findSequenceElementType(records.getIDLType(type))).toBeUndefined();
+      expect(records.findRecordValueType(records.getIDLType(type))).toBe(records.builtinTypes.long);
+      expect(dictionaries.findSequenceElementType(dictionaries.getIDLType(type))).toBeUndefined();
+      expect(dictionaries.findRecordValueType(dictionaries.getIDLType(type))).toBeUndefined();
     }
   });
 
@@ -130,10 +206,10 @@ describe('Web IDL types', () => {
       ...definitions, defineTypedef({ name: 'Value', type: idlType.symbol }),
     ]);
 
-    expect(strings.isJSONType(type)).toBe(true);
-    expect(symbols.isJSONType(type)).toBe(false);
-    expect(strings.isJSONType(type)).toBe(true);
-    expect(symbols.isJSONType(type)).toBe(false);
+    expect(strings.isJSONType(strings.getIDLType(type))).toBe(true);
+    expect(symbols.isJSONType(symbols.getIDLType(type))).toBe(false);
+    expect(strings.isJSONType(strings.getIDLType(type))).toBe(true);
+    expect(symbols.isJSONType(symbols.getIDLType(type))).toBe(false);
   });
 
   it('preserves attribute order without leaking annotations between uses of a descriptor', () => {
@@ -151,10 +227,10 @@ describe('Web IDL types', () => {
     for (const name of ['FirstCall', 'SecondCall', undefined]) {
       const use = name ? annotated(type, xattr(name)) : type;
       const prefix = name ? [name] : [];
-      expect(assembly.getConversionRules(use).extendedAttributes)
+      expect(assembly.getIDLType(use).attributes)
         .toEqual(xattr(...prefix, 'Outer', 'Alias').extendedAttributes);
-      expect(assembly.getConversionCandidates(use).map((candidate) =>
-        candidate.extendedAttributes))
+      expect(assembly.getCandidateTypes(assembly.getIDLType(use)).map((candidate) =>
+        candidate.attributes))
         .toEqual([
           xattr(...prefix, 'Outer', 'Alias', 'Member').extendedAttributes,
           xattr(...prefix, 'Outer', 'Alias').extendedAttributes,
@@ -165,18 +241,19 @@ describe('Web IDL types', () => {
   it('distinguishes overload type keys from conversion type keys', () => {
     const assembly = new DefinitionAssembly([]);
     const clamped = annotated(idlType.byte, xattr('Clamp'));
-    expect(assembly.getOverloadTypeKey(clamped)).toBe(assembly.getOverloadTypeKey(idlType.byte));
-    expect(assembly.getConversionTypeKey(clamped))
-      .not.toBe(assembly.getConversionTypeKey(idlType.byte));
+    expect(assembly.getOverloadTypeKey(assembly.getIDLType(clamped))).toBe(assembly.getOverloadTypeKey(assembly.getIDLType(idlType.byte)));
+    expect(assembly.getConversionTypeKey(assembly.getIDLType(clamped)))
+      .not.toBe(assembly.getConversionTypeKey(assembly.getIDLType(idlType.byte)));
 
     const first = union(idlType.byte, idlType.DOMString);
     const reversed = union(idlType.DOMString, idlType.byte);
-    expect(assembly.getOverloadTypeKey(first)).not.toBe(assembly.getOverloadTypeKey(reversed));
-    expect(assembly.getConversionTypeKey(first)).toBe(assembly.getConversionTypeKey(reversed));
+    expect(assembly.getOverloadTypeKey(assembly.getIDLType(first))).not.toBe(assembly.getOverloadTypeKey(assembly.getIDLType(reversed)));
+    expect(assembly.getConversionTypeKey(assembly.getIDLType(first))).toBe(assembly.getConversionTypeKey(assembly.getIDLType(reversed)));
   });
 
   it('counts nullable members through annotations, unions, and typedefs', () => {
     const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Event', members: [] }),
       defineTypedef({
         name: 'MaybeEvent',
         type: annotated(nullable(reference('Event')), xattr('XAttr')),
@@ -187,10 +264,10 @@ describe('Web IDL types', () => {
       union(reference('MaybeEvent'), idlType.DOMString),
     );
 
-    expect(assembly.getNumberOfNullableMemberTypes(type)).toBe(1);
-    expect(assembly.includesNullableType(type)).toBe(true);
-    expect(assembly.includesNullableType(reference('MaybeEvent'))).toBe(true);
-    expect(assembly.includesNullableType(idlType.DOMString)).toBe(false);
+    expect(assembly.getNumberOfNullableMemberTypes(assembly.getIDLType(type))).toBe(1);
+    expect(assembly.includesNullableType(assembly.getIDLType(type))).toBe(true);
+    expect(assembly.includesNullableType(assembly.getIDLType(reference('MaybeEvent')))).toBe(true);
+    expect(assembly.includesNullableType(assembly.getIDLType(idlType.DOMString))).toBe(false);
   });
 
   it('detects undefined through annotations, nullable types, unions, and typedefs', () => {
@@ -202,7 +279,7 @@ describe('Web IDL types', () => {
       xattr('XAttr'),
     );
 
-    expect(assembly.includesUndefined(type)).toBe(true);
-    expect(assembly.includesUndefined(nullable(idlType.long))).toBe(false);
+    expect(assembly.includesUndefined(assembly.getIDLType(type))).toBe(true);
+    expect(assembly.includesUndefined(assembly.getIDLType(nullable(idlType.long)))).toBe(false);
   });
 });

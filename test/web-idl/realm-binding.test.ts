@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { getMemberBinding } from '../support/web-idl-binding';
+
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 
 import {
@@ -95,26 +97,26 @@ describe('Web IDL realm interface bindings', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(derived.name));
     interfaceBinding.createImplementation = () => new ProjectionDerivedImpl();
-    interfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function(value_) {
         state.set(this, value_ as number);
       },
     };
-    interfaceBinding.getOrCreateMemberBinding(value).attributeSteps = {
+    getMemberBinding(interfaceBinding, value).attributeSteps = {
       get(receiver) { return state.get(receiver!.implInst) ?? 0; },
       set(receiver, value_) { state.set(receiver!.implInst, value_ as number); },
     };
-    interfaceBinding.getOrCreateMemberBinding(describeNumber).operationSteps = function(_receiver, value_) {
+    getMemberBinding(interfaceBinding, describeNumber).operationSteps = function(_receiver, value_) {
       return `number:${String(value_)}`;
     };
-    interfaceBinding.getOrCreateMemberBinding(describeString).operationSteps = function(_receiver, value_) {
+    getMemberBinding(interfaceBinding, describeString).operationSteps = function(_receiver, value_) {
       return `string:${String(value_)}`;
     };
-    interfaceBinding.getOrCreateMemberBinding(partialOperation).operationSteps = () => 'partial';
-    interfaceBinding.getOrCreateMemberBinding(mixinOperation).operationSteps = () => 'mixin';
-    interfaceBinding.getOrCreateMemberBinding(staticOperation).operationSteps = () => 'static';
-    interfaceBinding.getOrCreateMemberBinding(staticAttribute).attributeSteps = {
+    getMemberBinding(interfaceBinding, partialOperation).operationSteps = () => 'partial';
+    getMemberBinding(interfaceBinding, mixinOperation).operationSteps = () => 'mixin';
+    getMemberBinding(interfaceBinding, staticOperation).operationSteps = () => 'static';
+    getMemberBinding(interfaceBinding, staticAttribute).attributeSteps = {
       get() { return '1.0'; },
     };
     const installed = binding.install();
@@ -198,18 +200,18 @@ describe('Web IDL realm interface bindings', () => {
     firstBinding.createImplementation = () => new FirstHostImpl();
     const secondBinding = binding.getImplementationBinding(binding.resolveInterface(second.name));
     secondBinding.createImplementation = () => new SecondHostImpl();
-    firstBinding.getOrCreateMemberBinding(firstConstructor).constructorBehavior = {
+    getMemberBinding(firstBinding, firstConstructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    secondBinding.getOrCreateMemberBinding(secondConstructor).constructorBehavior = {
+    getMemberBinding(secondBinding, secondConstructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    firstBinding.getOrCreateMemberBinding(value).attributeSteps = { get: () => 1 };
-    secondBinding.getOrCreateMemberBinding(value).attributeSteps = { get: () => 1 };
-    firstBinding.getOrCreateMemberBinding(read).operationSteps = () => 2;
-    secondBinding.getOrCreateMemberBinding(read).operationSteps = () => 2;
+    getMemberBinding(firstBinding, value).attributeSteps = { get: () => 1 };
+    getMemberBinding(secondBinding, value).attributeSteps = { get: () => 1 };
+    getMemberBinding(firstBinding, read).operationSteps = () => 2;
+    getMemberBinding(secondBinding, read).operationSteps = () => 2;
     const installed = binding.install();
     const First = getInstalledInterface(installed, 'FirstHost');
     const Second = getInstalledInterface(installed, 'SecondHost');
@@ -325,11 +327,11 @@ describe('Web IDL realm interface bindings', () => {
     );
     const firstInterfaceBinding = first.getImplementationBinding(first.resolveInterface(interfaceIDL.name));
     firstInterfaceBinding.createImplementation = () => new CrossRealmImpl();
-    firstInterfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(firstInterfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    firstInterfaceBinding.getOrCreateMemberBinding(operation).operationSteps = () => 'ok';
+    getMemberBinding(firstInterfaceBinding, operation).operationSteps = () => 'ok';
     const second = new RealmBinding(
       assembly,
       secondRealm,
@@ -338,11 +340,11 @@ describe('Web IDL realm interface bindings', () => {
     );
     const secondInterfaceBinding = second.getImplementationBinding(second.resolveInterface(interfaceIDL.name));
     secondInterfaceBinding.createImplementation = () => new CrossRealmImpl();
-    secondInterfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(secondInterfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    secondInterfaceBinding.getOrCreateMemberBinding(operation).operationSteps = () => 'ok';
+    getMemberBinding(secondInterfaceBinding, operation).operationSteps = () => 'ok';
     const First = getInstalledInterface(first.install(), 'CrossRealmInterface');
     const Second = getInstalledInterface(second.install(), 'CrossRealmInterface');
     const foreignObject = construct(Second, []);
@@ -384,12 +386,12 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).getOrCreateMemberBinding(read).operationSteps = function(receiver) {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)), read).operationSteps = function(receiver) {
       const implInst = receiver?.implInst;
       if (!(implInst instanceof PrivateStateImplementation)) throw new Error('Wrong implementation');
       return PrivateStateImplementation.read(implInst);
     };
-    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).getOrCreateMemberBinding(echo).operationSteps = function(receiver, value) {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)), echo).operationSteps = function(receiver, value) {
       expect(receiver!.implInst).toBe(implementation);
       expect(value).toBe(implementation);
       return value;
@@ -408,8 +410,8 @@ describe('Web IDL realm interface bindings', () => {
     expect(record.implInst).toBe(implementation);
     expect(call(prototype, 'read', object)).toBe(42);
     expect(call(prototype, 'echo', object, object)).toBe(object);
-    expect(binding.getConverter(reference('SeparatedIdentity')).jsToIDL(object)).toBe(implementation);
-    expect(binding.getConverter(reference('SeparatedIdentity')).idlToJS(implementation)).toBe(object);
+    expect(binding.getConverter(binding.assembly.getIDLType(reference('SeparatedIdentity'))).jsToIDL(object)).toBe(implementation);
+    expect(binding.getConverter(binding.assembly.getIDLType(reference('SeparatedIdentity'))).idlToJS(implementation)).toBe(object);
     expect(realm.checks.map(({ object: checked }) => checked)).toEqual([
       object,
       object,
@@ -454,17 +456,17 @@ describe('Web IDL realm interface bindings', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(derived.name));
     interfaceBinding.createImplementation = () => new JSONDerivedImpl();
-    interfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    binding.getImplementationBinding(binding.resolveInterface(base.name)).getOrCreateMemberBinding(inheritedValue).attributeSteps = {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(base.name)), inheritedValue).attributeSteps = {
       get() { reads.push('inheritedValue'); return 12; },
     };
-    interfaceBinding.getOrCreateMemberBinding(ownValue).attributeSteps = {
+    getMemberBinding(interfaceBinding, ownValue).attributeSteps = {
       get() { reads.push('ownValue'); return currentValue; },
     };
-    interfaceBinding.getOrCreateMemberBinding(nonJSONValue).attributeSteps = {
+    getMemberBinding(interfaceBinding, nonJSONValue).attributeSteps = {
       get() { throw new Error('A non-JSON getter must not be read'); },
     };
     const Interface = getInstalledInterface(binding.install(), 'JSONDerived');
@@ -575,10 +577,10 @@ describe('Web IDL realm interface bindings', () => {
       ? local.createPlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
       : undefined;
     const pointImpl = pointObject ? getPlatformRecord(pointObject)!.implInst : new JSONPointImpl();
-    local.getImplementationBinding(local.resolveInterface(holder.name)).getOrCreateMemberBinding(pointAttribute).attributeSteps = {
+    getMemberBinding(local.getImplementationBinding(local.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
       get() { return pointImpl; },
     };
-    foreign.getImplementationBinding(foreign.resolveInterface(holder.name)).getOrCreateMemberBinding(pointAttribute).attributeSteps = {
+    getMemberBinding(foreign.getImplementationBinding(foreign.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
       get() { return pointImpl; },
     };
     const holderObject = local.createPlatformRecord(local.resolveInterface('JSONHolder')).platformObject!;
@@ -618,13 +620,13 @@ describe('Web IDL realm interface bindings', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new FrozenArrayImpl();
-    interfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
         state.set(this, Object.freeze(new realm.intrinsics.array()));
       },
     };
-    interfaceBinding.getOrCreateMemberBinding(values).attributeSteps = {
+    getMemberBinding(interfaceBinding, values).attributeSteps = {
       get(receiver) { return state.get(receiver!.implInst); },
       set(receiver, value) { state.set(receiver!.implInst, value as readonly unknown[]); },
     };
@@ -666,11 +668,11 @@ describe('Web IDL realm interface bindings', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new BufferSourceImpl();
-    interfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: () => undefined,
     };
-    interfaceBinding.getOrCreateMemberBinding(echo).operationSteps = (_receiver, source) => source;
+    getMemberBinding(interfaceBinding, echo).operationSteps = (_receiver, source) => source;
     const Interface = getInstalledInterface(binding.install(), 'BufferSourceInterface');
     const object = construct(Interface, []);
     const view = new Uint8Array([1, 2]);
@@ -730,27 +732,27 @@ describe('Web IDL realm interface bindings', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     interfaceBinding.createImplementation = () => new ExtendedInterfaceImpl();
-    interfaceBinding.getOrCreateMemberBinding(constructor).constructorBehavior = {
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function() {
         choices.set(this, 'first');
       },
     };
-    interfaceBinding.getOrCreateMemberBinding(unforgeable).attributeSteps = {
+    getMemberBinding(interfaceBinding, unforgeable).attributeSteps = {
       get() { return true; },
     };
-    interfaceBinding.getOrCreateMemberBinding(replaceable).attributeSteps = {
+    getMemberBinding(interfaceBinding, replaceable).attributeSteps = {
       get() { return 'original'; },
     };
-    interfaceBinding.getOrCreateMemberBinding(forwards).attributeSteps = {
+    getMemberBinding(interfaceBinding, forwards).attributeSteps = {
       get() { return forwarded; },
     };
-    interfaceBinding.getOrCreateMemberBinding(choice).attributeSteps = {
+    getMemberBinding(interfaceBinding, choice).attributeSteps = {
       get(receiver) { return choices.get(receiver!.implInst) ?? 'first'; },
       set(receiver, value) { choices.set(receiver!.implInst, value as string); },
     };
-    interfaceBinding.getOrCreateMemberBinding(fixed).operationSteps = () => 'fixed';
-    interfaceBinding.getOrCreateMemberBinding(scoped).operationSteps = () => undefined;
+    getMemberBinding(interfaceBinding, fixed).operationSteps = () => 'fixed';
+    getMemberBinding(interfaceBinding, scoped).operationSteps = () => undefined;
     const Interface = getInstalledInterface(binding.install(), 'ExtendedInterface');
     const prototype = Interface.prototype;
     const first = construct(Interface, []);

@@ -1,18 +1,16 @@
 import { InternalError, InternalPromise } from '../../infra/index';
 
-import type { ImplementationType, PromiseType, WebIDLType } from '../core/index';
-
-import { Converter, type ConversionSteps } from './converter';
-
+import type { IDLType, IDLPromiseType } from '../assembly/index';
 import { IDLPromise, waitForAll } from '../values/index';
+import { Converter, type ConversionSteps } from './converter';
 
 /** Adopt author promises and expose promises with the declared fulfillment conversion. */
 // https://webidl.spec.whatwg.org/#es-promise
-export class PromiseConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
+export class PromiseConverter<Type extends IDLPromiseType = IDLPromiseType> extends Converter<Type> {
   /** Project an IDL fulfillment value and resolve a new promise in the converter's realm. */
   // https://webidl.spec.whatwg.org/#js-promise-manipulation
   static fromIDL(value: unknown, converter: Converter): IDLPromise {
-    const promise = new IDLPromise(converter.declaredType, converter.realm, converter.binding.realizeException);
+    const promise = new IDLPromise(converter.type, converter.realm, converter.binding.realizeException);
     const jsValue = IDLPromise.is(value) ? value.promise : converter.idlToJS(value);
     promise.resolve(jsValue);
     return promise;
@@ -22,7 +20,7 @@ export class PromiseConverter<Type extends WebIDLType = WebIDLType> extends Conv
   // https://webidl.spec.whatwg.org/#waiting-for-all-promise
   static getPromiseForWaitingForAll(
     promises: IDLPromise[],
-    type: WebIDLType,
+    type: IDLType,
     converter: Converter,
   ): IDLPromise {
     const promise = new IDLPromise(converter.binding.assembly.getSequenceType(type), converter.realm, converter.binding.realizeException);
@@ -39,7 +37,7 @@ export class PromiseConverter<Type extends WebIDLType = WebIDLType> extends Conv
   }
 
   protected createInputSteps(): ConversionSteps<IDLPromise> {
-    const { type } = this.resolvedType as PromiseType;
+    const type = this.type.resultType;
     return (value) => IDLPromise.fromJS(value, type, this.realm, this.binding.realizeException);
   }
 
@@ -47,12 +45,12 @@ export class PromiseConverter<Type extends WebIDLType = WebIDLType> extends Conv
     return (value) => {
       if (IDLPromise.is(value)) return value.promise;
       if (value instanceof InternalPromise) {
-        const type = this.resolvedType as PromiseType;
+        const type = this.type;
         const assembly = this.binding.assembly;
         if (
             value.type.kind === 'implementation' ||
-            assembly.getConversionTypeKey(value.type as ImplementationType<unknown>) !==
-            assembly.getConversionTypeKey(type.type)
+            assembly.getConversionTypeKey(assembly.getPromiseResultType(value.type)) !==
+            assembly.getConversionTypeKey(type.resultType)
         ) {
           throw new InternalError('Promise result type does not match its Web IDL declaration');
         }

@@ -1,5 +1,4 @@
-import type { DefinitionAssembly } from '../../../../src/web-idl/assembly';
-import type { AssembledInterface } from '../../../../src/web-idl/assembled';
+import type { DefinitionAssembly, AssembledInterface } from '../../../../src/web-idl/assembly/index';
 
 import { idlType, type StampedImplInstance, type PlatformRecord, type WebIDLType } from '../../../../src/web-idl/index';
 import {
@@ -46,9 +45,9 @@ getImplementationRecord(authorValue)?.implInst.count;
 // @ts-expect-error A platform-object lookup cannot infer the shape of its implementation from its key.
 getPlatformRecord(platformObject)?.implInst.authorProperty;
 
-const buffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(idlType.Uint8Array).jsToIDL(authorValue);
-const returnedBuffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(idlType.ArrayBuffer).idlToJS(authorValue);
+const buffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(binding.assembly.getIDLType(idlType.Uint8Array)).jsToIDL(authorValue);
+const returnedBuffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(binding.assembly.getIDLType(idlType.ArrayBuffer)).idlToJS(authorValue);
 buffer.byteLength.toFixed();
 returnedBuffer.byteLength.toFixed();
 // @ts-expect-error Outer annotations have been removed from the result.
-const annotation: 'annotated' = assembly.getUnannotatedType(type).kind;
+const annotation: 'annotated' = assembly.getIDLType(type).kind;

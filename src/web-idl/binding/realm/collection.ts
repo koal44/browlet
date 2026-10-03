@@ -1,19 +1,13 @@
 import { InternalError } from '../../../infra/index';
-
 import {
   defineDataProperty, defineMethod, isObject, type JSFunction, type JSRealm,
 } from '../../../js-engine/index';
 
-import type { MaplikeMember, SetlikeMember, WebIDLType } from '../../core/index';
-
-import type { AssembledInterface } from '../../assembled';
-
+import type { IDLType, IDLMaplike, IDLSetlike, AssembledInterface } from '../../assembly/index';
+import type { IDLMapEntries, IDLSetEntries } from '../../values/index';
+import type { ConversionSteps } from '../../converters/index';
 import { getPlatformRecord, type PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
-
-import type { IDLMapEntries, IDLSetEntries } from '../../values/index';
-
-import type { ConversionSteps } from '../../converters/index';
 
 /** Share realm ownership, receiver validation, and errors for maplike and setlike bindings. */
 abstract class CollectionBinding {
@@ -62,7 +56,7 @@ export class MaplikeBinding extends CollectionBinding {
   defineMembers(
     target: object,
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
   ): void {
     Object.defineProperty(target, 'size', {
       configurable: true,
@@ -156,7 +150,7 @@ export class MaplikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.11.3 entries, §3.7.11.4 keys, and §3.7.11.5 values.
   #createIteratorMethod(
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
     kind: MapIterationKind,
     name: string,
   ): JSFunction {
@@ -184,7 +178,7 @@ export class MaplikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.11.6 forEach.
   #createForEach(
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -215,7 +209,7 @@ export class MaplikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.11.7 get.
   #createGet(
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -236,7 +230,7 @@ export class MaplikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.11.8 has.
   #createHas(
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -255,7 +249,7 @@ export class MaplikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.11.9 set.
   #createSet(
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -276,7 +270,7 @@ export class MaplikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.11.10 delete.
   #createDelete(
     assembled: AssembledInterface,
-    member: MaplikeMember,
+    member: IDLMaplike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -321,7 +315,7 @@ export class SetlikeBinding extends CollectionBinding {
   defineMembers(
     target: object,
     assembled: AssembledInterface,
-    member: SetlikeMember,
+    member: IDLSetlike,
   ): void {
     Object.defineProperty(target, 'size', {
       configurable: true,
@@ -404,7 +398,7 @@ export class SetlikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.12.3 entries and §3.7.12.5 values.
   #createIteratorMethod(
     assembled: AssembledInterface,
-    member: SetlikeMember,
+    member: IDLSetlike,
     kind: SetIterationKind,
     name: string,
   ): JSFunction {
@@ -430,7 +424,7 @@ export class SetlikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.12.6 forEach.
   #createForEach(
     assembled: AssembledInterface,
-    member: SetlikeMember,
+    member: IDLSetlike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -462,7 +456,7 @@ export class SetlikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.12.7 has.
   #createHas(
     assembled: AssembledInterface,
-    member: SetlikeMember,
+    member: IDLSetlike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -481,7 +475,7 @@ export class SetlikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.12.8 add.
   #createAdd(
     assembled: AssembledInterface,
-    member: SetlikeMember,
+    member: IDLSetlike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -501,7 +495,7 @@ export class SetlikeBinding extends CollectionBinding {
   // Project factory for Web IDL §3.7.12.9 delete.
   #createDelete(
     assembled: AssembledInterface,
-    member: SetlikeMember,
+    member: IDLSetlike,
   ): JSFunction {
     return this.binding.realm.createFunction(
       (thisArgument, argumentsList) => {
@@ -624,7 +618,7 @@ type SetIterationKind = 'key+value' | 'value';
 // https://webidl.spec.whatwg.org/#js-set-add
 function convertCollectionValue(
   value: unknown,
-  type: WebIDLType,
+  type: IDLType,
   binding: RealmBinding,
 ): unknown {
   const converted = binding.getConverter(type).jsToIDL(value);

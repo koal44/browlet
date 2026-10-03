@@ -1,9 +1,11 @@
 import { PromiseConverter } from '../../src/web-idl/converters/promise';
 import { describe, expect, it } from 'vitest';
 
+import { getMemberBinding } from '../support/web-idl-binding';
+
 import { TestRealm as Realm } from './test-realm';
 import { createDOMException } from '../../src/web-idl/core/dom-exception';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { endOfIteration } from '../../src/infra/iteration';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
@@ -224,14 +226,14 @@ describe('Web IDL promise member binding', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new PromiseOwnerImpl();
-    interfaceBinding.getOrCreateMemberBinding(resolvedAttribute).attributeSteps = {
-      get: () => PromiseConverter.fromIDL(4, binding.getConverter(idlType.long)),
+    getMemberBinding(interfaceBinding, resolvedAttribute).attributeSteps = {
+      get: () => PromiseConverter.fromIDL(4, binding.getConverter(binding.assembly.getIDLType(idlType.long))),
     };
-    interfaceBinding.getOrCreateMemberBinding(rejectedAttribute).attributeSteps = {
+    getMemberBinding(interfaceBinding, rejectedAttribute).attributeSteps = {
       get() { throw reason; },
     };
-    interfaceBinding.getOrCreateMemberBinding(resolvedOperation).operationSteps = () => PromiseConverter.fromIDL(5, binding.getConverter(idlType.long));
-    interfaceBinding.getOrCreateMemberBinding(rejectedOperation).operationSteps = () => {
+    getMemberBinding(interfaceBinding, resolvedOperation).operationSteps = () => PromiseConverter.fromIDL(5, binding.getConverter(binding.assembly.getIDLType(idlType.long)));
+    getMemberBinding(interfaceBinding, rejectedOperation).operationSteps = () => {
       throw reason;
     };
     const object = binding.createPlatformRecord(binding.resolveInterface('PromiseOwner')).platformObject!;
@@ -272,7 +274,7 @@ describe('Web IDL promise member binding', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
     binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new PromiseReceiverImpl();
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(read).operationSteps = () => {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), read).operationSteps = () => {
       throw new Error('unreachable');
     };
     const object = binding.createPlatformRecord(binding.resolveInterface('PromiseReceiver')).platformObject!;
@@ -302,9 +304,9 @@ describe('Web IDL promise member binding', () => {
     const binding = world.getRealmBinding(realm)!;
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new PromiseExceptionSourceImpl();
-    interfaceBinding.getOrCreateMemberBinding(reject).operationSteps = () => IDLPromise.rejected(createDOMException('NotAllowedError', 'requested rejection'), idlType.undefined, binding.realm, binding.realizeException);
+    getMemberBinding(interfaceBinding, reject).operationSteps = () => IDLPromise.rejected(createDOMException('NotAllowedError', 'requested rejection'), binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
     const arbitraryReason = { arbitrary: true };
-    interfaceBinding.getOrCreateMemberBinding(rejectArbitrary).operationSteps = () => IDLPromise.rejected(arbitraryReason, idlType.undefined, binding.realm, binding.realizeException);
+    getMemberBinding(interfaceBinding, rejectArbitrary).operationSteps = () => IDLPromise.rejected(arbitraryReason, binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
     const object = binding.createPlatformRecord(binding.resolveInterface('PromiseExceptionSource')).platformObject!;
     const promise = call(object, 'reject') as Promise<unknown>;
 

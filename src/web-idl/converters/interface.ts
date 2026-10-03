@@ -1,30 +1,15 @@
 import { InternalError } from '../../infra/index';
-
 import { isObject } from '../../js-engine/index';
 
-import type { WebIDLType } from '../core/index';
-
-import type { AssembledInterface } from '../assembled';
-import type { ConversionRules } from '../assembly';
-import { Converter, type ConversionSteps } from './converter';
-import type { WebIDLRealm } from '../environment';
-
+import type { IDLInterfaceType } from '../assembly/index';
 import { getPlatformRecord } from '../binding/platform';
-import type { RealmBinding } from '../binding/realm';
+import { Converter, type ConversionSteps } from './converter';
 
 /** Unwrap and project values of one assembled interface. */
-export class InterfaceConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
-  /** Declaration selected once when this converter is created. */
-  assembled: AssembledInterface;
-
-  constructor(rules: ConversionRules<Type>, binding: RealmBinding, realm: WebIDLRealm, assembled: AssembledInterface) {
-    super(rules, binding, realm);
-    this.assembled = assembled;
-  }
-
+export class InterfaceConverter<Type extends IDLInterfaceType = IDLInterfaceType> extends Converter<Type> {
   // https://webidl.spec.whatwg.org/#es-interface
   protected createInputSteps(): ConversionSteps<object> {
-    const assembled = this.assembled;
+    const assembled = this.type.assembled;
     return (value) => {
       const record = getPlatformRecord(value);
       if (
@@ -36,7 +21,7 @@ export class InterfaceConverter<Type extends WebIDLType = WebIDLType> extends Co
   }
 
   protected override createOutputSteps(): ConversionSteps<object> {
-    const assembled = this.assembled;
+    const assembled = this.type.assembled;
     return (value) => {
       const object = isObject(value)
           ? this.binding.projectImplementationObject(value, assembled)

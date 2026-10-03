@@ -3,7 +3,8 @@
 ## Present
 
 - `registry.ts` reserves the `CustomElementRegistry` identity required by
-  Document and realm setup. Most registry behavior remains absent.
+  Document and realm setup. Its declaration supports projection from the existing
+  Document getter; registry members and Window exposure remain absent.
 
 ## Missing
 

@@ -1,20 +1,17 @@
 import { InternalError } from '../../infra/index';
-
 import { defineDataProperty, hasMapData, isObject } from '../../js-engine/index';
 
-import type { RecordType, WebIDLType } from '../core/index';
-
-import { Converter, type ConversionSteps } from './converter';
-
+import type { IDLRecordType } from '../assembly/index';
 import type { IDLRecord } from '../values/index';
+import { Converter, type ConversionSteps } from './converter';
 
 /** Convert own enumerable properties to IDL entries and project them as author data properties. */
 // https://webidl.spec.whatwg.org/#es-record
-export class RecordConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
+export class RecordConverter<Type extends IDLRecordType = IDLRecordType> extends Converter<Type> {
   protected createInputSteps(): ConversionSteps<IDLRecord> {
-    const type = this.resolvedType as RecordType;
-    const convertKey = this.forType(type.key).inputSteps;
-    const convertValue = this.forType(type.value).inputSteps;
+    const type = this.type;
+    const convertKey = this.forType(type.keyType).inputSteps;
+    const convertValue = this.forType(type.valueType).inputSteps;
     return (value) => {
       if (!isObject(value)) this.throwTypeError('A record value must be an object');
       const result: IDLRecord = new Map();
@@ -30,9 +27,9 @@ export class RecordConverter<Type extends WebIDLType = WebIDLType> extends Conve
   }
 
   protected override createOutputSteps(): ConversionSteps<object> {
-    const type = this.resolvedType as RecordType;
-    const convertKey = this.forType(type.key).getIDLToJSSteps();
-    const convertValue = this.forType(type.value).getIDLToJSSteps();
+    const type = this.type;
+    const convertKey = this.forType(type.keyType).getIDLToJSSteps();
+    const convertValue = this.forType(type.valueType).getIDLToJSSteps();
     return (value) => {
       if (!isMap(value)) throw new InternalError('IDL record is not a map');
       const result = this.realm.createOrdinaryObject(this.realm.intrinsics.objectPrototype);

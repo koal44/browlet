@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { getMemberBinding } from '../support/web-idl-binding';
+
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
@@ -65,13 +67,13 @@ describe('Web IDL namespace objects', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
     const namespaceBinding = binding.getImplementationBinding(assembly.namespaces.get(namespace.name)!);
-    namespaceBinding.getOrCreateMemberBinding(version).attributeSteps = {
+    getMemberBinding(namespaceBinding, version).attributeSteps = {
       get(receiver) {
         receivers.push(receiver);
         return '1.0';
       },
     };
-    namespaceBinding.getOrCreateMemberBinding(echo).operationSteps = function(receiver, value) {
+    getMemberBinding(namespaceBinding, echo).operationSteps = function(receiver, value) {
       receivers.push(receiver);
       return value;
     };

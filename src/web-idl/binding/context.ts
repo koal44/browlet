@@ -1,18 +1,15 @@
 import {
   InternalError, InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType,
 } from '../../infra/index';
-
 import type { ImplementationClass, ImplementationType, InjectedArgument, WebIDLType } from '../core/index';
 
 import type { WebIDLEnvironment } from '../environment';
-
+import { IDLPromise } from '../values/index';
 import {
   getImplementationRecord, getPlatformRecord, stampImplementation, type StampedImplInstance,
   type StampedPlatformObject, type PlatformRecord,
 } from './platform';
 import type { GlobalObjectAllocation, RealmBinding } from './realm';
-
-import { IDLPromise } from '../values/index';
 
 /** A realm's Web IDL operations and environment within one binding world. */
 export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
@@ -28,7 +25,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ) {
     this.realm = binding.realm;
     this.#binding = binding;
-    this.Promise = createWebIDLPromiseConstructor(this);
+    this.Promise = createWebIDLPromiseConstructor(this, binding);
     this.#env = createEnvironment(this);
     if (this.#env.realm !== this.realm) {
       throw new InternalError('The binding environment belongs to a different realm');
@@ -66,9 +63,10 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   jsToImpl<T>(value: unknown, type: ImplementationType<T>): T;
   jsToImpl(value: unknown, type: WebIDLType): unknown;
   jsToImpl(value: unknown, type: WebIDLType): unknown {
+    const compiled = this.#binding.assembly.getIDLType(type);
     return this.#binding.implementationConverter.idlToImpl(
-      this.#binding.getConverter(type).jsToIDL(value),
-      type,
+      this.#binding.getConverter(compiled).jsToIDL(value),
+      compiled,
       {},
       this,
     );
@@ -76,7 +74,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   /** Convert a declared implementation result to its author-facing representation. */
   implToJS(value: unknown, type: WebIDLType): unknown {
-    return this.#binding.getConverter(type).idlToJS(value);
+    return this.#binding.getConverter(this.#binding.assembly.getIDLType(type)).idlToJS(value);
   }
 
   /** Turn an internal exception request into a realm-owned error, preserving any prior realization. */
@@ -164,13 +162,15 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 }
 
 /** Add this binding's result conversion to the realm's implementation Promise constructor. */
-function createWebIDLPromiseConstructor(context: BindingContext): typeof InternalPromise {
+function createWebIDLPromiseConstructor(context: BindingContext, binding: RealmBinding): typeof InternalPromise {
   return class WebIDLPromise<T> extends context.realm.Promise<T> {
     static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
       if (type.kind === 'implementation') return super.withResolvers(type);
-      const resultType = type as ImplementationType<T>;
+      const resultType = binding.assembly.getPromiseResultType(type);
+      const converter = binding.getConverter(resultType);
       const idlPromise = new IDLPromise(resultType, context.realm, (value) => context.realizeException(value));
-      const promise = new this(idlPromise.promise, type, (value) => context.jsToImpl(value, resultType));
+      const promise = new this(idlPromise.promise, resultType as typeof resultType & PromiseResultType<T>, (value) =>
+        binding.implementationConverter.idlToImpl(converter.jsToIDL(value), resultType, {}, context) as T);
       return {
         promise,
         get isResolved() { return idlPromise.resolved; },
@@ -180,7 +180,7 @@ function createWebIDLPromiseConstructor(context: BindingContext): typeof Interna
               idlPromise.resolve(value.backing);
             } else {
               // Conversion precedes the native resolving function, including reentrant resolution.
-              idlPromise.resolve(context.implToJS(value, resultType));
+              idlPromise.resolve(converter.idlToJS(value));
             }
           } catch (error) { idlPromise.reject(error); }
         },

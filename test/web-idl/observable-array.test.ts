@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { getMemberBinding } from '../support/web-idl-binding';
+
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
@@ -27,7 +29,7 @@ describe('Web IDL observable arrays', () => {
     expect(first).toEqual([1, 2]);
     expect(fixture.binding.getObservableArrayBackingList(
       fixture.object,
-      fixture.attribute,
+      fixture.binding.resolveInterface('NumberArrays').findMemberByKind('attribute')!.member,
     )).toEqual([1, 2]);
 
     const other = fixture.binding.createPlatformRecord(fixture.binding.resolveInterface('NumberArrays')).platformObject!;
@@ -52,7 +54,8 @@ describe('Web IDL observable arrays', () => {
     const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreign), 'values')!.get!;
     const values = Reflect.apply(getter, object, []) as object[];
     const value = new ValueImpl();
-    world.getRealmBinding(owner.realm)!.getObservableArrayBackingList(object, attribute).push(value);
+    const binding = world.getRealmBinding(owner.realm)!;
+    binding.getObservableArrayBackingList(object, binding.resolveInterface('Values').findMemberByKind('attribute')!.member).push(value);
 
     expect(world.getRealm(values[0]!)).toBe(owner.realm);
     expect(values[0]).toBe(owner.project(ValueImpl, value));
@@ -62,7 +65,7 @@ describe('Web IDL observable arrays', () => {
     const operations: string[] = [];
     const receivers: object[] = [];
     const fixture = createNumberArrayBinding();
-    fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberBinding(fixture.attribute).observableArraySteps = {
+    getMemberBinding(fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)), fixture.attribute).observableArraySteps = {
       delete(value, index) {
         receivers.push(this);
         operations.push(`delete ${index} ${String(value)}`);
@@ -93,7 +96,7 @@ describe('Web IDL observable arrays', () => {
     const deleted: number[] = [];
     const exception = new Error('stop deleting');
     const fixture = createNumberArrayBinding();
-    fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberBinding(fixture.attribute).observableArraySteps = {
+    getMemberBinding(fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)), fixture.attribute).observableArraySteps = {
       delete(_value, index) {
         deleted.push(index);
         if (index === 1) throw exception;
@@ -110,7 +113,7 @@ describe('Web IDL observable arrays', () => {
   it('converts an assignment before replacing the existing contents', () => {
     const operations: string[] = [];
     const fixture = createNumberArrayBinding();
-    fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)).getOrCreateMemberBinding(fixture.attribute).observableArraySteps = {
+    getMemberBinding(fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)), fixture.attribute).observableArraySteps = {
       delete(value, index) {
         operations.push(`delete ${index} ${String(value)}`);
       },
@@ -253,7 +256,7 @@ describe('Web IDL observable arrays', () => {
     const employeeObject = binding.createPlatformRecord(binding.resolveInterface('Employee')).platformObject!;
     const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
     const values = getArray(object, 'workers');
-    const backingList = binding.getObservableArrayBackingList(object, workers);
+    const backingList = binding.getObservableArrayBackingList(object, binding.resolveInterface('Building').findMemberByKind('attribute')!.member);
 
     values.push(employeeObject);
     expect(backingList).toHaveLength(1);

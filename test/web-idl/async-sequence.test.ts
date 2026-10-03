@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
+import { getMemberBinding } from '../support/web-idl-binding';
+
 import { TestRealm as Realm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding/world';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { endOfIteration, type AsyncIterator } from '../../src/infra/iteration';
 import {
   IDLAsyncSequence, type AsyncSequenceIterator,
@@ -46,9 +48,9 @@ describe('Web IDL async sequences', () => {
       },
     });
 
-    const sequence = binding.getConverter(asyncSequence(idlType.long)).jsToIDL(source);
+    const sequence = binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source);
 
-    expect(binding.getConverter(asyncSequence(idlType.long)).idlToJS(sequence)).toBe(source);
+    expect(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).idlToJS(sequence)).toBe(source);
     expect(gets).toBe(1);
     requireAsyncSequence(sequence).open(binding.realm);
     expect(gets).toBe(1);
@@ -69,7 +71,7 @@ describe('Web IDL async sequences', () => {
     const source = {
       [kind === 'sync' ? Symbol.iterator : Symbol.asyncIterator]: () => sourceIterator,
     };
-    const iterator = requireAsyncSequence(binding.getConverter(asyncSequence(idlType.long)).jsToIDL(source)).open(realm);
+    const iterator = requireAsyncSequence(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source)).open(realm);
     Object.defineProperty(sourceIterator, 'next', {
       value: () => { throw new Error('next was read again'); },
     });
@@ -90,7 +92,7 @@ describe('Web IDL async sequences', () => {
     const source = {
       [kind === 'sync' ? Symbol.iterator : Symbol.asyncIterator]: () => sourceIterator,
     };
-    const iterator = requireAsyncSequence(binding.getConverter(asyncSequence(idlType.long)).jsToIDL(source)).open(realm);
+    const iterator = requireAsyncSequence(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source)).open(realm);
     sourceIterator.return = function(reason: unknown) {
       expect(this).toBe(sourceIterator);
       returned = reason;
@@ -127,7 +129,7 @@ describe('Web IDL async sequences', () => {
         };
       },
     };
-    const sequence = requireAsyncSequence(binding.getConverter(asyncSequence(idlType.long)).jsToIDL(source));
+    const sequence = requireAsyncSequence(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source));
     const iterator = sequence.open(realm);
 
     const next = iterator.nextValue(realm,
@@ -156,7 +158,7 @@ describe('Web IDL async sequences', () => {
         return { next: () => values.shift() };
       },
     };
-    const iterator = requireAsyncSequence(binding.getConverter(asyncSequence(idlType.long)).jsToIDL(source)).open(realm);
+    const iterator = requireAsyncSequence(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source)).open(realm);
 
     await expect(nextValue(iterator, binding)).resolves.toBe(8);
     await expect(nextValue(iterator, binding)).rejects
@@ -170,7 +172,7 @@ describe('Web IDL async sequences', () => {
         return { next: () => 42 };
       },
     };
-    const iterator = requireAsyncSequence(binding.getConverter(asyncSequence(idlType.long)).jsToIDL(source)).open(realm);
+    const iterator = requireAsyncSequence(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source)).open(realm);
     const order: string[] = [];
     const rejection = nextValue(iterator, binding).catch((error: unknown) => {
       expect(error).toBeInstanceOf(realm.intrinsics.typeError);
@@ -211,8 +213,8 @@ describe('Web IDL async sequences', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new AsyncSequenceConsumerImpl();
-    interfaceBinding.getOrCreateMemberBinding(asyncOperation).operationSteps = (_receiver, _value) => 'async';
-    interfaceBinding.getOrCreateMemberBinding(stringOperation).operationSteps = (_receiver, _value) => 'string';
+    getMemberBinding(interfaceBinding, asyncOperation).operationSteps = (_receiver, _value) => 'async';
+    getMemberBinding(interfaceBinding, stringOperation).operationSteps = (_receiver, _value) => 'string';
     const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     let gets = 0;
     const source = Object.defineProperty({}, Symbol.asyncIterator, {

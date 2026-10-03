@@ -5,13 +5,13 @@ import {
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
 import { BindingWorld, type BindingContext, type WebIDLEnvironment } from '../../src/web-idl/index';
-import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
-import { streamsIDLDefinitions } from '../../src/streams/index';
+import { readableStreamReadResultIDL } from '../../src/streams/index';
 
 /** A standalone realm environment with facilities supplied by the unit host. */
 export function createEnvironment(realm = new TestRealm(), binding?: BindingContext): TestEnvironment {
   if (!binding) {
-    return new BindingWorld<TestEnvironment>([...webIDLCommonDefinitions, ...streamsIDLDefinitions])
+    // Implementation read promises need their result dictionary, not the Streams author API.
+    return new BindingWorld<TestEnvironment>([readableStreamReadResultIDL])
       .register(realm, (ctx) => createEnvironment(realm, ctx)).getEnvironment();
   }
   return { realm, exec: createExecution(realm, binding), queueNetworkingTask };

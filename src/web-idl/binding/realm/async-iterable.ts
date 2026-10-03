@@ -1,15 +1,12 @@
 import { InternalError, endOfIteration, InternalPromise, Stamper } from '../../../infra/index';
-
 import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../../js-engine/index';
 
-import { idlType, type AsyncIterableMember } from '../../core/index';
-
-import type { AssembledArgument, AssembledCallable, AssembledInterface } from '../../assembled';
-
+import {
+  anyType, type IDLAsyncIterable, type AssembledArgument, type AssembledCallable, type AssembledInterface,
+} from '../../assembly/index';
+import { IDLPromise } from '../../values/index';
 import { getPlatformRecord, type PlatformRecord, type StampedImplInstance } from '../platform';
 import type { RealmBinding } from '../realm';
-
-import { IDLPromise } from '../../values/index';
 
 /** Install async iterator methods and prototypes in one realm. */
 export class AsyncIterableBinding {
@@ -25,7 +22,7 @@ export class AsyncIterableBinding {
   defineMethods(
     target: object,
     assembled: AssembledInterface,
-    callable: AssembledCallable<AsyncIterableMember>,
+    callable: AssembledCallable<IDLAsyncIterable>,
   ): void {
     if (callable.primary.key === undefined) {
       const values = this.#createIteratorMethod(
@@ -50,7 +47,7 @@ export class AsyncIterableBinding {
   // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
   #createIteratorMethod(
     assembled: AssembledInterface,
-    callable: AssembledCallable<AsyncIterableMember>,
+    callable: AssembledCallable<IDLAsyncIterable>,
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
@@ -74,7 +71,7 @@ export class AsyncIterableBinding {
   }
 
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
-  #getIteratorPrototypeObject(assembled: AssembledInterface, member: AsyncIterableMember): object {
+  #getIteratorPrototypeObject(assembled: AssembledInterface, member: IDLAsyncIterable): object {
     const implementationBinding = this.#binding.getImplementationBinding(assembled);
     if (implementationBinding.asyncIteratorPrototype) return implementationBinding.asyncIteratorPrototype;
 
@@ -110,7 +107,7 @@ export class AsyncIterableBinding {
     try {
       state = this.#getIteratorState(thisArgument, assembled, 'next');
     } catch (exception) {
-      return IDLPromise.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
+      return IDLPromise.rejected(exception, anyType, this.#binding.realm, this.#binding.realizeException).promise;
     }
     return state.next(this.#binding);
   }
@@ -120,7 +117,7 @@ export class AsyncIterableBinding {
     try {
       state = this.#getIteratorState(thisArgument, assembled, 'return');
     } catch (exception) {
-      return IDLPromise.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
+      return IDLPromise.rejected(exception, anyType, this.#binding.realm, this.#binding.realizeException).promise;
     }
     return state.return(value, this.#binding);
   }
@@ -173,7 +170,7 @@ class AsyncIteratorRecord {
   /** Interface identity required when checking an iterator receiver. */
   assembled: AssembledInterface;
   /** Declaration supplying the key and value conversion types. */
-  member: AsyncIterableMember;
+  member: IDLAsyncIterable;
   /** Whether this iterator yields keys, values, or key/value pairs. */
   kind: IterationKind;
   /** Original receiver's binding, used to project yielded implementations. */
@@ -186,7 +183,7 @@ class AsyncIteratorRecord {
   constructor(
     implementationIterator: object,
     assembled: AssembledInterface,
-    member: AsyncIterableMember,
+    member: IDLAsyncIterable,
     kind: IterationKind,
     receiverBinding: RealmBinding,
   ) {
@@ -218,7 +215,7 @@ class AsyncIteratorRecord {
   #runNext(methodBinding: RealmBinding): IDLPromise {
     const { realm, realizeException } = methodBinding;
     if (this.#finished) {
-      return IDLPromise.fromJS(realm.createIteratorResultObject(undefined, true), idlType.any, realm, realizeException);
+      return IDLPromise.fromJS(realm.createIteratorResultObject(undefined, true), anyType, realm, realizeException);
     }
 
     const steps = getAsyncIteratorSteps(this.assembled, this.member, methodBinding);
@@ -227,7 +224,7 @@ class AsyncIteratorRecord {
       nextPromise = steps.next(this.implementationIterator);
     } catch (exception) {
       this.#finished = true;
-      return IDLPromise.rejected(exception, idlType.any, realm, realizeException);
+      return IDLPromise.rejected(exception, anyType, realm, realizeException);
     }
 
     return this.#react(nextPromise,
@@ -252,19 +249,19 @@ class AsyncIteratorRecord {
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
   #runReturn(value: unknown, methodBinding: RealmBinding): IDLPromise {
     const { realm, realizeException } = methodBinding;
-    if (this.#finished) return IDLPromise.fromJS(value, idlType.any, realm, realizeException);
+    if (this.#finished) return IDLPromise.fromJS(value, anyType, realm, realizeException);
     this.#finished = true;
 
     const steps = getAsyncIteratorSteps(this.assembled, this.member, methodBinding);
     if (!steps.return) {
       return IDLPromise.rejected(
-        new InternalError('Asynchronous iterator return steps are missing'), idlType.any, realm, realizeException,
+        new InternalError('Asynchronous iterator return steps are missing'), anyType, realm, realizeException,
       );
     }
     try {
       return this.#react(steps.return(this.implementationIterator, value), () => undefined, undefined, methodBinding);
     } catch (exception) {
-      return IDLPromise.rejected(exception, idlType.any, realm, realizeException);
+      return IDLPromise.rejected(exception, anyType, realm, realizeException);
     }
   }
 
@@ -274,7 +271,7 @@ class AsyncIteratorRecord {
     const ongoing = this.#ongoing;
     if (!ongoing) return this.#ongoing = action();
 
-    const afterOngoing = new IDLPromise(idlType.any, methodBinding.realm, methodBinding.realizeException);
+    const afterOngoing = new IDLPromise(anyType, methodBinding.realm, methodBinding.realizeException);
     const onSettled = methodBinding.realm.createFunction(
       () => {
         try {
@@ -297,7 +294,7 @@ class AsyncIteratorRecord {
     rejected: ((reason: unknown) => unknown) | undefined,
     methodBinding: RealmBinding,
   ): IDLPromise {
-    const result = new IDLPromise(idlType.any, methodBinding.realm, methodBinding.realizeException);
+    const result = new IDLPromise(anyType, methodBinding.realm, methodBinding.realizeException);
     const onFulfilled = methodBinding.realm.createFunction(
       (_thisArgument, [value]) => {
         try {
@@ -392,7 +389,7 @@ type IterationKind = 'key' | 'key+value' | 'value';
 
 /** Get the invoked realm's implementation steps for creating or advancing an iterator. */
 function getAsyncIteratorSteps(
-  assembled: AssembledInterface, member: AsyncIterableMember, binding: RealmBinding,
+  assembled: AssembledInterface, member: IDLAsyncIterable, binding: RealmBinding,
 ): AsyncIteratorSteps {
   const steps = binding.getMemberBinding(assembled, member)?.asyncIteratorSteps;
   if (!steps) throw new InternalError(`Missing ${assembled.primary.name} asynchronous iterator implementation`);

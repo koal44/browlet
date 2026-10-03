@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
+import { getMemberBinding } from '../support/web-idl-binding';
+
 import { TestRealm as Realm } from './test-realm';
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
@@ -30,7 +32,7 @@ describe('Web IDL synchronous iterable declarations', () => {
         implementation: impl(PairsImpl),
         members: [iter(idlType.long, { key: idlType.DOMString })],
       });
-      const context = new BindingWorld([...webIDLCommonDefinitions, definition]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+      const context = new BindingWorld([definition]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
       const object = context.project(PairsImpl, context.construct(PairsImpl));
       if (method === 'forEach') {
         const seen: unknown[][] = [];
@@ -50,7 +52,7 @@ describe('Web IDL synchronous iterable declarations', () => {
   it('defines realm-specific pair iteration methods and iterator objects', () => {
     const { binding, member, definition, realm } = createPairBinding();
     const pairs = new WeakMap<object, ValuePair[]>();
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = function() {
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = function() {
       return pairs.get(this) ?? [];
     };
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
@@ -111,7 +113,7 @@ describe('Web IDL synchronous iterable declarations', () => {
   it('consults the current value-pair list for next and after each callback', () => {
     const { binding, member, definition } = createPairBinding();
     const pairs: ValuePair[] = [['one', 1]];
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => pairs;
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = () => pairs;
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const entries = getMethod(object, 'entries');
     const iterator = Reflect.apply(entries, object, []) as object;
@@ -187,7 +189,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     };
     const [keyImplementation, keyObject] = createPairValue();
     const [valueImplementation, valueObject] = createPairValue();
-    binding.getImplementationBinding(binding.resolveInterface(collectionInterface.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => [[keyImplementation, valueImplementation]];
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(collectionInterface.name)), member).valuePairsSteps = () => [[keyImplementation, valueImplementation]];
     const collection = binding.createPlatformRecord(
       binding.resolveInterface('InterfacePairCollection'),
     ).platformObject!;
@@ -262,7 +264,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     expect(Object.hasOwn(hiddenPrototype, 'entries')).toBe(false);
 
     const pair = createPairBinding();
-    pair.binding.getImplementationBinding(pair.binding.resolveInterface(pair.definition.name)).getOrCreateMemberBinding(pair.member).valuePairsSteps = () => [];
+    getMemberBinding(pair.binding.getImplementationBinding(pair.binding.resolveInterface(pair.definition.name)), pair.member).valuePairsSteps = () => [];
     const object = pair.binding.createPlatformRecord(pair.binding.resolveInterface('PairCollection')).platformObject!;
     const entries = getMethod(object, 'entries');
     const iterator = Reflect.apply(entries, object, []) as object;
@@ -279,11 +281,11 @@ describe('Web IDL synchronous iterable declarations', () => {
     const otherBinding = new RealmBinding(
       binding.assembly, otherRealm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => [];
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = () => [];
     const original = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
-    other.getOrCreateMemberBinding(member).valuePairsSteps = original.getOrCreateMemberBinding(member).valuePairsSteps;
+    getMemberBinding(other, member).valuePairsSteps = getMemberBinding(original, member).valuePairsSteps;
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('PairCollection')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
@@ -295,7 +297,7 @@ describe('Web IDL synchronous iterable declarations', () => {
 
   it('keeps iterator state private and independent of author property changes', () => {
     const { binding, member, definition, realm } = createPairBinding();
-    binding.getImplementationBinding(binding.resolveInterface(definition.name)).getOrCreateMemberBinding(member).valuePairsSteps = () => [['one', 1], ['two', 2]];
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = () => [['one', 1], ['two', 2]];
     const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const next = getMethod(iterator, 'next');

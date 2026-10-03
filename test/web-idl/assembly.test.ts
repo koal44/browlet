@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import {
   defineCallbackInterface, defineDictionary, defineEnumeration, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
@@ -19,15 +19,15 @@ describe('Web IDL definition assembly', () => {
     const nestedNumbers = sequence(numbers);
     const dictionaries = sequence(reference('Options'));
 
-    expect(assembly.isPrimitiveType(primitive)).toBe(true);
-    expect(assembly.canPassToImpl(primitive)).toBe(true);
-    expect(assembly.isPrimitiveType(numbers)).toBe(false);
-    expect(assembly.canPassToImpl(numbers)).toBe(true);
-    expect(assembly.canPassToImpl(nestedNumbers)).toBe(true);
-    expect(assembly.canPassToImpl(dictionaries)).toBe(false);
-    expect(assembly.isPrimitiveType(idlType.any)).toBe(false);
-    expect(assembly.canPassToImpl(idlType.any)).toBe(false);
-    expect(assembly.isPrimitiveType(idlType.symbol)).toBe(true);
+    expect(assembly.isPrimitiveType(assembly.getIDLType(primitive))).toBe(true);
+    expect(assembly.canPassToImpl(assembly.getIDLType(primitive))).toBe(true);
+    expect(assembly.isPrimitiveType(assembly.getIDLType(numbers))).toBe(false);
+    expect(assembly.canPassToImpl(assembly.getIDLType(numbers))).toBe(true);
+    expect(assembly.canPassToImpl(assembly.getIDLType(nestedNumbers))).toBe(true);
+    expect(assembly.canPassToImpl(assembly.getIDLType(dictionaries))).toBe(false);
+    expect(assembly.isPrimitiveType(assembly.getIDLType(idlType.any))).toBe(false);
+    expect(assembly.canPassToImpl(assembly.getIDLType(idlType.any))).toBe(false);
+    expect(assembly.isPrimitiveType(assembly.getIDLType(idlType.symbol))).toBe(true);
   });
 
   it('resolves inheritance and partial interfaces independently of order', () => {
@@ -52,7 +52,7 @@ describe('Web IDL definition assembly', () => {
     expect(assembled?.parentAssembled?.primary).toBe(parent);
     expect(assembled?.partials).toEqual([partial]);
     expect(assembled?.members).toEqual([{
-      member: partial.members[0],
+      member: { ...partial.members[0], returns: assembly.builtinTypes.undefined },
       source: partial,
     }]);
   });
@@ -88,9 +88,9 @@ describe('Web IDL definition assembly', () => {
     const assembled = assembly.interfaces.get('Host');
 
     expect(assembled?.members).toEqual([
-      { member: second.members[0], source: second },
-      { member: secondPartial.members[0], source: secondPartial },
-      { member: first.members[0], source: first },
+      { member: { ...second.members[0], returns: assembly.builtinTypes.undefined }, source: second },
+      { member: { ...secondPartial.members[0], returns: assembly.builtinTypes.undefined }, source: secondPartial },
+      { member: { ...first.members[0], returns: assembly.builtinTypes.undefined }, source: first },
     ]);
   });
 
@@ -105,6 +105,9 @@ describe('Web IDL definition assembly', () => {
     const assembly = new DefinitionAssembly([child, unrelated, parent, base]);
     const assembled = assembly.interfaces.get('Child')!;
     const otherAssembly = new DefinitionAssembly([base]);
+    const compiledBase = assembly.interfaces.get('Base')!.findMemberByKind('attribute')!.member;
+    const compiledParent = assembly.interfaces.get('Parent')!.findMemberByKind('attribute')!.member;
+    const compiledInherited = assembled.findMemberByKind('attribute')!.member;
 
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(assembled.getInheritanceChain().map((ancestor) => ancestor.name))
@@ -113,10 +116,10 @@ describe('Web IDL definition assembly', () => {
       expect(assembled.implements(assembly.interfaces.get('Child')!)).toBe(true);
       expect(assembled.implements(otherAssembly.interfaces.get('Base')!)).toBe(true);
       expect(assembled.implements(assembly.interfaces.get('Unrelated')!)).toBe(false);
-      expect(assembled.getInheritedAttribute(inheritedValue)).toBe(parentValue);
-      expect(assembled.includesMember(baseValue)).toBe(true);
-      expect(assembled.includesMember(inheritedValue)).toBe(true);
-      expect(assembled.includesMember(roAttr('value', idlType.long))).toBe(false);
+      expect(assembled.getInheritedAttribute(compiledInherited)).toBe(compiledParent);
+      expect(assembled.includesMember(compiledBase)).toBe(true);
+      expect(assembled.includesMember(compiledInherited)).toBe(true);
+      expect(assembled.includesMember({ ...compiledBase })).toBe(false);
     }
   });
 
@@ -128,11 +131,12 @@ describe('Web IDL definition assembly', () => {
       defineInterface({ name: 'Parent', members: [collection] }),
     ]);
     const assembled = assembly.interfaces.get('Child')!;
+    const compiledCollection = assembly.interfaces.get('Parent')!.getCollectionMember();
 
     for (let attempt = 0; attempt < 2; attempt++) {
       expect(assembled.getCollectionMember()).toBeUndefined();
-      expect(assembled.getCollectionMember(true)).toBe(collection);
-      expect(assembly.interfaces.get('Parent')!.getCollectionMember()).toBe(collection);
+      expect(assembled.getCollectionMember(true)).toBe(compiledCollection);
+      expect(assembly.interfaces.get('Parent')!.getCollectionMember()).toBe(compiledCollection);
       expect(assembly.interfaces.get('Plain')!.getCollectionMember(true)).toBeUndefined();
     }
   });

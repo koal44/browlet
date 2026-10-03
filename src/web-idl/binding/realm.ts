@@ -1,35 +1,32 @@
 import { ExceptionRequestStamper, InternalError, Stamper } from '../../infra/index';
-
 import { getAssociatedRealm, isObject } from '../../js-engine/index';
-
 import {
-  hasExtendedAttribute, DOMExceptionImpl, DOMExceptionStamper, reference, type AttributeMember,
-  type Exposure, type ExtendedAttribute, type ImplementationClass, type WebIDLType,
+  hasExtendedAttribute, DOMExceptionImpl, DOMExceptionStamper, type Exposure, type ExtendedAttribute,
+  type ImplementationClass,
 } from '../core/index';
 
-import {
-  AssembledInterface, type AssembledInterfaceMember, type AssembledDictionary,
-  type AssembledNamespaceMember,
-} from '../assembled';
-import type { ConversionRules, DefinitionAssembly } from '../assembly';
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
+import {
+  AssembledInterface, type IDLType, type IDLDictionaryType, type IDLAttribute, type AssembledInterfaceMember,
+  type AssembledDictionary, type AssembledNamespaceMember, type DefinitionAssembly,
+} from '../assembly/index';
+import type { IDLMapEntries, IDLSetEntries } from '../values/index';
+import {
+  createConverter, DictionaryConverter, ImplementationConverter, type Converter, type ConverterFor,
+} from '../converters/index';
 
-import { BindingContext } from './context';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord, PlatformRecord,
   type StampedPlatformObject,
 } from './platform';
 import {
-  AsyncIterableBinding, CallbackBinding, MaplikeBinding, SetlikeBinding, GlobalPlatformObjectBinding, ImplementationBinding,
-  SynchronousIterableBinding, LegacyPlatformObjectBinding, ObservableArrayBinding, invalidReceiver,
-  type BoundConstruct, type MemberDeclaration,
-  type ConstructorBehavior, type MemberBinding, type MemberOwner,
+  AsyncIterableBinding, CallbackBinding, MaplikeBinding, SetlikeBinding, GlobalPlatformObjectBinding,
+  ImplementationBinding, SynchronousIterableBinding, LegacyPlatformObjectBinding, ObservableArrayBinding,
+  invalidReceiver, type BoundConstruct, type IDLMember, type ConstructorBehavior, type MemberBinding,
+  type MemberOwner,
 } from './realm/index';
+import { BindingContext } from './context';
 import type { BindingWorld } from './world';
-
-import type { IDLMapEntries, IDLSetEntries } from '../values/index';
-
-import { createConverter, DictionaryConverter, ImplementationConverter, type Converter } from '../converters/index';
 
 /** Realm-wide identity, allocation, conversion, and receiver services used by construct bindings. */
 export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
@@ -57,7 +54,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   /** Each assembled construct has one implementation binding in this realm. */
   #implementationBindings = new Map<BoundConstruct, ImplementationBinding>();
   /** Type converters for this binding, without keeping discarded conversion realms alive. */
-  #converters = new WeakMap<WebIDLRealm, Map<WebIDLType, Converter>>();
+  #converters = new WeakMap<WebIDLRealm, Map<IDLType, Converter>>();
   /** Dictionary conversion plans are shared across invocations in the same conversion realm. */
   #dictionaryConverters = new WeakMap<WebIDLRealm, Map<AssembledDictionary, DictionaryConverter>>();
 
@@ -148,40 +145,32 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return binding as ImplementationBinding<Assembled>;
   }
 
-  /** Reuse a converter for this binding, declared type, and allocation/error realm. */
-  getConverter<Type extends WebIDLType>(
-    type: Type,
-    realm: WebIDLRealm = this.realm,
-  ): Converter<Type> {
+  /** Reuse conversion machinery without resolving an already assembled type again. */
+  getConverter<Type extends IDLType>(type: Type, realm: WebIDLRealm = this.realm): ConverterFor<Type> {
     let converters = this.#converters.get(realm);
-    if (!converters) this.#converters.set(realm, converters = new Map<WebIDLType, Converter>());
+    if (!converters) this.#converters.set(realm, converters = new Map<IDLType, Converter>());
     const cached = converters.get(type);
-    // The descriptor used as the key determines the converter's declared type.
-    if (cached) return cached as Converter<Type>;
+    // The assembled type used as the key determines the converter subclass and result contract.
+    if (cached) return cached as ConverterFor<Type>;
     const converter = createConverter(type, this, realm);
     converters.set(type, converter);
     return converter;
   }
 
-  /** Share dictionary preparation across aliases while preserving each declared use's rules. */
-  getDictionaryConverter<Type extends WebIDLType = WebIDLType>(
-    assembled: AssembledDictionary, realm: WebIDLRealm, rules?: ConversionRules<Type>,
-  ): DictionaryConverter<Type> {
+  /** Share dictionary member preparation while retaining each assembled type use. */
+  getDictionaryConverter<Type extends IDLDictionaryType>(type: Type, realm: WebIDLRealm): DictionaryConverter<Type> {
     let converters = this.#dictionaryConverters.get(realm);
     if (!converters) this.#dictionaryConverters.set(realm, converters = new Map<AssembledDictionary, DictionaryConverter>());
-    const shared = converters.get(assembled);
-    if (shared && !rules) return shared as DictionaryConverter<Type>;
-    const converter = new DictionaryConverter<WebIDLType>(
-      rules ?? this.assembly.getConversionRules(reference(assembled.primary.name)), this, realm, assembled, shared,
-    );
-    if (!shared) converters.set(assembled, converter);
-    return converter as DictionaryConverter<Type>;
+    const shared = converters.get(type.assembled);
+    const converter = new DictionaryConverter(type, this, realm, shared);
+    if (!shared) converters.set(type.assembled, converter);
+    return converter;
   }
 
   /** Find a member's binding on its including interface or an ancestor. */
   getMemberBinding(
     assembled: MemberOwner,
-    member: MemberDeclaration,
+    member: IDLMember,
   ): MemberBinding | undefined {
     for (
       let currentAssembled: MemberOwner | undefined = assembled;
@@ -437,7 +426,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (this.globalObject) {
       throw new InternalError('This binding already has a projected global object');
     }
-    if (assembled.findSpecialOperation('getter', 'unsigned long', this.assembly) !== undefined) {
+    if (assembled.findSpecialOperation('getter', 'unsigned long') !== undefined) {
       throw new InternalError('Global interfaces cannot use indexed properties');
     }
     this.getImplementationBinding(assembled).assertOrdinaryProjection();
@@ -548,7 +537,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   // Locate an observable-array member and retrieve its backing list.
   getObservableArrayBackingList(
     object: object,
-    attribute: AttributeMember,
+    attribute: IDLAttribute,
   ): unknown[] {
     const record = getPlatformRecord(object);
     const elementType = this.assembly.getObservableArrayElementType(attribute.type);

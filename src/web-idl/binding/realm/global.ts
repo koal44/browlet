@@ -1,11 +1,7 @@
 import { InternalError } from '../../../infra/index';
-
 import { isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
-import type { OperationMember } from '../../core/index';
-
-import type { AssembledInterface } from '../../assembled';
-
+import type { IDLOperation, AssembledInterface } from '../../assembly/index';
 import { getPlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 import type { NamedPropertySteps } from './legacy';
@@ -194,7 +190,7 @@ export class GlobalPlatformObjectBinding {
   #getNamedProperties(
     assembled: AssembledInterface,
   ): NamedProperties | undefined {
-    const getter = assembled.findSpecialOperation('getter', 'DOMString', this.#binding.assembly);
+    const getter = assembled.findSpecialOperation('getter', 'DOMString');
     if (!getter) return;
     const steps = this.#binding.getMemberBinding(assembled, getter.primary)?.namedPropertySteps;
     if (!steps) {
@@ -210,7 +206,7 @@ export class GlobalPlatformObjectBinding {
 }
 
 type NamedProperties = {
-  getter: OperationMember;
+  getter: IDLOperation;
   assembled: AssembledInterface;
   steps: NamedPropertySteps;
   unenumerable: boolean;

@@ -1,12 +1,9 @@
-import { InternalError, type ObservableArrayHandle, Stamper } from '../../infra/index';
-
+import { InternalError, Stamper, type ObservableArrayHandle } from '../../infra/index';
 import { isObject } from '../../js-engine/index';
+import type { ImplementationClass } from '../core/index';
 
-import type { AttributeMember, ImplementationClass } from '../core/index';
-
-import type { AssembledInterface } from '../assembled';
 import type { WebIDLRealm } from '../environment';
-
+import type { IDLAttribute, AssembledInterface } from '../assembly/index';
 import type { RealmBinding } from './realm';
 
 /** An implementation instance stamped with its private platform record. */
@@ -34,7 +31,7 @@ export class PlatformRecord<T extends object = object> {
   platformObject?: StampedPlatformObject;
   // Lazily allocated storage for maplike, setlike, and observable-array members.
   declare mapEntries?: Map<unknown, unknown>;
-  declare observableArrays?: Map<AttributeMember, ObservableArrayHandle<unknown, unknown>>;
+  declare observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
   declare setEntries?: Set<unknown>;
 
   constructor(

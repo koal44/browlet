@@ -1,31 +1,21 @@
 import { InternalError } from '../../infra/index';
-
 import { defineDataProperty, isObject } from '../../js-engine/index';
 
-import type { WebIDLType } from '../core/index';
-
-import type { AssembledDictionary } from '../assembled';
-import type { ConversionRules } from '../assembly';
-import { Converter, type ConversionSteps } from './converter';
 import type { WebIDLRealm } from '../environment';
-
-import type { RealmBinding } from '../binding/realm';
-
+import type { IDLDictionaryType } from '../assembly/index';
 import { IDLDictionary } from '../values/index';
+import type { RealmBinding } from '../binding/realm';
+import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare dictionary members once, sharing their plan across references in the same binding and realm. */
-export class DictionaryConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
-  /** Inherited and own members in their declared conversion order. */
-  assembled: AssembledDictionary;
+export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryType> extends Converter<Type> {
   /** Shared preparation is deferred so recursive dictionary references do not expand forever. */
   #plan: { input?: ConversionSteps<IDLDictionary>; output?: ConversionSteps<object>; };
 
   constructor(
-    rules: ConversionRules<Type>, binding: RealmBinding, realm: WebIDLRealm,
-    assembled: AssembledDictionary, shared?: DictionaryConverter,
+    type: Type, binding: RealmBinding, realm: WebIDLRealm, shared?: DictionaryConverter,
   ) {
-    super(rules, binding, realm);
-    this.assembled = assembled;
+    super(type, binding, realm);
     this.#plan = shared ? shared.#plan : {};
   }
 
@@ -36,7 +26,7 @@ export class DictionaryConverter<Type extends WebIDLType = WebIDLType> extends C
   }
 
   #prepareInput(): ConversionSteps<IDLDictionary> {
-    const assembled = this.assembled;
+    const assembled = this.type.assembled;
     const members = assembled.members.map((member) => {
       const converter = this.binding.getConverter(member.type, this.realm);
       return {
@@ -88,7 +78,7 @@ export class DictionaryConverter<Type extends WebIDLType = WebIDLType> extends C
 
   protected override createOutputSteps(): ConversionSteps<object> {
     return this.#plan.output ??= (value) => {
-      const assembled = this.assembled;
+      const assembled = this.type.assembled;
       if (!isObject(value)) {
         throw new InternalError(`IDL dictionary ${assembled.primary.name} is not an object`);
       }
@@ -102,7 +92,7 @@ export class DictionaryConverter<Type extends WebIDLType = WebIDLType> extends C
         defineDataProperty(
           result,
           member.name,
-          this.forType(member.type).idlToJS(members[member.name]),
+          this.binding.getConverter(member.type, this.realm).idlToJS(members[member.name]),
         );
       }
       return result;

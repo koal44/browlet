@@ -1,18 +1,15 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
+import { hasExtendedAttribute, type ImplementationClass, type InjectedArgument } from '../core/index';
 
-import {
-  hasExtendedAttribute, type AttributeMember, type OperationMember, type ImplementationClass,
-  type InjectedArgument, type AsyncIterableMember, type ConstructorMember,
-} from '../core/index';
-
-import type { AssembledCallable, AssembledInterface } from '../assembled';
-
-import type { BindingContext } from './context';
-import type { RealmBinding } from './realm';
+import type {
+  IDLAttribute, IDLOperation, IDLAsyncIterable, IDLConstructor, AssembledCallable, AssembledInterface,
+} from '../assembly/index';
 import type {
   AsyncIteratorSteps, ValuePairsSteps, AttributeSteps, ConstructorSteps, ImplementationConstructorSteps,
   MemberBinding, OperationSteps, StringificationBehavior,
 } from './realm/index';
+import type { RealmBinding } from './realm';
+import type { BindingContext } from './context';
 
 /** Register implementation factories and member steps before the world publishes this realm. */
 export function registerImplementationBindings(binding: RealmBinding): void {
@@ -218,7 +215,7 @@ function missingMemberBinding(
 // Supplies attribute behavior to Web IDL §3.7.6 Attributes.
 function registerDefinedAttribute(
   memberBinding: MemberBinding,
-  member: AttributeMember,
+  member: IDLAttribute,
   assembled: AssembledInterface,
   context: BindingContext,
   realmBinding: RealmBinding,
@@ -266,7 +263,7 @@ function registerDefinedAttribute(
 
 // Adapt converted constructor arguments for a declared initializer.
 function createDefinedConstructorSteps(
-  invoke: NonNullable<ConstructorMember['invoke']>,
+  invoke: NonNullable<IDLConstructor['invoke']>,
   assembled: AssembledCallable,
   context: BindingContext,
   realmBinding: RealmBinding,
@@ -308,8 +305,8 @@ function createImplementationConstructorSteps(
 
 // Adapt converted arguments and the receiver context for a declared invocation.
 function createDefinedOperationSteps(
-  invoke: NonNullable<OperationMember['invoke']>,
-  assembled: AssembledCallable<OperationMember>,
+  invoke: NonNullable<IDLOperation['invoke']>,
+  assembled: AssembledCallable<IDLOperation>,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): OperationSteps {
@@ -331,7 +328,7 @@ function createDefinedOperationSteps(
 // Web IDL §2.5.10 Asynchronously iterable declarations.
 function createAsyncIteratorSteps(
   factory: (this: object, ...values: unknown[]) => object,
-  assembled: AssembledCallable<AsyncIterableMember>,
+  assembled: AssembledCallable<IDLAsyncIterable>,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): AsyncIteratorSteps {
@@ -377,7 +374,7 @@ type AsyncIteratorValue = {
 // Supplies attribute behavior to Web IDL §3.7.6 Attributes.
 function registerAttribute(
   memberBinding: MemberBinding,
-  member: AttributeMember,
+  member: IDLAttribute,
   target: object,
   context: BindingContext,
   realmBinding: RealmBinding,
@@ -437,7 +434,7 @@ function registerAttribute(
 // Supplies operation behavior to Web IDL §3.7.7 Operations.
 function registerOperation(
   memberBinding: MemberBinding,
-  assembled: AssembledCallable<OperationMember>,
+  assembled: AssembledCallable<IDLOperation>,
   name: string,
   target: object,
   context: BindingContext,

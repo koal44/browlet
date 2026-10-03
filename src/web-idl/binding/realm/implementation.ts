@@ -1,14 +1,10 @@
 import { InternalError } from '../../../infra/index';
-
 import type { JSFunction } from '../../../js-engine/index';
 
-import type { InterfaceMember, ConstantMember, NamedArgumentsExtendedAttribute } from '../../core/index';
-
 import type {
-  AssembledInterface, AssembledCallbackInterface, AssembledNamespace, DefaultToJSONAttribute,
-  MemberPlacement,
-} from '../../assembled';
-
+  IDLInterfaceMember, IDLConstant, IDLNamedArguments, AssembledInterface, AssembledCallbackInterface,
+  AssembledNamespace, DefaultToJSONAttribute, MemberPlacement,
+} from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 import type { LegacyPropertyMetadata } from './legacy';
@@ -27,8 +23,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   declare initializeImplementation?: ImplementationInitializationSteps;
   /** Replace ordinary constructor invocation when the declaration supplies custom steps. */
   declare overriddenConstructor?: OverriddenConstructorSteps;
-  /** Registered steps and generated functions, keyed by their original member declarations. */
-  declare members?: Map<MemberDeclaration, MemberBinding>;
+  /** Registered steps and generated functions, keyed by compiled members. */
+  declare members?: Map<IDLMember, MemberBinding>;
 
   /** Retained platform objects preserve their identities for this construct and realm. */
   declare interfaceObject?: InterfaceObject;
@@ -50,8 +46,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   }
 
   /** Retain the member's implementation steps and platform functions under its including construct. */
-  getOrCreateMemberBinding(member: MemberDeclaration): MemberBinding<Assembled> {
-    const members = this.members ??= new Map<MemberDeclaration, MemberBinding>();
+  getOrCreateMemberBinding(member: IDLMember): MemberBinding<Assembled> {
+    const members = this.members ??= new Map<IDLMember, MemberBinding>();
     let binding = members.get(member);
     if (!binding) {
       binding = new MemberBinding(this);
@@ -142,7 +138,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       () => realmBinding.throwTypeError('Illegal invocation'),
       { length: 0, name: definition.name },
     );
-    for (const member of definition.members) {
+    for (const member of assembled.members) {
       if (
         member.kind === 'constant' &&
         realmBinding.isConstructExposed(member)
@@ -251,7 +247,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
     const global = assembled.isGlobal();
     const parentPrototype = global &&
-      assembled.findSpecialOperation('getter', 'DOMString', realmBinding.assembly) !== undefined
+      assembled.findSpecialOperation('getter', 'DOMString') !== undefined
       ? this.#getNamedPropertiesObject()
       : assembled.parentAssembled
         ? realmBinding.getImplementationBinding(assembled.parentAssembled).getInterfacePrototypeObject()
@@ -313,7 +309,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
   #defineConstant(
     target: object,
-    constant: ConstantMember,
+    constant: IDLConstant,
   ): void {
     const realmBinding = this.binding;
     const converter = realmBinding.getConverter(constant.type);
@@ -397,7 +393,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   ): void {
     const { binding: realmBinding, assembled } = this;
     const entry = assembled.findMemberByKind('iterable');
-    if (assembled.findSpecialOperation('getter', 'unsigned long', realmBinding.assembly) !== undefined) {
+    if (assembled.findSpecialOperation('getter', 'unsigned long') !== undefined) {
       realmBinding.iterables.defineIndexedMethods(
         target,
         entry !== undefined &&
@@ -577,7 +573,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 }
 
 export type BoundConstruct = AssembledInterface | AssembledNamespace | AssembledCallbackInterface;
-export type MemberDeclaration = InterfaceMember | NamedArgumentsExtendedAttribute;
+export type IDLMember = IDLInterfaceMember | IDLNamedArguments;
 
 type InterfaceObject = JSFunction & { prototype: object; };
 

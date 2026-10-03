@@ -64,6 +64,10 @@ describe('Browlet', () => {
       .toBeNull();
     expect(documentImpl.customElementRegistry)
       .not.toBeNull();
+    const registry = Reflect.get(document, 'customElementRegistry') as object;
+    expect(unwrap(registry)).toBe(documentImpl.customElementRegistry);
+    expect(Reflect.get(document, 'customElementRegistry')).toBe(registry);
+    expect(getRelevantRealm(registry)).toBe(getRelevantRealm(document));
     expect(documentImpl.internalAncestorOriginObjectsList)
       .toEqual([]);
     expect(documentImpl.ancestorOriginsList).toEqual([]);

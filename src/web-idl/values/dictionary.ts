@@ -1,4 +1,4 @@
-import type { AssembledDictionary } from '../assembled';
+import type { AssembledDictionary } from '../assembly/index';
 
 /** Converted dictionary members with the declaration needed for subsequent conversion. */
 // https://webidl.spec.whatwg.org/#idl-dictionaries

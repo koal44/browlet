@@ -4,6 +4,10 @@
 Create the remaining files only as their behavior is implemented; do not add
 empty classes merely to complete this list.
 
+`html/web-idl.ts` retains a declaration-only `HTMLFormElement` type for FormData's
+constructor signature. It has no implementation or Window exposure; move that
+declaration into the form module when its behavior is implemented.
+
 ## Early platform slice
 
 Implement these in dependency order before filling out the element catalog.
