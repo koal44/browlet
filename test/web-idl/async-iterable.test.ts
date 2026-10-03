@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { internalType, type InternalPromiseWithResolvers } from '../../src/infra/promises';
 import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { endOfIteration } from '../../src/web-idl/constructs/async-sequence';
+import { endOfIteration } from '../../src/infra/iteration';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';

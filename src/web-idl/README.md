@@ -14,7 +14,7 @@ records backend constraints and unresolved behavior.
 | [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, and stamped-object types |
 
 Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
-entry augments declaration callbacks with typed `BindingContext` arguments.
+entry augments declaration hooks with typed `BindingContext` arguments.
 Core and full-binding type fixtures are compiled separately so the augmentation
 cannot hide a dependency in the standalone surface.
 
@@ -141,6 +141,11 @@ Carriers are classes: callback carriers own invocation, async-sequence carriers
 open iterators, and iterator carriers own advancing, closing, and yielded-value
 conversion. The local `IteratorRecord` holds the iterator and captured `next`
 method, and owns synchronous-to-asynchronous iteration.
+
+Implementation code receives Infra's [`AsyncIterator<T>`](../infra/iteration.ts)
+contract: `next()` and `return()` return `InternalPromise` results, and
+`endOfIteration` signals completion. The carrier and conversion context remain
+inside Web IDL.
 
 For an interface's `async iterable` declaration, `AsyncIterableBinding` installs
 methods and checks receivers. Each projected iterator retains an
@@ -397,12 +402,12 @@ them. The HTML traversal keeps the interface-specific shape opaque.
 
 ## Identity and construction
 
-One [`PlatformRecord`](platform-object.ts) is privately stamped onto both an
+One [`PlatformRecord`](binding/platform-object.ts) is privately stamped onto both an
 implementation and its eventual platform object. It retains the owning realm
 binding and assembled interface. `record.assembled` supplies its name and exact
-serialization and transfer steps. `ctx.getInterface(name)` returns the assembled
-interface used by allocation and exposure checks; those operations reject an
-interface from another binding world's assembly. The implementation keeps its
+serialization and transfer steps. `ctx.createPlatformRecord(name)` resolves the
+interface in its own world and creates the object, returning `undefined` when
+the interface is unknown or unexposed in that realm. The implementation keeps its
 class prototype and private state; public subclassing changes the platform prototype, not the
 implementation constructor's `newTarget`.
 
@@ -424,6 +429,9 @@ HTML separately owns transferable detached state.
 the same interface and owner checks as `ctx.project()`. Nested serialization can
 name an implementation with `context.subserialize(value, Impl)`. A fresh value
 uses the containing object's binding; an associated value keeps its owner.
+`record.associateWithOwner(Impl, value)` applies that ownership choice without
+requiring the caller to reach through the realm binding. Both association methods
+retain the implementation's type in `PlatformRecord<T>`.
 Ordinary JavaScript values still use the one-argument form without implementation
 discovery. Both forms share the enclosing operation's identity memory.
 

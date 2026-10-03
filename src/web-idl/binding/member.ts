@@ -2,7 +2,7 @@ import { isObject, type JSFunction } from '../../js-engine/index';
 import { AssembledInterface, type AssembledCallable, type AssembledNamespace, type AssembledOverloads } from '../assembled';
 import type { ImplementationBinding, BoundConstruct } from './implementation';
 import {
-  idlType, type AttributeMember, type OperationMember, type StringifierMember,
+  idlType, type AttributeMember, type AttributeFunctionSteps, type OperationMember, type StringifierMember,
   type WebIDLType, type ExtendedAttribute,
 } from '../core/types';
 import { hasExtendedAttribute } from '../core/helpers';
@@ -51,19 +51,19 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   getAttributeFunction(
     this: MemberBinding<MemberOwner>,
     attribute: AttributeMember,
-    createCallback: () => AttributeFunctionCallback,
+    createSteps: () => AttributeFunctionSteps,
   ): JSFunction {
     if (this.#attributeFunction) return this.#attributeFunction;
     const realmBinding = this.#implementationBinding.binding;
 
-    const callback = createCallback();
+    const steps = createSteps();
     return this.#attributeFunction = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
       try {
-        return Reflect.apply(callback, thisArgument, argumentsList);
+        return Reflect.apply(steps, thisArgument, argumentsList);
       } catch (exception) {
         throw realmBinding.realizeException(exception);
       }
-    }, { length: callback.length, name: attribute.name });
+    }, { length: steps.length, name: attribute.name });
   }
 
   /** Retain the realm-owned getter function and its prepared conversions. */
@@ -402,8 +402,6 @@ export type OperationSteps = (
 ) => unknown;
 
 export type MemberOwner = AssembledInterface | AssembledNamespace;
-
-export type AttributeFunctionCallback = (this: unknown, ...argumentsList: unknown[]) => unknown;
 
 export const invalidReceiver = Symbol('invalid receiver');
 

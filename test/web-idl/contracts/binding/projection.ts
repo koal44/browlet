@@ -2,7 +2,7 @@ import {
   atArg, attrFn, ctor, BindingWorld, defineCallbackInterface, defineInterface,
   idlType, impl, isStampedImplInstance, isStampedPlatformObject, op, roAttr, serializeDefinition,
   type BindingContext, type Definition, type StampedImplInstance, type StampedPlatformObject,
-  type AssembledInterface, type WebIDLEnvironment, type WebIDLRealm,
+  type PlatformRecord, type WebIDLEnvironment, type WebIDLRealm,
 } from '../../../../src/web-idl/index';
 import type { JSEnvironment } from '../../../../src/js-engine/environment';
 import type { RealmExecution } from '../../../../src/js-engine/index';
@@ -81,18 +81,24 @@ ctx.realm.eventTimeStamp();
 world.getBindingContext(hostRealm)?.realm.eventTimeStamp();
 world.getBindingContext(hostRealm)?.getEnvironment().exec.createEvent();
 world.register(env.realm, () => env);
-const assembled: AssembledInterface = ctx.getInterface(definition.name)!;
-ctx.createPlatformRecord(assembled);
-ctx.isInterfaceExposed(assembled);
-// @ts-expect-error Allocation requires an assembled interface, not its declaration.
+const record = ctx.createPlatformRecord(definition.name);
+// @ts-expect-error Allocation resolves the interface name inside the binding world.
 ctx.createPlatformRecord(definition);
-// @ts-expect-error Exposure checks require an assembled interface, not its declaration.
-ctx.isInterfaceExposed(definition);
+// @ts-expect-error Assembled interfaces are not allocation inputs at this boundary.
+ctx.createPlatformRecord(record!.assembled);
 const implInst: StampedImplInstance<Example> = ctx.construct(Example);
 implInst.value.toFixed();
+const associated: PlatformRecord<Example> = ctx.associate(Example, implInst);
+associated.implInst.value.toFixed();
+const related: PlatformRecord<Example> = associated.associateWithOwner(Example, new Example());
+related.implInst.value.toFixed();
+// @ts-expect-error Association retains the known implementation fields.
+associated.implInst.missing;
+// @ts-expect-error Owner association retains the known implementation fields.
+related.implInst.missing;
 const platformObject: StampedPlatformObject = ctx.project(Example, implInst);
 const projected: StampedPlatformObject | undefined = world.project(implInst);
-const created: StampedPlatformObject | undefined = ctx.createPlatformRecord(assembled).platformObject;
+const created: StampedPlatformObject | undefined = record?.platformObject;
 const unwrapped: StampedImplInstance<Example> | undefined = ctx.unwrap(platformObject, Example);
 unwrapped?.value.toFixed();
 const plain = new Example();

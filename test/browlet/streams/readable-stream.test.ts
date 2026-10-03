@@ -1,6 +1,7 @@
 import { createEnvironment } from '../../js-engine/execution-fixture';
 import { internalType, type InternalPromise } from '../../../src/infra/promises';
-import { idlType, endOfIteration } from '../../../src/web-idl/index';
+import { idlType } from '../../../src/web-idl/index';
+import { endOfIteration } from '../../../src/infra/iteration';
 import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';

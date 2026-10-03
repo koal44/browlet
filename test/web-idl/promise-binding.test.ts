@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { createDOMException } from '../../src/web-idl/core/dom-exception';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { endOfIteration } from '../../src/web-idl/constructs/async-sequence';
+import { endOfIteration } from '../../src/infra/iteration';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
   arg, asyncIter, defineCallbackFunction, defineDictionary, defineInterface, dictMember,

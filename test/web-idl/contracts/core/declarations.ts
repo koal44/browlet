@@ -6,7 +6,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 
 declare module '../../../../src/web-idl/core/types' {
-  interface DeclarationCallbacks {
+  interface DeclarationHooks {
     'argument-resolve': (ctx: { global: object; }) => unknown;
   }
 }
@@ -104,7 +104,7 @@ dictMember('callback', idlType.object, { callbackExceptionBehavior: 'ignore' });
 op('item', idlType.object, [], { indexedGetter: { getSupportedPropertyIndices() { return [0]; } } });
 // @ts-expect-error Runtime callbacks require a declared runtime signature.
 ctor([], { construct() { return {}; } });
-// @ts-expect-error Backing allocation belongs to Binding, not declaration callbacks.
+// @ts-expect-error Backing allocation belongs to Binding, not declaration hooks.
 impl(Example, { allocatePlatformObject() { return {}; } });
 // @ts-expect-error Initialization callbacks require the projection's signature.
 impl(Example, { initializeImplementation() {} });

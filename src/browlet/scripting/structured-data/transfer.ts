@@ -146,13 +146,8 @@ function receiveTransfer(
   ctx: BindingContext<ScriptingEnvironment>,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
-    const assembled = ctx.getInterface(
-      dataHolder.interfaceName,
-    );
-    if (!assembled || !ctx.isInterfaceExposed(assembled)) {
-      return throwDOMException('DataCloneError');
-    }
-    const platformRecord = ctx.createPlatformRecord(assembled);
+    const platformRecord = ctx.createPlatformRecord(dataHolder.interfaceName);
+    if (!platformRecord) return throwDOMException('DataCloneError');
     const steps = platformRecord.assembled.transferSteps;
     if (!steps) {
       throw new InternalError(

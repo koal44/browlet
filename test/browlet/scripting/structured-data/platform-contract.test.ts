@@ -47,8 +47,8 @@ describe('HTML structured-data platform contracts', () => {
       unusedSerializationContext,
     );
     const targetBinding = second.createPlatformRecord(
-      sourceBinding.assembled,
-    );
+      sourceBinding.assembled.name,
+    )!;
     steps.deserializationSteps(
       serialized,
       targetBinding.implInst,
@@ -94,8 +94,8 @@ describe('HTML structured-data platform contracts', () => {
       unusedSerializationContext,
     );
     const targetBinding = registration.createPlatformRecord(
-      sourceBinding.assembled,
-    );
+      sourceBinding.assembled.name,
+    )!;
     steps.deserializationSteps(
       serialized,
       targetBinding.implInst,
@@ -161,7 +161,7 @@ describe('HTML structured-data platform contracts', () => {
       implementation: impl(ChildImpl), members: [],
     });
     const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const value = ctx.createPlatformRecord(ctx.getInterface(child.name)!).platformObject;
+    const value = ctx.createPlatformRecord(child.name)!.platformObject;
 
     expect(() => structuredSerialize(value, ctx)).toThrow(expect.objectContaining({ name: 'DataCloneError' }));
     expect(() => structuredSerializeWithTransfer(value, [value], ctx))

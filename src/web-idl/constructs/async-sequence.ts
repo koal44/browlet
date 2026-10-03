@@ -1,15 +1,9 @@
 import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js-engine/index';
-import type { InternalPromise } from '../../infra/promises';
+import { endOfIteration } from '../../infra/iteration';
 import { idlType, type AsyncSequenceType, type WebIDLType } from '../core/index';
 import type { WebIDLRealm } from '../environment';
 import type { ConversionContext } from '../conversion-context';
 import { PromiseCarrier } from './promise';
-
-/** Converted iteration steps supplied to implementation algorithms. */
-export type AsyncSequenceValue<T> = {
-  next(): InternalPromise<T | typeof endOfIteration>;
-  return(reason: unknown): InternalPromise<unknown>;
-};
 
 /** An iterable with the captured method and type needed to open its sequence. */
 export class AsyncSequenceCarrier {
@@ -142,10 +136,6 @@ export class AsyncIteratorCarrier {
     }, realm);
   }
 }
-
-export const endOfIteration: unique symbol = Symbol(
-  'Web IDL end of iteration',
-);
 
 type AsyncSequenceIteratorType = 'async' | 'sync';
 

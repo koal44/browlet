@@ -1,7 +1,7 @@
 import type { PromiseResult, ResultValue } from '../../infra/promises';
 import type {
   AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, CallbackExceptionBehavior,
-  ConstantMember, ConstantValue, DecimalLiteral, DeclarationCallback, DefaultValue, ExtendedAttribute, FrozenArrayType,
+  ConstantMember, ConstantValue, DecimalLiteral, DeclarationHook, DefaultValue, ExtendedAttribute, FrozenArrayType,
   ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, InterfaceType, NullableType, ObservableArrayType,
   OperationMember, PromiseType, RecordType, ReferenceType, SequenceType,
   StringifierMember, StringType, UnionType, WebIDLType,
@@ -49,12 +49,12 @@ export function roAttr<Env = unknown>(
 
 /**
  * Return one built-in function per attribute and receiver realm, named after the attribute.
- * The factory receives the owning binding context; its callback supplies the function's length.
+ * The factory receives the owning binding context; the returned steps supply the function's length.
  */
 export function attrFn<Env = unknown>(
-  createCallback: NonNullable<AttributeOptions<Env>['attributeFunction']>,
+  createSteps: NonNullable<AttributeOptions<Env>['attributeFunction']>,
 ): Pick<AttributeOptions<Env>, 'attributeFunction'> {
-  return { attributeFunction: createCallback };
+  return { attributeFunction: createSteps };
 }
 
 /** Declare an operation overload; automatic binding calls the implementation method of the same name. */
@@ -415,8 +415,8 @@ export function onError(
 
 type ConstructorOptions<Env = unknown, Values extends unknown[] = unknown[]> =
   Omit<ConstructorMember<Env>, 'kind' | 'arguments' | 'construct' | 'invoke'> & {
-    construct?: DeclarationCallback<'constructor-create', Env, object, Values>;
-    invoke?: DeclarationCallback<'constructor-invoke', Env, object, Values>;
+    construct?: DeclarationHook<'constructor-create', Env, object, Values>;
+    invoke?: DeclarationHook<'constructor-invoke', Env, object, Values>;
   };
 
 type AttributeOptions<Env = unknown> = Omit<AttributeMember<Env>, 'kind' | 'name' | 'type'>;
@@ -425,7 +425,7 @@ type ReadonlyAttributeOptions<Env = unknown> = Omit<AttributeOptions<Env>, 'read
 
 type OperationOptions<Env = unknown, Values extends unknown[] = unknown[]> =
   Omit<OperationMember<Env>, 'kind' | 'name' | 'returns' | 'arguments' | 'invoke'> & {
-    invoke?: DeclarationCallback<'operation-invoke', Env, object, Values>;
+    invoke?: DeclarationHook<'operation-invoke', Env, object, Values>;
   };
 
 type StaticOperationOptions<Env = unknown, Values extends unknown[] = unknown[]> = Omit<OperationOptions<Env, Values>, 'static'>;

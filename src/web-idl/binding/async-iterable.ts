@@ -1,8 +1,8 @@
 import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../js-engine/index';
 import { InternalPromise } from '../../infra/promises';
+import { endOfIteration } from '../../infra/iteration';
 import { Stamper } from '../../infra/stamper';
 import type { AssembledArgument, AssembledCallable, AssembledInterface } from '../assembled';
-import { endOfIteration } from '../constructs/async-sequence';
 import { jsToIDL, idlToJS } from '../conversion';
 import { idlType, type AsyncIterableMember } from '../core/index';
 

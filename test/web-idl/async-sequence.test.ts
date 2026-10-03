@@ -3,9 +3,9 @@ import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
+import { endOfIteration, type AsyncIterator } from '../../src/infra/iteration';
 import {
-  endOfIteration, AsyncSequenceCarrier, type AsyncSequenceValue,
-  type AsyncIteratorCarrier,
+  AsyncSequenceCarrier, type AsyncIteratorCarrier,
 } from '../../src/web-idl/constructs/async-sequence';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
@@ -25,7 +25,7 @@ describe('Web IDL async sequences', () => {
     let conversions = 0;
     const entries = [{ name: { toString() { conversions++; return 'entry'; } } }];
     const sequence = context.jsToImpl(entries, asyncSequence(reference('Entry'))) as
-      AsyncSequenceValue<{ name: string; }>;
+      AsyncIterator<{ name: string; }>;
     const first = Promise.withResolvers<unknown>();
     sequence.next().observe(first.resolve, first.reject);
     await expect(first.promise).resolves.toEqual({ name: 'entry' });

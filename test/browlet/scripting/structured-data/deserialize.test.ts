@@ -416,12 +416,13 @@ describe('HTML structured deserialization', () => {
     const targetRealm = new Realm();
     const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
     const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
-    const original = source.createPlatformRecord(source.getInterface(containerIDL.name)!);
+    const original = source.createPlatformRecord(containerIDL.name)!;
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
     const clone = cloneValue(original.platformObject, source, target);
     const resolved = target.getObjectRecord(clone);
-    expect(resolved?.assembled).toBe(target.getInterface(containerIDL.name));
+    expect(resolved?.assembled).toBe(original.assembled);
+    expect(resolved?.realm).toBe(targetRealm);
     expect(target.unwrap(clone, ContainerImpl)?.child).toBe(clone);
   });
 

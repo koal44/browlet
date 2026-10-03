@@ -4,11 +4,10 @@ import * as core from '../../src/web-idl/core/index';
 import * as webIDL from '../../src/web-idl/index';
 
 describe('Web IDL package surface', () => {
-  it('exposes declarations, binding entry points, exceptions, and async-sequence values', () => {
+  it('exposes declarations, binding entry points, exceptions, and platform identity', () => {
     expect(Object.keys(webIDL).sort()).toEqual([
       ...Object.keys(core),
       'BindingWorld',
-      'endOfIteration',
       'isStampedImplInstance',
       'isStampedPlatformObject',
     ].sort());

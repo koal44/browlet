@@ -39,7 +39,7 @@ export {
   undefinedDefault, emptySequence, emptyDictionary,
 } from './types';
 export type {
-  ConstantMember, AttributeMember, OperationMember, StringifierMember, ArgumentDefinition,
+  ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, StringifierMember, ArgumentDefinition,
   WebIDLType, AnnotatedType, AsyncSequenceType, UnionType,
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,

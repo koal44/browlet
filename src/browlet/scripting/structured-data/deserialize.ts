@@ -110,13 +110,8 @@ export function structuredDeserialize(
       deep = true;
       break;
     case 'platform-object': {
-      const assembled = ctx.getInterface(
-        serialized.interfaceName,
-      );
-      if (!assembled || !ctx.isInterfaceExposed(assembled)) {
-        return throwDOMException('DataCloneError');
-      }
-      platformRecord = ctx.createPlatformRecord(assembled);
+      platformRecord = ctx.createPlatformRecord(serialized.interfaceName);
+      if (!platformRecord) return throwDOMException('DataCloneError');
       value = platformRecord.platformObject;
       deep = true;
       break;

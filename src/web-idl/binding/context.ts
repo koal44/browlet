@@ -84,24 +84,12 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return this.#binding.realizeException(value);
   }
 
-  /** Create a platform object and return its implementation/platform binding record. */
+  /** Create a platform object by interface name; return undefined if unknown or unexposed. */
   // https://webidl.spec.whatwg.org/#new
-  // The interface must belong to this binding world's assembly.
-  createPlatformRecord(assembled: AssembledInterface): PlatformRecord {
-    this.#checkInterfaceOwner(assembled);
+  createPlatformRecord(interfaceName: string): PlatformRecord | undefined {
+    const assembled = this.#binding.assembly.interfaces.get(interfaceName);
+    if (!assembled || !this.#binding.isExposed(assembled)) return;
     return this.#binding.createPlatformRecord(assembled);
-  }
-
-  /** Find this binding world's assembled interface by name. */
-  getInterface(interfaceName: string): AssembledInterface | undefined {
-    return this.#binding.assembly.interfaces.get(interfaceName);
-  }
-
-  /** Whether the registered interface is exposed in this realm. */
-  // https://webidl.spec.whatwg.org/#Exposed
-  isInterfaceExposed(assembled: AssembledInterface): boolean {
-    this.#checkInterfaceOwner(assembled);
-    return this.#binding.isExposed(assembled);
   }
 
   /**
@@ -146,7 +134,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   }
 
   /** Establish an implementation's binding record without projection, preserving an existing owner. */
-  associate<T extends object>(implClass: ImplementationClass<T>, implInst: T): PlatformRecord {
+  associate<T extends object>(implClass: ImplementationClass<T>, implInst: T): PlatformRecord<T> {
     if (getPlatformRecord(implInst)) {
       throw new InternalError('Expected an implementation target');
     }
@@ -166,11 +154,5 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       throw new InternalError('No Web IDL interface is registered for this implementation');
     }
     return assembled;
-  }
-
-  #checkInterfaceOwner(assembled: AssembledInterface): void {
-    if (this.#binding.assembly.interfaces.get(assembled.name) !== assembled) {
-      throw new InternalError(`Interface ${assembled.name} belongs to a different assembly`);
-    }
   }
 }

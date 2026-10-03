@@ -502,19 +502,36 @@ describe('Web IDL binding worlds and realm registration', () => {
     const first = firstWorld.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const another = firstWorld.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const second = secondWorld.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const firstAssembled = first.getInterface(exampleIDL.name)!;
-    const secondAssembled = second.getInterface(exampleIDL.name)!;
-    const original = first.createPlatformRecord(firstAssembled);
-    const other = second.createPlatformRecord(secondAssembled);
+    const original = first.createPlatformRecord(exampleIDL.name)!;
+    const sameWorld = another.createPlatformRecord(exampleIDL.name)!;
+    const other = second.createPlatformRecord(exampleIDL.name)!;
 
-    expect(another.getInterface(exampleIDL.name)).toBe(firstAssembled);
-    expect(secondAssembled).not.toBe(firstAssembled);
-    expect(() => first.createPlatformRecord(secondAssembled)).toThrow('belongs to a different assembly');
-    expect(() => first.isInterfaceExposed(secondAssembled)).toThrow('belongs to a different assembly');
+    expect(sameWorld.assembled).toBe(original.assembled);
+    expect(other.assembled).not.toBe(original.assembled);
     expect(another.unwrap(original.platformObject, ExampleImpl)).toBe(original.implInst);
     expect(second.unwrap(original.platformObject, ExampleImpl)).toBeUndefined();
     expect(first.unwrap(other.platformObject, ExampleImpl)).toBeUndefined();
     expect(other.implInst).not.toBe(original.implInst);
+  });
+
+  it('associates related implementations without projection or changing existing owners', () => {
+    const world = new BindingWorld([exampleIDL]);
+    const first = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const second = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const owner = first.associate(ExampleImpl, new ExampleImpl());
+    const existing = second.associate(ExampleImpl, new ExampleImpl());
+    const fresh = owner.associateWithOwner(ExampleImpl, new ExampleImpl());
+
+    expect(fresh.realm).toBe(first.realm);
+    expect(fresh.platformObject).toBeUndefined();
+    expect(owner.associateWithOwner(ExampleImpl, existing.implInst)).toBe(existing);
+    expect(existing.realm).toBe(second.realm);
+    expect(existing.platformObject).toBeUndefined();
+
+    const foreign = new BindingWorld([exampleIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const foreignInstance = foreign.construct(ExampleImpl);
+    expect(() => owner.associateWithOwner(ExampleImpl, foreignInstance))
+      .toThrow('Implementation instance belongs to another binding world');
   });
 
   it('requires an implementation creator to instantiate a declared interface', () => {
@@ -526,7 +543,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     ctx.install(realm.global);
 
     expect(Reflect.get(realm.global, interfaceIDL.name)).toBeTypeOf('function');
-    expect(() => ctx.createPlatformRecord(ctx.getInterface(interfaceIDL.name)!))
+    expect(() => ctx.createPlatformRecord(interfaceIDL.name))
       .toThrow('Interface DeclarationOnly has no implementation creation steps');
   });
 
@@ -547,10 +564,9 @@ describe('Web IDL binding worlds and realm registration', () => {
     const registration = interfaces.register(realm, (ctx) => ({ realm: ctx.realm }));
     registration.install(realm.global);
 
-    const assembled = registration.getInterface(interfaceIDL.name)!;
-    const internal = registration.createPlatformRecord(assembled);
+    const internal = registration.createPlatformRecord(interfaceIDL.name)!;
 
-    expect(internal.assembled).toBe(assembled);
+    expect(internal.assembled.primary).toBe(interfaceIDL);
     expect(internal.realm).toBe(realm);
     expect(internal.implInst).toBeInstanceOf(InternalNewImpl);
     expect(internal.platformObject).not.toBe(internal.implInst);
@@ -564,30 +580,27 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     expect(registration.getObjectRecord(constructed)
       ?.assembled)
-      .toBe(assembled);
+      .toBe(internal.assembled);
     expect(allocations).toBe(2);
     expect(publicConstructions).toBe(1);
   });
 
-  it('rejects foreign definitions and unexposed interfaces during allocation', () => {
-    class RestrictedImpl {}
+  it('does not allocate unknown or unexposed interfaces', () => {
+    const allocate = vi.fn();
+    class RestrictedImpl {
+      constructor() { allocate(); }
+    }
     const restrictedIDL = defineInterface({
       name: 'RestrictedInterface',
       exposed: ['Worker'],
       implementation: impl(RestrictedImpl),
       members: [],
     });
-    const foreignIDL = defineInterface({ name: restrictedIDL.name, members: [] });
     const registration = new BindingWorld([restrictedIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const foreign = new BindingWorld([foreignIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const assembled = registration.getInterface(restrictedIDL.name)!;
 
-    expect(() => registration.createPlatformRecord(foreign.getInterface(foreignIDL.name)!))
-      .toThrow('belongs to a different assembly');
-    expect(registration.isInterfaceExposed(assembled)).toBe(false);
-    expect(() => registration.createPlatformRecord(assembled)).toThrow(
-      'Interface RestrictedInterface is not exposed in this realm',
-    );
+    expect(registration.createPlatformRecord('UnknownInterface')).toBeUndefined();
+    expect(registration.createPlatformRecord(restrictedIDL.name)).toBeUndefined();
+    expect(allocate).not.toHaveBeenCalled();
   });
 });
 

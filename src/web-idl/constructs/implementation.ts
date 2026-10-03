@@ -11,10 +11,11 @@ import {
 import { DictionaryCarrier } from './dictionary';
 import type { IDLSequence } from './sequence';
 import { PromiseCarrier } from './promise';
-import { endOfIteration, AsyncSequenceCarrier } from './async-sequence';
+import { AsyncSequenceCarrier } from './async-sequence';
 import { missingArgument } from '../binding/overload';
 import { jsToIDL } from '../conversion';
 import { InternalError } from '../../infra/internal-error';
+import { endOfIteration, type AsyncIterator } from '../../infra/iteration';
 
 /** Prepare and perform IDL-to-implementation conversion using one realm's binding machinery. */
 export class ImplementationConverter {
@@ -161,7 +162,7 @@ export class ImplementationConverter {
           const result = iterator.close(reason, realmBinding.realm);
           return result.toImpl(realmBinding, (value) => value, context.Promise);
         },
-      };
+      } satisfies AsyncIterator<unknown>;
     }
     if (PromiseCarrier.is(value)) {
       return value.toImpl(realmBinding, (result) =>

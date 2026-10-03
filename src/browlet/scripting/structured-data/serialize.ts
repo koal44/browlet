@@ -160,7 +160,7 @@ export function structuredSerializeInternal(
             if (implClass) {
               // The typed overload supplies an implementation; its containing object selects
               // the owner just as an interface-valued result does during projection.
-              record.binding.context.associate(implClass, subValue as object);
+              record.associateWithOwner(implClass, subValue as object);
             }
             return structuredSerializeInternal(subValue, forStorage, ctx, memory);
           },

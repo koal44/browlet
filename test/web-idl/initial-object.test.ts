@@ -136,8 +136,8 @@ describe('Web IDL initial objects', () => {
     expect(Object.hasOwn(prototype, 'label')).toBe(false);
     expect(Object.hasOwn(prototype, 'read')).toBe(false);
 
-    const first = ctx.createPlatformRecord(ctx.getInterface(definition.name)!).platformObject!;
-    const second = ctx.createPlatformRecord(ctx.getInterface(definition.name)!).platformObject!;
+    const first = ctx.createPlatformRecord(definition.name)!.platformObject!;
+    const second = ctx.createPlatformRecord(definition.name)!.platformObject!;
     const firstDescriptors = Object.getOwnPropertyDescriptors(first);
     const secondDescriptors = Object.getOwnPropertyDescriptors(second);
     for (const name of ['label', 'read', 'toString']) {

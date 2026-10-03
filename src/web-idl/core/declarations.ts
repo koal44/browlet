@@ -1,6 +1,6 @@
 import type {
   ArgumentDefinition, AttributeMember, CallbackExceptionBehavior, ConstantMember,
-  DeclarationCallback, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass,
+  DeclarationHook, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass,
   InjectedArgument, OperationMember, StringifierMember, WebIDLType,
 } from './types';
 import type { SerialSteps, TransferSteps } from './structured-data';
@@ -35,7 +35,7 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
     /** Injected arguments for internal construction and automatically bound constructors. */
     constructWith?: InjectedArgument<Env>[];
     /** Initialize the implementation before stamping or projection; inherited hooks run first. */
-    initializeImplementation?: DeclarationCallback<'initialize-implementation', Env, Impl>;
+    initializeImplementation?: DeclarationHook<'initialize-implementation', Env, Impl>;
   };
 };
 
@@ -96,11 +96,11 @@ export type ConstructorMember<Env = unknown> = {
 
   // Project metadata: implementation construction and argument injection.
   /** Return a new implementation from the binding context and converted arguments. */
-  construct?: DeclarationCallback<'constructor-create', Env>;
+  construct?: DeclarationHook<'constructor-create', Env>;
   /** Injected arguments for automatic construction; overrides the interface's `constructWith`. */
   constructWith?: InjectedArgument<Env>[];
   /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
-  invoke?: DeclarationCallback<'constructor-invoke', Env>;
+  invoke?: DeclarationHook<'constructor-invoke', Env>;
 };
 
 /** Synchronous iteration over values or key/value pairs. */
@@ -367,7 +367,7 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
   /** Turn the callback carrier, including its invocation method, into the implementation's value. */
-  toImpl?: DeclarationCallback<'callback-interface-to-impl', Env>;
+  toImpl?: DeclarationHook<'callback-interface-to-impl', Env>;
 };
 
 /** Declare an author callback object's operations and optional implementation conversion. */

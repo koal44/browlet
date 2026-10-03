@@ -232,14 +232,14 @@ function registerDefinedAttribute(
   context: BindingContext,
   realmBinding: RealmBinding,
 ): void {
-  const createCallback = member.attributeFunction;
+  const createSteps = member.attributeFunction;
   const steps: AttributeSteps = {
     // Invoke a declared getter or obtain its realm-owned attribute function.
     get(receiver) {
       const owner = receiver?.binding ?? realmBinding;
       const ownerContext = receiver ? owner.context : context;
-      if (createCallback) {
-        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createCallback.call(undefined, ownerContext));
+      if (createSteps) {
+        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, ownerContext));
       }
       if (!member.get) {
         throw new InternalError(

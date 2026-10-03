@@ -5,12 +5,12 @@ import {
   getBufferSourceByteOffset, writeArrayBuffer, getBufferSourceCopy, writeArrayBufferView,
 } from '../js-engine/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
+import { endOfIteration, type AsyncIterator } from '../infra/iteration';
 import {
   arg, atArg, asyncIter, asyncSequence, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, implementationType, invokeWith, op, promise, roAttr, reference,
   sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
-  endOfIteration, type AsyncSequenceValue,
 } from '../web-idl/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import {
@@ -109,7 +109,7 @@ export class ReadableStreamImpl {
 
   /** Streams §4.9.1, ReadableStreamFromIterable; Binding supplies the opened iterator. */
   static from(
-    iterator: AsyncSequenceValue<unknown>,
+    iterator: AsyncIterator<unknown>,
     env: JSEnvironment,
   ): ReadableStreamImpl {
     const { Promise: P } = env.exec;
@@ -1469,7 +1469,7 @@ export const underlyingSourceIDL = defineDictionary({
 // ReadableStreamIterator
 // =============================================================================
 
-class ReadableStreamIterator {
+class ReadableStreamIterator implements AsyncIterator<unknown> {
   #reader: ReadableStreamDefaultReaderImpl;
   #preventCancel: boolean;
   #env: JSEnvironment;

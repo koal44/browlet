@@ -213,7 +213,7 @@ describe('HTML structured transfer', () => {
     const targetRealm = new Realm({ globalNames: ['TransferTest'] });
     const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
     const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
-    const original = source.createPlatformRecord(source.getInterface(transferBoxIDL.name)!);
+    const original = source.createPlatformRecord(transferBoxIDL.name)!;
     source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
     Object.freeze(original.implInst);
 
@@ -254,14 +254,15 @@ describe('HTML structured transfer', () => {
     const clone = result.deserialized as { first: object; second: object; };
     expect(clone.first).toBe(transferred);
     expect(clone.second).toBe(transferred);
-    expect(resolved?.assembled).toBe(target.getInterface(transferBoxIDL.name));
+    expect(resolved?.assembled).toBe(original.assembled);
+    expect(resolved?.realm).toBe(targetRealm);
     expect(target.unwrap(transferred, TransferBoxImpl)?.value)
       .toBe('transferred');
     expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
     const hiddenRealm = new Realm();
     const hiddenTarget = bindings.register(hiddenRealm, (ctx) => ({ realm: ctx.realm }));
-    const hiddenOriginal = source.createPlatformRecord(source.getInterface(transferBoxIDL.name)!);
+    const hiddenOriginal = source.createPlatformRecord(transferBoxIDL.name)!;
     const hiddenSerialized = structuredSerializeWithTransfer(
       hiddenOriginal.platformObject,
       [hiddenOriginal.platformObject],

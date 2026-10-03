@@ -48,7 +48,9 @@ piping pass the invoking environment to errors shared across stream state,
 callbacks, and Promise rejections. Retained read/write, `ready`, and `closed`
 Promises keep their creation owner; error allocation does not move them.
 
-`ReadableStreamIterator` owns its reader and `preventCancel` state. Its Web IDL
+Streams consume and produce Infra's [`AsyncIterator<T>`](../infra/iteration.ts)
+contract, using `endOfIteration` to signal completion. `ReadableStreamIterator`
+owns its reader and `preventCancel` state. Its Web IDL
 declaration names `createAsyncIterator` as the factory and exposes `return()`.
 Binding handles the author iterator's identity, overlapping calls, completion,
 and realm-owned results.

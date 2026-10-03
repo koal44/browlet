@@ -3,7 +3,7 @@ import type { ObservableArrayHandle } from '../../infra/observable-array';
 import { Stamper } from '../../infra/stamper';
 import type { AssembledInterface } from '../assembled';
 import type { RealmBinding } from './realm';
-import type { AttributeMember } from '../core/index';
+import type { AttributeMember, ImplementationClass } from '../core/index';
 import type { WebIDLRealm } from '../environment';
 import { InternalError } from '../../infra/internal-error';
 
@@ -51,6 +51,11 @@ export class PlatformRecord<T extends object = object> {
   project(): StampedPlatformObject {
     return this.platformObject ??
       this.binding.projectPlatformObject(this.implInst, this.assembled).platformObject!;
+  }
+
+  /** Associate another implementation with this owner, preserving any existing owner. */
+  associateWithOwner<Impl extends object>(implClass: ImplementationClass<Impl>, implInst: Impl): PlatformRecord<Impl> {
+    return this.binding.context.associate(implClass, implInst);
   }
 
   /** Whether this object's interface is the requested interface or inherits from it. */

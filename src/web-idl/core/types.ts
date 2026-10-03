@@ -404,14 +404,17 @@ export type AttributeMember<Env = unknown> = {
 
   // Project metadata: member steps, returned function creation, and callback exception policy.
   /** Read the implementation value using the owner's context; `this` is the implementation or null for static access. */
-  get?: DeclarationCallback<'attribute-get', Env>;
+  get?: DeclarationHook<'attribute-get', Env>;
   /** Store a converted value using the owner's context; `this` is the implementation or null for static access. */
-  set?: DeclarationCallback<'attribute-set', Env>;
-  /** Create the callback for a cached realm-owned function returned by this attribute. */
-  attributeFunction?: DeclarationCallback<'attribute-function', Env>;
+  set?: DeclarationHook<'attribute-set', Env>;
+  /** Create the steps for a cached realm-owned function returned by this attribute. */
+  attributeFunction?: DeclarationHook<'attribute-function', Env>;
   /** Report or rethrow exceptions from an author callback assigned to this attribute. */
   callbackExceptionBehavior?: CallbackExceptionBehavior;
 };
+
+/** Steps for an attribute's returned function, receiving author-side `this` and arguments. */
+export type AttributeFunctionSteps = (this: unknown, ...argumentsList: unknown[]) => unknown;
 
 /** An operation overload and its explicit or automatic implementation binding. */
 export type OperationMember<Env = unknown> = {
@@ -438,7 +441,7 @@ export type OperationMember<Env = unknown> = {
    * Run with converted arguments and return the implementation result.
    * The context belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
    */
-  invoke?: DeclarationCallback<'operation-invoke', Env>;
+  invoke?: DeclarationHook<'operation-invoke', Env>;
   /** Injected arguments for an automatically bound implementation method. */
   invokeWith?: InjectedArgument<Env>[];
   /** Supported indices and membership checks for a legacy indexed getter. */
@@ -457,27 +460,27 @@ export type StringifierMember = {
   extendedAttributes?: ExtendedAttribute[];
 };
 
-// Implementation identity and contextual callbacks
+// Implementation identity and declaration hooks
 
 /** A construction or invocation dependency inserted among converted author arguments. */
 export type InjectedArgument<Env = unknown> = {
   /** Zero-based index in the final implementation argument list. */
   index: number;
   /** Compute the dependency from receiver and method contexts; constructors supply the same context twice. */
-  resolve: DeclarationCallback<'argument-resolve', Env>;
+  resolve: DeclarationHook<'argument-resolve', Env>;
 };
 
-/** Callback signature slots supplied by the full Web IDL entry's module augmentation. */
-// Core alone leaves binding callbacks unavailable; the declaration records own their fields.
+/** Signatures for declaration hooks, supplied by the full Web IDL entry's module augmentation. */
+// Core alone leaves binding hooks unavailable; the declaration records own their fields.
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
-export interface DeclarationCallbacks<Env = unknown, Impl extends object = object, Values extends unknown[] = unknown[]> {}
+export interface DeclarationHooks<Env = unknown, Impl extends object = object, Values extends unknown[] = unknown[]> {}
 
-/** Select a binding hook's environment, implementation, and argument types. */
-export type DeclarationCallback<
+/** Select a declaration hook's signature for its environment, implementation, and arguments. */
+export type DeclarationHook<
   Name extends PropertyKey, Env = unknown, Impl extends object = object, Values extends unknown[] = unknown[],
 > =
-  Name extends keyof DeclarationCallbacks<Env, Impl, Values>
-    ? DeclarationCallbacks<Env, Impl, Values>[Name]
+  Name extends keyof DeclarationHooks<Env, Impl, Values>
+    ? DeclarationHooks<Env, Impl, Values>[Name]
     : never;
 
 // Legacy property support

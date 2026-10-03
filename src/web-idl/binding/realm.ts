@@ -265,10 +265,10 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   }
 
   /** Associate an implementation with its interface and owner without allocating its platform object. */
-  associateImplementationObject(
-    implInst: object,
+  associateImplementationObject<T extends object>(
+    implInst: T,
     expectedAssembled: AssembledInterface,
-  ): PlatformRecord | undefined {
+  ): PlatformRecord<T> | undefined {
     const existing = getImplementationRecord(implInst);
     if (existing) {
       if (existing.binding.world !== this.world) {

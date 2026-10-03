@@ -517,7 +517,7 @@ describe('HTML structured serialization', () => {
     const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
     const realm = new Realm();
     const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const container = ctx.createPlatformRecord(ctx.getInterface(containerIDL.name)!);
+    const container = ctx.createPlatformRecord(containerIDL.name)!;
     const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
     implInst.child = container.platformObject;
     const serialized = structuredSerializeForStorage(
