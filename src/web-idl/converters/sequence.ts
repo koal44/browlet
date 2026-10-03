@@ -2,15 +2,15 @@ import { InternalError } from '../../infra/index';
 import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js-engine/index';
 
 import type { IDLSequenceType, IDLFrozenArrayType } from '../assembly/index';
-import type { IDLSequence } from '../values/index';
+import type { IDLSequence, IDLValue } from '../values/index';
 import { Converter, type ConversionSteps } from './converter';
 
 /** Convert iterable elements and allocate author arrays in the selected realm. */
 export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType = IDLSequenceType> extends Converter<Type> {
   /** Reused element conversion with its own annotations and this converter's realm. */
-  #element?: Converter;
+  #element?: Converter<Type['elementType']>;
 
-  protected get element(): Converter {
+  protected get element(): Converter<Type['elementType']> {
     return this.#element ??= this.forType(this.type.elementType);
   }
 
@@ -27,18 +27,20 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
 
   /** Enter conversion using the iterator method already selected by overload or union resolution. */
   // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
-  jsToIDLIterable(iterable: object, iteratorMethod: JSMethod): readonly unknown[] {
-    try { return this.readIterable(iterable, iteratorMethod); }
+  jsToIDLIterable<ValueType extends IDLSequenceType | IDLFrozenArrayType>(
+    this: SequenceConverter<ValueType>, iterable: object, iteratorMethod: JSMethod,
+  ): IDLValue<ValueType> {
+    try { return this.readIterable(iterable, iteratorMethod) as IDLValue<ValueType>; }
     catch (error) { return this.throwConversionError(error); }
   }
 
   protected readIterable(iterable: object, iteratorMethod: JSMethod): readonly unknown[] {
-    const convert = this.element.inputSteps;
+    const convert = this.element.getInputSteps();
     const iterator = Reflect.apply(iteratorMethod, iterable, []);
     if (!isObject(iterator)) this.throwTypeError('Iterator method did not return an object');
     const nextMethod = getMethod(iterator, 'next', this.realm);
     if (!nextMethod) this.throwTypeError('Iterator has no next method');
-    const sequence: IDLSequence = [];
+    const sequence: IDLSequence<IDLValue<Type['elementType']>> = [];
     while (true) {
       const result = Reflect.apply(nextMethod, iterator, []);
       if (!isObject(result)) this.throwTypeError('Iterator result is not an object');

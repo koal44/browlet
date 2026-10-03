@@ -192,12 +192,12 @@ export class GlobalPlatformObjectBinding {
   ): NamedProperties | undefined {
     const getter = assembled.findSpecialOperation('getter', 'DOMString');
     if (!getter) return;
-    const steps = this.#binding.getMemberBinding(assembled, getter.primary)?.namedPropertySteps;
+    const steps = this.#binding.getMemberBinding(assembled, getter)?.namedPropertySteps;
     if (!steps) {
       throw new InternalError('Missing supported property names implementation');
     }
     return {
-      getter: getter.primary,
+      getter,
       assembled,
       steps,
       unenumerable: assembled.inheritsExtendedAttribute('LegacyUnenumerableNamedProperties', false),

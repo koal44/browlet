@@ -90,10 +90,10 @@ describe('Cached converters', () => {
     const converter = binding.getConverter(binding.assembly.getIDLType(type));
     const convert = converter.getJSToIDLSteps();
 
-    expect(converter.legacyCallback).toBe(binding.assembly.callbackFunctions.get('Handler'));
-    expect(converter.legacyCallback).toBe(binding.getConverter(binding.assembly.getIDLType(type)).legacyCallback);
-    expect(binding.getConverter(binding.assembly.getIDLType(reference('Handler'))).legacyCallback).toBeNull();
-    expect(binding.getConverter(binding.assembly.getIDLType(sequence(type))).legacyCallback).toBeNull();
+    expect(converter.type.legacyCallback).toBe(binding.assembly.callbackFunctions.get('Handler'));
+    expect(converter.type.legacyCallback).toBe(binding.getConverter(binding.assembly.getIDLType(type)).type.legacyCallback);
+    expect(binding.assembly.getIDLType(reference('Handler'))).not.toHaveProperty('legacyCallback');
+    expect(binding.assembly.getIDLType(sequence(type))).not.toHaveProperty('legacyCallback');
     expect(() => convert(5)).toThrow(realm.intrinsics.typeError);
     expect(() => convert({})).toThrow(realm.intrinsics.typeError);
     expect(() => converter.jsToIDL(5)).toThrow(realm.intrinsics.typeError);

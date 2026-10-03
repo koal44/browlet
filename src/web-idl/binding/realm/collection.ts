@@ -1,52 +1,24 @@
 import { InternalError } from '../../../infra/index';
 import {
-  defineDataProperty, defineMethod, isObject, type JSFunction, type JSRealm,
+  defineDataProperty, defineMethod, type JSFunction, type JSRealm,
 } from '../../../js-engine/index';
 
 import type { IDLType, IDLMaplike, IDLSetlike, AssembledInterface } from '../../assembly/index';
 import type { IDLMapEntries, IDLSetEntries } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
-import { getPlatformRecord, type PlatformRecord } from '../platform';
+import type { PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
-
-/** Share realm ownership, receiver validation, and errors for maplike and setlike bindings. */
-abstract class CollectionBinding {
-  /** Binding for the installed methods and their allocation realm. */
-  protected binding: RealmBinding;
-
-  constructor(binding: RealmBinding) {
-    this.binding = binding;
-  }
-
-  // Project adapter for the receiver and security checks in Web IDL §3.7.11 Maplike declarations and §3.7.12
-  // Setlike declarations.
-  protected getReceiverRecord(
-    value: unknown,
-    assembled: AssembledInterface,
-    identifier: string,
-    type: 'getter' | 'method',
-  ): PlatformRecord {
-    if (!isObject(value)) this.throwTypeError('Illegal invocation');
-    const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.binding.world) {
-      this.throwTypeError('Illegal invocation');
-    }
-    this.binding.realm.performSecurityCheck(value, identifier, type);
-    if (!record.implements(assembled)) {
-      this.throwTypeError('Illegal invocation');
-    }
-    return record;
-  }
-
-  // Project helper: throw a TypeError allocated in this binding's realm.
-  protected throwTypeError(message: string): never {
-    throw new this.binding.realm.intrinsics.typeError(message);
-  }
-}
 
 /** Install maplike members and access their retained map entries. */
 // https://webidl.spec.whatwg.org/#idl-maplike
-export class MaplikeBinding extends CollectionBinding {
+export class MaplikeBinding {
+  /** Binding for the installed methods and their allocation realm. */
+  #binding: RealmBinding;
+
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
+  }
+
   /** Allocate backing entries once when the platform object is initialized. */
   initialize(record: PlatformRecord): void {
     record.mapEntries ??= new Map();
@@ -133,9 +105,9 @@ export class MaplikeBinding extends CollectionBinding {
   #createSizeGetter(
     assembled: AssembledInterface,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument,
           assembled,
           'size',
@@ -155,13 +127,13 @@ export class MaplikeBinding extends CollectionBinding {
     name: string,
   ): JSFunction {
     // Reuse installed converters unless a borrowed method needs another receiver binding.
-    const methodBinding = this.binding;
+    const methodBinding = this.#binding;
     const realm = methodBinding.realm;
     const convertKey = methodBinding.getConverter(member.key).getIDLToJSSteps();
     const convertValue = methodBinding.getConverter(member.value).getIDLToJSSteps();
     return realm.createFunction(
       (thisArgument) => {
-        const receiver = this.getReceiverRecord(thisArgument, assembled, name, 'method');
+        const receiver = this.#binding.getDirectReceiverRecord(thisArgument, assembled, name, 'method');
         const receiverBinding = receiver.binding;
         const sameBinding = receiverBinding === methodBinding;
         const iterator = new MapIteratorRecord(
@@ -180,9 +152,9 @@ export class MaplikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLMaplike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument,
           assembled,
           'forEach',
@@ -190,13 +162,13 @@ export class MaplikeBinding extends CollectionBinding {
         );
         const callback = argumentsList[0];
         if (typeof callback !== 'function') {
-          this.throwTypeError('Callback is not callable');
+          this.#binding.throwTypeError('Callback is not callable');
         }
         const binding = receiver.binding;
         this.getEntries(receiver).forEach((value, key) => {
           Reflect.apply(callback, argumentsList[1], [
-            binding.getConverter(member.value, this.binding.realm).idlToJS(value),
-            binding.getConverter(member.key, this.binding.realm).idlToJS(key),
+            binding.getConverter(member.value, this.#binding.realm).idlToJS(value),
+            binding.getConverter(member.key, this.#binding.realm).idlToJS(key),
             receiver.platformObject,
           ]);
         });
@@ -211,17 +183,17 @@ export class MaplikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLMaplike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'get', 'method',
         );
         const entries = this.getEntries(receiver);
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.binding,
+          argumentsList[0], member.key, this.#binding,
         );
         if (!entries.has(key)) return undefined;
-        return receiver.binding.getConverter(member.value, this.binding.realm).idlToJS(entries.get(key));
+        return receiver.binding.getConverter(member.value, this.#binding.realm).idlToJS(entries.get(key));
       },
       { length: 1, name: 'get' },
     );
@@ -232,13 +204,13 @@ export class MaplikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLMaplike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'has', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.binding,
+          argumentsList[0], member.key, this.#binding,
         );
         return this.getEntries(receiver).has(key);
       },
@@ -251,15 +223,15 @@ export class MaplikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLMaplike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'set', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.binding,
+          argumentsList[0], member.key, this.#binding,
         );
-        const value = this.binding.getConverter(member.value, this.binding.realm).jsToIDL(argumentsList[1]);
+        const value = this.#binding.getConverter(member.value, this.#binding.realm).jsToIDL(argumentsList[1]);
         this.getEntries(receiver).set(key, value);
         return receiver.platformObject;
       },
@@ -272,13 +244,13 @@ export class MaplikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLMaplike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'delete', 'method',
         );
         const key = convertCollectionValue(
-          argumentsList[0], member.key, this.binding,
+          argumentsList[0], member.key, this.#binding,
         );
         return this.getEntries(receiver).delete(key);
       },
@@ -290,9 +262,9 @@ export class MaplikeBinding extends CollectionBinding {
   #createClear(
     assembled: AssembledInterface,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'clear', 'method',
         );
         this.getEntries(receiver).clear();
@@ -305,7 +277,14 @@ export class MaplikeBinding extends CollectionBinding {
 
 /** Install setlike members and access their retained set entries. */
 // https://webidl.spec.whatwg.org/#idl-setlike
-export class SetlikeBinding extends CollectionBinding {
+export class SetlikeBinding {
+  /** Binding for the installed methods and their allocation realm. */
+  #binding: RealmBinding;
+
+  constructor(binding: RealmBinding) {
+    this.#binding = binding;
+  }
+
   /** Allocate backing entries once when the platform object is initialized. */
   initialize(record: PlatformRecord): void {
     record.setEntries ??= new Set();
@@ -381,9 +360,9 @@ export class SetlikeBinding extends CollectionBinding {
   #createSizeGetter(
     assembled: AssembledInterface,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument,
           assembled,
           'size',
@@ -403,12 +382,12 @@ export class SetlikeBinding extends CollectionBinding {
     name: string,
   ): JSFunction {
     // Reuse installed converters unless a borrowed method needs another receiver binding.
-    const methodBinding = this.binding;
+    const methodBinding = this.#binding;
     const realm = methodBinding.realm;
     const convertValue = methodBinding.getConverter(member.value).getIDLToJSSteps();
     return realm.createFunction(
       (thisArgument) => {
-        const receiver = this.getReceiverRecord(thisArgument, assembled, name, 'method');
+        const receiver = this.#binding.getDirectReceiverRecord(thisArgument, assembled, name, 'method');
         const receiverBinding = receiver.binding;
         const sameBinding = receiverBinding === methodBinding;
         const iterator = new SetIteratorRecord(
@@ -426,9 +405,9 @@ export class SetlikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLSetlike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument,
           assembled,
           'forEach',
@@ -436,11 +415,11 @@ export class SetlikeBinding extends CollectionBinding {
         );
         const callback = argumentsList[0];
         if (typeof callback !== 'function') {
-          this.throwTypeError('Callback is not callable');
+          this.#binding.throwTypeError('Callback is not callable');
         }
         const binding = receiver.binding;
         this.getEntries(receiver).forEach((value) => {
-          const javaScriptValue = binding.getConverter(member.value, this.binding.realm).idlToJS(value);
+          const javaScriptValue = binding.getConverter(member.value, this.#binding.realm).idlToJS(value);
           Reflect.apply(callback, argumentsList[1], [
             javaScriptValue,
             javaScriptValue,
@@ -458,13 +437,13 @@ export class SetlikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLSetlike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'has', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.binding,
+          argumentsList[0], member.value, this.#binding,
         );
         return this.getEntries(receiver).has(value);
       },
@@ -477,13 +456,13 @@ export class SetlikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLSetlike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'add', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.binding,
+          argumentsList[0], member.value, this.#binding,
         );
         this.getEntries(receiver).add(value);
         return receiver.platformObject;
@@ -497,13 +476,13 @@ export class SetlikeBinding extends CollectionBinding {
     assembled: AssembledInterface,
     member: IDLSetlike,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'delete', 'method',
         );
         const value = convertCollectionValue(
-          argumentsList[0], member.value, this.binding,
+          argumentsList[0], member.value, this.#binding,
         );
         return this.getEntries(receiver).delete(value);
       },
@@ -515,9 +494,9 @@ export class SetlikeBinding extends CollectionBinding {
   #createClear(
     assembled: AssembledInterface,
   ): JSFunction {
-    return this.binding.realm.createFunction(
+    return this.#binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.getReceiverRecord(
+        const receiver = this.#binding.getDirectReceiverRecord(
           thisArgument, assembled, 'clear', 'method',
         );
         this.getEntries(receiver).clear();

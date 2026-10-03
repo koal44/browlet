@@ -9,7 +9,7 @@ import { Converter, type ConversionSteps } from './converter';
 export class PromiseConverter<Type extends IDLPromiseType = IDLPromiseType> extends Converter<Type> {
   /** Project an IDL fulfillment value and resolve a new promise in the converter's realm. */
   // https://webidl.spec.whatwg.org/#js-promise-manipulation
-  static fromIDL(value: unknown, converter: Converter): IDLPromise {
+  static fromIDL<Type extends IDLType>(value: unknown, converter: Converter<Type>): IDLPromise<Type> {
     const promise = new IDLPromise(converter.type, converter.realm, converter.binding.realizeException);
     const jsValue = IDLPromise.is(value) ? value.promise : converter.idlToJS(value);
     promise.resolve(jsValue);
@@ -36,7 +36,7 @@ export class PromiseConverter<Type extends IDLPromiseType = IDLPromiseType> exte
     return promise;
   }
 
-  protected createInputSteps(): ConversionSteps<IDLPromise> {
+  protected createInputSteps(): ConversionSteps<IDLPromise<Type['resultType']>> {
     const type = this.type.resultType;
     return (value) => IDLPromise.fromJS(value, type, this.realm, this.binding.realizeException);
   }

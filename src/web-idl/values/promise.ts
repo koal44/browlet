@@ -4,13 +4,13 @@ import type { WebIDLRealm } from '../environment';
 import type { IDLType } from '../assembly/index';
 
 /** A realm-owned promise with its fulfillment type and settlement lifecycle. */
-export class IDLPromise {
-  /** Promise exposed to author code. */
+export class IDLPromise<Type extends IDLType = IDLType> {
+  /** Native Promise backing; fulfillment conversion is supplied by its consumer. */
   promise: Promise<unknown>;
   /** Realm used to allocate the promise. */
   realm: WebIDLRealm;
   /** Declared conversion for fulfillment values. */
-  type: IDLType;
+  type: Type;
   /** Whether a resolving function was accepted; adoption may still be pending. */
   resolved = false;
   /** Native resolution function, invoked after recording the first resolution. */
@@ -20,7 +20,7 @@ export class IDLPromise {
   /** Optional conversion of internal failures at the rejection boundary. */
   #realizeException: ExceptionRealizer | undefined;
 
-  constructor(type: IDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer) {
+  constructor(type: Type, realm: WebIDLRealm, realizeException?: ExceptionRealizer) {
     let resolve: PromiseSettlement | undefined;
     let reject: PromiseSettlement | undefined;
     this.promise = new realm.intrinsics.promise.constructor((resolve_, reject_) => {
@@ -42,7 +42,7 @@ export class IDLPromise {
 
   /** Adopt an author value, retaining its fulfillment type for later implementation conversion. */
   // https://webidl.spec.whatwg.org/#js-to-promise
-  static fromJS(value: unknown, type: IDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer): IDLPromise {
+  static fromJS<Type extends IDLType>(value: unknown, type: Type, realm: WebIDLRealm, realizeException?: ExceptionRealizer): IDLPromise<Type> {
     const promise = new IDLPromise(type, realm, realizeException);
     promise.resolve(value);
     return promise;
@@ -50,7 +50,7 @@ export class IDLPromise {
 
   /** Create a rejected promise in the supplied realm, optionally realizing internal failures. */
   // https://webidl.spec.whatwg.org/#js-promise-manipulation
-  static rejected(reason: unknown, type: IDLType, realm: WebIDLRealm, realizeException?: ExceptionRealizer): IDLPromise {
+  static rejected<Type extends IDLType>(reason: unknown, type: Type, realm: WebIDLRealm, realizeException?: ExceptionRealizer): IDLPromise<Type> {
     const promise = new IDLPromise(type, realm, realizeException);
     promise.reject(reason);
     return promise;
@@ -76,12 +76,12 @@ export class IDLPromise {
   /** React to JS values without conversion, keeping the result promise in this promise's realm. */
   // Reaction handling extracted from https://webidl.spec.whatwg.org/#dfn-perform-steps-once-promise-is-settled
   // Callers supply any conversions in their reaction steps.
-  react(
-    resultType: IDLType,
+  react<Result extends IDLType>(
+    resultType: Result,
     steps: PromiseReactionSteps,
     realm: WebIDLRealm,
     realizeException?: ExceptionRealizer,
-  ): IDLPromise {
+  ): IDLPromise<Result> {
     const resultPromise = new IDLPromise(resultType, this.realm, realizeException);
     const onFulfilled = realm.createFunction(
       (_thisArgument, [value]) => {

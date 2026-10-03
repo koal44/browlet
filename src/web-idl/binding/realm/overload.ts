@@ -96,7 +96,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   if (i === distinguishingIndex && asyncSequenceMethod) {
     const type = selected.getArgument(i)!.type;
-    const asyncSequence = binding.assembly.getUnionCandidates(type).asyncSequence;
+    const asyncSequence = type.candidates.asyncSequence;
     if (!asyncSequence) {
       throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
@@ -108,7 +108,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   if (i === distinguishingIndex && method) {
     const type = selected.getArgument(i)!.type;
-    const candidate = binding.assembly.getUnionCandidates(type).array;
+    const candidate = type.candidates.array;
     if (!candidate) {
       throw new InternalError('Iterator method selected a non-sequence-like overload');
     }
@@ -151,7 +151,6 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
   index: number,
   binding: RealmBinding,
 ): DistinguishingResolution<Callable> {
-  const assembly = binding.assembly;
   let matches: Callable[];
 
   if (value === undefined) {
@@ -162,10 +161,8 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
 
   if (value === null || value === undefined) {
     matches = candidates.filter((callable) => {
-      const type = callable.getArgument(index)!.type;
-      return assembly.includesNullableType(type) ||
-        assembly.getCandidateTypes(type).some((candidate) =>
-          candidate.kind === 'dictionary');
+      const branches = callable.getArgument(index)!.type.candidates;
+      return branches.includesNullable || branches.dictionary;
     });
     if (matches.length > 0) return { candidates: matches };
   }
@@ -174,7 +171,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     matches = candidates.filter((callable) => {
       const type = callable.getArgument(index)!.type;
       return containsImplementedInterface(type, value, binding) ||
-        assembly.hasCandidateKind(type, 'object');
+        type.candidates.hasObject;
     });
     if (matches.length > 0) return { candidates: matches };
   }
@@ -184,22 +181,22 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     if (bufferName === 'ArrayBuffer' || bufferName === 'SharedArrayBuffer') {
       matches = candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
-        return assembly.hasArrayBufferCandidate(type) ||
-          assembly.hasCandidateKind(type, 'object');
+        return type.candidates.hasArrayBuffer ||
+          type.candidates.hasObject;
       });
       if (matches.length > 0) return { candidates: matches };
     } else if (bufferName === 'DataView') {
       matches = candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
-        return assembly.hasBufferCandidate(type, 'DataView') ||
-          assembly.hasCandidateKind(type, 'object');
+        return type.candidates.buffers.has('DataView') ||
+          type.candidates.hasObject;
       });
       if (matches.length > 0) return { candidates: matches };
     } else if (bufferName) {
       matches = candidates.filter((callable) => {
         const type = callable.getArgument(index)!.type;
-        return assembly.hasBufferCandidate(type, bufferName) ||
-          assembly.hasCandidateKind(type, 'object');
+        return type.candidates.buffers.has(bufferName) ||
+          type.candidates.hasObject;
       });
       if (matches.length > 0) return { candidates: matches };
     }
@@ -207,19 +204,17 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
 
   if (typeof value === 'function') {
     matches = candidates.filter((callable) => {
-      const type = callable.getArgument(index)!.type;
-      return assembly.getCandidateTypes(type).some((candidate) =>
-        candidate.kind === 'callback-function' ||
-        candidate.kind === 'object');
+      const branches = callable.getArgument(index)!.type.candidates;
+      return branches.callbackFunction || branches.hasObject;
     });
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (isObject(value)) {
     const hasAsyncSequence = candidates.some((callable) =>
-      assembly.hasCandidateKind(callable.getArgument(index)!.type, 'async-sequence'));
+      !!callable.getArgument(index)!.type.candidates.asyncSequence);
     const hasString = candidates.some((callable) =>
-      assembly.hasStringCandidate(callable.getArgument(index)!.type));
+      !!callable.getArgument(index)!.type.candidates.string);
 
     if (hasAsyncSequence && !(hasStringData(value) && hasString)) {
       const asyncMethod = getMethod(
@@ -233,7 +228,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
       const iteratorMethod = asyncMethod ?? syncMethod;
       if (iteratorMethod) {
         matches = candidates.filter((callable) =>
-          assembly.hasCandidateKind(callable.getArgument(index)!.type, 'async-sequence'));
+          !!callable.getArgument(index)!.type.candidates.asyncSequence);
         if (matches.length > 0) {
           return {
             asyncSequenceMethod: {
@@ -247,7 +242,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     }
 
     const hasSequenceLike = candidates.some((callable) =>
-      assembly.hasSequenceCandidate(callable.getArgument(index)!.type));
+      !!callable.getArgument(index)!.type.candidates.array);
     if (hasSequenceLike) {
       const iteratorMethod = getMethod(
         value,
@@ -256,7 +251,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
       );
       if (iteratorMethod) {
         matches = candidates.filter((callable) =>
-          assembly.hasSequenceCandidate(callable.getArgument(index)!.type));
+          !!callable.getArgument(index)!.type.candidates.array);
         if (matches.length > 0) {
           return { candidates: matches, method: iteratorMethod };
         }
@@ -264,51 +259,48 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     }
 
     matches = candidates.filter((callable) => {
-      const type = callable.getArgument(index)!.type;
-      return assembly.getCandidateTypes(type).some((candidate) => {
-        return candidate.kind === 'callback-interface' || candidate.kind === 'dictionary' ||
-          candidate.kind === 'record' || candidate.kind === 'object';
-      });
+      const branches = callable.getArgument(index)!.type.candidates;
+      return branches.callbackInterface || branches.dictionary || branches.record || branches.hasObject;
     });
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'boolean') {
     matches = candidates.filter((callable) =>
-      assembly.hasCandidateKind(callable.getArgument(index)!.type, 'boolean'));
+      callable.getArgument(index)!.type.candidates.hasBoolean);
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'number') {
     matches = candidates.filter((callable) =>
-      assembly.hasNumericCandidate(callable.getArgument(index)!.type));
+      !!callable.getArgument(index)!.type.candidates.numeric);
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'bigint') {
     matches = candidates.filter((callable) =>
-      assembly.hasCandidateKind(callable.getArgument(index)!.type, 'bigint'));
+      callable.getArgument(index)!.type.candidates.hasBigInt);
     if (matches.length > 0) return { candidates: matches };
   }
 
   matches = candidates.filter((callable) =>
-    assembly.hasStringCandidate(callable.getArgument(index)!.type));
+    !!callable.getArgument(index)!.type.candidates.string);
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasNumericCandidate(callable.getArgument(index)!.type));
+    !!callable.getArgument(index)!.type.candidates.numeric);
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasCandidateKind(callable.getArgument(index)!.type, 'boolean'));
+    callable.getArgument(index)!.type.candidates.hasBoolean);
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasCandidateKind(callable.getArgument(index)!.type, 'bigint'));
+    callable.getArgument(index)!.type.candidates.hasBigInt);
   if (matches.length > 0) return { candidates: matches };
 
   matches = candidates.filter((callable) =>
-    assembly.hasCandidateKind(callable.getArgument(index)!.type, 'any'));
+    callable.getArgument(index)!.type.candidates.hasAny);
   if (matches.length > 0) return { candidates: matches };
 
   return throwTypeError(binding, 'No overload matches the argument value');
@@ -334,13 +326,13 @@ function containsImplementedInterface(
   value: unknown,
   binding: RealmBinding,
 ): boolean {
-  return binding.assembly.getCandidateTypes(type).some((candidate) => {
+  return type.candidates.interfaces.some((candidate) => {
     if (candidate.kind === 'interface') {
       const record = getPlatformRecord(value);
       return record?.binding.world === binding.world &&
         record.implements(candidate.assembled);
     }
-    return candidate.kind === 'proxy-object' && candidate.assembled.is(value);
+    return candidate.assembled.is(value);
   });
 }
 

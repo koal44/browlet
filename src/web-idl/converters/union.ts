@@ -9,35 +9,34 @@ import { getPlatformRecord, isPlatformObject } from '../binding/platform';
 import { CallbackFunctionStamper } from '../binding/realm/callback';
 
 import { Converter, type ConversionSteps } from './converter';
-import { getCallbackRealm } from './callback';
 import { isMap } from './record';
 
 /** Select union branches from the value while retaining the declaration's prepared candidates. */
 // https://webidl.spec.whatwg.org/#es-union
 export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Converter<Type> {
   protected createInputSteps(): ConversionSteps {
-    const type = this.type;
-    const assembly = this.binding.assembly;
-    const candidates = assembly.getUnionCandidates(type);
+    const candidates = this.type.candidates;
+    const convertCallbackFunction = candidates.callbackFunction && this.forType(candidates.callbackFunction).getInputSteps();
+    const convertCallbackInterface = candidates.callbackInterface && this.forType(candidates.callbackInterface).getInputSteps();
     return (value) => {
       if (value === undefined && candidates.hasUndefined) {
         return undefined;
       }
       if (
           (value === null || value === undefined) &&
-          assembly.includesNullableType(type)
+          candidates.includesNullable
       ) return null;
 
       if (value === null || value === undefined) {
         const assembled = candidates.dictionary;
-        if (assembled) return this.forType(assembled).inputSteps(value);
+        if (assembled) return this.forType(assembled).getInputSteps()(value);
       }
 
       if (isPlatformObject(value, this.binding)) {
         const interfaceType = candidates.interfaces.find((candidate) =>
           this.#implements(candidate, value));
         if (interfaceType) {
-          return this.forType(interfaceType).inputSteps(value);
+          return this.forType(interfaceType).getInputSteps()(value);
         }
         if (candidates.hasObject) return value;
       }
@@ -45,18 +44,13 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         const bufferName = getBufferTypeName(value);
         if (bufferName) {
           const buffer = candidates.buffers.get(bufferName);
-          if (buffer) return this.forType(buffer).inputSteps(value);
+          if (buffer) return this.forType(buffer).getInputSteps()(value);
           if (candidates.hasObject) return value;
         }
       }
 
       if (typeof value === 'function') {
-        const assembled = candidates.callbackFunction;
-        if (assembled) {
-          return new IDLCallbackFunction(
-            assembled.assembled, value, getCallbackRealm(value, this.realm), this.realm.callbacks.captureContext(), this.binding.callbacks,
-          );
-        }
+        if (convertCallbackFunction) return convertCallbackFunction(value);
         if (candidates.hasObject) return value;
       }
 
@@ -94,19 +88,10 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         }
 
         const dictionaryAssembled = candidates.dictionary;
-        if (dictionaryAssembled) return this.forType(dictionaryAssembled).inputSteps(value);
+        if (dictionaryAssembled) return this.forType(dictionaryAssembled).getInputSteps()(value);
         const record = candidates.record;
-        if (record) return this.forType(record).inputSteps(value);
-        const callbackInterfaceAssembled = candidates.callbackInterface;
-        if (callbackInterfaceAssembled) {
-          return new IDLCallbackInterface(
-            callbackInterfaceAssembled.assembled,
-            value,
-            getCallbackRealm(value, this.realm),
-            this.realm.callbacks.captureContext(),
-            this.binding.callbacks,
-          );
-        }
+        if (record) return this.forType(record).getInputSteps()(value);
+        if (convertCallbackInterface) return convertCallbackInterface(value);
         if (candidates.hasObject) return value;
       }
 
@@ -115,14 +100,14 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
       }
       if (typeof value === 'number') {
         const numeric = candidates.numeric;
-        if (numeric) return this.forType(numeric).inputSteps(value);
+        if (numeric) return this.forType(numeric).getInputSteps()(value);
       }
       if (typeof value === 'bigint') {
         if (candidates.hasBigInt) return value;
       }
 
       const string = candidates.string;
-      if (string) return this.forType(string).inputSteps(value);
+      if (string) return this.forType(string).getInputSteps()(value);
 
       const numeric = candidates.numeric;
       const bigint = candidates.hasBigInt;
@@ -130,9 +115,9 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         const primitive = toPrimitive(value, 'number');
         return typeof primitive === 'bigint'
             ? primitive
-            : this.forType(numeric).inputSteps(primitive);
+            : this.forType(numeric).getInputSteps()(primitive);
       }
-      if (numeric) return this.forType(numeric).inputSteps(value);
+      if (numeric) return this.forType(numeric).getInputSteps()(value);
 
       if (candidates.hasBoolean) return Boolean(value);
       if (bigint) return toBigInt(value);
@@ -141,14 +126,12 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
   }
 
   protected override createOutputSteps(): ConversionSteps {
-    const type = this.type;
-    const assembly = this.binding.assembly;
-    const candidates = assembly.getUnionCandidates(type);
+    const candidates = this.type.candidates;
     return (value) => {
       if (value === undefined) {
         if (candidates.hasUndefined) return undefined;
       }
-      if (value === null && assembly.includesNullableType(type)) {
+      if (value === null && candidates.includesNullable) {
         return null;
       }
       if (isPlatformObject(value, this.binding)) {
@@ -206,6 +189,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         const buffer = bufferName && candidates.buffers.get(bufferName);
         if (buffer) return this.forType(buffer).idlToJS(value);
         if (candidates.dictionary) return this.forType(candidates.dictionary).idlToJS(value);
+        if (candidates.record) return this.forType(candidates.record).idlToJS(value);
         if (candidates.hasObject) return value;
       }
       throw new InternalError('IDL union value has no matching specific type');

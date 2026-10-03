@@ -2,10 +2,10 @@ import { InternalError, endOfIteration, InternalPromise, Stamper } from '../../.
 import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../../js-engine/index';
 
 import {
-  anyType, type IDLAsyncIterable, type AssembledArgument, type AssembledCallable, type AssembledInterface,
+  anyType, type IDLAsyncIterable, type AssembledArgument, type AssembledInterface,
 } from '../../assembly/index';
 import { IDLPromise } from '../../values/index';
-import { getPlatformRecord, type PlatformRecord, type StampedImplInstance } from '../platform';
+import { getPlatformRecord, type StampedImplInstance } from '../platform';
 import type { RealmBinding } from '../realm';
 
 /** Install async iterator methods and prototypes in one realm. */
@@ -22,11 +22,11 @@ export class AsyncIterableBinding {
   defineMethods(
     target: object,
     assembled: AssembledInterface,
-    callable: AssembledCallable<IDLAsyncIterable>,
+    member: IDLAsyncIterable,
   ): void {
-    if (callable.primary.key === undefined) {
+    if (member.key === undefined) {
       const values = this.#createIteratorMethod(
-        assembled, callable, 'value', 'values', 'values',
+        assembled, member, 'value', 'values', 'values',
       );
       defineDataProperty(target, 'values', values);
       defineMethod(target, Symbol.asyncIterator, values);
@@ -34,33 +34,32 @@ export class AsyncIterableBinding {
     }
 
     const entries = this.#createIteratorMethod(
-      assembled, callable, 'key+value', 'entries', '%Symbol.asyncIterator%',
+      assembled, member, 'key+value', 'entries', '%Symbol.asyncIterator%',
     );
     defineMethod(target, Symbol.asyncIterator, entries);
     defineDataProperty(target, 'entries', entries);
     defineDataProperty(target, 'keys',
-      this.#createIteratorMethod(assembled, callable, 'key', 'keys', 'keys'));
+      this.#createIteratorMethod(assembled, member, 'key', 'keys', 'keys'));
     defineDataProperty(target, 'values',
-      this.#createIteratorMethod(assembled, callable, 'value', 'values', 'values'));
+      this.#createIteratorMethod(assembled, member, 'value', 'values', 'values'));
   }
 
   // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
   #createIteratorMethod(
     assembled: AssembledInterface,
-    callable: AssembledCallable<IDLAsyncIterable>,
+    member: IDLAsyncIterable,
     kind: IterationKind,
     name: string,
     securityIdentifier: string,
   ): JSFunction<StampedAsyncIterator> {
-    const member = callable.primary;
     const prototype = this.#getIteratorPrototypeObject(assembled, member);
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(thisArgument, assembled, securityIdentifier);
+        const receiver = this.#binding.getDirectReceiverRecord(thisArgument, assembled, securityIdentifier, 'method');
         const iterator = this.#binding.realm.createOrdinaryObject(prototype);
         const steps = getAsyncIteratorSteps(assembled, member, this.#binding);
         const implementationIterator = steps.create(
-          receiver.implInst, this.#convertArguments(callable.arguments, argumentsList),
+          receiver.implInst, this.#convertArguments(member.arguments, argumentsList),
         );
         return AsyncIteratorStamper.stamp(iterator, new AsyncIteratorRecord(
           implementationIterator, assembled, member, kind, receiver.binding,
@@ -146,16 +145,6 @@ export class AsyncIterableBinding {
       this.#throwTypeError('Illegal invocation');
     }
     return state;
-  }
-
-  // https://webidl.spec.whatwg.org/#js-asynchronous-iterable
-  #getReceiverRecord(value: unknown, assembled: AssembledInterface, identifier: string): PlatformRecord {
-    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#binding.world) this.#throwTypeError('Illegal invocation');
-    this.#binding.realm.performSecurityCheck(value, identifier, 'method');
-    if (!record.implements(assembled)) this.#throwTypeError('Illegal invocation');
-    return record;
   }
 
   #throwTypeError(message: string): never {

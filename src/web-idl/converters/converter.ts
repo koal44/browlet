@@ -5,7 +5,7 @@ import { isObject } from '../../js-engine/index';
 import type { DefaultValue, ExtendedAttribute } from '../core/index';
 
 import type { WebIDLRealm } from '../environment';
-import { integerTypes, type IDLType, type AssembledCallbackFunction } from '../assembly/index';
+import type { IDLType } from '../assembly/index';
 import type { IDLValue, JSValue } from '../values/index';
 import type { RealmBinding } from '../binding/realm';
 import type { ConverterFor } from './factory';
@@ -24,8 +24,6 @@ export abstract class Converter<Type extends IDLType = IDLType> {
   #inputEntry?: ConversionSteps;
   /** Prepared output conversion that preserves existing buffer identity. */
   #output?: ConversionSteps;
-  /** Cached nullable legacy callback declaration, or null when the type does not qualify. */
-  #legacyCallback?: AssembledCallbackFunction | null;
 
   /** Retain the assembly's rules with the binding and allocation realm for this conversion. */
   constructor(type: Type, binding: RealmBinding, realm: WebIDLRealm) {
@@ -36,14 +34,6 @@ export abstract class Converter<Type extends IDLType = IDLType> {
 
   /** Conversion annotations collected from this type and its aliases. */
   get extendedAttributes(): ExtendedAttribute[] { return this.type.attributes; }
-
-  /** Nullable legacy callback declaration, used by setters to select their input converter. */
-  get legacyCallback(): AssembledCallbackFunction | null {
-    if (this.#legacyCallback === undefined) {
-      this.#legacyCallback = this.binding.assembly.getNullableLegacyCallback(this.type);
-    }
-    return this.#legacyCallback;
-  }
 
   /** Select a nested type's own rules while preserving implementation and allocation ownership. */
   forType<Other extends IDLType>(type: Other): ConverterFor<Other> {
@@ -72,9 +62,9 @@ export abstract class Converter<Type extends IDLType = IDLType> {
     switch (value.kind) {
       case 'integer': {
         const integer = this.binding.assembly.getIntegerLiteralValue(value);
-        const numericType = this.binding.assembly.getSoleNumericTypeName(this.type);
-        if (numericType === 'bigint') return integer;
-        if (numericType && Object.hasOwn(integerTypes, numericType)) return Number(integer);
+        const numericType = this.type.candidates.soleNumeric;
+        if (numericType?.kind === 'bigint') return integer;
+        if (numericType?.kind === 'integer') return Number(integer);
         return this.jsToIDL(Number(integer));
       }
       case 'decimal':
@@ -115,7 +105,7 @@ export abstract class Converter<Type extends IDLType = IDLType> {
   // https://webidl.spec.whatwg.org/#js-type-mapping
   jsToIDL<ValueType extends IDLType>(this: Converter<ValueType>, value: unknown): IDLValue<ValueType> {
     try {
-      return this.inputSteps(value) as IDLValue<ValueType>;
+      return this.getInputSteps()(value);
     } catch (error) {
       return this.throwConversionError(error);
     }
@@ -127,14 +117,14 @@ export abstract class Converter<Type extends IDLType = IDLType> {
   }
 
   /** Nested input steps for converters already inside an error boundary; enter through jsToIDL(). */
-  get inputSteps(): ConversionSteps {
-    return this.#input ??= this.createInputSteps();
+  getInputSteps<ValueType extends IDLType>(this: Converter<ValueType>): ConversionSteps<IDLValue<ValueType>> {
+    return (this.#input ??= this.createInputSteps()) as ConversionSteps<IDLValue<ValueType>>;
   }
 
   /** Retain a callable input entry point when installing members or preparing callback returns. */
   getJSToIDLSteps<ValueType extends IDLType>(this: Converter<ValueType>): ConversionSteps<IDLValue<ValueType>> {
     if (!this.#inputEntry) {
-      const convert = this.inputSteps;
+      const convert = this.getInputSteps();
       this.#inputEntry = (value) => {
         try { return convert(value); }
         catch (error) { return this.throwConversionError(error); }

@@ -8,7 +8,7 @@ import { Converter, type ConversionSteps } from './converter';
 /** Capture the selected iteration method without opening or advancing the iterator. */
 export class AsyncSequenceConverter<Type extends IDLAsyncSequenceType = IDLAsyncSequenceType> extends Converter<Type> {
   // https://webidl.spec.whatwg.org/#js-to-async-iterable
-  protected createInputSteps(): ConversionSteps<IDLAsyncSequence> {
+  protected createInputSteps(): ConversionSteps<IDLAsyncSequence<Type['elementType']>> {
     const type = this.type;
     const { realm } = this;
     return (value) => {

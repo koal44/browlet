@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { InternalError } from '../../src/infra/internal-error';
 import {
-  arg, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
+  arg, cbDict, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
   defineIncludes, defineInterface, defineInterfaceMixin, defineNamespace, definePartialDictionary,
   definePartialInterface, definePartialInterfaceMixin, definePartialNamespace, defineTypedef,
   idlType, nullable, observableArray, op, reference, roAttr, sequence, type Definition,
@@ -26,6 +26,17 @@ describe('Web IDL declaration validation', () => {
     const assembly = new DefinitionAssembly([]);
     expect(() => assembly.getNamedType('Missing')).toThrowError(InternalError);
     expect(() => assembly.getIDLType(sequence(reference('Missing')))).toThrowError(InternalError);
+  });
+
+  it('rejects a callback-dictionary adapter naming a non-dictionary', () => {
+    expect(() => new DefinitionAssembly([
+      defineInterface({ name: 'NotADictionary', members: [] }),
+      defineInterface({
+        name: 'Example', members: [
+          op('run', idlType.undefined, [arg('options', idlType.object, cbDict('NotADictionary'))]),
+        ],
+      }),
+    ])).toThrowError(new InternalError('Callback dictionary for options must be a dictionary'));
   });
 
   it.each<Definition>([

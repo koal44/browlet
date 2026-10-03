@@ -32,7 +32,7 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
       return {
         member,
         converter,
-        convert: converter.inputSteps,
+        convert: converter.getInputSteps(),
         getDefault: member.primary.default === undefined
             ? undefined
             : converter.createDefaultSteps(member.primary.default),
@@ -40,7 +40,7 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
     });
     // Required/defaulted members always exist after successful conversion. Copy
     // their layout together; sparse dictionaries only create present properties.
-    const complete = members.every(({ member, getDefault }) => member.primary.required || getDefault);
+    const complete = assembled.hasCompleteShape;
     const template: Record<string, unknown> = {};
     if (complete) {
       for (const { member } of members) defineDataProperty(template, member.name, undefined);
@@ -77,23 +77,28 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
   }
 
   protected override createOutputSteps(): ConversionSteps<object> {
-    return this.#plan.output ??= (value) => {
-      const assembled = this.type.assembled;
+    const plan = this.#plan;
+    return (value) => (plan.output ??= this.#prepareOutput())(value);
+  }
+
+  #prepareOutput(): ConversionSteps<object> {
+    const assembled = this.type.assembled;
+    const members = assembled.members.map((member) => ({
+      name: member.name,
+      convert: this.binding.getConverter(member.type, this.realm).getIDLToJSSteps(),
+    }));
+    return (value) => {
       if (!isObject(value)) {
         throw new InternalError(`IDL dictionary ${assembled.primary.name} is not an object`);
       }
-      const members = value instanceof IDLDictionary ? value.record : value as Record<string, unknown>;
+      const record = value instanceof IDLDictionary ? value.record : value as Record<string, unknown>;
 
       const result = this.realm.createOrdinaryObject(
         this.realm.intrinsics.objectPrototype,
       );
-      for (const member of assembled.members) {
-        if (!Object.hasOwn(members, member.name)) continue;
-        defineDataProperty(
-          result,
-          member.name,
-          this.binding.getConverter(member.type, this.realm).idlToJS(members[member.name]),
-        );
+      for (const { name, convert } of members) {
+        if (!Object.hasOwn(record, name)) continue;
+        defineDataProperty(result, name, convert(record[name]));
       }
       return result;
     };

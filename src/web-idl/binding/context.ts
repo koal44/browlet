@@ -168,9 +168,10 @@ function createWebIDLPromiseConstructor(context: BindingContext, binding: RealmB
       if (type.kind === 'implementation') return super.withResolvers(type);
       const resultType = binding.assembly.getPromiseResultType(type);
       const converter = binding.getConverter(resultType);
+      const toImpl = binding.implementationConverter.createConverter(resultType, {});
       const idlPromise = new IDLPromise(resultType, context.realm, (value) => context.realizeException(value));
       const promise = new this(idlPromise.promise, resultType as typeof resultType & PromiseResultType<T>, (value) =>
-        binding.implementationConverter.idlToImpl(converter.jsToIDL(value), resultType, {}, context) as T);
+        toImpl(converter.jsToIDL(value), context) as T);
       return {
         promise,
         get isResolved() { return idlPromise.resolved; },

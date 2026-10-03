@@ -3,7 +3,7 @@ import { isCallable, isConstructor, isObject } from '../../../js-engine/index';
 import type { CallbackExceptionBehavior } from '../../core/index';
 
 import type { WebIDLRealm } from '../../environment';
-import type { IDLOperation, AssembledCallable, AssembledCallbackFunction } from '../../assembly/index';
+import type { IDLOperation, AssembledCallbackFunction } from '../../assembly/index';
 import { IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
 import { getImplementationRecord } from '../platform';
@@ -202,10 +202,10 @@ export class CallbackInvoker {
   }
 }
 
-export type CallbackCallable = AssembledCallbackFunction | AssembledCallable<IDLOperation>;
+export type CallbackCallable = AssembledCallbackFunction | IDLOperation;
 
 /** An implementation callable retaining its original callback's conversion and realm. */
-export type StampedCallbackFunction = CallableFunction & CallbackFunctionStamper;
+export type StampedCallbackFunction = ((...args: unknown[]) => unknown) & CallbackFunctionStamper;
 
 /** Retain a converted callback on its implementation callable without public properties. */
 export class CallbackFunctionStamper extends Stamper {

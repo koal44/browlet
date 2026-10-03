@@ -6,8 +6,8 @@ import { Converter, type ConversionSteps } from './converter';
 export class NullableConverter<Type extends IDLNullableType = IDLNullableType> extends Converter<Type> {
   protected createInputSteps(): ConversionSteps {
     const type = this.type.innerType;
-    const includesUndefined = this.binding.assembly.includesUndefined(type);
-    const convert = this.forType(type).inputSteps;
+    const includesUndefined = type.candidates.hasUndefined;
+    const convert = this.forType(type).getInputSteps();
     return (value) => value === undefined && includesUndefined ? undefined
       : value === null || value === undefined ? null : convert(value);
   }

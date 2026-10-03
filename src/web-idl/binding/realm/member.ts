@@ -5,7 +5,7 @@ import {
 } from '../../core/index';
 
 import {
-  AssembledInterface, type IDLType, type IDLAttribute, type IDLOperation, type AssembledCallable,
+  AssembledInterface, type IDLType, type IDLAttribute, type IDLOperation,
   type AssembledNamespace, type AssembledOverloads,
 } from '../../assembly/index';
 import { IDLPromise } from '../../values/index';
@@ -160,7 +160,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const type = attribute.type;
     const enumeration = type.kind === 'enumeration' ? type.assembled : undefined;
     const inputConverter = realmBinding.getConverter(enumeration ? realmBinding.assembly.builtinTypes.DOMString : attribute.type);
-    const legacyCallback = inputConverter.legacyCallback;
+    const legacyCallback = attribute.type.kind === 'nullable' ? attribute.type.legacyCallback : null;
     const convertInput = legacyCallback
       ? CallbackFunctionConverter.createAttributeSteps(inputConverter, legacyCallback)
       : inputConverter.getJSToIDLSteps();
@@ -239,7 +239,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   getOperationFunction(
     this: MemberBinding<MemberOwner>,
     name: string,
-    operations: AssembledOverloads<AssembledCallable<IDLOperation>>,
+    operations: AssembledOverloads<IDLOperation>,
   ): JSFunction {
     if (this.#operation) return this.#operation;
     const { binding: realmBinding, assembled } = this.#implementationBinding;
@@ -248,14 +248,14 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const resolve = createOverloadResolver(operations, realmBinding);
     const interfaceAssembled = assembled instanceof AssembledInterface ? assembled : undefined;
     const implementationBinding = this.#implementationBinding;
-    for (const { primary } of operations.callables) {
-      const binding = implementationBinding.getOrCreateMemberBinding(primary);
-      binding.isDefaultOperation = hasExtendedAttribute(primary.extendedAttributes, 'Default');
-      binding.convertResult = realmBinding.getConverter(primary.returns).getIDLToJSSteps();
+    for (const member of operations.callables) {
+      const binding = implementationBinding.getOrCreateMemberBinding(member);
+      binding.isDefaultOperation = hasExtendedAttribute(member.extendedAttributes, 'Default');
+      binding.convertResult = realmBinding.getConverter(member.returns).getIDLToJSSteps();
     }
     return this.#operation = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
       try {
-        const receiver = interfaceAssembled && !source.primary.static
+        const receiver = interfaceAssembled && !source.static
           ? realmBinding.getReceiverRecord(
             thisArgument,
             interfaceAssembled,
@@ -268,8 +268,8 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         // https://github.com/whatwg/webidl/issues/135
         const resultBinding = receiver?.binding ?? realmBinding;
         const overload = resolve(argumentsList);
-        const operation = overload.callable.primary;
-        const operationBinding = operation === source.primary
+        const operation = overload.callable;
+        const operationBinding = operation === source
           ? this
           : implementationBinding.getOrCreateMemberBinding(operation);
         const steps = operationBinding.operationSteps;
@@ -291,11 +291,11 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         return convertResult(result);
       } catch (exception) {
         return this.#handlePromiseException(
-          source.primary.returns,
+          source.returns,
           exception,
           // Invocation failure creates a new promise in the method realm;
           // allocation of a successful implementation result is unrelated.
-          realmBinding.getConverter(source.primary.returns),
+          realmBinding.getConverter(source.returns),
         );
       }
     }, { length: operations.minimumArgumentCount, name });

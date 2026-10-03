@@ -16,7 +16,7 @@ export function getMemberBinding<Assembled extends AssembledInterface | Assemble
         if (attribute.kind !== 'named-arguments' || attribute.value !== declaration.value) continue;
         if (attribute === declaration) {
           const factory = assembled.getLegacyFactoryOverloads(declaration.value, binding.binding.assembly);
-          return binding.getOrCreateMemberBinding(factory.callables[index]!.primary);
+          return binding.getOrCreateMemberBinding(factory.callables[index]!);
         }
         index++;
       }

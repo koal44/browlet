@@ -604,6 +604,22 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return record;
   }
 
+  /** Require a direct platform receiver in this world, checking security before its interface. */
+  // Shared receiver steps of Web IDL iterable, async iterable, maplike, and setlike declarations.
+  getDirectReceiverRecord(
+    value: unknown,
+    assembled: AssembledInterface,
+    identifier: string,
+    type: 'getter' | 'method',
+  ): PlatformRecord {
+    if (!isObject(value)) this.throwTypeError('Illegal invocation');
+    const record = getPlatformRecord(value);
+    if (record?.binding.world !== this.world) this.throwTypeError('Illegal invocation');
+    this.realm.performSecurityCheck(value, identifier, type);
+    if (!record.implements(assembled)) this.throwTypeError('Illegal invocation');
+    return record;
+  }
+
   // Resolve direct platform receivers and proxy object receiver aliases.
   #resolveReceiverRecord(
     value: unknown,

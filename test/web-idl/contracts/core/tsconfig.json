@@ -9,6 +9,7 @@
     "./*.ts",
     "../../../../src/web-idl/core/**/*.ts",
     "../../../../src/infra/promises.ts",
+    "../../../../src/infra/iteration.ts",
     "../../../../src/infra/exceptions.ts",
     "../../../../src/infra/stamper.ts",
     "../../../../src/infra/internal-error.ts"

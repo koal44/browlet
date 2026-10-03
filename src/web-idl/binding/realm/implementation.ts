@@ -84,7 +84,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
         }
 
         const overload = resolve(argumentsList);
-        const behavior = realmBinding.getMemberBinding(assembled, overload.callable.primary)?.constructorBehavior;
+        const behavior = realmBinding.getMemberBinding(assembled, overload.callable)?.constructorBehavior;
         if (!behavior) {
           throw missingImplementation(assembled, 'constructor');
         }
@@ -170,7 +170,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
           );
         }
         const overload = resolve(argumentsList);
-        const behavior = realmBinding.getMemberBinding(assembled, overload.callable.primary)?.constructorBehavior;
+        const behavior = realmBinding.getMemberBinding(assembled, overload.callable)?.constructorBehavior;
         if (!behavior) {
           throw new InternalError(
             `Web IDL ${assembled.primary.name} legacy factory function ${name} has no implementation steps`,
@@ -356,12 +356,12 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     );
 
     for (const operations of groups.values()) {
-      const name = operations.callables[0]?.primary.name;
+      const name = operations.callables[0]?.name;
       if (!name) continue;
       defineProperty(target, name, {
         configurable: kind !== 'unforgeable',
         enumerable: true,
-        value: this.getOrCreateMemberBinding(operations.callables[0]!.primary).getOperationFunction(name, operations),
+        value: this.getOrCreateMemberBinding(operations.callables[0]!).getOperationFunction(name, operations),
         writable: kind !== 'unforgeable',
       });
     }
@@ -429,7 +429,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     realmBinding.asyncIterables.defineMethods(
       target,
       assembled,
-      assembled.callables.get(entry.member),
+      entry.member,
     );
   }
 

@@ -53,10 +53,9 @@ function registerInterfaceImplementation(
         }
         break;
       case 'constructor': {
-        const callable = assembled.callables.get(member);
         if (member.construct) {
           const construct = member.construct;
-          const convert = realmBinding.implementationConverter.createArgumentConverter(callable);
+          const convert = realmBinding.implementationConverter.createArgumentConverter(member);
           memberBinding.constructorBehavior = {
             kind: 'construct',
             steps: (values) => {
@@ -68,7 +67,7 @@ function registerInterfaceImplementation(
           memberBinding.constructorBehavior = {
             kind: 'initialize',
             steps: createDefinedConstructorSteps(
-              member.invoke, callable, context, realmBinding,
+              member.invoke, member, context, realmBinding,
             ),
           };
         } else {
@@ -76,7 +75,7 @@ function registerInterfaceImplementation(
             kind: 'construct',
             steps: createImplementationConstructorSteps(
               implClass,
-              callable,
+              member,
               context,
               realmBinding,
               member.constructWith ?? definition.constructWith,
@@ -86,11 +85,10 @@ function registerInterfaceImplementation(
         break;
       }
       case 'operation': {
-        const callable = assembled.callables.get(member);
         if (hasExtendedAttribute(member.extendedAttributes, 'Default')) break;
         if (member.invoke) {
           memberBinding.operationSteps = createDefinedOperationSteps(
-            member.invoke, callable, context, realmBinding,
+            member.invoke, member, context, realmBinding,
           );
         } else {
           if (member.name === undefined) {
@@ -98,7 +96,7 @@ function registerInterfaceImplementation(
           }
           registerOperation(
             memberBinding,
-            callable,
+            member,
             member.name,
             member.static ? implClass : implClass.prototype,
             context,
@@ -164,7 +162,7 @@ function registerInterfaceImplementation(
         }
         memberBinding.asyncIteratorSteps = createAsyncIteratorSteps(
           factory as (this: object, ...values: unknown[]) => object,
-          assembled.callables.get(member),
+          member,
           context,
           realmBinding,
         );
@@ -306,7 +304,7 @@ function createImplementationConstructorSteps(
 // Adapt converted arguments and the receiver context for a declared invocation.
 function createDefinedOperationSteps(
   invoke: NonNullable<IDLOperation['invoke']>,
-  assembled: AssembledCallable<IDLOperation>,
+  assembled: IDLOperation,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): OperationSteps {
@@ -328,7 +326,7 @@ function createDefinedOperationSteps(
 // Web IDL §2.5.10 Asynchronously iterable declarations.
 function createAsyncIteratorSteps(
   factory: (this: object, ...values: unknown[]) => object,
-  assembled: AssembledCallable<IDLAsyncIterable>,
+  assembled: IDLAsyncIterable,
   context: BindingContext,
   realmBinding: RealmBinding,
 ): AsyncIteratorSteps {
@@ -350,7 +348,7 @@ function createAsyncIteratorSteps(
         [],
       );
     },
-    ...(assembled.primary.return
+    ...(assembled.return
       ? {
         // Project adapter for "asynchronous iterator return": invoke the implementation iterator.
         return(iterator: AsyncIteratorValue, value: unknown) {
@@ -434,7 +432,7 @@ function registerAttribute(
 // Supplies operation behavior to Web IDL §3.7.7 Operations.
 function registerOperation(
   memberBinding: MemberBinding,
-  assembled: AssembledCallable<IDLOperation>,
+  assembled: IDLOperation,
   name: string,
   target: object,
   context: BindingContext,

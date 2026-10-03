@@ -6,7 +6,8 @@ export {
   type IDLSequenceType, type IDLAsyncSequenceType, type IDLFrozenArrayType, type IDLObservableArrayType,
   type IDLRecordType, type IDLPromiseType, type IDLInterfaceType, type IDLDictionaryType,
   type IDLEnumerationType, type IDLCallbackFunctionType, type IDLCallbackInterfaceType,
-  type IDLProxyType, type IntegerConversionMode, type IntegerTypeName,
+  type IDLProxyType, type IDLTypeCandidates, type UnionInterfaceCandidate,
+  type IntegerConversionMode, type IntegerTypeName,
 } from './types';
 export {
   AssembledInterface, AssembledCallbackInterface, AssembledCallbackFunction, AssembledNamespace,
@@ -17,4 +18,4 @@ export {
   type IDLAsyncIterable, type IDLMaplike, type IDLSetlike, type IDLNamedArguments,
   type IDLInterfaceMember, type IDLNamespaceMember,
 } from './assembled';
-export { DefinitionAssembly, type UnionInterfaceCandidate } from './assembly';
+export { DefinitionAssembly } from './assembly';

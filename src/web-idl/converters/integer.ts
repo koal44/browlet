@@ -1,19 +1,13 @@
 import { toNumber } from '../../js-engine/index';
 
-import { integerTypes, type IDLIntegerType } from '../assembly/index';
+import type { IDLIntegerType } from '../assembly/index';
 import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare the declared integer width, signedness, and overflow behavior. */
 export class IntegerConverter<Type extends IDLIntegerType = IDLIntegerType> extends Converter<Type> {
   // https://webidl.spec.whatwg.org/#abstract-opdef-converttoint
   protected createInputSteps(): ConversionSteps<number> {
-    const { bitLength, signed } = integerTypes[this.type.name];
-    const lowerBound = bitLength === 64
-      ? signed ? -(2 ** 53) + 1 : 0
-      : signed ? -(2 ** (bitLength - 1)) : 0;
-    const upperBound = bitLength === 64
-      ? 2 ** 53 - 1
-      : signed ? 2 ** (bitLength - 1) - 1 : 2 ** bitLength - 1;
+    const { bitLength, signed, lowerBound, upperBound } = this.type.format;
 
     switch (this.type.integerMode) {
       case 'enforce-range': return (value) => {

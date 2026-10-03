@@ -74,46 +74,46 @@ export type InterfaceType = {
   implClass: ImplementationClass;
 };
 
-export type NullableType = {
+export interface NullableType<Type extends WebIDLType = WebIDLType> {
   kind: 'nullable';
-  type: WebIDLType;
-};
+  type: Type;
+}
 
-export type UnionType = {
+export interface UnionType<Types extends [WebIDLType, WebIDLType, ...WebIDLType[]] = [WebIDLType, WebIDLType, ...WebIDLType[]]> {
   kind: 'union';
-  types: [WebIDLType, WebIDLType, ...WebIDLType[]];
-};
+  types: Types;
+}
 
-export type SequenceType = {
+export interface SequenceType<Type extends WebIDLType = WebIDLType> {
   kind: 'sequence';
-  type: WebIDLType;
-};
+  type: Type;
+}
 
-export type AsyncSequenceType = {
+export interface AsyncSequenceType<Type extends WebIDLType = WebIDLType> {
   kind: 'async-sequence';
-  type: WebIDLType;
-};
+  type: Type;
+}
 
-export type PromiseType = {
+export interface PromiseType<Type extends WebIDLType = WebIDLType> {
   kind: 'promise';
-  type: WebIDLType;
-};
+  type: Type;
+}
 
-export type FrozenArrayType = {
+export interface FrozenArrayType<Type extends WebIDLType = WebIDLType> {
   kind: 'frozen-array';
-  type: WebIDLType;
-};
+  type: Type;
+}
 
 export type ObservableArrayType = {
   kind: 'observable-array';
   type: WebIDLType;
 };
 
-export type RecordType = {
+export interface RecordType<Key extends StringType = StringType, Value extends WebIDLType = WebIDLType> {
   kind: 'record';
-  key: StringType;
-  value: WebIDLType;
-};
+  key: Key;
+  value: Value;
+}
 
 // An interface keeps the recursive WebIDLType relationship lazy.
 

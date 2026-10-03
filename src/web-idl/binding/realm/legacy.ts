@@ -1,7 +1,7 @@
 import { InternalError } from '../../../infra/index';
 import { isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
-import type { IDLOperation, AssembledCallable, AssembledInterface } from '../../assembly/index';
+import type { IDLOperation, AssembledInterface } from '../../assembly/index';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 import { isNamedPropertiesObject } from './global';
@@ -96,7 +96,7 @@ export class LegacyPlatformObjectBinding {
 
     let indexed: IndexedProperties | undefined;
     if (indexedGetter) {
-      const steps = this.#binding.getMemberBinding(assembled, indexedGetter.primary)?.indexedPropertySteps;
+      const steps = this.#binding.getMemberBinding(assembled, indexedGetter)?.indexedPropertySteps;
       if (!steps) {
         throw new InternalError('Missing supported property indices implementation');
       }
@@ -110,7 +110,7 @@ export class LegacyPlatformObjectBinding {
 
     let named: NamedProperties | undefined;
     if (namedGetter) {
-      const steps = this.#binding.getMemberBinding(assembled, namedGetter.primary)?.namedPropertySteps;
+      const steps = this.#binding.getMemberBinding(assembled, namedGetter)?.namedPropertySteps;
       if (!steps) {
         throw new InternalError('Missing supported property names implementation');
       }
@@ -235,7 +235,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: true,
-      value: this.#binding.getConverter(properties.getter.primary.returns).idlToJS(value),
+      value: this.#binding.getConverter(properties.getter.returns).idlToJS(value),
       writable: properties.setter !== undefined,
     };
   }
@@ -247,7 +247,7 @@ export class LegacyPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter.primary)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
     if (!steps) {
       throw new InternalError('Missing named property getter implementation');
     }
@@ -255,7 +255,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: this.#binding.getConverter(properties.getter.primary.returns).idlToJS(value),
+      value: this.#binding.getConverter(properties.getter.returns).idlToJS(value),
       writable: properties.setter !== undefined,
     };
   }
@@ -458,8 +458,8 @@ export class LegacyPlatformObjectBinding {
     );
     const converted = this.#convertSetterValue(setter, value);
 
-    if (setter.primary.name) {
-      const steps = this.#binding.getMemberBinding(properties.assembled, setter.primary)?.operationSteps;
+    if (setter.name) {
+      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing indexed property setter implementation');
       }
@@ -488,8 +488,8 @@ export class LegacyPlatformObjectBinding {
 
     const creating = !this.#getSupportedNames(target, properties).has(property);
     const converted = this.#convertSetterValue(setter, value);
-    if (setter.primary.name) {
-      const steps = this.#binding.getMemberBinding(properties.assembled, setter.primary)?.operationSteps;
+    if (setter.name) {
+      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing named property setter implementation');
       }
@@ -509,7 +509,7 @@ export class LegacyPlatformObjectBinding {
 
   // Extracted from Web IDL §3.9.7 Abstract operations — convert the value for an indexed or named property
   // setter.
-  #convertSetterValue(setter: AssembledCallable<IDLOperation>, value: unknown): unknown {
+  #convertSetterValue(setter: IDLOperation, value: unknown): unknown {
     const valueArgument = setter.arguments[1];
     if (!valueArgument) {
       throw new InternalError('Legacy property setter has no value argument');
@@ -525,7 +525,7 @@ export class LegacyPlatformObjectBinding {
   ): boolean {
     const { deleter } = properties;
     if (!deleter) throw new InternalError('Named property has no deleter');
-    if (!deleter.primary.name) {
+    if (!deleter.name) {
       // eslint-disable-next-line @typescript-eslint/unbound-method -- named deleter steps use the implementation as their specified this value
       const steps = properties.steps.deleteExisting;
       if (!steps) {
@@ -534,10 +534,10 @@ export class LegacyPlatformObjectBinding {
       return Reflect.apply(steps, target, [property]);
     }
 
-    const steps = this.#binding.getMemberBinding(properties.assembled, deleter.primary)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, deleter)?.operationSteps;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
-    const returnType = deleter.primary.returns;
+    const returnType = deleter.returns;
     return returnType.kind !== 'boolean' || result !== false;
   }
 
@@ -570,7 +570,7 @@ export class LegacyPlatformObjectBinding {
     index: number,
     properties: IndexedProperties,
   ): unknown {
-    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter.primary)?.operationSteps;
+    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
     if (!steps) throw new InternalError('Missing indexed property getter implementation');
     return steps(this.#getReceiverRecord(implementation), index);
   }
@@ -650,18 +650,18 @@ export type LegacyPropertyMetadata = {
 };
 
 type IndexedProperties = {
-  getter: AssembledCallable<IDLOperation>;
+  getter: IDLOperation;
   assembled: AssembledInterface;
-  setter: AssembledCallable<IDLOperation> | undefined;
+  setter: IDLOperation | undefined;
   steps: IndexedPropertySteps;
 };
 
 type NamedProperties = {
-  deleter: AssembledCallable<IDLOperation> | undefined;
-  getter: AssembledCallable<IDLOperation>;
+  deleter: IDLOperation | undefined;
+  getter: IDLOperation;
   assembled: AssembledInterface;
   overrideBuiltIns: boolean;
-  setter: AssembledCallable<IDLOperation> | undefined;
+  setter: IDLOperation | undefined;
   steps: NamedPropertySteps;
   unenumerable: boolean;
   unforgeableNames: Set<string>;

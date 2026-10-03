@@ -1,5 +1,6 @@
 import { InternalError } from '../../infra/internal-error';
-import type { PromiseResult, ResultValue } from '../../infra/promises';
+import type { AsyncIterator } from '../../infra/iteration';
+import type { InternalPromise, PromiseResult, ResultValue } from '../../infra/promises';
 
 import type {
   AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, CallbackExceptionBehavior,
@@ -249,28 +250,28 @@ export function implementationType<T>(type: WebIDLType): ImplementationType<T> {
 
 /** Permit null in addition to the supplied IDL type. */
 // https://webidl.spec.whatwg.org/#idl-nullable-type
-export function nullable<Type extends WebIDLType>(type: Type): NullableType & ResultValue<PromiseResult<Type> | null> {
-  return { kind: 'nullable', type } as NullableType & ResultValue<PromiseResult<Type> | null>;
+export function nullable<Type extends WebIDLType>(type: Type): NullableType<Type> & ResultValue<PromiseResult<Type> | null> {
+  return { kind: 'nullable', type } as NullableType<Type> & ResultValue<PromiseResult<Type> | null>;
 }
 
 /** Declare a value selected from two or more IDL types. */
 // https://webidl.spec.whatwg.org/#idl-union
 export function union<const Types extends [WebIDLType, WebIDLType, ...WebIDLType[]]>(
   ...types: Types
-): UnionType & ResultValue<PromiseResult<Types[number]>> {
-  return { kind: 'union', types } as unknown as UnionType & ResultValue<PromiseResult<Types[number]>>;
+): UnionType<Types> & ResultValue<PromiseResult<Types[number]>> {
+  return { kind: 'union', types } as UnionType<Types> & ResultValue<PromiseResult<Types[number]>>;
 }
 
 /** Declare an ordered sequence of values converted to the supplied element type. */
 // https://webidl.spec.whatwg.org/#idl-sequence
-export function sequence<Type extends WebIDLType>(type: Type): SequenceType & ResultValue<PromiseResult<Type>[]> {
-  return { kind: 'sequence', type } as SequenceType & ResultValue<PromiseResult<Type>[]>;
+export function sequence<Type extends WebIDLType>(type: Type): SequenceType<Type> & ResultValue<PromiseResult<Type>[]> {
+  return { kind: 'sequence', type } as SequenceType<Type> & ResultValue<PromiseResult<Type>[]>;
 }
 
 /** Declare an asynchronous sequence of values with the supplied element type. */
 // https://webidl.spec.whatwg.org/#idl-async-iterable-type
-export function asyncSequence(type: WebIDLType): AsyncSequenceType {
-  return { kind: 'async-sequence', type };
+export function asyncSequence<Type extends WebIDLType>(type: Type): AsyncSequenceType<Type> & ResultValue<AsyncIterator<PromiseResult<Type>>> {
+  return { kind: 'async-sequence', type } as AsyncSequenceType<Type> & ResultValue<AsyncIterator<PromiseResult<Type>>>;
 }
 
 /** Declare string-keyed entries with the supplied key and value conversions. */
@@ -278,20 +279,20 @@ export function asyncSequence(type: WebIDLType): AsyncSequenceType {
 export function record<Key extends StringType, Value extends WebIDLType>(
   key: Key,
   value: Value,
-): RecordType & ResultValue<Record<string, PromiseResult<Value>>> {
-  return { kind: 'record', key, value } as RecordType & ResultValue<Record<string, PromiseResult<Value>>>;
+): RecordType<Key, Value> & ResultValue<Record<string, PromiseResult<Value>>> {
+  return { kind: 'record', key, value } as RecordType<Key, Value> & ResultValue<Record<string, PromiseResult<Value>>>;
 }
 
 /** Declare a Promise whose fulfillment uses the supplied IDL type. */
 // https://webidl.spec.whatwg.org/#idl-promise
-export function promise(type: WebIDLType): PromiseType {
-  return { kind: 'promise', type };
+export function promise<Type extends WebIDLType>(type: Type): PromiseType<Type> & ResultValue<InternalPromise<PromiseResult<Type>>> {
+  return { kind: 'promise', type } as PromiseType<Type> & ResultValue<InternalPromise<PromiseResult<Type>>>;
 }
 
 /** Declare values exposed as a frozen JavaScript array. */
 // https://webidl.spec.whatwg.org/#idl-frozen-array
-export function frozenArray<Type extends WebIDLType>(type: Type): FrozenArrayType & ResultValue<PromiseResult<Type>[]> {
-  return { kind: 'frozen-array', type } as FrozenArrayType & ResultValue<PromiseResult<Type>[]>;
+export function frozenArray<Type extends WebIDLType>(type: Type): FrozenArrayType<Type> & ResultValue<PromiseResult<Type>[]> {
+  return { kind: 'frozen-array', type } as FrozenArrayType<Type> & ResultValue<PromiseResult<Type>[]>;
 }
 
 /** Declare an array whose author mutations invoke the interface's observable-array steps. */

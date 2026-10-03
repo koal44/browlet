@@ -199,7 +199,8 @@ retain the collection's binding; pairs and result objects use the realm of the
 method that created the iterator. Iterator methods retain their usual converters
 at installation; borrowed methods select converters for the receiver's binding.
 `MaplikeBinding` and `SetlikeBinding` install
-their respective members, sharing receiver validation through `CollectionBinding`.
+their respective members. They and the iterable bindings share direct-platform
+receiver validation through `RealmBinding`, without global fallback or proxy aliases.
 JS Engine owns iterator identity, reentrancy, and completion.
 
 `IDLPromise` owns resolution, rejection, and reactions. Its `react()` handles
@@ -210,8 +211,11 @@ and allocation when needed. `ImplementationConverter` converts typed fulfillment
 values inside `InternalPromise` reactions. The promise value depends on neither
 converters nor binding machinery.
 
-An `AssembledCallable` describes a declaration that takes arguments; it is not a
-JavaScript function. For example:
+An `AssembledCallable` supplies the prepared argument and return contract on a
+compiled operation, constructor, callback, async iterable, or legacy factory.
+The compiled member itself is the binding key; no separate callable wrapper or
+lookup map is needed. Exposure-selected overload groups retain these members.
+For example:
 
 ```webidl
 callback Progress = undefined (double value);
@@ -242,18 +246,36 @@ coercion or validation. A callback's callable retains the original function,
 realm, and captured context. Numbers and strings already have their implementation
 representation. `ImplementationConverter.createArgumentConverter()` prepares those choices
 for a callable; `createConverter()` prepares the choice for one argument or member type.
+The one-shot `idlToImpl()` entry invokes those same rules. Installed members and
+typed Promise fulfillment retain their prepared conversions; unions only identify
+which converted representation needs them.
 
 `BindingContext.jsToImpl()` combines the two input stages. On the return path,
 `Converter.idlToJS()` produces author values; `BindingContext.implToJS()` uses that same
 output converter for implementation results without creating a separate IDL container.
 
-Concrete conversion descriptors retain known TypeScript results, such as a
-number for `idlType.long` or a `IDLPromise` for `promise(...)`. Named
-references and dynamically selected types still need the runtime assembly;
+Concrete conversion descriptors retain known TypeScript results, including nested
+sequence and record entries. For example, `record(idlType.DOMString, sequence(idlType.long))`
+produces an `IDLRecord<number[]>`; implementation conversion consumes it as a
+`Record<string, number[]>`. Output conversion accepts either representation and
+projects its entries into a fresh object in the selected realm. Sequence conversion
+consumes its fresh IDL array in place; it never modifies the author's input array.
+Other retained results include a number for `idlType.long` and an `IDLPromise`
+for `promise(...)`. Named references and dynamically selected types still need the runtime assembly;
 their generic results remain `unknown` until the assembled category is known. A
 converter for an assembled dictionary returns `IDLDictionary`, for example.
 `ctx.jsToImpl()` additionally uses
 the descriptor's implementation payload type, after consuming intermediate IDL representations. That payload must not be used to type the intermediate IDL value.
+`ImplementationConverter` requires the assembled type's converted IDL input and
+retains that type in its result contract: dictionaries become member records,
+callbacks become stamped callables, and nested
+sequences and records preserve their value types. Promise fulfillment and async-sequence
+element types survive the same path: `promise(sequence(idlType.long))` supplies an
+`InternalPromise<number[]>`, and `asyncSequence(sequence(idlType.long))` supplies an
+`AsyncIterator<number[]>`. An `IDLPromise` retains its result descriptor, but its
+native `promise` remains `Promise<unknown>` because fulfillment conversion has not
+necessarily run. Custom callback-interface hooks
+and unwrapping overrides keep an unknown result because they can replace that representation.
 
 ## Registration and environment composition
 
@@ -295,13 +317,23 @@ IDL-to-implementation argument and attribute converters are prepared from those 
 types. Known callbacks and dictionaries use their specific representations;
 known sequences retain an element converter and unpack their fresh lists in place.
 Unions and `any` retain runtime discrimination. Recursive dictionary members and
-callback results prepare their nested converters on first use.
+callback and Promise results prepare their nested converters on first use.
+Async sequences prepare element conversion when opened and preserve the argument's
+callback exception policy. Each advance converts its author value in the iterator's
+reaction; implementation conversion then retains that step's result or failure,
+so observing the same step again does not consume its IDL containers twice.
 Converted dictionaries carry their assembled definition and a member record;
-IDL-to-implementation conversion updates that record in place. `canPassToImpl()`
+IDL-to-implementation conversion updates that record in place. `type.canPassToImpl`
 allows primitives and their sequences to bypass further inspection.
 `getMembersToConvert()` selects the remaining members, including records that need
 unpacking; ordinary objects pass through unchanged.
-Complete dictionaries reuse a property layout,
+Direct and prepared implementation conversion share dictionary member plans,
+keyed by dictionary and fallback callback exception policy. The input record and
+`cbDict()` receiver are supplied per conversion, never retained in those plans.
+`cbDict()` must resolve to a dictionary during assembly; it preserves the argument's
+fallback policy while allowing individual callback members to override it.
+Assembled dictionaries record whether required/defaulted members guarantee a complete
+shape after inheritance and partials are combined. Complete dictionaries reuse a property layout,
 while sparse dictionaries collect only present entries
 before creating the record. Both produce ordinary objects with own data properties,
 including `__proto__`. Arbitrary Web IDL records still use a Map during conversion.
@@ -349,17 +381,20 @@ types carry their applicable conversion rules; annotations and aliases are no
 longer runtime dispatch cases. Type inference preserves buffer and implementation
 payload types without retaining declaration syntax.
 
-Candidate lists and comparison keys are cached on first use. One lazy type
-analysis supplies candidate classifications, nullability, container element types,
-and the numeric type for integer defaults. JSON type checks retain completed
-answers without retaining intermediate dictionary traversal results. These maps
-live with the assembly. It also retains derived sequence descriptors used by
-Promise aggregates and observable array assignment.
+Runtime type instances own lazy `candidates`: flattened branches, category selections,
+nullability, and the actual numeric branch for integer defaults. Union conversion and
+overload resolution read the same selections without querying the assembly.
+Primitive representation and implementation pass-through are fixed type fields.
+Integer types reference shared width, signedness, and conversion bounds; buffer types
+record whether they describe a view. Nullable callback types retain their applicable
+legacy callback declaration, while the setter selects attribute-specific conversion.
+Comparison keys and completed JSON checks remain cached in assembly; intermediate
+dictionary traversal results are not retained. Assembly also retains derived sequence
+descriptors used by Promise aggregates and observable array assignment.
 
-`getCandidateTypes()` supplies flattened assembled candidates with conversion
-attributes in their original order. Union conversion retains typed category
-selections, so a dictionary candidate already identifies its dictionary. Nullable
-and union branches inherit enclosing annotations during assembly; container
+`type.candidates.types` supplies flattened branches with conversion attributes
+in their original order. Category selections retain those same types, including their
+assembled definitions. Nullable and union branches inherit enclosing annotations; container
 contents keep their own annotations. Shared declarations are never mutated, and
 conversion does not merge or search attribute arrays per value.
 
@@ -376,10 +411,11 @@ converters by IDL type. This preserves sharing without keeping discarded
 conversion realms alive. Runtime values and their container representations are
 unchanged; assembling a type does not allocate a wrapper for each value.
 Prepared input/output steps live on the converter and retain no incoming values.
-Dictionary converters for different references share preparation by assembled
-dictionary, binding, and realm. Preparation remains lazy for recursive dictionaries.
+Dictionary converters for different references share input and output preparation
+by assembled dictionary, binding, and realm. Output steps retain member converters
+while reading current member values on each return. Preparation remains lazy for recursive dictionaries.
 `jsToIDL(value)` and `getJSToIDLSteps()` establish the conversion error boundary.
-Nested input conversion uses `inputSteps` within that boundary; output uses
+Nested input conversion uses `getInputSteps()` within that boundary; output uses
 `idlToJS(value)` or retained `getIDLToJSSteps()`.
 Each setter selects its input converter once when its cached function is created.
 Ordinary attributes reuse the converter's prepared input steps. Nullable

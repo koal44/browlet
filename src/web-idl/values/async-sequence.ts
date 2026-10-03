@@ -4,21 +4,22 @@ import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js
 import type { WebIDLRealm } from '../environment';
 import { anyType, type IDLType } from '../assembly/index';
 import { IDLPromise } from './promise';
+import type { IDLValue } from './value';
 
 /** An iterable with the captured method and type needed to open its sequence. */
-export class IDLAsyncSequence {
+export class IDLAsyncSequence<Element extends IDLType = IDLType> {
   /** Private identity tested without inspecting author iterable properties. */
   #brand = undefined;
   /** Original author iterable, preserved for identity and invocation. */
   object: object;
   /** Declared conversion applied to each yielded value. */
-  elementType: IDLType;
+  elementType: Element;
   /** Iterator method captured when the author value was converted. */
   method: JSMethod;
   /** Whether opening needs an async-from-sync iterator. */
   iteratorType: AsyncSequenceIteratorType;
 
-  constructor(object: object, elementType: IDLType, method: JSMethod, iteratorType: AsyncSequenceIteratorType) {
+  constructor(object: object, elementType: Element, method: JSMethod, iteratorType: AsyncSequenceIteratorType) {
     this.object = object;
     this.elementType = elementType;
     this.method = method;
@@ -32,7 +33,7 @@ export class IDLAsyncSequence {
 
   /** Open a fresh iterator using the method captured during conversion. */
   // https://webidl.spec.whatwg.org/#async-sequence-open
-  open(realm: WebIDLRealm): AsyncSequenceIterator {
+  open(realm: WebIDLRealm): AsyncSequenceIterator<Element> {
     let record = IteratorRecord.fromMethod(this.object, this.method, realm);
     if (this.iteratorType === 'sync') record = record.toAsync(realm);
     return new AsyncSequenceIterator(this.elementType, record);
@@ -40,20 +41,20 @@ export class IDLAsyncSequence {
 }
 
 /** An opened iterator with the conversion type of its yielded values. */
-export class AsyncSequenceIterator {
+export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
   /** Declared conversion applied to each yielded value. */
-  elementType: IDLType;
+  elementType: Element;
   /** Live iterator and its captured next method. */
   record: IteratorRecord;
 
-  constructor(elementType: IDLType, record: IteratorRecord) {
+  constructor(elementType: Element, record: IteratorRecord) {
     this.elementType = elementType;
     this.record = record;
   }
 
   /** Advance this iterator and convert the next yielded value. */
   // https://webidl.spec.whatwg.org/#async-iterator-get-next-value
-  nextValue(realm: WebIDLRealm, convert: (value: unknown, type: IDLType) => unknown): IDLPromise {
+  nextValue(realm: WebIDLRealm, convert: (value: unknown, type: Element) => IDLValue<Element>): IDLPromise {
     let nextResult: unknown;
     try {
       nextResult = Reflect.apply(

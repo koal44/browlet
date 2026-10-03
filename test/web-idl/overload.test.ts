@@ -348,7 +348,7 @@ describe('Web IDL effective overload sets', () => {
 function operation(
   argumentsList: OperationMember['arguments'],
   binding: RealmBinding,
-): AssembledCallable<IDLOperation> {
+): IDLOperation {
   return assembleOperation({
     arguments: argumentsList,
     kind: 'operation',
@@ -361,7 +361,7 @@ function namedOperation(
   name: string,
   type: OperationMember['arguments'][number]['type'],
   binding: RealmBinding,
-): AssembledCallable<IDLOperation> {
+): IDLOperation {
   return assembleOperation({
     arguments: [{ name: 'value', type }],
     kind: 'operation',
@@ -370,12 +370,12 @@ function namedOperation(
   }, binding);
 }
 
-function assembleOperation(member: OperationMember, binding: RealmBinding): AssembledCallable<IDLOperation> {
-  return new AssembledCallable({
-    ...member,
-    arguments: member.arguments.map((argument) => new AssembledArgument(argument, binding.assembly)),
-    returns: binding.assembly.getIDLType(member.returns),
-  });
+function assembleOperation(member: OperationMember, binding: RealmBinding): IDLOperation {
+  const { arguments: argumentsList, returns, ...metadata } = member;
+  return Object.assign(new AssembledCallable(
+    argumentsList.map((argument) => new AssembledArgument(argument, binding.assembly)),
+    binding.assembly.getIDLType(returns),
+  ), metadata);
 }
 
 function createBinding(
@@ -389,7 +389,7 @@ function createBinding(
 }
 
 function resolve(
-  callables: AssembledCallable<IDLOperation>[],
+  callables: IDLOperation[],
   argumentsList: unknown[],
   binding: RealmBinding,
 ) {

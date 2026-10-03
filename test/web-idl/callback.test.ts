@@ -128,16 +128,29 @@ describe('Web IDL callbacks', () => {
     const ctx = { binding: binding, realm: binding.realm };
     const functionType = union(reference('Increment'), idlType.DOMString);
     const interfaceType = union(reference('NumberHandler'), idlType.DOMString);
+    const capture = vi.spyOn(targetRealm.callbacks, 'captureContext');
+    const functionConverter = binding.getConverter(binding.assembly.getIDLType(functionType));
+    const interfaceConverter = binding.getConverter(binding.assembly.getIDLType(interfaceType));
+    functionConverter.getInputSteps();
+    interfaceConverter.getInputSteps();
+    expect(capture).not.toHaveBeenCalled();
 
     for (const realm of [targetRealm, callbackRealm]) {
+      capture.mockClear();
+      const functionContext = {};
+      const interfaceContext = {};
+      capture.mockReturnValueOnce(functionContext).mockReturnValueOnce(interfaceContext);
       const callback = realm.evaluate('(value) => value + 1', 'union-callback.js');
       const object = realm.evaluate('({ handleEvent(value) { return value + 2; } })', 'union-callback-interface.js');
-      const functionRecord = ctx.binding.getConverter(ctx.binding.assembly.getIDLType(functionType), ctx.realm).jsToIDL(callback);
-      const interfaceRecord = ctx.binding.getConverter(ctx.binding.assembly.getIDLType(interfaceType), ctx.realm).jsToIDL(object);
+      const functionRecord = functionConverter.jsToIDL(callback);
+      const interfaceRecord = interfaceConverter.jsToIDL(object);
       if (!IDLCallbackFunction.is(functionRecord) || !IDLCallbackInterface.is(interfaceRecord)) {
         throw new Error('Union did not select its callback member');
       }
 
+      expect(capture).toHaveBeenCalledTimes(2);
+      expect(functionRecord.callbackContext).toBe(functionContext);
+      expect(interfaceRecord.callbackContext).toBe(interfaceContext);
       expect(functionRecord.realm).toBe(realm);
       expect(interfaceRecord.realm).toBe(realm);
       expect(ctx.binding.getConverter(ctx.binding.assembly.getIDLType(functionType), ctx.realm).idlToJS(functionRecord)).toBe(callback);
@@ -145,6 +158,10 @@ describe('Web IDL callbacks', () => {
       expect(functionRecord.invoke([4], 'rethrow')).toBe(5);
       expect(interfaceRecord.callUserObjectOperation('handleEvent', [4])).toBe(6);
     }
+    capture.mockClear();
+    expect(functionConverter.jsToIDL('plain string')).toBe('plain string');
+    expect(interfaceConverter.jsToIDL('plain string')).toBe('plain string');
+    expect(capture).not.toHaveBeenCalled();
   });
 
   it('reads the current callback-interface method on every invocation', () => {
@@ -338,7 +355,7 @@ describe('Web IDL callbacks', () => {
     const ctx = { binding: binding, realm: binding.realm };
     const type = nullable(reference('LegacyHandler'));
     const converter = ctx.binding.getConverter(ctx.binding.assembly.getIDLType(type), ctx.realm);
-    const convert = CallbackFunctionConverter.createAttributeSteps(converter, converter.legacyCallback!);
+    const convert = CallbackFunctionConverter.createAttributeSteps(converter, converter.type.legacyCallback!);
 
     expect(convert(1)).toBeNull();
     const object = {};

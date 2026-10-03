@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import {
-  defineCallbackInterface, defineDictionary, defineEnumeration, defineIncludes,
+  arg, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
   definePartialDictionary, definePartialInterface,
-  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, nullable, reference, roAttr, sequence, union,
+  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, nullable, op, reference, roAttr, sequence, union,
 } from '../../src/web-idl/core/index';
 
 describe('Web IDL definition assembly', () => {
@@ -19,15 +19,15 @@ describe('Web IDL definition assembly', () => {
     const nestedNumbers = sequence(numbers);
     const dictionaries = sequence(reference('Options'));
 
-    expect(assembly.isPrimitiveType(assembly.getIDLType(primitive))).toBe(true);
-    expect(assembly.canPassToImpl(assembly.getIDLType(primitive))).toBe(true);
-    expect(assembly.isPrimitiveType(assembly.getIDLType(numbers))).toBe(false);
-    expect(assembly.canPassToImpl(assembly.getIDLType(numbers))).toBe(true);
-    expect(assembly.canPassToImpl(assembly.getIDLType(nestedNumbers))).toBe(true);
-    expect(assembly.canPassToImpl(assembly.getIDLType(dictionaries))).toBe(false);
-    expect(assembly.isPrimitiveType(assembly.getIDLType(idlType.any))).toBe(false);
-    expect(assembly.canPassToImpl(assembly.getIDLType(idlType.any))).toBe(false);
-    expect(assembly.isPrimitiveType(assembly.getIDLType(idlType.symbol))).toBe(true);
+    expect(assembly.getIDLType(primitive).isPrimitive).toBe(true);
+    expect(assembly.getIDLType(primitive).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(numbers).isPrimitive).toBe(false);
+    expect(assembly.getIDLType(numbers).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(nestedNumbers).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(dictionaries).canPassToImpl).toBe(false);
+    expect(assembly.getIDLType(idlType.any).isPrimitive).toBe(false);
+    expect(assembly.getIDLType(idlType.any).canPassToImpl).toBe(false);
+    expect(assembly.getIDLType(idlType.symbol).isPrimitive).toBe(true);
   });
 
   it('resolves inheritance and partial interfaces independently of order', () => {
@@ -51,7 +51,7 @@ describe('Web IDL definition assembly', () => {
     expect(assembled?.primary).toBe(child);
     expect(assembled?.parentAssembled?.primary).toBe(parent);
     expect(assembled?.partials).toEqual([partial]);
-    expect(assembled?.members).toEqual([{
+    expect(assembled?.members).toMatchObject([{
       member: { ...partial.members[0], returns: assembly.builtinTypes.undefined },
       source: partial,
     }]);
@@ -87,11 +87,56 @@ describe('Web IDL definition assembly', () => {
     ]);
     const assembled = assembly.interfaces.get('Host');
 
-    expect(assembled?.members).toEqual([
+    expect(assembled?.members).toMatchObject([
       { member: { ...second.members[0], returns: assembly.builtinTypes.undefined }, source: second },
       { member: { ...secondPartial.members[0], returns: assembly.builtinTypes.undefined }, source: secondPartial },
       { member: { ...first.members[0], returns: assembly.builtinTypes.undefined }, source: first },
     ]);
+  });
+
+  it('uses the compiled mixin operation itself in each includer and overload group', () => {
+    const operation = op('run', idlType.undefined, [
+      arg('first', idlType.long), arg('rest', idlType.DOMString, { variadic: true }),
+    ]);
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'First', members: [] }),
+      defineInterface({ name: 'Second', members: [] }),
+      defineInterfaceMixin({ name: 'Runner', members: [operation] }),
+      defineIncludes({ interface: 'First', mixin: 'Runner' }),
+      defineIncludes({ interface: 'Second', mixin: 'Runner' }),
+    ]);
+    const first = assembly.interfaces.get('First')!;
+    const second = assembly.interfaces.get('Second')!;
+    const member = first.findMemberByKind('operation')!.member;
+
+    expect(member).not.toBe(operation);
+    expect(second.findMemberByKind('operation')!.member).toBe(member);
+    for (const assembled of [first, second]) {
+      const group = assembled.getOperationGroups('regular', () => true, assembly).get('regular:run')!;
+      expect(group.callables[0]).toBe(member);
+      expect(group.minimumArgumentCount).toBe(1);
+      expect(group.maximumArgumentCount).toBe(Infinity);
+    }
+    expect(member.minimumArgumentCount).toBe(1);
+    expect(member.getArgument(10)).toBe(member.variadicArgument);
+    expect(member.variadicArgument).toBe(member.arguments[1]);
+    expect(member.arguments[0]!.type).toBe(assembly.builtinTypes.long);
+    expect(operation.arguments[0]!.type).toBe(idlType.long);
+  });
+
+  it('finishes callback arity and forward references before exposing its callable contract', () => {
+    const callback = defineCallbackFunction({
+      name: 'Read', returns: reference('Result'),
+      arguments: [arg('index', idlType.long), arg('fallback', idlType.long, { optional: true })],
+    });
+    const assembly = new DefinitionAssembly([callback, defineDictionary({ name: 'Result', members: [] })]);
+    const assembled = assembly.callbackFunctions.get('Read')!;
+
+    expect(assembled.minimumArgumentCount).toBe(1);
+    expect(assembled.variadicArgument).toBeUndefined();
+    expect(assembled.getArgument(1)).toBe(assembled.arguments[1]);
+    expect(assembled.getArgument(2)).toBeUndefined();
+    expect(assembled.returns).toBe(assembly.getIDLType(callback.returns));
   });
 
   it('preserves ancestry, declaration identity, and nearest inherited attributes', () => {
@@ -182,6 +227,22 @@ describe('Web IDL definition assembly', () => {
     expect(assembled?.members.map(({ source }) => source)).toEqual([
       primary, partial,
     ]);
+  });
+
+  it('retains complete dictionary shapes after combining inheritance and partial members', () => {
+    const assembly = new DefinitionAssembly([
+      defineDictionary({
+        name: 'Complete', inherits: 'Base', members: [{ name: 'required', type: idlType.long, required: true }],
+      }),
+      defineDictionary({ name: 'Base', members: [{ name: 'flag', type: idlType.boolean, default: false }] }),
+      definePartialDictionary({ name: 'Complete', members: [{ name: 'text', type: idlType.DOMString, default: '' }] }),
+      defineDictionary({ name: 'Sparse', inherits: 'Complete', members: [member('optional')] }),
+      defineDictionary({ name: 'Empty', members: [] }),
+    ]);
+    expect(assembly.dictionaries.get('Base')!.hasCompleteShape).toBe(true);
+    expect(assembly.dictionaries.get('Complete')!.hasCompleteShape).toBe(true);
+    expect(assembly.dictionaries.get('Sparse')!.hasCompleteShape).toBe(false);
+    expect(assembly.dictionaries.get('Empty')!.hasCompleteShape).toBe(true);
   });
 
   it('orders inherited and partial dictionary members per Web IDL', () => {

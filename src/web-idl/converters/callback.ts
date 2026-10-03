@@ -69,6 +69,6 @@ export class CallbackInterfaceConverter<Type extends IDLCallbackInterfaceType = 
 }
 
 /** Select a callback object's realm without changing the conversion's allocation realm. */
-export function getCallbackRealm(value: object, realm: WebIDLRealm): WebIDLRealm {
+function getCallbackRealm(value: object, realm: WebIDLRealm): WebIDLRealm {
   return getPlatformRecord(value)?.realm ?? realm.callbacks.getAssociatedRealm(value);
 }

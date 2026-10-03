@@ -1,11 +1,12 @@
 import { InternalError, type PromiseResult, type PromiseResultType, type ResultValue } from '../../infra/index';
 import {
-  hasExtendedAttribute, idlType, type BufferTypeName, type ExtendedAttribute, type WebIDLType,
+  hasExtendedAttribute, idlType, type ExtendedAttribute, type WebIDLType,
   type IntegerLiteral, type Definition,
 } from '../core/index';
 
-import type {
-  IDLType, IDLStringType, IDLBufferType, IDLUnionType, IDLNullableType,
+import {
+  type IDLType, IDLAnyType, IDLUndefinedType, IDLBooleanType, IDLBigIntType, IDLObjectType, IDLSymbolType,
+  IDLStringType, IDLBufferType, IDLUnionType, IDLNullableType,
   IDLPromiseType, IDLObservableArrayType, IDLIntegerType, IDLFloatType, IDLEnumerationType, IDLSequenceType,
   IDLFrozenArrayType, IDLAsyncSequenceType, IDLRecordType, IDLDictionaryType, IDLCallbackFunctionType,
   IDLCallbackInterfaceType, IDLInterfaceType, IDLProxyType,
@@ -13,7 +14,7 @@ import type {
 import {
   AssembledInterfaces, AssembledCallbackInterfaces, AssembledCallbackFunctions, AssembledNamespaces,
   AssembledDictionaries, AssembledEnumerations, AssembledTypedefs, AssembledProxyObjects,
-  type AssembledCallbackFunction, type AssemblySteps,
+  type AssemblySteps,
 } from './assembled';
 
 /**
@@ -45,17 +46,8 @@ export class DefinitionAssembly {
   #types = new Map<WebIDLType, IDLType>();
   /** Named type inputs used by bindings without manufacturing declaration descriptors. */
   #namedTypes = new Map<string, IDLType>();
-  /** Flattened candidates retaining the conversion rules of their assembled use. */
-  #candidateTypes = new Map<IDLType, IDLType[]>();
-  /** Category lookups used to select a union branch from an incoming value. */
-  #unionCandidates = new Map<IDLType, UnionCandidates>();
-
-  /** Type categories, nullability, and container element types computed on first inspection. */
-  #typeAnalyses = new Map<IDLType, TypeAnalysis>();
   /** Completed JSON-type checks; incomplete recursive dictionary checks are not retained. */
   #jsonTypeResults = new Map<IDLType, boolean>();
-  /** Whether IDL values can reach implementations without unpacking or callback binding. */
-  #directImplTypes = new Map<IDLType, boolean>();
   /** Type comparison keys that ignore annotations for overload selection. */
   #overloadTypeKeys = new Map<IDLType, string>();
   /** Type comparison keys that retain conversion attributes and nested types. */
@@ -139,76 +131,10 @@ export class DefinitionAssembly {
   getSequenceType(elementType: IDLType): IDLSequenceType {
     let type = this.#sequenceTypesByElementType.get(elementType);
     if (!type) {
-      type = { kind: 'sequence', elementType, attributes: [] };
+      type = new IDLSequenceType(elementType);
       this.#sequenceTypesByElementType.set(elementType, type);
     }
     return type;
-  }
-
-  /** Get assembled candidates without descending into container contents. */
-  getCandidateTypes(type: IDLType): IDLType[] {
-    return this.#getCandidateTypes(type);
-  }
-
-  /** Resolve union members, removing nullable wrappers and nested unions. */
-  // https://webidl.spec.whatwg.org/#dfn-flattened-union-member-types
-  getFlattenedMemberTypes(type: IDLUnionType): IDLType[] {
-    return this.getCandidateTypes(type);
-  }
-
-  /** Retain the first assembled candidate in each union conversion category. */
-  // https://webidl.spec.whatwg.org/#js-union
-  getUnionCandidates(type: IDLType): UnionCandidates {
-    const cached = this.#unionCandidates.get(type);
-    if (cached) return cached;
-    const candidates: UnionCandidates = {
-      buffers: new Map(),
-      hasBoolean: false,
-      hasBigInt: false,
-      hasObject: false,
-      hasUndefined: false,
-      interfaces: [],
-      numeric: undefined,
-      string: undefined,
-      array: undefined,
-      sequence: undefined,
-      frozenArray: undefined,
-      asyncSequence: undefined,
-      record: undefined,
-      dictionary: undefined,
-      callbackFunction: undefined,
-      callbackInterface: undefined,
-    };
-    for (const candidate of this.#getCandidateTypes(type)) {
-      switch (candidate.kind) {
-        case 'integer': case 'float': candidates.numeric ??= candidate; break;
-        case 'string': candidates.string ??= candidate; break;
-        case 'boolean': candidates.hasBoolean = true; break;
-        case 'bigint': candidates.hasBigInt = true; break;
-        case 'object': candidates.hasObject = true; break;
-        case 'undefined': candidates.hasUndefined = true; break;
-        case 'buffer-source':
-          if (!candidates.buffers.has(candidate.name)) candidates.buffers.set(candidate.name, candidate);
-          break;
-        case 'enumeration': candidates.string ??= candidate; break;
-        case 'dictionary': candidates.dictionary ??= candidate; break;
-        case 'callback-function': candidates.callbackFunction ??= candidate; break;
-        case 'callback-interface': candidates.callbackInterface ??= candidate; break;
-        case 'interface': case 'proxy-object': candidates.interfaces.push(candidate); break;
-        case 'sequence':
-          candidates.sequence ??= candidate;
-          candidates.array ??= candidate;
-          break;
-        case 'frozen-array':
-          candidates.frozenArray ??= candidate;
-          candidates.array ??= candidate;
-          break;
-        case 'async-sequence': candidates.asyncSequence ??= candidate; break;
-        case 'record': candidates.record ??= candidate; break;
-      }
-    }
-    this.#unionCandidates.set(type, candidates);
-    return candidates;
   }
 
   /** Get an overload comparison key with aliases resolved and annotations ignored. */
@@ -264,106 +190,11 @@ export class DefinitionAssembly {
     return key;
   }
 
-  /** Whether every candidate produces a primitive value, including enumerations and null. */
-  isPrimitiveType(type: IDLType): boolean {
-    return this.getCandidateTypes(type).every((candidate) =>
-      candidate.kind === 'integer' || candidate.kind === 'float' || candidate.kind === 'string' ||
-      candidate.kind === 'enumeration' || candidate.kind === 'undefined' || candidate.kind === 'boolean' ||
-      candidate.kind === 'bigint' || candidate.kind === 'symbol');
-  }
-
-  /** Whether values of this type can pass directly from IDL to implementation code. */
-  // Only primitives and sequences of primitives bypass inspection. References,
-  // records, and other objects can need unwrapping, binding, or nested conversion.
-  canPassToImpl(type: IDLType): boolean {
-    const cached = this.#directImplTypes.get(type);
-    if (cached !== undefined) return cached;
-    const direct = this.getCandidateTypes(type).every((candidate) => {
-      if (candidate.kind === 'sequence') return this.canPassToImpl(candidate.elementType);
-      return this.isPrimitiveType(candidate);
-    });
-    this.#directImplTypes.set(type, direct);
-    return direct;
-  }
-
-  /** Whether an overload candidate includes a string or enumeration type. */
-  hasStringCandidate(type: IDLType): boolean {
-    return this.#getTypeAnalysis(type).hasString;
-  }
-
-  /** Whether an overload candidate includes a numeric type, excluding bigint. */
-  hasNumericCandidate(type: IDLType): boolean {
-    return this.#getTypeAnalysis(type).hasNumeric;
-  }
-
-  /** Match a buffer type through nullable wrappers and unions. */
-  hasBufferCandidate(type: IDLType, name: BufferTypeName): boolean {
-    return this.#getTypeAnalysis(type).bufferNames.has(name);
-  }
-
-  /** Whether an overload candidate includes ArrayBuffer or SharedArrayBuffer. */
-  hasArrayBufferCandidate(type: IDLType): boolean {
-    const { bufferNames } = this.#getTypeAnalysis(type);
-    return bufferNames.has('ArrayBuffer') || bufferNames.has('SharedArrayBuffer');
-  }
-
-  /** Match a type kind through aliases, nullable wrappers, and unions. */
-  hasCandidateKind(type: IDLType, kind: IDLType['kind']): boolean {
-    return this.#getTypeAnalysis(type).kinds.has(kind);
-  }
-
-  /** Whether an overload candidate includes a sequence or frozen array. */
-  hasSequenceCandidate(type: IDLType): boolean {
-    const { kinds } = this.#getTypeAnalysis(type);
-    return kinds.has('sequence') || kinds.has('frozen-array');
-  }
-
-  /** Count nullable members through aliases and nested unions. */
-  // https://webidl.spec.whatwg.org/#dfn-number-of-nullable-member-types
-  getNumberOfNullableMemberTypes(type: IDLUnionType): number {
-    return this.#getTypeAnalysis(type).nullableMemberCount;
-  }
-
-  /** Whether null is included directly or through a union member. */
-  // https://webidl.spec.whatwg.org/#dfn-includes-a-nullable-type
-  includesNullableType(type: IDLType): boolean {
-    return this.#getTypeAnalysis(type).includesNullable;
-  }
-
-  /** Whether undefined is included directly or through a union member. */
-  // https://webidl.spec.whatwg.org/#dfn-includes-undefined
-  includesUndefined(type: IDLType): boolean {
-    return this.#getTypeAnalysis(type).kinds.has('undefined');
-  }
-
-  /** Find the single numeric or bigint candidate used to materialize an integer default. */
-  getSoleNumericTypeName(type: IDLType): NumericTypeName | undefined {
-    return this.#getTypeAnalysis(type).soleNumericTypeName;
-  }
-
-  /** Find a sequence's element type through aliases, nullable wrappers, and unions. */
-  findSequenceElementType(type: IDLType): IDLType | undefined {
-    return this.#getTypeAnalysis(type).sequenceElementType;
-  }
-
-  /** Find a record's value type through aliases, nullable wrappers, and unions. */
-  findRecordValueType(type: IDLType): IDLType | undefined {
-    return this.#getTypeAnalysis(type).recordValueType;
-  }
-
   /** Resolve aliases and annotations before selecting an observable array's element type. */
   getObservableArrayElementType(type: IDLType): IDLType | undefined {
     return type.kind === 'observable-array'
       ? type.elementType
       : undefined;
-  }
-
-  /** The nullable callback whose attribute assignment accepts non-callable objects. */
-  // https://webidl.spec.whatwg.org/#LegacyTreatNonObjectAsNull
-  getNullableLegacyCallback(type: IDLType): AssembledCallbackFunction | null {
-    if (type.kind !== 'nullable' || type.innerType.kind !== 'callback-function') return null;
-    const assembled = type.innerType.assembled;
-    return assembled.treatsNonObjectAsNull() ? assembled : null;
   }
 
   /** Whether the declared type can contribute values to a default toJSON operation. */
@@ -396,190 +227,68 @@ export class DefinitionAssembly {
   }
 
   #assembleType(type: WebIDLType, inheritedAttributes?: ExtendedAttribute[]): IDLType {
-    const extendedAttributes = inheritedAttributes ? [...inheritedAttributes] : [];
-    const resolved = this.typedefs.resolve(type, extendedAttributes);
-    const origin = { attributes: extendedAttributes };
+    const attributes = inheritedAttributes ? [...inheritedAttributes] : [];
+    const resolved = this.typedefs.resolve(type, attributes);
     switch (resolved.kind) {
       case 'simple': {
         const { name } = resolved;
         switch (name) {
           case 'byte': case 'octet': case 'short': case 'unsigned short':
           case 'long': case 'unsigned long': case 'long long': case 'unsigned long long':
-            return {
-              ...origin, kind: 'integer', name,
-              integerMode: hasExtendedAttribute(extendedAttributes, 'EnforceRange') ? 'enforce-range'
-                : hasExtendedAttribute(extendedAttributes, 'Clamp') ? 'clamp' : 'wrap',
-            };
+            return new IDLIntegerType(name,
+              hasExtendedAttribute(attributes, 'EnforceRange') ? 'enforce-range'
+                : hasExtendedAttribute(attributes, 'Clamp') ? 'clamp' : 'wrap', attributes);
           case 'float': case 'unrestricted float': case 'double': case 'unrestricted double':
-            return { ...origin, kind: 'float', name };
+            return new IDLFloatType(name, attributes);
           case 'DOMString': case 'ByteString': case 'USVString':
-            return {
-              ...origin, kind: 'string', name,
-              nullToEmptyString: hasExtendedAttribute(extendedAttributes, 'LegacyNullToEmptyString'),
-            };
-          case 'any': case 'undefined': case 'boolean': case 'bigint': case 'object': case 'symbol':
-            return { ...origin, kind: name };
+            return new IDLStringType(name, hasExtendedAttribute(attributes, 'LegacyNullToEmptyString'), attributes);
+          case 'any': return new IDLAnyType(attributes);
+          case 'undefined': return new IDLUndefinedType(attributes);
+          case 'boolean': return new IDLBooleanType(attributes);
+          case 'bigint': return new IDLBigIntType(attributes);
+          case 'object': return new IDLObjectType(attributes);
+          case 'symbol': return new IDLSymbolType(attributes);
           default:
-            return {
-              ...origin, kind: 'buffer-source', name,
-              allowShared: hasExtendedAttribute(extendedAttributes, 'AllowShared'),
-              allowResizable: hasExtendedAttribute(extendedAttributes, 'AllowResizable'),
-            };
+            return new IDLBufferType(name, hasExtendedAttribute(attributes, 'AllowShared'),
+              hasExtendedAttribute(attributes, 'AllowResizable'), attributes);
         }
       }
       case 'interface':
-        return { ...origin, kind: 'interface', assembled: this.interfaces.getType(resolved.implClass).assembled };
+        return new IDLInterfaceType(this.interfaces.getType(resolved.implClass).assembled, attributes);
       case 'reference': {
         const name = resolved.name;
         const assembled = this.interfaces.get(name);
-        if (assembled) return { ...origin, kind: 'interface', assembled };
+        if (assembled) return new IDLInterfaceType(assembled, attributes);
         const dictionary = this.dictionaries.get(name);
-        if (dictionary) return { ...origin, kind: 'dictionary', assembled: dictionary };
+        if (dictionary) return new IDLDictionaryType(dictionary, attributes);
         const enumeration = this.enumerations.get(name);
-        if (enumeration) return { ...origin, kind: 'enumeration', assembled: enumeration };
+        if (enumeration) return new IDLEnumerationType(enumeration, attributes);
         const callbackFunction = this.callbackFunctions.get(name);
-        if (callbackFunction) return { ...origin, kind: 'callback-function', assembled: callbackFunction };
+        if (callbackFunction) return new IDLCallbackFunctionType(callbackFunction, attributes);
         const callbackInterface = this.callbackInterfaces.get(name);
-        if (callbackInterface) return { ...origin, kind: 'callback-interface', assembled: callbackInterface };
+        if (callbackInterface) return new IDLCallbackInterfaceType(callbackInterface, attributes);
         const proxy = this.proxyObjects.get(name);
-        if (proxy) return { ...origin, kind: 'proxy-object', assembled: proxy };
+        if (proxy) return new IDLProxyType(proxy, attributes);
         throw new InternalError(this.namespaces.has(name)
           ? `${name} is not a value type` : `Unknown Web IDL type ${name}`);
       }
       case 'nullable':
-        return {
-          ...origin, kind: 'nullable', innerType: extendedAttributes.length
-          ? this.#assembleType(resolved.type, extendedAttributes) : this.getIDLType(resolved.type),
-        };
+        return new IDLNullableType(attributes.length
+          ? this.#assembleType(resolved.type, attributes) : this.getIDLType(resolved.type), attributes);
       case 'union':
-        return {
-          ...origin, kind: 'union', memberTypes: resolved.types.map((member) => extendedAttributes.length
-          ? this.#assembleType(member, extendedAttributes) : this.getIDLType(member)),
-        };
-      case 'sequence': case 'async-sequence': case 'frozen-array': case 'observable-array':
-        return { ...origin, kind: resolved.kind, elementType: this.getIDLType(resolved.type) };
-      case 'promise':
-        return { ...origin, kind: 'promise', resultType: this.getIDLType(resolved.type) };
+        return new IDLUnionType(resolved.types.map((member) => attributes.length
+          ? this.#assembleType(member, attributes) : this.getIDLType(member)), attributes);
+      case 'sequence': return new IDLSequenceType(this.getIDLType(resolved.type), attributes);
+      case 'async-sequence': return new IDLAsyncSequenceType(this.getIDLType(resolved.type), attributes);
+      case 'frozen-array': return new IDLFrozenArrayType(this.getIDLType(resolved.type), attributes);
+      case 'observable-array': return new IDLObservableArrayType(this.getIDLType(resolved.type), attributes);
+      case 'promise': return new IDLPromiseType(this.getIDLType(resolved.type), attributes);
       case 'record':
-        return {
-          ...origin, kind: 'record',
-          // The declaration contract restricts record keys to the three string types.
-          keyType: this.getIDLType(resolved.key),
-          valueType: this.getIDLType(resolved.value),
-        };
+        // The declaration contract restricts record keys to the three string types.
+        return new IDLRecordType(this.getIDLType(resolved.key), this.getIDLType(resolved.value), attributes);
     }
-  }
-
-  #getCandidateTypes(type: IDLType): IDLType[] {
-    const cached = this.#candidateTypes.get(type);
-    if (cached) return cached;
-    let candidates: IDLType[];
-    if (type.kind === 'nullable') {
-      candidates = this.#getCandidateTypes(type.innerType);
-    } else if (type.kind === 'union') {
-      candidates = [];
-      for (const member of type.memberTypes) candidates.push(...this.#getCandidateTypes(member));
-    } else {
-      candidates = [type];
-    }
-    this.#candidateTypes.set(type, candidates);
-    return candidates;
-  }
-
-  // Prepare fixed classification and implementation-conversion answers without inspecting container contents.
-  #getTypeAnalysis(type: IDLType): TypeAnalysis {
-    const cached = this.#typeAnalyses.get(type);
-    if (cached) return cached;
-    const analysis: TypeAnalysis = {
-      bufferNames: new Set(),
-      kinds: new Set(),
-      hasString: false,
-      hasNumeric: false,
-      includesNullable: false,
-      nullableMemberCount: 0,
-      soleNumericTypeName: undefined,
-      sequenceElementType: undefined,
-      recordValueType: undefined,
-    };
-    let numericCount = 0;
-    for (const candidate of this.getCandidateTypes(type)) {
-      analysis.kinds.add(candidate.kind);
-      switch (candidate.kind) {
-        case 'integer': case 'float':
-          analysis.hasNumeric = true;
-          numericCount++;
-          analysis.soleNumericTypeName = candidate.name;
-          break;
-        case 'bigint':
-          numericCount++;
-          analysis.soleNumericTypeName = 'bigint';
-          break;
-        case 'string': case 'enumeration': analysis.hasString = true; break;
-        case 'buffer-source': analysis.bufferNames.add(candidate.name); break;
-        case 'record':
-          analysis.recordValueType ??= candidate.valueType;
-          break;
-        case 'sequence':
-          analysis.sequenceElementType ??= candidate.elementType;
-          break;
-      }
-    }
-    if (numericCount !== 1) analysis.soleNumericTypeName = undefined;
-
-    if (type.kind === 'union') {
-      for (let memberType of type.memberTypes) {
-        if (memberType.kind === 'nullable') {
-          analysis.nullableMemberCount++;
-          memberType = memberType.innerType;
-        }
-        if (memberType.kind === 'union') {
-          analysis.nullableMemberCount += this.#getTypeAnalysis(memberType).nullableMemberCount;
-        }
-      }
-    }
-    analysis.includesNullable = type.kind === 'nullable' || analysis.nullableMemberCount === 1;
-    this.#typeAnalyses.set(type, analysis);
-    return analysis;
   }
 }
-
-/** Fixed choices used to select a union branch from an incoming value. */
-type UnionCandidates = {
-  buffers: Map<BufferTypeName, IDLBufferType>;
-  hasBoolean: boolean;
-  hasBigInt: boolean;
-  hasObject: boolean;
-  hasUndefined: boolean;
-  interfaces: UnionInterfaceCandidate[];
-  numeric: IDLIntegerType | IDLFloatType | undefined;
-  string: IDLStringType | IDLEnumerationType | undefined;
-  array: IDLSequenceType | IDLFrozenArrayType | undefined;
-  sequence: IDLSequenceType | undefined;
-  frozenArray: IDLFrozenArrayType | undefined;
-  asyncSequence: IDLAsyncSequenceType | undefined;
-  record: IDLRecordType | undefined;
-  dictionary: IDLDictionaryType | undefined;
-  callbackFunction: IDLCallbackFunctionType | undefined;
-  callbackInterface: IDLCallbackInterfaceType | undefined;
-};
-
-/** Interface and proxy branches already linked to the definitions that recognize them. */
-export type UnionInterfaceCandidate = IDLInterfaceType | IDLProxyType;
-
-/** Answers that depend only on a descriptor and this assembly's declarations. */
-type TypeAnalysis = {
-  bufferNames: Set<BufferTypeName>;
-  kinds: Set<IDLType['kind']>;
-  hasString: boolean;
-  hasNumeric: boolean;
-  includesNullable: boolean;
-  nullableMemberCount: number;
-  soleNumericTypeName: NumericTypeName | undefined;
-  sequenceElementType: IDLType | undefined;
-  recordValueType: IDLType | undefined;
-};
-
-type NumericTypeName = IDLIntegerType['name'] | IDLFloatType['name'] | 'bigint';
 
 /** Static counterpart of declaration assembly; this mapping is confined to the input boundary. */
 type TypeFromDeclaration<Type extends WebIDLType> =
@@ -593,12 +302,12 @@ type TypeFromDeclaration<Type extends WebIDLType> =
                 : Extract<IDLType, { kind: Name; }>
       )
         : Type extends { kind: 'interface'; } ? IDLInterfaceType & ResultValue<PromiseResult<Type>>
-          : Type extends { kind: 'nullable'; } ? IDLNullableType
-            : Type extends { kind: 'union'; } ? IDLUnionType
-              : Type extends { kind: 'sequence'; } ? IDLSequenceType
-                : Type extends { kind: 'async-sequence'; } ? IDLAsyncSequenceType
-                  : Type extends { kind: 'frozen-array'; } ? IDLFrozenArrayType
+          : Type extends { kind: 'nullable'; type: infer Inner extends WebIDLType; } ? IDLNullableType<TypeFromDeclaration<Inner>>
+            : Type extends { kind: 'union'; types: (infer Member extends WebIDLType)[]; } ? IDLUnionType<TypeFromDeclaration<Member>>
+              : Type extends { kind: 'sequence'; type: infer Element extends WebIDLType; } ? IDLSequenceType<TypeFromDeclaration<Element>>
+                : Type extends { kind: 'async-sequence'; type: infer Element extends WebIDLType; } ? IDLAsyncSequenceType<TypeFromDeclaration<Element>>
+                  : Type extends { kind: 'frozen-array'; type: infer Element extends WebIDLType; } ? IDLFrozenArrayType<TypeFromDeclaration<Element>>
                     : Type extends { kind: 'observable-array'; } ? IDLObservableArrayType
-                      : Type extends { kind: 'record'; } ? IDLRecordType
-                        : Type extends { kind: 'promise'; } ? IDLPromiseType
+                      : Type extends { kind: 'record'; value: infer Value extends WebIDLType; } ? IDLRecordType<TypeFromDeclaration<Value>>
+                        : Type extends { kind: 'promise'; type: infer Result extends WebIDLType; } ? IDLPromiseType<TypeFromDeclaration<Result>>
                           : IDLType;

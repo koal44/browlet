@@ -4,7 +4,7 @@ import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../
 import type { IDLIterable, AssembledInterface } from '../../assembly/index';
 import { IDLCallbackFunction } from '../../values/index';
 import {
-  getImplementationRecord, getPlatformRecord, type StampedImplInstance, type PlatformRecord,
+  getImplementationRecord, getPlatformRecord, type StampedImplInstance,
 } from '../platform';
 import type { RealmBinding } from '../realm';
 
@@ -87,8 +87,8 @@ export class SynchronousIterableBinding {
   ): JSFunction<StampedDefaultIterator> {
     return this.#binding.realm.createFunction(
       (thisArgument) => {
-        const receiver = this.#getReceiverRecord(
-          thisArgument, assembled, securityIdentifier
+        const receiver = this.#binding.getDirectReceiverRecord(
+          thisArgument, assembled, securityIdentifier, 'method',
         );
         const iterator = this.#binding.realm.createOrdinaryObject(
           this.#getIteratorPrototypeObject(assembled, member),
@@ -111,8 +111,8 @@ export class SynchronousIterableBinding {
   ): JSFunction {
     return this.#binding.realm.createFunction(
       (thisArgument, argumentsList) => {
-        const receiver = this.#getReceiverRecord(
-          thisArgument, assembled, 'forEach'
+        const receiver = this.#binding.getDirectReceiverRecord(
+          thisArgument, assembled, 'forEach', 'method',
         );
         const callback = this.#binding.getConverter(this.#binding.assembly.getNamedType('Function')).jsToIDL(argumentsList[0]);
         if (!IDLCallbackFunction.is(callback)) {
@@ -245,24 +245,6 @@ export class SynchronousIterableBinding {
       );
     }
     return Reflect.apply(steps, implInst, []);
-  }
-
-  // Project adapter for the receiver and security checks in Web IDL §3.7.9 Iterable declarations.
-  #getReceiverRecord(
-    value: unknown,
-    assembled: AssembledInterface,
-    identifier: string,
-  ): PlatformRecord {
-    if (!isObject(value)) this.#throwTypeError('Illegal invocation');
-    const record = getPlatformRecord(value);
-    if (record?.binding.world !== this.#binding.world) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    this.#binding.realm.performSecurityCheck(value, identifier, 'method');
-    if (!record.implements(assembled)) {
-      this.#throwTypeError('Illegal invocation');
-    }
-    return record;
   }
 
   // Project helper: throw a TypeError allocated in this binding's realm.
