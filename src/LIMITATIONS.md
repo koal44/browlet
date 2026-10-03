@@ -90,7 +90,7 @@ the exact no-result-capability form of `PerformPromiseThen`. Browlet also marks 
 Promise handled by attaching a reaction; the addon does not expose V8's existing
 `MarkAsHandled` API. Replace these substitutes with exact engine operations;
 preserve typed settlement, exception identity, handled state, and queue ownership.
-Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promises](web-idl/constructs/promise.ts).
+Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promises](web-idl/values/promise.ts).
 
 ## Buffers and engine internal slots
 

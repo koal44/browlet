@@ -10,7 +10,6 @@ import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
   defineInterface, idlType, type AsyncIterableMember,
 } from '../../src/web-idl/core/index';
-import { missingArgument } from '../../src/web-idl/binding/overload';
 
 describe('Web IDL asynchronously iterable declarations', () => {
   it('projects pair methods, iterator prototypes, arguments, and results', async () => {
@@ -47,10 +46,10 @@ describe('Web IDL asynchronously iterable declarations', () => {
       .toMatchObject({ configurable: true, enumerable: false, writable: true });
 
     const iterator = Reflect.apply(entries, object, [undefined, undefined]) as object;
-    expect(initialized).toEqual([[missingArgument, 'fallback']]);
+    expect(initialized).toEqual([[undefined, 'fallback']]);
     Reflect.apply(entries, object, [300, undefined]);
     expect(initialized).toEqual([
-      [missingArgument, 'fallback'],
+      [undefined, 'fallback'],
       [127, 'fallback'],
     ]);
     const iteratorPrototype = Object.getPrototypeOf(iterator) as object;

@@ -1,16 +1,15 @@
-import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../js-engine/index';
-import { InternalPromise } from '../../infra/promises';
-import { endOfIteration } from '../../infra/iteration';
-import { Stamper } from '../../infra/stamper';
-import type { AssembledArgument, AssembledCallable, AssembledInterface } from '../assembled';
-import { jsToIDL, idlToJS } from '../conversion';
-import { idlType, type AsyncIterableMember } from '../core/index';
+import { InternalError, endOfIteration, InternalPromise, Stamper } from '../../../infra/index';
 
-import { missingArgument } from './overload';
-import { getPlatformRecord, type PlatformRecord, type StampedImplInstance } from './platform-object';
-import { PromiseCarrier } from '../constructs/promise';
-import type { RealmBinding } from './realm';
-import { InternalError } from '../../infra/internal-error';
+import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../../js-engine/index';
+
+import { idlType, type AsyncIterableMember } from '../../core/index';
+
+import type { AssembledArgument, AssembledCallable, AssembledInterface } from '../../assembled';
+
+import { getPlatformRecord, type PlatformRecord, type StampedImplInstance } from '../platform';
+import type { RealmBinding } from '../realm';
+
+import { IDLPromise } from '../../values/index';
 
 /** Install async iterator methods and prototypes in one realm. */
 export class AsyncIterableBinding {
@@ -111,7 +110,7 @@ export class AsyncIterableBinding {
     try {
       state = this.#getIteratorState(thisArgument, assembled, 'next');
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
+      return IDLPromise.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
     }
     return state.next(this.#binding);
   }
@@ -121,7 +120,7 @@ export class AsyncIterableBinding {
     try {
       state = this.#getIteratorState(thisArgument, assembled, 'return');
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
+      return IDLPromise.rejected(exception, idlType.any, this.#binding.realm, this.#binding.realizeException).promise;
     }
     return state.return(value, this.#binding);
   }
@@ -132,10 +131,10 @@ export class AsyncIterableBinding {
       const value = argumentsList[index];
       if (index >= argumentsList.length || value === undefined) {
         return argument.primary.default === undefined
-          ? missingArgument
-          : this.#binding.getConversionContext(argument.type).createDefault(argument.primary.default);
+          ? undefined
+          : this.#binding.getConverter(argument.type).createDefault(argument.primary.default);
       }
-      return jsToIDL(value, this.#binding.getConversionContext(argument.type));
+      return this.#binding.getConverter(argument.type).jsToIDL(value);
     });
   }
 
@@ -182,7 +181,7 @@ class AsyncIteratorRecord {
   /** Whether completion, closing, or failure has ended implementation iteration. */
   #finished = false;
   /** Last queued operation, used to serialize overlapping next and return calls. */
-  #ongoing: PromiseCarrier | null = null;
+  #ongoing: IDLPromise | null = null;
 
   constructor(
     implementationIterator: object,
@@ -216,10 +215,10 @@ class AsyncIteratorRecord {
 
   // nextSteps and its fulfillment/rejection steps.
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
-  #runNext(methodBinding: RealmBinding): PromiseCarrier {
+  #runNext(methodBinding: RealmBinding): IDLPromise {
     const { realm, realizeException } = methodBinding;
     if (this.#finished) {
-      return PromiseCarrier.fromJS(realm.createIteratorResultObject(undefined, true), idlType.any, realm, realizeException);
+      return IDLPromise.fromJS(realm.createIteratorResultObject(undefined, true), idlType.any, realm, realizeException);
     }
 
     const steps = getAsyncIteratorSteps(this.assembled, this.member, methodBinding);
@@ -228,7 +227,7 @@ class AsyncIteratorRecord {
       nextPromise = steps.next(this.implementationIterator);
     } catch (exception) {
       this.#finished = true;
-      return PromiseCarrier.rejected(exception, idlType.any, realm, realizeException);
+      return IDLPromise.rejected(exception, idlType.any, realm, realizeException);
     }
 
     return this.#react(nextPromise,
@@ -251,31 +250,31 @@ class AsyncIteratorRecord {
 
   // returnSteps.
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
-  #runReturn(value: unknown, methodBinding: RealmBinding): PromiseCarrier {
+  #runReturn(value: unknown, methodBinding: RealmBinding): IDLPromise {
     const { realm, realizeException } = methodBinding;
-    if (this.#finished) return PromiseCarrier.fromJS(value, idlType.any, realm, realizeException);
+    if (this.#finished) return IDLPromise.fromJS(value, idlType.any, realm, realizeException);
     this.#finished = true;
 
     const steps = getAsyncIteratorSteps(this.assembled, this.member, methodBinding);
     if (!steps.return) {
-      return PromiseCarrier.rejected(
+      return IDLPromise.rejected(
         new InternalError('Asynchronous iterator return steps are missing'), idlType.any, realm, realizeException,
       );
     }
     try {
       return this.#react(steps.return(this.implementationIterator, value), () => undefined, undefined, methodBinding);
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, realm, realizeException);
+      return IDLPromise.rejected(exception, idlType.any, realm, realizeException);
     }
   }
 
   // Serialize next/return using the ongoing promise, including after closing.
   // https://webidl.spec.whatwg.org/#dfn-asynchronous-iterator-prototype-object
-  #enqueue(action: () => PromiseCarrier, methodBinding: RealmBinding): PromiseCarrier {
+  #enqueue(action: () => IDLPromise, methodBinding: RealmBinding): IDLPromise {
     const ongoing = this.#ongoing;
     if (!ongoing) return this.#ongoing = action();
 
-    const afterOngoing = new PromiseCarrier(idlType.any, methodBinding.realm, methodBinding.realizeException);
+    const afterOngoing = new IDLPromise(idlType.any, methodBinding.realm, methodBinding.realizeException);
     const onSettled = methodBinding.realm.createFunction(
       () => {
         try {
@@ -297,8 +296,8 @@ class AsyncIteratorRecord {
     fulfilled: (value: unknown) => unknown,
     rejected: ((reason: unknown) => unknown) | undefined,
     methodBinding: RealmBinding,
-  ): PromiseCarrier {
-    const result = new PromiseCarrier(idlType.any, methodBinding.realm, methodBinding.realizeException);
+  ): IDLPromise {
+    const result = new IDLPromise(idlType.any, methodBinding.realm, methodBinding.realizeException);
     const onFulfilled = methodBinding.realm.createFunction(
       (_thisArgument, [value]) => {
         try {
@@ -340,16 +339,16 @@ class AsyncIteratorRecord {
   #convertResult(next: unknown, methodBinding: RealmBinding): unknown {
     const member = this.member;
     if (member.key === undefined) {
-      return idlToJS(next, this.receiverBinding.getConversionContext(member.value, methodBinding.realm));
+      return this.receiverBinding.getConverter(member.value, methodBinding.realm).idlToJS(next);
     }
     if (!Array.isArray(next) || next.length < 2) {
       throw new InternalError('Pair asynchronous iterator produced a non-pair value');
     }
 
     const key = this.kind === 'value' ? undefined
-      : idlToJS(next[0], this.receiverBinding.getConversionContext(member.key, methodBinding.realm));
+      : this.receiverBinding.getConverter(member.key, methodBinding.realm).idlToJS(next[0]);
     const value = this.kind === 'key' ? undefined
-      : idlToJS(next[1], this.receiverBinding.getConversionContext(member.value, methodBinding.realm));
+      : this.receiverBinding.getConverter(member.value, methodBinding.realm).idlToJS(next[1]);
     if (this.kind === 'key') return key;
     if (this.kind === 'value') return value;
 

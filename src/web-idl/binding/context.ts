@@ -1,18 +1,18 @@
-import type { InternalPromise } from '../../infra/promises';
-import type { AssembledInterface } from '../assembled';
-import type { GlobalObjectAllocation, RealmBinding } from './realm';
-import type { ImplementationClass, ImplementationType, WebIDLType } from '../core/types';
-import { jsToIDL, idlToJS } from '../conversion';
+import {
+  InternalError, InternalPromise, type InternalPromiseWithResolvers, type PromiseResultType,
+} from '../../infra/index';
+
+import type { ImplementationClass, ImplementationType, InjectedArgument, WebIDLType } from '../core/index';
+
 import type { WebIDLEnvironment } from '../environment';
+
 import {
   getImplementationRecord, getPlatformRecord, stampImplementation, type StampedImplInstance,
   type StampedPlatformObject, type PlatformRecord,
-} from './platform-object';
-import {
-  constructImplementationObject, resolveImplementationArguments,
-} from '../constructs/implementation';
-import { InternalError } from '../../infra/internal-error';
-import { createWebIDLPromiseConstructor } from '../constructs/promise';
+} from './platform';
+import type { GlobalObjectAllocation, RealmBinding } from './realm';
+
+import { IDLPromise } from '../values/index';
 
 /** A realm's Web IDL operations and environment within one binding world. */
 export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
@@ -67,7 +67,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   jsToImpl(value: unknown, type: WebIDLType): unknown;
   jsToImpl(value: unknown, type: WebIDLType): unknown {
     return this.#binding.implementationConverter.idlToImpl(
-      jsToIDL(value, this.#binding.getConversionContext(type)),
+      this.#binding.getConverter(type).jsToIDL(value),
       type,
       {},
       this,
@@ -76,7 +76,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   /** Convert a declared implementation result to its author-facing representation. */
   implToJS(value: unknown, type: WebIDLType): unknown {
-    return idlToJS(value, this.#binding.getConversionContext(type));
+    return this.#binding.getConverter(type).idlToJS(value);
   }
 
   /** Turn an internal exception request into a realm-owned error, preserving any prior realization. */
@@ -106,13 +106,37 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     implClass: ImplementationClass<T>,
     ...argumentsList: unknown[]
   ): StampedImplInstance<T> {
-    const assembled = this.#getImplementationInterface(implClass);
+    const assembled = this.#binding.resolveInterface(implClass);
     const definition = assembled.primary.implementation;
-    const implInst = constructImplementationObject(
-      implClass,
-      resolveImplementationArguments(argumentsList, definition?.constructWith ?? [], this),
+    const implInst: T = Reflect.construct(
+      implClass as new (...argumentsList: unknown[]) => T,
+      this.resolveArguments(argumentsList, definition?.constructWith ?? []),
     );
     return stampImplementation(implInst, assembled, this.#binding);
+  }
+
+  /** Merge converted arguments with dependencies resolved against receiver and method contexts. */
+  resolveArguments(
+    argumentsList: unknown[],
+    injectedArguments: InjectedArgument[],
+    methodContext: BindingContext = this,
+  ): unknown[] {
+    if (injectedArguments.length === 0) return argumentsList;
+
+    const result: unknown[] = [];
+    for (const { index, resolve } of injectedArguments) {
+      if (Object.hasOwn(result, index)) {
+        throw new InternalError(`Injected argument ${index} is declared more than once`);
+      }
+      result[index] = resolve(this, methodContext);
+    }
+
+    let index = 0;
+    for (const value of argumentsList) {
+      while (Object.hasOwn(result, index)) index++;
+      result[index++] = value;
+    }
+    return result;
   }
 
   /** Return the stamped instance if the platform object implements the requested interface in this world. */
@@ -120,7 +144,7 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     platformObject: unknown,
     implClass: ImplementationClass<T>,
   ): StampedImplInstance<T> | undefined {
-    const assembled = this.#getImplementationInterface(implClass);
+    const assembled = this.#binding.resolveInterface(implClass);
     const record = getPlatformRecord(platformObject);
     return record?.binding.world === this.#binding.world &&
       record.implements(assembled)
@@ -135,24 +159,33 @@ export class BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   /** Establish an implementation's binding record without projection, preserving an existing owner. */
   associate<T extends object>(implClass: ImplementationClass<T>, implInst: T): PlatformRecord<T> {
-    if (getPlatformRecord(implInst)) {
-      throw new InternalError('Expected an implementation target');
-    }
-    const record = this.#binding.associateImplementationObject(
-      implInst,
-      this.#getImplementationInterface(implClass),
-    );
-    if (!record) {
-      throw new InternalError('Implementation target is associated with another interface');
-    }
-    return record;
+    return this.#binding.associate(implClass, implInst);
   }
+}
 
-  #getImplementationInterface(implClass: ImplementationClass): AssembledInterface {
-    const assembled = this.#binding.assembly.interfaces.get(implClass);
-    if (!assembled) {
-      throw new InternalError('No Web IDL interface is registered for this implementation');
+/** Add this binding's result conversion to the realm's implementation Promise constructor. */
+function createWebIDLPromiseConstructor(context: BindingContext): typeof InternalPromise {
+  return class WebIDLPromise<T> extends context.realm.Promise<T> {
+    static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
+      if (type.kind === 'implementation') return super.withResolvers(type);
+      const resultType = type as ImplementationType<T>;
+      const idlPromise = new IDLPromise(resultType, context.realm, (value) => context.realizeException(value));
+      const promise = new this(idlPromise.promise, type, (value) => context.jsToImpl(value, resultType));
+      return {
+        promise,
+        get isResolved() { return idlPromise.resolved; },
+        resolve(value) {
+          try {
+            if (value instanceof InternalPromise) {
+              idlPromise.resolve(value.backing);
+            } else {
+              // Conversion precedes the native resolving function, including reentrant resolution.
+              idlPromise.resolve(context.implToJS(value, resultType));
+            }
+          } catch (error) { idlPromise.reject(error); }
+        },
+        reject(reason) { idlPromise.reject(reason); },
+      };
     }
-    return assembled;
-  }
+  };
 }

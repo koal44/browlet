@@ -3,7 +3,7 @@ import { itPassesWith } from '../test-runtime';
 import type { JSFunction } from '../../src/js-engine/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { ctor, defineInterface, impl } from '../../src/web-idl/core/index';
-import { getPlatformRecord } from '../../src/web-idl/binding/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/binding/platform';
 import { TestRealm, getInstalledInterface } from './test-realm';
 
 describe('interface constructor prototype fallback', () => {

@@ -9,8 +9,8 @@ import { createOpaqueOrigin, type Origin } from
 import { parseURL, type URLRecord } from '../../../src/url/url';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly';
 import { RealmBinding } from '../../../src/web-idl/binding/realm';
-import { CallbackFunctionCarrier } from '../../../src/web-idl/constructs/callback';
-import { jsToIDL } from '../../../src/web-idl/conversion';
+import { IDLCallbackFunction } from '../../../src/web-idl/values/callback';
+
 import {
   defineCallbackFunction, idlType, reference,
 } from '../../../src/web-idl/core/index';
@@ -162,12 +162,12 @@ describe('HTML callback and script-entry lifecycle', () => {
     );
     Reflect.set(incumbentRealm.realm.global, 'callback', callback);
     Reflect.set(incumbentRealm.realm.global, 'convert', (value: unknown) =>
-      jsToIDL(value, incumbentContext.getConversionContext(reference('LifecycleCallback'))));
+      incumbentContext.getConverter(reference('LifecycleCallback')).jsToIDL(value));
     const callbackValue = incumbentRealm.realm.evaluate(
       'convert(callback)',
       'convert-callback.js',
     );
-    if (!CallbackFunctionCarrier.is(callbackValue)) {
+    if (!IDLCallbackFunction.is(callbackValue)) {
       throw new Error('LifecycleCallback did not convert to a callback value');
     }
     Reflect.set(incumbentRealm.realm.global, 'invoke', () =>
@@ -230,12 +230,12 @@ describe('HTML callback and script-entry lifecycle', () => {
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
     Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
-      jsToIDL(value, context.getConversionContext(reference('LifecycleCallback'))));
+      context.getConverter(reference('LifecycleCallback')).jsToIDL(value));
     const callbackValue = entry.realm.evaluate(
       'convert(() => {})',
       'create-reentrant-callback.js',
     );
-    if (!CallbackFunctionCarrier.is(callbackValue)) {
+    if (!IDLCallbackFunction.is(callbackValue)) {
       throw new Error('LifecycleCallback did not convert to a callback value');
     }
     checkpoint.mockClear();

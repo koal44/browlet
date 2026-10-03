@@ -23,6 +23,7 @@ export type {
   DictionaryDefinition, PartialDictionaryDefinition, DictionaryMember,
   NamespaceDefinition, PartialNamespaceDefinition, NamespaceMember,
   CallbackInterfaceDefinition, CallbackFunctionDefinition, ProxyObjectDefinition, Definition,
+  EnumerationDefinition, TypedefDefinition,
 } from './declarations';
 
 export {
@@ -31,7 +32,7 @@ export {
   reference, implementationType, nullable, union, sequence, asyncSequence, record, promise,
   frozenArray, observableArray, annotated,
   integer, decimal, xattr,
-  impl, atArg, invokeWith, unwrapArg, cbDict, onError,
+  impl, atArg, invokeWith, unwrapArg, cbDict, onError, hasExtendedAttribute,
 } from './helpers';
 
 export {
@@ -40,7 +41,8 @@ export {
 } from './types';
 export type {
   ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, StringifierMember, ArgumentDefinition,
-  WebIDLType, AnnotatedType, AsyncSequenceType, UnionType,
+  WebIDLType, AnnotatedType, AsyncSequenceType, NullableType, UnionType,
+  SimpleType, ReferenceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposure, ExtendedAttribute, NamedArgumentsExtendedAttribute,

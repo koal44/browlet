@@ -7,8 +7,8 @@ import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
 import {
   BindingWorld, defineInterface, idlType, impl, iter, reference, type IterableMember,
 } from '../../src/web-idl/index';
-import type { ValuePair } from '../../src/web-idl/binding/iterable';
-import { getPlatformRecord } from '../../src/web-idl/binding/platform-object';
+import type { ValuePair } from '../../src/web-idl/binding/realm/iterable';
+import { getPlatformRecord } from '../../src/web-idl/binding/platform';
 
 describe('Web IDL synchronous iterable declarations', () => {
   it.each(['entries', 'keys', 'values', 'forEach'])(

@@ -11,9 +11,9 @@ import {
   stringifier,
   union, invokeWith, xattr,
 } from '../../src/web-idl/core/index';
-import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/binding/platform-object';
+import { getImplementationObject, getImplementationRecord } from '../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../src/web-idl/binding/world';
-import { CallbackFunctionStamper, type StampedCallbackFunction } from '../../src/web-idl/constructs/callback';
+import { CallbackFunctionStamper, type StampedCallbackFunction } from '../../src/web-idl/binding/realm/callback';
 import type { WebIDLRealm } from '../../src/web-idl/index';
 
 describe('Web IDL implementation bindings', () => {

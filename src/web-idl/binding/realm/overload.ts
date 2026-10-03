@@ -1,14 +1,17 @@
-import { getPlatformRecord, isPlatformObject } from './platform-object';
-import {
-  getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod,
-} from '../../js-engine/index';
-import type { AssembledArgument, AssembledCallable, AssembledOverloads } from '../assembled';
-import { AsyncSequenceCarrier } from '../constructs/async-sequence';
-import { jsToIDL, createDefaultValueFactory } from '../conversion';
-import { jsToIDLFrozenArray, jsToIDLSequence } from '../constructs/sequence';
-import type { WebIDLType } from '../core/index';
-import type { RealmBinding } from './realm';
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
+
+import { getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod } from '../../../js-engine/index';
+
+import type { WebIDLType } from '../../core/index';
+
+import type { AssembledArgument, AssembledCallable, AssembledOverloads } from '../../assembled';
+
+import { getPlatformRecord, isPlatformObject } from '../platform';
+import type { RealmBinding } from '../realm';
+
+import { IDLAsyncSequence } from '../../values/index';
+
+import type { SequenceConverter } from '../../converters/index';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */
 export function createOverloadResolver<Callable extends AssembledCallable>(
@@ -20,13 +23,13 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
   }
   const callable = overloads.callables[0]!;
   const converters = callable.arguments.map((argument) => {
-    const context = binding.getConversionContext(argument.type);
-    const convert = context.getJSToIDLConverter();
+    const converter = binding.getConverter(argument.type);
+    const convert = converter.getJSToIDLSteps();
     const getDefault = argument.primary.default === undefined
       ? undefined
-      : createDefaultValueFactory(argument.primary.default);
+      : converter.createDefaultSteps(argument.primary.default);
     return (value: unknown) => argument.optionality === 'optional' && value === undefined
-      ? getDefault ? getDefault(context) : missingArgument
+      ? getDefault?.()
       : convert(value);
   });
   const variadic = callable.variadicArgument && converters.at(-1);
@@ -104,7 +107,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
     if (!asyncSequence || asyncSequence.kind !== 'async-sequence') {
       throw new InternalError('Iterator method selected a non-async-sequence overload');
     }
-    values.push(new AsyncSequenceCarrier(
+    values.push(new IDLAsyncSequence(
       argumentsList[i] as object, asyncSequence.type, asyncSequenceMethod.method, asyncSequenceMethod.type,
     ));
     i++;
@@ -112,7 +115,8 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   if (i === distinguishingIndex && method) {
     const type = selected.getArgument(i)!.type;
-    const sequenceLike = binding.assembly.getUnionCandidates(type).array?.resolvedType;
+    const candidate = binding.assembly.getUnionCandidates(type).array;
+    const sequenceLike = candidate?.resolvedType;
     if (
       !sequenceLike ||
       (sequenceLike.kind !== 'sequence' &&
@@ -120,17 +124,8 @@ export function resolveOverload<Callable extends AssembledCallable>(
     ) {
       throw new InternalError('Iterator method selected a non-sequence-like overload');
     }
-    values.push(sequenceLike.kind === 'sequence'
-      ? jsToIDLSequence(
-        argumentsList[i] as object,
-        binding.getConversionContext(sequenceLike.type),
-        method,
-      )
-      : jsToIDLFrozenArray(
-        argumentsList[i] as object,
-        binding.getConversionContext(sequenceLike.type),
-        method,
-      ));
+    const converter = binding.getConverter(candidate.declaredType) as SequenceConverter;
+    values.push(converter.jsToIDLIterable(argumentsList[i] as object, method));
     i++;
   }
 
@@ -146,9 +141,9 @@ export function resolveOverload<Callable extends AssembledCallable>(
   while (i < selected.arguments.length) {
     const argument = selected.arguments[i]!;
     if (argument.primary.default !== undefined) {
-      values.push(binding.getConversionContext(argument.type).createDefault(argument.primary.default));
+      values.push(binding.getConverter(argument.type).createDefault(argument.primary.default));
     } else if (argument.optionality !== 'variadic') {
-      values.push(missingArgument);
+      values.push(undefined);
     }
     i++;
   }
@@ -160,9 +155,6 @@ export type ResolvedOverload<Callable extends AssembledCallable> = {
   callable: Callable;
   values: unknown[];
 };
-
-export const missingArgument: unique symbol = Symbol('Web IDL missing argument');
-export type MissingArgument = typeof missingArgument;
 
 // Extracted from Web IDL §3.6 Overload resolution algorithm — select by the distinguishing argument.
 function resolveDistinguishingArgument<Callable extends AssembledCallable>(
@@ -348,10 +340,10 @@ function convertArgument(
 ): unknown {
   if (argument.optionality === 'optional' && value === undefined) {
     return argument.primary.default === undefined
-      ? missingArgument
-      : binding.getConversionContext(argument.type).createDefault(argument.primary.default);
+      ? undefined
+      : binding.getConverter(argument.type).createDefault(argument.primary.default);
   }
-  return jsToIDL(value, binding.getConversionContext(argument.type));
+  return binding.getConverter(argument.type).jsToIDL(value);
 }
 
 // Project helper: test candidate types against a platform object's implemented interfaces.

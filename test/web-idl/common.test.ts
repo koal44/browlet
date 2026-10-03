@@ -5,14 +5,13 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 
-import { CallbackFunctionCarrier } from '../../src/web-idl/constructs/callback';
+import { IDLCallbackFunction } from '../../src/web-idl/values/callback';
 import {
   allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL, functionIDL,
   voidFunctionIDL, webIDLCommonDefinitions,
 } from '../../src/web-idl/core/common';
-import { jsToIDL } from '../../src/web-idl/conversion';
-import { reference } from '../../src/web-idl/core/index';
-import { serializeDefinitions } from '../../src/web-idl/core/index';
+
+import { reference, serializeDefinitions } from '../../src/web-idl/core/index';
 
 describe('Web IDL common definitions', () => {
   it('represents the common typedefs and callbacks losslessly', () => {
@@ -41,14 +40,14 @@ callback VoidFunction = undefined();`);
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const function_ = jsToIDL(realm.evaluate(
+    const function_ = binding.getConverter(reference('Function')).jsToIDL(realm.evaluate(
       '(function (...args) { return args; })',
       'common-function.js',
-    ), binding.getConversionContext(reference('Function')));
-    const voidFunction = jsToIDL(realm.evaluate('() => 42', 'common-void-function.js'), binding.getConversionContext(reference('VoidFunction')));
+    ));
+    const voidFunction = binding.getConverter(reference('VoidFunction')).jsToIDL(realm.evaluate('() => 42', 'common-void-function.js'));
     if (
-      !CallbackFunctionCarrier.is(function_) ||
-      !CallbackFunctionCarrier.is(voidFunction)
+      !IDLCallbackFunction.is(function_) ||
+      !IDLCallbackFunction.is(voidFunction)
     ) {
       throw new Error('Common callbacks did not convert to callback values');
     }

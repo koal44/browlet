@@ -10,7 +10,7 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { AssembledCallable, AssembledOverloads } from '../../src/web-idl/assembled';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
-import { createOverloadResolver, missingArgument, resolveOverload } from '../../src/web-idl/binding/overload';
+import { createOverloadResolver, resolveOverload } from '../../src/web-idl/binding/realm/overload';
 
 describe('Web IDL effective overload sets', () => {
   it.each(['direct', 'prepared'] as const)('fills optional defaults before an omitted or repeated variadic argument (%s)', (mode) => {
@@ -32,7 +32,7 @@ describe('Web IDL effective overload sets', () => {
     expect(() => resolveArguments()).toThrow(binding.realm.intrinsics.typeError);
   });
 
-  it('keeps mutable defaults fresh and distinguishes omitted arguments in a prepared signature', () => {
+  it('keeps mutable defaults fresh and leaves omitted arguments without defaults undefined', () => {
     const binding = createBinding([]);
     const callable = operation([
       { name: 'values', optional: true, default: emptySequence, type: sequence(idlType.double) },
@@ -42,8 +42,8 @@ describe('Web IDL effective overload sets', () => {
     const first = resolve([]).values;
     const values = first[0] as number[];
     values.push(99);
-    expect(first[1]).toBe(missingArgument);
-    expect(resolve([]).values).toEqual([[], missingArgument]);
+    expect(first[1]).toBeUndefined();
+    expect(resolve([]).values).toEqual([[], undefined]);
     expect(resolve([undefined, 'label']).values).toEqual([[], 'label']);
     expect(resolve([[1, '2'], null, Symbol('ignored')]).values).toEqual([[1, 2], 'null']);
   });
@@ -297,7 +297,7 @@ describe('Web IDL effective overload sets', () => {
 
     expect(resolve([optional, numeric], [undefined], binding)).toEqual({
       callable: optional,
-      values: [missingArgument],
+      values: [undefined],
     });
 
     const assembled = binding.assembly.interfaces.get('Node');
@@ -339,7 +339,7 @@ describe('Web IDL effective overload sets', () => {
 
     expect(resolve([callable], [], binding)).toEqual({
       callable,
-      values: [false, missingArgument],
+      values: [false, undefined],
     });
   });
 });

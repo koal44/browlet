@@ -1,14 +1,19 @@
+import { InternalError } from '../../../infra/index';
+
 import {
   defineDataProperty, defineMethod, isObject, type JSFunction, type JSRealm,
-} from '../../js-engine/index';
-import type { AssembledInterface } from '../assembled';
-import { jsToIDL, idlToJS, type ValueConverter } from '../conversion';
-import type {
-  MaplikeMember, SetlikeMember, WebIDLType,
-} from '../core/index';
-import { getPlatformRecord, type PlatformRecord } from './platform-object';
-import type { RealmBinding } from './realm';
-import { InternalError } from '../../infra/internal-error';
+} from '../../../js-engine/index';
+
+import type { MaplikeMember, SetlikeMember, WebIDLType } from '../../core/index';
+
+import type { AssembledInterface } from '../../assembled';
+
+import { getPlatformRecord, type PlatformRecord } from '../platform';
+import type { RealmBinding } from '../realm';
+
+import type { IDLMapEntries, IDLSetEntries } from '../../values/index';
+
+import type { ConversionSteps } from '../../converters/index';
 
 /** Share realm ownership, receiver validation, and errors for maplike and setlike bindings. */
 abstract class CollectionBinding {
@@ -158,8 +163,8 @@ export class MaplikeBinding extends CollectionBinding {
     // Reuse installed converters unless a borrowed method needs another receiver binding.
     const methodBinding = this.binding;
     const realm = methodBinding.realm;
-    const convertKey = methodBinding.getConversionContext(member.key).getIDLToJSConverter();
-    const convertValue = methodBinding.getConversionContext(member.value).getIDLToJSConverter();
+    const convertKey = methodBinding.getConverter(member.key).getIDLToJSSteps();
+    const convertValue = methodBinding.getConverter(member.value).getIDLToJSSteps();
     return realm.createFunction(
       (thisArgument) => {
         const receiver = this.getReceiverRecord(thisArgument, assembled, name, 'method');
@@ -167,8 +172,8 @@ export class MaplikeBinding extends CollectionBinding {
         const sameBinding = receiverBinding === methodBinding;
         const iterator = new MapIteratorRecord(
           this.getEntries(receiver), kind, realm,
-          sameBinding ? convertKey : receiverBinding.getConversionContext(member.key, realm).getIDLToJSConverter(),
-          sameBinding ? convertValue : receiverBinding.getConversionContext(member.value, realm).getIDLToJSConverter(),
+          sameBinding ? convertKey : receiverBinding.getConverter(member.key, realm).getIDLToJSSteps(),
+          sameBinding ? convertValue : receiverBinding.getConverter(member.value, realm).getIDLToJSSteps(),
         );
         return realm.createCollectionIterator('map', () => iterator.next());
       },
@@ -196,8 +201,8 @@ export class MaplikeBinding extends CollectionBinding {
         const binding = receiver.binding;
         this.getEntries(receiver).forEach((value, key) => {
           Reflect.apply(callback, argumentsList[1], [
-            idlToJS(value, binding.getConversionContext(member.value, this.binding.realm)),
-            idlToJS(key, binding.getConversionContext(member.key, this.binding.realm)),
+            binding.getConverter(member.value, this.binding.realm).idlToJS(value),
+            binding.getConverter(member.key, this.binding.realm).idlToJS(key),
             receiver.platformObject,
           ]);
         });
@@ -222,7 +227,7 @@ export class MaplikeBinding extends CollectionBinding {
           argumentsList[0], member.key, this.binding,
         );
         if (!entries.has(key)) return undefined;
-        return idlToJS(entries.get(key), receiver.binding.getConversionContext(member.value, this.binding.realm));
+        return receiver.binding.getConverter(member.value, this.binding.realm).idlToJS(entries.get(key));
       },
       { length: 1, name: 'get' },
     );
@@ -260,7 +265,7 @@ export class MaplikeBinding extends CollectionBinding {
         const key = convertCollectionValue(
           argumentsList[0], member.key, this.binding,
         );
-        const value = jsToIDL(argumentsList[1], this.binding.getConversionContext(member.value, this.binding.realm));
+        const value = this.binding.getConverter(member.value, this.binding.realm).jsToIDL(argumentsList[1]);
         this.getEntries(receiver).set(key, value);
         return receiver.platformObject;
       },
@@ -406,7 +411,7 @@ export class SetlikeBinding extends CollectionBinding {
     // Reuse installed converters unless a borrowed method needs another receiver binding.
     const methodBinding = this.binding;
     const realm = methodBinding.realm;
-    const convertValue = methodBinding.getConversionContext(member.value).getIDLToJSConverter();
+    const convertValue = methodBinding.getConverter(member.value).getIDLToJSSteps();
     return realm.createFunction(
       (thisArgument) => {
         const receiver = this.getReceiverRecord(thisArgument, assembled, name, 'method');
@@ -414,7 +419,7 @@ export class SetlikeBinding extends CollectionBinding {
         const sameBinding = receiverBinding === methodBinding;
         const iterator = new SetIteratorRecord(
           this.getEntries(receiver), kind, realm,
-          sameBinding ? convertValue : receiverBinding.getConversionContext(member.value, realm).getIDLToJSConverter(),
+          sameBinding ? convertValue : receiverBinding.getConverter(member.value, realm).getIDLToJSSteps(),
         );
         return realm.createCollectionIterator('set', () => iterator.next());
       },
@@ -441,7 +446,7 @@ export class SetlikeBinding extends CollectionBinding {
         }
         const binding = receiver.binding;
         this.getEntries(receiver).forEach((value) => {
-          const javaScriptValue = idlToJS(value, binding.getConversionContext(member.value, this.binding.realm));
+          const javaScriptValue = binding.getConverter(member.value, this.binding.realm).idlToJS(value);
           Reflect.apply(callback, argumentsList[1], [
             javaScriptValue,
             javaScriptValue,
@@ -539,16 +544,16 @@ class MapIteratorRecord {
   /** Realm of the iterator-creation method, used for result objects and pairs. */
   #realm: JSRealm;
   /** Key conversion retaining the collection owner's binding and result realm. */
-  #convertKey: ValueConverter;
+  #convertKey: ConversionSteps;
   /** Value conversion retaining the collection owner's binding and result realm. */
-  #convertValue: ValueConverter;
+  #convertValue: ConversionSteps;
 
   constructor(
     entries: IDLMapEntries,
     kind: MapIterationKind,
     realm: JSRealm,
-    convertKey: ValueConverter,
-    convertValue: ValueConverter,
+    convertKey: ConversionSteps,
+    convertValue: ConversionSteps,
   ) {
     this.#iterator = entries.entries();
     this.#kind = kind;
@@ -583,13 +588,13 @@ class SetIteratorRecord {
   /** Realm of the iterator-creation method, used for result objects and pairs. */
   #realm: JSRealm;
   /** Value conversion retaining the collection owner's binding and result realm. */
-  #convertValue: ValueConverter;
+  #convertValue: ConversionSteps;
 
   constructor(
     entries: IDLSetEntries,
     kind: SetIterationKind,
     realm: JSRealm,
-    convertValue: ValueConverter,
+    convertValue: ConversionSteps,
   ) {
     this.#iterator = entries.values();
     this.#kind = kind;
@@ -610,9 +615,6 @@ class SetIteratorRecord {
   }
 }
 
-export type IDLMapEntries = Map<unknown, unknown>;
-export type IDLSetEntries = Set<unknown>;
-
 type MapIterationKind = 'key' | 'key+value' | 'value';
 type SetIterationKind = 'key+value' | 'value';
 
@@ -625,7 +627,7 @@ function convertCollectionValue(
   type: WebIDLType,
   binding: RealmBinding,
 ): unknown {
-  const converted = jsToIDL(value, binding.getConversionContext(type));
+  const converted = binding.getConverter(type).jsToIDL(value);
   return typeof converted === 'number' && Object.is(converted, -0)
     ? 0
     : converted;

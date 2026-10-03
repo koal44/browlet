@@ -11,7 +11,7 @@ import {
 import {
   getImplementationObject, getImplementationRecord, getPlatformObject, getPlatformRecord,
   stampImplementation, isStampedImplInstance, isStampedPlatformObject,
-} from '../../src/web-idl/binding/platform-object';
+} from '../../src/web-idl/binding/platform';
 
 describe('Web IDL platform-object identity and state', () => {
   it('reads the shared stamped record without a registry', () => {

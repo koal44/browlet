@@ -1,22 +1,27 @@
-import { isObject, type JSFunction } from '../../js-engine/index';
-import { AssembledInterface, type AssembledCallable, type AssembledNamespace, type AssembledOverloads } from '../assembled';
-import type { ImplementationBinding, BoundConstruct } from './implementation';
+import { InternalError } from '../../../infra/index';
+
+import { isObject, type JSFunction } from '../../../js-engine/index';
+
 import {
-  idlType, type AttributeMember, type AttributeFunctionSteps, type OperationMember, type StringifierMember,
-  type WebIDLType, type ExtendedAttribute,
-} from '../core/types';
-import { hasExtendedAttribute } from '../core/helpers';
-import type { ConversionContext } from '../conversion-context';
-import { idlToJS, type ValueConverter } from '../conversion';
-import { createOverloadResolver } from './overload';
-import { createLegacyCallbackConverter } from '../constructs/callback';
-import { PromiseCarrier } from '../constructs/promise';
-import type { PlatformRecord, StampedImplInstance } from './platform-object';
+  idlType, hasExtendedAttribute, type AttributeMember, type AttributeFunctionSteps, type OperationMember,
+  type StringifierMember, type WebIDLType, type ExtendedAttribute,
+} from '../../core/index';
+
+import {
+  AssembledInterface, type AssembledCallable, type AssembledNamespace, type AssembledOverloads,
+} from '../../assembled';
+
+import type { PlatformRecord, StampedImplInstance } from '../platform';
 import type { AsyncIteratorSteps } from './async-iterable';
-import type { IndexedPropertySteps, NamedPropertySteps } from './legacy-platform-object';
-import type { ObservableArraySteps } from './observable-array';
+import type { ImplementationBinding, BoundConstruct } from './implementation';
 import type { ValuePairsSteps } from './iterable';
-import { InternalError } from '../../infra/internal-error';
+import type { IndexedPropertySteps, NamedPropertySteps } from './legacy';
+import type { ObservableArraySteps } from './observable-array';
+import { createOverloadResolver } from './overload';
+
+import { IDLPromise } from '../../values/index';
+
+import { type Converter, type ConversionSteps, CallbackFunctionConverter } from '../../converters/index';
 
 /** Registered implementation steps and platform functions for one member in one realm. */
 export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
@@ -25,7 +30,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   declare constructorBehavior?: ConstructorBehavior;
   declare operationSteps?: OperationSteps;
   /** Result converter for calls whose receiver belongs to the method's binding. */
-  declare convertResult?: ValueConverter;
+  declare convertResult?: ConversionSteps;
   declare isDefaultOperation?: boolean;
   declare stringificationBehavior?: StringificationBehavior;
   declare indexedPropertySteps?: IndexedPropertySteps;
@@ -77,13 +82,13 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const interfaceAssembled = assembled instanceof AssembledInterface ? assembled : undefined;
     const lenient = hasExtendedAttribute(attribute.extendedAttributes, 'LegacyLenientThis');
     const elementType = realmBinding.assembly.getObservableArrayElementType(attribute.type);
-    const defaultContext = realmBinding.getConversionContext(attribute.type);
-    const convertResult = defaultContext.getIDLToJSConverter();
+    const defaultConverter = realmBinding.getConverter(attribute.type);
+    const convertResult = defaultConverter.getIDLToJSSteps();
     const implementation = interfaceAssembled && attribute.inherit
       ? interfaceAssembled.getInheritedAttribute(attribute)
       : attribute;
     return this.#getter = realmBinding.realm.createFunction((thisArgument) => {
-      let resultContext: ConversionContext | undefined;
+      let resultConverter: Converter | undefined;
       try {
         const receiver = interfaceAssembled && !attribute.static
           ? realmBinding.getReceiverRecord(
@@ -95,9 +100,9 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           )
           : null;
         if (receiver === invalidReceiver) return undefined;
-        resultContext = !receiver || receiver.binding === realmBinding
-          ? defaultContext
-          : receiver.binding.getConversionContext(attribute.type);
+        resultConverter = !receiver || receiver.binding === realmBinding
+          ? defaultConverter
+          : receiver.binding.getConverter(attribute.type);
 
         if (elementType) {
           if (!receiver) {
@@ -120,12 +125,12 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           );
         }
         const value = steps.get(receiver);
-        return resultContext === defaultContext ? convertResult(value) : resultContext.getIDLToJSConverter()(value);
+        return resultConverter === defaultConverter ? convertResult(value) : resultConverter.getIDLToJSSteps()(value);
       } catch (exception) {
         return this.#handlePromiseException(
           attribute.type,
           exception,
-          resultContext ?? defaultContext,
+          resultConverter ?? defaultConverter,
         );
       }
     }, { length: 0, name: `get ${attribute.name}` });
@@ -158,11 +163,11 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const observableArrayElementType = realmBinding.assembly.getObservableArrayElementType(attribute.type);
     const type = realmBinding.assembly.getUnannotatedType(attribute.type);
     const enumeration = type.kind === 'reference' ? realmBinding.assembly.enumerations.get(type.name) : undefined;
-    const inputContext = realmBinding.getConversionContext(enumeration ? idlType.DOMString : attribute.type);
-    const legacyCallback = inputContext.legacyCallback;
+    const inputConverter = realmBinding.getConverter(enumeration ? idlType.DOMString : attribute.type);
+    const legacyCallback = inputConverter.legacyCallback;
     const convertInput = legacyCallback
-      ? createLegacyCallbackConverter(inputContext, legacyCallback)
-      : inputContext.getJSToIDLConverter();
+      ? CallbackFunctionConverter.createAttributeSteps(inputConverter, legacyCallback)
+      : inputConverter.getJSToIDLSteps();
     return this.#setter = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
       const value = argumentsList[0];
       const jsValue = realmBinding.resolveThisValue(thisArgument);
@@ -250,7 +255,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     for (const { primary } of operations.callables) {
       const binding = implementationBinding.getOrCreateMemberBinding(primary);
       binding.isDefaultOperation = hasExtendedAttribute(primary.extendedAttributes, 'Default');
-      binding.convertResult = realmBinding.getConversionContext(primary.returns).getIDLToJSConverter();
+      binding.convertResult = realmBinding.getConverter(primary.returns).getIDLToJSSteps();
     }
     return this.#operation = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
       try {
@@ -285,7 +290,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
         }
         const convertResult = resultBinding === realmBinding
           ? operationBinding.convertResult!
-          : resultBinding.getConversionContext(operation.returns).getIDLToJSConverter();
+          : resultBinding.getConverter(operation.returns).getIDLToJSSteps();
         const result = steps(receiver, ...overload.values);
         return convertResult(result);
       } catch (exception) {
@@ -294,7 +299,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           exception,
           // Invocation failure creates a new promise in the method realm;
           // allocation of a successful implementation result is unrelated.
-          realmBinding.getConversionContext(source.primary.returns),
+          realmBinding.getConverter(source.primary.returns),
         );
       }
     }, { length: operations.minimumArgumentCount, name });
@@ -347,7 +352,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
           }
           value = Reflect.apply(behavior, object, []);
         }
-        return idlToJS(value, realmBinding.getConversionContext(idlType.DOMString));
+        return realmBinding.getConverter(idlType.DOMString).idlToJS(value);
       },
       { length: 0, name: 'toString' },
     );
@@ -358,11 +363,11 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   #handlePromiseException(
     type: WebIDLType,
     exception: unknown,
-    context: ConversionContext,
+    converter: Converter,
   ): Promise<unknown> {
     const promiseType = this.#implementationBinding.binding.assembly.getUnannotatedType(type);
     if (promiseType.kind !== 'promise') throw exception;
-    return PromiseCarrier.rejected(exception, promiseType.type, context.realm, context.binding.realizeException).promise;
+    return IDLPromise.rejected(exception, promiseType.type, converter.realm, converter.binding.realizeException).promise;
   }
 }
 

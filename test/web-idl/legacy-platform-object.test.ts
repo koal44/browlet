@@ -8,7 +8,7 @@ import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
   type PrimaryInterfaceDefinition, type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
-import { getImplementationObject } from '../../src/web-idl/binding/platform-object';
+import { getImplementationObject } from '../../src/web-idl/binding/platform';
 
 describe('Web IDL legacy platform objects', () => {
   it('projects supported indices as read-only virtual own properties', () => {

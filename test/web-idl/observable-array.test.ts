@@ -8,7 +8,7 @@ import {
   defineInterface, idlType, impl, observableArray, reference, roAttr,
   type AttributeMember,
 } from '../../src/web-idl/core/index';
-import { getPlatformRecord } from '../../src/web-idl/binding/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/binding/platform';
 
 describe('Web IDL observable arrays', () => {
   it('creates one realm Array per platform object and attribute', () => {

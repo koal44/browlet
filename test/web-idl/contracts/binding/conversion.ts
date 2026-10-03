@@ -1,47 +1,48 @@
-import type { ConversionContext } from '../../../../src/web-idl/conversion-context';
+
+import type { Converter, ConversionSteps } from '../../../../src/web-idl/converters/converter';
 import type { BindingContext } from '../../../../src/web-idl/binding/context';
-import { jsToIDL, type ValueConverter } from '../../../../src/web-idl/conversion';
-import { type IDLRecord } from '../../../../src/web-idl/constructs/record';
-import { type IDLSequence } from '../../../../src/web-idl/constructs/sequence';
+import type { IDLRecord, IDLSequence } from '../../../../src/web-idl/values/value';
 import {
   annotated, asyncSequence, idlType, implementationType, promise, record, reference, sequence, xattr,
 } from '../../../../src/web-idl/core/index';
-import type { AsyncSequenceCarrier } from '../../../../src/web-idl/constructs/async-sequence';
-import type { PromiseCarrier } from '../../../../src/web-idl/constructs/promise';
+import type { IDLAsyncSequence } from '../../../../src/web-idl/values/async-sequence';
+import type { IDLPromise } from '../../../../src/web-idl/values/promise';
 
 import type { InternalPromise } from '../../../../src/infra/promises';
 
-declare const ctx: ConversionContext;
+declare const converter: Converter;
 declare const binding: BindingContext;
 declare const authorValue: unknown;
 
 // The supplied descriptor determines the result; the caller cannot choose an unrelated output type.
-const number: number = jsToIDL(authorValue, ctx.binding.getConversionContext(idlType.long, ctx.realm));
-const clamped: number = jsToIDL(authorValue, ctx.binding.getConversionContext(annotated(idlType.octet, xattr('Clamp')), ctx.realm));
-const string: string = jsToIDL(authorValue, ctx.binding.getConversionContext(idlType.DOMString, ctx.realm));
-const buffer: Uint8Array = jsToIDL(authorValue, ctx.binding.getConversionContext(idlType.Uint8Array, ctx.realm));
-const convertNumber: ValueConverter<number> = ctx.binding.getConversionContext(idlType.double, ctx.realm).getJSToIDLConverter();
+const number: number = converter.binding.getConverter(idlType.long, converter.realm).jsToIDL(authorValue);
+const clamped: number = converter.binding.getConverter(annotated(idlType.octet, xattr('Clamp')), converter.realm).jsToIDL(authorValue);
+const string: string = converter.binding.getConverter(idlType.DOMString, converter.realm).jsToIDL(authorValue);
+const buffer: Uint8Array = converter.binding.getConverter(idlType.Uint8Array, converter.realm).jsToIDL(authorValue);
+const convertNumber: ConversionSteps<number> = converter.binding.getConverter(idlType.double, converter.realm).getJSToIDLSteps();
 // @ts-expect-error A numeric conversion cannot promise a string.
-const wrongResult: string = jsToIDL(authorValue, ctx.binding.getConversionContext(idlType.long, ctx.realm));
+const wrongResult: string = converter.binding.getConverter(idlType.long, converter.realm).jsToIDL(authorValue);
 // @ts-expect-error Web IDL any makes no guarantee about the value's shape.
-const anyObject: object = jsToIDL(authorValue, ctx.binding.getConversionContext(idlType.any, ctx.realm));
+const anyObject: object = converter.binding.getConverter(idlType.any, converter.realm).jsToIDL(authorValue);
 
-const values: IDLSequence = jsToIDL(authorValue, ctx.binding.getConversionContext(sequence(idlType.long), ctx.realm));
-const entries: IDLRecord = jsToIDL(authorValue, ctx.binding.getConversionContext(record(idlType.DOMString, idlType.long), ctx.realm));
-const promiseValue: PromiseCarrier = jsToIDL(authorValue, ctx.binding.getConversionContext(promise(idlType.long), ctx.realm));
-const asyncValues: AsyncSequenceCarrier = jsToIDL(authorValue, ctx.binding.getConversionContext(asyncSequence(idlType.long), ctx.realm));
+const values: IDLSequence = converter.binding.getConverter(sequence(idlType.long), converter.realm).jsToIDL(authorValue);
+const entries: IDLRecord = converter.binding.getConverter(record(idlType.DOMString, idlType.long), converter.realm).jsToIDL(authorValue);
+const promiseValue: IDLPromise = converter.binding.getConverter(promise(idlType.long), converter.realm).jsToIDL(authorValue);
+const asyncValues: IDLAsyncSequence = converter.binding.getConverter(asyncSequence(idlType.long), converter.realm).jsToIDL(authorValue);
 // @ts-expect-error A named reference needs this world's assembly; its name alone does not encode the result.
-const namedObject: object = jsToIDL(authorValue, ctx.binding.getConversionContext(reference('Options'), ctx.realm));
+const namedObject: object = converter.binding.getConverter(reference('Options'), converter.realm).jsToIDL(authorValue);
 
 type Options = { count: number; };
 const optionsType = implementationType<Options>(reference('Options'));
 // @ts-expect-error The implementation payload does not describe the intermediate IDL dictionary record.
-const intermediate: Options = jsToIDL(authorValue, ctx.binding.getConversionContext(optionsType, ctx.realm));
+const intermediate: Options = converter.binding.getConverter(optionsType, converter.realm).jsToIDL(authorValue);
 const options: Options = binding.jsToImpl(authorValue, optionsType);
 const count: number = binding.jsToImpl(authorValue, idlType.long);
 class Example { count = 0; }
 const instance: Example = binding.jsToImpl(authorValue, reference(Example));
-const unwrappedInstance: Example = jsToIDL(authorValue, ctx.binding.getConversionContext(reference(Example), ctx.realm));
+const unwrappedInstance: Example = converter.binding.getConverter(reference(Example), converter.realm).jsToIDL(authorValue);
 
-// A promise bridge retains the result selected by the fulfillment converter.
-const convertedPromise: InternalPromise<number> = promiseValue.toImpl(ctx.binding, () => 3, binding.Promise);
+// The implementation boundary owns fulfillment conversion; the IDL value retains promise state.
+const convertedPromise: InternalPromise<number> = binding.jsToImpl(
+  authorValue, implementationType<InternalPromise<number>>(promise(idlType.long)),
+);

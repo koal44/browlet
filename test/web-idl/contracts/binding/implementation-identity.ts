@@ -1,11 +1,11 @@
 import type { DefinitionAssembly } from '../../../../src/web-idl/assembly';
 import type { AssembledInterface } from '../../../../src/web-idl/assembled';
-import { jsToIDLBufferSource, idlToJSBufferSource } from '../../../../src/web-idl/constructs/buffer-source';
+
 import { idlType, type StampedImplInstance, type PlatformRecord, type WebIDLType } from '../../../../src/web-idl/index';
 import {
   associatePlatformObject, getImplementationRecord, getPlatformRecord,
   stampImplementation,
-} from '../../../../src/web-idl/binding/platform-object';
+} from '../../../../src/web-idl/binding/platform';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
 
 declare const binding: RealmBinding;
@@ -46,8 +46,8 @@ getImplementationRecord(authorValue)?.implInst.count;
 // @ts-expect-error A platform-object lookup cannot infer the shape of its implementation from its key.
 getPlatformRecord(platformObject)?.implInst.authorProperty;
 
-const buffer: ArrayBufferLike | ArrayBufferView = jsToIDLBufferSource(authorValue, binding.getConversionContext(idlType.Uint8Array));
-const returnedBuffer: ArrayBufferLike | ArrayBufferView = idlToJSBufferSource(authorValue, binding.getConversionContext(idlType.ArrayBuffer));
+const buffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(idlType.Uint8Array).jsToIDL(authorValue);
+const returnedBuffer: ArrayBufferLike | ArrayBufferView = binding.getConverter(idlType.ArrayBuffer).idlToJS(authorValue);
 buffer.byteLength.toFixed();
 returnedBuffer.byteLength.toFixed();
 // @ts-expect-error Outer annotations have been removed from the result.

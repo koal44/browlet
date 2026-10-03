@@ -1,3 +1,4 @@
+import { CallbackFunctionConverter } from '../../src/web-idl/converters/callback';
 import { describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
@@ -5,15 +6,14 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { AssembledCallbackFunction } from '../../src/web-idl/assembled';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
-import {
-  missingArgument, CallbackFunctionCarrier, CallbackInterfaceCarrier, createLegacyCallbackConverter,
-} from '../../src/web-idl/constructs/callback';
-import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
+import { IDLCallbackFunction, IDLCallbackInterface } from '../../src/web-idl/values/callback';
+import { missingArgument } from '../../src/web-idl/binding/realm/callback';
+
 import {
   defineCallbackFunction, defineCallbackInterface, defineInterface, defineTypedef, idlType,
   integer, nullable, promise as promiseType, reference, sequence, union,
 } from '../../src/web-idl/core/index';
-import { PromiseCarrier } from '../../src/web-idl/constructs/promise';
+import { IDLPromise } from '../../src/web-idl/values/promise';
 
 describe('Web IDL callbacks', () => {
   it('captures callback context and invokes functions in their associated realm', () => {
@@ -23,7 +23,7 @@ describe('Web IDL callbacks', () => {
     Reflect.set(
       callbackRealm.global,
       'convertCallback',
-      (callback: unknown) => jsToIDL(callback, ctx.binding.getConversionContext(reference('Increment'), ctx.realm)),
+      (callback: unknown) => ctx.binding.getConverter(reference('Increment'), ctx.realm).jsToIDL(callback),
     );
     const [callback, value] = callbackRealm.evaluate(
       `(() => {
@@ -32,12 +32,12 @@ describe('Web IDL callbacks', () => {
       })()`,
       'callback-function.js',
     ) as [object, unknown];
-    if (!CallbackFunctionCarrier.is(value)) {
+    if (!IDLCallbackFunction.is(value)) {
       throw new Error('Increment did not convert to a callback value');
     }
     recordLifecycle(callbackRealm, order);
 
-    expect(idlToJS(value, ctx.binding.getConversionContext(reference('Increment'), ctx.realm))).toBe(callback);
+    expect(ctx.binding.getConverter(reference('Increment'), ctx.realm).idlToJS(value)).toBe(callback);
     expect(value.invoke([4],
       'rethrow',
     )).toBe(5);
@@ -70,17 +70,17 @@ describe('Web IDL callbacks', () => {
       const firstContext = {};
       const secondContext = {};
       capture.mockReturnValueOnce(firstContext).mockReturnValueOnce(secondContext);
-      const values = [0, 1].map(() => jsToIDL(callback, binding.getConversionContext(reference(definition.name))));
+      const values = [0, 1].map(() => binding.getConverter(reference(definition.name)).jsToIDL(callback));
       const prepare = vi.spyOn(realm.callbacks, 'prepareToRunCallback');
       const clean = vi.spyOn(realm.callbacks, 'cleanUpAfterRunningCallback');
       for (const value of values) {
-        if (!CallbackFunctionCarrier.is(value)) throw new Error('Expected a converted callback');
+        if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
         expect(value.invoke([[4], 1, 2], 'rethrow')).toBe(6);
       }
       expect(prepare.mock.calls).toEqual([[firstContext], [secondContext]]);
       Reflect.set(realm.global, 'fail', true);
       const value = values[0]!;
-      if (!CallbackFunctionCarrier.is(value)) throw new Error('Expected a converted callback');
+      if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
       expect(() => value.invoke([[4]], 'rethrow')).toThrow(realm.intrinsics.typeError);
       expect(clean.mock.calls).toEqual([[firstContext], [secondContext], [firstContext]]);
     }
@@ -109,17 +109,17 @@ describe('Web IDL callbacks', () => {
       'callback-interface.js',
     ) as object;
 
-    const value = jsToIDL(object, ctx.binding.getConversionContext(reference('NumberHandler'), ctx.realm));
-    if (!CallbackInterfaceCarrier.is(value)) {
+    const value = ctx.binding.getConverter(reference('NumberHandler'), ctx.realm).jsToIDL(object);
+    if (!IDLCallbackInterface.is(value)) {
       throw new Error('NumberHandler did not convert to a callback value');
     }
 
-    expect(idlToJS(value, ctx.binding.getConversionContext(reference('NumberHandler'), ctx.realm))).toBe(object);
+    expect(ctx.binding.getConverter(reference('NumberHandler'), ctx.realm).idlToJS(value)).toBe(object);
     expect(value.callUserObjectOperation('handleEvent', [2])).toBe(3);
     expect(prepareCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
     expect(cleanUpCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
     expect(prepareTargetCallback).not.toHaveBeenCalled();
-    expect(() => jsToIDL(1, ctx.binding.getConversionContext(reference('NumberHandler'), ctx.realm))).toThrow(targetRealm.intrinsics.typeError);
+    expect(() => ctx.binding.getConverter(reference('NumberHandler'), ctx.realm).jsToIDL(1)).toThrow(targetRealm.intrinsics.typeError);
   });
 
   it('retains each callback\'s identity and realm when reusing union candidates', () => {
@@ -131,16 +131,16 @@ describe('Web IDL callbacks', () => {
     for (const realm of [targetRealm, callbackRealm]) {
       const callback = realm.evaluate('(value) => value + 1', 'union-callback.js');
       const object = realm.evaluate('({ handleEvent(value) { return value + 2; } })', 'union-callback-interface.js');
-      const functionRecord = jsToIDL(callback, ctx.binding.getConversionContext(functionType, ctx.realm));
-      const interfaceRecord = jsToIDL(object, ctx.binding.getConversionContext(interfaceType, ctx.realm));
-      if (!CallbackFunctionCarrier.is(functionRecord) || !CallbackInterfaceCarrier.is(interfaceRecord)) {
+      const functionRecord = ctx.binding.getConverter(functionType, ctx.realm).jsToIDL(callback);
+      const interfaceRecord = ctx.binding.getConverter(interfaceType, ctx.realm).jsToIDL(object);
+      if (!IDLCallbackFunction.is(functionRecord) || !IDLCallbackInterface.is(interfaceRecord)) {
         throw new Error('Union did not select its callback member');
       }
 
       expect(functionRecord.realm).toBe(realm);
       expect(interfaceRecord.realm).toBe(realm);
-      expect(idlToJS(functionRecord, ctx.binding.getConversionContext(functionType, ctx.realm))).toBe(callback);
-      expect(idlToJS(interfaceRecord, ctx.binding.getConversionContext(interfaceType, ctx.realm))).toBe(object);
+      expect(ctx.binding.getConverter(functionType, ctx.realm).idlToJS(functionRecord)).toBe(callback);
+      expect(ctx.binding.getConverter(interfaceType, ctx.realm).idlToJS(interfaceRecord)).toBe(object);
       expect(functionRecord.invoke([4], 'rethrow')).toBe(5);
       expect(interfaceRecord.callUserObjectOperation('handleEvent', [4])).toBe(6);
     }
@@ -151,8 +151,8 @@ describe('Web IDL callbacks', () => {
     const object = {
       handleEvent(value: number) { return value + 1; },
     };
-    const value = jsToIDL(object, binding.getConversionContext(reference('NumberHandler')));
-    if (!CallbackInterfaceCarrier.is(value)) {
+    const value = binding.getConverter(reference('NumberHandler')).jsToIDL(object);
+    if (!IDLCallbackInterface.is(value)) {
       throw new Error('NumberHandler did not convert to a callback value');
     }
 
@@ -171,8 +171,8 @@ describe('Web IDL callbacks', () => {
         return value + 1;
       },
     };
-    const objectValue = jsToIDL(object, ctx.binding.getConversionContext(reference('NumberHandler'), ctx.realm));
-    if (!CallbackInterfaceCarrier.is(objectValue)) {
+    const objectValue = ctx.binding.getConverter(reference('NumberHandler'), ctx.realm).jsToIDL(object);
+    if (!IDLCallbackInterface.is(objectValue)) {
       throw new Error('NumberHandler did not convert to a callback value');
     }
 
@@ -185,11 +185,11 @@ describe('Web IDL callbacks', () => {
       receivedExpectedThis = this === thisArgument;
       return value + 2;
     };
-    const cbCarrier = jsToIDL(callback, ctx.binding.getConversionContext(reference('NumberHandler'), ctx.realm));
-    if (!CallbackInterfaceCarrier.is(cbCarrier)) {
+    const cbValue = ctx.binding.getConverter(reference('NumberHandler'), ctx.realm).jsToIDL(callback);
+    if (!IDLCallbackInterface.is(cbValue)) {
       throw new Error('Callable NumberHandler did not convert');
     }
-    expect(cbCarrier.callUserObjectOperation('handleEvent', [2], thisArgument)).toBe(4);
+    expect(cbValue.callUserObjectOperation('handleEvent', [2], thisArgument)).toBe(4);
     expect(receivedExpectedThis).toBe(true);
   });
 
@@ -204,7 +204,7 @@ describe('Web IDL callbacks', () => {
       ],
     }));
 
-    const invoker = binding.getCallbackInvoker(assembled, binding.realm);
+    const invoker = binding.callbacks.getInvoker(assembled, binding.realm);
     expect(invoker.idlToJSArguments([missingArgument, 2, missingArgument])).toEqual([undefined, 2]);
     expect(invoker.idlToJSArguments([1, missingArgument, missingArgument])).toEqual([1]);
   });
@@ -218,8 +218,8 @@ describe('Web IDL callbacks', () => {
       '() => { throw callbackFailure; }',
       'callback-exception.js',
     );
-    const value = jsToIDL(callback, ctx.binding.getConversionContext(reference('Notification'), ctx.realm));
-    if (!CallbackFunctionCarrier.is(value)) {
+    const value = ctx.binding.getConverter(reference('Notification'), ctx.realm).jsToIDL(callback);
+    if (!IDLCallbackFunction.is(value)) {
       throw new Error('Notification did not convert to a callback value');
     }
     const report = vi.spyOn(callbackRealm, 'reportException')
@@ -242,7 +242,7 @@ describe('Web IDL callbacks', () => {
     Reflect.set(
       callbackRealm.global,
       'convertPromiseCallback',
-      (callback: unknown, name: string) => jsToIDL(callback, ctx.binding.getConversionContext(reference(name), ctx.realm)),
+      (callback: unknown, name: string) => ctx.binding.getConverter(reference(name), ctx.realm).jsToIDL(callback),
     );
     const functionRecord = callbackRealm.evaluate(
       `convertPromiseCallback(
@@ -251,7 +251,7 @@ describe('Web IDL callbacks', () => {
       )`,
       'promise-callback-function.js',
     );
-    if (!CallbackFunctionCarrier.is(functionRecord)) {
+    if (!IDLCallbackFunction.is(functionRecord)) {
       throw new Error('PromiseIncrement did not convert to a callback value');
     }
     const interfaceRecord = callbackRealm.evaluate(
@@ -260,7 +260,7 @@ describe('Web IDL callbacks', () => {
       }, "PromiseHandler")`,
       'promise-callback-interface.js',
     );
-    if (!CallbackInterfaceCarrier.is(interfaceRecord)) {
+    if (!IDLCallbackInterface.is(interfaceRecord)) {
       throw new Error('PromiseHandler did not convert to a callback value');
     }
 
@@ -268,11 +268,11 @@ describe('Web IDL callbacks', () => {
       undefined,
     );
     const interfaceResult = interfaceRecord.callUserObjectOperation('handleEvent', []);
-    if (!PromiseCarrier.is(functionResult) || !PromiseCarrier.is(interfaceResult)) {
+    if (!IDLPromise.is(functionResult) || !IDLPromise.is(interfaceResult)) {
       throw new Error('Promise callback did not return an IDL promise');
     }
-    const functionPromise = idlToJS(functionResult, ctx.binding.getConversionContext(promiseType(idlType.long), ctx.realm)) as Promise<unknown>;
-    const interfacePromise = idlToJS(interfaceResult, ctx.binding.getConversionContext(promiseType(idlType.long), ctx.realm)) as Promise<unknown>;
+    const functionPromise = ctx.binding.getConverter(promiseType(idlType.long), ctx.realm).idlToJS(functionResult);
+    const interfacePromise = ctx.binding.getConverter(promiseType(idlType.long), ctx.realm).idlToJS(interfaceResult);
 
     expect(functionPromise).toBeInstanceOf(
       callbackRealm.intrinsics.promise.constructor,
@@ -305,12 +305,12 @@ describe('Web IDL callbacks', () => {
       )`,
       'callback-constructor.js',
     ) as object;
-    const constructorCarrier = jsToIDL(constructor, ctx.binding.getConversionContext(reference('Builder'), ctx.realm));
-    if (!CallbackFunctionCarrier.is(constructorCarrier)) {
+    const constructorValue = ctx.binding.getConverter(reference('Builder'), ctx.realm).jsToIDL(constructor);
+    if (!IDLCallbackFunction.is(constructorValue)) {
       throw new Error('Builder did not convert to a callback value');
     }
 
-    expect(constructorCarrier.construct([7],
+    expect(constructorValue.construct([7],
       ctx.realm,
     )).toMatchObject({ value: 7 });
     expect(prototypeReads.count).toBe(1);
@@ -323,11 +323,11 @@ describe('Web IDL callbacks', () => {
       '() => ({})',
       'callback-arrow.js',
     ) as object;
-    const arrowCarrier = jsToIDL(arrow, ctx.binding.getConversionContext(reference('Builder'), ctx.realm));
-    if (!CallbackFunctionCarrier.is(arrowCarrier)) {
+    const arrowValue = ctx.binding.getConverter(reference('Builder'), ctx.realm).jsToIDL(arrow);
+    if (!IDLCallbackFunction.is(arrowValue)) {
       throw new Error('Arrow Builder did not convert');
     }
-    expect(() => arrowCarrier.construct([7],
+    expect(() => arrowValue.construct([7],
       targetRealm,
     )).toThrow(targetRealm.intrinsics.typeError);
   });
@@ -336,14 +336,14 @@ describe('Web IDL callbacks', () => {
     const { binding, targetRealm } = createCallbackBinding();
     const ctx = { binding: binding, realm: binding.realm };
     const type = nullable(reference('LegacyHandler'));
-    const context = ctx.binding.getConversionContext(type, ctx.realm);
-    const convert = createLegacyCallbackConverter(context, context.legacyCallback!);
+    const converter = ctx.binding.getConverter(type, ctx.realm);
+    const convert = CallbackFunctionConverter.createAttributeSteps(converter, converter.legacyCallback!);
 
     expect(convert(1)).toBeNull();
     const object = {};
     const value = convert(object);
-    expect(idlToJS(value, context)).toBe(object);
-    expect(() => jsToIDL(object, context))
+    expect(converter.idlToJS(value)).toBe(object);
+    expect(() => converter.jsToIDL(object))
       .toThrow(targetRealm.intrinsics.typeError);
   });
 
@@ -387,8 +387,8 @@ describe('Web IDL callbacks', () => {
       get: () => stored,
       set: (_receiver, value) => { stored = value; },
     };
-    const context = binding.getConversionContext(type);
-    const convert = context.getJSToIDLConverter();
+    const converter = binding.getConverter(type);
+    const convert = converter.getJSToIDLSteps();
     const object = binding.createPlatformRecord(binding.resolveInterface('CallbackOwner')).platformObject!;
 
     Reflect.set(object, 'handler', 1);
@@ -399,9 +399,9 @@ describe('Web IDL callbacks', () => {
     Reflect.set(object, 'handler', handler);
     expect(Reflect.get(object, 'handler')).toBe(handler);
     expect(() => convert(handler)).toThrow(realm.intrinsics.typeError);
-    expect(() => jsToIDL(handler, context)).toThrow(realm.intrinsics.typeError);
-    expect(binding.getConversionContext(type)).toBe(context);
-    expect(context.getJSToIDLConverter()).toBe(convert);
+    expect(() => converter.jsToIDL(handler)).toThrow(realm.intrinsics.typeError);
+    expect(binding.getConverter(type)).toBe(converter);
+    expect(converter.getJSToIDLSteps()).toBe(convert);
   });
 
   it('installs callback-interface constants on a legacy initial object', () => {

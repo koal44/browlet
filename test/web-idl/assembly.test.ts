@@ -9,7 +9,7 @@ import {
 } from '../../src/web-idl/core/index';
 
 describe('Web IDL definition assembly', () => {
-  it('distinguishes primitive types and sequences from possible carrier values', () => {
+  it('identifies types that can pass directly from IDL to implementation code', () => {
     const assembly = new DefinitionAssembly([
       defineEnumeration({ name: 'Mode', values: ['fast', 'slow'] }),
       defineDictionary({ name: 'Options', members: [] }),
@@ -20,13 +20,13 @@ describe('Web IDL definition assembly', () => {
     const dictionaries = sequence(reference('Options'));
 
     expect(assembly.isPrimitiveType(primitive)).toBe(true);
-    expect(assembly.mayContainCarrier(primitive)).toBe(false);
+    expect(assembly.canPassToImpl(primitive)).toBe(true);
     expect(assembly.isPrimitiveType(numbers)).toBe(false);
-    expect(assembly.mayContainCarrier(numbers)).toBe(false);
-    expect(assembly.mayContainCarrier(nestedNumbers)).toBe(false);
-    expect(assembly.mayContainCarrier(dictionaries)).toBe(true);
+    expect(assembly.canPassToImpl(numbers)).toBe(true);
+    expect(assembly.canPassToImpl(nestedNumbers)).toBe(true);
+    expect(assembly.canPassToImpl(dictionaries)).toBe(false);
     expect(assembly.isPrimitiveType(idlType.any)).toBe(false);
-    expect(assembly.mayContainCarrier(idlType.any)).toBe(true);
+    expect(assembly.canPassToImpl(idlType.any)).toBe(false);
     expect(assembly.isPrimitiveType(idlType.symbol)).toBe(true);
   });
 

@@ -1,7 +1,10 @@
-import type { BindingContext } from './binding/context';
-import type { AttributeFunctionSteps } from './core/types';
-import type { CallbackInterfaceCarrier } from './constructs/callback';
+import type { AttributeFunctionSteps } from './core/index';
+
 import type { WebIDLEnvironment, WebIDLRealm } from './environment';
+
+import type { BindingContext } from './binding/context';
+
+import type { IDLCallbackInterface } from './values/index';
 
 export * from './core/index';
 
@@ -13,7 +16,7 @@ export type { GlobalObjectAllocation } from './binding/realm';
 export {
   isStampedImplInstance, isStampedPlatformObject,
   type StampedImplInstance, type StampedPlatformObject, type PlatformRecord,
-} from './binding/platform-object';
+} from './binding/platform';
 
 // The full Web IDL entry supplies typed Binding Contexts for declaration hooks.
 declare module './core/types' {
@@ -27,7 +30,7 @@ declare module './core/types' {
     'attribute-function': BindingHook<Env, undefined, [], AttributeFunctionSteps>;
     'operation-invoke': BindingHook<Env, object | null, Values, unknown>;
     'callback-interface-to-impl': BindingHook<
-      Env, undefined, [cbCarrier: CallbackInterfaceCarrier<(Env & WebIDLEnvironment)['realm']>], unknown
+      Env, undefined, [cbValue: IDLCallbackInterface<(Env & WebIDLEnvironment)['realm']>], unknown
     >;
   }
 }

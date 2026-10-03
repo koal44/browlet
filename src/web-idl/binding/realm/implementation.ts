@@ -1,17 +1,19 @@
+import { InternalError } from '../../../infra/index';
+
+import type { JSFunction } from '../../../js-engine/index';
+
+import type { InterfaceMember, ConstantMember, NamedArgumentsExtendedAttribute } from '../../core/index';
+
 import type {
-  AssembledInterface, AssembledCallbackInterface, AssembledNamespace,
-  DefaultToJSONAttribute, MemberPlacement,
-} from '../assembled';
-import type { RealmBinding } from './realm';
+  AssembledInterface, AssembledCallbackInterface, AssembledNamespace, DefaultToJSONAttribute,
+  MemberPlacement,
+} from '../../assembled';
+
+import type { PlatformRecord } from '../platform';
+import type { RealmBinding } from '../realm';
+import type { LegacyPropertyMetadata } from './legacy';
 import { MemberBinding, type MemberOwner } from './member';
-import type { JSFunction } from '../../js-engine/index';
-import type { InterfaceMember } from '../core/declarations';
-import type { ConstantMember, NamedArgumentsExtendedAttribute } from '../core/types';
-import { idlToJS } from '../conversion';
 import { createOverloadResolver } from './overload';
-import type { PlatformRecord } from './platform-object';
-import type { LegacyPropertyMetadata } from './legacy-platform-object';
-import { InternalError } from '../../infra/internal-error';
 
 /** An assembled construct's registered implementation steps and platform objects in one realm. */
 export class ImplementationBinding<Assembled extends BoundConstruct = BoundConstruct> {
@@ -314,11 +316,11 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     constant: ConstantMember,
   ): void {
     const realmBinding = this.binding;
-    const context = realmBinding.getConversionContext(constant.type);
+    const converter = realmBinding.getConverter(constant.type);
     defineProperty(target, constant.name, {
       configurable: false,
       enumerable: true,
-      value: idlToJS(context.createDefault(constant.value), context),
+      value: converter.idlToJS(converter.createDefault(constant.value)),
       writable: false,
     });
   }
@@ -468,7 +470,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       defineProperty(result, attribute.name, {
         configurable: true,
         enumerable: true,
-        value: idlToJS(idlValue, receiver.binding.getConversionContext(attribute.type, realmBinding.realm)),
+        value: receiver.binding.getConverter(attribute.type, realmBinding.realm).idlToJS(idlValue),
         writable: true,
       });
     }

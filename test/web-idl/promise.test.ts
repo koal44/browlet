@@ -1,35 +1,38 @@
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
+import type { InternalPromise } from '../../src/infra/promises';
+
 import { TestRealm as Realm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding/world';
-import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
+
 import {
-  idlType, promise as promiseType, sequence,
+  idlType, implementationType, promise as promiseType, sequence,
 } from '../../src/web-idl/core/index';
-import { PromiseCarrier, getPromiseForWaitingForAll, waitForAll } from '../../src/web-idl/constructs/promise';
+import { IDLPromise, waitForAll } from '../../src/web-idl/values/promise';
+import { PromiseConverter } from '../../src/web-idl/converters/promise';
 
 describe('Web IDL promises', () => {
   it('wraps JavaScript values in a target-realm PromiseCapability', async () => {
     const ctx = createContext();
     const { realm } = ctx;
-    const value = jsToIDL({ then(resolve: (value: string) => void) { resolve('fulfilled'); } }, ctx.getConversionContext(promiseType(idlType.DOMString), ctx.realm));
-    const promise = requirePromiseCarrier(value);
-    const javaScriptValue = idlToJS(promise, ctx.getConversionContext(promiseType(idlType.DOMString), ctx.realm));
+    const value = ctx.getConverter(promiseType(idlType.DOMString), ctx.realm).jsToIDL({ then(resolve: (value: string) => void) { resolve('fulfilled'); } });
+    const promise = requireIDLPromise(value);
+    const javaScriptValue = ctx.getConverter(promiseType(idlType.DOMString), ctx.realm).idlToJS(promise);
 
     expect(javaScriptValue).toBeInstanceOf(realm.intrinsics.promise.constructor);
     expect(javaScriptValue).not.toBeInstanceOf(Promise);
-    expect(idlToJS(promise, ctx.getConversionContext(promiseType(idlType.DOMString), ctx.realm))).toBe(javaScriptValue);
+    expect(ctx.getConverter(promiseType(idlType.DOMString), ctx.realm).idlToJS(promise)).toBe(javaScriptValue);
     await expect(javaScriptValue).resolves.toBe('fulfilled');
   });
 
   it('creates, resolves, rejects, and forwards promise results', async () => {
     const ctx = createContext();
-    const resolved = PromiseCarrier.fromIDL(4, ctx.getConversionContext(idlType.long));
+    const resolved = PromiseConverter.fromIDL(4, ctx.getConverter(idlType.long));
     await expect(toJavaScriptPromise(resolved)).resolves.toBe(4);
 
     const reason = new Error('rejected');
-    const rejected = PromiseCarrier.rejected(reason, idlType.long, ctx.realm, ctx.realizeException);
+    const rejected = IDLPromise.rejected(reason, idlType.long, ctx.realm, ctx.realizeException);
     await expect(toJavaScriptPromise(rejected)).rejects.toBe(reason);
     await expect(toJavaScriptPromise(rejected.react(idlType.long,
       {},
@@ -37,13 +40,13 @@ describe('Web IDL promises', () => {
     ))).rejects.toBe(reason);
 
     const value = { unchanged: true };
-    const source = PromiseCarrier.fromJS(value, idlType.any, ctx.realm);
+    const source = IDLPromise.fromJS(value, idlType.any, ctx.realm);
     await expect(source.react(idlType.any, {}, ctx.realm).promise).resolves.toBe(value);
   });
 
   it('leaves fulfillment and reaction result conversion to its caller', async () => {
     const ctx = createContext();
-    const input = requirePromiseCarrier(jsToIDL('4.9', ctx.getConversionContext(promiseType(idlType.long), ctx.realm)));
+    const input = requireIDLPromise(ctx.getConverter(promiseType(idlType.long), ctx.realm).jsToIDL('4.9'));
     let received: unknown;
     const result = [1, 2];
     const reaction = input.react(sequence(idlType.long), {
@@ -56,12 +59,10 @@ describe('Web IDL promises', () => {
 
   it('converts typed fulfillments when observed by implementation code', async () => {
     const ctx = createContext();
-    const input = PromiseCarrier.fromJS('4.9', idlType.long, ctx.realm);
-    const converted = input.toImpl(ctx, (value) => value, ctx.realm.Promise);
+    const converted = ctx.context.jsToImpl('4.9', implementationType<InternalPromise<number>>(promiseType(idlType.long)));
     await expect(new Promise((resolve, reject) => converted.observe(resolve, reject))).resolves.toBe(4);
 
-    const invalid = requirePromiseCarrier(jsToIDL('😞', ctx.getConversionContext(promiseType(idlType.ByteString), ctx.realm)));
-    const failedConversion = invalid.toImpl(ctx, (value) => value, ctx.realm.Promise);
+    const failedConversion = ctx.context.jsToImpl('😞', implementationType<InternalPromise<string>>(promiseType(idlType.ByteString)));
     await expect(new Promise((resolve, reject) => failedConversion.observe(resolve, reject))).rejects
       .toBeInstanceOf(ctx.realm.intrinsics.typeError);
   });
@@ -70,8 +71,8 @@ describe('Web IDL promises', () => {
     const ctx = createContext();
     const reason = new Error('reaction failed');
     const source = reaction === 'fulfilled'
-      ? PromiseCarrier.fromJS(1, idlType.long, ctx.realm)
-      : PromiseCarrier.rejected('source rejected', idlType.long, ctx.realm);
+      ? IDLPromise.fromJS(1, idlType.long, ctx.realm)
+      : IDLPromise.rejected('source rejected', idlType.long, ctx.realm);
     const result = source.react(idlType.long, {
       [reaction]: () => { throw reason; },
     }, ctx.realm);
@@ -85,7 +86,7 @@ describe('Web IDL promises', () => {
     const adopted = new Promise<string>((resolve) => {
       resolveAdopted = resolve;
     });
-    const capability = new PromiseCarrier(idlType.any, ctx.realm, ctx.realizeException);
+    const capability = new IDLPromise(idlType.any, ctx.realm, ctx.realizeException);
     let settled = false;
     void toJavaScriptPromise(capability).then(() => {
       settled = true;
@@ -103,9 +104,9 @@ describe('Web IDL promises', () => {
 
   it('adopts an internal promise capability when resolving a promise', async () => {
     const ctx = createContext();
-    const inner = new PromiseCarrier(idlType.any, ctx.realm, ctx.realizeException);
-    const created = PromiseCarrier.fromIDL(inner, ctx.getConversionContext(idlType.any));
-    const resolved = new PromiseCarrier(idlType.any, ctx.realm, ctx.realizeException);
+    const inner = new IDLPromise(idlType.any, ctx.realm, ctx.realizeException);
+    const created = PromiseConverter.fromIDL(inner, ctx.getConverter(idlType.any));
+    const resolved = new IDLPromise(idlType.any, ctx.realm, ctx.realizeException);
     resolved.resolve(inner.promise);
 
     let settled = false;
@@ -128,7 +129,7 @@ describe('Web IDL promises', () => {
   it('runs fulfillment and rejection steps', async () => {
     const ctx = createContext();
     let fulfilledValue: unknown;
-    const fulfilled = PromiseCarrier.fromIDL(2, ctx.getConversionContext(idlType.long)).react(idlType.undefined, {
+    const fulfilled = PromiseConverter.fromIDL(2, ctx.getConverter(idlType.long)).react(idlType.undefined, {
       fulfilled: (value) => { fulfilledValue = value; },
     }, ctx.realm);
     await expect(toJavaScriptPromise(fulfilled)).resolves.toBeUndefined();
@@ -136,7 +137,7 @@ describe('Web IDL promises', () => {
 
     const reason = new Error('recover');
     let rejectedValue: unknown;
-    const recovered = PromiseCarrier.rejected(reason, idlType.long, ctx.realm).react(idlType.undefined, {
+    const recovered = IDLPromise.rejected(reason, idlType.long, ctx.realm).react(idlType.undefined, {
       rejected: (value) => { rejectedValue = value; },
     }, ctx.realm);
     await expect(toJavaScriptPromise(recovered)).resolves.toBeUndefined();
@@ -147,9 +148,9 @@ describe('Web IDL promises', () => {
     const world = new BindingWorld([]);
     const first = createContext(world);
     const second = createContext(world);
-    const promise = new PromiseCarrier(sequence(idlType.long), first.realm, first.realizeException);
+    const promise = new IDLPromise(sequence(idlType.long), first.realm, first.realizeException);
 
-    const jsValue = idlToJS([1, 2], second.getConversionContext(promise.type, second.realm));
+    const jsValue = second.getConverter(promise.type, second.realm).idlToJS([1, 2]);
     promise.resolve(jsValue);
     const value = await promise.promise;
 
@@ -164,9 +165,9 @@ describe('Web IDL promises', () => {
     const first = createContext(world);
     const second = createContext(world);
     const source = reaction === 'fulfilled'
-      ? PromiseCarrier.fromIDL(undefined, first.getConversionContext(idlType.undefined))
-      : PromiseCarrier.rejected('rejected', idlType.undefined, first.realm);
-    const converted = idlToJS([1, 2], second.getConversionContext(sequence(idlType.long), second.realm));
+      ? PromiseConverter.fromIDL(undefined, first.getConverter(idlType.undefined))
+      : IDLPromise.rejected('rejected', idlType.undefined, first.realm);
+    const converted = second.getConverter(sequence(idlType.long), second.realm).idlToJS([1, 2]);
     const result = source.react(sequence(idlType.long), {
       [reaction]: () => converted,
     }, second.realm);
@@ -180,7 +181,7 @@ describe('Web IDL promises', () => {
 
   itPassesWith('v26+', 'explicitQueues')('reacts without consulting author-defined Promise constructors', async () => {
     const ctx = createContext();
-    const promise = PromiseCarrier.fromIDL(1, ctx.getConversionContext(idlType.long));
+    const promise = PromiseConverter.fromIDL(1, ctx.getConverter(idlType.long));
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {
       get() { throw new Error('constructor was consulted'); },
     })).toBe(true);
@@ -196,10 +197,10 @@ describe('Web IDL promises', () => {
     const ctx = createContext();
     const { realm } = ctx;
     const promises = [
-      PromiseCarrier.fromIDL(2, ctx.getConversionContext(idlType.long)),
-      PromiseCarrier.fromIDL(1, ctx.getConversionContext(idlType.long)),
+      PromiseConverter.fromIDL(2, ctx.getConverter(idlType.long)),
+      PromiseConverter.fromIDL(1, ctx.getConverter(idlType.long)),
     ];
-    const aggregate = getPromiseForWaitingForAll(promises, idlType.long, ctx.getConversionContext(idlType.long));
+    const aggregate = PromiseConverter.getPromiseForWaitingForAll(promises, idlType.long, ctx.getConverter(idlType.long));
     const values = await toJavaScriptPromise(aggregate);
 
     expect(values).toEqual([2, 1]);
@@ -225,17 +226,17 @@ describe('Web IDL promises', () => {
     const ctx = createContext();
     const first = new Error('first');
     const second = new Error('second');
-    const aggregate = getPromiseForWaitingForAll([
-      PromiseCarrier.rejected(first, idlType.long, ctx.realm, ctx.realizeException),
-      PromiseCarrier.rejected(second, idlType.long, ctx.realm, ctx.realizeException),
-    ], idlType.long, ctx.getConversionContext(idlType.long));
+    const aggregate = PromiseConverter.getPromiseForWaitingForAll([
+      IDLPromise.rejected(first, idlType.long, ctx.realm, ctx.realizeException),
+      IDLPromise.rejected(second, idlType.long, ctx.realm, ctx.realizeException),
+    ], idlType.long, ctx.getConverter(idlType.long));
 
     await expect(toJavaScriptPromise(aggregate)).rejects.toBe(first);
   });
 
   it('marks the underlying JavaScript promise as handled', async () => {
     const ctx = createContext();
-    const promise = PromiseCarrier.rejected('ignored', idlType.undefined, ctx.realm, ctx.realizeException);
+    const promise = IDLPromise.rejected('ignored', idlType.undefined, ctx.realm, ctx.realizeException);
 
     expect(() => promise.markAsHandled()).not.toThrow();
     await Promise.resolve();
@@ -243,7 +244,7 @@ describe('Web IDL promises', () => {
 
   itPassesWith('v26+', 'explicitQueues')('marks a promise handled without consulting author properties', () => {
     const ctx = createContext();
-    const promise = new PromiseCarrier(idlType.undefined, ctx.realm, ctx.realizeException);
+    const promise = new IDLPromise(idlType.undefined, ctx.realm, ctx.realizeException);
     expect(Reflect.defineProperty(toJavaScriptPromise(promise), 'constructor', {
       get() { throw new Error('constructor was consulted'); },
     })).toBe(true);
@@ -258,13 +259,13 @@ function createContext(world = new BindingWorld([])) {
   return world.getRealmBinding(realm)!;
 }
 
-function requirePromiseCarrier(value: unknown): PromiseCarrier {
-  if (!PromiseCarrier.is(value)) throw new Error('Value is not a promise carrier');
+function requireIDLPromise(value: unknown): IDLPromise {
+  if (!IDLPromise.is(value)) throw new Error('Value is not an IDL promise');
   return value;
 }
 
 function toJavaScriptPromise(
-  promise: PromiseCarrier,
+  promise: IDLPromise,
 ): Promise<unknown> {
   return promise.promise;
 }

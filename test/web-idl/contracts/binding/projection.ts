@@ -67,9 +67,9 @@ impl(Example, {
 const callbackDefinition = defineCallbackInterface<HostEnvironment>({
   name: 'Callback',
   members: [],
-  toImpl(_ctx, cbCarrier) {
-    cbCarrier.realm.eventTimeStamp();
-    return cbCarrier.object;
+  toImpl(_ctx, cbValue) {
+    cbValue.realm.eventTimeStamp();
+    return cbValue.object;
   },
 });
 const world = new BindingWorld<HostEnvironment>([definition, callbackDefinition]);

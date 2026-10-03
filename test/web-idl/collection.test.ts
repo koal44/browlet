@@ -5,7 +5,7 @@ import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
-import { getImplementationRecord } from '../../src/web-idl/binding/platform-object';
+import { getImplementationRecord } from '../../src/web-idl/binding/platform';
 import {
   defineInterface, idlType, impl, maplike, reference, sequence, setlike,
   type MaplikeMember, type OperationMember, type SetlikeMember,

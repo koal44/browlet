@@ -1,8 +1,9 @@
+import { annotated, hasExtendedAttribute, sequence } from './core/index';
 import type {
   AnnotatedType, UnionType, SimpleTypeName, SequenceType, ExtendedAttribute, WebIDLType, IntegerLiteral,
-} from './core/types';
-import { annotated, hasExtendedAttribute, sequence } from './core/helpers';
-import type { Definition } from './core/declarations';
+  Definition,
+} from './core/index';
+
 import {
   AssembledInterfaces, AssembledCallbackInterfaces, AssembledCallbackFunctions, AssembledNamespaces,
   AssembledDictionaries, AssembledEnumerations, AssembledTypedefs, AssembledProxyObjects,
@@ -48,8 +49,8 @@ export class DefinitionAssembly {
   #typeAnalyses = new Map<WebIDLType, TypeAnalysis>();
   /** Completed JSON-type checks; incomplete recursive dictionary checks are not retained. */
   #jsonTypeResults = new Map<WebIDLType, boolean>();
-  /** Conservative carrier checks, including containers that need unpacking. */
-  #carrierTypes = new Map<WebIDLType, boolean>();
+  /** Whether IDL values can reach implementations without unpacking or callback binding. */
+  #directImplTypes = new Map<WebIDLType, boolean>();
   /** Type comparison keys that ignore annotations for overload selection. */
   #overloadTypeKeys = new Map<WebIDLType, string>();
   /** Type comparison keys that retain conversion attributes and nested types. */
@@ -328,19 +329,18 @@ export class DefinitionAssembly {
     });
   }
 
-  /** Whether a type may carry an intermediate value, directly or inside a container. */
-  // Only primitives and sequences of primitives bypass unpacking. This is a
-  // conservative check: record Maps also need unpacking, while ordinary objects
-  // pass through unchanged when inspected by idlToImpl.
-  mayContainCarrier(type: WebIDLType): boolean {
-    const cached = this.#carrierTypes.get(type);
+  /** Whether values of this type can pass directly from IDL to implementation code. */
+  // Only primitives and sequences of primitives bypass inspection. References,
+  // records, and other objects can need unwrapping, binding, or nested conversion.
+  canPassToImpl(type: WebIDLType): boolean {
+    const cached = this.#directImplTypes.get(type);
     if (cached !== undefined) return cached;
-    const mayContainCarrier = this.getCandidateTypes(type).some((candidate) => {
-      if (candidate.kind === 'sequence') return this.mayContainCarrier(candidate.type);
-      return !this.isPrimitiveType(candidate);
+    const direct = this.getCandidateTypes(type).every((candidate) => {
+      if (candidate.kind === 'sequence') return this.canPassToImpl(candidate.type);
+      return this.isPrimitiveType(candidate);
     });
-    this.#carrierTypes.set(type, mayContainCarrier);
-    return mayContainCarrier;
+    this.#directImplTypes.set(type, direct);
+    return direct;
   }
 
   /** Whether an overload candidate includes a string or enumeration type. */
@@ -524,7 +524,7 @@ export class DefinitionAssembly {
   }
 }
 
-/** A declared type's fixed conversion rules, shared by contexts across bindings and realms. */
+/** A declared type's fixed conversion rules, shared by converters across bindings and realms. */
 export interface ConversionRules<Type extends WebIDLType = WebIDLType> {
   /** Descriptor whose aliases and annotations produced these rules. */
   declaredType: Type;

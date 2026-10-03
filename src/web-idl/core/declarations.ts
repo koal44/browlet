@@ -1,9 +1,9 @@
+import type { SerialSteps, TransferSteps } from './structured-data';
 import type {
   ArgumentDefinition, AttributeMember, CallbackExceptionBehavior, ConstantMember,
   DeclarationHook, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass,
   InjectedArgument, OperationMember, StringifierMember, WebIDLType,
 } from './types';
-import type { SerialSteps, TransferSteps } from './structured-data';
 
 // Interfaces
 
@@ -366,7 +366,7 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   exposed?: Exposure;
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
-  /** Turn the callback carrier, including its invocation method, into the implementation's value. */
+  /** Turn the IDL callback, including its invocation method, into the implementation's value. */
   toImpl?: DeclarationHook<'callback-interface-to-impl', Env>;
 };
 

@@ -17,6 +17,8 @@ Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
 entry augments declaration hooks with typed `BindingContext` arguments.
 Core and full-binding type fixtures are compiled separately so the augmentation
 cannot hide a dependency in the standalone surface.
+Production code outside Core imports through `core/index.ts`; Core modules
+import their siblings directly.
 
 | Modules | Responsibility |
 | --- | --- |
@@ -25,27 +27,51 @@ cannot hide a dependency in the standalone surface.
 | `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
 | `assembly.ts` | Compose the assembled collections and answer type queries across them |
 | `assembled.ts` | Construct assembled definitions and collections, with member searches and implementation-class lookup |
-| `binding/world.ts`, `binding/context.ts` | Register realms and expose their shared boundary operations |
+| `binding/world.ts` | Own definitions and identity across registered realms |
+| `binding/context.ts` | Expose boundary operations, resolve injected arguments, and supply typed implementation Promises |
 | `environment.ts` | Environment, realm-facility, and callback-lifecycle contracts supplied to Web IDL |
-| `binding/realm.ts` | Realm-wide allocation, conversion caches, projection, and receiver/exposure checks |
-| `binding/implementation.ts`, `binding/member.ts` | Registered implementation steps and the platform objects and functions that invoke them |
+| `binding/realm.ts` | Compose realm components and own allocation, conversion caches, association, projection, and invocation exception handling |
+| `binding/realm/implementation.ts`, `binding/realm/member.ts` | Registered implementation steps and the platform objects and functions that invoke them |
 | `binding/register.ts` | Connect assembled declarations to implementation factories, members, and explicit bindings |
-| `binding/overload.ts` | Select a callable and convert its arguments for invocation |
-| `constructs/implementation.ts` | Implementation construction dependencies and IDL-to-implementation conversion |
-| `conversion.ts`, `conversion-context.ts` | Shared conversion dispatch, type and realm context, and error realization |
-| `constructs/simple.ts`, `dictionary.ts`, `sequence.ts`, `record.ts`, `union.ts`, `buffer-source.ts` | Type-specific conversion, including dictionary carriers and frozen arrays |
-| `constructs/callback.ts`, `promise.ts`, `async-sequence.ts` | Callback, Promise, and async-sequence conversion, carriers, and invocation |
-| `constructs/interface.ts` | Convert interface-typed values through their implementation/platform association |
-| `binding/platform-object.ts`, `binding/global-platform-object.ts`, `binding/legacy-platform-object.ts` | Stamped identity and platform-object behavior |
-| `binding/iterable.ts`, `binding/async-iterable.ts`, `binding/collection.ts`, `binding/observable-array.ts` | Install interface members and retain their iterator or collection state |
+| `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, captured-context restoration, and implementation-callable identity |
+| `binding/realm/overload.ts` | Select a callable and convert its arguments for invocation |
+| `converters/factory.ts` | Select the converter subclass for a declared type |
+| `converters/converter.ts` | Base Converter, shared rules and ownership, defaults, and conversion error boundaries |
+| `converters/` | Type-specific Converter subclasses and IDL-to-implementation conversion |
+| `values/` | Runtime IDL dictionaries, callbacks, promises, and iterable/iterator state |
+| `values/value.ts` | IDL and author value typings, including plain record, sequence, and collection containers |
+| `binding/platform.ts` | The identity record shared by an implementation and its platform object |
+| `binding/realm/global.ts`, `binding/realm/legacy.ts` | Global and legacy platform-object behavior |
+| `binding/realm/iterable.ts`, `binding/realm/async-iterable.ts`, `binding/realm/collection.ts`, `binding/realm/observable-array.ts` | Install interface members and retain their iterator or collection state |
 
-The `binding/` directory owns registration, platform identity, and the installation
-and invocation of platform APIs. The `constructs/` directory groups value
-conversion, carriers, and their operations by construct. `ImplementationConverter`
-stays with those conversions: it consumes carriers rather than installing an API.
-Callback and Promise invocation stay with their carriers; retaining a realm binding
-alone does not determine a module's placement. Shared assembly and conversion
-dispatch remain at the subsystem root.
+The coordinating modules in `binding/` compose the subsystem: `BindingWorld` owns
+assembly and realm registration, `RealmBinding` retains realm-wide state and
+services, and `BindingContext` exposes operations to consumers. Files under
+`binding/realm/` are components of that same realm binding. They retain a typed
+reference to their owner and call its allocation, identity, conversion, and
+exception services; they do not create separate realm lifecycles.
+
+`BindingContext` owns declaration argument injection and the implementation
+Promise constructor that uses its conversion operations. Platform records call
+`RealmBinding` directly to associate another implementation with their owner.
+`converters/` owns the base `Converter` and reusable type-specific algorithms;
+`ImplementationConverter` consumes IDL values into implementation values.
+`values/` holds per-value state and lifecycle operations; converters and realm
+bindings hold reusable machinery. `value.ts` describes plain records, sequences,
+maplike/setlike entries, and the relationship between descriptors and value types.
+Those containers need no additional wrapping.
+Shared assembly remains at the subsystem root; the factory lives with the converters it selects.
+Assembly owns realm-independent rules. Converter subclasses retain those rules,
+a binding, an allocation realm, and prepared input/output steps.
+
+Consumers use the `converters/`, `values/`, and `binding/realm/` indexes;
+modules within those folders import their siblings directly. Infra also offers
+an index, while direct foundation imports remain available for narrow consumers,
+including standalone Core.
+
+Group imports by dependency: Infra, JS Engine, Core, assembly and conversion
+foundations, then collaborating binding, converter, and value modules. Keep
+type-only owner references visible alongside the relevant module imports.
 
 ## Declaring an interface
 
@@ -117,35 +143,32 @@ Conversion names state both ends: `JS` is the author-facing representation,
 Both sides run in JavaScript. `project` and `unwrap` specifically connect an
 implementation object with its platform object.
 
-A **carrier** holds a value together with information needed for later conversion
-or invocation. It is an intermediate binding representation, not the assembled
-declaration or the final implementation value.
+A runtime **IDL value** is the result of author-to-IDL conversion. Some values
+already use the representation implementations consume; others retain information
+needed for later conversion or invocation. Their declaration descriptors remain
+in Core. The `IDL…` prefix identifies these values without boxing every value.
 
-| Carrier | Payload and retained information |
+| Value | Payload and retained information |
 | --- | --- |
-| `DictionaryCarrier` | Converted members and their assembled declaration |
-| `CallbackFunctionCarrier`, `CallbackInterfaceCarrier` | Author object, declared conversions, binding, callback realm, and captured callback context |
-| `PromiseCarrier` | Realm-owned promise, fulfillment type, resolving functions, and settlement state |
-| `AsyncSequenceCarrier` | Author iterable, selected iterator method, iteration kind, and element type |
-| `AsyncIteratorCarrier` | Opened iterator record and element type used for yielded-value conversion |
+| `IDLDictionary` | Converted members and their assembled declaration |
+| `IDLCallbackFunction`, `IDLCallbackInterface` | Author object, declaration, callback realm, captured context, and a reference to the callback binding |
+| `IDLPromise` | Realm-owned promise, fulfillment type, resolving functions, and settlement state |
+| `IDLAsyncSequence` | Author iterable, selected iterator method, iteration kind, and element type |
+| `IDLSequence`, `IDLRecord`, `IDLMapEntries`, `IDLSetEntries` | Existing Array, Map, or Set containers holding converted values |
 
-Ordinary arrays, maps, and buffers keep their existing representations. Platform
-identity records and iterator state are not carriers merely because binding uses
-them. A callback interface's `toImpl(ctx, cbCarrier)` hook receives the carrier itself, whose
-`callUserObjectOperation()` method handles conversion and invocation. Its `binding`
-and `realm` select cached contexts for its argument and return types; `callbackContext` is the separately
-captured host context restored during invocation. No second callback-value object
-is created. A bound callback function is the implementation-facing callable.
+Callback values expose invocation methods that delegate to `CallbackBinding`.
+That realm component owns shared `CallbackInvoker` plans, dynamic operation
+lookup, context restoration, and callback stamps. A callback interface's
+`toImpl(ctx, cbValue)` hook still receives the value and can invoke its operations.
+The value captures its own callback context; sharing a plan never shares that
+context or the original author object.
 
-Carriers are classes: callback carriers own invocation, async-sequence carriers
-open iterators, and iterator carriers own advancing, closing, and yielded-value
-conversion. The local `IteratorRecord` holds the iterator and captured `next`
-method, and owns synchronous-to-asynchronous iteration.
-
-Implementation code receives Infra's [`AsyncIterator<T>`](../infra/iteration.ts)
-contract: `next()` and `return()` return `InternalPromise` results, and
-`endOfIteration` signals completion. The carrier and conversion context remain
-inside Web IDL.
+`IDLAsyncSequence.open()` creates an `AsyncSequenceIterator` for each traversal.
+It advances and closes the iterator and applies the caller's yielded-value
+conversion. Its local `IteratorRecord` retains the captured `next` method and
+owns synchronous-to-asynchronous iteration. Implementation code receives Infra's
+[`AsyncIterator<T>`](../infra/iteration.ts): `next()` and `return()` return
+`InternalPromise` results, and `endOfIteration` signals completion.
 
 For an interface's `async iterable` declaration, `AsyncIterableBinding` installs
 methods and checks receivers. Each projected iterator retains an
@@ -163,12 +186,13 @@ at installation; borrowed methods select converters for the receiver's binding.
 their respective members, sharing receiver validation through `CollectionBinding`.
 JS Engine owns iterator identity, reentrancy, and completion.
 
-`PromiseCarrier` owns resolution, rejection, and reactions. Its `react()` handles
-JS values; callers supply any conversions in their reaction steps. Convert an
-IDL result with `idlToJS()` before passing it to `resolve()`; resolution accepts
-a JS value and may adopt another promise. `PromiseCarrier.fromIDL()` combines
-conversion and allocation when a new promise is needed. Typed implementation
-reactions use the conversion supplied by `toImpl()` through `InternalPromise`.
+`IDLPromise` owns resolution, rejection, and reactions. Its `react()` handles
+JS values; callers supply conversions in their reaction steps. Convert an IDL
+result with `converter.idlToJS()` before `resolve()`, which accepts a JS value
+and may adopt another promise. `PromiseConverter.fromIDL()` combines conversion
+and allocation when needed. `ImplementationConverter` converts typed fulfillment
+values inside `InternalPromise` reactions. The promise value depends on neither
+converters nor binding machinery.
 
 An `AssembledCallable` describes a declaration that takes arguments; it is not a
 JavaScript function. For example:
@@ -187,13 +211,13 @@ interface Work {
 The assembled `run` callable has two arguments and a minimum argument count of
 one. Its first argument's type retains `[Clamp]`; the second retains its default.
 The assembled dictionary contains `limit` and `onprogress` in conversion order.
-Its carried members include `onprogress`: a callback carrier
+Its members needing implementation conversion include `onprogress`: an IDL callback
 must become a callable before the implementation can use it.
 
 | Stage for `run(300, { onprogress: fn })` | Representation |
 | --- | --- |
 | Author input | Number 300 and an arbitrary JavaScript object |
-| `jsToIDL` | Number 255 and a `DictionaryCarrier` containing `limit: 3` and a `CallbackFunctionCarrier` for `fn` |
+| `jsToIDL` | Number 255 and an `IDLDictionary` containing `limit: 3` and an `IDLCallbackFunction` for `fn` |
 | `idlToImpl` | Number 255 and the member record, with `onprogress` replaced by a `StampedCallbackFunction` |
 
 The `idlToImpl` step changes an already-converted IDL value into the
@@ -204,15 +228,14 @@ representation. `ImplementationConverter.createArgumentConverter()` prepares tho
 for a callable; `createConverter()` prepares the choice for one argument or member type.
 
 `BindingContext.jsToImpl()` combines the two input stages. On the return path,
-`idlToJS()` produces author values; `BindingContext.implToJS()` uses that same
-output converter for implementation results without creating a separate carrier.
+`Converter.idlToJS()` produces author values; `BindingContext.implToJS()` uses that same
+output converter for implementation results without creating a separate IDL container.
 
 Concrete conversion descriptors retain known TypeScript results, such as a
-number for `idlType.long` or a `PromiseCarrier` for `promise(...)`. Named
+number for `idlType.long` or a `IDLPromise` for `promise(...)`. Named
 references and dynamically selected types still need the runtime assembly;
 their generic results remain `unknown`. `ctx.jsToImpl()` additionally uses
-the descriptor's implementation payload type, after consuming any conversion
-carriers. That payload must not be used to type the intermediate IDL value.
+the descriptor's implementation payload type, after consuming intermediate IDL representations. That payload must not be used to type the intermediate IDL value.
 
 ## Registration and environment composition
 
@@ -226,6 +249,9 @@ Callable arguments and dictionary members retain their assembled types, includin
 applicable conversion attributes such as `[Clamp]`. Callables also retain argument
 optionality and minimum argument counts. This preparation happens during assembly;
 invocation and implementation conversion reuse it while reading current values.
+Optional input arguments without a supplied value or declared default remain
+`undefined`. Callback invocation retains a separate missing-argument marker so
+trailing absent arguments can be omitted from the author's argument list.
 After realm exposure filtering, assembled overload groups prepare their argument-count
 choices, distinguishing positions, and function lengths. Invocation selects from
 these groups without rebuilding effective overload entries. One final group handles
@@ -244,8 +270,8 @@ Bindings prepare fixed input/result conversions while installing callables.
 Dictionary conversion plans retain member converters on first use, while each
 invocation reads the current author properties in specification order. Successful
 primitive defaults can be reused; sequence and dictionary defaults remain fresh.
-Each prepared converter retains its type's `ConversionContext`. Borrowed calls
-select the context for the receiver binding and required allocation realm;
+Each converter retains its declared type, rules, binding, and allocation realm. Borrowed calls
+select the converter for the receiver binding and required allocation realm;
 nested conversions preserve those owners while selecting their own type's rules.
 IDL-to-implementation argument and attribute converters are prepared from those converted
 types. Known callbacks and dictionaries use their specific representations;
@@ -253,32 +279,32 @@ known sequences retain an element converter and unpack their fresh lists in plac
 Unions and `any` retain runtime discrimination. Recursive dictionary members and
 callback results prepare their nested converters on first use.
 Converted dictionaries carry their assembled definition and a member record;
-IDL-to-implementation conversion updates that record in place. `mayContainCarrier()`
-conservatively selects its carried members, including record containers that need
-unpacking; ordinary objects pass through unchanged. Primitive values and sequences
-of them bypass this step, so conversion keeps their fresh arrays.
+IDL-to-implementation conversion updates that record in place. `canPassToImpl()`
+allows primitives and their sequences to bypass further inspection.
+`getMembersToConvert()` selects the remaining members, including records that need
+unpacking; ordinary objects pass through unchanged.
 Complete dictionaries reuse a property layout,
 while sparse dictionaries collect only present entries
 before creating the record. Both produce ordinary objects with own data properties,
 including `__proto__`. Arbitrary Web IDL records still use a Map during conversion.
 Each `CallbackInvoker` retains argument and return converters per callable and
-callback realm. The carrier separately captures the current callback context;
+callback realm. The callback value separately captures the current callback context;
 that invocation state is never shared through a cached conversion plan.
 Bound implementation callbacks retain the callback invoker and result converter,
 so invocation does not rediscover the callback contract.
 Plans identify primitive arguments that need no projection, allowing invocation
 to reuse the internal argument list. Missing arguments, object projection, and
 exception requests still take the conversion path. `ImplementationConverter` creates
-an implementation callable from a `CallbackFunctionCarrier` and invocation policy;
+an implementation callable from an `IDLCallbackFunction` and invocation policy;
 it does not change the author's function realm or necessarily fix its `this` value.
-Bound callbacks are ordinary functions privately stamped with their callback carrier;
+Bound callbacks are ordinary functions privately stamped with their IDL callback;
 projection reads that stamp without inspecting author function properties.
-`CallbackFunctionCarrier.construct(args, currentRealm)` implements callback construction,
+`IDLCallbackFunction.construct(args, currentRealm)` implements callback construction,
 returning the converted IDL result, including primitives. It has no production
 consumer yet; HTML custom-element upgrade will need this operation. Construction
 uses the original author function, preserving callback realm and lifecycle handling.
 The caller supplies the current realm because non-constructor rejection precedes
-entry into the callback realm. Carriers retain the binding, callback realm, and
+entry into the callback realm. Callback values retain the callback binding, realm, and
 captured callback context; they do not retain the original conversion realm for
 this later error.
 Runtime consumers use assembled class instances,
@@ -309,27 +335,32 @@ buffer/string rules. Nullable and union branches inherit enclosing annotations
 through descriptors prepared once; sequence elements, dictionary members, and other
 container contents keep their own declared types. Conversion does not merge or
 search attribute arrays per value. Assembly prepares `ConversionRules`, retained
-privately by each context alongside its binding and allocation/error realm.
-Contexts in different bindings and realms share the same rules object when they
+privately by each converter alongside its binding and allocation/error realm.
+Converters in different bindings and realms share the same rules object when they
 use the same assembly and descriptor. Forwarding getters expose the rules:
-`context.declaredType` retains the original descriptor; `context.resolvedType` exposes the type
-after resolving outer aliases and annotations. `binding.getConversionContext(type, realm)`
-reuses a context for that binding, descriptor, and conversion realm, defaulting to
-`binding.realm` when the second argument is omitted. Shared contexts and their type
+`converter.declaredType` retains the original descriptor; `converter.resolvedType` exposes the type
+after resolving outer aliases and annotations. `binding.getConverter(type, realm)`
+selects and reuses a subclass for that binding, descriptor, and conversion realm, defaulting to
+`binding.realm` when the second argument is omitted. Shared converters and their type
 descriptors must remain unchanged after creation. Each realm binding owns a
-WeakMap keyed by conversion realm, whose maps retain the contexts by descriptor.
+WeakMap keyed by conversion realm, whose maps retain converters by descriptor.
 This preserves sharing without keeping discarded conversion realms alive.
-Prepared input/output converters live on the context and retain no incoming values.
+Prepared input/output steps live on the converter and retain no incoming values.
+Dictionary converters for different references share preparation by assembled
+dictionary, binding, and realm. Preparation remains lazy for recursive dictionaries.
+`jsToIDL(value)` and `getJSToIDLSteps()` establish the conversion error boundary.
+Nested input conversion uses `inputSteps` within that boundary; output uses
+`idlToJS(value)` or retained `getIDLToJSSteps()`.
 Each setter selects its input converter once when its cached function is created.
-Ordinary attributes reuse the context's prepared converter. Nullable
+Ordinary attributes reuse the converter's prepared input steps. Nullable
 `[LegacyTreatNonObjectAsNull]` callbacks use a specialized converter that maps
 non-objects to null and retains objects without requiring callability. Both use
-the same cached context; no assignment mode is stored on it or passed through
+the same cached converter; no assignment mode is stored on it or passed through
 nested conversion. Legacy callback eligibility is a cached declaration lookup.
-Converters take the value and its context. Additional inputs retain work already
-done, such as selecting an assembled interface or reading an iterator method.
-Iterable helpers use the element's context so sequences and frozen arrays share
-the same conversion.
+Converter methods take the value; type and ownership come from the receiver.
+`SequenceConverter.jsToIDLIterable()` also accepts the iterator method already
+read by overload or union resolution. `FrozenArrayConverter` reuses iteration
+and element conversion, then projects and freezes the converted entries.
 Enumeration membership uses a retained set of values.
 Returned candidate and inheritance lists are shared and must not be modified.
 Assembled interfaces collect legacy factory names and lazily prepare their overload
@@ -402,7 +433,7 @@ them. The HTML traversal keeps the interface-specific shape opaque.
 
 ## Identity and construction
 
-One [`PlatformRecord`](binding/platform-object.ts) is privately stamped onto both an
+One [`PlatformRecord`](binding/platform.ts) is privately stamped onto both an
 implementation and its eventual platform object. It retains the owning realm
 binding and assembled interface. `record.assembled` supplies its name and exact
 serialization and transfer steps. `ctx.createPlatformRecord(name)` resolves the

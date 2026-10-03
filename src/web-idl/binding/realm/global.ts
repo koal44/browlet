@@ -1,13 +1,14 @@
-import { getPlatformRecord } from './platform-object';
-import {
-  isDataDescriptor, ordinarySetWithOwnDescriptor,
-} from '../../js-engine/index';
-import type { AssembledInterface } from '../assembled';
-import { idlToJS } from '../conversion';
-import type { OperationMember } from '../core/types';
-import type { NamedPropertySteps } from './legacy-platform-object';
-import type { RealmBinding } from './realm';
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
+
+import { isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
+
+import type { OperationMember } from '../../core/index';
+
+import type { AssembledInterface } from '../../assembled';
+
+import { getPlatformRecord } from '../platform';
+import type { RealmBinding } from '../realm';
+import type { NamedPropertySteps } from './legacy';
 
 // The Web IDL object kind is shared across realms and binding instances.
 const namedPropertiesObjects = new WeakSet<object>();
@@ -53,7 +54,7 @@ export class GlobalPlatformObjectBinding {
     });
 
     // Web IDL §3.7.4.1 [[GetOwnProperty]] of a named properties object.
-    const ownDescriptor = (property: PropertyKey) => {
+    const ownDescriptor = (property: PropertyKey): TypedPropertyDescriptor<unknown> | undefined => {
       const global = getGlobalObject();
       if (
         typeof property === 'string' &&
@@ -75,9 +76,10 @@ export class GlobalPlatformObjectBinding {
         if (!descriptor) {
           return Reflect.get(target_, property, receiver) as unknown;
         }
-        if (isDataDescriptor(descriptor)) return descriptor.value as unknown;
+        if (isDataDescriptor(descriptor)) return descriptor.value;
         if (!descriptor.get) return undefined;
-        return Reflect.apply(descriptor.get, receiver, []) as unknown;
+
+        return Reflect.apply(descriptor.get, receiver, []);
       },
       getOwnPropertyDescriptor: (_target, property) => ownDescriptor(property),
       // Project Proxy adapter for ECMAScript §10.1.7.1 OrdinaryHasProperty with named [[GetOwnProperty]].
@@ -146,7 +148,7 @@ export class GlobalPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: idlToJS(value, this.#binding.getConversionContext(properties.getter.returns)),
+      value: this.#binding.getConverter(properties.getter.returns).idlToJS(value),
       writable: true,
     };
   }

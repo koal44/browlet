@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { TestRealm as Realm, getInstalledInterface } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
 import { webIDLCommonDefinitions } from '../../src/web-idl/core/common';
-import { jsToIDL, idlToJS } from '../../src/web-idl/conversion';
+
 import {
   decimal, defineEnumeration, defineIncludes, defineInterface,
   defineInterfaceMixin, definePartialInterface, frozenArray, idlType, impl, integer,
@@ -13,7 +13,7 @@ import {
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import type { SecurityCheckType } from '../../src/web-idl/environment';
-import { getPlatformRecord } from '../../src/web-idl/binding/platform-object';
+import { getPlatformRecord } from '../../src/web-idl/binding/platform';
 
 describe('Web IDL realm interface bindings', () => {
   it('projects constructors, inheritance, fragments, members, and descriptors', () => {
@@ -408,8 +408,8 @@ describe('Web IDL realm interface bindings', () => {
     expect(record.implInst).toBe(implementation);
     expect(call(prototype, 'read', object)).toBe(42);
     expect(call(prototype, 'echo', object, object)).toBe(object);
-    expect(jsToIDL(object, binding.getConversionContext(reference('SeparatedIdentity')))).toBe(implementation);
-    expect(idlToJS(implementation, binding.getConversionContext(reference('SeparatedIdentity')))).toBe(object);
+    expect(binding.getConverter(reference('SeparatedIdentity')).jsToIDL(object)).toBe(implementation);
+    expect(binding.getConverter(reference('SeparatedIdentity')).idlToJS(implementation)).toBe(object);
     expect(realm.checks.map(({ object: checked }) => checked)).toEqual([
       object,
       object,

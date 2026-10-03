@@ -1,12 +1,9 @@
-import {
-  createObservableArray, type ObservableArrayHandle,
-} from '../../infra/observable-array';
-import { jsToIDL } from '../conversion';
-import {
-  idlType, type AttributeMember, type WebIDLType,
-} from '../core/index';
-import type { PlatformRecord } from './platform-object';
-import type { RealmBinding } from './realm';
+import { createObservableArray, type ObservableArrayHandle } from '../../../infra/index';
+
+import { idlType, type AttributeMember, type WebIDLType } from '../../core/index';
+
+import type { PlatformRecord } from '../platform';
+import type { RealmBinding } from '../realm';
 
 export class ObservableArrayBinding {
   #binding: RealmBinding;
@@ -41,7 +38,7 @@ export class ObservableArrayBinding {
     elementType: WebIDLType,
     value: unknown,
   ): void {
-    const values = jsToIDL(value, this.#binding.getConversionContext(this.#binding.assembly.getSequenceType(elementType)));
+    const values = this.#binding.getConverter(this.#binding.assembly.getSequenceType(elementType)).jsToIDL(value);
     this.#getHandle(record, attribute, elementType).replaceValues(values);
   }
 
@@ -61,8 +58,8 @@ export class ObservableArrayBinding {
     const existing = attributes.get(attribute);
     if (existing) return existing;
 
-    const inputContext = this.#binding.getConversionContext(elementType);
-    const outputContext = record.binding.getConversionContext(elementType, this.#binding.realm);
+    const inputConverter = this.#binding.getConverter(elementType);
+    const outputConverter = record.binding.getConverter(elementType, this.#binding.realm);
     const steps = this.#binding.getMemberBinding(record.assembled, attribute)?.observableArraySteps;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const deleteSteps = steps?.delete;
@@ -70,7 +67,7 @@ export class ObservableArrayBinding {
     const setSteps = steps?.set;
     const handle = createObservableArray({
       array: this.#binding.realm.intrinsics.array,
-      convert: inputContext.getJSToIDLConverter(),
+      convert: inputConverter.getJSToIDLSteps(),
       delete: deleteSteps
         ? (value, index) => Reflect.apply(
           deleteSteps,
@@ -87,8 +84,8 @@ export class ObservableArrayBinding {
           [value, index],
         )
         : undefined,
-      toJavaScript: outputContext.getIDLToJSConverter(),
-      toNumber: this.#binding.getConversionContext(idlType.unrestrictedDouble).getJSToIDLConverter(),
+      toJavaScript: outputConverter.getIDLToJSSteps(),
+      toNumber: this.#binding.getConverter(idlType.unrestrictedDouble).getJSToIDLSteps(),
     });
     attributes.set(attribute, handle);
     return handle;

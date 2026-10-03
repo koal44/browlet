@@ -1,0 +1,42 @@
+import { InternalError } from '../../infra/index';
+
+import { getMethod, isObject } from '../../js-engine/index';
+
+import type { AsyncSequenceType, WebIDLType } from '../core/index';
+
+import { Converter, type ConversionSteps } from './converter';
+
+import { IDLAsyncSequence } from '../values/index';
+
+/** Capture the selected iteration method without opening or advancing the iterator. */
+export class AsyncSequenceConverter<Type extends WebIDLType = WebIDLType> extends Converter<Type> {
+  // https://webidl.spec.whatwg.org/#js-to-async-iterable
+  protected createInputSteps(): ConversionSteps<IDLAsyncSequence> {
+    const type = this.resolvedType as AsyncSequenceType;
+    const { realm } = this;
+    return (value) => {
+      if (!isObject(value)) {
+        throw new realm.intrinsics.typeError(
+          'An async sequence value must be an object',
+        );
+      }
+
+      const asyncMethod = getMethod(value, Symbol.asyncIterator, realm);
+      if (asyncMethod) {
+        return new IDLAsyncSequence(value, type.type, asyncMethod, 'async');
+      }
+      const syncMethod = getMethod(value, Symbol.iterator, realm);
+      if (!syncMethod) {
+        throw new realm.intrinsics.typeError('Value is not asynchronously iterable');
+      }
+      return new IDLAsyncSequence(value, type.type, syncMethod, 'sync');
+    };
+  }
+
+  protected override createOutputSteps(): ConversionSteps<object> {
+    return (value) => {
+      if (!IDLAsyncSequence.is(value)) throw new InternalError('Expected an IDL async sequence');
+      return value.object;
+    };
+  }
+}

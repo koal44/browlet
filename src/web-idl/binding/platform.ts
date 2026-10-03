@@ -1,11 +1,13 @@
+import { InternalError, type ObservableArrayHandle, Stamper } from '../../infra/index';
+
 import { isObject } from '../../js-engine/index';
-import type { ObservableArrayHandle } from '../../infra/observable-array';
-import { Stamper } from '../../infra/stamper';
-import type { AssembledInterface } from '../assembled';
-import type { RealmBinding } from './realm';
+
 import type { AttributeMember, ImplementationClass } from '../core/index';
+
+import type { AssembledInterface } from '../assembled';
 import type { WebIDLRealm } from '../environment';
-import { InternalError } from '../../infra/internal-error';
+
+import type { RealmBinding } from './realm';
 
 /** An implementation instance stamped with its private platform record. */
 export type StampedImplInstance<T extends object = object> = T & ImplementationStamper;
@@ -55,7 +57,7 @@ export class PlatformRecord<T extends object = object> {
 
   /** Associate another implementation with this owner, preserving any existing owner. */
   associateWithOwner<Impl extends object>(implClass: ImplementationClass<Impl>, implInst: Impl): PlatformRecord<Impl> {
-    return this.binding.context.associate(implClass, implInst);
+    return this.binding.associate(implClass, implInst);
   }
 
   /** Whether this object's interface is the requested interface or inherits from it. */

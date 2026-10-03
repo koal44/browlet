@@ -1,14 +1,14 @@
-import {
-  isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor,
-} from '../../js-engine/index';
-import type { AssembledCallable, AssembledInterface } from '../assembled';
-import { jsToIDL, idlToJS } from '../conversion';
-import type { OperationMember } from '../core/types';
-import { getImplementationObject, getImplementationRecord, type PlatformRecord } from './platform-object';
-import { isNamedPropertiesObject } from './global-platform-object';
-import type { RealmBinding } from './realm';
+import { InternalError } from '../../../infra/index';
 
-import { InternalError } from '../../infra/internal-error';
+import { isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
+
+import type { OperationMember } from '../../core/index';
+
+import type { AssembledCallable, AssembledInterface } from '../../assembled';
+
+import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../platform';
+import type { RealmBinding } from '../realm';
+import { isNamedPropertiesObject } from './global';
 
 export class LegacyPlatformObjectBinding {
   #binding: RealmBinding;
@@ -239,7 +239,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: true,
-      value: idlToJS(value, this.#binding.getConversionContext(properties.getter.primary.returns)),
+      value: this.#binding.getConverter(properties.getter.primary.returns).idlToJS(value),
       writable: properties.setter !== undefined,
     };
   }
@@ -259,7 +259,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: idlToJS(value, this.#binding.getConversionContext(properties.getter.primary.returns)),
+      value: this.#binding.getConverter(properties.getter.primary.returns).idlToJS(value),
       writable: properties.setter !== undefined,
     };
   }
@@ -518,7 +518,7 @@ export class LegacyPlatformObjectBinding {
     if (!valueArgument) {
       throw new InternalError('Legacy property setter has no value argument');
     }
-    return jsToIDL(value, this.#binding.getConversionContext(valueArgument.type));
+    return this.#binding.getConverter(valueArgument.type).jsToIDL(value);
   }
 
   // Extracted from Web IDL §3.9.4 [[Delete]] — invoke the named property deleter.

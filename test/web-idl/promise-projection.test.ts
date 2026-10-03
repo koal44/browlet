@@ -1,9 +1,9 @@
+import { PromiseConverter } from '../../src/web-idl/converters/promise';
 import { describe, expect, it } from 'vitest';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly';
-import { idlToJS } from '../../src/web-idl/conversion';
-import { PromiseCarrier } from '../../src/web-idl/constructs/promise';
+
 import {
   annotated, defineTypedef, idlType, implementationType, promise, reference, sequence, xattr,
 } from '../../src/web-idl/core/index';
@@ -38,7 +38,7 @@ describe('declared Promise ownership', () => {
     const P = binding.context.Promise;
     const type = implementationType<number[]>(reference('Counts'));
     const result = P.all([P.resolve(1, idlType.long), P.resolve(2, idlType.long)], type);
-    const values = await idlToJS(result, binding.getConversionContext(promise(type)));
+    const values = await binding.getConverter(promise(type)).idlToJS(result);
     expect(values).toEqual([1, 2]);
     expect(values).toBeInstanceOf(realm.intrinsics.array);
   });
@@ -48,13 +48,13 @@ describe('declared Promise ownership', () => {
     const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
     const context = { binding: binding, realm: binding.realm };
     const source = Object.freeze(kind === 'record'
-      ? PromiseCarrier.fromIDL(7, binding.getConversionContext(idlType.long))
+      ? PromiseConverter.fromIDL(7, binding.getConverter(idlType.long))
       : binding.context.Promise.resolve(7, idlType.long));
     const keys = Reflect.ownKeys(source);
     const prototype = Reflect.getPrototypeOf(source);
     const type = promise(idlType.long);
-    const result = idlToJS(source, context.binding.getConversionContext(type, context.realm));
-    expect(idlToJS(source, context.binding.getConversionContext(type, context.realm))).toBe(result);
+    const result = context.binding.getConverter(type, context.realm).idlToJS(source);
+    expect(context.binding.getConverter(type, context.realm).idlToJS(source)).toBe(result);
     expect(result).toBeInstanceOf(realm.intrinsics.promise.constructor);
     await expect(result).resolves.toBe(7);
     expect(Reflect.ownKeys(source)).toEqual(keys);
@@ -66,7 +66,7 @@ describe('declared Promise ownership', () => {
     const realm = new TestRealm();
     const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
     const source = binding.context.Promise.withResolvers(idlType.double);
-    expect(() => idlToJS(source.promise, binding.getConversionContext(promise(idlType.long))))
+    expect(() => binding.getConverter(promise(idlType.long)).idlToJS(source.promise))
       .toThrow(InternalError);
   });
 
@@ -77,8 +77,8 @@ describe('declared Promise ownership', () => {
     const result = source.then((value) => value, undefined, idlType.USVString);
     const context = { binding: binding, realm: binding.realm };
     expect(result.type).toBe(idlType.USVString);
-    expect(() => idlToJS(result, context.binding.getConversionContext(promise(idlType.DOMString), context.realm))).toThrow(InternalError);
-    await expect(idlToJS(result, context.binding.getConversionContext(promise(idlType.USVString), context.realm))).resolves.toBe('text');
+    expect(() => context.binding.getConverter(promise(idlType.DOMString), context.realm).idlToJS(result)).toThrow(InternalError);
+    await expect(context.binding.getConverter(promise(idlType.USVString), context.realm).idlToJS(result)).resolves.toBe('text');
   });
 
   it('retains implementation result metadata without exposing its private representation', () => {
@@ -87,7 +87,7 @@ describe('declared Promise ownership', () => {
     const type = internalType<number>('Counter');
     const source = binding.context.Promise.resolve(7, type);
     expect(source.type).toBe(type);
-    expect(() => idlToJS(source, binding.getConversionContext(promise(idlType.long)))).toThrow(InternalError);
+    expect(() => binding.getConverter(promise(idlType.long)).idlToJS(source)).toThrow(InternalError);
   });
 
   it('resolves aliases inside nested result types while retaining conversion attributes', async () => {
@@ -97,9 +97,9 @@ describe('declared Promise ownership', () => {
     const binding = new RealmBinding(new DefinitionAssembly([alias]), realm, world, (ctx) => ({ realm: ctx.realm }));
     const source = binding.context.Promise.resolve([7], sequence(implementationType<number>(reference('Count'))));
     const context = { binding: binding, realm: binding.realm };
-    await expect(idlToJS(source, context.binding.getConversionContext(promise(sequence(idlType.long)), context.realm))).resolves.toEqual([7]);
+    await expect(context.binding.getConverter(promise(sequence(idlType.long)), context.realm).idlToJS(source)).resolves.toEqual([7]);
     const clamped = annotated(idlType.long, xattr('Clamp'));
-    expect(() => idlToJS(source, context.binding.getConversionContext(promise(sequence(clamped)), context.realm))).toThrow(InternalError);
+    expect(() => context.binding.getConverter(promise(sequence(clamped)), context.realm).idlToJS(source)).toThrow(InternalError);
   });
 
   it('retains allocation and identity when an implementation view changes reaction destination', async () => {
@@ -111,8 +111,8 @@ describe('declared Promise ownership', () => {
     const source = a.context.Promise.resolve(7, idlType.long);
     const view = b.context.Promise.fromInternal(source);
     const type = promise(idlType.long);
-    const result = idlToJS(source, a.getConversionContext(type));
-    expect(idlToJS(view, b.getConversionContext(type))).toBe(result);
+    const result = a.getConverter(type).idlToJS(source);
+    expect(b.getConverter(type).idlToJS(view)).toBe(result);
     expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
     expect(result).not.toBeInstanceOf(second.intrinsics.promise.constructor);
     await expect(result).resolves.toBe(7);

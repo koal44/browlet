@@ -1,12 +1,15 @@
+import { endOfIteration } from '../../infra/index';
+
 import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js-engine/index';
-import { endOfIteration } from '../../infra/iteration';
-import { idlType, type AsyncSequenceType, type WebIDLType } from '../core/index';
+
+import { idlType, type WebIDLType } from '../core/index';
+
 import type { WebIDLRealm } from '../environment';
-import type { ConversionContext } from '../conversion-context';
-import { PromiseCarrier } from './promise';
+
+import { IDLPromise } from './promise';
 
 /** An iterable with the captured method and type needed to open its sequence. */
-export class AsyncSequenceCarrier {
+export class IDLAsyncSequence {
   /** Private identity tested without inspecting author iterable properties. */
   #brand = undefined;
   /** Original author iterable, preserved for identity and invocation. */
@@ -26,43 +29,21 @@ export class AsyncSequenceCarrier {
   }
 
   /** Recognize a converted async sequence. */
-  static is(value: unknown): value is AsyncSequenceCarrier {
+  static is(value: unknown): value is IDLAsyncSequence {
     return isObject(value) && #brand in value;
-  }
-
-  /** Capture the author's iterable and its selected iteration method. */
-  // https://webidl.spec.whatwg.org/#js-to-async-iterable
-  static fromJS(value: unknown, context: ConversionContext): AsyncSequenceCarrier {
-    const type = context.resolvedType as AsyncSequenceType;
-    const { realm } = context;
-    if (!isObject(value)) {
-      throw new realm.intrinsics.typeError(
-        'An async sequence value must be an object',
-      );
-    }
-
-    const asyncMethod = getMethod(value, Symbol.asyncIterator, realm);
-    if (asyncMethod) {
-      return new AsyncSequenceCarrier(value, type.type, asyncMethod, 'async');
-    }
-    const syncMethod = getMethod(value, Symbol.iterator, realm);
-    if (!syncMethod) {
-      throw new realm.intrinsics.typeError('Value is not asynchronously iterable');
-    }
-    return new AsyncSequenceCarrier(value, type.type, syncMethod, 'sync');
   }
 
   /** Open a fresh iterator using the method captured during conversion. */
   // https://webidl.spec.whatwg.org/#async-sequence-open
-  open(realm: WebIDLRealm): AsyncIteratorCarrier {
+  open(realm: WebIDLRealm): AsyncSequenceIterator {
     let record = IteratorRecord.fromMethod(this.object, this.method, realm);
     if (this.iteratorType === 'sync') record = record.toAsync(realm);
-    return new AsyncIteratorCarrier(this.elementType, record);
+    return new AsyncSequenceIterator(this.elementType, record);
   }
 }
 
 /** An opened iterator with the conversion type of its yielded values. */
-export class AsyncIteratorCarrier {
+export class AsyncSequenceIterator {
   /** Declared conversion applied to each yielded value. */
   elementType: WebIDLType;
   /** Live iterator and its captured next method. */
@@ -75,7 +56,7 @@ export class AsyncIteratorCarrier {
 
   /** Advance this iterator and convert the next yielded value. */
   // https://webidl.spec.whatwg.org/#async-iterator-get-next-value
-  nextValue(realm: WebIDLRealm, convert: (value: unknown, type: WebIDLType) => unknown): PromiseCarrier {
+  nextValue(realm: WebIDLRealm, convert: (value: unknown, type: WebIDLType) => unknown): IDLPromise {
     let nextResult: unknown;
     try {
       nextResult = Reflect.apply(
@@ -87,10 +68,10 @@ export class AsyncIteratorCarrier {
         throw new realm.intrinsics.typeError('Iterator result is not an object');
       }
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, realm);
+      return IDLPromise.rejected(exception, idlType.any, realm);
     }
 
-    const nextPromise = PromiseCarrier.fromJS(nextResult, idlType.any, realm);
+    const nextPromise = IDLPromise.fromJS(nextResult, idlType.any, realm);
     return nextPromise.react(idlType.any, {
       fulfilled: (iterationResult) => {
         if (!isObject(iterationResult)) {
@@ -105,14 +86,14 @@ export class AsyncIteratorCarrier {
 
   /** Close this iterator with the supplied reason. */
   // https://webidl.spec.whatwg.org/#async-iterator-close
-  close(reason: unknown, realm: WebIDLRealm): PromiseCarrier {
+  close(reason: unknown, realm: WebIDLRealm): IDLPromise {
     let returnMethod: JSMethod | undefined;
     try {
       returnMethod = getMethod(this.record.iterator, 'return', realm);
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, realm);
+      return IDLPromise.rejected(exception, idlType.any, realm);
     }
-    if (!returnMethod) return PromiseCarrier.fromJS(undefined, idlType.any, realm);
+    if (!returnMethod) return IDLPromise.fromJS(undefined, idlType.any, realm);
 
     let returnResult: unknown;
     try {
@@ -122,10 +103,10 @@ export class AsyncIteratorCarrier {
         [reason],
       );
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, realm);
+      return IDLPromise.rejected(exception, idlType.any, realm);
     }
 
-    const returnPromise = PromiseCarrier.fromJS(returnResult, idlType.any, realm);
+    const returnPromise = IDLPromise.fromJS(returnResult, idlType.any, realm);
     return returnPromise.react(idlType.any, {
       fulfilled: (result) => {
         if (!isObject(result)) {
@@ -185,11 +166,11 @@ class IteratorRecord {
   /** Invoke next or return, await its value, and create an async iterator result. */
   // https://tc39.es/ecma262/#sec-async-from-sync-iterator-objects
   // Combines next/return with AsyncFromSyncIteratorContinuation for this adapter.
-  #invokeAsAsync(operation: 'next' | 'return', args: unknown[], realm: WebIDLRealm): PromiseCarrier {
+  #invokeAsAsync(operation: 'next' | 'return', args: unknown[], realm: WebIDLRealm): IDLPromise {
     try {
       const method = operation === 'next' ? this.nextMethod : getMethod(this.iterator, 'return', realm);
       if (!method) {
-        return PromiseCarrier.fromJS(realm.createIteratorResultObject(args[0], true), idlType.any, realm);
+        return IDLPromise.fromJS(realm.createIteratorResultObject(args[0], true), idlType.any, realm);
       }
       const result = Reflect.apply(method, this.iterator, args);
       if (!isObject(result)) {
@@ -197,12 +178,12 @@ class IteratorRecord {
       }
       const iteration = result as { done?: unknown; value?: unknown; };
       const done = Boolean(iteration.done);
-      const valuePromise = PromiseCarrier.fromJS(iteration.value, idlType.any, realm);
+      const valuePromise = IDLPromise.fromJS(iteration.value, idlType.any, realm);
       return valuePromise.react(idlType.any, {
         fulfilled: (value) => realm.createIteratorResultObject(value, done),
       }, realm);
     } catch (exception) {
-      return PromiseCarrier.rejected(exception, idlType.any, realm);
+      return IDLPromise.rejected(exception, idlType.any, realm);
     }
   }
 }

@@ -1,16 +1,18 @@
-import { DefinitionAssembly } from '../assembly';
-import { RealmBinding } from './realm';
-import type { BindingContext } from './context';
-import { webIDLCommonDefinitions } from '../core/common';
-import type { Definition } from '../core/index';
-import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
-import {
-  getImplementationRecord, getPlatformRecord,
-  type StampedImplInstance, type StampedPlatformObject,
-} from './platform-object';
-import { registerImplementationBindings } from './register';
+import { InternalError } from '../../infra/index';
+
 import type { JSRealm } from '../../js-engine/index';
-import { InternalError } from '../../infra/internal-error';
+
+import { webIDLCommonDefinitions, type Definition } from '../core/index';
+
+import { DefinitionAssembly } from '../assembly';
+import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
+
+import type { BindingContext } from './context';
+import {
+  getImplementationRecord, getPlatformRecord, type StampedImplInstance, type StampedPlatformObject,
+} from './platform';
+import { RealmBinding } from './realm';
+import { registerImplementationBindings } from './register';
 
 /**
  * Owns definitions and platform-object identity across registered realms.

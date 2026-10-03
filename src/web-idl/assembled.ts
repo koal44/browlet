@@ -1,17 +1,17 @@
+import { InternalError } from '../infra/index';
+
+import { hasExtendedAttribute, reference } from './core/index';
 import type {
   CallbackFunctionDefinition, CallbackInterfaceDefinition, DictionaryDefinition, DictionaryMember,
   ConstructorMember, EnumerationDefinition, MaplikeMember, ProxyObjectDefinition, SetlikeMember,
   TypedefDefinition, PartialDictionaryDefinition, PrimaryInterfaceDefinition, InterfaceMember,
   PartialInterfaceDefinition, InterfaceMixinDefinition, MixinMember, PartialInterfaceMixinDefinition,
   NamespaceDefinition, NamespaceMember, PartialNamespaceDefinition, Definition, IncludesDefinition,
-} from './core/declarations';
-import type {
-  ArgumentDefinition, AttributeMember, ExtendedAttribute, ImplementationClass, NamedArgumentsExtendedAttribute,
-  OperationMember, ReferenceType, StringifierMember, WebIDLType,
-} from './core/types';
-import { hasExtendedAttribute, reference } from './core/helpers';
-import type { SerialSteps, TransferSteps } from './core/structured-data';
-import { InternalError } from '../infra/internal-error';
+  ArgumentDefinition, AttributeMember, ExtendedAttribute, ImplementationClass,
+  NamedArgumentsExtendedAttribute, OperationMember, ReferenceType, StringifierMember, WebIDLType,
+  SerialSteps, TransferSteps,
+} from './core/index';
+
 import type { DefinitionAssembly } from './assembly';
 
 /** An interface with its parent, partial declarations, and included mixin members. */
@@ -583,7 +583,7 @@ export class AssembledDictionary {
   members: AssembledDictionaryMember[] = [];
 
   /** Members whose converted values may need unpacking or callback binding before implementation use. */
-  #carriedMembers: AssembledDictionaryMember[] | undefined;
+  #membersToConvert: AssembledDictionaryMember[] | undefined;
 
   constructor(primary: DictionaryDefinition, partials: PartialDictionaryDefinition[] = []) {
     this.primary = primary;
@@ -591,8 +591,8 @@ export class AssembledDictionary {
   }
 
   /** Get members that may need further conversion; primitives and sequences of primitives pass through. */
-  getCarriedMembers(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
-    return this.#carriedMembers ??= this.members.filter((member) => assembly.mayContainCarrier(member.type));
+  getMembersToConvert(assembly: DefinitionAssembly): AssembledDictionaryMember[] {
+    return this.#membersToConvert ??= this.members.filter((member) => !assembly.canPassToImpl(member.type));
   }
 
   /** A dictionary is a JSON type only when all of its member types are JSON types. */

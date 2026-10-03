@@ -1,4 +1,10 @@
+import { InternalError } from '../../infra/internal-error';
 import type { PromiseResult, ResultValue } from '../../infra/promises';
+
+import type {
+  AsyncIterableMember, ConstructorMember, DictionaryMember, PrimaryInterfaceDefinition,
+  IterableMember, MaplikeMember, SetlikeMember,
+} from './declarations';
 import type {
   AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, CallbackExceptionBehavior,
   ConstantMember, ConstantValue, DecimalLiteral, DeclarationHook, DefaultValue, ExtendedAttribute, FrozenArrayType,
@@ -6,11 +12,6 @@ import type {
   OperationMember, PromiseType, RecordType, ReferenceType, SequenceType,
   StringifierMember, StringType, UnionType, WebIDLType,
 } from './types';
-import type {
-  AsyncIterableMember, ConstructorMember, DictionaryMember, PrimaryInterfaceDefinition,
-  IterableMember, MaplikeMember, SetlikeMember,
-} from './declarations';
-import { InternalError } from '../../infra/internal-error';
 
 // Members and arguments
 
