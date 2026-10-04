@@ -1,8 +1,8 @@
 import type { CSSStyleDeclarationImpl } from './cssom/declaration';
 import type {
-  DOMNode as Document, DOMNode as Element,
+  DOMDocument as Document, DOMElement as Element,
 } from '../infra/index';
-import type { CSSStyleSheetImpl } from './cssom/css-stylesheet';
+import type { CSSStyleSheetImpl, CSSStyleSheetInit } from './cssom/css-stylesheet';
 import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';
 import { StyleletContext } from './context';
@@ -19,7 +19,7 @@ export class Stylelet {
     const env = createStyleletEnvironment(options);
     this.context = new StyleletContext(document, env);
     this.#cascade = new CascadeEngine({
-      environmentBaseUrl: new URL(this.context.dom.baseURI(document)),
+      environmentBaseUrl: new env.userAgent.URL(this.context.dom.baseURI(document)),
       context: this.context,
     });
     this.documentScope = new TreeScope(document, this.#cascade);

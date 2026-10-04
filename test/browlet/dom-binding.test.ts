@@ -123,6 +123,31 @@ describe('Browlet DOM binding', () => {
     }).toThrow(FirstTypeError);
   });
 
+  it('retains converted listener values without looking up handleEvent', async () => {
+    const browlet = createBrowlet();
+    const EventTarget_ = getGlobal<typeof EventTarget>(browlet, 'EventTarget');
+    const target = new EventTarget_();
+    await browlet.evaluate(() => {
+      Reflect.set(globalThis, 'listenerForLookup', {
+        get handleEvent(): (event: Event) => void {
+          throw new Error('Listener lookup must not read handleEvent');
+        },
+      });
+    });
+    const callback = getGlobal<EventListenerObject>(browlet, 'listenerForLookup');
+
+    target.addEventListener('ready', callback);
+    const targetImpl = unwrap<EventTargetImpl>(target);
+    const [value] = targetImpl.getEventListenerCallbacks('ready');
+
+    expect(value?.object === callback).toBe(true);
+    expect(value?.realm).toBe(getRelevantRealm(browlet.window));
+    expect(targetImpl.getEventListenerCallbacks('ready')[0]).toBe(value);
+
+    target.removeEventListener('ready', callback);
+    expect(targetImpl.getEventListenerCallbacks('ready')).toEqual([]);
+  });
+
   it('keeps an internally created event in its owning realm when first delivered through another realm', () => {
     const first = createBrowlet();
     const second = createBrowlet();

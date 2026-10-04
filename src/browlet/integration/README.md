@@ -52,6 +52,9 @@ Domain-local behavior still remains with its owning subsystem.
   microtask-queue backend, including its enqueue and checkpoint operations.
 - `fetch.ts` resolves an explicit global task destination to its existing Realm
   and queues through that Realm, which can differ from the body owner's Realm.
+- `network/` supplies the UserAgent's Node/Undici HTTP transport and per-response
+  native content decoders. Fetch owns request processing and stream delivery;
+  the adapters own connections, TLS, native I/O, and compression facilities.
 
 File and DOMException serialization steps live beside their implementations and
 attach directly to the Web IDL declarations. HTML invokes their portable step

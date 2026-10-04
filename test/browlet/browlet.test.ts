@@ -6,9 +6,8 @@ import {
 import { getRelevantRealm, unwrap } from '../../src/browlet/bindings';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
-  MATHML_NAMESPACE, SVG_NAMESPACE,
+  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../src/infra/index';
-import { isHtmlLink } from '../../src/infra/selector-dom';
 import { InternalError } from '../../src/infra/internal-error';
 import { serializeOrigin } from '../../src/url/origin';
 
@@ -546,6 +545,10 @@ describe('Browlet', () => {
     expect(link.sheet).not.toBeNull();
     expect(link.sheet?.ownerNode).toBe(link);
     expect(browlet.document.styleSheets.item(0)).toBe(link.sheet);
+
+    function isHtmlLink(element: Element): element is HTMLLinkElement {
+      return element.namespaceURI === HTML_NAMESPACE && element.localName === 'link';
+    }
   });
 
   it('exposes parsed element IDs as named window properties', async () => {

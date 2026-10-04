@@ -1,4 +1,4 @@
-import type { DOMOperations, DOMNode as Element } from '../../infra/index';
+import type { DOMOperations, DOMElement as Element, DOMShadowRoot as ShadowRoot } from '../../infra/index';
 import { collectCompoundTests } from '../compile/emit-seedable';
 import { nextDescendant } from '../compile/runtime';
 import type { RuntimeCache } from '../compile/runtimeCache';
@@ -880,7 +880,7 @@ function matchHasFrom(
   }
 }
 
-function shadowRoot(node: Element, dom: DOMOperations): Element | null {
+function shadowRoot(node: Element, dom: DOMOperations): ShadowRoot | null {
   const root = dom.root(node);
   return dom.isShadowRoot(root) ? root : null;
 }

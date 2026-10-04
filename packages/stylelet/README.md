@@ -27,7 +27,7 @@ import { styleletIDLDefinitions } from 'stylelet';
 A DOM host can assemble it with its own interfaces and bind the resulting
 CSSOM mixins to that host's platform objects.
 
-`StyleletOptions` accepts `env`, `dom`, and `exec`. The shared `DOMOperations` contract
+`StyleletOptions` accepts `env`, `dom`, `URL`, `decodeText`, and `exec`. The shared `DOMOperations` contract
 also serves Selectlet: engines use these operations for all access to host nodes,
 preserving their identities without requiring fields or methods on them.
 Omitting `dom` selects `standardDOM` for browser or jsdom platform objects;
@@ -38,16 +38,39 @@ supply `inlineStyle` to reuse that state directly.
 `exec` accepts `StyleletExecution`
 for promises, deferred execution, and DOM exceptions; omitting it selects
 `defaultStyleletExecution`, using the native Promise queue, timers, and DOMException.
-Stylesheet result delivery uses `exec.style.queueTask()` separately from
+Infra owns the standalone scheduling provider and its native timer adapter.
+Cancellation uses `TaskHandle.remove()` without exposing browser timer IDs or Node
+timer objects. Importing Stylelet does not require ambient timers; a host can supply
+its own `exec` or `env`. Native timers are required when the default execution
+schedules work. `TimerHost` and `TaskHandle` are exported from `stylelet`.
+`exec.DOMException`
+supplies the host's constructor using Web IDL Core's `DOMExceptionConstructor`
+and `DOMException` contracts, re-exported from `stylelet`. CSSOM platform projection remains unfinished.
+Stylesheet result delivery uses `exec.queueTask('dom-manipulation', steps)` separately from
 `exec.runInParallel()`. These options compose a standalone environment.
 
 A host with an existing owner can use `new Stylelet(document, { env })`.
-That environment is retained directly and takes precedence over `dom` and `exec`.
-`StyleletEnvironment` requires `userAgent.dom` and `exec`; Browlet satisfies this
+That environment is retained directly and takes precedence over the standalone options.
+`StyleletEnvironment` requires `userAgent.dom`, `userAgent.URL`, `userAgent.decodeText`, and `exec`; Browlet satisfies this
 view with its existing Environment, UserAgent, and composed execution object.
 `StyleletContext` and its CSSOM objects retain that same environment. Stylelet
 and RealmExecution share Infra's `AsyncExecution` contract for Promise creation
 and background work; Stylelet has no dependency on the engine package.
+
+`URL` accepts a `StyleletURLConstructor`: construction takes an input string and
+an optional base string, returns a `StyleletURL` with `href`, and throws for invalid
+input. Standalone composition defaults to the captured native URL constructor;
+Browlet supplies its own implementation. The same provider resolves stylesheet
+bases and computed resource URLs. Low-level value callers supply it as `context.URL`
+when computing nonempty, nonlocal URLs. URL strings are resolved before CSS
+serialization; these internal objects are not exposed through CSSOM.
+
+`decodeText(bytes, fallbackEncoding)` supplies complete-input text decoding with
+BOM override and replacement handling. `Encoding` and `EncodingCapability` are
+exported for hosts implementing this contract. Browlet uses its Encoding
+implementation; standalone hosts default to the native decoder adapter. CSS
+chooses its fallback using Encoding Core's shared label lookup. Importing
+Stylelet does not require ambient TextDecoder; using the native adapter does.
 
 Stylelet exports its stylesheet, declaration, and media-list implementations.
 Stylesheet construction takes the existing context, which supplies `env`.

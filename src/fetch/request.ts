@@ -1,5 +1,5 @@
 import type { BlobImpl } from '../file/index';
-import { type AbortSignalCapability, type JSEnvironment, isomorphicEncode } from '../js-engine/index';
+import { type AbortSignalCapability, type JSEnvironment, isomorphicEncode, randomUUID } from '../js-engine/index';
 import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
@@ -127,7 +127,7 @@ export class FetchRequest {
   /** Timing-Allow-Origin values from each redirect response in a navigation. */
   navigationTimingAllowValuesList: string[][] = [];
   /** Unique request identifier for WebDriver; cloning generates a fresh identifier. */
-  webDriverId: string = crypto.randomUUID();
+  webDriverId: string = randomUUID();
 
   constructor(url: URLRecord, client: FetchEnvironment | null, userAgent: FetchUserAgent) {
     this.urlList = [copyURL(url)];

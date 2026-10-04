@@ -1,4 +1,4 @@
-import type { TaskCreationOptions } from '../../infra/execution';
+import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/execution';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { Duration } from '../performance/clock';
 import type { EventLoop, Task } from './event-loop';
@@ -18,7 +18,7 @@ export class GlobalTimers {
 
   constructor(options: GlobalTimersOptions) {
     this.#eventLoop = options.eventLoop;
-    this.#host = options.host ?? nodeTimerHost;
+    this.#host = options.host;
     this.#queueTask = options.queueTask;
     this.#time = options.time;
   }
@@ -42,7 +42,7 @@ export class GlobalTimers {
     const startTime = this.#currentTime();
     const timerKey = Symbol('Timer');
     const timer: ActiveTimer = {
-      cancelWakeUp: null,
+      wakeUp: null,
       completionSteps,
       expiryTime: startTime + milliseconds,
       key: timerKey,
@@ -89,7 +89,7 @@ export class GlobalTimers {
   /** Release timer state and host wakeups when its document cannot be restored. */
   // https://html.spec.whatwg.org/multipage/document-lifecycle.html#unloading-document-cleanup-steps
   clear(): void {
-    for (const timer of this.#activeTimers.values()) timer.cancelWakeUp?.();
+    for (const timer of this.#activeTimers.values()) timer.wakeUp?.remove();
     this.#activeTimers.clear();
     this.#idMap.clear();
     this.#stopObservingDocument?.();
@@ -168,8 +168,8 @@ export class GlobalTimers {
     this.#fullyActive = fullyActive;
     if (!fullyActive) {
       for (const timer of this.#activeTimers.values()) {
-        timer.cancelWakeUp?.();
-        timer.cancelWakeUp = null;
+        timer.wakeUp?.remove();
+        timer.wakeUp = null;
         timer.suspensionStartTime = now;
       }
       return;
@@ -186,8 +186,8 @@ export class GlobalTimers {
   }
 
   #schedule(timer: ActiveTimer): void {
-    timer.cancelWakeUp?.();
-    timer.cancelWakeUp = this.#host.scheduleTimeout(
+    timer.wakeUp?.remove();
+    timer.wakeUp = this.#host.scheduleTimeout(
       Math.max(0, timer.expiryTime - this.#currentTime()),
       () => { this.#timeoutReached(timer.key); },
     );
@@ -196,7 +196,7 @@ export class GlobalTimers {
   #timeoutReached(key: TimerKey): void {
     const timer = this.#activeTimers.get(key);
     if (timer === undefined) return;
-    timer.cancelWakeUp = null;
+    timer.wakeUp = null;
     if (!this.#fullyActive) return;
     if (this.#currentTime() < timer.expiryTime) {
       this.#schedule(timer);
@@ -227,7 +227,7 @@ export class GlobalTimers {
     const now = this.#currentTime();
     for (const timer of this.#activeTimers.values()) {
       if (
-        timer.cancelWakeUp === null &&
+        timer.wakeUp === null &&
         timer.expiryTime <= now &&
         !this.#hasOrderingBlocker(timer)
       ) this.#schedule(timer);
@@ -241,19 +241,11 @@ export class GlobalTimers {
 
 export type TimerAction = (argumentsList: unknown[]) => void;
 
-export type TimerHost = {
-  scheduleTimeout(
-    this: void,
-    milliseconds: number,
-    steps: () => void,
-  ): () => void;
-};
-
 export type GlobalTimersOptions = {
   eventLoop: EventLoop;
   queueTask: (steps: () => void, options: TaskCreationOptions) => void;
   time: HighResolutionTimeSource;
-  host?: TimerHost;
+  host: TimerHost;
 };
 
 export type TimerKey = symbol;
@@ -263,7 +255,7 @@ type HighResolutionTimeSource = {
 };
 
 type ActiveTimer = {
-  cancelWakeUp: (() => void) | null;
+  wakeUp: TaskHandle | null;
   completionSteps: () => void;
   expiryTime: number;
   readonly key: TimerKey;
@@ -271,15 +263,6 @@ type ActiveTimer = {
   orderingIdentifier: string;
   sequence: number;
   suspensionStartTime: number | null;
-};
-
-const nodeTimerHost: TimerHost = {
-  scheduleTimeout(milliseconds, steps) {
-    // Node clamps larger delays to one millisecond; wake in bounded chunks.
-    const delay = Math.min(milliseconds, 2_147_483_647);
-    const handle = setTimeout(steps, delay);
-    return () => { clearTimeout(handle); };
-  },
 };
 
 function isTimerTask(task: Task | null): task is Task & {

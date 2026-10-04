@@ -1,4 +1,4 @@
-import type { DOMNode as QuerySource, DOMOperations, DOMNode as Element } from '../../infra/index';
+import type { DOMQueryRoot as QuerySource, DOMOperations, DOMElement as Element } from '../../infra/index';
 import type { CompoundSelector } from '../parser/parser';
 import type { Chain, ElementProofFn } from './chain';
 import { seedsByTag } from '../seeds/seedsByTag';

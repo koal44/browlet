@@ -3,7 +3,6 @@ import { deserializeAbortReason, FetchController } from '../../src/fetch/control
 import { FetchParams } from '../../src/fetch/params';
 import { FetchTimingInfo } from '../../src/fetch/timing';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
-import { createEnvironment } from '../js-engine/execution-fixture';
 import { createControllerFixture } from './controller-fixture';
 import { createClientEnvironment } from './client-fixture';
 import { createFetchRequest } from './fetch-fixture';
@@ -22,7 +21,7 @@ describe('Fetch controller lifecycle', () => {
   it('sets aborted before serialization and retains only the serialized record', () => {
     const error = {};
     const record = {};
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     const { controller, abort } = createControllerFixture({
       ...env,
       exec: {
@@ -45,7 +44,7 @@ describe('Fetch controller lifecycle', () => {
   });
 
   it('cancels active operations once, after serializing the abort reason', () => {
-    const { controller, abort } = createControllerFixture(createEnvironment());
+    const { controller, abort } = createControllerFixture(createClientEnvironment());
     const cancel = vi.fn(() => {
       expect(controller.state).toBe('aborted');
       expect(controller.serializedAbortReason).not.toBeNull();
@@ -68,7 +67,7 @@ describe('Fetch controller lifecycle', () => {
   });
 
   it('does not add a once-only restriction to abort or terminate', () => {
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     const { controller, abort } = createControllerFixture({
       ...env,
       exec: {
@@ -86,7 +85,7 @@ describe('Fetch controller lifecycle', () => {
 
   it('keeps an omitted abort error distinct from an explicitly supplied undefined', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     const { abort } = createControllerFixture({
       ...env, exec: { ...env.exec, serialize, deserialize: vi.fn() },
     });
@@ -98,7 +97,7 @@ describe('Fetch controller lifecycle', () => {
   });
 
   it('falls back to AbortError if deserialization throws', () => {
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     const { deserialize } = createControllerFixture({
       ...env,
       exec: {
@@ -114,8 +113,8 @@ describe('Fetch controller lifecycle', () => {
   it.each(['absent', 'undefined', 'throws'] as const)(
     'allocates the %s abort fallback in the destination realm',
     (mode) => {
-      const env = createEnvironment();
-      const other = createEnvironment();
+      const env = createClientEnvironment();
+      const other = createClientEnvironment();
       const DOMException = env.exec.DOMException;
       Reflect.set(env.realm.global, 'DOMException', () => { throw new Error('Replaced constructor'); });
       env.exec.deserialize = () => {
@@ -160,7 +159,7 @@ describe('Fetch params and controller state', () => {
   it('retains request/timing references and derives cancellation from the controller', () => {
     const request = createFetchRequest();
     const timing = new FetchTimingInfo();
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     const params = new FetchParams(request, timing, env);
     expect(params).toMatchObject({
       processRequestBodyChunkLength: null, processRequestEndOfBody: null,
@@ -187,7 +186,7 @@ describe('Fetch networking task destinations', () => {
     const global = {};
     const algorithm = vi.fn();
     const queueGlobalTask = vi.fn();
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     env.exec.networking.queueGlobalTask = queueGlobalTask;
 
     env.queueNetworkingTask(algorithm, global);
@@ -200,7 +199,7 @@ describe('Fetch networking task destinations', () => {
     const drains: (() => void)[] = [];
     const queue = new ParallelQueue((steps) => drains.push(steps));
     const queueGlobalTask = vi.fn();
-    const env = createEnvironment();
+    const env = createClientEnvironment();
     env.exec.networking.queueGlobalTask = queueGlobalTask;
     const order: number[] = [];
 

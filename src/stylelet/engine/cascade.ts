@@ -1,4 +1,4 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { DOMElement as Element } from '../../infra/index';
 import type { PropertyDeclaration } from '../css/property';
 import { matchSelectorList } from '../selector/match';
 import type { Specificity } from '../syntax/selector';

@@ -1,3 +1,4 @@
+import type { StyleletURL } from '../environment';
 import { asciiLower } from '../../infra/ascii';
 import {
   isBraceBlock, isComponentValue, isDelimToken, isIdentToken, isTokenKind,
@@ -9,7 +10,7 @@ import { tokenize, tokenizeWithSource, TokenKind, type Token } from './tokens';
 
 export type SyntaxStyleSheet = {
   rules: SyntaxRule[];
-  location?: URL;
+  location?: StyleletURL;
   originalText?: string;
 };
 
@@ -104,7 +105,7 @@ export function parseListAsComponentGrammar<T>(
 // 5.4.3. Parse a stylesheet
 export function parseSyntaxStylesheet(
   input: ParserInput,
-  location?: URL,
+  location?: StyleletURL,
 ): SyntaxStyleSheet {
   return {
     rules: consumeStylesheetContents(normalize(input)),

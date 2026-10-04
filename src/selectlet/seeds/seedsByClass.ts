@@ -1,5 +1,5 @@
 import type {
-  DOMNode as QuerySource, DOMOperations, DOMNode as Element, DOMNode as DocumentFragment,
+  DOMQueryRoot as QuerySource, DOMOperations, DOMElement as Element, DOMDocumentFragment as DocumentFragment,
 } from '../../infra/index';
 import { LOOKUP_COPY, type LookupMode } from '../constants';
 import { concatCollection, htmlCollectionSource } from '../collections';

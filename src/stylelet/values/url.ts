@@ -1,3 +1,5 @@
+import type { StyleletURL, StyleletURLConstructor } from '../environment';
+import { InternalError } from '../../infra/internal-error';
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,
 } from '../syntax/token-cursor';
@@ -45,7 +47,9 @@ export type UrlValue = {
 export type UrlNotation = 'url' | 'src';
 
 export type UrlContext = {
-  baseUrl?: URL;
+  /** Required when computing a nonempty URL without the local fragment flag. */
+  URL?: StyleletURLConstructor;
+  baseUrl?: StyleletURL;
   treeScope?: TreeScope;
 };
 
@@ -92,10 +96,13 @@ export function resolveUrl(
     return value;
   }
 
+  const URL = context.URL;
+  if (URL === undefined) throw new InternalError('URL resolution requires a host URL constructor');
+
   try {
     return {
       ...value,
-      value: new URL(value.value, context.baseUrl).href,
+      value: new URL(value.value, context.baseUrl?.href).href,
     };
   } catch {
     // A URL that cannot be made absolute retains its specified value.

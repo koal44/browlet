@@ -1,4 +1,4 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { DOMElement as Element } from '../../infra/index';
 import type { StyleletContext } from '../context';
 import { assertNever } from '../../infra/util';
 import {

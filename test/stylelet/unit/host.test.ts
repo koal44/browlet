@@ -5,7 +5,9 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   defaultStyleletExecution, Stylelet, type InternalPromise, type StyleletExecution,
 } from '../../../src/stylelet/index';
-import { standardDOM, type DOMOperations, type DOMNode } from '../../../src/infra/index';
+import {
+  standardDOM, type DOMOperations, type DOMNode, type DOMDocument, type DOMElement, type DOMDocumentFragment,
+} from '../../../src/infra/index';
 import { browletDOM } from '../../../src/browlet/integration/dom';
 import { matchSelectorList } from '../../../src/stylelet/selector/match';
 import { parseSelectorList } from '../../../src/stylelet/syntax/selector';
@@ -14,7 +16,10 @@ import { createOpaqueDOM } from '../../support/opaque-dom';
 
 // jsdom's private implementation accessor has no published TypeScript declaration.
 const { implForWrapper } = createRequire(__filename)('jsdom/lib/generated/idl/utils.js') as {
-  implForWrapper: (value: Node) => DOMNode;
+  implForWrapper(this: void, value: Document): DOMDocument;
+  implForWrapper(this: void, value: Element): DOMElement;
+  implForWrapper(this: void, value: DocumentFragment): DOMDocumentFragment;
+  implForWrapper(this: void, value: Node): DOMNode;
 };
 
 describe('Stylelet DOM hosts', () => {
@@ -127,7 +132,7 @@ describe('Stylelet DOM hosts', () => {
       const context = new Stylelet(implForWrapper(first.window.document)).context;
       const firstMain = implForWrapper(first.window.document.querySelector('main')!);
       const secondMain = implForWrapper(second.window.document.querySelector('main')!);
-      const circle = implForWrapper(first.window.document.querySelector('circle')!);
+      const circle = implForWrapper(first.window.document.querySelector<Element>('circle')!);
 
       expect(matchSelectorList(parseSelectorList('MAIN')!, firstMain, context)).not.toBeNull();
       expect(matchSelectorList(parseSelectorList('MAIN')!, secondMain, context)).not.toBeNull();
@@ -244,7 +249,7 @@ describe('Stylelet execution', () => {
     class HostDOMException extends DOMException {}
     const exec: StyleletExecution = {
       ...defaultStyleletExecution,
-      createDOMException: (name, message) => new HostDOMException(message, name),
+      DOMException: HostDOMException,
     };
     const { document } = new JSDOM('<main></main>').window;
     const styles = new Stylelet(document, { exec });

@@ -22,9 +22,9 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
-| `node-transport.ts` | UserAgent-owned Undici HTTP/1.1 and HTTP/2 adapter, TLS verification, partitioned connections/timing, multiplexing, demand-driven uploads, pause/resume, abort, and shutdown | Fetch network fetch |
-| `node-decoder.ts` | Per-response streaming gzip/deflate/Brotli codecs and bounded native transform queues | Fetch content codings |
 
+UserAgent composes the [Node transport](../integration/network/node-transport.ts)
+and [native decoders](../integration/network/node-decoder.ts) from `integration/network/`.
 Fetch's internal network algorithm calls the transport. Loopback HTTP/HTTPS tests exercise headers,
 upload/download flow, decoding, and cancellation through the actual HTML loop.
 HTTP/2 uses the temporary [vendor patch](../../../vendor/README.md) to preserve

@@ -12,8 +12,6 @@ export interface RealmExecution extends AsyncExecution {
   /** Captured constructors for errors whose realm must be fixed before delivery. */
   TypeError: TypeErrorConstructor;
   RangeError: RangeErrorConstructor;
-  /** Original DOMException constructor supplied by the owner's Binding. */
-  DOMException: typeof DOMException;
   buffers: RuntimeBuffers;
   networking: NetworkingTasks;
 

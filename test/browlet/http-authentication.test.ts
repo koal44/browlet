@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
 import type { AuthenticationPrompt } from '../../src/browlet/loader/authentication';
-import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
+import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { FetchBody } from '../../src/fetch/body';
 import type { AuthenticationCredentials } from '../../src/fetch/environment';

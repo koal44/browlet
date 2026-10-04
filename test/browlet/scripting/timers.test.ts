@@ -8,7 +8,8 @@ import { UserAgent } from '../../../src/browlet/user-agent';
 import { Duration, monotonicClock, UnsafeMoment } from
   '../../../src/browlet/performance/clock';
 import type { EventLoop, EventLoopOptions } from '../../../src/browlet/scripting/event-loop';
-import { GlobalTimers, type TimerHost } from '../../../src/browlet/scripting/timers';
+import { GlobalTimers } from '../../../src/browlet/scripting/timers';
+import type { TaskHandle, TimerHost } from '../../../src/infra/execution';
 
 describe('HTML timers', () => {
   it('counts only fully-active time before completing a timeout', () => {
@@ -162,7 +163,7 @@ class ManualTimerHost implements TimerHost {
   #nextSequence = 0;
   #wakeUps = new Set<ManualWakeUp>();
 
-  scheduleTimeout(milliseconds: number, steps: () => void): () => void {
+  scheduleTimeout(milliseconds: number, steps: () => void): TaskHandle {
     this.requestedDelays.push(milliseconds);
     const wakeUp = {
       at: this.now + milliseconds,
@@ -171,7 +172,7 @@ class ManualTimerHost implements TimerHost {
       steps,
     };
     this.#wakeUps.add(wakeUp);
-    return () => { wakeUp.canceled = true; };
+    return { remove: () => { wakeUp.canceled = true; } };
   }
 
   advanceBy(milliseconds: number, newestFirst = false): void {

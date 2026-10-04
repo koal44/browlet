@@ -1,14 +1,12 @@
 import {
-  type DOMOperations, type DOMNode as Element, type DOMNode as Node, type DOMNode as ParentNode,
-  XML_NAMESPACE,
+  type DOMOperations, type DOMElement as Element, type DOMNode as Node, type DOMParentNode as ParentNode,
+  XML_NAMESPACE, isHtmlSvgOrMathNamespace,
 } from '../../infra/index';
 import {
   asciiDashMatch, asciiEndsWith, asciiEquals, hasAsciiWhitespaceToken, asciiIncludes, asciiStartsWith,
+  isFormStateElementName,
 } from '../../infra/selector-matching';
 import { asciiLower, hasWhitespaceToken } from '../../infra/ascii';
-import {
-  isFormStateElement, isHtmlSvgOrMathNamespace,
-} from '../../infra/selector-dom';
 import type { SelectletContext } from '../context';
 import type { RuntimeCache } from './runtimeCache';
 
@@ -760,11 +758,11 @@ export function isDefined(element: Element, ctx: SelectletContext): boolean {
 }
 
 export function isDisabled(e: Element, ctx: SelectletContext): boolean {
-  return isFormStateElement(ctx.dom.getLocalName(e)) && isDisabledFormStateElement(e, ctx);
+  return isFormStateElementName(ctx.dom.getLocalName(e)) && isDisabledFormStateElement(e, ctx);
 }
 
 export function isEnabled(e: Element, ctx: SelectletContext): boolean {
-  return isFormStateElement(ctx.dom.getLocalName(e)) && !isDisabledFormStateElement(e, ctx);
+  return isFormStateElementName(ctx.dom.getLocalName(e)) && !isDisabledFormStateElement(e, ctx);
 }
 
 function isDisabledFormStateElement(e: Element, ctx: SelectletContext): boolean {

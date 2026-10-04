@@ -1,10 +1,11 @@
 import type { BlobImpl } from '../file/index';
 import type { CookieStore } from '../http/index';
 import type { InternalPromise } from '../infra/promises';
-import type { JSEnvironment } from '../js-engine/index';
+import type { JSEnvironment, RealmExecution } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
+import type { WebIDLExecution } from '../web-idl/core/index';
 import type { FetchController } from './controller';
 import type { FetchGroup } from './group';
 import type { HTTPCacheStore } from './cache-http';
@@ -26,6 +27,8 @@ export function isOffline(env: FetchEnvironment): boolean {
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
 export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment {
+  /** Engine execution and exception allocation for this environment. */
+  exec: FetchExecution;
   /** Whether this environment belongs to a Window, which can consume Document preloads. */
   isWindow: boolean;
   /** Whether this global is a ServiceWorkerGlobalScope, which cannot intercept its own fetches. */
@@ -73,6 +76,9 @@ export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment 
   /** Submit a policy report for this client, retaining each field's JSON value type. */
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void;
 }
+
+/** Engine facilities plus construction of abort exceptions in the owner's realm. */
+export interface FetchExecution extends RealmExecution, WebIDLExecution {}
 
 /** An opaque reference to the HTML traversable selected for user prompts. */
 export type FetchPromptTarget = {

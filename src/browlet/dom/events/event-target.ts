@@ -119,16 +119,14 @@ export class EventTargetImpl {
     return null;
   }
 
-  /** Return the original callback objects for Service Worker's legacy lookup. */
+  /** Return the retained listener callback values for Service Worker's legacy lookup. */
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
-  getEventListenerCallbacks(type: string): EventListenerOrEventListenerObject[] {
-    const callbacks: EventListenerOrEventListenerObject[] = [];
+  getEventListenerCallbacks(type: string): EventListenerValue[] {
+    const callbacks: EventListenerValue[] = [];
 
     for (const listener of this.#eventListenerList) {
       if (listener.type === type && listener.callback !== null) {
-        callbacks.push(
-          listener.callback.object as EventListenerOrEventListenerObject,
-        );
+        callbacks.push(listener.callback);
       }
     }
 
@@ -687,7 +685,7 @@ const LEGACY_EVENT_TYPES = new Map([
 ]);
 
 /** Retains a listener's identity, callback realm, and invocation steps. */
-class EventListenerValue {
+export class EventListenerValue {
   /** Original callback object used to match registrations and removals. */
   readonly object: object;
   /** Callback realm, absent for direct implementation listeners. */

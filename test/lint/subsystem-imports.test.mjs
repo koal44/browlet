@@ -10,7 +10,7 @@ RuleTester.it = it;
 const filename = fileURLToPath(new URL('../../src/browlet/example.ts', import.meta.url));
 const options = [{
   unrestrictedSubsystems: ['infra'],
-  entryPoints: { 'web-idl': ['index', 'core/index'] },
+  entryPoints: { 'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'] },
 }];
 const tester = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
@@ -19,6 +19,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import { FetchGroup } from '../fetch/index';" },
     { filename, options, code: "import type { ReferrerPolicy } from '../fetch/index.js';" },
     { filename, options, code: "export { defineInterface } from '../web-idl/core/index';" },
+    { filename, options, code: "import { getEncoding } from '../encoding/core/index';" },
     { filename, options, code: "import { parseURL } from '../url/index';" },
     { filename, options, code: "import { InternalPromise } from '../infra/promises';" },
     { filename, options, code: "import type { InternalPromise } from '../infra/promises';" },
@@ -38,6 +39,7 @@ tester.run('subsystem-imports', rule, {
     { filename, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { FetchRequest } from '../fetch/request';", errors: [{ messageId: 'entryPoint' }] },
+    { filename, options, code: "import { decodeNative } from '../encoding/core/decoding';", errors: [{ messageId: 'entryPoint' }] },
     {
       filename, options, code: "import type { FetchPolicyContainer } from '../fetch/environment';",
       errors: [{ messageId: 'entryPoint' }],

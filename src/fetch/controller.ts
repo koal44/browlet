@@ -86,7 +86,7 @@ export class FetchController {
 // https://fetch.spec.whatwg.org/#deserialize-a-serialized-abort-reason
 export function deserializeAbortReason(
   abortReason: object | null,
-  env: JSEnvironment,
+  env: FetchEnvironment,
 ): unknown {
   const fallbackError = new env.exec.DOMException('', 'AbortError');
   if (abortReason !== null) {

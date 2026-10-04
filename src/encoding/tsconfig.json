@@ -9,7 +9,9 @@
     "tsBuildInfoFile": "../../dist/.typecheck/encoding.tsbuildinfo"
   },
   "include": ["./**/*.ts"],
+  "exclude": ["./core"],
   "references": [
+    { "path": "./core" },
     { "path": "../infra" },
     { "path": "../js-engine" },
     { "path": "../web-idl/core" },

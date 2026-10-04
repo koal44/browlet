@@ -1,46 +1,62 @@
-import { HTML_NAMESPACE } from './namespaces';
-
 /** A host node whose representation is private to its DOM operations. */
-export type DOMNode = object;
+export type DOMNode = object & {
+  [nodeRole]?: 'element' | 'document' | 'fragment' | 'shadow-root' | 'processing-instruction' | 'other';
+};
+export type DOMElement = DOMNode & { [nodeRole]?: 'element'; };
+export type DOMDocument = DOMNode & { [nodeRole]?: 'document'; };
+export type DOMDocumentFragment = DOMNode & { [nodeRole]?: 'fragment' | 'shadow-root'; };
+export type DOMShadowRoot = DOMDocumentFragment & { [nodeRole]?: 'shadow-root'; };
+export type DOMProcessingInstruction = DOMNode & { [nodeRole]?: 'processing-instruction'; };
+export type DOMParentNode = DOMDocument | DOMElement | DOMDocumentFragment;
+export type DOMQueryRoot = DOMParentNode;
+
+// These optional, type-only roles distinguish opaque nodes inside the engines.
+// Hosts need not define the symbol or add properties to their node objects.
+declare const nodeRole: unique symbol;
 
 /** Indexed collections may be live; engines request a copy when stability is needed. */
-export interface DOMCollection<E extends object = object> extends Iterable<E> {
+export interface DOMCollection<E extends object = DOMElement> extends Iterable<E> {
   length: number;
   item?(index: number): E | null;
   [index: number]: E | undefined;
 }
 
 /** DOM access shared by the selector and style engines, without changing node identity. */
-export interface DOMOperations<N extends object = object, E extends N = N, A extends object = object> {
+export interface DOMOperations<
+  N extends object = DOMNode, E extends N = N & DOMElement, A extends object = object,
+  D extends N = N & DOMDocument, F extends N = N & DOMDocumentFragment,
+  S extends F = F & DOMShadowRoot,
+> {
   isNode(value: unknown): value is N;
   isElement(node: N): node is E;
-  isDocument(node: N): boolean;
-  isDocumentFragment(node: N): boolean;
+  isDocument(node: N): node is D;
+  isDocumentFragment(node: N): node is F;
   isText(node: N): boolean;
-  isShadowRoot(node: N): boolean;
+  isShadowRoot(node: N): node is S;
   isConnected(node: N): boolean;
   isHTMLElement(element: E): boolean;
-  isHTMLDocument(document: N): boolean;
-  isQuirksMode(document: N): boolean;
+  isHTMLDocument(document: D): boolean;
+  isQuirksMode(document: D): boolean;
 
-  ownerDocument(node: N): N | null;
+  /** The document owning this node; null only when the node is itself a document. */
+  ownerDocument(node: N): D | null;
   root(node: N): N;
-  parentNode(node: N): N | null;
+  parentNode(node: N): D | E | F | null;
   parentElement(node: N): E | null;
   firstChild(node: N): N | null;
   nextSibling(node: N): N | null;
-  firstElementChild(node: N): E | null;
-  lastElementChild(node: N): E | null;
+  firstElementChild(node: D | E | F): E | null;
+  lastElementChild(node: D | E | F): E | null;
   nextElementSibling(element: E): E | null;
   previousElementSibling(element: E): E | null;
-  childElementCount(node: N): number;
+  childElementCount(node: D | E | F): number;
   contains(node: N, other: N | null): boolean;
   compareDocumentPosition(node: N, other: N): number;
-  shadowHost(root: N): E;
+  shadowHost(root: S): E;
   textData(text: N): string;
-  documentElement(document: N): E | null;
-  body(document: N): E | null;
-  URL(document: N): string;
+  documentElement(document: D): E | null;
+  body(document: D): E | null;
+  URL(document: D): string;
   baseURI(node: N): string;
 
   getId(element: E): string;
@@ -60,12 +76,12 @@ export interface DOMOperations<N extends object = object, E extends N = N, A ext
   /** Existing inline-style state, when the host uses a style implementation directly. */
   inlineStyle?(element: E): object | null;
 
-  getElementById(root: N, id: string): E | null;
-  getElementsByTagName(root: N, name: string): DOMCollection<E>;
-  getElementsByTagNameNS(root: N, namespace: string | null, name: string): DOMCollection<E>;
-  getElementsByClassName(root: N, names: string): DOMCollection<E>;
-  hasDocumentAll(document: N): boolean;
-  allNamedItem(document: N, name: string): E | DOMCollection<E> | null;
+  getElementById(root: D | F, id: string): E | null;
+  getElementsByTagName(root: D | E, name: string): DOMCollection<E>;
+  getElementsByTagNameNS(root: D | E, namespace: string | null, name: string): DOMCollection<E>;
+  getElementsByClassName(root: D | E, names: string): DOMCollection<E>;
+  hasDocumentAll(document: D): boolean;
+  allNamedItem(document: D, name: string): E | DOMCollection<E> | null;
   /** Optional native traversal of descendant elements, excluding the root. */
   walkElements?(root: N): Iterable<E>;
   /** Optional complete, document-ordered indexes; never omit duplicate IDs. */
@@ -76,13 +92,13 @@ export interface DOMOperations<N extends object = object, E extends N = N, A ext
   /** Exposes a host collection's existing array, when available. */
   collectionArray?(collection: DOMCollection<E>): E[] | null;
 
-  designMode(document: N): string | undefined;
-  hasFocus(document: N): boolean;
-  activeElement(document: N): E | null;
-  isDefined(document: N, name: string): boolean;
+  designMode(document: D): string | undefined;
+  hasFocus(document: D): boolean;
+  activeElement(document: D): E | null;
+  isDefined(document: D, name: string): boolean;
   hasCustomState(element: E, name: string): boolean;
   /** Observe a capture-phase event, supplying its original node target. */
-  listen(document: N, type: string, listener: (target: N | null) => void): void;
+  listen(document: D, type: string, listener: (target: N | null) => void): void;
 
   // Live HTML control and media state; these are not attribute fallbacks.
   controlType(element: E): string;
@@ -107,96 +123,3 @@ export interface DOMOperations<N extends object = object, E extends N = N, A ext
   /** A readable node description for selector diagnostics. */
   describe(node: N): string;
 }
-
-/** DOM operations for platform objects implementing the ordinary browser DOM API. */
-export const standardDOM: DOMOperations<Node, Element, Attr> = {
-  isNode: (value): value is Node => !!value && typeof value === 'object' &&
-    'nodeType' in value && typeof value.nodeType === 'number' && 'nodeName' in value,
-  isElement: (node): node is Element => node.nodeType === 1,
-  isDocument: (node) => node.nodeType === 9,
-  isDocumentFragment: (node) => node.nodeType === 11,
-  isText: (node) => node.nodeType === 3,
-  isShadowRoot: (node) => node.nodeType === 11 && 'host' in node && node.host !== null,
-  isConnected: (node) => node.isConnected,
-  isHTMLElement: (element) => element.namespaceURI === HTML_NAMESPACE,
-  isHTMLDocument: (document) => (document as Document).contentType.includes('/html') ||
-    (document as Document).createElement('DiV').localName === 'div',
-  isQuirksMode: (document) => (document as Document).compatMode !== 'CSS1Compat',
-
-  ownerDocument: (node) => node.ownerDocument,
-  root: (node) => node.getRootNode(),
-  parentNode: (node) => node.parentNode,
-  parentElement: (node) => node.parentElement,
-  firstChild: (node) => node.firstChild,
-  nextSibling: (node) => node.nextSibling,
-  firstElementChild: (node) => (node as ParentNode).firstElementChild,
-  lastElementChild: (node) => (node as ParentNode).lastElementChild,
-  nextElementSibling: (element) => element.nextElementSibling,
-  previousElementSibling: (element) => element.previousElementSibling,
-  childElementCount: (node) => (node as ParentNode).childElementCount,
-  contains: (node, other) => node.contains(other),
-  compareDocumentPosition: (node, other) => node.compareDocumentPosition(other),
-  shadowHost: (root) => (root as ShadowRoot).host,
-  textData: (text) => (text as Text).data,
-  documentElement: (document) => (document as Document).documentElement,
-  body: (document) => (document as Document).body,
-  URL: (document) => (document as Document).URL,
-  baseURI: (node) => node.baseURI,
-
-  getId: (element) => typeof element.id === 'string' ? element.id : element.getAttribute('id') ?? '',
-  getClass: (element) => typeof element.className === 'string' ? element.className : element.getAttribute('class') ?? '',
-  getLocalName: (element) => element.localName,
-  getNamespaceURI: (element) => element.namespaceURI,
-  getAttribute: (element, name) => element.getAttribute(name),
-  getAttributeNS: (element, namespace, name) => element.getAttributeNS(namespace, name),
-  hasAttribute: (element, name) => element.hasAttribute(name),
-  hasAttributeNS: (element, namespace, name) => element.hasAttributeNS(namespace, name),
-  setAttribute: (element, name, value) => element.setAttribute(name, value),
-  removeAttribute: (element, name) => element.removeAttribute(name),
-  attributes: (element) => element.attributes,
-  attributeLocalName: (attribute) => attribute.localName,
-  attributeNamespaceURI: (attribute) => attribute.namespaceURI,
-  attributeValue: (attribute) => attribute.value,
-
-  getElementById: (root, id) => (root as Document | DocumentFragment).getElementById(id),
-  getElementsByTagName: (root, name) => (root as Document | Element).getElementsByTagName(name),
-  getElementsByTagNameNS: (root, namespace, name) => (root as Document | Element).getElementsByTagNameNS(namespace, name),
-  getElementsByClassName: (root, names) => (root as Document | Element).getElementsByClassName(names),
-  hasDocumentAll: (document) => 'all' in document,
-  allNamedItem: (document, name) => (document as Document).all.namedItem(name),
-  *walkElements(root) {
-    const document = root.nodeType === 9 ? root as Document : root.ownerDocument!;
-    const walker = document.createTreeWalker(root, 1);
-    for (let node = walker.nextNode(); node; node = walker.nextNode()) yield node as Element;
-  },
-
-  designMode: (document) => (document as Document).designMode,
-  hasFocus: (document) => (document as Document).hasFocus(),
-  activeElement: (document) => (document as Document).activeElement,
-  isDefined: (document, name) => !!(document as Document).defaultView?.customElements.get(name),
-  // CustomStateSet has no public reverse lookup from its element.
-  hasCustomState: () => false,
-  listen: (document, type, listener) => {
-    document.addEventListener(type, (event) => listener(standardDOM.isNode(event.target) ? event.target : null), true);
-  },
-
-  controlType: (element) => (element as HTMLInputElement | HTMLButtonElement).type,
-  controlValue: (element) => (element as HTMLInputElement | HTMLTextAreaElement).value,
-  formOwner: (element) => (element as HTMLInputElement | HTMLButtonElement).form,
-  checked: (element) => (element as HTMLInputElement).checked,
-  selected: (element) => (element as HTMLOptionElement).selected,
-  indeterminate: (element) => (element as HTMLInputElement).indeterminate,
-  supportsValidity: (element) => 'willValidate' in element,
-  willValidate: (element) => (element as HTMLInputElement).willValidate,
-  checkValidity: (element) => (element as HTMLInputElement | HTMLFormElement).checkValidity(),
-  rangeUnderflow: (element) => (element as HTMLInputElement).validity.rangeUnderflow,
-  rangeOverflow: (element) => (element as HTMLInputElement).validity.rangeOverflow,
-  isMediaElement: (element) => 'currentTime' in element && 'paused' in element && 'ended' in element && 'readyState' in element,
-  currentTime: (element) => (element as HTMLMediaElement).currentTime,
-  paused: (element) => (element as HTMLMediaElement).paused,
-  ended: (element) => (element as HTMLMediaElement).ended,
-  readyState: (element) => (element as HTMLMediaElement).readyState,
-  seeking: (element) => (element as HTMLMediaElement).seeking,
-  muted: (element) => (element as HTMLMediaElement).muted,
-  describe: (node) => node.nodeType === 1 ? (node as Element).outerHTML : node.textContent ?? '',
-};

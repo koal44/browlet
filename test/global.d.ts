@@ -11,9 +11,9 @@ import type { PerfHelpers } from './selectlet/perf/harness/perf-scenario';
 export {};
 
 declare global {
-  type Selectlet = _Selectlet;
+  type Selectlet = _Selectlet<Node, Element, Document, DocumentFragment>;
   type Stylelet = _Stylelet;
-  type QuerySource = _QuerySource;
+  type QuerySource = _QuerySource<Document, Element, DocumentFragment>;
 
   var selectlet: undefined | Selectlet;
   var stylelet: undefined | Stylelet;

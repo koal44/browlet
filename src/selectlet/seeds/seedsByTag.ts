@@ -1,5 +1,5 @@
 import type {
-  DOMNode as QuerySource, DOMNode as Element, DOMNode as Document, DOMNode as DocumentFragment,
+  DOMQueryRoot as QuerySource, DOMElement as Element, DOMDocument as Document, DOMDocumentFragment as DocumentFragment,
 } from '../../infra/index';
 import { LOOKUP_COPY, type LookupMode } from '../constants';
 import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../collections';
@@ -46,7 +46,7 @@ function seedsByTagFragment(tag: string, source: DocumentFragment, ctx: Selectle
   return nodes;
 }
 
-function seedsByTagNsUnion(tag: string, lowerTag: string, source: Document, ctx: SelectletContext): Element[] {
+function seedsByTagNsUnion(tag: string, lowerTag: string, source: Document | Element, ctx: SelectletContext): Element[] {
   const exact = ctx.dom.getElementsByTagNameNS(source, '*', tag);
   const lower = ctx.dom.getElementsByTagNameNS(source, '*', lowerTag);
 

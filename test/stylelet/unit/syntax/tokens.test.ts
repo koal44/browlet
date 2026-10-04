@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { decode } from '../../../../src/encoding/index';
+import { createStyleletEnvironment, defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
 import {
-  decodeStylesheetBytes, filterCodePoints, HashTokenFlag, NumericSign, NumberTokenFlag,
-  tokenize, TokenKind,
+  decodeStylesheetBytes as decodeBytes, filterCodePoints, HashTokenFlag, NumericSign, NumberTokenFlag,
+  tokenize, TokenKind, type DecodeStylesheetOptions,
 } from '../../../../src/stylelet/syntax/tokens';
 
 describe('filterCodePoints', () => {
@@ -460,8 +462,13 @@ describe('style tokenizer consumers', () => {
 
 });
 
-describe('3.2. The input byte stream', () => {
+describe.each([
+  ['native', defaultStyleletEnvironment],
+  ['Encoding', createStyleletEnvironment({ decodeText: decode })],
+] as const)('3.2. The input byte stream (%s)', (_host, env) => {
   const textEncoder = new TextEncoder();
+  const decodeStylesheetBytes = (bytes: Uint8Array, options: DecodeStylesheetOptions = {}) =>
+    decodeBytes(bytes, options, env);
 
   it('defaults to UTF-8 and replaces malformed input', () => {
     expect(decodeStylesheetBytes(textEncoder.encode('a { color: é; }')))
@@ -504,6 +511,13 @@ describe('3.2. The input byte stream', () => {
     })).toBe('@charset "not-an-encoding"; é');
   });
 
+  it('does not Unicode-fold encoding labels', () => {
+    expect(decodeStylesheetBytes(Uint8Array.of(0xE9), {
+      transportEncoding: '\u212Aoi8-r',
+      environmentEncoding: 'windows-1252',
+    })).toBe('é');
+  });
+
   it('treats a declared UTF-16 encoding as UTF-8', () => {
     const bytes = textEncoder.encode('@charset "utf-16le"; é');
 
@@ -529,6 +543,6 @@ describe('3.2. The input byte stream', () => {
 
     expect(decodeStylesheetBytes(new Uint8Array([0x41, 0x80, 0xFF]), {
       transportEncoding: 'x-user-defined',
-    })).toBe(`A${String.fromCodePoint(0xF800, 0xF87F)}`);
+    })).toBe(`A${String.fromCodePoint(0xF780, 0xF7FF)}`);
   });
 });

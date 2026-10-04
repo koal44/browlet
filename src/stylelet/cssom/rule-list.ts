@@ -1,10 +1,12 @@
-export class CSSRuleListImpl {
-  [index: number]: CSSRule;
+import type { CSSRuleImpl } from './rule';
 
-  #rules: CSSRule[] = [];
+export class CSSRuleListImpl {
+  [index: number]: CSSRuleImpl;
+
+  #rules: CSSRuleImpl[] = [];
   #indexedLength = 0;
 
-  constructor(rules: CSSRule[] = []) {
+  constructor(rules: CSSRuleImpl[] = []) {
     this.replace(rules);
   }
 
@@ -12,20 +14,20 @@ export class CSSRuleListImpl {
     return this.#rules.length;
   }
 
-  item(index: number): CSSRule | null {
+  item(index: number): CSSRuleImpl | null {
     return this.#rules[index] ?? null;
   }
 
-  [Symbol.iterator](): ArrayIterator<CSSRule> {
+  [Symbol.iterator](): ArrayIterator<CSSRuleImpl> {
     return this.#rules[Symbol.iterator]();
   }
 
-  replace(rules: CSSRule[]): void {
+  replace(rules: CSSRuleImpl[]): void {
     this.#rules = rules;
     this.#updateIndices();
   }
 
-  insert(index: number, rule: CSSRule): void {
+  insert(index: number, rule: CSSRuleImpl): void {
     this.#rules.splice(index, 0, rule);
     this.#updateIndices();
   }

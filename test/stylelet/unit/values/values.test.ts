@@ -676,6 +676,7 @@ describe('url', () => {
     const value = parseUrl('url("../image.png")')!;
 
     expect(resolveUrl(value, ValueStage.Computed, {
+      URL,
       baseUrl: new URL('https://example.com/styles/site.css'),
     })).toEqual({
       ...value,
@@ -705,7 +706,14 @@ describe('url', () => {
   it('retains a relative URL when no base URL is available', () => {
     const value = parseUrl('url("image.png")')!;
 
-    expect(resolveUrl(value, ValueStage.Computed)).toBe(value);
+    expect(resolveUrl(value, ValueStage.Computed, { URL })).toBe(value);
+  });
+
+  it('requires a selected provider when computing a resource URL', () => {
+    const value = parseUrl('url("https://example.com/image.png")')!;
+
+    expect(() => resolveUrl(value, ValueStage.Computed))
+      .toThrow('URL resolution requires a host URL constructor');
   });
 
   it('preserves substitution in src() but not in url()', () => {

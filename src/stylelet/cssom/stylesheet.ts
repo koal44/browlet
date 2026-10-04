@@ -1,5 +1,5 @@
 import { MediaListImpl } from './media-list';
-import type { DOMNode } from '../../infra/index';
+import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 import type { CSSOMString } from './string';
 import type { StyleletEnvironment } from '../environment';
@@ -20,7 +20,7 @@ import { TypeError } from '../../infra/exceptions';
 export abstract class StyleSheetImpl {
   #type: CSSOMString;
   #location: string | null;
-  #ownerNode: DOMNode | null;
+  #ownerNode: DOMElement | DOMProcessingInstruction | null;
   #parentStyleSheet: CSSStyleSheetImpl | null;
   #title: string;
   #media: MediaListImpl;
@@ -50,7 +50,7 @@ export abstract class StyleSheetImpl {
     return this.#location;
   }
 
-  get ownerNode(): DOMNode | null {
+  get ownerNode(): DOMElement | DOMProcessingInstruction | null {
     return this.#ownerNode;
   }
 
@@ -83,7 +83,7 @@ export abstract class StyleSheetImpl {
   }
 
   protected setOwnerNode(
-    ownerNode: DOMNode | null,
+    ownerNode: DOMElement | DOMProcessingInstruction | null,
   ): void {
     this.#ownerNode = ownerNode;
   }
@@ -102,7 +102,7 @@ export abstract class StyleSheetImpl {
     this.#disabled = disabled;
   }
 
-  protected setMedia(media: CSSOMString | MediaList): void {
+  protected setMedia(media: CSSOMString | MediaListImpl): void {
     this.#media.mediaText = typeof media === 'string'
       ? media
       : media.mediaText;

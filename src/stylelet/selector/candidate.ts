@@ -1,4 +1,4 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { DOMElement as Element } from '../../infra/index';
 import type { RuntimeCache } from './runtimeCache';
 
 export type CompiledMatcher = {

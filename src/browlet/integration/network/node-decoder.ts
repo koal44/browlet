@@ -1,7 +1,7 @@
 import type { Transform } from 'node:stream';
 import { createBrotliDecompress, createGunzip, createInflate } from 'node:zlib';
-import type { HTTPContentDecoder, HTTPContentDecoderListener } from '../../fetch/index';
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../../infra/internal-error';
+import type { HTTPContentDecoder, HTTPContentDecoderListener } from '../../../fetch/index';
 
 /** HTTP codecs supplied by Node; Fetch advertises and selects the supported codings. */
 export const supportedContentCodings = new Set(['gzip', 'deflate', 'br']);

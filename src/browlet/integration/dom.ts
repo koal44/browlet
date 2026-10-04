@@ -11,36 +11,38 @@ import type { TextImpl } from '../dom/nodes/text';
 import { HTMLElementImpl } from '../html/elements/html-element';
 
 /** Selector and style access to Browlet implementations, preserving their identities. */
-export const browletDOM: DOMOperations<NodeImpl, ElementImpl, AttrImpl> = {
+export const browletDOM: DOMOperations<
+  NodeImpl, ElementImpl, AttrImpl, DocumentImpl, DocumentFragmentImpl, ShadowRootImpl
+> = {
   isNode: (value): value is NodeImpl => NodeImpl.is(value),
   isElement: (node): node is ElementImpl => node.isElement(),
-  isDocument: (node) => node.isDocument(),
-  isDocumentFragment: (node) => node.isDocumentFragment(),
+  isDocument: (node): node is DocumentImpl => node.isDocument(),
+  isDocumentFragment: (node): node is DocumentFragmentImpl => node.isDocumentFragment(),
   isText: (node) => node.isText(),
-  isShadowRoot: (node) => ShadowRootImpl.is(node),
+  isShadowRoot: (node): node is ShadowRootImpl => ShadowRootImpl.is(node),
   isConnected: (node) => node.isConnected,
   isHTMLElement: (element) => HTMLElementImpl.is(element),
-  isHTMLDocument: (document) => (document as DocumentImpl).type === 'html',
-  isQuirksMode: (document) => (document as DocumentImpl).compatMode !== 'CSS1Compat',
+  isHTMLDocument: (document) => document.type === 'html',
+  isQuirksMode: (document) => document.compatMode !== 'CSS1Compat',
 
   ownerDocument: (node) => node.ownerDocument,
   root: (node) => node.getRootNode(),
-  parentNode: (node) => node.parentNode,
+  parentNode: (node) => node.parentNode as ParentImpl | null,
   parentElement: (node) => node.parentElement,
   firstChild: (node) => node.firstChild,
   nextSibling: (node) => node.nextSibling,
-  firstElementChild: (node) => (node as ParentImpl).firstElementChild,
-  lastElementChild: (node) => (node as ParentImpl).lastElementChild,
+  firstElementChild: (node) => node.firstElementChild,
+  lastElementChild: (node) => node.lastElementChild,
   nextElementSibling: (element) => element.nextElementSibling,
   previousElementSibling: (element) => element.previousElementSibling,
-  childElementCount: (node) => (node as ParentImpl).childElementCount,
+  childElementCount: (node) => node.childElementCount,
   contains: (node, other) => node.contains(other),
   compareDocumentPosition: (node, other) => node.compareDocumentPosition(other),
-  shadowHost: (root) => (root as ShadowRootImpl).host,
+  shadowHost: (root) => root.host,
   textData: (text) => (text as TextImpl).data,
-  documentElement: (document) => (document as DocumentImpl).documentElement,
-  body: (document) => (document as DocumentImpl).body,
-  URL: (document) => (document as DocumentImpl).URL,
+  documentElement: (document) => document.documentElement,
+  body: (document) => document.body,
+  URL: (document) => document.URL,
   baseURI: (node) => node.baseURI,
 
   getId: (element) => element.getAttribute('id') ?? '',
@@ -60,9 +62,9 @@ export const browletDOM: DOMOperations<NodeImpl, ElementImpl, AttrImpl> = {
   inlineStyle: (element) => 'style' in element ? element.getInlineStyle() : null,
 
   getElementById: (root, id) => findElementById(root, id),
-  getElementsByTagName: (root, name) => (root as DocumentImpl | ElementImpl).getElementsByTagName(name),
-  getElementsByTagNameNS: (root, namespace, name) => (root as DocumentImpl | ElementImpl).getElementsByTagNameNS(namespace, name),
-  getElementsByClassName: (root, names) => (root as DocumentImpl | ElementImpl).getElementsByClassName(names),
+  getElementsByTagName: (root, name) => root.getElementsByTagName(name),
+  getElementsByTagNameNS: (root, namespace, name) => root.getElementsByTagNameNS(namespace, name),
+  getElementsByClassName: (root, names) => root.getElementsByClassName(names),
   hasDocumentAll: () => false,
   allNamedItem: () => unavailable('Document.all'),
 

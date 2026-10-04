@@ -1,4 +1,4 @@
-import type { DOMOperations, DOMNode as Element } from '../../infra/index';
+import type { DOMOperations, DOMElement as Element, DOMShadowRoot as ShadowRoot } from '../../infra/index';
 import { assertNever } from '../../infra/util';
 import type { Combinator } from '../syntax/selector';
 import {
@@ -397,7 +397,7 @@ function matchRelativeFrom(
   }
 }
 
-function shadowRoot(node: Element, dom: DOMOperations): Element | null {
+function shadowRoot(node: Element, dom: DOMOperations): ShadowRoot | null {
   const root = dom.root(node);
   return dom.isShadowRoot(root) ? root : null;
 }

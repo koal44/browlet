@@ -1,4 +1,4 @@
-import type { DOMNode as QuerySource, DOMOperations, DOMCollection, DOMNode as Element } from '../../infra/index';
+import type { DOMQueryRoot as QuerySource, DOMOperations, DOMCollection, DOMElement as Element } from '../../infra/index';
 import { sameId } from '../seeds/seedsById';
 import { sameSelectorTag } from '../seeds/seedsByTag';
 import { collectionToArray, concatCollection } from '../collections';

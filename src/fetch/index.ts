@@ -24,7 +24,7 @@ export type {
 export { HTTPCacheStore } from './cache-http';
 export { CORSPreflightCache } from './cache-cors';
 export type {
-  FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
+  FetchEnvironment, FetchEnvironmentRecord, FetchExecution, FetchUserAgent,
   HTTPAuthentication, AuthenticationCredentials, AuthenticationEntry,
   FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue,

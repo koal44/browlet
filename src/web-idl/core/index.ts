@@ -3,8 +3,10 @@ export {
   DOMExceptionCodes, DOMExceptionNames,
   DOMExceptionImpl, DOMExceptionStamper, QuotaExceededErrorImpl, domExceptionIDL, isDOMException,
   quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
-  type DOMExceptionName,
+  type DOMException, type DOMExceptionConstructor, type DOMExceptionName,
 } from './dom-exception';
+
+export type { WebIDLExecution } from './execution';
 
 export {
   allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL,

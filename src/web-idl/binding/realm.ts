@@ -4,7 +4,7 @@ import {
 } from '../../infra/index';
 import { getAssociatedRealm, isObject } from '../../js-engine/index';
 import {
-  DOMExceptionImpl,
+  DOMExceptionImpl, type DOMExceptionConstructor,
   type ImplementationClass, type ImplementationType, type InjectedArgument, type WebIDLType,
 } from '../core/index';
 
@@ -117,9 +117,9 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   }
 
   /** The realm's original DOMException constructor, independent of its global property. */
-  get DOMException(): typeof globalThis.DOMException {
+  get DOMException(): DOMExceptionConstructor {
     const binding = this.getImplementationBinding(this.resolveInterface('DOMException'));
-    return binding.getInterfaceObject() as unknown as typeof globalThis.DOMException;
+    return binding.getInterfaceObject() as unknown as DOMExceptionConstructor;
   }
 
   /** Install this realm's exposed definitions on the supplied global object. */

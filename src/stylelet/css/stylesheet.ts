@@ -1,3 +1,4 @@
+import type { StyleletURL } from '../environment';
 import {
   parseSyntaxStylesheet,
   type ParserInput, type SyntaxBlockContents, type SyntaxQualifiedRule,
@@ -12,14 +13,14 @@ import {
 
 export type InterpretedStyleSheet = {
   rules: InterpretedRule[];
-  location?: URL;
-  baseUrl?: URL;
+  location?: StyleletURL;
+  baseUrl?: StyleletURL;
   originalText?: string;
 };
 
 export type StyleSheetOptions = {
-  location?: URL;
-  baseUrl?: URL;
+  location?: StyleletURL;
+  baseUrl?: StyleletURL;
 };
 
 export type InterpretedRule =

@@ -1,66 +1,82 @@
 import { standardDOM, type DOMOperations } from '../infra/index';
-import { InternalPromise } from '../infra/promises';
-import type { AsyncExecution } from '../infra/execution';
-import type { DOMExceptionName } from '../web-idl/core/index';
+import { createAsyncExecution, nativeTimerHost, type AsyncExecution } from '../infra/execution';
+import type { DOMExceptionConstructor, WebIDLExecution } from '../web-idl/core/index';
+import { decodeNative, type EncodingCapability } from '../encoding/core/index';
 
-/** Existing owner supplying Stylelet's execution and host DOM operations. */
+/** Existing owner supplying Stylelet's execution, DOM access, URLs, and text decoding. */
 export interface StyleletEnvironment {
   /** Promise allocation, background work, task delivery, and exception creation. */
   exec: StyleletExecution;
-  /** Host owner sharing DOM access across its documents and engines. */
+  /** Host facilities shared across this owner's documents and engines. */
   userAgent: StyleletUserAgent;
 }
 
-/** DOM integration shared by this host's documents and engines. */
-export interface StyleletUserAgent {
+/** DOM, URL, and text decoding shared by this host's documents and engines. */
+export interface StyleletUserAgent extends EncodingCapability {
   /** Read and update host nodes through their supplied DOM operations. */
   dom: DOMOperations;
+  /** Parse and serialize URLs using this host's selected implementation. */
+  URL: StyleletURLConstructor;
 }
 
-/** Shared Promise facilities plus delivery of stylesheet updates. */
-export interface StyleletExecution extends AsyncExecution {
-  /** Create an exception for delivery through the host's CSSOM binding. */
-  // PROVISIONAL: Browlet's direct CSSOM APIs use the owning environment's
-  // platform exceptions. Revisit method-realm allocation when CSSOM gains
-  // member bindings (browlet/style/ROADMAP.md).
-  createDOMException(name: DOMExceptionName, message?: string): DOMException;
+/** Serialized view of a parsed URL retained by Stylelet. */
+export interface StyleletURL {
+  href: string;
 }
+
+/** URL construction required by stylesheets and computed CSS resource values. */
+export interface StyleletURLConstructor {
+  /** Resolve input against the optional base; throw when parsing fails. */
+  new (input: string, base?: string): StyleletURL;
+}
+
+/** Shared scheduling and host exception construction for stylesheet updates. */
+// PROVISIONAL: Browlet's direct CSSOM APIs use the owning environment's
+// platform exceptions. Revisit method-realm allocation when CSSOM gains
+// member bindings (browlet/style/ROADMAP.md).
+export interface StyleletExecution extends AsyncExecution, WebIDLExecution {}
 
 /** Host configuration for an existing environment or standalone execution. */
 export type StyleletOptions = {
-  /** Existing owner; takes precedence over the standalone dom and exec options. */
+  /** Existing owner; takes precedence over the standalone host options. */
   env?: StyleletEnvironment;
   /** Access to existing host nodes; defaults to the standard DOM API. */
   dom?: DOMOperations;
+  /** Standalone URL implementation; defaults to the captured native constructor. */
+  URL?: StyleletURLConstructor;
+  /** Complete-input byte decoding; defaults to the native decoder adapter. */
+  decodeText?: EncodingCapability['decodeText'];
   /** Standalone execution facilities; defaults to native promises, timers, and exceptions. */
   exec?: StyleletExecution;
 };
 
-/** Return the supplied environment or compose standalone DOM and execution facilities. */
+/** Return the supplied environment or compose standalone host facilities. */
 export function createStyleletEnvironment(options: StyleletOptions = {}): StyleletEnvironment {
   if (options.env) return options.env;
 
   return {
-    userAgent: { dom: options.dom ?? standardDOM },
+    userAgent: {
+      dom: options.dom ?? standardDOM,
+      URL: options.URL ?? nativeURL,
+      decodeText: options.decodeText ?? decodeNative,
+    },
     exec: options.exec ?? defaultStyleletExecution,
   };
 }
 
-/** Native scheduling for hosts without an existing execution integration. */
+// Capture standalone host facilities using only the surfaces Stylelet needs.
+const nativeHost = globalThis as typeof globalThis & NativeStyleletHost;
+const nativeURL = nativeHost.URL;
+
+/** Shared native scheduling and host exceptions for standalone Stylelet. */
 export const defaultStyleletExecution: StyleletExecution = {
-  Promise: class StyleletPromise<T> extends InternalPromise<T> {
-    protected override observeNative(fulfilled: (value: unknown) => void, rejected: (reason: unknown) => void): void {
-      void this.backing.then(fulfilled, rejected).catch((error: unknown) => {
-        setTimeout(() => { throw error; }, 0);
-      });
-    }
-  },
-  runInParallel: (steps) => { setTimeout(steps, 0); },
-  queueTask(_source, steps) {
-    const timer = setTimeout(steps, 0);
-    return { remove: () => { clearTimeout(timer); } };
-  },
-  createDOMException: (name, message = '') => new DOMException(message, name),
+  ...createAsyncExecution(nativeTimerHost),
+  DOMException: nativeHost.DOMException,
 };
 
 export const defaultStyleletEnvironment = createStyleletEnvironment();
+
+type NativeStyleletHost = {
+  URL: StyleletURLConstructor;
+  DOMException: DOMExceptionConstructor;
+};

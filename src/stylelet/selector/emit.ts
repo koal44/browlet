@@ -1,4 +1,4 @@
-import type { DOMOperations, DOMNode as Element } from '../../infra/index';
+import type { DOMOperations, DOMElement as Element } from '../../infra/index';
 import {
   PseudoArgumentKind, SelectorKind,
   type AttributeSelector, type ClassSelector, type IdSelector,

@@ -10,7 +10,8 @@ UTF-8; legacy output encodings are available through the internal operations.
 | Location | Responsibility |
 | --- | --- |
 | `index.ts` | Entry point for other subsystems. |
-| `encodings.ts` | Canonical encoding type, label lookup, codec factories, and complete-input/queue operations. |
+| `core/index.ts` | Portable labels, canonical encoding types, BOM detection, and the host decoding contract/native adapter. |
+| `encodings.ts` | Codec factories and complete-input/queue operations. |
 | `codecs/` | Encoder and decoder algorithms, including state retained across input chunks. |
 | `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through the owning environment. |
 | `indexes.ts`, `gen/` | Lazy lookup tables and checked-in packed mapping data. |
@@ -23,6 +24,13 @@ UTF-8; legacy output encodings are available through the internal operations.
 It returns a canonical `Encoding` or null. `getOutputEncoding` maps replacement
 and UTF-16 names to UTF-8 where the caller's specification requires it;
 replacement and UTF-16 deliberately have no encoders.
+
+Core is independently compiled without Node or Web IDL dependencies. Stylelet
+uses its label lookup directly and consumes `EncodingCapability.decodeText`
+through its existing UserAgent. Browlet supplies `decode`; standalone hosts
+default to `decodeNative`, which captures TextDecoder without requiring it during
+import. Both providers apply BOM override and replacement decoding. The full
+codec implementation retains its existing Node fast paths.
 
 `decode` and `encode` accept complete inputs and return complete results.
 Their `*Queue` counterparts retain supplied output and return `InternalPromise`

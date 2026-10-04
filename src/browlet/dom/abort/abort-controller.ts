@@ -1,4 +1,4 @@
-import type { JSEnvironment } from '../../../js-engine/index';
+import type { BrowletEnvironment } from '../../scripting/environment';
 import {
   arg, atArg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
   impl, invokeWith,
@@ -17,7 +17,7 @@ export class AbortControllerImpl {
 
   /** Default errors use env, or the signal's owner for internal calls. */
   // https://dom.spec.whatwg.org/#dom-abortcontroller-abort
-  abort(reason: unknown = undefined, env?: JSEnvironment): void {
+  abort(reason: unknown = undefined, env?: BrowletEnvironment): void {
     this.signal.signalAbort(reason, env);
   }
 }
@@ -32,7 +32,7 @@ export class AbortControllerImpl {
  *   undefined abort(optional any reason);
  * };
  */
-export const abortControllerIDL = defineInterface<JSEnvironment>({
+export const abortControllerIDL = defineInterface<BrowletEnvironment>({
   name: 'AbortController',
   exposed: '*',
   implementation: impl(AbortControllerImpl, {

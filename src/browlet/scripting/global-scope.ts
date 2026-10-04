@@ -11,6 +11,7 @@ import type { ReportingObserverImpl } from '../reporting/observer';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
 import type { InternalPromise } from '../../infra/promises';
 import type { DocumentImpl } from '../dom/nodes/document';
+import { nodeTimerHost } from '../integration/scripting';
 import type { BrowletEnvironment } from './environment';
 import { GlobalTimers, type TimerAction } from './timers';
 import {
@@ -52,6 +53,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.performance = new PerformanceImpl(env.timing, env);
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
+      host: nodeTimerHost,
       queueTask: (steps, options) => env.exec.queueTask('timer', steps, options),
       time: env.timing,
     });

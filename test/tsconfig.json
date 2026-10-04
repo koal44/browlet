@@ -24,6 +24,7 @@
     { "path": "../src/web-idl/core" },
     { "path": "../src/web-idl" },
     { "path": "../src/streams" },
+    { "path": "../src/encoding/core" },
     { "path": "../src/encoding" },
     { "path": "../src/file" },
     { "path": "../src/xhr" },

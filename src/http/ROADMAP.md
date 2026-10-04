@@ -160,7 +160,7 @@ and bodyless-304 repairs. Retain those regressions when updating the dependency.
 The HTTP/2 response-start fallback records decoded-header receipt when Undici
 omits the interim notification. This approximates first-byte timing; moving the
 same callback into Undici would not improve precision. A lower-level observation
-is needed for that. The [transport](../browlet/loader/node-transport.ts) owns it.
+is needed for that. The [transport](../browlet/integration/network/node-transport.ts) owns it.
 
 Transport tests retain informational/final separation, HEAD/304 representation
 lengths, framing failures, unknown status codes, and HTTP/2 refusal recovery.

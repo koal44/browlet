@@ -64,7 +64,11 @@ describe('ServiceWorkerGlobalScopeImpl', () => {
     worker.addEventListener('install', ignored);
     worker.addEventListener('fetch', second);
 
-    expect(worker.getFetchEventListenerCallbacks())
-      .toEqual([first, second]);
+    const callbacks = worker.getFetchEventListenerCallbacks();
+    expect(callbacks.map((callback) => callback.object)).toEqual([first, second]);
+    expect(worker.getFetchEventListenerCallbacks()[0]).toBe(callbacks[0]);
+
+    worker.removeEventListener('fetch', first);
+    expect(worker.getFetchEventListenerCallbacks()).toEqual([callbacks[1]]);
   });
 });

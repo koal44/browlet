@@ -1,6 +1,7 @@
 import { TextCursor } from '../../infra/text-cursor';
 import { asciiLower } from '../../infra/ascii';
-import { surroundingASCIIWhitespacePattern } from '../../infra/patterns';
+import { getEncoding, type Encoding } from '../../encoding/core/index';
+import type { StyleletEnvironment } from '../environment';
 
 export enum TokenKind {
   Ident = 1,
@@ -310,11 +311,10 @@ export type DecodeStylesheetOptions = {
 export function decodeStylesheetBytes(
   bytes: Uint8Array,
   options: DecodeStylesheetOptions = {},
+  env: StyleletEnvironment,
 ): string {
   const fallback = determineFallbackEncoding(bytes, options);
-  const encoding = sniffByteOrderMark(bytes) ?? fallback;
-
-  return decode(bytes, encoding);
+  return env.userAgent.decodeText(bytes, fallback);
 }
 
 function determineFallbackEncoding(
@@ -323,22 +323,22 @@ function determineFallbackEncoding(
     transportEncoding,
     environmentEncoding,
   }: DecodeStylesheetOptions,
-): string {
-  const transport = getEncoding(transportEncoding);
+): Encoding {
+  const transport = transportEncoding === undefined ? null : getEncoding(transportEncoding);
   if (transport !== null) return transport;
 
   const declared = getDeclaredEncoding(bytes);
   if (declared !== null) {
-    return declared === 'utf-16be' || declared === 'utf-16le'
-      ? 'utf-8'
+    return declared === 'UTF-16BE' || declared === 'UTF-16LE'
+      ? 'UTF-8'
       : declared;
   }
 
-  const environment = getEncoding(environmentEncoding);
-  return environment ?? 'utf-8';
+  const environment = environmentEncoding === undefined ? null : getEncoding(environmentEncoding);
+  return environment ?? 'UTF-8';
 }
 
-function getDeclaredEncoding(bytes: Uint8Array): string | null {
+function getDeclaredEncoding(bytes: Uint8Array): Encoding | null {
   const prefix = [
     0x40, 0x63, 0x68, 0x61, 0x72,
     0x73, 0x65, 0x74, 0x20, 0x22,
@@ -364,61 +364,9 @@ function getDeclaredEncoding(bytes: Uint8Array): string | null {
   return null;
 }
 
-function sniffByteOrderMark(bytes: Uint8Array): string | null {
-  if (startsWith(bytes, [0xEF, 0xBB, 0xBF])) return 'utf-8';
-  if (startsWith(bytes, [0xFE, 0xFF])) return 'utf-16be';
-  if (startsWith(bytes, [0xFF, 0xFE])) return 'utf-16le';
-
-  return null;
-}
-
-function getEncoding(label?: string): string | null {
-  if (label === undefined) return null;
-
-  const normalized = label
-    .replace(surroundingASCIIWhitespacePattern, '')
-    .toLowerCase();
-
-  if (ReplacementEncodingLabels.has(normalized)) return 'replacement';
-  if (normalized === 'x-user-defined') return normalized;
-
-  try {
-    return new TextDecoder(normalized).encoding;
-  } catch {
-    return null;
-  }
-}
-
-function decode(bytes: Uint8Array, encoding: string): string {
-  if (encoding === 'replacement') {
-    return bytes.length === 0 ? '' : '\uFFFD';
-  }
-
-  if (encoding === 'x-user-defined') {
-    let result = '';
-
-    for (const byte of bytes) {
-      result += String.fromCodePoint(byte <= 0x7F ? byte : 0xF780 + byte);
-    }
-
-    return result;
-  }
-
-  return new TextDecoder(encoding).decode(bytes);
-}
-
 function startsWith(bytes: Uint8Array, prefix: number[]): boolean {
   return prefix.every((byte, index) => bytes[index] === byte);
 }
-
-const ReplacementEncodingLabels = new Set([
-  'csiso2022kr',
-  'hz-gb-2312',
-  'iso-2022-cn',
-  'iso-2022-cn-ext',
-  'iso-2022-kr',
-  'replacement',
-]);
 
 // 3.3. Preprocessing the input stream
 export function filterCodePoints(input: string): string {

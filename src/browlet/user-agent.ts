@@ -12,9 +12,9 @@ import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
 import type { ReportingEndpoint } from './reporting/endpoint';
 import { ReportImpl } from './reporting/report';
 import type { ReportDeliveryResult } from './reporting/delivery';
-import { NodeHTTPTransport } from './loader/node-transport';
+import { NodeHTTPTransport } from './integration/network/node-transport';
 import { HTTPAuthenticationStore } from './loader/authentication';
-import { createContentDecoder, supportedContentCodings } from './loader/node-decoder';
+import { createContentDecoder, supportedContentCodings } from './integration/network/node-decoder';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
@@ -23,14 +23,15 @@ import {
 import { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
 import type { MIMEType } from '../mime/index';
-import type { JSEnvironment } from '../js-engine/index';
+import { randomUUID, type JSEnvironment } from '../js-engine/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import {
-  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL,
+  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
   type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { InternalError } from '../infra/internal-error';
 import type { StyleletUserAgent } from '../stylelet/index';
+import { decode } from '../encoding/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import { browletDOM } from './integration/dom';
 import { internalType, type InternalPromise } from '../infra/promises';
@@ -39,6 +40,10 @@ import { internalType, type InternalPromise } from '../infra/promises';
 export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
   /** Implementation access shared by selector and style engines. */
   dom = browletDOM;
+  /** Implementation used for Stylelet's internal stylesheet and resource URLs. */
+  URL = URLImpl;
+  /** Encoding's complete-input decoder used by stylesheet byte processing. */
+  decodeText = decode;
   /** Related-context groups currently retained by this browser. */
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   /** Top-level windows or tabs owned by this browser. */
@@ -126,7 +131,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   /** Generate a fresh canonical UUID for browser-owned registrations. */
   generateUUID(): string {
-    return crypto.randomUUID();
+    return randomUUID();
   }
 
   /** Parse a browser URL and retain its Blob registration before revocation can remove it. */

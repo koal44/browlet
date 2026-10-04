@@ -62,7 +62,7 @@ views of existing owners, not a new environment object for each subsystem.
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `exec: RealmExecution`, and `queueNetworkingTask(steps, destination)` for a JavaScript execution owner |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: EventRealm` and `exec: EventExecution` for event timing and allocation |
 | [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
-| [`FetchEnvironment`](fetch/environment.ts) | Extends both FetchEnvironmentRecord and JSEnvironment with the client settings Fetch consumes |
+| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and JSEnvironment with Fetch execution facilities and client settings |
 | [`BrowletEnvironment`](browlet/scripting/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
@@ -90,14 +90,20 @@ adds the bound Promise, DOM allocations, and structured data at the composition
 root. Defining a contract below HTML does not transfer ownership of HTML
 algorithms to JS Engine.
 
-Subsystems can declare independent execution contracts, such as DOM's
-[`EventExecution`](browlet/dom/environment.ts). `BrowletExecution` combines it
-with `RealmExecution` on the same `env.exec` object; neither base contract depends
-on the other.
+Subsystems declare independent execution contracts. Web IDL Core's
+[`WebIDLExecution`](web-idl/core/execution.ts) supplies `DOMException` through
+its `DOMExceptionConstructor` contract, and DOM's
+[`EventExecution`](browlet/dom/environment.ts) supplies event allocation.
+`BrowletExecution` combines these with `RealmExecution` and `StyleletExecution`
+on the same `env.exec` object. JS Engine does not depend on Web IDL; Core does
+not depend on JS Engine. Web IDL's realm and callback environment contracts
+remain in its full entry point.
 
-Fetch uses `RealmExecution` through `JSEnvironment`; it adds no separate
-`FetchExecution` contract. Its base URL, origin, policies, and UserAgent belong
-to the surrounding `FetchEnvironment`, already implemented by BrowletEnvironment.
+Fetch's `FetchExecution` combines engine facilities and Web IDL exception
+construction on `FetchEnvironment.exec`. Fetch receives the existing environment
+as its execution owner; the request's optional client remains a separate selection.
+The same `FetchEnvironment` contract supplies base URL, origin, policies, and
+UserAgent when used as client settings. BrowletEnvironment implements it directly.
 
 Implementations use `env.exec`. It exposes no Binding Context, realm object,
 callback adapter, conversion API, or projection registry. Supply lifetime
@@ -109,18 +115,43 @@ Realm-neutral backing storage such as `BlobData` needs no retained environment.
 An environment may forward a useful operation such as `parseURL()` to its
 UserAgent. Do not put ordinary imports behind environment properties or copy
 another owner's complete API into a facade. Stylelet consumes the existing
-`StyleletEnvironment` view: `userAgent.dom` supplies host DOM operations and
-`exec` supplies execution. `RealmExecution` and `StyleletExecution` both extend
+`StyleletEnvironment` view: `userAgent.dom` supplies host DOM operations,
+`userAgent.URL` supplies URL construction, and `exec` supplies execution.
+Browlet supplies `URLImpl`; standalone composition captures the native constructor
+or accepts a supplied provider. Stylelet retains only the `StyleletURL` contract
+(`href`) and passes the selected constructor through CSS value contexts. Resource
+URLs resolve at the computed stage; serialization formats the resulting value.
+CSSOM URL attributes expose strings, so these internal URLs require no platform
+projection. Stylelet does not import the URL implementation or its runtime graph.
+Stylelet also uses Encoding Core's portable label lookup and canonical encoding
+type. Its existing UserAgent supplies `EncodingCapability.decodeText(bytes, fallback)`:
+Browlet forwards to Encoding's `decode`, while standalone composition supplies
+the native decoder adapter. CSS retains fallback-encoding selection; Encoding
+owns BOM override, byte decoding, and replacement handling. Encoding Core depends
+only on Infra; Stylelet does not load the full codecs or their Node dependencies.
+`RealmExecution` and `StyleletExecution` both extend
 Infra's [`AsyncExecution`](infra/execution.ts) for Promise creation, background
 work, and `queueTask(source, steps, options?)` delivery. The source keyword selects
 a shared task source; `env.exec` selects the owning destination. Browlet's
 [`scripting/tasks.ts`](browlet/scripting/tasks.ts) maps these keys to shared source
 identities; HTML retains task queues and scheduling policy. Optional task metadata
 carries timer nesting levels without moving timer initialization into Infra.
-Its provisional CSSOM exception factory supplies platform exceptions in the
-owning environment while CSSOM implementations remain directly exposed. Full
-CSSOM member bindings must replace this interim choice with method-realm
-exception projection.
+`StyleletExecution` also extends `WebIDLExecution`. Its supplied `DOMException`
+constructor creates platform exceptions in the owning environment while CSSOM
+implementations remain directly exposed. Full CSSOM member bindings must replace
+this interim allocation with method-realm exception projection.
+The constructor's result uses Core's shared `DOMException` contract for
+`name`, `message`, and `code` while retaining the host-created exception.
+Infra's `TimerHost` describes a native wake-up request returning a `TaskHandle`.
+`remove()` cancels pending work; native timer tokens remain private to the
+provider. Hosts may limit requested delays, so consumers enforcing a deadline
+must recheck their clock. Browlet supplies its Node provider explicitly to
+`GlobalTimers`, which retains HTML activity, deadline, and ordering rules.
+Infra's `createAsyncExecution(timerHost)` composes standalone Promise observation,
+background work, and task delivery around a supplied provider. Its `nativeTimerHost`
+captures scheduling and cancellation together, retaining their original receiver;
+it requires native timers only when scheduling work, not during module import.
+Stylelet composes this shared execution with its host's DOMException constructor.
 Standalone Stylelet composes native facilities without requiring HTML settings
 or loading the engine runtime. `SelectletEnvironment` uses the same `userAgent.dom`
 owner and currently needs no execution facilities. `SelectletContext` retains
@@ -132,6 +163,15 @@ attributes, and live HTML state only through those operations. The standard
 provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts)
 uses implementations, including class checks for HTML elements. There are no
 per-node adapters or required fields on host nodes.
+
+`DOMOperations` distinguishes the host's node, element, attribute, document,
+document-fragment, and shadow-root types. Its predicates narrow those roles, and each lookup
+accepts only the receiver kinds it supports. Engine internals use opaque role
+types with an optional, type-only symbol; no node is tagged or inspected through
+that symbol. CSSOM retains element or processing-instruction owners through the
+corresponding opaque roles. The separate [standard adapter](infra/dom-standard.ts) owns the
+structural browser interfaces it reads, including separate form and media views.
+Browlet's adapter supplies concrete implementation types instead.
 
 ### Construction and lifetime
 

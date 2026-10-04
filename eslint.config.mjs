@@ -85,9 +85,9 @@ export default defineConfig(
         },
       ],
       '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: true }],
-      // Binding projects implementation exceptions into realm-owned Error objects.
+      // Binding projects implementation exceptions; host exceptions use Core's contract.
       '@typescript-eslint/only-throw-error': ['error', {
-        allow: ['DOMExceptionImpl', 'QuotaExceededErrorImpl'],
+        allow: ['DOMException', 'DOMExceptionImpl', 'QuotaExceededErrorImpl'],
       }],
       // Allow interfaces for extending object contracts alongside type aliases.
       '@typescript-eslint/consistent-type-definitions': 'off',
@@ -224,7 +224,7 @@ export default defineConfig(
     rules: {
       'browlet/subsystem-imports': ['error', {
         unrestrictedSubsystems: ['infra'],
-        entryPoints: { 'web-idl': ['index', 'core/index'] },
+        entryPoints: { 'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'] },
       }],
     },
   },

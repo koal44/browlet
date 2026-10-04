@@ -1,6 +1,6 @@
 import { escapeRegExp } from '../infra/strings';
 import type {
-  DOMOperations, DOMNode as Document, DOMNode as Element, DOMNode as Node,
+  DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node,
 } from '../infra/index';
 import { RuntimeCache } from './selector/runtimeCache';
 import { defaultStyleletEnvironment, type StyleletEnvironment } from './environment';

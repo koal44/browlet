@@ -1,7 +1,8 @@
 import type { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise } from '../infra/promises';
-import type { GlobalObject, JSEnvironment } from '../js-engine/index';
+import type { GlobalObject } from '../js-engine/index';
 import { FetchController } from './controller';
+import type { FetchEnvironment } from './environment';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
 import type { FetchTimingInfo } from './timing';
@@ -35,9 +36,9 @@ export class FetchParams {
   // A Promise represents the draft's "pending" state and wakes the waiting fetch without polling.
   preloadedResponseCandidate: FetchResponse | InternalPromise<FetchResponse> | null = null;
   /** Execution owner for body streams, separate from the request's optional client. */
-  env: JSEnvironment;
+  env: FetchEnvironment;
 
-  constructor(request: FetchRequest, timingInfo: FetchTimingInfo, env: JSEnvironment) {
+  constructor(request: FetchRequest, timingInfo: FetchTimingInfo, env: FetchEnvironment) {
     this.request = request;
     this.timingInfo = timingInfo;
     this.env = env;

@@ -130,3 +130,10 @@ export function hasAsciiWhitespaceToken(actual: string, expectedLower: string): 
 
   return false;
 }
+
+/** Local names eligible for form-state selector checks. */
+export function isFormStateElementName(localName: string): boolean {
+  return FORM_STATE_ELEMENTS.has(localName);
+}
+
+const FORM_STATE_ELEMENTS = new Set(['button', 'fieldset', 'input', 'optgroup', 'option', 'select', 'textarea']);

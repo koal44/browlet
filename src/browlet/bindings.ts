@@ -257,9 +257,6 @@ export function createBoundExecution(context: BindingContext<BrowletEnvironment>
     Promise: context.Promise,
     // Interface binding registration finishes after execution is composed.
     get DOMException() { return context.DOMException; },
-    // PROVISIONAL: direct CSSOM APIs need platform exceptions before full
-    // CSSOM projection supplies the invoking method's exception boundary.
-    createDOMException: (name, message = '') => new context.DOMException(message, name),
     createEvent: (EventConstructor = EventImpl) => {
       const event = context.construct(EventConstructor, ['', {}]);
       event.isTrusted = true;

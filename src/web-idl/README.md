@@ -28,6 +28,7 @@ Core through its index, while Core modules import their siblings directly.
 | `core/types.ts` | Type expressions, literals, extended attributes, implementation identity, and binding-hook contracts |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
 | `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
+| `core/execution.ts` | Host-neutral execution contract supplying the DOMException constructor |
 | `assembly/assembly.ts` | Compose the assembled collections and cache declared type uses |
 | `assembly/types.ts` | Realm-independent type contracts, conversion rules, comparison keys, and JSON classification |
 | `assembly/interface.ts`, `dictionary.ts`, `namespace.ts`, `callback.ts`, `enumeration.ts`, `typedef.ts`, `proxy-object.ts` | Each definition family, its collection, and its construction and search logic |
@@ -683,6 +684,10 @@ When an algorithm stores or shares a newly created error before returning,
 allocate it through the selected `env.exec.TypeError`,
 `RangeError`, or `DOMException` constructor. Binding supplies the original
 `DOMException` independently of its writable global property.
+Core owns the structural `DOMException` and `DOMExceptionConstructor` types.
+Its `WebIDLExecution` contract supplies that constructor on an existing `exec`
+object without importing JS Engine or requiring a realm. Browlet and Fetch
+combine it with engine execution; Stylelet combines it with Infra scheduling.
 Later Promise delivery must not decide that error's realm.
 `InternalError` diagnoses an implementation contract failure.
 DOMException's engine Error allocation and legacy/global exotic behavior are

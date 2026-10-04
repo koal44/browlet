@@ -1,7 +1,9 @@
 import { browletDOM } from '../../../../src/browlet/integration/dom';
 import { describe, expect, it } from 'vitest';
 
-import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
+import { CSSStyleSheetImpl, type CSSStyleSheetInit } from '../../../../src/stylelet/cssom/css-stylesheet';
+import { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
+import type { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import {
@@ -71,6 +73,15 @@ describe('CSSStyleSheetImpl', () => {
     );
   });
 
+  it('resolves a relative constructor base through the standalone URL provider', () => {
+    const sheet = createStyleSheet({ baseURL: '../css/' });
+
+    expect(sheet.interpretedStyleSheet.location).toBeInstanceOf(URL);
+    expect(sheet.interpretedStyleSheet.location?.href).toBe('https://example.com/document/');
+    expect(sheet.interpretedStyleSheet.baseUrl).toBeInstanceOf(URL);
+    expect(sheet.interpretedStyleSheet.baseUrl?.href).toBe('https://example.com/css/');
+  });
+
   it('projects semantic property declarations into CSSOM declarations', () => {
     const sheet = createStyleSheet();
     sheet.replaceSync(`
@@ -81,8 +92,9 @@ describe('CSSStyleSheetImpl', () => {
       }
     `);
 
-    const rule = sheet.cssRules.item(0) as CSSStyleRule;
+    const rule = sheet.cssRules.item(0) as CSSStyleRuleImpl;
 
+    expect(rule).toBeInstanceOf(CSSRuleImpl);
     expect(rule.style.getPropertyValue('color')).toBe('red');
     expect(rule.style.getPropertyValue('margin-top')).toBe('10px');
     expect(rule.style.getPropertyValue('--Brand')).toBe('A/**/B');
@@ -102,7 +114,7 @@ describe('CSSStyleSheetImpl', () => {
       }
     `);
 
-    const rule = sheet.cssRules.item(0) as CSSStyleRule;
+    const rule = sheet.cssRules.item(0) as CSSStyleRuleImpl;
 
     expect(rule.style.getPropertyValue('color')).toBe('green');
     expect(rule.style.getPropertyPriority('color')).toBe('important');
@@ -112,11 +124,11 @@ describe('CSSStyleSheetImpl', () => {
   it('mutates declarations through the CSSStyleDeclaration interface', () => {
     const sheet = createStyleSheet();
     sheet.replaceSync('.example { color: red; }');
-    const style = (sheet.cssRules.item(0) as CSSStyleRule).style;
+    const style = (sheet.cssRules.item(0) as CSSStyleRuleImpl).style;
 
     style.setProperty('opacity', '50%', 'IMPORTANT');
 
-    expect(style.opacity).toBe('0.5');
+    expect(Reflect.get(style, 'opacity')).toBe('0.5');
     expect(style.getPropertyPriority('opacity')).toBe('important');
     expect(style[1]).toBe('opacity');
     expect(style.cssText).toBe('color: red; opacity: 0.5 !important;');

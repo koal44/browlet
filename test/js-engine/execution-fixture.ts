@@ -4,7 +4,7 @@ import {
   queueNetworkingTask, type AbortControllerCapability, type JSEnvironment, type RealmExecution,
 } from '../../src/js-engine/index';
 import { TestRealm } from '../web-idl/test-realm';
-import { BindingWorld, type BindingContext, type WebIDLEnvironment } from '../../src/web-idl/index';
+import { BindingWorld, type BindingContext, type WebIDLEnvironment, type WebIDLExecution } from '../../src/web-idl/index';
 import { readableStreamReadResultIDL } from '../../src/streams/index';
 
 /** A standalone realm environment with facilities supplied by the unit host. */
@@ -19,10 +19,13 @@ export function createEnvironment(realm = new TestRealm(), binding?: BindingCont
 
 export interface TestEnvironment extends JSEnvironment, WebIDLEnvironment {
   realm: TestRealm;
+  exec: TestExecution;
 }
 
+export interface TestExecution extends RealmExecution, WebIDLExecution {}
+
 /** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
-export function createExecution(realm = new TestRealm(), binding?: BindingContext): RealmExecution {
+export function createExecution(realm = new TestRealm(), binding?: BindingContext): TestExecution {
   if (!binding) return createEnvironment(realm).exec;
   return {
     global: realm.global,

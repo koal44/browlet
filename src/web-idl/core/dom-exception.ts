@@ -86,9 +86,21 @@ export type DOMExceptionName = typeof DOMExceptionNames[
   keyof typeof DOMExceptionNames
 ];
 
+/** Common exception attributes shared by implementations and host platform objects. */
+export interface DOMException {
+  name: string;
+  message: string;
+  code: number;
+}
+
+/** Constructor supplied by Binding or a standalone host for its platform exceptions. */
+export interface DOMExceptionConstructor {
+  new (message?: string, name?: string): DOMException;
+}
+
 /** Exception state projected into a realm-owned DOMException when exposed. */
 // https://webidl.spec.whatwg.org/#idl-DOMException
-export class DOMExceptionImpl {
+export class DOMExceptionImpl implements DOMException {
   // Private state supports recognition without consulting author properties or prototypes.
   #message: string;
   #name: string;
@@ -145,7 +157,7 @@ export class DOMExceptionStamper extends Stamper {
   }
 
   /** Recognize a projected exception, optionally checking its original name. */
-  static is(value: unknown, name?: string): value is globalThis.DOMException {
+  static is(value: unknown, name?: string): value is DOMException {
     return typeof value === 'object' && value !== null && #impl in value &&
       (name === undefined || DOMExceptionImpl.is(value.#impl, name));
   }

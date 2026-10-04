@@ -1,4 +1,4 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { DOMElement as Element } from '../../infra/index';
 import {
   propertyRegistry,
   resolveBuiltInPropertyDeclaration,
@@ -31,6 +31,7 @@ export function computeStyle(
 
     let selected: PropertyDeclaration | undefined;
     let context: PropertyContext = {
+      URL: engine.context.env.userAgent.URL,
       treeScope: scope,
       ...(engine.environmentBaseUrl === undefined
         ? {}

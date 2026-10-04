@@ -2,6 +2,9 @@
 import type {
   Engine, EquivalentCase, QuerySourceRef, QuerySourceHome, CssomProbe,
 } from '../harness';
+import type {
+  CSSRuleImpl, CSSStyleDeclarationImpl, CSSStyleRuleImpl, CSSStyleSheetImpl,
+} from '../../../src/stylelet/index';
 
 export type PwHelpers = {
   resolveQuerySource(doc: Document, ref?: QuerySourceRef): QuerySource | null;
@@ -87,7 +90,7 @@ export function installBrowserHelpers(): void {
     return isHtmlElement(x) && x.localName === 'style';
   }
 
-  function isCssStyleDeclaration(x: unknown): x is CSSStyleDeclaration {
+  function isCssStyleDeclaration(x: unknown): x is CssomDeclaration {
     return typeof x === 'object' &&
       x !== null &&
       'length' in x &&
@@ -97,7 +100,7 @@ export function installBrowserHelpers(): void {
       hasFn(x, 'getPropertyPriority');
   }
 
-  function isCssRuleList(x: unknown): x is CSSRuleList {
+  function isCssRuleList(x: unknown): x is CssomSheet['cssRules'] {
     return typeof x === 'object' &&
       x !== null &&
       'length' in x &&
@@ -616,7 +619,11 @@ export function installBrowserHelpers(): void {
     }
   }
 
-  type CssomSheet = Pick<CSSStyleSheet, 'cssRules'>;
+  // The harness inspects native platform objects and Stylelet implementations.
+  type CssomSheet = Pick<CSSStyleSheet | CSSStyleSheetImpl, 'cssRules'>;
+  type CssomRule = CSSRule | CSSRuleImpl;
+  type CssomStyleRule = CSSStyleRule | CSSStyleRuleImpl;
+  type CssomDeclaration = CSSStyleDeclaration | CSSStyleDeclarationImpl;
 
   type CssomReadFrom =
     | { kind: 'sheet'; }
@@ -653,7 +660,7 @@ export function installBrowserHelpers(): void {
           for (const rule of rules) {
             if (rule.type !== CSSRule.STYLE_RULE) continue;
 
-            const style = (rule as CSSStyleRule).style;
+            const style = (rule as CssomStyleRule).style;
             matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === cssom.name));
           }
         }
@@ -674,8 +681,8 @@ export function installBrowserHelpers(): void {
     }
   }
 
-  function ruleListToArray(list: CSSRuleList): CSSRule[] {
-    const rules: CSSRule[] = [];
+  function ruleListToArray(list: CssomSheet['cssRules']): CssomRule[] {
+    const rules: CssomRule[] = [];
 
     for (let i = 0; i < list.length; i++) {
       const rule = list.item(i);
@@ -755,7 +762,7 @@ export function installBrowserHelpers(): void {
     }
 
     if (isCssRuleList(value)) {
-      return Array.from(value).map((rule) =>
+      return Array.from<CssomRule>(value).map((rule) =>
         inspectObjectInner(rule, depth - 1, opts, seen)
       );
     }
@@ -803,7 +810,7 @@ export function installBrowserHelpers(): void {
     return out;
   }
 
-  function inspectStyleDeclaration(style: CSSStyleDeclaration, depth: number, opts: InspectOptions, seen: WeakSet<object>): JsonRecord {
+  function inspectStyleDeclaration(style: CssomDeclaration, depth: number, opts: InspectOptions, seen: WeakSet<object>): JsonRecord {
     const out = inspectHostObject(style, Math.max(depth, 0), opts, seen);
 
     out.kind = 'styleDeclaration';
@@ -830,22 +837,22 @@ export function installBrowserHelpers(): void {
     return out;
   }
 
-  function getStyleRule(sheet: CssomSheet, index: number): CSSStyleRule {
+  function getStyleRule(sheet: CssomSheet, index: number): CssomStyleRule {
     const rule = getRule(sheet, index);
     if (rule.type !== CSSRule.STYLE_RULE) {
       throw new Error(`CSS rule at index ${index} is not a style rule`);
     }
 
-    return rule as CSSStyleRule;
+    return rule as CssomStyleRule;
   }
 
-  function getRule(sheet: CssomSheet, index: number): CSSRule {
+  function getRule(sheet: CssomSheet, index: number): CssomRule {
     const rule = sheet.cssRules[index];
     if (!rule) throw new Error(`No CSS rule at index ${index}`);
     return rule;
   }
 
-  function getActiveDeclarations(style: CSSStyleDeclaration): JsonRecord[] {
+  function getActiveDeclarations(style: CssomDeclaration): JsonRecord[] {
     const decls: JsonRecord[] = [];
 
     for (let i = 0; i < style.length; i++) {

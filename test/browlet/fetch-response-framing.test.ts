@@ -4,7 +4,7 @@ import { createSecureServer, Http2ServerResponse, type ServerHttp2Stream } from 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
-import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
+import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
 import { FetchRequest } from '../../src/fetch/request';
 import { type FetchResponse, ResponseImpl } from '../../src/fetch/response';
 import { closeServer, listen } from './loader/http-fixture';

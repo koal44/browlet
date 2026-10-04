@@ -1,4 +1,4 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { DOMElement as Element } from '../../infra/index';
 import { asciiLower } from '../../infra/ascii';
 import {
   interpretPropertyDeclaration, propertyRegistry,
@@ -8,6 +8,7 @@ import {
   parseBlockContents, parseDeclaration, type ParserInput,
 } from '../syntax/parser';
 import type { StyleletEnvironment } from '../environment';
+import type { CSSRuleImpl } from './rule';
 
 /*
  * [Exposed=Window]
@@ -37,7 +38,7 @@ export class CSSStyleDeclarationImpl {
   #declarations: PropertyDeclaration[] = [];
   #computed: boolean;
   #readonly: boolean;
-  #parentRule: CSSRule | null;
+  #parentRule: CSSRuleImpl | null;
   #ownerNode: Element | null;
   #onChange: (declarations: readonly PropertyDeclaration[]) => void;
   #updating = false;
@@ -81,7 +82,7 @@ export class CSSStyleDeclarationImpl {
     return this.#declarations.length;
   }
 
-  get parentRule(): CSSRule | null {
+  get parentRule(): CSSRuleImpl | null {
     return this.#parentRule;
   }
 
@@ -252,9 +253,9 @@ export class CSSStyleDeclarationImpl {
   #assertMutable(): void {
     if (!this.#readonly) return;
 
-    throw this.#env.exec.createDOMException(
-      'NoModificationAllowedError',
+    throw new this.#env.exec.DOMException(
       'The CSS declaration block is read-only.',
+      'NoModificationAllowedError',
     );
   }
 }
@@ -263,7 +264,7 @@ type CSSStyleDeclarationOptions = {
   declarations?: readonly PropertyDeclaration[];
   computed?: boolean;
   readonly?: boolean;
-  parentRule?: CSSRule | null;
+  parentRule?: CSSRuleImpl | null;
   ownerNode?: Element | null;
   onChange?: (declarations: readonly PropertyDeclaration[]) => void;
 };

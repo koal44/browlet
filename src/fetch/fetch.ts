@@ -8,7 +8,7 @@ import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import { type PromiseResultType, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../infra/promises';
 import { coarsenTime } from '../infra/time';
-import { getBufferSourceCopy, getBufferTypeName, type JSEnvironment } from '../js-engine/index';
+import { getBufferSourceCopy, getBufferTypeName } from '../js-engine/index';
 import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl, TransformStreamImpl, type ReadableStreamDefaultReaderImpl } from '../streams/index';
 import {
@@ -20,7 +20,7 @@ import { FetchBody } from './body';
 import type { HTTPCacheEntry, HTTPCachePartition } from './cache-http';
 import { deserializeAbortReason, type FetchController } from './controller';
 import { processDataURL } from './data-url';
-import { isOffline, type AuthenticationCredentials, type AuthenticationEntry } from './environment';
+import { isOffline, type AuthenticationCredentials, type AuthenticationEntry, type FetchEnvironment } from './environment';
 import {
   convertHeaderNamesToSortedLowercaseSet, documentAcceptHeaderValue, isCORSNonWildcardRequestHeaderName, isCORSSafelistedMethod,
   isNullBodyStatus, isOkStatus, isRangeStatus, isRedirectStatus, isRequestBodyHeaderName,
@@ -38,7 +38,7 @@ import { isHTTPScheme, isLocalURL } from './url';
 /** Populate a request, select callback delivery, and start its fetch without waiting for a response. */
 // https://fetch.spec.whatwg.org/#concept-fetch
 export function fetch(
-  request: FetchRequest, options: FetchOptions = {}, env: JSEnvironment,
+  request: FetchRequest, options: FetchOptions = {}, env: FetchEnvironment,
 ): FetchController {
   if (request.mode !== 'navigate' && options.processEarlyHintsResponse !== undefined && options.processEarlyHintsResponse !== null) {
     throw new InternalError('Early Hints processing requires a navigation request');

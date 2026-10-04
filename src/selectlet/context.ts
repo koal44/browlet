@@ -1,5 +1,5 @@
 import type {
-  DOMNode as QuerySource, DOMNode as Element, DOMNode as Document, DOMOperations,
+  DOMQueryRoot as QuerySource, DOMElement as Element, DOMDocument as Document, DOMOperations,
 } from '../infra/index';
 import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import { queryFirst, type DebugFirst, type FirstResolver } from './api/first';
@@ -184,7 +184,8 @@ export class SelectletContext {
   }
 
   update(source: QuerySource, updateScope = false): void {
-    const doc = this.dom.ownerDocument(source) ?? source;
+    // Among query roots, only a document has no owner document.
+    const doc = (this.dom.ownerDocument(source) ?? source) as Document;
 
     if (this.doc !== doc) {
       // Template-content owner documents can have null documentElement

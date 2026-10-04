@@ -18,9 +18,11 @@ import {
 } from './text-encoder-stream';
 
 export {
-  type Encoding, type OutputEncoding,
+  getEncoding, getOutputEncoding, type Encoding, type OutputEncoding, type EncodingCapability,
+} from './core/index';
+export {
   bomSniff, decode, decodeQueue, encode, encodeQueue, encodeOrFail, encodeOrFailSync,
-  getDecoder, getEncoder, getEncoding, getOutputEncoding,
+  getDecoder, getEncoder,
 } from './encodings';
 export { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
 export { getSingleByteCodec } from './codecs/single-byte';

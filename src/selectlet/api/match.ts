@@ -1,4 +1,4 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { DOMElement as Element } from '../../infra/index';
 import { type CandidateElementPredicate, parseSelectorList, type SelectorList } from '../parser/parser';
 import { describeQuerySource, type QuerySourceDescription } from '../debug';
 import type { RuntimeCache } from '../compile/runtimeCache';

@@ -4,7 +4,7 @@ import { createServer as createHTTPSServer } from 'node:https';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
-import { NodeHTTPTransport } from '../../src/browlet/loader/node-transport';
+import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';
 import { FetchRequest } from '../../src/fetch/request';
 import type { FetchResponse } from '../../src/fetch/response';

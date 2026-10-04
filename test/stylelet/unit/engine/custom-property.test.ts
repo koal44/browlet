@@ -282,7 +282,7 @@ function resolveCustomProperty(
 
   const declaration = cascaded.declaration;
   const inheritedValue = registration.definition.parse(inherited)
-    ?.resolve(ValueStage.Computed, {});
+    ?.resolve(ValueStage.Computed, { URL: engine.context.env.userAgent.URL });
   const context: PropertyContext & {
     customProperty: {
       engine: CascadeEngine;

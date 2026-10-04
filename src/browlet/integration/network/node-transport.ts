@@ -3,15 +3,15 @@ import { isIP, type LookupFunction, type Socket } from 'node:net';
 import dns from 'node:dns';
 import { nextTick } from 'node:process';
 import { Client, buildConnector, errors, type Dispatcher } from 'undici';
+import { InternalError } from '../../../infra/internal-error';
+import { utf8Encode } from '../../../encoding/index';
 import {
   ConnectionTimingInfo, FetchHeaders, networkPartitionKeysEqual,
   type FetchUserAgent, type HTTPConnection, type HTTPTransport, type HTTPTransportControl,
   type HTTPTransportListener, type HTTPTransportRequest, type HTTPUploadSource, type NetworkPartitionKey,
-} from '../../fetch/index';
-import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../url/index';
-import { InternalError } from '../../infra/internal-error';
-import { utf8Encode } from '../../encoding/index';
-import { unsafeSharedCurrentTime } from '../performance/high-resolution-time';
+} from '../../../fetch/index';
+import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../../url/index';
+import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
 
 /** Node HTTP I/O owned by one UserAgent; Fetch keeps all browser processing. */
 export class NodeHTTPTransport implements HTTPTransport {

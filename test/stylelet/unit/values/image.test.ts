@@ -38,6 +38,7 @@ describe('image values', () => {
   it('resolves and serializes URL images', () => {
     const value = parseImage('url("image.png")')!;
     const resolved = resolveImage(value, ValueStage.Computed, {
+      URL,
       baseUrl: new URL('https://example.com/styles/site.css'),
     });
 

@@ -4,13 +4,13 @@ import { Browlet } from '../../src/browlet/browlet';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { utf8Decode, utf8Encode } from '../../src/encoding/codecs/utf-8';
 import { FetchBody } from '../../src/fetch/body';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetch } from '../../src/fetch/fetch';
 import { FetchHeaders } from '../../src/fetch/headers';
 import type { HTTPTransportListener } from '../../src/fetch/transport';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { InternalError } from '../../src/infra/internal-error';
-import type { JSEnvironment } from '../../src/js-engine/environment';
 import { parseURL } from '../../src/url/url';
 import { mockHTTPTransport } from '../fetch/transport-fixture';
 import { createPolicyEnvironment } from './browsing/policy/environment-fixture';
@@ -168,7 +168,7 @@ async function createWindowFixture() {
 }
 
 
-function consume(request: FetchRequest, env: JSEnvironment) {
+function consume(request: FetchRequest, env: FetchEnvironment) {
   const result = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();
   fetch(request, {
     processResponseConsumeBody: (response, body) => result.resolve({ response, body }),

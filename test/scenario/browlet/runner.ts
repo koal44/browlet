@@ -5,7 +5,9 @@ import type {
 } from '../harness';
 import { Browlet } from '../../../src/browlet/browlet';
 import { isElement } from '../../selectlet/util';
-import { createSelectlet, type Selectlet } from '../../../src/selectlet/selectlet';
+import { createSelectlet, type Selectlet as SelectletAPI } from '../../../src/selectlet/selectlet';
+
+type Selectlet = SelectletAPI<Node, Element, Document, DocumentFragment>;
 
 const STACK_TRACE = false;
 const ONLY = process.env.ONLY;

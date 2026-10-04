@@ -1,7 +1,6 @@
 import type { BrowletEnvironment } from '../../scripting/environment';
 import { Stamper } from '../../../infra/stamper';
 import { WeakOrderedSet } from '../../../infra/collections';
-import type { JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, defineInterface, idlType, impl, invokeWith, op, reference, roAttr,
   sequence, staticOp, xattr, DOMExceptionNames,
@@ -24,7 +23,7 @@ export class AbortSignalImpl extends EventTargetImpl {
   #dependent = false;
   /** Signals to abort with this signal, in registration order. */
   #dependentSignals = new WeakOrderedSet<AbortSignalImpl>();
-  #env: JSEnvironment;
+  #env: BrowletEnvironment;
   #eventHandlers = new EventHandlerMap(this, [{
     name: 'onabort',
     type: 'abort',

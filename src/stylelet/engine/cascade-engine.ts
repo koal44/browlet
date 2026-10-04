@@ -1,10 +1,11 @@
-import type { DOMNode as Element } from '../../infra/index';
+import type { StyleletURL } from '../environment';
+import type { DOMElement as Element } from '../../infra/index';
 import type {
   CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry,
   PropertyContext, PropertyDeclaration,
 } from '../css/property';
 import type { CSSStyleDeclarationImpl } from '../cssom/declaration';
-import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
+import { CSSStyleSheetImpl, type CSSStyleSheetInit } from '../cssom/css-stylesheet';
 import type { StyleletContext } from '../context';
 import { computeStyle } from './computed-style';
 import {
@@ -22,7 +23,7 @@ export class CascadeEngine {
 
   // The API base URL of the document-like environment associated with this
   // engine. It is the final fallback for resolving stylesheet resource URLs.
-  environmentBaseUrl: URL | undefined;
+  environmentBaseUrl: StyleletURL | undefined;
 
   context: StyleletContext;
 
@@ -79,6 +80,7 @@ export class CascadeEngine {
       this.environmentBaseUrl;
 
     return {
+      URL: this.context.env.userAgent.URL,
       treeScope: scope,
       ...(baseUrl === undefined ? {} : { baseUrl }),
     };
@@ -93,7 +95,7 @@ export class CascadeEngine {
 }
 
 export type CascadeEngineOptions = {
-  environmentBaseUrl?: URL;
+  environmentBaseUrl?: StyleletURL;
   registeredPropertySet?: CustomPropertyRegistry;
   context: StyleletContext;
 };

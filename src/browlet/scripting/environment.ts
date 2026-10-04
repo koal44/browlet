@@ -22,7 +22,8 @@ import { Moment, UnsafeMoment, monotonicClock } from '../performance/clock';
 import { EnvironmentTiming } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
-import { queueNetworkingTask, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
+import { queueNetworkingTask, randomUUID, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
+import type { WebIDLExecution } from '../../web-idl/core/index';
 import type { DOMEnvironment, EventExecution } from '../dom/environment';
 import type { StyleletEnvironment, StyleletExecution } from '../../stylelet/index';
 import type { SelectletEnvironment } from '../../selectlet/index';
@@ -57,7 +58,7 @@ export class EnvironmentRecord implements FetchEnvironmentRecord {
 
   /** Null leaves browser-specific state unavailable for an internal sandbox. */
   constructor(initialization: EnvironmentInit | null) {
-    this.id = initialization?.id ?? crypto.randomUUID();
+    this.id = initialization?.id ?? randomUUID();
     this.#userAgent = initialization?.userAgent ?? null;
     this.#creationURL = initialization?.creationURL ?? null;
     this.topLevelCreationURL = initialization?.topLevelCreationURL ?? null;
@@ -133,8 +134,8 @@ export interface ScriptingEnvironment {
   realm: Realm;
 }
 
-/** Engine, DOM, and style facilities composed for one Browlet execution owner. */
-export interface BrowletExecution extends RealmExecution, EventExecution, StyleletExecution {}
+/** Engine, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
+export interface BrowletExecution extends RealmExecution, WebIDLExecution, EventExecution, StyleletExecution {}
 
 /** Composed browser settings and execution for one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;

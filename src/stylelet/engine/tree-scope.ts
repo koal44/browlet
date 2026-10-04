@@ -1,4 +1,4 @@
-import type { DOMOperations, DOMNode as Document, DOMNode as Element, DOMNode as Node } from '../../infra/index';
+import type { DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node } from '../../infra/index';
 import { parseStylesheet } from '../css/stylesheet';
 import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
 import { StyleSheetListImpl } from '../cssom/stylesheet-list';
@@ -24,9 +24,9 @@ export class TreeScope {
       convert: toCSSStyleSheet,
       set(styleSheet) {
         if (styleSheet.isConstructedFor(document)) return;
-        throw cascade.context.env.exec.createDOMException(
-          'NotAllowedError',
+        throw new cascade.context.env.exec.DOMException(
           'The stylesheet was not constructed for this document.',
+          'NotAllowedError',
         );
       },
     });
@@ -88,7 +88,7 @@ export class TreeScope {
         originClean: true,
       },
       parseStylesheet(source, {
-        baseUrl: new URL(this.cascade.context.dom.baseURI(this.cascade.context.dom.ownerDocument(this.root) ?? this.root)),
+        baseUrl: new context.env.userAgent.URL(context.dom.baseURI(context.dom.ownerDocument(this.root) ?? this.root)),
       }),
     );
     this.addTreeStyleSheet(styleSheet);

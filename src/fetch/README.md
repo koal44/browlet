@@ -46,24 +46,26 @@ CSP language and browser policy state remain with their browser owners.
 
 ## Execution and ownership
 
-The execution owner (`env: JSEnvironment`), initiating client
+The execution owner (`env: FetchEnvironment`), initiating client
 (`request.client`), and callback destination are distinct. The client may be
 null; it does not supply every execution facility. The supplied environment
 provides `exec` for promises, Streams, allocation, and abort handling, and queues
 networking tasks to a global or parallel queue. Pass the existing environment;
-do not manufacture a substitute browser settings object.
+do not manufacture a substitute browser settings object. `FetchExecution`
+combines JS Engine's facilities with Web IDL Core's `DOMException` constructor
+contract so abort fallback exceptions retain their destination realm.
 
 UserAgent owns transport, connections, HTTP/CORS caches, authentication, cookies,
 and HSTS. Its sandbox supplies execution for work that outlives a Window, such
 as retired Reporting deliveries. Reserved HTML environment records supply early
 origin/partition state without pretending to be complete settings objects.
 
-The [Node adapter](../browlet/loader/node-transport.ts) uses Undici's dispatcher
+The [Node adapter](../browlet/integration/network/node-transport.ts) uses Undici's dispatcher
 for HTTP/1.1 and HTTP/2 wire I/O. Browlet owns Fetch policy and its own public
 objects, streams, and promises. Native callbacks return work through the owner's
 networking tasks. Upload pulls follow transport demand; response backpressure
 pauses both decoding and wire input. A separate
-[decoder](../browlet/loader/node-decoder.ts) chain handles each compressed response.
+[decoder](../browlet/integration/network/node-decoder.ts) chain handles each compressed response.
 The temporary Undici patches and their removal criteria live in
 [vendor/README.md](../../vendor/README.md).
 

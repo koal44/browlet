@@ -4,7 +4,7 @@ import { TypeError } from '../infra/exceptions';
 import { toScalarValueString } from '../infra/index';
 import { lineEndingPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { TextCursor } from '../infra/text-cursor';
-import { isomorphicDecode, isomorphicEncode, type JSEnvironment } from '../js-engine/index';
+import { isomorphicDecode, isomorphicEncode, randomUUID, type JSEnvironment } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import { percentEncodeByte } from '../url/index';
 import type { FormDataEntry } from '../xhr/index';
@@ -16,7 +16,7 @@ export function encodeMultipartFormData(
   encoding: Encoding,
 ): MultipartEncoding {
   // A random boundary avoids eagerly reading every File to scan for collisions.
-  const boundary = crypto.randomUUID();
+  const boundary = randomUUID();
   const lineEnding = BlobData.fromOwnedBytes(isomorphicEncode('\r\n'));
   const parts: BlobData[] = [];
   for (const [name, value] of entries) {

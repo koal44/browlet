@@ -188,7 +188,7 @@ describe('custom property', () => {
     (syntaxText, input, serialized) => {
       const property = defineCustomProperty({ syntax: syntax(syntaxText) });
 
-      expect(property.parse(input)?.resolve(ValueStage.Computed, {})?.serialize())
+      expect(property.parse(input)?.resolve(ValueStage.Computed, { URL })?.serialize())
         .toBe(serialized);
     },
   );
@@ -205,6 +205,7 @@ describe('custom property', () => {
   it('resolves a relative registered URL against its stylesheet', () => {
     const property = defineCustomProperty({ syntax: syntax('<url>') });
     const context: PropertyContext = {
+      URL,
       baseUrl: new URL('https://example.com/styles/site.css'),
     };
 

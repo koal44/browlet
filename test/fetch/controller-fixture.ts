@@ -1,8 +1,8 @@
 import { FetchController, deserializeAbortReason } from '../../src/fetch/controller';
-import type { JSEnvironment } from '../../src/js-engine/index';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 
 export function createControllerFixture(
-  env: JSEnvironment,
+  env: FetchEnvironment,
 ) {
   const controller = new FetchController();
   return {

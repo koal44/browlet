@@ -1,6 +1,6 @@
 import type {
-  DOMNode as QuerySource, DOMOperations, DOMCollection, DOMNode as Element, DOMNode as Document,
-  DOMNode as DocumentFragment,
+  DOMQueryRoot as QuerySource, DOMOperations, DOMCollection, DOMElement as Element, DOMDocument as Document,
+  DOMDocumentFragment as DocumentFragment,
 } from '../../infra/index';
 import type { LookupMode } from '../constants';
 import { iterableToArray } from '../../infra/collections';
@@ -63,7 +63,7 @@ function seedsByIdInFragment(id: string, source: DocumentFragment, ctx: Selectle
   return ctx.hasTreeWalker ? seedsById_TreeWalk(id, source, ctx.dom) : seedsById_Walk(id, source, ctx.dom);
 }
 
-function seedsById_All(id: string, source: Document, dom: DOMOperations): Element[] {
+function seedsById_All(id: string, source: Document | Element, dom: DOMOperations): Element[] {
   // document.all is only a document-root fast path.
   // Element callers must already have been routed through a Document root.
 
@@ -99,7 +99,7 @@ function seedsById_All(id: string, source: Document, dom: DOMOperations): Elemen
   return nodes;
 }
 
-function seedsById_MutateInDoc(id: string, source: Document, dom: DOMOperations): Element[] {
+function seedsById_MutateInDoc(id: string, source: Document | DocumentFragment, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
 
   try {
@@ -182,9 +182,13 @@ function seedsById_Walk(id: string, source: QuerySource, dom: DOMOperations): El
 
 function seedsById_TreeWalk(id: string, source: QuerySource, dom: DOMOperations): Element[] {
   const nodes: Element[] = [];
-  const root = dom.isDocument(source) ? dom.documentElement(source) : source;
-  if (root === null) return nodes;
-  if (dom.isDocument(source) && sameId(root, id, dom)) nodes.push(root);
+  let root: QuerySource = source;
+  if (dom.isDocument(source)) {
+    const element = dom.documentElement(source);
+    if (element === null) return nodes;
+    if (sameId(element, id, dom)) nodes.push(element);
+    root = element;
+  }
   for (const node of dom.walkElements!(root)) {
     if (sameId(node, id, dom)) nodes.push(node);
   }

@@ -65,9 +65,9 @@ export class MediaListImpl {
     this.#queries = this.#queries.filter((item) => !mediaQueriesEqual(item, query));
 
     if (this.#queries.length === length) {
-      throw this.#env.exec.createDOMException(
-        'NotFoundError',
+      throw new this.#env.exec.DOMException(
         `"${medium}" was not found in the media list.`,
+        'NotFoundError',
       );
     }
 

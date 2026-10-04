@@ -19,7 +19,7 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 | [environment.ts](environment.ts), [realm-execution.ts](realm-execution.ts) | Portable environment and execution contracts supplied to implementations |
 | [buffers.ts](buffers.ts) | Buffer/view brands, slot inspection, and byte operations |
 | [abstract-operations.ts](abstract-operations.ts), [built-in-primitives.ts](built-in-primitives.ts) | Shared JavaScript operations and bounded built-in state inspection |
-| [byte-string.ts](byte-string.ts), [hash.ts](hash.ts) | Native byte/string conversion and digest computation |
+| [byte-string.ts](byte-string.ts), [crypto.ts](crypto.ts) | Native byte/string conversion, digest computation, and UUID generation |
 | [index.ts](index.ts) | Entry point for other subsystems |
 
 ## Environments and allocation
@@ -35,6 +35,9 @@ for Promises, buffers, JSON, microtasks, background work, file/network task
 delivery, abort construction, and structured data. Browser composition supplies
 the HTML/DOM operations; declaring the contract here does not move their
 algorithms into JS Engine. Binding Context and projection stay outside `exec`.
+Web IDL's `DOMException` constructor belongs to its separate Core execution
+contract; higher layers combine it with `RealmExecution` on the same object.
+JS Engine has no Web IDL dependency.
 
 `JSRealm.createRuntimeBuffers()` provides realm-owned operations without exposing
 the realm. `allocateArrayBuffer()` creates zeroed fixed storage. `createView()`

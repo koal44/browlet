@@ -10,6 +10,7 @@ import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { fetch, type FetchOptions } from '../../src/fetch/fetch';
 import type { FetchController } from '../../src/fetch/controller';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 import type { FetchRequest } from '../../src/fetch/request';
 import type { FetchResponse } from '../../src/fetch/response';
 import type { TaskCreationOptions } from '../../src/infra/execution';
@@ -18,7 +19,7 @@ import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/controller-fixture';
 
 /** Configure a fetch through its public entry; start() supplies the controller and awaits response delivery. */
-export function createFetchOperation(request: FetchRequest, env: JSEnvironment) {
+export function createFetchOperation(request: FetchRequest, env: FetchEnvironment) {
   let controller: FetchController;
   const options: FetchOptions = { useParallelQueue: true };
   return {

@@ -6,12 +6,12 @@ import { EnvironmentRecord, type WindowEnvironment } from '../../src/browlet/scr
 import { navigationAndTraversalTaskSource } from '../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { utf8Decode } from '../../src/encoding/codecs/utf-8';
+import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetch } from '../../src/fetch/fetch';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { BlobImpl } from '../../src/file/blob';
 import { InternalError } from '../../src/infra/internal-error';
-import type { JSEnvironment } from '../../src/js-engine/environment';
 import { copyURL, parseURL } from '../../src/url/url';
 import { readBodyBytes } from '../fetch/body-fixture';
 import { createPolicyEnvironment } from './browsing/policy/environment-fixture';
@@ -377,7 +377,7 @@ function createBlob(text = '0123456789', type = 'text/plain') {
   return { env, blob, url, operation: createOperation(url, env) };
 }
 
-function consume(request: FetchRequest, env: JSEnvironment) {
+function consume(request: FetchRequest, env: FetchEnvironment) {
   const result = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();
   fetch(request, {
     useParallelQueue: true,

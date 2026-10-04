@@ -9,14 +9,19 @@
   `styleletIDLDefinitions`; Browlet contributes only their host behavior and
   assembles the declarations into its Web IDL bindings.
 - Documents and CSSOM implementations retain their existing environment through
-  `StyleletEnvironment`. UserAgent supplies `dom`; `env.exec` supplies the shared
+  `StyleletEnvironment`. UserAgent supplies `dom` and the `URLImpl` constructor
+  through `URL`; `env.exec` supplies the shared
   Promise and background scheduling plus `queueTask('dom-manipulation', steps)`
   for stylesheet delivery.
   There is no separate document execution adapter. Standalone Stylelet uses
   native scheduling without loading Browlet's engine runtime.
-- The CSSOM exception factory remains provisional: Browlet's direct CSSOM
+- Stylelet's host-neutral URL contract exposes `href`. Standalone hosts use
+  their native URL constructor or supply one explicitly. Stylesheet creation
+  and computed resource values use the same provider; CSSOM exposes URL strings.
+- CSSOM exception allocation remains provisional: Browlet's direct CSSOM
   APIs receive platform exceptions from the owning environment, while
-  standalone hosts supply their own DOMExceptions. This prevents implementation
+  standalone hosts supply their own constructor through `exec.DOMException`.
+  Core's `WebIDLExecution` owns that contract. This prevents implementation
   objects from escaping through APIs that do not yet have member bindings.
   Full CSSOM bindings must project new failures in the invoking method's realm.
 - Stylelet and Selectlet share Infra's `DOMOperations` through the `dom` option.
@@ -55,7 +60,7 @@
   factory into Web IDL and remove `src/infra/observable-array.ts`.
 - [ ] Exercise CSSOM exception and promise boundaries through the projected
   APIs, including borrowed cross-realm calls. Replace the interim owner-realm
-  exception factory with projection of DOMException implementations in the
+  exception construction with projection of DOMException implementations in the
   operation's realm, preserving author-thrown exceptions. Complete CSSOM
   projection is still required to exercise this boundary.
 

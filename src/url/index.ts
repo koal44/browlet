@@ -1,4 +1,4 @@
-export { URLSearchParamsImpl, urlIDLDefinitions } from './api';
+export { URLImpl, URLSearchParamsImpl, urlIDLDefinitions } from './api';
 export { originIDL } from './origin-api';
 export {
   copyURL, getDefaultPort, obtainURLOrigin, parseURL, serializeURL, serializeURLPath, stripURLForReporting, urlsEqual,

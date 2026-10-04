@@ -100,7 +100,7 @@ describe('cascade engine', () => {
 
     const property = engine.getCascadedProperty('color', scope)!;
 
-    expect(engine.getPropertyContext(property).baseUrl).toEqual(location);
+    expect(engine.getPropertyContext(property).baseUrl?.href).toBe(location.href);
   });
 
   it('captures an embedded stylesheet base when its source is parsed', () => {
@@ -116,7 +116,7 @@ describe('cascade engine', () => {
 
     const property = engine.getCascadedProperty('color', scope)!;
 
-    expect(engine.getPropertyContext(property).baseUrl).toEqual(baseUrl);
+    expect(engine.getPropertyContext(property).baseUrl?.href).toBe(baseUrl.href);
   });
 
   it('distinguishes separate tree-scope uses of an adopted stylesheet', () => {
