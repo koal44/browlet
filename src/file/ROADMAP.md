@@ -53,6 +53,34 @@ FileReader uses Browlet's EventTarget and XHR's ProgressEvent. Its read operatio
 owns its removable tasks, reader, progress clock, and final result. Abort and
 reentrant reads suppress stale tasks/events; global teardown remains below.
 
+### FileReader failure state
+
+FileReader retains `DOMExceptionImpl | null`; its normal Web IDL attribute
+projects that implementation without a custom getter. Backing sources classify
+expected read failures as `BlobReadFailure`; Blob streaming maps those reasons
+to concrete DOMException implementations. Streams continue to carry arbitrary
+rejection reasons, but FileReader rethrows unexpected failures from its file
+task instead of storing values that its DOMException attribute cannot expose.
+Such failures preserve their original identity for implementation diagnostics;
+they do not dispatch FileReader's normal `error`/`loadend` recovery sequence.
+
+Only result packaging belongs inside the completion catch. Event construction
+and dispatch failures escape the task separately, leaving any completed result
+intact. Author listener exceptions retain their existing callback reporting.
+
+`SPEC_CLASH(filereader-allocation-error)`: the File API
+[read operation](https://w3c.github.io/FileAPI/#readOperation) stores packaging
+and stream exceptions directly, while its [FileReader state and declaration](https://w3c.github.io/FileAPI/#dfn-filereader)
+require a DOMException or null. The Blob get-stream algorithm can also forward
+a JavaScript allocation exception. Browlet preserves the declared error type:
+a RangeError from the owner's result-buffer copy becomes `NotReadableError`.
+Other packaging exceptions propagate unchanged as unexpected failures.
+This follows WebKit's explicit buffer-allocation failure mapping in
+`Source/WebCore/fileapi/FileReaderLoader.cpp`. Gecko's
+`dom/file/FileReader.cpp` also retains a DOMException,
+but includes different handling for engine errors; this is a documented choice,
+not a claim that the draft or engines specify one uniform allocation-error name.
+
 ## Blob URL integration
 
 File API [§§8.2–8.4](https://w3c.github.io/FileAPI/#BlobURLStore) is implemented

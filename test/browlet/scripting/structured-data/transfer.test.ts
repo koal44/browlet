@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
-import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
+import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
@@ -298,7 +298,7 @@ function expectDataCloneError(steps: () => unknown): void {
   try {
     steps();
   } catch (error) {
-    expect(InternalDOMException.is(error)).toBe(true);
+    expect(DOMExceptionImpl.is(error)).toBe(true);
     expect(error).toMatchObject({
       message: '',
       name: 'DataCloneError',

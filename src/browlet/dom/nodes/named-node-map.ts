@@ -1,6 +1,6 @@
 import {
   arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
-  roAttr, xattr, DOMExceptionNames, throwDOMException,
+  roAttr, xattr, DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
 import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../infra/index';
@@ -85,7 +85,7 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
 
   #remove(matches: (attribute: AttrImpl) => boolean): AttrImpl {
     const index = this.findIndex(matches);
-    if (index < 0) throwDOMException(DOMExceptionNames.notFound);
+    if (index < 0) throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
     const attribute = this.splice(index, 1)[0]!;
     attribute.ownerElement = null;
     this.#element?.attributeChanged(attribute.localName, attribute.value, null, attribute.namespaceURI);
@@ -98,7 +98,7 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
       attribute.ownerElement !== null &&
       attribute.ownerElement !== this.#element
     ) {
-      throwDOMException(DOMExceptionNames.inUseAttribute);
+      throw new DOMExceptionImpl('', DOMExceptionNames.inUseAttribute);
     }
 
     const previous = this.getNamedItemNS(attribute.namespaceURI, attribute.localName);

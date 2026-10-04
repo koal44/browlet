@@ -85,6 +85,10 @@ export default defineConfig(
         },
       ],
       '@typescript-eslint/no-floating-promises': ['error', { ignoreVoid: true }],
+      // Binding projects implementation exceptions into realm-owned Error objects.
+      '@typescript-eslint/only-throw-error': ['error', {
+        allow: ['DOMExceptionImpl', 'QuotaExceededErrorImpl'],
+      }],
       // Allow interfaces for extending object contracts alongside type aliases.
       '@typescript-eslint/consistent-type-definitions': 'off',
       '@typescript-eslint/consistent-type-imports': ['warn', { prefer: 'type-imports' }],

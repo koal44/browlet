@@ -4,7 +4,7 @@ import { TypeError as TypeErrorRequest } from '../../../../src/infra/exceptions'
 import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
-import { DOMException as InternalDOMException } from '../../../../src/web-idl/core/dom-exception';
+import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
@@ -576,7 +576,7 @@ function expectDataCloneError(steps: () => unknown): void {
   try {
     steps();
   } catch (error) {
-    expect(InternalDOMException.is(error)).toBe(true);
+    expect(DOMExceptionImpl.is(error)).toBe(true);
     expect(error).toMatchObject({
       message: '',
       name: 'DataCloneError',

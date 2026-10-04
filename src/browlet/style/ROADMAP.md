@@ -14,10 +14,11 @@
   for stylesheet delivery.
   There is no separate document execution adapter. Standalone Stylelet uses
   native scheduling without loading Browlet's engine runtime.
-- The CSSOM exception factory remains provisional: Browlet supplies requests
-  for method-realm realization by Binding, while standalone hosts supply their
-  own DOMExceptions. It must not become eager receiver-realm allocation merely
-  because `env.exec.DOMException` is available.
+- The CSSOM exception factory remains provisional: Browlet's direct CSSOM
+  APIs receive platform exceptions from the owning environment, while
+  standalone hosts supply their own DOMExceptions. This prevents implementation
+  objects from escaping through APIs that do not yet have member bindings.
+  Full CSSOM bindings must project new failures in the invoking method's realm.
 - Stylelet and Selectlet share Infra's `DOMOperations` through the `dom` option.
   Browlet supplies [implementation operations](../integration/dom.ts), including
   fast HTML class checks and access to existing inline-style state. Engines never
@@ -53,10 +54,10 @@
   steps, with conversion and proxy ownership in the binding. Move the proxy
   factory into Web IDL and remove `src/infra/observable-array.ts`.
 - [ ] Exercise CSSOM exception and promise boundaries through the projected
-  APIs, including borrowed cross-realm calls. Realize requested DOMExceptions
-  in the operation's realm and preserve author-thrown exceptions. The execution
-  and exception-request providers are connected; complete CSSOM projection is
-  still required to exercise this author-facing boundary.
+  APIs, including borrowed cross-realm calls. Replace the interim owner-realm
+  exception factory with projection of DOMException implementations in the
+  operation's realm, preserving author-thrown exceptions. Complete CSSOM
+  projection is still required to exercise this boundary.
 
 The contracts come from CSSOM, CSSOM View, CSS Style Attributes, and HTML's
 style/link processing rather than one WHATWG HTML section. This file records

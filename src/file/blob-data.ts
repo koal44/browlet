@@ -1,6 +1,6 @@
 import type { JSEnvironment } from '../js-engine/index';
 import { ReadableStreamImpl } from '../streams/index';
-import { DOMExceptionNames, createDOMException } from '../web-idl/index';
+import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 
 /*
@@ -126,7 +126,7 @@ export class BlobData {
         env.exec.queueTask('file', () => {
           if (canceled) return;
           canceled = true;
-          stream.error(realizeReadFailure(error));
+          stream.error(error instanceof BlobReadFailure ? createReadException(error) : error);
         });
       }
     };
@@ -215,7 +215,7 @@ export type BlobReadFailureReason =
   | 'SnapshotState'
   | 'FileLock';
 
-/** A semantic File API failure; Browlet maps it to a realm DOMException. */
+/** A backing-source failure which Blob streaming maps to a File API DOMException. */
 // eslint-disable-next-line no-restricted-globals -- A backing read failure is translated to a File API DOMException, not an implementation failure.
 export class BlobReadFailure extends Error {
   constructor(
@@ -272,16 +272,13 @@ function requireRange(size: number, start: number, length: number): void {
   }
 }
 
-function realizeReadFailure(error: unknown): unknown {
-  if (!(error instanceof BlobReadFailure)) return error;
-
-  const failure = error;
+function createReadException(failure: BlobReadFailure): DOMExceptionImpl {
   const name = failure.reason === 'NotFound'
     ? DOMExceptionNames.notFound
     : failure.reason === 'UnsafeFile' || failure.reason === 'TooManyReads'
       ? DOMExceptionNames.security
       : DOMExceptionNames.notReadable;
-  return createDOMException(name, failure.message);
+  return new DOMExceptionImpl(failure.message, name);
 }
 
 const blobReadChunkSize = 64 * 1024;

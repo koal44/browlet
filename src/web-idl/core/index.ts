@@ -1,6 +1,6 @@
 // Project entry point for standalone declarations and DOM exceptions.
 export {
-  createDOMException, DOMExceptionCodes, DOMExceptionNames, throwDOMException,
+  DOMExceptionCodes, DOMExceptionNames,
   DOMExceptionImpl, DOMExceptionStamper, QuotaExceededErrorImpl, domExceptionIDL, isDOMException,
   quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
   type DOMExceptionName,

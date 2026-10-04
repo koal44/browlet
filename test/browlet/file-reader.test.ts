@@ -14,7 +14,8 @@ import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
 import { getBufferSourceCopy, queueNetworkingTask } from '../../src/js-engine/index';
-import { serializeDefinition, type BindingContext } from '../../src/web-idl/index';
+import { DOMExceptionImpl, serializeDefinition, type BindingContext } from '../../src/web-idl/index';
+import { InternalError } from '../../src/infra/internal-error';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
 
 describe('File API FileReader foundation', () => {
@@ -430,8 +431,8 @@ describe('File API §6.2: FileReader reads', () => {
       error = caught;
     }
 
-    expect(error).toBeInstanceOf(DOMException);
-    expect((error as DOMException).name).toBe('InvalidStateError');
+    expect(error).toBeInstanceOf(DOMExceptionImpl);
+    expect(error).toHaveProperty('name', 'InvalidStateError');
     await done;
     expect(reader.result).toBe('abc');
   });
@@ -578,6 +579,154 @@ describe('File API §6.2: FileReader reads', () => {
     expect(events).toEqual(['error', 'load', 'loadend']);
   });
 
+  it('exposes a result-buffer allocation failure as a stable DOMException in the reader realm', async () => {
+    const first = createWindow();
+    const second = createWindow();
+    const context = getContext(first);
+    const env = context.getEnvironment();
+    const reader = new first.FileReader();
+    const events: string[] = [];
+    for (const name of ['load', 'error', 'loadend']) {
+      reader.addEventListener(name, () => { events.push(name); });
+    }
+    const allocation = vi.spyOn(env.exec.buffers, 'copyArrayBuffer').mockImplementationOnce(() => {
+      throw new env.exec.RangeError('injected result-buffer allocation failure');
+    });
+
+    try {
+      const done = new Promise<void>((resolve) => reader.addEventListener('loadend', () => { resolve(); }));
+      reader.readAsArrayBuffer(new first.Blob(['content']));
+      await done;
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- The borrowed getter must preserve the reader's error owner.
+      const getter = Object.getOwnPropertyDescriptor(second.FileReader.prototype, 'error')!.get!;
+      const error: unknown = Reflect.apply(getter, reader, []);
+
+      expect(error).toBeInstanceOf(first.DOMException);
+      expect(error).toHaveProperty('name', 'NotReadableError');
+      expect(reader.error).toBe(error);
+      expect(context.unwrap(error, DOMExceptionImpl))
+        .toBe(context.unwrap(reader, FileReaderImpl)!.error);
+      expect(reader.result).toBeNull();
+      expect(reader.readyState).toBe(first.FileReader.DONE);
+      expect(events).toEqual(['error', 'loadend']);
+    } finally {
+      allocation.mockRestore();
+    }
+  });
+
+  it('reports author listener exceptions while preserving the successful read and loadend', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const realm = getContext(browlet.window).realm;
+    const report = vi.spyOn(realm, 'reportException').mockImplementation(() => {});
+
+    try {
+      const result = await browlet.evaluate(() => new Promise((resolve) => {
+        const reader = new FileReader();
+        const events: string[] = [];
+        reader.onload = () => {
+          events.push('load');
+          throw new Error('listener failed');
+        };
+        reader.onerror = () => { events.push('error'); };
+        reader.onloadend = () => {
+          events.push('loadend');
+          resolve({ result: reader.result, error: reader.error, events });
+        };
+        reader.readAsText(new Blob(['content']));
+      }));
+
+      expect(result).toEqual({ result: 'content', error: null, events: ['load', 'loadend'] });
+      expect(report).toHaveBeenCalledOnce();
+      expect(report.mock.calls[0]![0]).toHaveProperty('message', 'listener failed');
+    } finally {
+      report.mockRestore();
+    }
+  });
+
+  it.each(['source', 'packaging', 'load event'] as const)(
+    'propagates an unexpected %s failure without storing it as a read error', async (kind) => {
+      const context = getContext(createWindow());
+      const env = context.getEnvironment();
+      const reader = createReader(context);
+      const failure = kind === 'source'
+        ? new Error('injected unexpected source failure')
+        : new InternalError(`injected ${kind} failure`);
+      const events: string[] = [];
+      reader.onerror = () => { events.push('error'); };
+      reader.onloadend = () => { events.push('loadend'); };
+      const taskErrors: unknown[] = [];
+      const queueTask = env.exec.queueTask.bind(env.exec);
+      const taskDelivery = vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps) =>
+        queueTask(source, () => {
+          try { steps(); }
+          catch (error) { taskErrors.push(error); }
+        }),
+      );
+      const source: BlobByteSource = {
+        size: 1,
+        snapshotState: undefined,
+        read: () => kind === 'source' ? Promise.reject(failure) : Promise.resolve(Uint8Array.of(65)),
+      };
+      const data = BlobData.fromSource(source);
+      const allocation = vi.spyOn(env.exec.buffers, 'copyArrayBuffer');
+      const eventCreation = vi.spyOn(env.exec, 'createEvent');
+      if (kind === 'packaging') allocation.mockImplementationOnce(() => { throw failure; });
+      if (kind === 'load event') {
+        reader.onprogress = () => {
+          eventCreation.mockImplementationOnce(() => { throw failure; });
+        };
+      }
+
+      try {
+        reader.readAsArrayBuffer(BlobImpl.create(data, '', undefined, env));
+        await vi.waitFor(() => { expect(reader.readyState).toBe(2); });
+
+        expect(taskErrors).toEqual([failure]);
+        expect(reader.error).toBeNull();
+        expect(Reflect.get(context.project(FileReaderImpl, reader), 'error')).toBeNull();
+        expect(events).toEqual([]);
+        if (kind === 'load event') expect(new Uint8Array(reader.result as ArrayBuffer)).toEqual(Uint8Array.of(65));
+        else expect(reader.result).toBeNull();
+      } finally {
+        eventCreation.mockRestore();
+        allocation.mockRestore();
+        taskDelivery.mockRestore();
+      }
+    },
+  );
+
+  it('propagates a broken byte-source contract without exposing an invalid error attribute', async () => {
+    const context = getContext(createWindow());
+    const env = context.getEnvironment();
+    const reader = createReader(context);
+    const taskErrors: unknown[] = [];
+    const queueTask = env.exec.queueTask.bind(env.exec);
+    const taskDelivery = vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps) =>
+      queueTask(source, () => {
+        try { steps(); }
+        catch (error) { taskErrors.push(error); }
+      }),
+    );
+    const data = BlobData.fromSource({
+      size: 1,
+      snapshotState: undefined,
+      read: () => Promise.resolve(new Uint8Array(0)),
+    });
+
+    try {
+      reader.readAsArrayBuffer(BlobImpl.create(data, '', undefined, env));
+      await vi.waitFor(() => { expect(reader.readyState).toBe(2); });
+
+      expect(taskErrors).toHaveLength(1);
+      expect(taskErrors[0]).toBeInstanceOf(InternalError);
+      expect(taskErrors[0]).toHaveProperty('message', 'A Blob byte source must return the complete requested range');
+      expect(reader.error).toBeNull();
+      expect(Reflect.get(context.project(FileReaderImpl, reader), 'error')).toBeNull();
+    } finally {
+      taskDelivery.mockRestore();
+    }
+  });
+
   it.each([
     ['NotFound', 'NotFoundError'],
     ['UnsafeFile', 'SecurityError'],
@@ -607,10 +756,12 @@ describe('File API §6.2: FileReader reads', () => {
     expect(events).toEqual(['error', 'loadend']);
     expect(reader.readyState).toBe(2);
     expect(reader.result).toBeNull();
+    expect(reader.error).toBeInstanceOf(DOMExceptionImpl);
     expect(reader.error).toMatchObject({ name });
     const error: unknown = Reflect.get(context.project(FileReaderImpl, reader), 'error');
     expect(error).toMatchObject({ name });
     expect(error).toBeInstanceOf(requireFunction(context.realm.global, 'DOMException'));
+    expect(context.unwrap(error, DOMExceptionImpl)).toBe(reader.error);
   });
 });
 
@@ -636,7 +787,7 @@ async function read(
   const done = waitForLoadEnd(reader);
   start(reader);
   await done;
-  if (reader.error) throw reader.error;
+  expect(reader.error).toBeNull();
   return reader;
 }
 

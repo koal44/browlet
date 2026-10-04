@@ -6,6 +6,23 @@ import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
 
 describe('Stylelet execution integration', () => {
+  it('exposes computed-style failures in the owning realm through the provisional CSSOM API', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const result = await browlet.evaluate(() => {
+      const style = getComputedStyle(document.createElement('div'));
+      try { style.setProperty('color', 'red'); }
+      catch (error) {
+        return {
+          isDOMException: error instanceof DOMException,
+          name: error instanceof DOMException ? error.name : undefined,
+        };
+      }
+      return null;
+    });
+
+    expect(result).toEqual({ isDOMException: true, name: 'NoModificationAllowedError' });
+  });
+
   it.each(['initial', 'navigated', 'constructed'] as const)(
     'completes stylesheet work with the %s document host', async (kind) => {
       const browlet = new Browlet({ route: () => '<main></main>' });

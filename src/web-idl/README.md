@@ -137,8 +137,9 @@ allocates their backing Error in the selected realm, and applies Core's
 `DOMExceptionStamper` during platform-object initialization. This private stamp
 retains the implementation so Core can recognize projected exceptions and their
 names without reading author-overridden properties or importing Binding's identity
-records. It also observes state restored during deserialization. Internal exception
-requests retain their separate exception-request stamp.
+records. It also observes state restored during deserialization. DOMException
+implementations are recognized by their private state; Infra's TypeError,
+RangeError, and SyntaxError requests retain their separate request stamp.
 
 Custom operation and constructor bindings infer converted argument types from
 `arg()` declarations, including optional, defaulted, and variadic arguments.
@@ -665,10 +666,16 @@ owns traversal/resources; Binding owns author identity, call ordering, method
 realm Promises, and result projection. It observes internal completions directly
 rather than projecting an intermediate `Promise<any>` that could adopt values.
 
-Infra exception requests and Core DOMException requests are realm-neutral.
-Realize a failure once, at its first realm-owned observable boundary; the private
-realization record preserves identity on later delivery. Author-thrown values
-retain their identity. Output conversion realizes exception values for `any`,
+An unassociated `DOMExceptionImpl` has no selected realm. Throw it directly with
+`throw new DOMExceptionImpl(message, DOMExceptionNames.invalidState)`; Binding
+projects it when the exception crosses its invocation or delivery boundary. Its
+ordinary platform record preserves the selected owner and identity on later
+delivery, including delivery through another binding world without associating
+it with that world. An interface-valued result projects the same implementation
+through normal conversion.
+Infra's TypeError, RangeError, and SyntaxError requests remain realm-neutral and
+use their private realization record. Author-thrown values retain their identity.
+Output conversion realizes exception values for `any`,
 `object`, and the object branch of a union. Containers delegate to their member
 converters; an interface result projects its implementation directly. Thrown
 failures and Promise rejections are realized at their invocation/delivery boundary.

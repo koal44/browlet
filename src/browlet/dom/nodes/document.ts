@@ -29,7 +29,7 @@ import { asciiLower } from '../../../infra/ascii';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
-  DOMExceptionNames, throwDOMException, type ImplementationClass,
+  DOMExceptionNames, DOMExceptionImpl, type ImplementationClass,
 } from '../../../web-idl/index';
 import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord } from '../../../url/index';
 import { AttrImpl } from './attribute';
@@ -361,9 +361,9 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createattribute
   createAttribute(localName: string): AttrImpl {
     if (!isValidAttributeLocalName(localName)) {
-      throwDOMException(
-        DOMExceptionNames.invalidCharacter,
+      throw new DOMExceptionImpl(
         `Invalid attribute local name ${JSON.stringify(localName)}`,
+        DOMExceptionNames.invalidCharacter,
       );
     }
     if (this.type === 'html') localName = asciiLower(localName);

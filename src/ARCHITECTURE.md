@@ -34,6 +34,10 @@ exposing boundary operations without adding another object or lifecycle.
 Binding applies a private DOMException stamp during platform-object initialization
 so Core can recognize exceptions without importing Binding's identity record.
 The shared record still owns the implementation/platform association and realm.
+DOMException failures use that implementation directly; Binding projects a fresh
+exception in the selected invocation or delivery realm and reuses an existing
+record on later delivery. Infra's ordinary JavaScript error requests retain
+their separate realization mechanism.
 
 Type implementation parameters for the values Binding actually supplies:
 concrete implementations, converted dictionaries with defaults, and adapted
@@ -113,8 +117,10 @@ a shared task source; `env.exec` selects the owning destination. Browlet's
 [`scripting/tasks.ts`](browlet/scripting/tasks.ts) maps these keys to shared source
 identities; HTML retains task queues and scheduling policy. Optional task metadata
 carries timer nesting levels without moving timer initialization into Infra.
-Its provisional CSSOM exception factory preserves requests for method-realm
-realization rather than eagerly allocating in the receiver's realm.
+Its provisional CSSOM exception factory supplies platform exceptions in the
+owning environment while CSSOM implementations remain directly exposed. Full
+CSSOM member bindings must replace this interim choice with method-realm
+exception projection.
 Standalone Stylelet composes native facilities without requiring HTML settings
 or loading the engine runtime. `SelectletEnvironment` uses the same `userAgent.dom`
 owner and currently needs no execution facilities. `SelectletContext` retains

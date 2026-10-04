@@ -4,7 +4,7 @@ import {
   isBufferSourceDetached, isObject,
 } from '../../../js-engine/index';
 import {
-  throwDOMException,
+  DOMExceptionImpl, DOMExceptionNames,
   type BindingContext, type StampedImplInstance, type TransferSteps,
 } from '../../../web-idl/index';
 import {
@@ -30,7 +30,7 @@ export function structuredSerializeWithTransfer(
   for (const valueToTransfer of transferList) {
     const prepared = prepareTransfer(valueToTransfer, ctx);
     const identity = prepared.kind === 'platform-object' ? prepared.implInst : prepared.value;
-    if (memory.has(identity)) return throwDOMException('DataCloneError');
+    if (memory.has(identity)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     memory.set(identity, prepared.placeholder);
     preparedTransfers.push(prepared);
   }
@@ -79,7 +79,7 @@ function prepareTransfer(
   value: unknown,
   ctx: BindingContext<ScriptingEnvironment>,
 ): PreparedTransfer {
-  if (!isObject(value)) return throwDOMException('DataCloneError');
+  if (!isObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const bufferType = getBufferTypeName(value);
   const placeholder: TransferPlaceholderSerializedRecord = {
     type: 'transfer-placeholder',
@@ -91,13 +91,13 @@ function prepareTransfer(
       value: value as ArrayBuffer,
     };
   }
-  if (bufferType === 'SharedArrayBuffer') return throwDOMException('DataCloneError');
-  if (bufferType !== undefined) return throwDOMException('DataCloneError');
+  if (bufferType === 'SharedArrayBuffer') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+  if (bufferType !== undefined) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
 
   const record = ctx.getObjectRecord(value);
-  if (!record) return throwDOMException('DataCloneError');
+  if (!record) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const steps = record.assembled.transferSteps;
-  if (!steps) return throwDOMException('DataCloneError');
+  if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   return {
     kind: 'platform-object',
     implInst: record.implInst,
@@ -112,7 +112,7 @@ function performTransfer(
   ctx: BindingContext<ScriptingEnvironment>,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
-    if (isBufferSourceDetached(prepared.value)) return throwDOMException('DataCloneError');
+    if (isBufferSourceDetached(prepared.value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     const byteLength = getBufferSourceByteLength(prepared.value);
     const maxByteLength = getArrayBufferMaxByteLength(prepared.value);
     return {
@@ -127,7 +127,7 @@ function performTransfer(
   }
 
   if (DetachedTransferableStamper.has(prepared.implInst)) {
-    return throwDOMException('DataCloneError');
+    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   }
   const fields = createStructuredDataRecord();
   prepared.steps.transferSteps(prepared.implInst, fields);
@@ -147,7 +147,7 @@ function receiveTransfer(
 ): unknown {
   if (dataHolder.type === 'platform-object') {
     const platformRecord = ctx.createPlatformRecord(dataHolder.interfaceName);
-    if (!platformRecord) return throwDOMException('DataCloneError');
+    if (!platformRecord) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     const steps = platformRecord.assembled.transferSteps;
     if (!steps) {
       throw new InternalError(

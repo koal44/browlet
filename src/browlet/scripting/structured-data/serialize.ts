@@ -14,7 +14,9 @@ import {
   isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
-import { throwDOMException, type BindingContext, type ImplementationClass } from '../../../web-idl/index';
+import {
+  DOMExceptionImpl, DOMExceptionNames, type BindingContext, type ImplementationClass,
+} from '../../../web-idl/index';
 import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, isSerializedErrorName,
@@ -58,10 +60,10 @@ export function structuredSerializeInternal(
   if (memory.has(identity)) return memory.get(identity)!;
 
   if (isPrimitive(value)) return { type: 'primitive', value };
-  if (typeof value === 'symbol') return throwDOMException('DataCloneError');
+  if (typeof value === 'symbol') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
 
   if (!record && isProxyObject(value)) {
-    return throwDOMException('DataCloneError');
+    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   }
   let serialized: SerializedRecord;
   let deep = false;
@@ -87,7 +89,7 @@ export function structuredSerializeInternal(
       value: getStringData(value),
     };
   } else if (hasSymbolData(value)) {
-    return throwDOMException('DataCloneError');
+    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   } else if (hasDateValue(value)) {
     serialized = {
       type: 'Date',
@@ -111,7 +113,7 @@ export function structuredSerializeInternal(
       );
     } else if (bufferType !== undefined) {
       if (isArrayBufferViewOutOfBounds(value)) {
-        return throwDOMException('DataCloneError');
+        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       }
       const bufferSerialized = structuredSerializeInternal(
         getBufferSourceUnderlyingBuffer(value),
@@ -141,9 +143,9 @@ export function structuredSerializeInternal(
       deep = true;
     } else if (record) {
       const steps = record.assembled.serialSteps;
-      if (!steps) return throwDOMException('DataCloneError');
+      if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       if (DetachedTransferableStamper.has(record.implInst)) {
-        return throwDOMException('DataCloneError');
+        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       }
       serialized = {
         type: 'platform-object',
@@ -175,10 +177,10 @@ export function structuredSerializeInternal(
       serialized = { type: 'Array', length, properties: [] };
       deep = true;
     } else if (typeof value === 'function') {
-      return throwDOMException('DataCloneError');
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     } else if (hasUnsupportedInternalSlots(value) ||
       nativeCloneRejectsPropertylessObject(value)) {
-      return throwDOMException('DataCloneError');
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     } else {
       serialized = { type: 'Object', properties: [] };
       deep = true;
@@ -245,7 +247,7 @@ function serializeBuffer(
 
   if (type === 'SharedArrayBuffer') {
     if (!ctx.realm.crossOriginIsolated || forStorage) {
-      return throwDOMException('DataCloneError');
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     }
     const agentCluster = ctx.realm.agent.agentCluster;
     if (!agentCluster) throw new InternalError('Realm agent has no agent cluster');
@@ -265,7 +267,7 @@ function serializeBuffer(
       };
   }
 
-  if (isBufferSourceDetached(value)) return throwDOMException('DataCloneError');
+  if (isBufferSourceDetached(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const bytes = getBufferSourceCopy(value);
   return maxByteLength === undefined
     ? { type: 'ArrayBuffer', bytes, byteLength }

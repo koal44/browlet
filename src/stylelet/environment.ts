@@ -20,9 +20,9 @@ export interface StyleletUserAgent {
 /** Shared Promise facilities plus delivery of stylesheet updates. */
 export interface StyleletExecution extends AsyncExecution {
   /** Create an exception for delivery through the host's CSSOM binding. */
-  // PROVISIONAL: Browlet supplies an exception request, not an owner-realm
-  // allocation. Keep synchronous failures available for method-realm realization
-  // until CSSOM projection is complete (browlet/style/ROADMAP.md).
+  // PROVISIONAL: Browlet's direct CSSOM APIs use the owning environment's
+  // platform exceptions. Revisit method-realm allocation when CSSOM gains
+  // member bindings (browlet/style/ROADMAP.md).
   createDOMException(name: DOMExceptionName, message?: string): DOMException;
 }
 

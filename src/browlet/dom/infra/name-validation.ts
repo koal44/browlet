@@ -1,7 +1,7 @@
 import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
 } from '../../../infra/index';
-import { DOMExceptionNames, throwDOMException } from '../../../web-idl/core/index';
+import { DOMExceptionNames, DOMExceptionImpl } from '../../../web-idl/core/index';
 
 const INVALID_NAMESPACE_PREFIX_RE = /[\t\n\f\r \0/>]/;
 const INVALID_ATTRIBUTE_LOCAL_NAME_RE = /[\t\n\f\r \0/=>]/;
@@ -50,9 +50,9 @@ export function validateAndExtract(
     localName = qualifiedName.slice(colon + 1);
 
     if (!isValidNamespacePrefix(prefix)) {
-      throwDOMException(
-        DOMExceptionNames.invalidCharacter,
+      throw new DOMExceptionImpl(
         `Invalid namespace prefix ${JSON.stringify(prefix)}`,
+        DOMExceptionNames.invalidCharacter,
       );
     }
   }
@@ -62,9 +62,9 @@ export function validateAndExtract(
     : isValidElementLocalName(localName);
 
   if (!validLocalName) {
-    throwDOMException(
-      DOMExceptionNames.invalidCharacter,
+    throw new DOMExceptionImpl(
       `Invalid ${context} local name ${JSON.stringify(localName)}`,
+      DOMExceptionNames.invalidCharacter,
     );
   }
 
@@ -98,8 +98,8 @@ function throwNamespaceError(
   qualifiedName: string,
   namespace: string | null,
 ): never {
-  throwDOMException(
-    DOMExceptionNames.namespace,
+  throw new DOMExceptionImpl(
     `Qualified name ${JSON.stringify(qualifiedName)} is not valid for namespace ${JSON.stringify(namespace)}`,
+    DOMExceptionNames.namespace,
   );
 }

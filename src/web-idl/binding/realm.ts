@@ -34,7 +34,7 @@ import type { BindingContext, BindingWorld } from './world';
 export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   assembly: DefinitionAssembly;
   world: BindingWorld;
-  /** Realize a private exception request once in this binding's realm; preserve other values. */
+  /** Project DOMExceptions and realize Infra exception requests once; preserve other values. */
   realizeException: (value: unknown) => unknown;
   realm: Env['realm'];
   /** InternalPromise constructor whose results use this realm's Web IDL conversion. */
@@ -76,6 +76,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     // https://webidl.spec.whatwg.org/#js-creating-throwing-exceptions
     this.realizeException = (value) => {
       if (!isObject(value)) return value;
+      if (DOMExceptionImpl.is(value)) {
+        // An already-owned exception keeps its platform identity, even when
+        // delivered through another world; do not associate it a second time.
+        return getImplementationRecord(value)?.project() ?? this.project(DOMExceptionImpl, value);
+      }
       const request = ExceptionRequestStamper.get(value);
       if (!request) return value;
       const existing = ExceptionRealizationStamper.get(value);
@@ -90,9 +95,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
           break;
         case 'SyntaxError':
           error = new this.realm.intrinsics.syntaxError(request.exception.message);
-          break;
-        case 'DOMException':
-          error = new this.DOMException(request.exception.message, request.exception.name);
           break;
       }
       void ExceptionRealizationStamper.stamp(value, error);
@@ -244,7 +246,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return assembled;
   }
 
-  /** Invoke implementation code and realize private exception requests as they cross into Binding. */
+  /** Invoke implementation code and realize its exceptions as they cross into Binding. */
   callImplementation<This, Values extends unknown[], Result>(
     implementation: (this: This, ...values: Values) => Result,
     thisArgument: This,

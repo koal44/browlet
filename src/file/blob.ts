@@ -6,8 +6,8 @@ import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
-  reference, roAttr, sequence, throwDOMException, union, xattr,
-  type BufferSource, type SerialSteps,
+  reference, roAttr, sequence, union, xattr,
+  DOMExceptionImpl, DOMExceptionNames, type BufferSource, type SerialSteps,
 } from '../web-idl/index';
 import { BlobData, type BlobSnapshotState } from './blob-data';
 
@@ -203,7 +203,10 @@ export const blobSerialSteps = {
       try {
         data = data.cloneForStorage();
       } catch {
-        return throwDOMException('DataCloneError', 'The Blob byte source cannot be serialized for storage');
+        throw new DOMExceptionImpl(
+          'The Blob byte source cannot be serialized for storage',
+          DOMExceptionNames.dataClone,
+        );
       }
     }
     serialized.set('SnapshotState', state.snapshotState);

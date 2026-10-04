@@ -2,8 +2,7 @@ import { types } from 'node:util';
 import { describe, expect, it } from 'vitest';
 
 import {
-  createDOMException, DOMException as InternalDOMException,
-  DOMExceptionCodes, DOMExceptionNames, DOMExceptionStamper, isDOMException,
+  DOMExceptionImpl, DOMExceptionCodes, DOMExceptionNames, DOMExceptionStamper, isDOMException,
 } from '../../../src/web-idl/core/dom-exception';
 import { BindingWorld } from '../../../src/web-idl/index';
 import { TestRealm } from '../test-realm';
@@ -55,14 +54,16 @@ describe('DOMException names', () => {
 });
 
 describe('DOMException recognition', () => {
-  it('recognizes internal requests and projected exceptions across realms', () => {
+  it('recognizes implementations and projected exceptions across realms', () => {
     const world = new BindingWorld([]);
     const first = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     const second = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
-    const request = createDOMException('AbortError', 'internal');
+    const implementation = new DOMExceptionImpl('internal', 'AbortError');
 
-    expect(isDOMException(request, 'AbortError')).toBe(true);
-    expect(DOMExceptionStamper.is(request)).toBe(false);
+    expect(DOMExceptionImpl.is(implementation)).toBe(true);
+    expect(isDOMException(implementation, 'AbortError')).toBe(true);
+    expect(isDOMException(implementation, 'NetworkError')).toBe(false);
+    expect(DOMExceptionStamper.is(implementation)).toBe(false);
     for (const ctx of [first, second]) {
       ctx.install(ctx.realm.global);
       const Constructor = Reflect.get(ctx.realm.global, 'DOMException') as typeof DOMException;
@@ -73,7 +74,7 @@ describe('DOMException recognition', () => {
       expect(DOMExceptionStamper.is(exception)).toBe(true);
       expect(isDOMException(exception, 'AbortError')).toBe(true);
       expect(isDOMException(exception, 'NetworkError')).toBe(false);
-      expect(InternalDOMException.is(exception)).toBe(false);
+      expect(DOMExceptionImpl.is(exception)).toBe(false);
       expect(first.realizeException(exception)).toBe(exception);
       expect(second.realizeException(exception)).toBe(exception);
 
@@ -100,9 +101,12 @@ describe('DOMException recognition', () => {
     expect(exception).toHaveProperty('requested', 12);
   });
 
-  it('rejects forged objects and proxies without invoking author code', () => {
+  it.each(['implementation', 'platform'])('rejects forged %s objects and proxies without invoking author code', (kind) => {
     const ctx = new BindingWorld([]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
-    const exception = ctx.realizeException(createDOMException('AbortError')) as object;
+    const implementation = new DOMExceptionImpl('', 'AbortError');
+    const exception = kind === 'implementation'
+      ? implementation
+      : ctx.realizeException(implementation) as object;
     const calls: string[] = [];
     const proxy = new Proxy(exception, {
       get() { calls.push('get'); throw new Error('get'); },
@@ -117,8 +121,10 @@ describe('DOMException recognition', () => {
       new globalThis.DOMException('', 'AbortError'),
       proxy, revoked.proxy, null, undefined, 1, 'AbortError', () => undefined,
     ]) {
+      expect(DOMExceptionImpl.is(value)).toBe(false);
       expect(DOMExceptionStamper.is(value)).toBe(false);
       expect(isDOMException(value, 'AbortError')).toBe(false);
+      expect(ctx.realizeException(value)).toBe(value);
     }
     expect(calls).toEqual([]);
   });

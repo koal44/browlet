@@ -133,7 +133,9 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   of that specification gap rather than inventing a rule.
 - **CSSOM projection:** CSSStyleSheet and related platform interfaces remain
   incomplete; `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
-  interface brand check. [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
+  interface brand check. Direct CSSOM APIs currently allocate exceptions in the
+  owning environment; method-realm selection awaits their member bindings.
+  [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
   owns projection, restoring `ObservableArray<CSSStyleSheet>`, and removing the
   temporary Infra observable-array factory.
 

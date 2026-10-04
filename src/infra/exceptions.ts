@@ -52,5 +52,5 @@ export class ExceptionRequestStamper extends Stamper {
 
 type ExceptionRequest = {
   exception: { message: string; name: string; };
-  type: 'RangeError' | 'SyntaxError' | 'TypeError' | 'DOMException';
+  type: 'RangeError' | 'SyntaxError' | 'TypeError';
 };

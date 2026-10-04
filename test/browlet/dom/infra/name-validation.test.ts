@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { DOMExceptionImpl } from '../../../../src/web-idl/index';
 
 import {
   isValidAttributeLocalName, isValidDoctypeName, isValidElementLocalName,
@@ -80,8 +81,8 @@ function expectError(callback: () => unknown, name: string): void {
   try {
     callback();
   } catch (error) {
-    expect(error).toBeInstanceOf(DOMException);
-    expect((error as DOMException).name).toBe(name);
+    expect(error).toBeInstanceOf(DOMExceptionImpl);
+    expect(error).toHaveProperty('name', name);
     return;
   }
 

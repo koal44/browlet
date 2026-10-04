@@ -1,7 +1,7 @@
 import { assert, describe, expect, it, vi } from 'vitest';
 
 import { TestRealm as Realm } from './test-realm';
-import { throwDOMException } from '../../src/web-idl/core/dom-exception';
+import { DOMExceptionImpl, DOMExceptionNames } from '../../src/web-idl/core/dom-exception';
 import {
   arg, atArg, attr, attrFn, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
@@ -1996,7 +1996,7 @@ describe('Web IDL implementation bindings', () => {
           [],
           {
             invoke() {
-              throwDOMException('InvalidStateError', 'requested');
+              throw new DOMExceptionImpl('requested', DOMExceptionNames.invalidState);
             },
           },
         ),
@@ -2082,7 +2082,7 @@ class ChildLifecycleImpl extends ParentLifecycleImpl {}
 
 class ExceptionSourceImpl {
   constructor() {
-    throwDOMException('NotSupportedError', 'creation requested');
+    throw new DOMExceptionImpl('creation requested', DOMExceptionNames.notSupported);
   }
 }
 

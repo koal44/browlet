@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import { getMemberBinding } from '../support/web-idl-binding';
 
 import { TestRealm as Realm } from './test-realm';
-import { createDOMException } from '../../src/web-idl/core/dom-exception';
+import { DOMExceptionImpl } from '../../src/web-idl/core/dom-exception';
 import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { endOfIteration } from '../../src/infra/iteration';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
@@ -304,7 +304,7 @@ describe('Web IDL promise member binding', () => {
     const binding = world.getRealmBinding(realm)!;
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new PromiseExceptionSourceImpl();
-    getMemberBinding(interfaceBinding, reject).operationSteps = () => IDLPromise.rejected(createDOMException('NotAllowedError', 'requested rejection'), binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
+    getMemberBinding(interfaceBinding, reject).operationSteps = () => IDLPromise.rejected(new DOMExceptionImpl('requested rejection', 'NotAllowedError'), binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
     const arbitraryReason = { arbitrary: true };
     getMemberBinding(interfaceBinding, rejectArbitrary).operationSteps = () => IDLPromise.rejected(arbitraryReason, binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
     const object = binding.allocatePlatformRecord(binding.resolveInterface('PromiseExceptionSource')).platformObject!;

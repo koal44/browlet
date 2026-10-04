@@ -8,7 +8,7 @@ import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
-  BindingWorld, createDOMException, type GlobalObjectAllocation,
+  BindingWorld, type GlobalObjectAllocation,
   type BindingContext, type StampedImplInstance, type StampedPlatformObject,
 } from '../web-idl/index';
 import { locationIDL } from './browsing/window/location';
@@ -257,7 +257,9 @@ export function createBoundExecution(context: BindingContext<BrowletEnvironment>
     Promise: context.Promise,
     // Interface binding registration finishes after execution is composed.
     get DOMException() { return context.DOMException; },
-    createDOMException,
+    // PROVISIONAL: direct CSSOM APIs need platform exceptions before full
+    // CSSOM projection supplies the invoking method's exception boundary.
+    createDOMException: (name, message = '') => new context.DOMException(message, name),
     createEvent: (EventConstructor = EventImpl) => {
       const event = context.construct(EventConstructor, ['', {}]);
       event.isTrusted = true;
@@ -268,7 +270,7 @@ export function createBoundExecution(context: BindingContext<BrowletEnvironment>
       context.construct(AbortSignalImpl), signals as AbortSignalImpl[],
     ),
     clone: (value, transferList = []) => structuredClone(value, transferList, context),
-    // Exception requests become recognizable platform objects at serialization.
+    // Associate DOMException implementations before structured serialization.
     serialize: (value) => structuredSerialize(context.realizeException(value), context),
     deserialize: (record) => structuredDeserialize(record as SerializedRecord, context),
   };

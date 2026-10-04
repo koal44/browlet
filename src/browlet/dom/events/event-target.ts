@@ -1,7 +1,7 @@
 import {
   arg, atArg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,
-  DOMExceptionNames, throwDOMException,
+  DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
 import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
@@ -78,7 +78,7 @@ export class EventTargetImpl {
   // https://dom.spec.whatwg.org/#dom-eventtarget-dispatchevent
   dispatchEvent(event: EventImpl): boolean {
     if (event.dispatching || !event.initialized) {
-      throwDOMException(DOMExceptionNames.invalidState);
+      throw new DOMExceptionImpl('', DOMExceptionNames.invalidState);
     }
 
     event.isTrusted = false;

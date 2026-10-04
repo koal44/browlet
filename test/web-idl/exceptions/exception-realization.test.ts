@@ -3,9 +3,6 @@ import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
   TypeError as InternalTypeError, ExceptionRequestStamper,
 } from '../../../src/infra/exceptions';
-import {
-  createDOMException, DOMException as InternalDOMException,
-} from '../../../src/web-idl/core/dom-exception';
 import { BindingWorld } from '../../../src/web-idl/index';
 import { TestRealm } from '../test-realm';
 
@@ -27,12 +24,6 @@ const cases = [
     create: () => new InternalTypeError('original message'),
     Exception: InternalTypeError,
     native: TypeError,
-  },
-  {
-    name: 'DOMException',
-    create: () => createDOMException('InvalidStateError', 'original message'),
-    Exception: InternalDOMException,
-    native: DOMException,
   },
 ];
 
@@ -71,7 +62,7 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     const constructor: unknown = Reflect.get(binding.realm.global, name);
 
     expect(error).toBeInstanceOf(constructor);
-    expect(error).toHaveProperty('name', name === 'DOMException' ? 'InvalidStateError' : name);
+    expect(error).toHaveProperty('name', name);
     expect(error).toHaveProperty('message', 'original message');
     expect(error === exception).toBe(false);
 

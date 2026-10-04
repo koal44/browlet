@@ -64,7 +64,7 @@ export class IDLPromise<Type extends IDLType = IDLType> {
     resolve(value);
   }
 
-  /** Reject once, realizing an internal exception request when configured. */
+  /** Reject once, realizing an implementation exception when configured. */
   reject(reason?: unknown): void {
     if (this.resolved) return;
     this.resolved = true;

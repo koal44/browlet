@@ -1,4 +1,4 @@
-import { DOMExceptionNames, throwDOMException } from '../../../web-idl/index';
+import { DOMExceptionNames, DOMExceptionImpl } from '../../../web-idl/index';
 import type { NodeImpl } from './node';
 
 /** Rejects an invalid insertion before either tree changes. */
@@ -10,30 +10,30 @@ export function ensurePreInsertValidity(
   childrenToExclude: NodeImpl[],
 ): void {
   if (!parent.isDocument() && !parent.isDocumentFragment() && !parent.isElement()) {
-    throwDOMException(DOMExceptionNames.hierarchyRequest);
+    throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
   }
   if (isHostIncludingInclusiveAncestor(node, parent)) {
-    throwDOMException(DOMExceptionNames.hierarchyRequest);
+    throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
   }
   if (child !== null && child.parentNode !== parent) {
-    throwDOMException(DOMExceptionNames.notFound);
+    throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
   }
   if (!node.isDocumentFragment() && !node.isDocumentType() && !node.isElement() && !node.isCharacterData()) {
-    throwDOMException(DOMExceptionNames.hierarchyRequest);
+    throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
   }
 
   if (!parent.isDocument()) {
-    if (node.isDocumentType()) throwDOMException(DOMExceptionNames.hierarchyRequest);
+    if (node.isDocumentType()) throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
     return;
   }
-  if (node.isText()) throwDOMException(DOMExceptionNames.hierarchyRequest);
+  if (node.isText()) throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
   if (node.isCharacterData()) return;
 
   if (node.isDocumentFragment()) {
     let elements = 0;
     for (let current = node.firstChild; current; current = current.nextSibling) {
       if (current.isElement()) elements++;
-      if (elements > 1 || current.isText()) throwDOMException(DOMExceptionNames.hierarchyRequest);
+      if (elements > 1 || current.isText()) throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
     }
     if (elements === 0) return;
   }
@@ -41,12 +41,12 @@ export function ensurePreInsertValidity(
   if (node.isDocumentFragment() || node.isElement()) {
     for (let current = parent.firstChild; current; current = current.nextSibling) {
       if (current.isElement() && !childrenToExclude.includes(current)) {
-        throwDOMException(DOMExceptionNames.hierarchyRequest);
+        throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
       }
     }
     for (let current = child; current; current = current.nextSibling) {
       if (current.isDocumentType() && (current !== child || !childrenToExclude.includes(current))) {
-        throwDOMException(DOMExceptionNames.hierarchyRequest);
+        throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
       }
     }
     return;
@@ -54,12 +54,12 @@ export function ensurePreInsertValidity(
 
   for (let current = parent.firstChild; current; current = current.nextSibling) {
     if (current.isDocumentType() && !childrenToExclude.includes(current)) {
-      throwDOMException(DOMExceptionNames.hierarchyRequest);
+      throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
     }
   }
   for (let current = parent.firstChild; current && current !== child; current = current.nextSibling) {
     if (current.isElement() && (child !== null || !childrenToExclude.includes(current))) {
-      throwDOMException(DOMExceptionNames.hierarchyRequest);
+      throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
     }
   }
 }

@@ -1,6 +1,6 @@
 import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
-  reference, union, DOMExceptionNames, throwDOMException,
+  reference, union, DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
 import { getBufferSourceCopy } from '../../../js-engine/index';
 import type { BrowletEnvironment } from '../../scripting/environment';
@@ -24,8 +24,8 @@ export class FileReaderImpl extends EventTargetImpl {
   #state: FileReaderState = 'empty';
   /** Packaged contents of the completed read, or null before completion. */
   result: string | ArrayBuffer | null = null;
-  /** Retained failure, realized by Binding when observed; null before a failure. */
-  error: unknown = null;
+  /** Retained File API failure, or null before a read fails. */
+  error: DOMExceptionImpl | null = null;
   /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
   #eventHandlers = new EventHandlerMap(this, [
@@ -149,7 +149,7 @@ export class FileReaderImpl extends EventTargetImpl {
     encodingLabel?: string,
   ): void {
     if (this.#isLoading()) {
-      throwDOMException(DOMExceptionNames.invalidState);
+      throw new DOMExceptionImpl('', DOMExceptionNames.invalidState);
     }
 
     this.#state = 'loading';
@@ -243,11 +243,11 @@ export class FileReaderImpl extends EventTargetImpl {
                 encodingLabel,
                 this.env,
               );
-              fire('load');
             } catch (error) {
+              if (!DOMExceptionImpl.is(error)) throw error;
               this.error = error;
-              fire('error');
             }
+            fire(this.error === null ? 'load' : 'error');
             if (!this.#isLoading()) fire('loadend');
           });
         },
@@ -256,6 +256,7 @@ export class FileReaderImpl extends EventTargetImpl {
           queueTask(() => {
             this.#state = 'done';
             this.#operation = null;
+            if (!DOMExceptionImpl.is(error)) throw error;
             this.error = error;
             fire('error');
             if (!this.#isLoading()) fire('loadend');
@@ -272,9 +273,6 @@ export class FileReaderImpl extends EventTargetImpl {
   }
 }
 
-const fileReaderErrorType = nullable(reference('DOMException'));
-
-// BINDING_INTEGRATION: supply the runtime and realize retained exceptions.
 /*
  * File API §6.2 — The FileReader API
  *
@@ -330,13 +328,7 @@ export const fileReaderIDL = defineInterface<BrowletEnvironment>({
     constant('DONE', idlType.unsignedShort, integer(2)),
     roAttr('readyState', idlType.unsignedShort),
     roAttr('result', nullable(union(idlType.DOMString, idlType.ArrayBuffer))),
-    roAttr('error', nullable(reference('DOMException')), {
-      // BINDING_INTEGRATION: realize a retained failure on its first author observation.
-      get(context) {
-        const error = context.realizeException((this as FileReaderImpl).error);
-        return context.jsToImpl(error, fileReaderErrorType);
-      },
-    }),
+    roAttr('error', nullable(reference('DOMException'))),
     eventHandlerAttr('onloadstart'),
     eventHandlerAttr('onprogress'),
     eventHandlerAttr('onload'),

@@ -1,6 +1,6 @@
 import { InternalError } from '../infra/internal-error';
 import type { JSEnvironment } from '../js-engine/index';
-import { createDOMException } from '../web-idl/core/index';
+import { DOMExceptionImpl } from '../web-idl/core/index';
 import type { FetchTimingInfo } from './timing';
 import type { FetchEnvironment } from './environment';
 
@@ -56,7 +56,7 @@ export class FetchController {
     ...args: [env: JSEnvironment] | [error: unknown, env: JSEnvironment]
   ): void {
     this.state = 'aborted';
-    const fallbackError = createDOMException('AbortError');
+    const fallbackError = new DOMExceptionImpl('', 'AbortError');
     const env = args.length === 1 ? args[0] : args[1];
     const error = args.length === 1 ? fallbackError : args[0];
     let serializedError: object;

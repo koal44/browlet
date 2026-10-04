@@ -5,7 +5,7 @@ import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
 import {
-  DOMException as InternalDOMException, isDOMException,
+  DOMExceptionImpl, isDOMException,
 } from '../../../../src/web-idl/core/dom-exception';
 import { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
@@ -480,7 +480,7 @@ function expectDataCloneError(steps: () => unknown): void {
   try {
     steps();
   } catch (error) {
-    expect(InternalDOMException.is(error)).toBe(true);
+    expect(DOMExceptionImpl.is(error)).toBe(true);
     expect(error).toMatchObject({
       message: '',
       name: 'DataCloneError',

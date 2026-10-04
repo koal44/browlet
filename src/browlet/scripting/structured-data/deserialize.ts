@@ -3,7 +3,7 @@ import {
   appendMapData, appendSetData, getBufferTypeName, isObject, writeErrorStack,
 } from '../../../js-engine/index';
 import {
-  throwDOMException, type BindingContext, type PlatformRecord,
+  DOMExceptionImpl, DOMExceptionNames, type BindingContext, type PlatformRecord,
 } from '../../../web-idl/index';
 import type { Realm } from '../realm';
 import type {
@@ -58,7 +58,7 @@ export function structuredDeserialize(
     case 'SharedArrayBuffer':
     case 'GrowableSharedArrayBuffer':
       if (ctx.realm.agent.agentCluster !== serialized.agentCluster) {
-        return throwDOMException('DataCloneError');
+        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       }
       value = deserializeSharedArrayBuffer(serialized.buffer, realm);
       break;
@@ -111,7 +111,7 @@ export function structuredDeserialize(
       break;
     case 'platform-object': {
       platformRecord = ctx.createPlatformRecord(serialized.interfaceName);
-      if (!platformRecord) return throwDOMException('DataCloneError');
+      if (!platformRecord) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       value = platformRecord.platformObject;
       deep = true;
       break;
@@ -221,7 +221,7 @@ function deserializeArrayBuffer(
       serialized.maxByteLength,
     );
   } catch {
-    return throwDOMException('DataCloneError');
+    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   }
 }
 

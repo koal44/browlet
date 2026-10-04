@@ -3,8 +3,10 @@ import { isomorphicDecode, type JSEnvironment } from '../js-engine/index';
 import { decode, getEncoding } from '../encoding/index';
 import { parseMIMEType } from '../mime/index';
 import { forgivingBase64Encode } from '../infra/index';
+import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
 
-/** File API §6.3 — Package data. */
+/** Package Blob bytes in the requested FileReader result format. */
+// https://w3c.github.io/FileAPI/#package-data
 export function packageData(
   bytes: Uint8Array,
   type: FileReadType,
@@ -24,7 +26,14 @@ export function packageData(
     case 'Text':
       return packageText(bytes, mimeType, encodingLabel);
     case 'ArrayBuffer':
-      return env.exec.buffers.copyArrayBuffer(bytes);
+      try {
+        return env.exec.buffers.copyArrayBuffer(bytes);
+      } catch (error) {
+        if (!(error instanceof env.exec.RangeError)) throw error;
+        // SPEC_CLASH(filereader-allocation-error): retain a DOMException for allocation failure.
+        // Follow WebKit's NotReadableError mapping; see the File API roadmap.
+        throw new DOMExceptionImpl('', DOMExceptionNames.notReadable);
+      }
     case 'BinaryString':
       return isomorphicDecode(bytes);
   }
