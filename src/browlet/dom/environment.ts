@@ -1,4 +1,5 @@
 import type { EventImpl } from './events/event';
+import type { DOMHighResTimeStamp } from '../performance/high-resolution-time';
 
 /** Environment supplying the realm and allocation facilities used by DOM events. */
 export interface DOMEnvironment {
@@ -14,6 +15,7 @@ export interface EventExecution {
 
 /** Realm operations used by event timestamps and listener dispatch. */
 export interface EventRealm {
+  /** Creation timestamp in milliseconds relative to the realm's time origin. */
   eventTimeStamp(): DOMHighResTimeStamp;
   isWindow(): this is WindowEventRealm;
 }

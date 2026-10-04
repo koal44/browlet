@@ -4,6 +4,7 @@ import {
 import { HTMLTreeAdapter } from './tree-adapter';
 import type { BrowletEnvironment } from '../../scripting/environment';
 
+/** Parse source into a new HTML document owned by env. */
 export function parseHTMLDocument(
   source = '',
   options: DocumentConstructionOptions = {},

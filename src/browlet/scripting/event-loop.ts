@@ -15,7 +15,8 @@ export class EventLoop {
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
-  #lastRenderOpportunityTime: UnsafeMoment | null = null;
+  /** Most recent rendering opportunity reported by the host. */
+  lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
   #schedulingOptions: EventLoopOptions | null = null;
   #turnRequested = false;
@@ -27,11 +28,6 @@ export class EventLoop {
   /** Task executing on this loop, or null outside task execution. */
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
-  }
-
-  /** Most recent rendering opportunity reported by the host. */
-  get lastRenderOpportunityTime(): UnsafeMoment | null {
-    return this.#lastRenderOpportunityTime;
   }
 
   get started(): boolean {
@@ -340,10 +336,6 @@ export class EventLoop {
 
   notifyTaskRunnabilityChanged(): void {
     this.#requestTurnIfNeeded();
-  }
-
-  setLastRenderOpportunityTime(time: UnsafeMoment): void {
-    this.#lastRenderOpportunityTime = time;
   }
 
   getTaskQueue(source: TaskSource): ReadonlySet<Task> {

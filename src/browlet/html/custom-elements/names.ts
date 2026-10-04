@@ -1,5 +1,6 @@
 import { isValidElementLocalName } from '../../dom/infra/name-validation';
 
+/** Recognize custom-element names, excluding names reserved by SVG and MathML. */
 // https://html.spec.whatwg.org/multipage/custom-elements.html#valid-custom-element-name
 export function isValidCustomElementName(name: string): boolean {
   return name.includes('-') &&

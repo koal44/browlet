@@ -91,20 +91,26 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   }
 }
 
+/** Controls whether the host exposes its shadow root to authors. */
+export type ShadowRootMode = 'open' | 'closed';
+
 /*
  * enum ShadowRootMode { "open", "closed" };
  */
 export const shadowRootModeIDL = defineEnumeration({
   name: 'ShadowRootMode',
-  values: ['open', 'closed'],
+  values: ['open', 'closed'] satisfies ShadowRootMode[],
 });
+
+/** Selects explicit slot assignment or matching by slot name. */
+export type SlotAssignmentMode = 'manual' | 'named';
 
 /*
  * enum SlotAssignmentMode { "manual", "named" };
  */
 export const slotAssignmentModeIDL = defineEnumeration({
   name: 'SlotAssignmentMode',
-  values: ['manual', 'named'],
+  values: ['manual', 'named'] satisfies SlotAssignmentMode[],
 });
 
 /*

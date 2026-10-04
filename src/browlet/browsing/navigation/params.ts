@@ -16,7 +16,7 @@ import {
   type SessionHistoryEntry,
 } from './session-history';
 import {
-  coarsenedSharedCurrentTime,
+  coarsenedSharedCurrentTime, type DOMHighResTimeStamp,
 } from '../../performance/high-resolution-time';
 import { InternalError } from '../../../infra/internal-error';
 

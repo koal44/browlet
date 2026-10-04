@@ -1,6 +1,10 @@
 import { UnsafeMoment, monotonicClock, wallClock } from './clock';
 import type { Clock, Duration, Moment } from './clock';
 
+/** Millisecond duration, interpreted relative to the origin selected by its consumer. */
+// https://w3c.github.io/hr-time/#sec-domhighrestimestamp
+export type DOMHighResTimeStamp = number;
+
 /** Converts shared clock readings into timestamps for one environment. */
 // https://w3c.github.io/hr-time/#time-origin
 export class EnvironmentTiming {
@@ -60,6 +64,7 @@ export class EnvironmentTiming {
 
 }
 
+/** Read wall-clock time with the default non-isolated precision limit. */
 export function currentCoarsenedWallTime(): Moment {
   return wallClock.unsafeCurrentTime().coarsen();
 }
@@ -79,6 +84,7 @@ export function initializeEstimatedMonotonicTimeOfUnixEpoch(
   return epochTime.coarsen();
 }
 
+/** Read monotonic time at the precision allowed by the isolation capability. */
 export function coarsenedSharedCurrentTime(
   crossOriginIsolatedCapability = false,
 ): Moment {

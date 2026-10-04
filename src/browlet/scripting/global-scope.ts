@@ -1,7 +1,8 @@
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
-  emptyDictionary, idlType, integer, op, reference, roAttr, union, xattr,
+  emptyDictionary, idlType, integer, op, reference, roAttr, union, xattr, type VoidFunction,
 } from '../../web-idl/index';
+import type { JSFunction } from '../../js-engine/index';
 import { PerformanceImpl } from '../performance/performance';
 import { ReportingEndpoint } from '../reporting/endpoint';
 import type { ReportImpl } from '../reporting/report';
@@ -12,7 +13,9 @@ import type { InternalPromise } from '../../infra/promises';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { BrowletEnvironment } from './environment';
 import { GlobalTimers, type TimerAction } from './timers';
-import { structuredSerializeOptionsIDL } from './structured-data/web-idl';
+import {
+  structuredSerializeOptionsIDL, type StructuredSerializeOptionsRecord,
+} from './structured-data/web-idl';
 
 /** Owns timers, performance, reporting, and resource lifetimes for one global. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
@@ -86,7 +89,7 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   structuredClone(
     value: unknown,
-    options: StructuredSerializeOptions = { transfer: [] },
+    options: StructuredSerializeOptionsRecord = { transfer: [] },
   ): unknown {
     return this.env.exec.clone(value, options.transfer);
   }
@@ -173,8 +176,13 @@ export class WindowOrWorkerGlobalScopeMixin {
   }
 }
 
+/** Converted timer callback or source text. */
+export type TimerHandler = string | JSFunction;
+
 // TrustedScript awaits the Trusted Types interface and timer string compilation.
-// typedef (DOMString or Function or TrustedScript) TimerHandler;
+/*
+ * typedef (DOMString or Function or TrustedScript) TimerHandler;
+ */
 export const timerHandlerIDL = defineTypedef({
   name: 'TimerHandler',
   type: union(idlType.DOMString, reference('Function')),

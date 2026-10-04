@@ -21,6 +21,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     this.#document = document;
   }
 
+  /** Build the document tree and finish pending element parsing hooks. */
   parse(source: string): DocumentImpl {
     this.#pendingUnpushedElement = null;
 
@@ -31,10 +32,12 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     return document;
   }
 
+  /** Finish the final element that did not receive a parser stack callback. */
   finishParsing(): void {
     this.#finishPendingUnpushedElement();
   }
 
+  // parse5's factory contract reuses the document supplied to this adapter.
   createDocument(): DocumentImpl {
     return this.#document;
   }

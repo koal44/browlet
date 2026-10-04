@@ -115,7 +115,8 @@ type EventHandlerRecord = {
   type: string;
 };
 
+/** Converted callback invoked with implementation identities by event dispatch. */
 export type EventHandlerCallback = (
-  this: EventTarget,
-  event: Event,
+  this: EventTargetImpl,
+  event: EventImpl,
 ) => unknown;

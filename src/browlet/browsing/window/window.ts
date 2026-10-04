@@ -1,15 +1,17 @@
+import type { URL } from 'node:url';
 import type { DocumentImpl } from '../../dom/nodes/document';
 import { ElementImpl } from '../../dom/nodes/element';
 import type { EventImpl } from '../../dom/events/event';
 import { EventTargetImpl } from '../../dom/events/event-target';
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
-  impl, roAttr, reference, union, xattr,
+  impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/index';
 import { LocationImpl } from './location';
 import type { WindowProxy, WindowProxyHandle } from './window-proxy';
 import type { PerformanceImpl } from '../../performance/performance';
-import type { WindowOrWorkerGlobalScopeMixin } from '../../scripting/global-scope';
+import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../scripting/global-scope';
+import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/web-idl';
 import type { BrowletEnvironment } from '../../scripting/environment';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 import type { InternalPromise } from '../../../infra/promises';
@@ -120,7 +122,7 @@ export class WindowImpl extends EventTargetImpl {
 
   structuredClone<T>(
     value: T,
-    options?: StructuredSerializeOptions,
+    options?: StructuredSerializeOptionsRecord,
   ): T {
     return this.getWindowOrWorkerGlobalScopeMixin()
       .structuredClone(value, options) as T;

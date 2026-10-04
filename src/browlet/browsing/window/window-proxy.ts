@@ -11,6 +11,15 @@ import { InternalError } from '../../../infra/internal-error';
 export class WindowProxyHandle implements ProxyHandler<object> {
   static #handles = new WeakMap<object, WindowProxyHandle>();
 
+  /** Stable global-this identity retained when navigation replaces the Window. */
+  platform: WindowProxy;
+  #associatedWindow: WindowAssociation | null = null;
+
+  private constructor(platform?: object) {
+    this.platform = (platform ?? new Proxy({}, this)) as WindowProxy;
+    WindowProxyHandle.#handles.set(this.platform, this);
+  }
+
   /** Retrieves the supplied platform's handle, creating a fallback proxy when omitted. */
   static getOrCreate(platform?: object): WindowProxyHandle {
     const handle = platform === undefined ? undefined : WindowProxyHandle.#handles.get(platform);
@@ -26,17 +35,6 @@ export class WindowProxyHandle implements ProxyHandler<object> {
   static resolveReceiver(this: void, windowProxy: WindowProxy): Window | undefined {
     const handle = WindowProxyHandle.#handles.get(windowProxy);
     return handle ? handle.#associatedWindow?.platform : undefined;
-  }
-
-  // -----------------------------------------------------------------------
-
-  /** Stable global-this identity retained when navigation replaces the Window. */
-  platform: WindowProxy;
-  #associatedWindow: WindowAssociation | null = null;
-
-  private constructor(platform?: object) {
-    this.platform = (platform ?? new Proxy({}, this)) as WindowProxy;
-    WindowProxyHandle.#handles.set(this.platform, this);
   }
 
   /** Current Window association; throws before construction has connected it. */

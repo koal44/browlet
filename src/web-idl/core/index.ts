@@ -9,6 +9,7 @@ export {
 export {
   allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL,
   functionIDL, voidFunctionIDL, webIDLCommonDefinitions,
+  type BufferSource, type VoidFunction,
 } from './common';
 
 export {

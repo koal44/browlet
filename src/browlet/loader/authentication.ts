@@ -20,6 +20,7 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
     this.#userAgent = userAgent;
   }
 
+  /** Credential-clear generation used to reject results from older prompts. */
   get generation(): number { return this.#generation; }
 
   // RFC 9110 §11.5; RFC 7617 §2.2.

@@ -1,3 +1,4 @@
+import { URL } from 'node:url';
 import {
   arg, attr, defineInterface, idlType, impl, op, roAttr, xattr,
 } from '../../../web-idl/index';

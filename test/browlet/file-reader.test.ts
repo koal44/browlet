@@ -607,9 +607,10 @@ describe('File API §6.2: FileReader reads', () => {
     expect(events).toEqual(['error', 'loadend']);
     expect(reader.readyState).toBe(2);
     expect(reader.result).toBeNull();
-    expect(reader.error?.name).toBe(name);
-    expect(Reflect.get(context.project(FileReaderImpl, reader), 'error'))
-      .toBeInstanceOf(requireFunction(context.realm.global, 'DOMException'));
+    expect(reader.error).toMatchObject({ name });
+    const error: unknown = Reflect.get(context.project(FileReaderImpl, reader), 'error');
+    expect(error).toMatchObject({ name });
+    expect(error).toBeInstanceOf(requireFunction(context.realm.global, 'DOMException'));
   });
 });
 

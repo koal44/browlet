@@ -7,23 +7,18 @@ import { AbortSignalImpl } from './abort-signal';
 
 /** Controls cancellation through an associated signal. */
 // https://dom.spec.whatwg.org/#interface-abortcontroller
-export class AbortControllerImpl
-{
-  #signal: AbortSignalImpl;
+export class AbortControllerImpl {
+  /** The signal notified when this controller aborts. */
+  signal: AbortSignalImpl;
 
   constructor(signal: AbortSignalImpl) {
-    this.#signal = signal;
-  }
-
-  /** The signal notified when this controller aborts. */
-  get signal(): AbortSignalImpl {
-    return this.#signal;
+    this.signal = signal;
   }
 
   /** Default errors use env, or the signal's owner for internal calls. */
   // https://dom.spec.whatwg.org/#dom-abortcontroller-abort
   abort(reason: unknown = undefined, env?: JSEnvironment): void {
-    this.#signal.signalAbort(reason, env);
+    this.signal.signalAbort(reason, env);
   }
 }
 

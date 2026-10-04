@@ -11,7 +11,7 @@ import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 import type { WindowImpl } from '../browsing/window/window';
 import type { WindowProxyHandle } from '../browsing/window/window-proxy';
-import { coarsenedSharedCurrentTime } from '../performance/high-resolution-time';
+import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../performance/high-resolution-time';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
 

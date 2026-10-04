@@ -3,7 +3,7 @@ import {
   arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, xattr,
 } from '../../../web-idl/index';
-import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
+import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
 import type { EventTargetImpl } from './event-target';
 import { InternalError } from '../../../infra/internal-error';
 
@@ -52,7 +52,7 @@ export class EventImpl {
   // https://dom.spec.whatwg.org/#dom-event-event
   constructor(
     type: string,
-    eventInitDict: EventInit | null = {},
+    eventInitDict: EventInitRecord | null = {},
     timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
     const init = eventInitDict ?? {};
@@ -71,6 +71,7 @@ export class EventImpl {
   }
 
   /** @deprecated Legacy alias of target. */
+  // https://dom.spec.whatwg.org/#dom-event-srcelement
   get srcElement(): EventTargetImpl | null {
     return this.target;
   }
@@ -157,12 +158,14 @@ export class EventImpl {
     return composedPath;
   }
 
+  /** Prevent dispatch from invoking listeners on further targets. */
   // https://dom.spec.whatwg.org/#dom-event-stoppropagation
   stopPropagation(): void {
     this.propagationStopped = true;
   }
 
   /** @deprecated Legacy propagation flag; assigning false cannot clear it. */
+  // https://dom.spec.whatwg.org/#dom-event-cancelbubble
   get cancelBubble(): boolean {
     return this.propagationStopped;
   }
@@ -171,6 +174,7 @@ export class EventImpl {
     if (value) this.propagationStopped = true;
   }
 
+  /** Stop propagation and skip remaining listeners on the current target. */
   // https://dom.spec.whatwg.org/#dom-event-stopimmediatepropagation
   stopImmediatePropagation(): void {
     this.propagationStopped = true;
@@ -178,6 +182,7 @@ export class EventImpl {
   }
 
   /** @deprecated False when canceled; assigning false requests cancellation. */
+  // https://dom.spec.whatwg.org/#dom-event-returnvalue
   get returnValue(): boolean {
     return !this.defaultPrevented;
   }
@@ -186,6 +191,7 @@ export class EventImpl {
     if (!value) this.#setCanceled();
   }
 
+  /** Cancel a cancelable event unless the current listener is passive. */
   // https://dom.spec.whatwg.org/#dom-event-preventdefault
   preventDefault(): void {
     this.#setCanceled();
@@ -222,7 +228,7 @@ export class EventImpl {
   }
 
   /** Set dispatch flags during internal event creation, retaining its trusted status. */
-  setFlags(init: EventInit): void {
+  setFlags(init: EventInitRecord): void {
     this.bubbles = init.bubbles ?? false;
     this.cancelable = init.cancelable ?? false;
     this.composed = init.composed ?? false;
@@ -314,12 +320,6 @@ export enum EventPhase {
  *
  *   undefined initEvent(DOMString type, optional boolean bubbles = false, optional boolean cancelable = false); // legacy
  * };
- *
- * dictionary EventInit {
- *   boolean bubbles = false;
- *   boolean cancelable = false;
- *   boolean composed = false;
- * };
  */
 export const eventIDL = defineInterface<DOMEnvironment>({
   name: 'Event',
@@ -367,6 +367,20 @@ export const eventIDL = defineInterface<DOMEnvironment>({
   ],
 });
 
+/** Event flags accepted by constructors and internal event creation. */
+export type EventInitRecord = {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+};
+
+/*
+ * dictionary EventInit {
+ *   boolean bubbles = false;
+ *   boolean cancelable = false;
+ *   boolean composed = false;
+ * };
+ */
 export const eventInitIDL = defineDictionary({
   name: 'EventInit',
   members: [
@@ -385,7 +399,7 @@ export class CustomEventImpl<T = unknown> extends EventImpl {
   // https://dom.spec.whatwg.org/#dom-customevent-customevent
   constructor(
     type: string,
-    eventInitDict: CustomEventInit<T> | null = {},
+    eventInitDict: CustomEventInitRecord<T> | null = {},
     timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
     const init = eventInitDict ?? {};
@@ -418,10 +432,6 @@ export class CustomEventImpl<T = unknown> extends EventImpl {
  *
  *   undefined initCustomEvent(DOMString type, optional boolean bubbles = false, optional boolean cancelable = false, optional any detail = null); // legacy
  * };
- *
- * dictionary CustomEventInit : EventInit {
- *   any detail = null;
- * };
  */
 export const customEventIDL = defineInterface<DOMEnvironment>({
   name: 'CustomEvent',
@@ -451,6 +461,16 @@ export const customEventIDL = defineInterface<DOMEnvironment>({
   ],
 });
 
+/** Event flags and payload accepted by custom-event creation. */
+export interface CustomEventInitRecord<T = unknown> extends EventInitRecord {
+  detail?: T;
+}
+
+/*
+ * dictionary CustomEventInit : EventInit {
+ *   any detail = null;
+ * };
+ */
 export const customEventInitIDL = defineDictionary({
   name: 'CustomEventInit',
   inherits: 'EventInit',

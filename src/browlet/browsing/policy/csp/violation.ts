@@ -6,8 +6,9 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,
 } from '../../../../web-idl/index';
-import { EventImpl } from '../../../dom/events/event';
+import { EventImpl, type EventInitRecord } from '../../../dom/events/event';
 import type { DOMEnvironment } from '../../../dom/environment';
+import type { DOMHighResTimeStamp } from '../../../performance/high-resolution-time';
 import type { ElementImpl } from '../../../dom/nodes/element';
 import type { DocumentImpl } from '../../../dom/nodes/document';
 import { ReportBodyImpl } from '../../../reporting/report';
@@ -278,7 +279,7 @@ export class SecurityPolicyViolationEventImpl extends EventImpl {
 }
 
 /** Event dictionaries also enter through DOM's internal event-creation path. */
-export interface SecurityPolicyViolationEventInitRecord extends EventInit {
+export interface SecurityPolicyViolationEventInitRecord extends EventInitRecord {
   documentURI?: string;
   referrer?: string;
   blockedURI?: string;
@@ -295,7 +296,13 @@ export interface SecurityPolicyViolationEventInitRecord extends EventInit {
 
 /*
  * enum SecurityPolicyViolationEventDisposition { "enforce", "report" };
- *
+ */
+export const securityPolicyViolationEventDispositionIDL = defineEnumeration({
+  name: 'SecurityPolicyViolationEventDisposition',
+  values: ['enforce', 'report'] satisfies CSPDisposition[],
+});
+
+/*
  * [Exposed=(Window,Worker)]
  * interface SecurityPolicyViolationEvent : Event {
  *   constructor(DOMString type, optional SecurityPolicyViolationEventInit eventInitDict = {});
@@ -312,27 +319,7 @@ export interface SecurityPolicyViolationEventInitRecord extends EventInit {
  *   readonly attribute unsigned long lineNumber;
  *   readonly attribute unsigned long columnNumber;
  * };
- *
- * dictionary SecurityPolicyViolationEventInit : EventInit {
- *   USVString documentURI = "";
- *   USVString referrer = "";
- *   USVString blockedURI = "";
- *   DOMString violatedDirective = "";
- *   DOMString effectiveDirective = "";
- *   DOMString originalPolicy = "";
- *   USVString sourceFile = "";
- *   DOMString sample = "";
- *   SecurityPolicyViolationEventDisposition disposition = "enforce";
- *   unsigned short statusCode = 0;
- *   unsigned long lineNumber = 0;
- *   unsigned long columnNumber = 0;
- * };
  */
-export const securityPolicyViolationEventDispositionIDL = defineEnumeration({
-  name: 'SecurityPolicyViolationEventDisposition',
-  values: ['enforce', 'report'] satisfies CSPDisposition[],
-});
-
 export const securityPolicyViolationEventIDL = defineInterface<DOMEnvironment>({
   name: 'SecurityPolicyViolationEvent',
   inherits: 'Event',
@@ -360,6 +347,22 @@ export const securityPolicyViolationEventIDL = defineInterface<DOMEnvironment>({
   ],
 });
 
+/*
+ * dictionary SecurityPolicyViolationEventInit : EventInit {
+ *   USVString documentURI = "";
+ *   USVString referrer = "";
+ *   USVString blockedURI = "";
+ *   DOMString violatedDirective = "";
+ *   DOMString effectiveDirective = "";
+ *   DOMString originalPolicy = "";
+ *   USVString sourceFile = "";
+ *   DOMString sample = "";
+ *   SecurityPolicyViolationEventDisposition disposition = "enforce";
+ *   unsigned short statusCode = 0;
+ *   unsigned long lineNumber = 0;
+ *   unsigned long columnNumber = 0;
+ * };
+ */
 export const securityPolicyViolationEventInitIDL = defineDictionary({
   name: 'SecurityPolicyViolationEventInit',
   inherits: 'EventInit',

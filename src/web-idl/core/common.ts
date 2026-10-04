@@ -5,6 +5,12 @@ import {
   domExceptionIDL, quotaExceededErrorIDL, quotaExceededErrorOptionsIDL,
 } from './dom-exception';
 
+/** Converted callback which takes no arguments and discards its return value. */
+export type VoidFunction = () => void;
+
+/** Array buffer or view accepted by Web IDL without AllowShared. */
+export type BufferSource = ArrayBuffer | ArrayBufferView<ArrayBuffer>;
+
 /*
  * callback Function = any (any... arguments);
  */

@@ -110,12 +110,6 @@ const visibleReportTypes = new Set(['coep', 'integrity-violation', 'csp-violatio
  *   undefined disconnect();
  *   ReportList takeRecords();
  * };
- * callback ReportingObserverCallback = undefined (sequence<Report> reports, ReportingObserver observer);
- * dictionary ReportingObserverOptions {
- *   sequence<DOMString> types;
- *   boolean buffered = false;
- * };
- * typedef sequence<Report> ReportList;
  */
 export const reportingObserverIDL = defineInterface<BrowletEnvironment>({
   name: 'ReportingObserver',
@@ -135,12 +129,21 @@ export const reportingObserverIDL = defineInterface<BrowletEnvironment>({
   ],
 });
 
+/*
+ * callback ReportingObserverCallback = undefined (sequence<Report> reports, ReportingObserver observer);
+ */
 export const reportingObserverCallbackIDL = defineCallbackFunction({
   name: 'ReportingObserverCallback',
   returns: idlType.undefined,
   arguments: [arg('reports', sequence(reference('Report'))), arg('observer', reference('ReportingObserver'))],
 });
 
+/*
+ * dictionary ReportingObserverOptions {
+ *   sequence<DOMString> types;
+ *   boolean buffered = false;
+ * };
+ */
 export const reportingObserverOptionsIDL = defineDictionary({
   name: 'ReportingObserverOptions',
   members: [
@@ -149,4 +152,7 @@ export const reportingObserverOptionsIDL = defineDictionary({
   ],
 });
 
+/*
+ * typedef sequence<Report> ReportList;
+ */
 export const reportListIDL = defineTypedef({ name: 'ReportList', type: sequence(reference('Report')) });

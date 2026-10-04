@@ -6,6 +6,8 @@ import { InternalError } from '../../../infra/internal-error';
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl
 {
+  // Mutations update both ends of each link and notify affected nodes together.
+  // Keep storage private so individual assignments cannot bypass those steps.
   // Preserve node-link types when checking the emitted JavaScript.
   /** @type {TreeNode | null} */
   #parent: TNode | null = null;

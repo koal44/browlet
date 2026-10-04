@@ -24,8 +24,8 @@ export class FileReaderImpl extends EventTargetImpl {
   #state: FileReaderState = 'empty';
   /** Packaged contents of the completed read, or null before completion. */
   result: string | ArrayBuffer | null = null;
-  /** Failure from the current read, or null when no read has failed. */
-  error: DOMException | null = null;
+  /** Retained failure, realized by Binding when observed; null before a failure. */
+  error: unknown = null;
   /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
   #eventHandlers = new EventHandlerMap(this, [
@@ -245,7 +245,7 @@ export class FileReaderImpl extends EventTargetImpl {
               );
               fire('load');
             } catch (error) {
-              this.error = error as DOMException;
+              this.error = error;
               fire('error');
             }
             if (!this.#isLoading()) fire('loadend');
@@ -256,7 +256,7 @@ export class FileReaderImpl extends EventTargetImpl {
           queueTask(() => {
             this.#state = 'done';
             this.#operation = null;
-            this.error = error as DOMException;
+            this.error = error;
             fire('error');
             if (!this.#isLoading()) fire('loadend');
           });

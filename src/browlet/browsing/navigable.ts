@@ -1,4 +1,4 @@
-import type { DocumentImpl } from '../dom/nodes/document';
+import type { DocumentImpl, DocumentVisibilityState } from '../dom/nodes/document';
 import type { ElementImpl } from '../dom/nodes/element';
 import { BrowsingContext } from './browsing-context';
 import {

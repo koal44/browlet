@@ -5,6 +5,7 @@ import {
 } from '../../../web-idl/index';
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
 import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
+import type { ShadowRootMode } from '../nodes/shadow-root';
 import { MouseEventImpl } from './ui-event';
 import {
   type AbortAlgorithmHandle, type AbortSignalImpl,
@@ -105,6 +106,7 @@ export class EventTargetImpl {
     return this.env.exec.createEvent(eventConstructor);
   }
 
+  /** Remove every listener and its associated abort registration. */
   // https://dom.spec.whatwg.org/#remove-all-event-listeners
   removeAllEventListeners(): void {
     for (const listener of [...this.#eventListenerList]) {
@@ -514,20 +516,6 @@ export class EventTargetImpl {
  *   undefined removeEventListener(DOMString type, EventListener? callback, optional (EventListenerOptions or boolean) options = {});
  *   boolean dispatchEvent(Event event);
  * };
- *
- * callback interface EventListener {
- *   undefined handleEvent(Event event);
- * };
- *
- * dictionary EventListenerOptions {
- *   boolean capture = false;
- * };
- *
- * dictionary AddEventListenerOptions : EventListenerOptions {
- *   boolean passive;
- *   boolean once = false;
- *   AbortSignal signal;
- * };
  */
 export const eventTargetIDL = defineInterface<DOMEnvironment>({
   name: 'EventTarget',
@@ -563,6 +551,11 @@ export const eventTargetIDL = defineInterface<DOMEnvironment>({
   ],
 });
 
+/*
+ * callback interface EventListener {
+ *   undefined handleEvent(Event event);
+ * };
+ */
 export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
@@ -590,11 +583,23 @@ export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   ],
 });
 
+/*
+ * dictionary EventListenerOptions {
+ *   boolean capture = false;
+ * };
+ */
 export const eventListenerOptionsIDL = defineDictionary({
   name: 'EventListenerOptions',
   members: [dictMember('capture', idlType.boolean, { default: false })],
 });
 
+/*
+ * dictionary AddEventListenerOptions : EventListenerOptions {
+ *   boolean passive;
+ *   boolean once = false;
+ *   AbortSignal signal;
+ * };
+ */
 export const addEventListenerOptionsIDL = defineDictionary({
   name: 'AddEventListenerOptions',
   inherits: 'EventListenerOptions',

@@ -291,7 +291,7 @@ export const urlIDL = defineInterface({
  *   stringifier;
  * };
  */
-export class URLSearchParamsImpl implements URLSearchParams {
+export class URLSearchParamsImpl {
   #list: FormTuple[] = [];
   #urlObject: URLImpl | null = null;
 
@@ -441,6 +441,9 @@ export class URLSearchParamsImpl implements URLSearchParams {
     this.#urlObject.setQuery(serialized === '' ? null : serialized);
   }
 }
+
+/** Native generator which reads the implementation's live parameter list. */
+export type URLSearchParamsIterator<T> = Generator<T, undefined, unknown>;
 
 // -- Web IDL ------------------------------------------------------------
 

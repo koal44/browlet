@@ -1,9 +1,10 @@
 import type { DOMEnvironment } from '../environment';
+import type { DOMHighResTimeStamp } from '../../performance/high-resolution-time';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, roAttr, reference,
 } from '../../../web-idl/index';
-import { EventImpl } from './event';
+import { EventImpl, type EventInitRecord } from './event';
 import type { EventTargetImpl } from './event-target';
 
 /** Reports completed work and, when known, its total amount. */
@@ -55,12 +56,6 @@ export class ProgressEventImpl extends EventImpl {
  *   readonly attribute double loaded;
  *   readonly attribute double total;
  * };
- *
- * dictionary ProgressEventInit : EventInit {
- *   boolean lengthComputable = false;
- *   double loaded = 0;
- *   double total = 0;
- * };
  */
 export const progressEventIDL = defineInterface<DOMEnvironment>({
   name: 'ProgressEvent',
@@ -83,6 +78,13 @@ export const progressEventIDL = defineInterface<DOMEnvironment>({
   ],
 });
 
+/*
+ * dictionary ProgressEventInit : EventInit {
+ *   boolean lengthComputable = false;
+ *   double loaded = 0;
+ *   double total = 0;
+ * };
+ */
 export const progressEventInitIDL = defineDictionary({
   name: 'ProgressEventInit',
   inherits: 'EventInit',
@@ -93,11 +95,9 @@ export const progressEventInitIDL = defineDictionary({
   ],
 });
 
-type ProgressEventInitRecord = {
-  bubbles?: boolean;
-  cancelable?: boolean;
-  composed?: boolean;
+/** Event flags and progress measurements accepted by event creation. */
+interface ProgressEventInitRecord extends EventInitRecord {
   lengthComputable?: boolean;
   loaded?: number;
   total?: number;
-};
+}

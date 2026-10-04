@@ -1,5 +1,6 @@
 import { InternalPromise } from '../../infra/promises';
 
+/** Request a later host turn for HTML's event-loop work. */
 export function requestNodeEventLoopTurn(steps: () => void): void {
   // Enter from a later Node task; never run an HTML turn synchronously.
   setImmediate(steps);

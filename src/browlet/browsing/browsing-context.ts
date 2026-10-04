@@ -169,6 +169,7 @@ export class BrowsingContext {
     return this.#windowProxy;
   }
 
+  /** Navigation owner; once assigned, the association cannot switch owners. */
   get navigable(): Navigable | null {
     return this.#navigable;
   }
@@ -183,6 +184,7 @@ export class BrowsingContext {
     return this.activeWindow.getAssociatedDocument();
   }
 
+  /** Attach the stable proxy exactly once during context construction. */
   initializeWindowProxy(proxy: WindowProxyHandle): void {
     if (this.#windowProxy) throw new InternalError('Browsing context already has a WindowProxy');
     this.#windowProxy = proxy;
@@ -196,6 +198,7 @@ export class BrowsingContext {
     if (policy.upgrade) this.insecureRequestsPolicy = policy.clone();
   }
 
+  /** Associate the navigation owner, rejecting a different existing owner. */
   setNavigable(navigable: Navigable): void {
     const existing = this.#navigable;
     if (existing !== null && existing !== navigable) {

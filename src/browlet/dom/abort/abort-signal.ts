@@ -11,14 +11,14 @@ import {
 } from '../../scripting/event-handlers';
 import { EventTargetImpl } from '../events/event-target';
 
+/** Registration that can be removed before its abort steps run. */
 export type AbortAlgorithmHandle = {
   remove(): void;
 };
 
 /** Tracks cancellation, propagates its reason, and notifies abort listeners. */
 // https://dom.spec.whatwg.org/#interface-AbortSignal
-export class AbortSignalImpl extends EventTargetImpl
-{
+export class AbortSignalImpl extends EventTargetImpl {
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
   /** True once this signal is configured to follow other signals. */
   #dependent = false;
@@ -30,6 +30,7 @@ export class AbortSignalImpl extends EventTargetImpl
     type: 'abort',
   }]);
   /** Undefined until aborted; then shared with dependent signals. */
+  // Keep writes in #setAbortReason so retention follows the aborted state.
   #reason: unknown = undefined;
   // A shared WeakRef lets every source/dependent set deduplicate by identity.
   #reference = new WeakRef(this);
@@ -87,10 +88,14 @@ export class AbortSignalImpl extends EventTargetImpl
     return signal;
   }
 
+  /** Whether an abort reason has been set. */
+  // https://dom.spec.whatwg.org/#dom-abortsignal-aborted
   get aborted(): boolean {
     return this.#reason !== undefined;
   }
 
+  /** The stored abort reason, or undefined before cancellation. */
+  // https://dom.spec.whatwg.org/#dom-abortsignal-reason
   get reason(): unknown {
     return this.#reason;
   }
@@ -103,6 +108,7 @@ export class AbortSignalImpl extends EventTargetImpl
     this.#eventHandlers.set('onabort', callback);
   }
 
+  /** Throw the stored reason if this signal has aborted. */
   // https://dom.spec.whatwg.org/#dom-abortsignal-throwifaborted
   throwIfAborted(): void {
     if (this.aborted) throw this.#reason;
@@ -123,6 +129,7 @@ export class AbortSignalImpl extends EventTargetImpl
     return handle;
   }
 
+  /** Remove pending abort steps and release their registration. */
   // https://dom.spec.whatwg.org/#abortsignal-remove
   removeAlgorithm(handle: AbortAlgorithmHandleImpl): void {
     if (!this.#abortAlgorithms.delete(handle)) return;
@@ -292,8 +299,7 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
 });
 
 /** A removable abort step with a weak link to its signal. */
-class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle
-{
+class AbortAlgorithmHandleImpl implements AbortAlgorithmHandle {
   #algorithm: (() => void) | null;
   #signal: WeakRef<AbortSignalImpl> | null;
 

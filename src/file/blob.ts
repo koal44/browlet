@@ -7,7 +7,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
   reference, roAttr, sequence, throwDOMException, union, xattr,
-  type SerialSteps,
+  type BufferSource, type SerialSteps,
 } from '../web-idl/index';
 import { BlobData, type BlobSnapshotState } from './blob-data';
 

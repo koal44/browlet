@@ -17,8 +17,9 @@ import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-r
 import { CSPList } from '../../browsing/policy/csp/list';
 import type { FetchRequest, FetchResponse } from '../../../fetch/index';
 import type { NavigationTimingRecord } from '../../performance/navigation';
-import { currentCoarsenedWallTime } from '../../performance/high-resolution-time';
+import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
+import type { WindowProxy } from '../../browsing/window/window-proxy';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import { PolicyContainer } from '../../browsing/policy/container';
 import { OpenerPolicy } from '../../browsing/policy/coop';
@@ -232,7 +233,7 @@ export class DocumentImpl extends NodeImpl {
 
   /** Associated WindowProxy, or null without a browsing context. */
   // https://html.spec.whatwg.org/#dom-document-defaultview
-  get defaultView(): Window | null {
+  get defaultView(): WindowProxy | null {
     return this.browsingContext?.windowProxy.platform ?? null;
   }
 
@@ -332,7 +333,7 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createelement
   createElement(
     localName: string,
-    _options?: ElementCreationOptions,
+    _options?: string | ElementCreationOptionsRecord,
   ): ElementImpl {
     if (this.type === 'html') localName = asciiLower(localName);
     return this.createElementNode(localName, HTML_NAMESPACE);
@@ -342,7 +343,7 @@ export class DocumentImpl extends NodeImpl {
   createElementNS(
     namespaceURI: string | null,
     qualifiedName: string,
-    _options?: string | ElementCreationOptions,
+    _options?: string | ElementCreationOptionsRecord,
   ): ElementImpl {
     return this.createElementNode(qualifiedName, namespaceURI ?? '');
   }
@@ -1016,6 +1017,11 @@ export const htmlDocumentIDL = definePartialInterface({
   ],
 });
 
+/** Converted element-creation options supported by the current declaration. */
+export type ElementCreationOptionsRecord = {
+  is?: string;
+};
+
 /*
  * dictionary ElementCreationOptions {
  *   CustomElementRegistry? customElementRegistry;
@@ -1078,6 +1084,13 @@ export const directDOMNodeFactory: DOMNodeFactory = {
 
 /** Active parser input used by document.write(). */
 export type DocumentWriter = (markup: string) => void;
+
+/** Loading stage exposed by the document's readyState attribute. */
+export type DocumentReadyState = 'loading' | 'interactive' | 'complete';
+
+/** Visibility reported for a document or its traversable. */
+// https://html.spec.whatwg.org/multipage/interaction.html#document-visibility
+export type DocumentVisibilityState = 'hidden' | 'visible';
 
 /** Selects HTML or XML rules for document operations. */
 // https://dom.spec.whatwg.org/#concept-document-type

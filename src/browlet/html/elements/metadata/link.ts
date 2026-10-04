@@ -59,7 +59,6 @@ export class HTMLLinkElementImpl extends HTMLElementImpl {
  *
  *   // also has obsolete members
  * };
- * HTMLLinkElement includes LinkStyle;
  */
 export const htmlLinkElementIDL = defineInterface({
   name: 'HTMLLinkElement',
@@ -75,6 +74,9 @@ export const htmlLinkElementInterface = defineElementInterface({
   namespaceURI: HTML_NAMESPACE,
 });
 
+/*
+ * HTMLLinkElement includes LinkStyle;
+ */
 export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({
   interface: 'HTMLLinkElement', mixin: 'LinkStyle',
 });

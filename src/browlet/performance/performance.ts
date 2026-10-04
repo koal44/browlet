@@ -2,7 +2,7 @@ import { EventTargetImpl } from '../dom/events/event-target';
 import {
   defineInterface, defineTypedef, idlType, impl, op, reference, roAttr, xattr,
 } from '../../web-idl/index';
-import type { EnvironmentTiming } from './high-resolution-time';
+import type { EnvironmentTiming, DOMHighResTimeStamp } from './high-resolution-time';
 import type { DOMEnvironment } from '../dom/environment';
 
 /** Exposes coarsened timestamps relative to its environment time origin. */

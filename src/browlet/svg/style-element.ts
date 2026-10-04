@@ -41,7 +41,6 @@ export class SVGStyleElementImpl extends SVGElementImpl {
  *   attribute DOMString title;
  *   attribute boolean disabled;
  * };
- * SVGStyleElement includes LinkStyle;
  */
 export const svgStyleElementIDL = defineInterface({
   name: 'SVGStyleElement',
@@ -57,6 +56,9 @@ export const svgStyleElementInterface = defineElementInterface({
   namespaceURI: SVG_NAMESPACE,
 });
 
+/*
+ * SVGStyleElement includes LinkStyle;
+ */
 export const svgStyleElementIncludesLinkStyleIDL = defineIncludes({
   interface: 'SVGStyleElement', mixin: 'LinkStyle',
 });

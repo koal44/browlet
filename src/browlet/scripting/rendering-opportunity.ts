@@ -54,9 +54,8 @@ export class WindowRenderingProducer {
     }
     if (realms.size === 0) return;
 
-    this.#agent.eventLoop.setLastRenderOpportunityTime(
-      this.#host.unsafeSharedCurrentTime(),
-    );
+    this.#agent.eventLoop.lastRenderOpportunityTime =
+      this.#host.unsafeSharedCurrentTime();
     for (const realm of realms) {
       realm.queueGlobalTask(renderingTaskSource, () => {
         this.#updateRendering();

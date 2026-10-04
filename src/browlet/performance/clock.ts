@@ -1,5 +1,6 @@
 import { InternalError } from '../../infra/internal-error';
 import { coarsenTime } from '../../infra/time';
+import type { DOMHighResTimeStamp } from './high-resolution-time';
 
 /** Supplies raw timestamps whose clock identity determines whether they can be compared. */
 // https://w3c.github.io/hr-time/#sec-clocks

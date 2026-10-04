@@ -16,6 +16,7 @@ import { svgElementInterface } from './svg/element';
 import { svgStyleElementInterface } from './svg/style-element';
 import { InternalError } from '../infra/internal-error';
 
+/** Select an element's implementation, including namespace and unknown-name fallbacks. */
 export function resolveElementInterface(
   namespaceURI: string,
   localName: string,
