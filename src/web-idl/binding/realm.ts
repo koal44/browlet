@@ -1,23 +1,26 @@
-import { ExceptionRequestStamper, InternalError, Stamper } from '../../infra/index';
+import {
+  ExceptionRequestStamper, InternalError, InternalPromise, Stamper,
+  type InternalPromiseWithResolvers, type PromiseResultType,
+} from '../../infra/index';
 import { getAssociatedRealm, isObject } from '../../js-engine/index';
 import {
-  hasExtendedAttribute, DOMExceptionImpl, DOMExceptionStamper, type Exposure, type ExtendedAttribute,
-  type ImplementationClass,
+  DOMExceptionImpl,
+  type ImplementationClass, type ImplementationType, type InjectedArgument, type WebIDLType,
 } from '../core/index';
 
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import {
-  AssembledInterface, type IDLType, type IDLDictionaryType, type IDLAttribute, type AssembledInterfaceMember,
-  type AssembledDictionary, type AssembledNamespaceMember, type DefinitionAssembly,
+  AssembledInterface, type IDLType, type IDLDictionaryType, type IDLAttribute,
+  type AssembledDictionary, type DefinitionAssembly,
 } from '../assembly/index';
-import type { IDLMapEntries, IDLSetEntries } from '../values/index';
+import { IDLPromise, type IDLMapEntries, type IDLSetEntries } from '../values/index';
 import {
   createConverter, DictionaryConverter, ImplementationConverter, type Converter, type ConverterFor,
 } from '../converters/index';
 
 import {
-  associatePlatformObject, getImplementationRecord, getPlatformRecord, PlatformRecord,
-  type StampedPlatformObject,
+  getImplementationRecord, getPlatformRecord, isStampedImplInstance, isStampedPlatformObject, PlatformRecord,
+  stampImplementation, type StampedImplInstance, type StampedPlatformObject,
 } from './platform';
 import {
   AsyncIterableBinding, CallbackBinding, MaplikeBinding, SetlikeBinding, GlobalPlatformObjectBinding,
@@ -25,8 +28,7 @@ import {
   invalidReceiver, type BoundConstruct, type IDLMember, type ConstructorBehavior, type MemberBinding,
   type MemberOwner,
 } from './realm/index';
-import { BindingContext } from './context';
-import type { BindingWorld } from './world';
+import type { BindingContext, BindingWorld } from './world';
 
 /** Realm-wide identity, allocation, conversion, and receiver services used by construct bindings. */
 export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
@@ -35,7 +37,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   /** Realize a private exception request once in this binding's realm; preserve other values. */
   realizeException: (value: unknown) => unknown;
   realm: Env['realm'];
-  context: BindingContext<Env>;
+  /** InternalPromise constructor whose results use this realm's Web IDL conversion. */
+  Promise: typeof InternalPromise;
   implementationConverter: ImplementationConverter;
   /** Construct-specific services share this realm's allocation and receiver facilities. */
   callbacks: CallbackBinding;
@@ -51,6 +54,8 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   globalObject: PlatformRecord | undefined;
   globalAllocation: GlobalObjectAllocation | undefined;
 
+  /** Owning environment, unavailable until its composition factory returns. */
+  #env: Env | undefined;
   /** Each assembled construct has one implementation binding in this realm. */
   #implementationBindings = new Map<BoundConstruct, ImplementationBinding>();
   /** Type converters for this binding, without keeping discarded conversion realms alive. */
@@ -102,13 +107,130 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     this.legacyPlatformObjects = new LegacyPlatformObjectBinding(this);
     this.observableArrays = new ObservableArrayBinding(this);
     this.implementationConverter = new ImplementationConverter(this);
-    this.context = new BindingContext(this, createEnvironment);
+    this.Promise = createWebIDLPromiseConstructor(this);
+    this.#env = createEnvironment(this);
+    if (this.#env.realm !== this.realm) {
+      throw new InternalError('The binding environment belongs to a different realm');
+    }
   }
 
-  // The constructor belongs to this realm's binding world and shares its interface-object cache.
+  /** The realm's original DOMException constructor, independent of its global property. */
   get DOMException(): typeof globalThis.DOMException {
     const binding = this.getImplementationBinding(this.resolveInterface('DOMException'));
     return binding.getInterfaceObject() as unknown as typeof globalThis.DOMException;
+  }
+
+  /** Install this realm's exposed definitions on the supplied global object. */
+  install(target: object): void {
+    this.installDefinitions(target);
+  }
+
+  /** Project a global implementation, optionally adopting an engine allocation. */
+  projectGlobalObject(
+    implInst: object,
+    interfaceName: string,
+    allocation?: GlobalObjectAllocation,
+  ): StampedPlatformObject {
+    const assembled = this.resolveInterface(interfaceName);
+    return this.projectGlobalRecord(implInst, assembled, allocation).platformObject!;
+  }
+
+  /** Owning environment supplied by this realm's composition root. */
+  getEnvironment(): Env {
+    if (!this.#env) throw new InternalError('The binding environment is still being composed');
+    return this.#env;
+  }
+
+  /** Convert an author value through IDL to the representation consumed by implementations. */
+  // https://webidl.spec.whatwg.org/#js-type-mapping
+  jsToImpl<T>(value: unknown, type: ImplementationType<T>): T;
+  jsToImpl(value: unknown, type: WebIDLType): unknown;
+  jsToImpl(value: unknown, type: WebIDLType): unknown {
+    const compiled = this.assembly.getIDLType(type);
+    return this.implementationConverter.idlToImpl(
+      this.getConverter(compiled).jsToIDL(value),
+      compiled,
+      {},
+      this,
+    );
+  }
+
+  /** Convert a declared implementation result to its author-facing representation. */
+  implToJS(value: unknown, type: WebIDLType): unknown {
+    return this.getConverter(this.assembly.getIDLType(type)).idlToJS(value);
+  }
+
+  /** Create a platform object by interface name; return undefined if unknown or unexposed. */
+  // https://webidl.spec.whatwg.org/#new
+  createPlatformRecord(interfaceName: string): PlatformRecord | undefined {
+    const assembled = this.assembly.interfaces.get(interfaceName);
+    if (!assembled || !assembled.isExposed(this.realm)) return;
+    return this.allocatePlatformRecord(assembled);
+  }
+
+  /**
+   * Find this world's binding record from either object identity without projecting.
+   * The record's platformObject remains absent until projection.
+   */
+  getObjectRecord(value: unknown): Readonly<PlatformRecord> | undefined {
+    const record = getPlatformRecord(value) ?? getImplementationRecord(value);
+    return record?.binding.world === this.world ? record : undefined;
+  }
+
+  /** Construct and associate an implementation using its declared injected arguments. */
+  construct<T extends object>(
+    implClass: ImplementationClass<T>,
+    ...argumentsList: unknown[]
+  ): StampedImplInstance<T> {
+    const assembled = this.resolveInterface(implClass);
+    const definition = assembled.primary.implementation;
+    const implInst: T = Reflect.construct(
+      implClass as new (...argumentsList: unknown[]) => T,
+      this.resolveArguments(argumentsList, definition?.constructWith ?? []),
+    );
+    return stampImplementation(implInst, assembled, this);
+  }
+
+  /** Merge converted arguments with dependencies resolved against receiver and method contexts. */
+  resolveArguments(
+    argumentsList: unknown[],
+    injectedArguments: InjectedArgument[],
+    methodContext: BindingContext = this,
+  ): unknown[] {
+    if (injectedArguments.length === 0) return argumentsList;
+
+    const result: unknown[] = [];
+    for (const { index, resolve } of injectedArguments) {
+      if (Object.hasOwn(result, index)) {
+        throw new InternalError(`Injected argument ${index} is declared more than once`);
+      }
+      result[index] = resolve(this, methodContext);
+    }
+
+    let index = 0;
+    for (const value of argumentsList) {
+      while (Object.hasOwn(result, index)) index++;
+      result[index++] = value;
+    }
+    return result;
+  }
+
+  /** Return the stamped instance if the platform object implements the requested interface in this world. */
+  unwrap<T extends object>(
+    platformObject: unknown,
+    implClass: ImplementationClass<T>,
+  ): StampedImplInstance<T> | undefined {
+    const assembled = this.resolveInterface(implClass);
+    const record = getPlatformRecord(platformObject);
+    return record?.binding.world === this.world &&
+      record.implements(assembled)
+      ? record.implInst as StampedImplInstance<T>
+      : undefined;
+  }
+
+  /** Retrieve or create the platform object for an implementation through its registered interface. */
+  project<T extends object>(implClass: ImplementationClass<T>, implInst: T): StampedPlatformObject {
+    return this.associate(implClass, implInst).project();
   }
 
   /** Resolve an interface name or implementation class to its assembled definition. */
@@ -183,7 +305,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   }
 
   // Project installer for Web IDL §3.8 Platform objects implementing interfaces — global property references.
-  install(
+  installDefinitions(
     target: object = this.globalObject?.platformObject ?? this.realm.global,
     isWindow = this.realm.globalNames.has('Window'),
   ): Map<string, object> {
@@ -207,7 +329,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     isWindow = this.realm.globalNames.has('Window'),
   ): Map<string, object> {
     const installed = new Map<string, object>();
-    const interfaces = this.assembly.interfaces.inInheritanceOrder((assembled) => this.isExposed(assembled));
+    const interfaces = this.assembly.interfaces.inInheritanceOrder((assembled) => assembled.isExposed(this.realm));
 
     for (const assembled of interfaces) {
       const definition = assembled.primary;
@@ -231,7 +353,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     }
     for (const assembled of this.assembly.callbackInterfaces.withInterfaceObjects()) {
       const definition = assembled.primary;
-      if (!this.isConstructExposed(definition)) continue;
+      if (!assembled.isExposed(this.realm)) continue;
       installed.set(
         definition.name,
         this.getImplementationBinding(assembled).getLegacyCallbackInterfaceObject(),
@@ -240,7 +362,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     for (const assembled of this.assembly.namespaces.values()) {
       if (
         assembled.primary.exposed === undefined ||
-        !this.isConstructExposed(assembled.primary)
+        !assembled.isExposed(this.realm)
       ) continue;
       installed.set(
         assembled.primary.name,
@@ -295,11 +417,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   // Project allocation entry point for Web IDL §3.8 Platform objects implementing interfaces — create a new
   // object implementing the interface, returning its shared record.
-  createPlatformRecord(
+  allocatePlatformRecord(
     assembled: AssembledInterface,
     newTarget?: object,
   ): PlatformRecord {
-    if (!this.isExposed(assembled)) {
+    if (!assembled.isExposed(this.realm)) {
       throw new InternalError(
         `Interface ${assembled.primary.name} is not exposed in this realm`,
       );
@@ -318,11 +440,9 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
         `Interface ${assembled.primary.name} has no implementation creation steps`,
       );
     }
-    return this.projectPlatformObject(
-      createImplementation(),
-      assembled,
-      prototype,
-    );
+    const implInst = createImplementation();
+    const platformObject = this.allocatePlatformObject(implInst, assembled, prototype);
+    return this.initializePlatformObject(platformObject, assembled, implInst);
   }
 
   // Project adapter: construct or initialize the implementation, then project its platform object.
@@ -333,18 +453,15 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     newTarget: object,
   ): StampedPlatformObject {
     if (behavior.kind === 'initialize') {
-      const record = this.createPlatformRecord(assembled, newTarget);
+      const record = this.allocatePlatformRecord(assembled, newTarget);
       Reflect.apply(behavior.steps, record.implInst, values);
       return record.platformObject!;
     }
 
     const prototype = this.#getPlatformObjectPrototype(assembled, newTarget);
     const implInst = behavior.steps(values);
-    return this.projectPlatformObject(
-      implInst,
-      assembled,
-      prototype,
-    ).platformObject!;
+    const platformObject = this.allocatePlatformObject(implInst, assembled, prototype);
+    return this.initializePlatformObject(platformObject, assembled, implInst).platformObject!;
   }
 
   // Extracted from Web IDL §3.8 Platform objects implementing interfaces — internally create a new object
@@ -373,17 +490,13 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     }
   }
 
-  // Query an assembled interface's exposure in this realm.
-  isExposed(assembled: AssembledInterface): boolean {
-    return this.isConstructExposed(assembled.primary);
-  }
-
-  // Project adapter: allocate a platform object for an existing implementation.
-  projectPlatformObject<T extends object>(
-    implInst: T,
+  /** Allocate an ordinary or legacy platform object, leaving association to its record. */
+  // Allocate before creating a new record: implementation initialization must follow allocation.
+  allocatePlatformObject(
+    implInst: object,
     assembled: AssembledInterface,
     prototype = this.getImplementationBinding(assembled).getInterfacePrototypeObject(),
-  ): PlatformRecord<T> {
+  ): object {
     if (assembled.isGlobal()) {
       throw new InternalError(
         `Use projectGlobalObject for ${assembled.primary.name}`,
@@ -397,20 +510,16 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     } else {
       backingObject = this.realm.createOrdinaryObject(prototype);
     }
-    return this.initializePlatformObject(
-      this.legacyPlatformObjects.createObject(
-        backingObject,
-        implInst,
-        this.getImplementationBinding(assembled).getLegacyPropertyMetadata(),
-      ),
-      assembled,
+    return this.legacyPlatformObjects.createObject(
+      backingObject,
       implInst,
+      this.getImplementationBinding(assembled).getLegacyPropertyMetadata(),
     );
   }
 
   // Project adapter for Web IDL §3.8 Platform objects implementing interfaces — allocation and members of a
   // [Global] object.
-  projectGlobalObject<T extends object>(
+  projectGlobalRecord<T extends object>(
     implInst: T,
     assembled: AssembledInterface,
     allocation?: GlobalObjectAllocation,
@@ -418,7 +527,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (!assembled.isGlobal()) {
       throw new InternalError(`${assembled.primary.name} is not a global interface`);
     }
-    if (!this.isExposed(assembled)) {
+    if (!assembled.isExposed(this.realm)) {
       throw new InternalError(
         `Interface ${assembled.primary.name} is not exposed in this realm`,
       );
@@ -460,7 +569,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     this.getImplementationBinding(assembled).defineAsyncIterationMethods(platformObject);
     this.getImplementationBinding(assembled).defineCollectionMembers(platformObject);
     const windowAssembled = this.assembly.interfaces.get('Window');
-    this.install(platformObject, Boolean(windowAssembled && record.implements(windowAssembled)));
+    this.installDefinitions(platformObject, Boolean(windowAssembled && record.implements(windowAssembled)));
     return record;
   }
 
@@ -487,24 +596,22 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     assembled: AssembledInterface,
     implInst: T,
   ): PlatformRecord<T> {
-    const record = associatePlatformObject(platformObject, implInst, assembled, this);
-    const member = assembled.getCollectionMember(true);
-    if (member?.kind === 'maplike') this.maplikes.initialize(record);
-    else if (member?.kind === 'setlike') this.setlikes.initialize(record);
-    for (const ancestorAssembled of assembled.getInheritanceChain()) {
-      // Use the declaration's class identity without probing implementation Proxy prototypes.
-      if (ancestorAssembled.primary.implementation?.implClass === DOMExceptionImpl) {
-        DOMExceptionStamper.stamp(platformObject, implInst as DOMExceptionImpl);
-      }
-      // https://webidl.spec.whatwg.org/#js-platform-objects
-      // Copy each interface's unforgeable properties onto the new platform object.
-      Object.defineProperties(
-        platformObject,
-        Object.getOwnPropertyDescriptors(
-          this.getImplementationBinding(ancestorAssembled).getUnforgeableObject(),
-        ),
-      );
+    if (platformObject === implInst) {
+      throw new InternalError('Implementation and platform objects must be distinct');
     }
+    if (
+      isStampedPlatformObject(platformObject) ||
+      isStampedPlatformObject(implInst) ||
+      isStampedImplInstance(platformObject)
+    ) {
+      throw new InternalError('Platform object is already associated');
+    }
+
+    const record = getImplementationRecord(implInst) ?? new PlatformRecord(implInst, assembled, this);
+    if (record.binding !== this || record.assembled !== assembled) {
+      throw new InternalError('Implementation object is already associated with another owner or platform object');
+    }
+    record.attachPlatformObject(platformObject);
     return record;
   }
 
@@ -555,9 +662,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     );
   }
 
-  // Project delegate to Web IDL §3.8 Platform objects implementing interfaces — is a platform object.
-  isPlatformObject(platformObject: unknown): boolean {
-    return getPlatformRecord(platformObject)?.binding.world === this.world;
+  /** Recognize this world's platform objects and values accepted by its proxy declarations. */
+  // https://webidl.spec.whatwg.org/#idl-objects
+  isPlatformObject(value: unknown): boolean {
+    if (getPlatformRecord(value)?.binding.world === this.world) return true;
+    return this.assembly.proxyObjects.is(value);
   }
 
   // Project delegate to Web IDL §3.8 Platform objects implementing interfaces — implements.
@@ -640,44 +749,40 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return thisArgument ?? this.globalObject?.platformObject ?? this.realm.global;
   }
 
-  // Combine exposure checks for a member, its declaration fragment, and its owner.
-  isMemberExposed(
-    assembled: MemberOwner,
-    entry: MemberEntry,
-  ): boolean {
-    return this.isConstructExposed(assembled.primary) &&
-      this.isConstructExposed(entry.source) &&
-      this.isConstructExposed(entry.member);
-  }
-
-  // Project predicate for Web IDL §3.3.7 [Exposed], §3.3.4 [CrossOriginIsolated], and §3.3.13 [SecureContext].
-  isConstructExposed(construct: Exposable): boolean {
-    const exposure = construct.exposed;
-    if (
-      exposure !== undefined &&
-      exposure !== '*' &&
-      !(typeof exposure === 'string'
-        ? this.realm.globalNames.has(exposure)
-        : exposure.some((name) => this.realm.globalNames.has(name)))
-    ) return false;
-    if (
-      hasExtendedAttribute(
-        construct.extendedAttributes,
-        'CrossOriginIsolated',
-      ) &&
-      !this.realm.crossOriginIsolated
-    ) return false;
-    if (
-      hasExtendedAttribute(construct.extendedAttributes, 'SecureContext') &&
-      !this.realm.secureContext
-    ) return false;
-    return true;
-  }
-
   // Throw a TypeError allocated in this binding's realm.
   throwTypeError(message: string): never {
     throw new this.realm.intrinsics.typeError(message);
   }
+}
+
+/** Add this binding's result conversion to the realm's implementation Promise constructor. */
+function createWebIDLPromiseConstructor(binding: RealmBinding): typeof InternalPromise {
+  return class WebIDLPromise<T> extends binding.realm.Promise<T> {
+    static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
+      if (type.kind === 'implementation') return super.withResolvers(type);
+      const resultType = binding.assembly.getPromiseResultType(type);
+      const converter = binding.getConverter(resultType);
+      const toImpl = binding.implementationConverter.createConverter(resultType, {});
+      const idlPromise = new IDLPromise(resultType, binding.realm, (value) => binding.realizeException(value));
+      const promise = new this(idlPromise.promise, resultType as typeof resultType & PromiseResultType<T>, (value) =>
+        toImpl(converter.jsToIDL(value), binding) as T);
+      return {
+        promise,
+        get isResolved() { return idlPromise.resolved; },
+        resolve(value) {
+          try {
+            if (value instanceof InternalPromise) {
+              idlPromise.resolve(value.backing);
+            } else {
+              // Conversion precedes the native resolving function, including reentrant resolution.
+              idlPromise.resolve(converter.idlToJS(value));
+            }
+          } catch (error) { idlPromise.reject(error); }
+        },
+        reject(reason) { idlPromise.reject(reason); },
+      };
+    }
+  };
 }
 
 /** Privately retain the realm-owned error for an internal failure. */
@@ -701,7 +806,6 @@ class ExceptionRealizationStamper extends Stamper {
     return #realizedError in exception ? exception.#realizedError : undefined;
   }
 }
-type MemberEntry = AssembledInterfaceMember | AssembledNamespaceMember;
 /** Supply before projecting any object that needs these interface prototypes. */
 export type GlobalObjectAllocation = {
   object: object;
@@ -710,8 +814,4 @@ export type GlobalObjectAllocation = {
     object: object;
     setDelegate(delegate: object): void;
   };
-};
-type Exposable = {
-  exposed?: Exposure;
-  extendedAttributes?: ExtendedAttribute[];
 };

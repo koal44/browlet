@@ -21,7 +21,7 @@ describe('Web IDL effective overload sets', () => {
       { name: 'mode', optional: true, default: 'default', type: idlType.DOMString },
       { name: 'values', type: idlType.double, variadic: true },
     ], binding);
-    const overloads = new AssembledOverloads([callable], binding.assembly);
+    const overloads = new AssembledOverloads([callable]);
     const resolve = mode === 'prepared'
       ? createOverloadResolver(overloads, binding)
       : (values: unknown[]) => resolveOverload(overloads, values, binding);
@@ -39,7 +39,7 @@ describe('Web IDL effective overload sets', () => {
       { name: 'values', optional: true, default: emptySequence, type: sequence(idlType.double) },
       { name: 'label', optional: true, type: idlType.DOMString },
     ], binding);
-    const resolve = createOverloadResolver(new AssembledOverloads([callable], binding.assembly), binding);
+    const resolve = createOverloadResolver(new AssembledOverloads([callable]), binding);
     const first = resolve([]).values;
     const values = first[0] as number[];
     values.push(99);
@@ -56,7 +56,7 @@ describe('Web IDL effective overload sets', () => {
     const boolean = namedOperation('boolean', idlType.boolean, binding);
     const dictionary = namedOperation('dictionary', reference('Options'), binding);
     const sequence_ = namedOperation('sequence', sequence(idlType.long), binding);
-    const overloads = new AssembledOverloads([string, boolean, dictionary, sequence_], binding.assembly);
+    const overloads = new AssembledOverloads([string, boolean, dictionary, sequence_]);
     const resolveArguments = (...values: unknown[]) =>
       resolveOverload(overloads, values, binding);
 
@@ -394,7 +394,7 @@ function resolve(
   binding: RealmBinding,
 ) {
   return resolveOverload(
-    new AssembledOverloads(callables, binding.assembly),
+    new AssembledOverloads(callables),
     argumentsList,
     binding,
   );

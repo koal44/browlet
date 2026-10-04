@@ -11,13 +11,13 @@ import {
 import { CallbackFunctionConverter, CallbackInterfaceConverter } from './callback';
 import { FloatConverter } from './float';
 import { IntegerConverter } from './integer';
-import { InterfaceConverter } from './interface';
-import { EnumerationConverter, ProxyObjectConverter, ObservableArrayConverter } from './named';
+import { InterfaceConverter, ProxyObjectConverter } from './interface';
 import { NullableConverter } from './nullable';
+import { ObservableArrayConverter } from './observable-array';
 import { PromiseConverter } from './promise';
 import { RecordConverter } from './record';
 import { SequenceConverter, FrozenArrayConverter } from './sequence';
-import { StringConverter } from './string';
+import { StringConverter, EnumerationConverter } from './string';
 import { UnionConverter } from './union';
 
 /** Select the converter for an assembled type, preserving its specific contract. */

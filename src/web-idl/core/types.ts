@@ -1,5 +1,7 @@
 import type { ResultValue } from '../../infra/promises';
 
+import type { ArgumentDefinition } from './members';
+
 // Type expressions
 
 // Project type records for the built-in names in Web IDL §2.13 Types.
@@ -244,7 +246,7 @@ export const emptyDictionary = {
 // Exposure and extended attributes
 
 // Project shorthand for Web IDL §3.3.7 [Exposed].
-export type Exposure = string | [string, ...string[]];
+export type Exposed = string | [string, ...string[]];
 
 // Project representation of the syntax forms in Web IDL §2.14 Extended attributes.
 export type ExtendedAttribute =
@@ -324,29 +326,7 @@ export type RawExtendedAttribute = {
   value: string;
 };
 
-/** One author argument, its conversion, and optional implementation adaptation. */
-export type ArgumentDefinition = {
-  /** Argument identifier used in IDL and conversion errors. */
-  name: string;
-  /** IDL type used to convert the author-supplied value. */
-  type: WebIDLType;
-  /** Permit the argument to be omitted. */
-  optional?: boolean;
-  /** Collect remaining arguments, converting each to the declared type. */
-  variadic?: boolean;
-  /** IDL default used when an optional argument is absent or undefined. */
-  default?: DefaultValue;
-  /** Extended attributes applying to this argument. */
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: implementation resolution and callback adaptation.
-  /** Classes to try when unwrapping; values matching none are retained unchanged. */
-  implClasses?: ImplementationClass[];
-  /** Retained dictionary reference for object adaptation; callback members use the input object as `this`. */
-  callbackDictionary?: ReferenceType;
-  /** Report or rethrow author callback exceptions when the converted callback is invoked. */
-  callbackExceptionBehavior?: CallbackExceptionBehavior;
-};
+// Implementation identity and declaration hooks
 
 /**
  * An implementation class known to the Web IDL binding.
@@ -361,106 +341,6 @@ export type ImplementationClass<T extends object = object> = {
 
 /** Whether a converted author callback reports an exception or propagates it to its caller. */
 export type CallbackExceptionBehavior = 'report' | 'rethrow';
-
-// Shared members and arguments
-
-/** A named constant installed with its declared IDL type and value. */
-export type ConstantMember = {
-  /** Member discriminator supplied by `constant()`. */
-  kind: 'constant';
-  /** Exposed constant name. */
-  name: string;
-  /** IDL type of the constant. */
-  type: WebIDLType;
-  /** Literal value, including explicit records for special numeric values. */
-  value: ConstantValue;
-  /** Global exposure names for this constant. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this constant. */
-  extendedAttributes?: ExtendedAttribute[];
-};
-
-/** An exposed attribute and any explicit getter or setter binding. */
-export type AttributeMember<Env = unknown> = {
-  /** Member discriminator supplied by `attr()` or `roAttr()`. */
-  kind: 'attribute';
-  /** Exposed property name; also the implementation property name for automatic binding. */
-  name: string;
-  /** IDL type used for getter results and setter arguments. */
-  type: WebIDLType;
-
-  /** Declare the attribute read-only; extended attributes may still supply setter behavior. */
-  readonly?: boolean;
-  /** Install on the interface object and bind to the implementation class. */
-  static?: boolean;
-  /** Declare an inherited attribute with a setter on the derived interface. */
-  inherit?: boolean;
-  /** Use this attribute's value for the interface's stringification. */
-  stringifier?: boolean;
-  /** Global exposure names for this attribute. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this attribute. */
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: member steps, returned function creation, and callback exception policy.
-  /** Read the implementation value using the owner's context; `this` is the implementation or null for static access. */
-  get?: DeclarationHook<'attribute-get', Env>;
-  /** Store a converted value using the owner's context; `this` is the implementation or null for static access. */
-  set?: DeclarationHook<'attribute-set', Env>;
-  /** Create the steps for a cached realm-owned function returned by this attribute. */
-  attributeFunction?: DeclarationHook<'attribute-function', Env>;
-  /** Report or rethrow exceptions from an author callback assigned to this attribute. */
-  callbackExceptionBehavior?: CallbackExceptionBehavior;
-};
-
-/** Steps for an attribute's returned function, receiving author-side `this` and arguments. */
-export type AttributeFunctionSteps = (this: unknown, ...argumentsList: unknown[]) => unknown;
-
-/** An operation overload and its explicit or automatic implementation binding. */
-export type OperationMember<Env = unknown> = {
-  /** Member discriminator supplied by `op()` or `staticOp()`. */
-  kind: 'operation';
-  /** IDL type used to expose the implementation's result to JavaScript. */
-  returns: WebIDLType;
-  /** Author arguments in declaration order. */
-  arguments: ArgumentDefinition[];
-
-  /** Exposed method name; may be omitted for an unnamed special operation. */
-  name?: string;
-  /** Install on the interface object and bind to the implementation class. */
-  static?: boolean;
-  /** Legacy property operation performed in addition to ordinary named invocation. */
-  special?: 'getter' | 'setter' | 'deleter';
-  /** Global exposure names for this overload. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this overload. */
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: invocation, argument injection, and legacy property support.
-  /**
-   * Run with converted arguments and return the implementation result.
-   * The context belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
-   */
-  invoke?: DeclarationHook<'operation-invoke', Env>;
-  /** Injected arguments for an automatically bound implementation method. */
-  invokeWith?: InjectedArgument<Env>[];
-  /** Supported indices and membership checks for a legacy indexed getter. */
-  indexedGetter?: IndexedGetterDeclaration;
-  /** Live supported names for a legacy named getter, with the implementation as `this`. */
-  getSupportedPropertyNames?: SupportedPropertyNamesSteps;
-};
-
-/** A standalone stringifier bound to the implementation's string conversion method. */
-export type StringifierMember = {
-  /** Member discriminator supplied by `stringifier()`. */
-  kind: 'stringifier';
-  /** Global exposure names for this stringifier. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this stringifier. */
-  extendedAttributes?: ExtendedAttribute[];
-};
-
-// Implementation identity and declaration hooks
 
 /** A construction or invocation dependency inserted among converted author arguments. */
 export type InjectedArgument<Env = unknown> = {
@@ -482,39 +362,6 @@ export type DeclarationHook<
   Name extends keyof DeclarationHooks<Env, Impl, Values>
     ? DeclarationHooks<Env, Impl, Values>[Name]
     : never;
-
-// Legacy property support
-
-/** Enumeration and membership rules for a legacy indexed getter. */
-export type IndexedGetterDeclaration =
-  | {
-    /** Enumerate live supported indices with the implementation as `this`. */
-    getSupportedPropertyIndices: SupportedPropertyIndicesSteps;
-    /** Getter result reserved for missing indices; the getter must be safe to call during membership checks. */
-    unsupportedValue: null | undefined;
-  }
-  | {
-    /** Enumerate live supported indices with the implementation as `this`. */
-    getSupportedPropertyIndices: SupportedPropertyIndicesSteps;
-    /** Test membership without invoking the getter, with the implementation as `this`. */
-    supportsIndex: SupportsIndexSteps;
-  };
-
-type SupportedPropertyIndicesSteps = (
-  this: object,
-  context: unknown,
-) => Iterable<number>;
-
-type SupportsIndexSteps = (
-  this: object,
-  index: number,
-  context: unknown,
-) => boolean;
-
-export type SupportedPropertyNamesSteps = (
-  this: object,
-  context: unknown,
-) => ReadonlySet<string>;
 
 type SimpleValue<N extends SimpleTypeName> =
   N extends 'any' ? unknown

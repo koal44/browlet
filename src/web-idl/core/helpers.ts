@@ -3,16 +3,16 @@ import type { AsyncIterator } from '../../infra/iteration';
 import type { InternalPromise, PromiseResult, ResultValue } from '../../infra/promises';
 
 import type {
-  AnnotatedType, ArgumentDefinition, AsyncSequenceType, AttributeMember, CallbackExceptionBehavior,
-  ConstantMember, ConstantValue, DecimalLiteral, DeclarationHook, DefaultValue, ExtendedAttribute, FrozenArrayType,
+  AnnotatedType, AsyncSequenceType, CallbackExceptionBehavior,
+  ConstantValue, DecimalLiteral, DeclarationHook, DefaultValue, ExtendedAttribute, FrozenArrayType,
   ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, InterfaceType, NullableType, ObservableArrayType,
-  OperationMember, PromiseType, RecordType, ReferenceType, SequenceType,
-  StringifierMember, StringType, UnionType, WebIDLType,
+  PromiseType, RecordType, ReferenceType, SequenceType, StringType, UnionType, WebIDLType,
 } from './types';
 import type {
-  AsyncIterableMember, ConstructorMember, DictionaryMember, PrimaryInterfaceDefinition,
-  IterableMember, MaplikeMember, SetlikeMember,
-} from './declarations';
+  ArgumentDefinition, AsyncIterableMember, AttributeMember, ConstantMember, ConstructorMember,
+  DictionaryMember, IterableMember, MaplikeMember, OperationMember, SetlikeMember, StringifierMember,
+} from './members';
+import type { PrimaryInterfaceDefinition } from './declarations';
 
 // Members and arguments
 

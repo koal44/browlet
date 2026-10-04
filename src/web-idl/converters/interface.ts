@@ -1,7 +1,7 @@
 import { InternalError } from '../../infra/index';
 import { isObject } from '../../js-engine/index';
 
-import type { IDLInterfaceType } from '../assembly/index';
+import type { IDLInterfaceType, IDLProxyType } from '../assembly/index';
 import { getPlatformRecord } from '../binding/platform';
 import { Converter, type ConversionSteps } from './converter';
 
@@ -30,6 +30,22 @@ export class InterfaceConverter<Type extends IDLInterfaceType = IDLInterfaceType
         throw new InternalError(`IDL interface value ${assembled.name} is not an implementation target`);
       }
       return object;
+    };
+  }
+}
+
+/** Preserve recognized proxy objects, such as a WindowProxy. */
+export class ProxyObjectConverter<Type extends IDLProxyType = IDLProxyType> extends Converter<Type> {
+  protected createInputSteps(): ConversionSteps {
+    const assembled = this.type.assembled;
+    return (value) => assembled.is(value) ? value : this.throwTypeError(`Value does not implement ${assembled.primary.name}`);
+  }
+
+  protected override createOutputSteps(): ConversionSteps {
+    const assembled = this.type.assembled;
+    return (value) => {
+      if (assembled.is(value)) return value;
+      throw new InternalError(`IDL interface value does not implement ${assembled.primary.name}`);
     };
   }
 }

@@ -78,7 +78,7 @@ describe('Web IDL namespace objects', () => {
       return value;
     };
 
-    const installed = binding.install();
+    const installed = binding.installDefinitions();
     const tools = requireObject(installed.get('Tools'));
     const Nested = requireObject(Reflect.get(tools, 'Nested'));
 

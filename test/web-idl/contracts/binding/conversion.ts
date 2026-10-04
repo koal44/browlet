@@ -1,6 +1,6 @@
 
 import type { Converter, ConversionSteps } from '../../../../src/web-idl/converters/converter';
-import type { BindingContext } from '../../../../src/web-idl/binding/context';
+import type { BindingContext } from '../../../../src/web-idl/binding/world';
 import type { IDLRecord, IDLSequence } from '../../../../src/web-idl/values/value';
 import {
   annotated, asyncSequence, idlType, implementationType, promise, record, reference, sequence, xattr,
@@ -28,7 +28,8 @@ const anyObject: object = converter.binding.getConverter(converter.binding.assem
 const values: IDLSequence = converter.binding.getConverter(converter.binding.assembly.getIDLType(sequence(idlType.long)), converter.realm).jsToIDL(authorValue);
 const entries: IDLRecord = converter.binding.getConverter(converter.binding.assembly.getIDLType(record(idlType.DOMString, idlType.long)), converter.realm).jsToIDL(authorValue);
 const promiseValue: IDLPromise = converter.binding.getConverter(converter.binding.assembly.getIDLType(promise(idlType.long)), converter.realm).jsToIDL(authorValue);
-const asyncValues: IDLAsyncSequence = converter.binding.getConverter(converter.binding.assembly.getIDLType(asyncSequence(idlType.long)), converter.realm).jsToIDL(authorValue);
+const asyncType = converter.binding.assembly.getIDLType(asyncSequence(idlType.long));
+const asyncValues: IDLAsyncSequence<typeof asyncType.elementType> = converter.binding.getConverter(asyncType, converter.realm).jsToIDL(authorValue);
 // @ts-expect-error A named reference needs this world's assembly; its name alone does not encode the result.
 const namedObject: object = converter.binding.getConverter(converter.binding.assembly.getIDLType(reference('Options')), converter.realm).jsToIDL(authorValue);
 

@@ -1,9 +1,9 @@
 import type { DefinitionAssembly, AssembledInterface } from '../../../../src/web-idl/assembly/index';
 
-import { idlType, type StampedImplInstance, type PlatformRecord, type WebIDLType } from '../../../../src/web-idl/index';
+import { idlType, type StampedImplInstance, type StampedPlatformObject, type WebIDLType } from '../../../../src/web-idl/index';
 import {
-  associatePlatformObject, getImplementationRecord, getPlatformRecord,
-  stampImplementation,
+  getImplementationRecord, getPlatformRecord,
+  stampImplementation, PlatformRecord,
 } from '../../../../src/web-idl/binding/platform';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
 
@@ -15,29 +15,29 @@ declare const authorValue: unknown;
 const implInst = { count: 1 };
 const platformObject = { authorProperty: true };
 
-const projected: PlatformRecord<typeof implInst> = binding.projectPlatformObject(implInst, assembled);
-const created: PlatformRecord = binding.createPlatformRecord(assembled);
+const record: PlatformRecord<typeof implInst> = new PlatformRecord(implInst, assembled, binding);
+const projected: StampedPlatformObject = record.project();
+const created: PlatformRecord = binding.allocatePlatformRecord(assembled);
 binding.getImplementationBinding(assembled);
 // @ts-expect-error Realm binding caches use assembled definitions, not their declarations.
 binding.getImplementationBinding(assembled.primary);
-const global: PlatformRecord<typeof implInst> = binding.projectGlobalObject(implInst, assembled);
+const global: PlatformRecord<typeof implInst> = binding.projectGlobalRecord(implInst, assembled);
 const paired: PlatformRecord<typeof implInst> = binding.initializePlatformObject(platformObject, assembled, implInst);
 // @ts-expect-error The implementation must be supplied separately from the platform object.
 binding.initializePlatformObject(platformObject, assembled);
-const registered: PlatformRecord<typeof implInst> = associatePlatformObject(platformObject, implInst, assembled, binding);
 const found: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(implInst)?.implInst;
 const stamped = stampImplementation(implInst, assembled, binding);
 const foundStamped: StampedImplInstance<typeof implInst> | undefined = getImplementationRecord(stamped)?.implInst;
 // @ts-expect-error Name lookup accepts a name, not an already assembled definition.
 binding.resolveInterface(assembled);
 // @ts-expect-error Internal creation requires the already assembled primary interface.
-binding.createPlatformRecord('Example');
+binding.allocatePlatformRecord('Example');
 // @ts-expect-error Internal projection requires the already assembled primary interface.
+binding.projectGlobalRecord(implInst, 'Example');
 binding.projectGlobalObject(implInst, 'Example');
-binding.context.projectGlobalObject(implInst, 'Example');
 // @ts-expect-error The external projection boundary accepts an interface name.
-binding.context.projectGlobalObject(implInst, assembled);
-projected.implInst.count.toFixed();
+binding.projectGlobalObject(implInst, assembled);
+record.implInst.count.toFixed();
 // @ts-expect-error The record retains the implementation shape, not the platform shape.
 paired.implInst.authorProperty;
 // @ts-expect-error An unknown incoming value does not identify a concrete implementation type.

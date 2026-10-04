@@ -5,8 +5,8 @@ top-level [`bindings.ts`](../bindings.ts) is the composition root which
 assembles interface and proxy object definitions with realm bindings,
 and connects execution facilities to their owners.
 
-The named functions exported by `bindings.ts` forward to its main
-`BrowletBindings` instance. `createWindowEnvironment()` allocates the realm and
+The functions exported by `bindings.ts` compose realms through one module-private
+`BindingWorld`. `createWindowEnvironment()` allocates the realm and
 execution facilities before constructing Window and installing its platform global.
 `scripting/environment.ts` creates realm facilities; `bindings.ts` completes
 them with its Promise constructor, DOM event/abort allocation, and structured
@@ -27,9 +27,9 @@ argument.
 
 A standalone subsystem owns the contract for each capability it consumes. A
 provider module here connects that contract to Browlet-owned behavior. The
-provider may know both sides of that boundary, but it must not import the
-assembled `browletBindings` singleton or use its forwarding functions to
-rediscover a Binding Context already available to the consuming algorithm.
+provider may know both sides of that boundary, but it must not use the
+composition root's functions to rediscover a Binding Context already
+available to the consuming algorithm.
 
 Integration modules contain cross-owner behavior and wiring. They may also
 contain Browlet's completion of a standalone subsystem when one concrete

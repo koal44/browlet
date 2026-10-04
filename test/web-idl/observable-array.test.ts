@@ -32,7 +32,7 @@ describe('Web IDL observable arrays', () => {
       fixture.binding.resolveInterface('NumberArrays').findMemberByKind('attribute')!.member,
     )).toEqual([1, 2]);
 
-    const other = fixture.binding.createPlatformRecord(fixture.binding.resolveInterface('NumberArrays')).platformObject!;
+    const other = fixture.binding.allocatePlatformRecord(fixture.binding.resolveInterface('NumberArrays')).platformObject!;
     expect(getValues(other)).not.toBe(first);
   });
 
@@ -252,8 +252,8 @@ describe('Web IDL observable arrays', () => {
     );
     binding.getImplementationBinding(binding.resolveInterface(employee.name)).createImplementation = () => new EmployeeImpl();
     binding.getImplementationBinding(binding.resolveInterface(building.name)).createImplementation = () => new BuildingImpl();
-    const object = binding.createPlatformRecord(binding.resolveInterface('Building')).platformObject!;
-    const employeeObject = binding.createPlatformRecord(binding.resolveInterface('Employee')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('Building')).platformObject!;
+    const employeeObject = binding.allocatePlatformRecord(binding.resolveInterface('Employee')).platformObject!;
     const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
     const values = getArray(object, 'workers');
     const backingList = binding.getObservableArrayBackingList(object, binding.resolveInterface('Building').findMemberByKind('attribute')!.member);
@@ -293,7 +293,7 @@ function createNumberArrayBinding(): NumberArrayFixture {
     attribute,
     binding,
     definition,
-    object: binding.createPlatformRecord(binding.resolveInterface('NumberArrays')).platformObject!,
+    object: binding.allocatePlatformRecord(binding.resolveInterface('NumberArrays')).platformObject!,
     realm,
   };
 }

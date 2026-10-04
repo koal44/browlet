@@ -6,7 +6,7 @@ import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import {
   defineCallbackFunction, defineEnumeration, defineInterface, defineTypedef,
-  idlType, observableArray, type AttributeMember, type MaplikeMember,
+  idlType, impl, observableArray, type AttributeMember, type MaplikeMember,
 } from '../../src/web-idl/core/index';
 import {
   getImplementationObject, getImplementationRecord, getPlatformObject, getPlatformRecord,
@@ -89,6 +89,53 @@ describe('Web IDL platform-object identity and state', () => {
     expect(second.implements(authorObject, baseAssembled)).toBe(false);
   });
 
+  it('projects an existing record through its original owner without initializing it again', () => {
+    class ExampleImpl { count = 1; }
+    let initializations = 0;
+    const world = new BindingWorld([defineInterface({
+      name: 'Example', exposed: '*', members: [],
+      implementation: impl(ExampleImpl, {
+        initializeImplementation() { initializations++; },
+      }),
+    })]);
+    const first = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const second = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const implInst = Object.freeze(new ExampleImpl());
+    const record = first.associate(ExampleImpl, implInst);
+    expect(record.platformObject).toBeUndefined();
+
+    const platformObject = second.project(ExampleImpl, implInst);
+
+    expect(getPlatformRecord(platformObject)).toBe(record);
+    expect(getImplementationRecord(implInst)).toBe(record);
+    expect(record.realm).toBe(first.realm);
+    expect(Object.getPrototypeOf(platformObject)).toBe(
+      world.getRealmBinding(first.realm)!.getImplementationBinding(record.assembled).getInterfacePrototypeObject(),
+    );
+    expect(first.project(ExampleImpl, implInst)).toBe(platformObject);
+    expect(initializations).toBe(1);
+  });
+
+  it('allocates a new platform object before initializing its implementation', () => {
+    const { first: binding } = createRealmBindings(defineInterface({
+      name: 'AllocationOrder', exposed: '*', members: [],
+    }));
+    const assembled = binding.resolveInterface('AllocationOrder');
+    const implementationBinding = binding.getImplementationBinding(assembled);
+    const prototype = implementationBinding.getInterfacePrototypeObject();
+    const order: string[] = [];
+    const createOrdinaryObject = binding.realm.createOrdinaryObject.bind(binding.realm);
+    binding.realm.createOrdinaryObject = (selectedPrototype) => {
+      if (selectedPrototype === prototype) order.push('allocate');
+      return createOrdinaryObject(selectedPrototype);
+    };
+    implementationBinding.initializeImplementation = () => { order.push('initialize'); };
+
+    binding.allocatePlatformRecord(assembled);
+
+    expect(order).toEqual(['allocate', 'initialize']);
+  });
+
   it('does not expose type-only definitions as realm globals', () => {
     const choice = defineEnumeration({
       name: 'AuditChoice',
@@ -111,7 +158,7 @@ describe('Web IDL platform-object identity and state', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
 
-    expect(binding.install()).toEqual(new Map());
+    expect(binding.installDefinitions()).toEqual(new Map());
     expect(Object.hasOwn(realm.global, choice.name)).toBe(false);
     expect(Object.hasOwn(realm.global, callback.name)).toBe(false);
     expect(Object.hasOwn(realm.global, alias.name)).toBe(false);
@@ -280,7 +327,7 @@ describe('Web IDL platform-object identity and state', () => {
       members: [numbers, entries],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
-    const object = first.createPlatformRecord(first.resolveInterface('RealmMutable')).platformObject!;
+    const object = first.allocatePlatformRecord(first.resolveInterface('RealmMutable')).platformObject!;
     const originalRecord = getPlatformRecord(object);
     const array = Reflect.get(object, 'numbers') as unknown[];
     array.push(1);
@@ -316,7 +363,7 @@ describe('Web IDL platform-object identity and state', () => {
     );
     Reflect.set(newTarget, 'prototype', null);
 
-    const object = first.createPlatformRecord(
+    const object = first.allocatePlatformRecord(
       first.resolveInterface('RealmPrototypeFallback'),
       newTarget,
     ).platformObject!;

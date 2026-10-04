@@ -10,12 +10,19 @@ export {
   type IntegerConversionMode, type IntegerTypeName,
 } from './types';
 export {
-  AssembledInterface, AssembledCallbackInterface, AssembledCallbackFunction, AssembledNamespace,
-  AssembledDictionary, AssembledEnumeration, AssembledTypedef, AssembledProxyObject,
-  AssembledCallable, AssembledOverloads, AssembledArgument, AssembledDictionaryMember,
-  type AssembledInterfaceMember, type AssembledNamespaceMember, type MemberPlacement, type DefaultToJSONAttribute,
+  AssembledCallable, AssembledOverloads, AssembledArgument, type MemberPlacement,
   type IDLAttribute, type IDLConstant, type IDLOperation, type IDLConstructor, type IDLIterable,
   type IDLAsyncIterable, type IDLMaplike, type IDLSetlike, type IDLNamedArguments,
   type IDLInterfaceMember, type IDLNamespaceMember,
-} from './assembled';
+} from './member';
+export {
+  AssembledInterface, type AssembledInterfaceMember, type DefaultToJSONAttribute,
+} from './interface';
+export { AssembledCallbackInterface, AssembledCallbackFunction } from './callback';
+export { AssembledNamespace, type AssembledNamespaceMember } from './namespace';
+export { AssembledDictionary, AssembledDictionaryMember } from './dictionary';
+export { AssembledEnumeration } from './enumeration';
+export { AssembledTypedef } from './typedef';
+export { AssembledProxyObject } from './proxy-object';
 export { DefinitionAssembly } from './assembly';
+export { validateDefinitions } from './validation';

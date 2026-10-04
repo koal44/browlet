@@ -1,9 +1,10 @@
 import type { BufferTypeName, ExtendedAttribute } from '../core/index';
 
-import type {
-  AssembledCallbackFunction, AssembledCallbackInterface, AssembledDictionary, AssembledEnumeration,
-  AssembledInterface, AssembledProxyObject,
-} from './assembled';
+import type { AssembledInterface } from './interface';
+import type { AssembledCallbackFunction, AssembledCallbackInterface } from './callback';
+import type { AssembledDictionary } from './dictionary';
+import type { AssembledEnumeration } from './enumeration';
+import type { AssembledProxyObject } from './proxy-object';
 
 /** Runtime type contract, with declaration names, annotations, and nested types resolved. */
 export type IDLType =
@@ -24,6 +25,12 @@ abstract class Type {
   canPassToImpl = false;
   /** Branch selections prepared only when conversion or overload resolution needs them. */
   #candidates?: IDLTypeCandidates;
+  /** Comparison key that ignores annotations and preserves union order. */
+  #overloadKey?: string;
+  /** Comparison key that includes annotations and ignores union order. */
+  #conversionKey?: string;
+  /** Completed JSON classification, evaluated only after member assembly has finished. */
+  #jsonType?: boolean;
 
   constructor(attributes: ExtendedAttribute[] = []) {
     this.attributes = attributes;
@@ -32,6 +39,82 @@ abstract class Type {
   /** Flattened branches and their categories; container contents retain their own candidates. */
   get candidates(): IDLTypeCandidates {
     return this.#candidates ??= new IDLTypeCandidates(this as IDLType);
+  }
+
+  /** Compare overload types without conversion annotations. */
+  get overloadKey(): string {
+    if (this.#overloadKey !== undefined) return this.#overloadKey;
+    const type = this as IDLType;
+    let key: string;
+    switch (type.kind) {
+      case 'any': case 'undefined': case 'boolean': case 'bigint': case 'object': case 'symbol':
+        key = type.kind;
+        break;
+      case 'integer': case 'float': case 'string': case 'buffer-source':
+        key = type.name;
+        break;
+      case 'interface': case 'dictionary': case 'enumeration': case 'callback-function':
+      case 'callback-interface': case 'proxy-object':
+        key = `reference:${type.assembled.primary.name}`;
+        break;
+      case 'nullable': key = `${type.innerType.overloadKey}?`; break;
+      case 'union': key = `(${type.memberTypes.map((member) => member.overloadKey).join(' or ')})`; break;
+      case 'sequence': case 'async-sequence': case 'frozen-array': case 'observable-array':
+        key = `${type.kind}<${type.elementType.overloadKey}>`;
+        break;
+      case 'promise': key = `promise<${type.resultType.overloadKey}>`; break;
+      case 'record': key = `record<${type.keyType.overloadKey}, ${type.valueType.overloadKey}>`; break;
+    }
+    return this.#overloadKey = key;
+  }
+
+  /** Compare conversion contracts, including annotations and nested types. */
+  get conversionKey(): string {
+    if (this.#conversionKey !== undefined) return this.#conversionKey;
+    const type = this as IDLType;
+    let parts: string[];
+    switch (type.kind) {
+      case 'any': case 'undefined': case 'boolean': case 'bigint': case 'object': case 'symbol':
+        parts = [];
+        break;
+      case 'integer': case 'float': case 'string': case 'buffer-source': parts = [type.name]; break;
+      case 'interface': case 'dictionary': case 'enumeration': case 'callback-function':
+      case 'callback-interface': case 'proxy-object': parts = [type.assembled.primary.name]; break;
+      case 'union': parts = type.memberTypes.map((member) => member.conversionKey).sort(); break;
+      case 'record': parts = [type.keyType.conversionKey, type.valueType.conversionKey]; break;
+      case 'nullable': parts = [type.innerType.conversionKey]; break;
+      case 'promise': parts = [type.resultType.conversionKey]; break;
+      default: parts = [type.elementType.conversionKey];
+    }
+    return this.#conversionKey = JSON.stringify([
+      type.kind, parts, type.attributes.map((attribute) => JSON.stringify(attribute)).sort(),
+    ]);
+  }
+
+  /** Whether values of this type can contribute to a default toJSON operation. */
+  // https://webidl.spec.whatwg.org/#dfn-json-types
+  get isJSON(): boolean {
+    return this.#jsonType ??= this.#checkJSONType(new Set());
+  }
+
+  // Recursive answers depend on the current dictionary path; only the root getter caches its result.
+  #checkJSONType(seen: Set<AssembledDictionary>): boolean {
+    const type = this as IDLType;
+    switch (type.kind) {
+      case 'integer': case 'float': case 'string': case 'boolean': case 'object': case 'enumeration':
+        return true;
+      case 'nullable': return type.innerType.#checkJSONType(seen);
+      case 'sequence': case 'frozen-array': return type.elementType.#checkJSONType(seen);
+      case 'union': return type.memberTypes.every((member) => member.#checkJSONType(seen));
+      case 'record': return type.valueType.#checkJSONType(seen);
+      case 'interface': return type.assembled.hasToJSON();
+      case 'dictionary': {
+        if (seen.has(type.assembled)) return false;
+        const path = new Set(seen).add(type.assembled);
+        return type.assembled.members.every((member) => member.type.#checkJSONType(path));
+      }
+      default: return false;
+    }
   }
 }
 

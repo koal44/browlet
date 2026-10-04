@@ -59,10 +59,10 @@ describe('Web IDL promises', () => {
 
   it('converts typed fulfillments when observed by implementation code', async () => {
     const ctx = createContext();
-    const converted = ctx.context.jsToImpl('4.9', implementationType<InternalPromise<number>>(promiseType(idlType.long)));
+    const converted = ctx.jsToImpl('4.9', implementationType<InternalPromise<number>>(promiseType(idlType.long)));
     await expect(new Promise((resolve, reject) => converted.observe(resolve, reject))).resolves.toBe(4);
 
-    const failedConversion = ctx.context.jsToImpl('😞', implementationType<InternalPromise<string>>(promiseType(idlType.ByteString)));
+    const failedConversion = ctx.jsToImpl('😞', implementationType<InternalPromise<string>>(promiseType(idlType.ByteString)));
     await expect(new Promise((resolve, reject) => failedConversion.observe(resolve, reject))).rejects
       .toBeInstanceOf(ctx.realm.intrinsics.typeError);
   });

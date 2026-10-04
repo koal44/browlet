@@ -2,8 +2,10 @@ import { InternalError } from '../../../infra/index';
 import { isAccessorDescriptor, isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engine/index';
 
 import type { IDLOperation, AssembledInterface } from '../../assembly/index';
+import type { ConversionSteps } from '../../converters/index';
 import { getImplementationObject, getImplementationRecord, type PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
+import type { MemberBinding } from './member';
 import { isNamedPropertiesObject } from './global';
 
 export class LegacyPlatformObjectBinding {
@@ -86,7 +88,7 @@ export class LegacyPlatformObjectBinding {
     return new Proxy(target, handler);
   }
 
-  // Project helper: assemble inherited property declarations, flags, and registered callbacks.
+  /** Prepare inherited property bindings and conversions once for this interface and realm. */
   createPropertyMetadata(
     assembled: AssembledInterface,
   ): LegacyPropertyMetadata | null {
@@ -96,31 +98,36 @@ export class LegacyPlatformObjectBinding {
 
     let indexed: IndexedProperties | undefined;
     if (indexedGetter) {
-      const steps = this.#binding.getMemberBinding(assembled, indexedGetter)?.indexedPropertySteps;
-      if (!steps) {
+      const getter = this.#binding.getMemberBinding(assembled, indexedGetter);
+      if (!getter?.indexedPropertySteps) {
         throw new InternalError('Missing supported property indices implementation');
       }
       indexed = {
-        getter: indexedGetter,
-        assembled,
-        setter: assembled.findSpecialOperation('setter', 'unsigned long'),
-        steps,
+        getter,
+        convertResult: this.#binding.getConverter(indexedGetter.returns).getIDLToJSSteps(),
+        setter: this.#prepareSetter(assembled, assembled.findSpecialOperation('setter', 'unsigned long')),
+        steps: getter.indexedPropertySteps,
       };
     }
 
     let named: NamedProperties | undefined;
     if (namedGetter) {
-      const steps = this.#binding.getMemberBinding(assembled, namedGetter)?.namedPropertySteps;
-      if (!steps) {
+      const getter = this.#binding.getMemberBinding(assembled, namedGetter);
+      if (!getter?.namedPropertySteps) {
         throw new InternalError('Missing supported property names implementation');
       }
+      const deleter = assembled.findSpecialOperation('deleter', 'DOMString');
       named = {
-        deleter: assembled.findSpecialOperation('deleter', 'DOMString'),
-        getter: namedGetter,
-        assembled,
+        deleter: deleter && {
+          named: Boolean(deleter.name),
+          binding: this.#binding.getMemberBinding(assembled, deleter),
+          returnsBoolean: deleter.returns.kind === 'boolean',
+        },
+        getter,
+        convertResult: this.#binding.getConverter(namedGetter.returns).getIDLToJSSteps(),
         overrideBuiltIns: assembled.inheritsExtendedAttribute('LegacyOverrideBuiltIns'),
-        setter: assembled.findSpecialOperation('setter', 'DOMString'),
-        steps,
+        setter: this.#prepareSetter(assembled, assembled.findSpecialOperation('setter', 'DOMString')),
+        steps: getter.namedPropertySteps,
         unenumerable: assembled.inheritsExtendedAttribute('LegacyUnenumerableNamedProperties'),
         unforgeableNames: assembled.getUnforgeablePropertyNames(),
       };
@@ -235,7 +242,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: true,
-      value: this.#binding.getConverter(properties.getter.returns).idlToJS(value),
+      value: properties.convertResult(value),
       writable: properties.setter !== undefined,
     };
   }
@@ -247,7 +254,7 @@ export class LegacyPlatformObjectBinding {
     property: string,
     properties: NamedProperties,
   ): PropertyDescriptor {
-    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
+    const steps = properties.getter.operationSteps;
     if (!steps) {
       throw new InternalError('Missing named property getter implementation');
     }
@@ -255,7 +262,7 @@ export class LegacyPlatformObjectBinding {
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
-      value: this.#binding.getConverter(properties.getter.returns).idlToJS(value),
+      value: properties.convertResult(value),
       writable: properties.setter !== undefined,
     };
   }
@@ -440,6 +447,19 @@ export class LegacyPlatformObjectBinding {
     return [...keys];
   }
 
+  // Keep missing-argument and missing-hook failures at invocation, after the live support check.
+  #prepareSetter(assembled: AssembledInterface, setter: IDLOperation | undefined): PropertySetter | undefined {
+    if (!setter) return;
+    const argument = setter.arguments[1];
+    return {
+      named: Boolean(setter.name),
+      binding: this.#binding.getMemberBinding(assembled, setter),
+      convert: argument ? this.#binding.getConverter(argument.type).getJSToIDLSteps() : () => {
+        throw new InternalError('Legacy property setter has no value argument');
+      },
+    };
+  }
+
   // Web IDL §3.9.7 Abstract operations — invoke an indexed property setter.
   #invokeIndexedSetter(
     target: object,
@@ -456,10 +476,10 @@ export class LegacyPlatformObjectBinding {
       index,
       properties,
     );
-    const converted = this.#convertSetterValue(setter, value);
+    const converted = setter.convert(value);
 
-    if (setter.name) {
-      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
+    if (setter.named) {
+      const steps = setter.binding?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing indexed property setter implementation');
       }
@@ -487,9 +507,9 @@ export class LegacyPlatformObjectBinding {
     if (!setter) throw new InternalError('Named property has no setter');
 
     const creating = !this.#getSupportedNames(target, properties).has(property);
-    const converted = this.#convertSetterValue(setter, value);
-    if (setter.name) {
-      const steps = this.#binding.getMemberBinding(properties.assembled, setter)?.operationSteps;
+    const converted = setter.convert(value);
+    if (setter.named) {
+      const steps = setter.binding?.operationSteps;
       if (!steps) {
         throw new InternalError('Missing named property setter implementation');
       }
@@ -507,16 +527,6 @@ export class LegacyPlatformObjectBinding {
     Reflect.apply(steps, target, [property, converted]);
   }
 
-  // Extracted from Web IDL §3.9.7 Abstract operations — convert the value for an indexed or named property
-  // setter.
-  #convertSetterValue(setter: IDLOperation, value: unknown): unknown {
-    const valueArgument = setter.arguments[1];
-    if (!valueArgument) {
-      throw new InternalError('Legacy property setter has no value argument');
-    }
-    return this.#binding.getConverter(valueArgument.type).jsToIDL(value);
-  }
-
   // Extracted from Web IDL §3.9.4 [[Delete]] — invoke the named property deleter.
   #invokeNamedDeleter(
     target: object,
@@ -525,7 +535,7 @@ export class LegacyPlatformObjectBinding {
   ): boolean {
     const { deleter } = properties;
     if (!deleter) throw new InternalError('Named property has no deleter');
-    if (!deleter.name) {
+    if (!deleter.named) {
       // eslint-disable-next-line @typescript-eslint/unbound-method -- named deleter steps use the implementation as their specified this value
       const steps = properties.steps.deleteExisting;
       if (!steps) {
@@ -534,11 +544,10 @@ export class LegacyPlatformObjectBinding {
       return Reflect.apply(steps, target, [property]);
     }
 
-    const steps = this.#binding.getMemberBinding(properties.assembled, deleter)?.operationSteps;
+    const steps = deleter.binding?.operationSteps;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
     const result = steps(this.#getReceiverRecord(target), property);
-    const returnType = deleter.returns;
-    return returnType.kind !== 'boolean' || result !== false;
+    return !deleter.returnsBoolean || result !== false;
   }
 
   // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
@@ -570,7 +579,7 @@ export class LegacyPlatformObjectBinding {
     index: number,
     properties: IndexedProperties,
   ): unknown {
-    const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
+    const steps = properties.getter.operationSteps;
     if (!steps) throw new InternalError('Missing indexed property getter implementation');
     return steps(this.#getReceiverRecord(implementation), index);
   }
@@ -650,21 +659,34 @@ export type LegacyPropertyMetadata = {
 };
 
 type IndexedProperties = {
-  getter: IDLOperation;
-  assembled: AssembledInterface;
-  setter: IDLOperation | undefined;
+  /** Retain the binding so hook updates remain visible after projection. */
+  getter: MemberBinding;
+  convertResult: ConversionSteps;
+  setter: PropertySetter | undefined;
   steps: IndexedPropertySteps;
 };
 
 type NamedProperties = {
-  deleter: IDLOperation | undefined;
-  getter: IDLOperation;
-  assembled: AssembledInterface;
+  deleter: {
+    named: boolean;
+    binding: MemberBinding | undefined;
+    returnsBoolean: boolean;
+  } | undefined;
+  /** Retain the binding so hook updates remain visible after projection. */
+  getter: MemberBinding;
+  convertResult: ConversionSteps;
   overrideBuiltIns: boolean;
-  setter: IDLOperation | undefined;
+  setter: PropertySetter | undefined;
   steps: NamedPropertySteps;
   unenumerable: boolean;
   unforgeableNames: Set<string>;
+};
+
+/** Setter invocation and input conversion, selected before any incoming value is observed. */
+type PropertySetter = {
+  named: boolean;
+  binding: MemberBinding | undefined;
+  convert: ConversionSteps;
 };
 
 // Web IDL §3.9.7 Abstract operations — determine if a property name is an array index.

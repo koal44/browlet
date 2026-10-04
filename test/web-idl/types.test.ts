@@ -97,7 +97,7 @@ describe('Web IDL types', () => {
     );
 
     expect(
-      assembly.getIDLType(type).candidates.types.map((member) => assembly.getOverloadTypeKey(member)),
+      assembly.getIDLType(type).candidates.types.map((member) => member.overloadKey),
     ).toEqual([
       'reference:Node',
       'sequence<long>',
@@ -124,7 +124,7 @@ describe('Web IDL types', () => {
         { kind: name === 'long' ? 'integer' : 'string', name },
         { kind: 'sequence', elementType: { kind: 'boolean' } },
       ]);
-      expect(assembly.getOverloadTypeKey(assembly.getIDLType(type))).toBe(`(${name} or sequence<boolean>)`);
+      expect(assembly.getIDLType(type).overloadKey).toBe(`(${name} or sequence<boolean>)`);
       expect(!!assembly.getIDLType(type).candidates.string).toBe(name === 'DOMString');
       expect(!!assembly.getIDLType(type).candidates.numeric).toBe(name === 'long');
       expect(!!assembly.getIDLType(type).candidates.array).toBe(true);
@@ -135,9 +135,9 @@ describe('Web IDL types', () => {
       expect(assembly.getIDLType(type).candidates.record?.valueType).toBeUndefined();
     }
 
-    const stringKey = strings.getConversionTypeKey(strings.getIDLType(type));
-    expect(numbers.getConversionTypeKey(numbers.getIDLType(type))).not.toBe(stringKey);
-    expect(strings.getConversionTypeKey(strings.getIDLType(type))).toBe(stringKey);
+    const stringKey = strings.getIDLType(type).conversionKey;
+    expect(numbers.getIDLType(type).conversionKey).not.toBe(stringKey);
+    expect(strings.getIDLType(type).conversionKey).toBe(stringKey);
   });
 
   it('classifies candidates without including their container contents', () => {
@@ -207,10 +207,32 @@ describe('Web IDL types', () => {
       ...definitions, defineTypedef({ name: 'Value', type: idlType.symbol }),
     ]);
 
-    expect(strings.isJSONType(strings.getIDLType(type))).toBe(true);
-    expect(symbols.isJSONType(symbols.getIDLType(type))).toBe(false);
-    expect(strings.isJSONType(strings.getIDLType(type))).toBe(true);
-    expect(symbols.isJSONType(symbols.getIDLType(type))).toBe(false);
+    expect(strings.getIDLType(type).isJSON).toBe(true);
+    expect(symbols.getIDLType(type).isJSON).toBe(false);
+    expect(strings.getIDLType(type).isJSON).toBe(true);
+    expect(symbols.getIDLType(type).isJSON).toBe(false);
+  });
+
+  it('keeps recursive JSON checks separate from completed dictionary answers', () => {
+    const assembly = new DefinitionAssembly([
+      defineDictionary({
+        name: 'First', members: [
+          { name: 'leaf', type: reference('Leaf') },
+          { name: 'next', type: nullable(reference('Second')) },
+        ],
+      }),
+      defineDictionary({ name: 'Second', members: [{ name: 'first', type: reference('First') }] }),
+      defineDictionary({ name: 'Leaf', members: [{ name: 'value', type: idlType.DOMString }] }),
+    ]);
+    const first = assembly.getNamedType('First');
+    const second = assembly.getNamedType('Second');
+    const leaf = assembly.getNamedType('Leaf');
+
+    expect(first.isJSON).toBe(false);
+    expect(leaf.isJSON).toBe(true);
+    expect(second.isJSON).toBe(false);
+    expect(first.isJSON).toBe(false);
+    expect(leaf.isJSON).toBe(true);
   });
 
   it('preserves attribute order without leaking annotations between uses of a descriptor', () => {
@@ -242,14 +264,14 @@ describe('Web IDL types', () => {
   it('distinguishes overload type keys from conversion type keys', () => {
     const assembly = new DefinitionAssembly([]);
     const clamped = annotated(idlType.byte, xattr('Clamp'));
-    expect(assembly.getOverloadTypeKey(assembly.getIDLType(clamped))).toBe(assembly.getOverloadTypeKey(assembly.getIDLType(idlType.byte)));
-    expect(assembly.getConversionTypeKey(assembly.getIDLType(clamped)))
-      .not.toBe(assembly.getConversionTypeKey(assembly.getIDLType(idlType.byte)));
+    expect(assembly.getIDLType(clamped).overloadKey).toBe(assembly.getIDLType(idlType.byte).overloadKey);
+    expect(assembly.getIDLType(clamped).conversionKey)
+      .not.toBe(assembly.getIDLType(idlType.byte).conversionKey);
 
     const first = union(idlType.byte, idlType.DOMString);
     const reversed = union(idlType.DOMString, idlType.byte);
-    expect(assembly.getOverloadTypeKey(assembly.getIDLType(first))).not.toBe(assembly.getOverloadTypeKey(assembly.getIDLType(reversed)));
-    expect(assembly.getConversionTypeKey(assembly.getIDLType(first))).toBe(assembly.getConversionTypeKey(assembly.getIDLType(reversed)));
+    expect(assembly.getIDLType(first).overloadKey).not.toBe(assembly.getIDLType(reversed).overloadKey);
+    expect(assembly.getIDLType(first).conversionKey).toBe(assembly.getIDLType(reversed).conversionKey);
   });
 
   it('retains exact candidate branches and distinguishes numeric defaults from numeric conversion', () => {

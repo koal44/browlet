@@ -28,6 +28,9 @@ own execution and event loops; AgentClusters define shared-memory boundaries.
 Neither is the owner of platform-object identity. Separate worlds need a real
 isolated-world or separate-runtime consumer.
 
+Each registered realm has one `RealmBinding`. `BindingContext` is its public type,
+exposing boundary operations without adding another object or lifecycle.
+
 Binding applies a private DOMException stamp during platform-object initialization
 so Core can recognize exceptions without importing Binding's identity record.
 The shared record still owns the implementation/platform association and realm.

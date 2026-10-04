@@ -1,5 +1,5 @@
 import { endOfIteration } from '../../infra/index';
-import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js-engine/index';
+import { getMethod, isObject, type JSMethod } from '../../js-engine/index';
 
 import type { WebIDLRealm } from '../environment';
 import { anyType, type IDLType } from '../assembly/index';
@@ -34,8 +34,9 @@ export class IDLAsyncSequence<Element extends IDLType = IDLType> {
   /** Open a fresh iterator using the method captured during conversion. */
   // https://webidl.spec.whatwg.org/#async-sequence-open
   open(realm: WebIDLRealm): AsyncSequenceIterator<Element> {
-    let record = IteratorRecord.fromMethod(this.object, this.method, realm);
-    if (this.iteratorType === 'sync') record = record.toAsync(realm);
+    const record = IteratorRecord.fromMethod(this.object, this.method, realm);
+    // Keep async-from-sync state directly; its private adapter is never exposed.
+    if (this.iteratorType === 'sync') record.syncRealm = realm;
     return new AsyncSequenceIterator(this.elementType, record);
   }
 }
@@ -57,11 +58,9 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
   nextValue(realm: WebIDLRealm, convert: (value: unknown, type: Element) => IDLValue<Element>): IDLPromise {
     let nextResult: unknown;
     try {
-      nextResult = Reflect.apply(
-        this.record.nextMethod,
-        this.record.iterator,
-        [],
-      );
+      nextResult = this.record.syncRealm
+        ? this.record.invokeAsAsync('next', [], this.record.syncRealm).promise
+        : Reflect.apply(this.record.nextMethod, this.record.iterator, []);
       if (!isObject(nextResult)) {
         throw new realm.intrinsics.typeError('Iterator result is not an object');
       }
@@ -85,21 +84,15 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
   /** Close this iterator with the supplied reason. */
   // https://webidl.spec.whatwg.org/#async-iterator-close
   close(reason: unknown, realm: WebIDLRealm): IDLPromise {
-    let returnMethod: JSMethod | undefined;
-    try {
-      returnMethod = getMethod(this.record.iterator, 'return', realm);
-    } catch (exception) {
-      return IDLPromise.rejected(exception, anyType, realm);
-    }
-    if (!returnMethod) return IDLPromise.fromJS(undefined, anyType, realm);
-
     let returnResult: unknown;
     try {
-      returnResult = Reflect.apply(
-        returnMethod,
-        this.record.iterator,
-        [reason],
-      );
+      if (this.record.syncRealm) {
+        returnResult = this.record.invokeAsAsync('return', [reason], this.record.syncRealm).promise;
+      } else {
+        const returnMethod = getMethod(this.record.iterator, 'return', realm);
+        if (!returnMethod) return IDLPromise.fromJS(undefined, anyType, realm);
+        returnResult = Reflect.apply(returnMethod, this.record.iterator, [reason]);
+      }
     } catch (exception) {
       return IDLPromise.rejected(exception, anyType, realm);
     }
@@ -124,6 +117,8 @@ class IteratorRecord {
   iterator: object;
   /** Next method captured when the iterator was opened. */
   nextMethod: JSMethod;
+  /** Opening realm that owns synchronous adaptation's Promises, results, and errors. */
+  syncRealm?: WebIDLRealm;
 
   constructor(iterator: object, nextMethod: JSMethod) {
     this.iterator = iterator;
@@ -144,27 +139,10 @@ class IteratorRecord {
     return new IteratorRecord(iterator, nextMethod);
   }
 
-  /** Create an async iterator that awaits values yielded by this synchronous iterator. */
-  // https://tc39.es/ecma262/#sec-createasyncfromsynciterator
-  toAsync(realm: WebIDLRealm): IteratorRecord {
-    const iterator = realm.createOrdinaryObject(realm.intrinsics.iteration.asyncIteratorPrototype);
-    const next = realm.createFunction(
-      (_thisArgument, args) => this.#invokeAsAsync('next', args, realm).promise,
-      { length: 1, name: 'next' },
-    );
-    const return_ = realm.createFunction(
-      (_thisArgument, args) => this.#invokeAsAsync('return', args, realm).promise,
-      { length: 1, name: 'return' },
-    );
-    defineDataProperty(iterator, 'next', next);
-    defineDataProperty(iterator, 'return', return_);
-    return new IteratorRecord(iterator, next);
-  }
-
   /** Invoke next or return, await its value, and create an async iterator result. */
   // https://tc39.es/ecma262/#sec-async-from-sync-iterator-objects
-  // Combines next/return with AsyncFromSyncIteratorContinuation for this adapter.
-  #invokeAsAsync(operation: 'next' | 'return', args: unknown[], realm: WebIDLRealm): IDLPromise {
+  // Combines next/return with AsyncFromSyncIteratorContinuation without allocating an adapter.
+  invokeAsAsync(operation: 'next' | 'return', args: unknown[], realm: WebIDLRealm): IDLPromise {
     try {
       const method = operation === 'next' ? this.nextMethod : getMethod(this.iterator, 'return', realm);
       if (!method) {

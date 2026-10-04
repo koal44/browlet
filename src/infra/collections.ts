@@ -32,6 +32,13 @@ export class WeakOrderedSet<T extends object>
   }
 }
 
+/** Append to the list at a map key, creating that list on first use. */
+export function appendToMapList<Key, Value>(map: Map<Key, Value[]>, key: Key, value: Value): void {
+  const values = map.get(key);
+  if (values) values.push(value);
+  else map.set(key, [value]);
+}
+
 export function iterableToArray<T>(items: Iterable<T>): T[] {
   if (Array.isArray(items)) return items as T[];
 

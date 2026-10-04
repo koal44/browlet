@@ -65,7 +65,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     if (this.interfaceObject) return this.interfaceObject;
 
     const constructors = assembled.getConstructors(
-      (entry) => realmBinding.isMemberExposed(assembled, entry), realmBinding.assembly,
+      (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
     const overridden = this.overriddenConstructor;
     const resolve = createOverloadResolver(constructors, realmBinding);
@@ -141,7 +141,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     for (const member of assembled.members) {
       if (
         member.kind === 'constant' &&
-        realmBinding.isConstructExposed(member)
+        assembled.isMemberExposed(member, realmBinding.realm)
       ) {
         this.#defineConstant(object, member);
       }
@@ -160,7 +160,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const existing = this.legacyFactoryFunctions?.get(name);
     if (existing) return existing;
 
-    const overloads = assembled.getLegacyFactoryOverloads(name, realmBinding.assembly);
+    const overloads = assembled.getLegacyFactoryOverloads(name);
     const resolve = createOverloadResolver(overloads, realmBinding);
     const function_ = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
@@ -216,7 +216,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     this.defineConstants(object);
 
     for (const interfaceAssembled of realmBinding.assembly.interfaces.inNamespace(assembled.primary.name)) {
-      if (!realmBinding.isExposed(interfaceAssembled)) continue;
+      if (!interfaceAssembled.isExposed(realmBinding.realm)) continue;
       defineProperty(object, interfaceAssembled.primary.name, {
         configurable: true,
         enumerable: false,
@@ -300,7 +300,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     for (const entry of assembled.members) {
       if (
         entry.member.kind !== 'constant' ||
-        !realmBinding.isMemberExposed(assembled, entry)
+        !assembled.isMemberExposed(entry, realmBinding.realm)
       ) continue;
 
       this.#defineConstant(target, entry.member);
@@ -330,7 +330,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     for (const entry of assembled.getAttributes(kind)) {
       const attribute = entry.member;
-      if (!realmBinding.isMemberExposed(assembled, entry)) continue;
+      if (!assembled.isMemberExposed(entry, realmBinding.realm)) continue;
 
       const memberBinding = this.getOrCreateMemberBinding(attribute);
       defineProperty(target, attribute.name, {
@@ -351,8 +351,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const { binding: realmBinding, assembled } = this;
     const groups = assembled.getOperationGroups(
       kind,
-      (_operation, entry) => realmBinding.isMemberExposed(assembled, entry),
-      realmBinding.assembly,
+      (_operation, entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
 
     for (const operations of groups.values()) {
@@ -374,7 +373,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     placement: Extract<MemberPlacement, 'regular' | 'unforgeable'>,
   ): void {
     const { binding: realmBinding, assembled } = this;
-    const entry = assembled.getStringifier(placement, (entry) => realmBinding.isMemberExposed(assembled, entry));
+    const entry = assembled.getStringifier(placement, (entry) => assembled.isMemberExposed(entry, realmBinding.realm));
     if (!entry) return;
     const unforgeable = placement === 'unforgeable';
 
@@ -398,13 +397,13 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
         target,
         entry !== undefined &&
         entry.member.key === undefined &&
-        realmBinding.isMemberExposed(assembled, entry),
+        assembled.isMemberExposed(entry, realmBinding.realm),
       );
       return;
     }
     if (
       !entry ||
-      !realmBinding.isMemberExposed(assembled, entry)
+      !assembled.isMemberExposed(entry, realmBinding.realm)
     ) return;
 
     realmBinding.iterables.defineMethods(
@@ -423,7 +422,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     const entry = assembled.findMemberByKind('async-iterable');
     if (
       !entry ||
-      !realmBinding.isMemberExposed(assembled, entry)
+      !assembled.isMemberExposed(entry, realmBinding.realm)
     ) return;
 
     realmBinding.asyncIterables.defineMethods(
@@ -476,8 +475,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   #getDefaultToJSONAttributes(
     this: ImplementationBinding<AssembledInterface>,
   ): DefaultToJSONAttribute[] {
-    return this.defaultToJSONAttributes ??= this.assembled.getDefaultToJSONAttributes(this.binding.assembly)
-      .filter((entry) => this.binding.isMemberExposed(entry.assembled, entry));
+    return this.defaultToJSONAttributes ??= this.assembled.getDefaultToJSONAttributes()
+      .filter((entry) => entry.assembled.isMemberExposed(entry, this.binding.realm));
   }
 
   /** Reject special operations that the available platform-object machinery cannot implement. */
@@ -537,7 +536,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     target: object,
   ): void {
     const { binding: realmBinding, assembled } = this;
-    const names = assembled.getUnscopableNames((entry) => realmBinding.isMemberExposed(assembled, entry));
+    const names = assembled.getUnscopableNames((entry) => assembled.isMemberExposed(entry, realmBinding.realm));
     if (names.size === 0) return;
 
     const unscopables = realmBinding.realm.createOrdinaryObject(null);

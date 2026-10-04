@@ -11,7 +11,7 @@ import {
   IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary, IDLPromise,
   type IDLSequence, type IDLRecord, type IDLValue,
 } from '../values/index';
-import type { BindingContext } from '../binding/context';
+import type { BindingContext } from '../binding/world';
 import type { RealmBinding } from '../binding/realm';
 import {
   CallbackFunctionStamper, type StampedCallbackFunction, type CallbackInvoker,
@@ -32,9 +32,9 @@ export class ImplementationConverter {
   /** Prepare a callable's argument conversions, including its variadic tail. */
   createArgumentConverter(assembled: AssembledCallable): (values: unknown[], context: BindingContext) => unknown[] {
     const converters = assembled.arguments.map((argument) => {
-      const convert = this.createConverter(argument.type, argument.primary);
+      const convert = this.createConverter(argument.type, argument);
       // Callback dictionaries also convert an omitted input into an empty dictionary.
-      return argument.primary.callbackDictionary ? convert : (value: unknown, context: BindingContext) =>
+      return argument.callbackDictionary ? convert : (value: unknown, context: BindingContext) =>
         value === undefined ? undefined : convert(value, context);
     });
     const variadic = assembled.variadicArgument && converters.at(-1);
@@ -188,7 +188,7 @@ export class ImplementationConverter {
       members ??= assembled.getMembersToConvert().map((member) => ({
         name: member.name,
         convert: this.createConverter(member.type, {
-          callbackExceptionBehavior: member.primary.callbackExceptionBehavior ?? exceptionBehavior,
+          callbackExceptionBehavior: member.callbackExceptionBehavior ?? exceptionBehavior,
         }),
       }));
       const { record } = value;

@@ -1,7 +1,8 @@
+import { InternalError } from '../infra/internal-error';
+import { addon, createMicrotaskQueue } from '../js-engine/index';
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
-import { addon, createMicrotaskQueue } from '../js-engine/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -61,7 +62,6 @@ import type { SerializedRecord } from './scripting/structured-data/records';
 import { structuredSerialize } from './scripting/structured-data/serialize';
 import { structuredClone } from './scripting/structured-data/structured-clone';
 import { svgIDLDefinitions } from './svg/web-idl';
-import { InternalError } from '../infra/internal-error';
 
 // The browser environment owns the final Web IDL assembly for its realm.
 // Defining specifications contribute declarations and implementation steps;
@@ -69,216 +69,152 @@ import { InternalError } from '../infra/internal-error';
 // installed on its Window environment. One main binding world spans the realms
 // hosted by Browlet's Node VM; it is not owned by an HTML Agent or AgentCluster.
 
-// -- Singleton entry points ---------------------------------------------
+// -- Browser composition ------------------------------------------------
 
 /** Compose a Window, its binding, and the new or reused WindowProxy handle. */
 export function createWindowEnvironment(
   initialization: WindowEnvironmentInit,
 ): WindowEnvironment {
-  return browletBindings.createWindowEnvironment(initialization);
+  const {
+    agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
+    reservedEnv = null, previousRealm,
+  } = initialization;
+  // HTML secure-context determination; browser ancestry checks include the
+  // parent's full chain. A reserved environment already carries that decision.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
+  // https://w3c.github.io/webappsec-secure-contexts/#ancestors
+  const envRecord = reservedEnv ?? new EnvironmentRecord({
+    userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
+    targetBrowsingContext: null,
+    isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
+      (parent === null || parent.isSecureContext),
+  });
+  const useAddonGlobals = !!(
+    addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
+    addon.getMethod('setPropertyDelegate') && addon.getMethod('setGlobalObject')
+  );
+  if (useAddonGlobals) previousRealm?.detachGlobal();
+  const realm = new WindowRealm({
+    agent,
+    envRecord,
+    reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
+    // Window.prototype -> named properties -> EventTarget.prototype.
+    globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
+  });
+  // This new realm is registered exactly once; composition runs synchronously.
+  let env!: WindowEnvironment;
+  const context = registerRealm(realm, (binding) => {
+    // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+    // Execution reads the installed global lazily; all consumers retain this environment.
+    env = new WindowEnvironment(realm, envRecord, createBoundExecution(binding));
+    env.creationURL = creationURL;
+    env.topLevelCreationURL = topLevelCreationURL;
+    env.topLevelOrigin = topLevelOrigin;
+    return env;
+  });
+  const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
+  realm.windowImplementation = window;
+  const chain = realm.globalPrototypeChain;
+  let globalObject: Window;
+  if (chain) {
+    const [windowPrototype, namedProperties, eventTargetPrototype] = chain;
+    const object = realm.allocatedGlobalObject;
+    if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
+      throw new InternalError('Incomplete native Window allocation');
+    }
+    // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
+    globalObject = projectWindow(context, window, {
+      object,
+      prototypes: new Map([
+        ['Window', windowPrototype],
+        ['EventTarget', eventTargetPrototype],
+      ]),
+      namedProperties: {
+        object: namedProperties,
+        setDelegate: (delegate) => { realm.setPropertyDelegate(namedProperties, delegate); },
+      },
+    });
+  } else {
+    globalObject = projectWindow(context, window);
+  }
+  realm.windowProxy = WindowProxyHandle.getOrCreate(
+    useAddonGlobals ? realm.globalThis : previousRealm?.globalThis,
+  );
+  realm.setGlobalObjects(globalObject, realm.windowProxy.platform);
+  if (reservedEnv !== null) reservedEnv.id = '';
+  window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
+  return env;
 }
 
 /** Create browser-owned execution without a Window, Document, or HTML settings object. */
-export function createSandboxEnvironment(
-  eventLoopOptions?: EventLoopOptions, userAgent?: UserAgent,
-): BrowletEnvironment {
-  return browletBindings.createSandboxEnvironment(eventLoopOptions, userAgent);
+export function createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
+  createMicrotaskQueue,
+  requestEventLoopTurn: requestNodeEventLoopTurn,
+  unsafeSharedCurrentTime,
+}, userAgent?: UserAgent): BrowletEnvironment {
+  const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
+  // Reuse the main binding world for internal allocations without installing
+  // author-facing interfaces on the sandbox's global.
+  return registerRealm(realm, (context) => createSandboxEnvironmentFromBinding(context, userAgent)).getEnvironment();
 }
 
 /** Construct and stamp a Document in the realm; HTML initialization remains with the caller. */
 export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
-  return browletBindings.createDocument(realm);
+  return getBindingContext(realm).construct(DocumentImpl);
 }
 
 /** Point a proxy at a Window implementation and its existing platform object. */
-export function setAssociatedWindow(windowProxy: WindowProxyHandle, window: WindowImpl): void {
-  browletBindings.setAssociatedWindow(windowProxy, window);
+export function setAssociatedWindow(
+  windowProxy: WindowProxyHandle,
+  window: WindowImpl,
+): void {
+  // Window composition has already projected this implementation. Projection
+  // retrieves that same platform identity; it does not create another Window.
+  const platform = world.project(window);
+  if (!platform) throw new InternalError('Window has not been projected');
+  windowProxy.setAssociatedWindow({
+    implementation: window,
+    platform: platform as StampedPlatformObject<Window>,
+  });
 }
 
 /** Relevant realm of a browser object; Window and DOM-node inputs retain their concrete realm type. */
 export function getRelevantRealm(value: Window | WindowImpl | Node | NodeImpl): WindowRealm;
 export function getRelevantRealm(value: object): Realm;
 export function getRelevantRealm(value: object): Realm {
-  return browletBindings.getRelevantRealm(value);
+  const realm = world.getRealm(value) ?? Realm.getAssociatedRealm(value);
+  if (!(realm instanceof Realm)) throw new InternalError('Object has no relevant Realm');
+  return realm;
 }
 
 /** Retrieve an implementation's platform object, allocating its first projection if needed. */
 export function project(value: object): StampedPlatformObject {
-  return browletBindings.project(value);
+  const object = world.project(value);
+  if (!object) throw new InternalError('Implementation has not been projected');
+  return object;
 }
 
 /** Retrieve the implementation paired with a platform object in Browlet's binding world. */
 export function unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
-  return browletBindings.unwrap<Value>(value);
+  const implInst = world.unwrap(value);
+  if (!implInst) throw new InternalError('Value is not a platform object');
+  return implInst as StampedImplInstance<Value>;
 }
 
 /** Register a realm once, composing a sandbox environment unless a factory is supplied. */
 export function registerRealm(
   realm: Realm,
-  createEnvironment?: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment,
+  createEnvironment: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment =
+    createSandboxEnvironmentFromBinding,
 ): BindingContext<BrowletEnvironment> {
-  return browletBindings.register(realm, createEnvironment);
+  return world.register(realm, createEnvironment);
 }
 
 /** Retrieve the realm's context in Browlet's main binding world. */
 export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
-  return browletBindings.getBindingContext(realm);
-}
-
-// -- Binding composition ------------------------------------------------
-
-/** Assembles Browlet declarations and retains their shared platform-identity world. */
-class BrowletBindings {
-  /** Shared implementation/platform identity across Browlet's registered realms. */
-  #world: BindingWorld<BrowletEnvironment>;
-
-  constructor() {
-    this.#world = new BindingWorld<BrowletEnvironment>(browletDefinitions);
-  }
-
-  /** Register the realm's binding and environment, reusing an existing registration. */
-  register(
-    realm: Realm,
-    createEnvironment: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment =
-      createSandboxEnvironmentFromBinding,
-  ): BindingContext<BrowletEnvironment> {
-    return this.#world.register(realm, createEnvironment);
-  }
-
-  /** Retrieve a realm's binding context; throw if composition has not registered it. */
-  getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
-    const context = this.#world.getBindingContext(realm);
-    if (!context) throw new InternalError('Realm has no Browlet binding');
-    return context;
-  }
-
-  /** Compose a Window, its realm binding, and the existing browser environment owner. */
-  createWindowEnvironment(
-    initialization: WindowEnvironmentInit,
-  ): WindowEnvironment {
-    const {
-      agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
-      reservedEnv = null, previousRealm,
-    } = initialization;
-    // HTML secure-context determination; browser ancestry checks include the
-    // parent's full chain. A reserved environment already carries that decision.
-    // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
-    // https://w3c.github.io/webappsec-secure-contexts/#ancestors
-    const envRecord = reservedEnv ?? new EnvironmentRecord({
-      userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
-      targetBrowsingContext: null,
-      isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
-        (parent === null || parent.isSecureContext),
-    });
-    const useAddonGlobals = !!(
-      addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
-      addon.getMethod('setPropertyDelegate') && addon.getMethod('setGlobalObject')
-    );
-    if (useAddonGlobals) previousRealm?.detachGlobal();
-    const realm = new WindowRealm({
-      agent,
-      envRecord,
-      reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
-      // Window.prototype -> named properties -> EventTarget.prototype.
-      globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
-    });
-    // This new realm is registered exactly once; composition runs synchronously.
-    let env!: WindowEnvironment;
-    const context = this.register(realm, (binding) => {
-      // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
-      // Execution reads the installed global lazily; all consumers retain this environment.
-      env = new WindowEnvironment(realm, envRecord, createBoundExecution(binding));
-      env.creationURL = creationURL;
-      env.topLevelCreationURL = topLevelCreationURL;
-      env.topLevelOrigin = topLevelOrigin;
-      return env;
-    });
-    const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
-    realm.windowImplementation = window;
-    const chain = realm.globalPrototypeChain;
-    let globalObject: Window;
-    if (chain) {
-      const [windowPrototype, namedProperties, eventTargetPrototype] = chain;
-      const object = realm.allocatedGlobalObject;
-      if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
-        throw new InternalError('Incomplete native Window allocation');
-      }
-      // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
-      globalObject = projectWindow(context, window, {
-        object,
-        prototypes: new Map([
-          ['Window', windowPrototype],
-          ['EventTarget', eventTargetPrototype],
-        ]),
-        namedProperties: {
-          object: namedProperties,
-          setDelegate: (delegate) => { realm.setPropertyDelegate(namedProperties, delegate); },
-        },
-      });
-    } else {
-      globalObject = projectWindow(context, window);
-    }
-    realm.windowProxy = WindowProxyHandle.getOrCreate(
-      useAddonGlobals ? realm.globalThis : previousRealm?.globalThis,
-    );
-    realm.setGlobalObjects(globalObject, realm.windowProxy.platform);
-    if (reservedEnv !== null) reservedEnv.id = '';
-    window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
-    return env;
-  }
-
-  /** Create an independent execution owner and compose its sandbox binding. */
-  createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
-    createMicrotaskQueue,
-    requestEventLoopTurn: requestNodeEventLoopTurn,
-    unsafeSharedCurrentTime,
-  }, userAgent?: UserAgent): BrowletEnvironment {
-    const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
-    // Reuse the main binding world for internal allocations without installing
-    // author-facing interfaces on the sandbox's global.
-    return this.register(realm, (context) => createSandboxEnvironmentFromBinding(context, userAgent)).getEnvironment();
-  }
-
-  /** Construct a Document with this realm's environment and binding ownership. */
-  createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
-    return this.getBindingContext(realm).construct(DocumentImpl);
-  }
-
-  /** Replace the proxy's Window association without changing either Window's projection. */
-  setAssociatedWindow(
-    windowProxy: WindowProxyHandle,
-    window: WindowImpl,
-  ): void {
-    // Window composition has already projected this implementation. Projection
-    // retrieves that same platform identity; it does not create another Window.
-    const platform = this.#world.project(window);
-    if (!platform) throw new InternalError('Window has not been projected');
-    windowProxy.setAssociatedWindow({
-      implementation: window,
-      platform: platform as StampedPlatformObject<Window>,
-    });
-  }
-
-  /** Find the owner through a binding stamp or an engine-associated JavaScript object. */
-  getRelevantRealm(value: object): Realm {
-    const realm = this.#world.getRealm(value) ?? Realm.getAssociatedRealm(value);
-    if (!(realm instanceof Realm)) throw new InternalError('Object has no relevant Realm');
-    return realm;
-  }
-
-  /** Retrieve or first allocate the platform object for a bound implementation. */
-  project(value: object): StampedPlatformObject {
-    const object = this.#world.project(value);
-    if (!object) throw new InternalError('Implementation has not been projected');
-    return object;
-  }
-
-  /** Retrieve the paired implementation, rejecting objects outside this binding world. */
-  unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
-    const implInst = this.#world.unwrap(value);
-    if (!implInst) throw new InternalError('Value is not a platform object');
-    return implInst as StampedImplInstance<Value>;
-  }
+  const context = world.getBindingContext(realm);
+  if (!context) throw new InternalError('Realm has no Browlet binding');
+  return context;
 }
 
 // -- Construction helpers -----------------------------------------------
@@ -363,9 +299,10 @@ function projectWindow(
   return object;
 }
 
-// -- Shared declarations and singleton ----------------------------------
+// -- Shared declarations and world --------------------------------------
 
-const browletDefinitions = [
+/** Declarations combined by Browlet's binding world, also available for development validation. */
+export const browletDefinitions = [
   htmlDocumentIDL,
   ...htmlIDLDefinitions,
   ...svgIDLDefinitions,
@@ -402,4 +339,5 @@ const browletDefinitions = [
   ...fetchIDLDefinitions,
 ];
 
-const browletBindings = new BrowletBindings();
+/** Shared implementation/platform identity across Browlet's registered realms. */
+const world = new BindingWorld<BrowletEnvironment>(browletDefinitions);

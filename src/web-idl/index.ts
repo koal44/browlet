@@ -2,7 +2,7 @@ import type { AttributeFunctionSteps } from './core/index';
 
 import type { WebIDLEnvironment, WebIDLRealm } from './environment';
 import type { IDLCallbackInterface } from './values/index';
-import type { BindingContext } from './binding/context';
+import type { BindingContext } from './binding/world';
 
 export * from './core/index';
 

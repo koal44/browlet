@@ -1,9 +1,10 @@
 import { InternalError } from '../../infra/internal-error';
 
 import type {
-  ArgumentDefinition, ConstantValue, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass, WebIDLType,
+  ConstantValue, DefaultValue, Exposed, ExtendedAttribute, ImplementationClass, WebIDLType,
 } from './types';
-import type { Definition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './declarations';
+import type { ArgumentDefinition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './members';
+import type { Definition } from './declarations';
 
 // Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
 export function serializeDefinitions<Env>(
@@ -207,7 +208,7 @@ export function serializeExtendedAttribute(
 }
 
 type AttributedDefinition = {
-  exposed?: Exposure;
+  exposed?: Exposed;
   extendedAttributes?: ExtendedAttribute[];
 };
 
@@ -344,7 +345,7 @@ function collectAttributes(value: AttributedDefinition, interfaces: InterfaceNam
 }
 
 // Project formatter for Web IDL §3.3.7 [Exposed].
-function serializeExposure(exposure: Exposure): string {
+function serializeExposure(exposure: Exposed): string {
   if (typeof exposure === 'string') return exposure;
   return `(${exposure.map((value) => serializeIdentifier(value)).join(', ')})`;
 }

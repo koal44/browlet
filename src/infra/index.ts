@@ -1,7 +1,7 @@
 export { asciiLower, hasWhitespaceToken, isAsciiWhitespace } from './ascii';
 export { forgivingBase64Decode, forgivingBase64Encode } from './base64';
 export {
-  WeakOrderedSet, iterableToArray, mergeSortedUniqueLists, mergeSortedUnique, type Precedes,
+  WeakOrderedSet, appendToMapList, iterableToArray, mergeSortedUniqueLists, mergeSortedUnique, type Precedes,
 } from './collections';
 export { standardDOM, type DOMOperations, type DOMNode, type DOMCollection } from './dom-operations';
 export { RangeError, SyntaxError, TypeError, ExceptionRequestStamper } from './exceptions';

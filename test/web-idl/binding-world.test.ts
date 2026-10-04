@@ -17,6 +17,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const compose = vi.fn((context: BindingContext) => {
       expect(context.realm).toBe(realm);
       expect(world.getBindingContext(realm)).toBeUndefined();
+      expect(world.getRealmBinding(realm)).toBeUndefined();
       env.exec.Promise = context.Promise;
       return env;
     });
@@ -25,10 +26,20 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     expect(second).toBe(first);
     expect(world.getBindingContext(realm)).toBe(first);
+    expect(world.getRealmBinding(realm)).toBe(first);
     expect(compose).toHaveBeenCalledOnce();
     expect(compose.mock.calls[0]![0]).toBe(first);
     expect(first.getEnvironment()).toBe(env);
     expect(first.getEnvironment().exec.Promise).toBe(first.Promise);
+  });
+
+  it('keeps installed-object bookkeeping out of the public installation result', () => {
+    const realm = new Realm();
+    const world = new BindingWorld([exampleIDL]);
+    const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+
+    expect(context.install(realm.global)).toBeUndefined();
+    expect(Object.hasOwn(realm.global, 'Example')).toBe(true);
   });
 
   it('allows registration to retry after environment composition fails', () => {
@@ -141,6 +152,9 @@ describe('Web IDL binding worlds and realm registration', () => {
     const descriptor = Reflect.getOwnPropertyDescriptor(prototype, 'value')!;
     const echo = Reflect.get(target, 'echo') as (value: object) => object;
 
+    const binding = world.getRealmBinding(realmA)!;
+    expect(binding.isPlatformObject(object)).toBe(true);
+    expect(a.unwrap(object, ReceiverImpl)).toBeUndefined();
     expect(Reflect.apply(descriptor.get!, object, [])).toBe('first');
     expect(Reflect.apply(echo, object, [object])).toBe(object);
     expect(() => Reflect.apply(echo, object, [{}])).toThrow(realmA.intrinsics.typeError);
@@ -155,6 +169,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(Reflect.apply(echo, object, [object])).toBe(object);
 
     target = undefined;
+    expect(binding.isPlatformObject(object)).toBe(true);
     expect(() => { Reflect.apply(descriptor.get!, object, []); }).toThrow(realmA.intrinsics.typeError);
   });
 

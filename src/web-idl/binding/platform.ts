@@ -1,6 +1,6 @@
 import { InternalError, Stamper, type ObservableArrayHandle } from '../../infra/index';
 import { isObject } from '../../js-engine/index';
-import type { ImplementationClass } from '../core/index';
+import { DOMExceptionImpl, DOMExceptionStamper, type ImplementationClass } from '../core/index';
 
 import type { WebIDLRealm } from '../environment';
 import type { IDLAttribute, AssembledInterface } from '../assembly/index';
@@ -49,7 +49,35 @@ export class PlatformRecord<T extends object = object> {
 
   project(): StampedPlatformObject {
     return this.platformObject ??
-      this.binding.projectPlatformObject(this.implInst, this.assembled).platformObject!;
+      this.attachPlatformObject(this.binding.allocatePlatformObject(this.implInst, this.assembled));
+  }
+
+  /** Attach a fresh or validated platform object and initialize its per-object binding state. */
+  attachPlatformObject(platformObject: object): StampedPlatformObject {
+    if (this.platformObject) {
+      throw new InternalError('Implementation object is already associated with another owner or platform object');
+    }
+    this.platformObject = PlatformObjectStamper.stamp(platformObject, this);
+    const { assembled, binding } = this;
+    const implInst: StampedImplInstance = this.implInst;
+    const member = assembled.getCollectionMember(true);
+    if (member?.kind === 'maplike') this.mapEntries ??= new Map();
+    else if (member?.kind === 'setlike') this.setEntries ??= new Set();
+    for (const ancestorAssembled of assembled.getInheritanceChain()) {
+      // Use the declaration's class identity without probing implementation Proxy prototypes.
+      if (ancestorAssembled.primary.implementation?.implClass === DOMExceptionImpl) {
+        DOMExceptionStamper.stamp(platformObject, implInst as StampedImplInstance<DOMExceptionImpl>);
+      }
+      // https://webidl.spec.whatwg.org/#js-platform-objects
+      // Copy each interface's unforgeable properties onto the new platform object.
+      Object.defineProperties(
+        platformObject,
+        Object.getOwnPropertyDescriptors(
+          binding.getImplementationBinding(ancestorAssembled).getUnforgeableObject(),
+        ),
+      );
+    }
+    return this.platformObject;
   }
 
   /** Associate another implementation with this owner, preserving any existing owner. */
@@ -73,35 +101,6 @@ export function stampImplementation<T extends object>(
     throw new InternalError('Implementation object is already stamped or is a platform object');
   }
   return new PlatformRecord(implInst, assembled, binding).implInst;
-}
-
-// Project helper: pair implementation and platform identities in our record.
-// Web IDL §3.8 Platform objects implementing interfaces defines [[Realm]] and [[PrimaryInterface]].
-export function associatePlatformObject<T extends object>(
-  platformObject: object,
-  implInst: T,
-  assembled: AssembledInterface,
-  binding: RealmBinding,
-): PlatformRecord<T> {
-  if (platformObject === implInst) {
-    throw new InternalError('Implementation and platform objects must be distinct');
-  }
-  if (
-    isStampedPlatformObject(platformObject) ||
-    isStampedPlatformObject(implInst) ||
-    isStampedImplInstance(platformObject)
-  ) {
-    throw new InternalError('Platform object is already associated');
-  }
-
-  const record = (ImplementationStamper.get(implInst) ??
-    new PlatformRecord(implInst, assembled, binding)) as PlatformRecord<T>;
-  if (record.binding !== binding ||
-    record.assembled !== assembled || record.platformObject) {
-    throw new InternalError('Implementation object is already associated with another owner or platform object');
-  }
-  record.platformObject = PlatformObjectStamper.stamp(platformObject, record);
-  return record;
 }
 
 // Project helper: read the platform object's attached record.
@@ -134,16 +133,6 @@ export function getPlatformObject(
   implInst: unknown,
 ): StampedPlatformObject | undefined {
   return getImplementationRecord(implInst)?.platformObject;
-}
-
-/** Recognize a stamped platform object or a declared proxy object in this binding world. */
-// https://webidl.spec.whatwg.org/#idl-objects
-export function isPlatformObject(
-  value: unknown,
-  binding: RealmBinding,
-): boolean {
-  if (getPlatformRecord(value)?.binding.world === binding.world) return true;
-  return binding.assembly.proxyObjects.is(value);
 }
 
 class ImplementationStamper extends Stamper {

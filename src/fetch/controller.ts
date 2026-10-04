@@ -1,8 +1,8 @@
+import { InternalError } from '../infra/internal-error';
 import type { JSEnvironment } from '../js-engine/index';
-import { createDOMException } from '../web-idl/index';
+import { createDOMException } from '../web-idl/core/index';
 import type { FetchTimingInfo } from './timing';
 import type { FetchEnvironment } from './environment';
-import { InternalError } from '../infra/internal-error';
 
 /** Cancellation, timing, and manual-redirect controls for an ongoing fetch. */
 // https://fetch.spec.whatwg.org/#fetch-controller

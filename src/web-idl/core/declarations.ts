@@ -1,8 +1,10 @@
 import type {
-  ArgumentDefinition, AttributeMember, CallbackExceptionBehavior, ConstantMember,
-  DeclarationHook, DefaultValue, Exposure, ExtendedAttribute, ImplementationClass,
-  InjectedArgument, OperationMember, StringifierMember, WebIDLType,
+  DeclarationHook, Exposed, ExtendedAttribute, ImplementationClass, InjectedArgument, WebIDLType,
 } from './types';
+import type {
+  ArgumentDefinition, CallbackInterfaceMember, DictionaryMember, InterfaceMember,
+  MixinMember, NamespaceMember, PartialInterfaceMember,
+} from './members';
 import type { SerialSteps, TransferSteps } from './structured-data';
 
 // Interfaces
@@ -18,7 +20,7 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   /** Name of the inherited interface. */
   inherits?: string;
   /** Global exposure names, or `'*'` for every global. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this interface. */
   extendedAttributes?: ExtendedAttribute[];
   /** HTML serialization steps for this exact interface, including any inherited state. */
@@ -56,7 +58,7 @@ export type PartialInterfaceDefinition<Env = unknown> = {
   /** Members contributed to the primary interface. */
   members: PartialInterfaceMember<Env>[];
   /** Global exposure names for this contribution, or `'*'` for every global. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
@@ -69,106 +71,6 @@ export function definePartialInterface<Env = unknown>(
   return { kind: 'partial-interface', ...definition };
 }
 
-/** Any member accepted by a primary interface declaration. */
-export type InterfaceMember<Env = unknown> = PartialInterfaceMember<Env> | ConstructorMember<Env>;
-
-/** Interface members that may also be contributed by a partial declaration. */
-export type PartialInterfaceMember<Env = unknown> =
-  | ConstantMember
-  | AttributeMember<Env>
-  | OperationMember<Env>
-  | StringifierMember
-  | IterableMember
-  | AsyncIterableMember
-  | MaplikeMember
-  | SetlikeMember;
-
-/** An author-facing constructor overload and its implementation creation steps. */
-export type ConstructorMember<Env = unknown> = {
-  /** Member discriminator supplied by `ctor()`. */
-  kind: 'constructor';
-  /** Author arguments in declaration order. */
-  arguments: ArgumentDefinition[];
-  /** Global exposure names for this overload. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this constructor. */
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: implementation construction and argument injection.
-  /** Return a new implementation from the binding context and converted arguments. */
-  construct?: DeclarationHook<'constructor-create', Env>;
-  /** Injected arguments for automatic construction; overrides the interface's `constructWith`. */
-  constructWith?: InjectedArgument<Env>[];
-  /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
-  invoke?: DeclarationHook<'constructor-invoke', Env>;
-};
-
-/** Synchronous iteration over values or key/value pairs. */
-export type IterableMember = {
-  /** Member discriminator supplied by `iter()`. */
-  kind: 'iterable';
-  /** Type of each iterated value. */
-  value: WebIDLType;
-  /** Type of each key; omit for value-only iteration. */
-  key?: WebIDLType;
-  /** Global exposure names for the generated iteration members. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this iterable declaration. */
-  extendedAttributes?: ExtendedAttribute[];
-};
-
-/** Asynchronous iteration backed by an implementation iterator factory. */
-export type AsyncIterableMember = {
-  /** Member discriminator supplied by `asyncIter()`. */
-  kind: 'async-iterable';
-  /** Type of each iterated value. */
-  value: WebIDLType;
-  /** Type of each key; omit for value-only iteration. */
-  key?: WebIDLType;
-  /** Author arguments accepted by the iteration methods. */
-  arguments?: ArgumentDefinition[];
-  /** Global exposure names for the generated iteration members. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this iterable declaration. */
-  extendedAttributes?: ExtendedAttribute[];
-
-  // Project metadata: the iterator implementation factory and optional return operation.
-  /** Name of the implementation method creating the iterator; required for automatic binding. */
-  create?: string;
-  /** Whether the iterator supports an author-visible `return()` operation. */
-  return?: boolean;
-};
-
-/** Map-shaped collection members generated from declared key and value types. */
-export type MaplikeMember = {
-  /** Member discriminator supplied by `maplike()`. */
-  kind: 'maplike';
-  /** Type accepted and returned as a collection key. */
-  key: WebIDLType;
-  /** Type accepted and returned as a collection value. */
-  value: WebIDLType;
-  /** Omit the author-facing mutation methods. */
-  readonly?: boolean;
-  /** Global exposure names for the generated collection members. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this maplike declaration. */
-  extendedAttributes?: ExtendedAttribute[];
-};
-
-/** Set-shaped collection members generated from a declared value type. */
-export type SetlikeMember = {
-  /** Member discriminator supplied by `setlike()`. */
-  kind: 'setlike';
-  /** Type accepted and returned as a collection value. */
-  value: WebIDLType;
-  /** Omit the author-facing mutation methods. */
-  readonly?: boolean;
-  /** Global exposure names for the generated collection members. */
-  exposed?: Exposure;
-  /** Extended attributes applying to this setlike declaration. */
-  extendedAttributes?: ExtendedAttribute[];
-};
-
 // Interface mixins and includes
 
 /** Members contributed to interfaces through includes declarations. */
@@ -180,7 +82,7 @@ export type InterfaceMixinDefinition<Env = unknown> = {
   /** Members supplied to each including interface. */
   members: MixinMember<Env>[];
   /** Global exposure names for these members. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this mixin. */
   extendedAttributes?: ExtendedAttribute[];
 };
@@ -202,7 +104,7 @@ export type PartialInterfaceMixinDefinition<Env = unknown> = {
   /** Members contributed to the primary mixin. */
   members: MixinMember<Env>[];
   /** Global exposure names for this contribution. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
@@ -214,13 +116,6 @@ export function definePartialInterfaceMixin<Env = unknown>(
 ): PartialInterfaceMixinDefinition<Env> {
   return { kind: 'partial-interface-mixin', ...definition };
 }
-
-/** Constants, attributes, operations, and stringifiers contributed by a mixin. */
-export type MixinMember<Env = unknown> =
-  | ConstantMember
-  | AttributeMember<Env>
-  | OperationMember<Env>
-  | StringifierMember;
 
 /** Applies a named mixin's members to a named interface. */
 export type IncludesDefinition = {
@@ -286,23 +181,6 @@ export function definePartialDictionary(
   return { kind: 'partial-dictionary', ...definition };
 }
 
-/** One dictionary property and its conversion requirements. */
-export type DictionaryMember = {
-  /** Property name read from the author-supplied dictionary. */
-  name: string;
-  /** IDL type used to convert this property's value. */
-  type: WebIDLType;
-  /** Reject a missing or undefined value instead of leaving the member absent. */
-  required?: boolean;
-  /** IDL default used when the supplied value is undefined. */
-  default?: DefaultValue;
-  /** Extended attributes applying to this member. */
-  extendedAttributes?: ExtendedAttribute[];
-  // Project metadata: exception policy for a callback-valued member.
-  /** Report or rethrow author callback exceptions when this member is invoked. */
-  callbackExceptionBehavior?: CallbackExceptionBehavior;
-};
-
 // Namespaces
 
 /** Members exposed together on a named namespace object. */
@@ -314,7 +192,7 @@ export type NamespaceDefinition<Env = unknown> = {
   /** Constants, attributes, and operations supplied by this namespace. */
   members: NamespaceMember<Env>[];
   /** Global exposure names, or `'*'` for every global. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this namespace. */
   extendedAttributes?: ExtendedAttribute[];
 };
@@ -336,7 +214,7 @@ export type PartialNamespaceDefinition<Env = unknown> = {
   /** Members contributed to the primary namespace. */
   members: NamespaceMember<Env>[];
   /** Global exposure names for this contribution. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this contribution. */
   extendedAttributes?: ExtendedAttribute[];
 };
@@ -349,9 +227,6 @@ export function definePartialNamespace<Env = unknown>(
   return { kind: 'partial-namespace', ...definition };
 }
 
-/** Constants, attributes, and operations exposed on a namespace object. */
-export type NamespaceMember<Env = unknown> = ConstantMember | AttributeMember<Env> | OperationMember<Env>;
-
 // Callbacks
 
 /** Declared operations on an author-supplied callback object. */
@@ -363,7 +238,7 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   /** Operations and constants defined by this callback interface. */
   members: CallbackInterfaceMember<Env>[];
   /** Global exposure names for the callback interface object. */
-  exposed?: Exposure;
+  exposed?: Exposed;
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
   /** Turn the IDL callback, including its invocation method, into the implementation's value. */
@@ -377,9 +252,6 @@ export function defineCallbackInterface<Env = unknown>(
 ): CallbackInterfaceDefinition<Env> {
   return { kind: 'callback-interface', ...definition };
 }
-
-/** Constants and operations accepted by a callback-interface declaration. */
-export type CallbackInterfaceMember<Env = unknown> = ConstantMember | OperationMember<Env>;
 
 /** The arguments and result conversion of an author-supplied callback function. */
 export type CallbackFunctionDefinition = {

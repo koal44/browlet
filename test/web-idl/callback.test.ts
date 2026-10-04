@@ -407,7 +407,7 @@ describe('Web IDL callbacks', () => {
     };
     const converter = binding.getConverter(binding.assembly.getIDLType(type));
     const convert = converter.getJSToIDLSteps();
-    const object = binding.createPlatformRecord(binding.resolveInterface('CallbackOwner')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('CallbackOwner')).platformObject!;
 
     Reflect.set(object, 'handler', 1);
     expect(Reflect.get(object, 'handler')).toBeNull();
@@ -424,7 +424,7 @@ describe('Web IDL callbacks', () => {
 
   it('installs callback-interface constants on a legacy initial object', () => {
     const { binding, targetRealm } = createCallbackBinding();
-    const installed = binding.install();
+    const installed = binding.installDefinitions();
     const Handler = installed.get('ConstantHandler');
     if (!Handler) throw new Error('ConstantHandler was not installed');
 

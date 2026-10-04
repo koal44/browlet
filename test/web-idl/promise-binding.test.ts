@@ -236,7 +236,7 @@ describe('Web IDL promise member binding', () => {
     getMemberBinding(interfaceBinding, rejectedOperation).operationSteps = () => {
       throw reason;
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface('PromiseOwner')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PromiseOwner')).platformObject!;
     const resolvedProperty = Reflect.get(object, 'resolved') as Promise<unknown>;
     const rejectedProperty = Reflect.get(object, 'rejected') as Promise<unknown>;
     const resolvedCall = call(object, 'resolve') as Promise<unknown>;
@@ -277,7 +277,7 @@ describe('Web IDL promise member binding', () => {
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), read).operationSteps = () => {
       throw new Error('unreachable');
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface('PromiseReceiver')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PromiseReceiver')).platformObject!;
     const method = Reflect.get(object, 'read') as CallableFunction;
     const promise = Reflect.apply(method, {}, []) as Promise<unknown>;
 
@@ -307,7 +307,7 @@ describe('Web IDL promise member binding', () => {
     getMemberBinding(interfaceBinding, reject).operationSteps = () => IDLPromise.rejected(createDOMException('NotAllowedError', 'requested rejection'), binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
     const arbitraryReason = { arbitrary: true };
     getMemberBinding(interfaceBinding, rejectArbitrary).operationSteps = () => IDLPromise.rejected(arbitraryReason, binding.assembly.getIDLType(idlType.undefined), binding.realm, binding.realizeException);
-    const object = binding.createPlatformRecord(binding.resolveInterface('PromiseExceptionSource')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PromiseExceptionSource')).platformObject!;
     const promise = call(object, 'reject') as Promise<unknown>;
 
     expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);

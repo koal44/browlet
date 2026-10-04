@@ -1,7 +1,7 @@
 import { toScalarValueString } from '../../infra/index';
 import { toString } from '../../js-engine/index';
 
-import type { IDLStringType } from '../assembly/index';
+import type { IDLStringType, IDLEnumerationType } from '../assembly/index';
 import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare the declared string conversion and null-to-empty-string behavior. */
@@ -25,5 +25,20 @@ export class StringConverter<Type extends IDLStringType = IDLStringType> extends
         ? (value) => toScalarValueString(value === null ? '' : toString(value))
         : (value) => toScalarValueString(toString(value));
     }
+  }
+}
+
+/** Coerce an enum value to a string and check the assembled declaration's membership set. */
+export class EnumerationConverter<Type extends IDLEnumerationType = IDLEnumerationType> extends Converter<Type> {
+  // https://webidl.spec.whatwg.org/#es-enumeration
+  protected createInputSteps(): ConversionSteps<string> {
+    const assembled = this.type.assembled;
+    return (value) => {
+      const string = toString(value);
+      if (!assembled.hasValue(string)) {
+        this.throwTypeError(`${string} is not a value of ${assembled.primary.name}`);
+      }
+      return string;
+    };
   }
 }

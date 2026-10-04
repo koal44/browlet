@@ -204,24 +204,12 @@ export default defineConfig(
 
   {
     files: ['src/**/*.{ts,js,mjs,cjs}'],
-    ignores: ['src/web-idl/**', 'src/stylelet/**', 'src/selectlet/**'],
-    rules: {
-      'no-restricted-imports': ['error', {
-        patterns: [{
-          regex: '(^|/)web-idl/(?!index$)',
-          message: 'Import from web-idl/index, the full Web IDL entry point.',
-        }],
-      }],
-    },
-  },
-
-  {
-    files: ['src/{stylelet,selectlet}/**/*.{ts,js,mjs,cjs}'],
+    ignores: ['src/web-idl/**'],
     rules: {
       'no-restricted-imports': ['error', {
         patterns: [{
           regex: '(^|/)web-idl/(?!(?:core/)?index$)',
-          message: 'Use web-idl/core/index for declarations or web-idl/index for the full binding API.',
+          message: 'Use web-idl/core/index for Core-only consumers or web-idl/index for binding hooks and runtime APIs.',
         }],
       }],
     },

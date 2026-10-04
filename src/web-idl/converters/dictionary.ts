@@ -33,9 +33,9 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
         member,
         converter,
         convert: converter.getInputSteps(),
-        getDefault: member.primary.default === undefined
+        getDefault: member.default === undefined
             ? undefined
-            : converter.createDefaultSteps(member.primary.default),
+            : converter.createDefaultSteps(member.default),
       };
     });
     // Required/defaulted members always exist after successful conversion. Copy
@@ -62,7 +62,7 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
           converted = convert(memberValue);
         } else if (getDefault) {
           converted = getDefault();
-        } else if (member.primary.required) {
+        } else if (member.required) {
           converter.throwTypeError(`Required dictionary member ${member.name} is missing`);
         } else {
           continue;
@@ -72,7 +72,7 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
       }
       // Object.fromEntries creates sparse own properties together, without
       // inherited setters or deleting absent fields from the complete layout.
-      return new IDLDictionary(assembled, entries ? Object.fromEntries(entries) : record);
+      return new IDLDictionary(entries ? Object.fromEntries(entries) : record);
     };
   }
 

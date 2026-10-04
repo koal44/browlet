@@ -3,7 +3,7 @@ import {
   frozenArray, idlType, nullable, record, reference, sequence, union,
 } from '../../../../src/web-idl/core/index';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import type { BindingContext } from '../../../../src/web-idl/binding/context';
+import type { BindingContext } from '../../../../src/web-idl/binding/world';
 import type { Converter } from '../../../../src/web-idl/converters/converter';
 
 declare const binding: RealmBinding;

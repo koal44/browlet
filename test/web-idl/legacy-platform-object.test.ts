@@ -48,7 +48,7 @@ describe('Web IDL legacy platform objects', () => {
     getMemberBinding(interfaceBinding, length).attributeSteps = {
       get(receiver) { return values.get(receiver!.implInst)?.length ?? 0; },
     };
-    const Interface = getInstalledInterface(binding.install(), 'ReadOnlyIndexed');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'ReadOnlyIndexed');
     const object = construct(Interface);
 
     expect(Reflect.get(object, '0')).toBe('zero');
@@ -84,6 +84,35 @@ describe('Web IDL legacy platform objects', () => {
     expect(Reflect.ownKeys(object)).toEqual([
       '0', '1', 'label', '01', '-0', '4294967295', symbol,
     ]);
+  });
+
+  it('reads operation hooks at invocation after legacy projection', () => {
+    const constructor = constructorMember();
+    const getter = indexedGetter('item', idlType.long);
+    const setter = indexedSetter('setItem', idlType.long);
+    const interfaceIDL = legacyInterface('MutableHooks', [constructor, getter, setter]);
+    const { binding } = createBinding(interfaceIDL);
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = { kind: 'initialize', steps() {} };
+    const getterBinding = getMemberBinding(interfaceBinding, getter);
+    getterBinding.indexedPropertySteps = {
+      getSupportedPropertyIndices: () => [0],
+      supportsIndex: (index) => index === 0,
+    };
+    const object = construct(getInstalledInterface(binding.installDefinitions(), 'MutableHooks'));
+
+    expect(() => { Reflect.get(object, '0'); }).toThrow('Missing indexed property getter implementation');
+    expect(() => Reflect.set(object, '0', 1)).toThrow('Missing indexed property setter implementation');
+
+    let value = 2;
+    getterBinding.operationSteps = () => value;
+    getMemberBinding(interfaceBinding, setter).operationSteps = (_receiver, _index, converted) => { value = converted as number; };
+    expect(Reflect.get(object, '0')).toBe(2);
+    expect(Reflect.set(object, '0', '3')).toBe(true);
+    expect(Reflect.get(object, '0')).toBe(3);
+
+    getterBinding.operationSteps = () => value + 1;
+    expect(Reflect.get(object, '0')).toBe(4);
   });
 
   it('converts values and invokes a named indexed setter', () => {
@@ -122,7 +151,7 @@ describe('Web IDL legacy platform objects', () => {
     getMemberBinding(interfaceBinding, setter).operationSteps = function(receiver, index, value) {
       values.get(receiver!.implInst)?.set(index as number, value as number);
     };
-    const Interface = getInstalledInterface(binding.install(), 'WritableIndexed');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'WritableIndexed');
     const object = construct(Interface);
     const implementation = getImplementationObject(object);
     if (!implementation) throw new Error('Missing implementation target');
@@ -181,7 +210,7 @@ describe('Web IDL legacy platform objects', () => {
         values.get(this)?.set(index, value as string);
       },
     };
-    const object = construct(getInstalledInterface(binding.install(), 'AnonymousIndexed'));
+    const object = construct(getInstalledInterface(binding.installDefinitions(), 'AnonymousIndexed'));
 
     expect(Reflect.set(object, '0', 'updated')).toBe(true);
     expect(Reflect.set(object, '1', 'created')).toBe(true);
@@ -226,7 +255,7 @@ describe('Web IDL legacy platform objects', () => {
     };
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(base.name)), baseGetter).operationSteps = () => 'base';
     getMemberBinding(interfaceBinding, derivedGetter).operationSteps = () => 'derived';
-    const object = construct(getInstalledInterface(binding.install(), 'IndexedDerived'));
+    const object = construct(getInstalledInterface(binding.installDefinitions(), 'IndexedDerived'));
 
     expect(Reflect.has(object, '0')).toBe(false);
     expect(Reflect.get(object, '1')).toBe('derived');
@@ -269,7 +298,7 @@ describe('Web IDL legacy platform objects', () => {
     getMemberBinding(interfaceBinding, length).attributeSteps = {
       get(receiver) { return values.get(receiver!.implInst)?.size ?? 0; },
     };
-    const Interface = getInstalledInterface(binding.install(), 'ReadOnlyNamed');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'ReadOnlyNamed');
     const object = construct(Interface);
 
     expect(Reflect.get(object, 'alpha')).toBe('named alpha');
@@ -352,7 +381,7 @@ describe('Web IDL legacy platform objects', () => {
     };
     getMemberBinding(legacyBinding.getImplementationBinding(legacyBinding.resolveInterface(window.name)), globalGetter).operationSteps = () => 'global';
     getMemberBinding(legacyBindingInterfaceBinding, legacyGetter).operationSteps = () => 'legacy';
-    const global = globalBinding.projectGlobalObject(
+    const global = globalBinding.projectGlobalRecord(
       {},
       globalBinding.resolveInterface('Window'),
     ).platformObject!;
@@ -361,7 +390,7 @@ describe('Web IDL legacy platform objects', () => {
       Reflect.getPrototypeOf(globalPrototype);
     if (!namedProperties) throw new Error('Missing named properties object');
 
-    const object = construct(getInstalledInterface(legacyBinding.install(), 'LegacyNamed'));
+    const object = construct(getInstalledInterface(legacyBinding.installDefinitions(), 'LegacyNamed'));
     expect(Reflect.setPrototypeOf(object, namedProperties)).toBe(true);
     expect(Reflect.get(object, 'shared')).toBe('legacy');
   });
@@ -424,7 +453,7 @@ describe('Web IDL legacy platform objects', () => {
     };
     getMemberBinding(interfaceBinding, length).attributeSteps = { get: () => 5 };
     getMemberBinding(interfaceBinding, fixed).attributeSteps = { get: () => 'fixed attribute' };
-    const Interface = getInstalledInterface(binding.install(), 'OverridingNamed');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'OverridingNamed');
     const object = construct(Interface);
 
     expect(Reflect.get(object, 'alpha')).toBe('named alpha');
@@ -474,7 +503,7 @@ describe('Web IDL legacy platform objects', () => {
     };
     getMemberBinding(interfaceBinding, getter).operationSteps = () => 'named';
     getMemberBinding(interfaceBinding, stringifier).stringificationBehavior = () => 'stringified';
-    const object = construct(getInstalledInterface(binding.install(), 'StringifyingNamed'));
+    const object = construct(getInstalledInterface(binding.installDefinitions(), 'StringifyingNamed'));
     const descriptor = Reflect.getOwnPropertyDescriptor(object, 'toString');
 
     expect(descriptor).toMatchObject({
@@ -530,7 +559,7 @@ describe('Web IDL legacy platform objects', () => {
         values.get(this)?.set(name, value as string);
       },
     };
-    const object = construct(getInstalledInterface(binding.install(), 'AnonymousNamed'));
+    const object = construct(getInstalledInterface(binding.installDefinitions(), 'AnonymousNamed'));
 
     expect(Reflect.set(object, 'existing', 'updated')).toBe(true);
     expect(Reflect.set(object, 'created', 'new value')).toBe(true);
@@ -588,7 +617,7 @@ describe('Web IDL legacy platform objects', () => {
     getMemberBinding(interfaceBinding, nameSetter).operationSteps = function(receiver, name, value) {
       names.get(receiver!.implInst)?.set(name as string, value as string);
     };
-    const Interface = getInstalledInterface(binding.install(), 'IndexedAndNamed');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'IndexedAndNamed');
     const object = construct(Interface);
     const other = construct(Interface);
 
@@ -634,7 +663,7 @@ describe('Web IDL legacy platform objects', () => {
       };
       getMemberBinding(interfaceBinding, indexGetter).operationSteps = () => name;
       getMemberBinding(interfaceBinding, nameGetter).operationSteps = () => name;
-      return construct(getInstalledInterface(binding.install(), 'SharedLegacy'));
+      return construct(getInstalledInterface(binding.installDefinitions(), 'SharedLegacy'));
     });
 
     expect(Reflect.ownKeys(objects[0]!)).toEqual(['0', 'first']);

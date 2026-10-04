@@ -5,8 +5,9 @@ import {
   arg, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration, defineIncludes,
   defineInterface, defineInterfaceMixin, defineNamespace,
   definePartialDictionary, definePartialInterface,
-  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, nullable, op, reference, roAttr, sequence, union,
+  definePartialInterfaceMixin, definePartialNamespace, idlType, maplike, nullable, op, reference, roAttr, sequence, union, xattr,
 } from '../../src/web-idl/core/index';
+import { TestRealm } from './test-realm';
 
 describe('Web IDL definition assembly', () => {
   it('identifies types that can pass directly from IDL to implementation code', () => {
@@ -112,7 +113,7 @@ describe('Web IDL definition assembly', () => {
     expect(member).not.toBe(operation);
     expect(second.findMemberByKind('operation')!.member).toBe(member);
     for (const assembled of [first, second]) {
-      const group = assembled.getOperationGroups('regular', () => true, assembly).get('regular:run')!;
+      const group = assembled.getOperationGroups('regular', () => true).get('regular:run')!;
       expect(group.callables[0]).toBe(member);
       expect(group.minimumArgumentCount).toBe(1);
       expect(group.maximumArgumentCount).toBe(Infinity);
@@ -137,6 +138,54 @@ describe('Web IDL definition assembly', () => {
     expect(assembled.getArgument(1)).toBe(assembled.arguments[1]);
     expect(assembled.getArgument(2)).toBeUndefined();
     expect(assembled.returns).toBe(assembly.getIDLType(callback.returns));
+  });
+
+  it('evaluates wildcard exposure for a realm without any declared global names', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Everywhere', exposed: '*', members: [] }),
+      defineNamespace({ name: 'Tools', exposed: '*', members: [] }),
+      defineCallbackInterface({ name: 'Callback', exposed: '*', members: [] }),
+      defineInterface({ name: 'WindowOnly', exposed: 'Window', members: [] }),
+    ]);
+    const realm = new TestRealm({ globalNames: [] });
+
+    expect(assembly.interfaces.get('Everywhere')!.isExposed(realm)).toBe(true);
+    expect(assembly.namespaces.get('Tools')!.isExposed(realm)).toBe(true);
+    expect(assembly.callbackInterfaces.get('Callback')!.isExposed(realm)).toBe(true);
+    expect(assembly.interfaces.get('WindowOnly')!.isExposed(realm)).toBe(false);
+  });
+
+  it('evaluates shared mixin exposure under each owner and all realm global names', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'First', exposed: 'Worker', members: [] }),
+      defineInterface({ name: 'Second', exposed: 'DedicatedWorker', members: [], ...xattr('SecureContext') }),
+      defineInterfaceMixin({
+        name: 'Runner', exposed: ['Worker', 'Worklet'],
+        members: [op('run', idlType.undefined,
+          [],
+          { exposed: 'DedicatedWorker', ...xattr('CrossOriginIsolated') },
+        )],
+      }),
+      defineIncludes({ interface: 'First', mixin: 'Runner' }),
+      defineIncludes({ interface: 'Second', mixin: 'Runner' }),
+    ]);
+    const first = assembly.interfaces.get('First')!;
+    const second = assembly.interfaces.get('Second')!;
+    const entry = first.members[0]!;
+    const realmOptions = {
+      globalNames: ['Worker', 'DedicatedWorker'], secureContext: false, crossOriginIsolated: true,
+    };
+    const realm = new TestRealm(realmOptions);
+
+    expect(second.members[0]).toBe(entry);
+    expect(first.isMemberExposed(entry, realm)).toBe(true);
+    expect(second.isMemberExposed(entry, realm)).toBe(false);
+    expect(second.isMemberExposed(entry, new TestRealm({ ...realmOptions, secureContext: true }))).toBe(true);
+    expect(first.isMemberExposed(entry, new TestRealm({ ...realmOptions, crossOriginIsolated: false }))).toBe(false);
+    expect(first.isMemberExposed(entry, new TestRealm({ ...realmOptions, globalNames: ['Worker'] }))).toBe(false);
+    expect(second.isMemberExposed(entry, new TestRealm({
+      ...realmOptions, secureContext: true, globalNames: ['DedicatedWorker'],
+    }))).toBe(false);
   });
 
   it('preserves ancestry, declaration identity, and nearest inherited attributes', () => {

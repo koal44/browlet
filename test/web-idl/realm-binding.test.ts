@@ -15,7 +15,7 @@ import {
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import type { SecurityCheckType } from '../../src/web-idl/environment';
-import { getPlatformRecord } from '../../src/web-idl/binding/platform';
+import { getPlatformRecord, PlatformRecord } from '../../src/web-idl/binding/platform';
 
 describe('Web IDL realm interface bindings', () => {
   it('projects constructors, inheritance, fragments, members, and descriptors', () => {
@@ -119,7 +119,7 @@ describe('Web IDL realm interface bindings', () => {
     getMemberBinding(interfaceBinding, staticAttribute).attributeSteps = {
       get() { return '1.0'; },
     };
-    const installed = binding.install();
+    const installed = binding.installDefinitions();
     const Base = getInstalledInterface(installed, 'ProjectionBase');
     const Derived = getInstalledInterface(installed, 'ProjectionDerived');
 
@@ -212,7 +212,7 @@ describe('Web IDL realm interface bindings', () => {
     getMemberBinding(secondBinding, value).attributeSteps = { get: () => 1 };
     getMemberBinding(firstBinding, read).operationSteps = () => 2;
     getMemberBinding(secondBinding, read).operationSteps = () => 2;
-    const installed = binding.install();
+    const installed = binding.installDefinitions();
     const First = getInstalledInterface(installed, 'FirstHost');
     const Second = getInstalledInterface(installed, 'SecondHost');
     const firstPrototype = getPrototype(First);
@@ -291,7 +291,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const Constants = getInstalledInterface(binding.install(), 'ConstantValues');
+    const Constants = getInstalledInterface(binding.installDefinitions(), 'ConstantValues');
 
     expect(Reflect.get(Constants, 'MAX_SIGNED'))
       .toBe(Number(9223372036854775807n));
@@ -345,8 +345,8 @@ describe('Web IDL realm interface bindings', () => {
       steps: () => undefined,
     };
     getMemberBinding(secondInterfaceBinding, operation).operationSteps = () => 'ok';
-    const First = getInstalledInterface(first.install(), 'CrossRealmInterface');
-    const Second = getInstalledInterface(second.install(), 'CrossRealmInterface');
+    const First = getInstalledInterface(first.installDefinitions(), 'CrossRealmInterface');
+    const Second = getInstalledInterface(second.installDefinitions(), 'CrossRealmInterface');
     const foreignObject = construct(Second, []);
     const firstPrototype = First.prototype;
 
@@ -397,8 +397,8 @@ describe('Web IDL realm interface bindings', () => {
       return value;
     };
     const prototype = binding.getImplementationBinding(assembled).getInterfacePrototypeObject();
-    const record = binding.projectPlatformObject(implementation, assembled);
-    const { platformObject: object } = record;
+    const record = new PlatformRecord(implementation, assembled, binding);
+    const object = record.project();
 
     expect(binding.isPlatformObject(object)).toBe(true);
     expect(binding.isPlatformObject(implementation)).toBe(false);
@@ -469,7 +469,7 @@ describe('Web IDL realm interface bindings', () => {
     getMemberBinding(interfaceBinding, nonJSONValue).attributeSteps = {
       get() { throw new Error('A non-JSON getter must not be read'); },
     };
-    const Interface = getInstalledInterface(binding.install(), 'JSONDerived');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'JSONDerived');
     const object = construct(Interface, []);
     const json = call(Interface.prototype, 'toJSON', object);
 
@@ -574,7 +574,7 @@ describe('Web IDL realm interface bindings', () => {
     foreign.getImplementationBinding(foreign.resolveInterface(point.name)).createImplementation = () => new JSONPointImpl();
     foreign.getImplementationBinding(foreign.resolveInterface(holder.name)).createImplementation = () => new JSONHolderImpl();
     const pointObject = projected
-      ? local.createPlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
+      ? local.allocatePlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
       : undefined;
     const pointImpl = pointObject ? getPlatformRecord(pointObject)!.implInst : new JSONPointImpl();
     getMemberBinding(local.getImplementationBinding(local.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
@@ -583,7 +583,7 @@ describe('Web IDL realm interface bindings', () => {
     getMemberBinding(foreign.getImplementationBinding(foreign.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
       get() { return pointImpl; },
     };
-    const holderObject = local.createPlatformRecord(local.resolveInterface('JSONHolder')).platformObject!;
+    const holderObject = local.allocatePlatformRecord(local.resolveInterface('JSONHolder')).platformObject!;
 
     const json = call(
       foreign.getImplementationBinding(foreign.resolveInterface('JSONHolder')).getInterfacePrototypeObject(),
@@ -630,7 +630,7 @@ describe('Web IDL realm interface bindings', () => {
       get(receiver) { return state.get(receiver!.implInst); },
       set(receiver, value) { state.set(receiver!.implInst, value as readonly unknown[]); },
     };
-    const Interface = getInstalledInterface(binding.install(), 'FrozenArrayInterface');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'FrozenArrayInterface');
     const object = construct(Interface, []);
     const source = Object.freeze(['1', 2]);
 
@@ -673,7 +673,7 @@ describe('Web IDL realm interface bindings', () => {
       steps: () => undefined,
     };
     getMemberBinding(interfaceBinding, echo).operationSteps = (_receiver, source) => source;
-    const Interface = getInstalledInterface(binding.install(), 'BufferSourceInterface');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'BufferSourceInterface');
     const object = construct(Interface, []);
     const view = new Uint8Array([1, 2]);
 
@@ -753,7 +753,7 @@ describe('Web IDL realm interface bindings', () => {
     };
     getMemberBinding(interfaceBinding, fixed).operationSteps = () => 'fixed';
     getMemberBinding(interfaceBinding, scoped).operationSteps = () => undefined;
-    const Interface = getInstalledInterface(binding.install(), 'ExtendedInterface');
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'ExtendedInterface');
     const prototype = Interface.prototype;
     const first = construct(Interface, []);
     const second = construct(Interface, []);
@@ -853,7 +853,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const insecureInstalled = insecure.install();
+    const insecureInstalled = insecure.installDefinitions();
     const insecurePrototype = getPrototype(
       requireInstalled(insecureInstalled, 'ExposedInterface'),
     );
@@ -870,7 +870,7 @@ describe('Web IDL realm interface bindings', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    const privilegedInstalled = privileged.install();
+    const privilegedInstalled = privileged.installDefinitions();
     const privilegedPrototype = getPrototype(
       requireInstalled(privilegedInstalled, 'ExposedInterface'),
     );
@@ -907,7 +907,7 @@ describe('Web IDL realm interface bindings', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
 
-    expect([...binding.install().keys()]).toEqual([
+    expect([...binding.installDefinitions().keys()]).toEqual([
       'WorkerInterface', 'WorkletInterface',
     ]);
   });

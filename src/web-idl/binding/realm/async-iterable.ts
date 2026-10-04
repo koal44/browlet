@@ -126,9 +126,9 @@ export class AsyncIterableBinding {
     return arguments_.map((argument, index) => {
       const value = argumentsList[index];
       if (index >= argumentsList.length || value === undefined) {
-        return argument.primary.default === undefined
+        return argument.default === undefined
           ? undefined
-          : this.#binding.getConverter(argument.type).createDefault(argument.primary.default);
+          : this.#binding.getConverter(argument.type).createDefault(argument.default);
       }
       return this.#binding.getConverter(argument.type).jsToIDL(value);
     });

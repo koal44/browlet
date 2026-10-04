@@ -1,9 +1,7 @@
 import {
-  DOMExceptionNames, throwDOMException,
-} from '../../../web-idl/index';
-import {
   XML_NAMESPACE, XMLNS_NAMESPACE,
 } from '../../../infra/index';
+import { DOMExceptionNames, throwDOMException } from '../../../web-idl/core/index';
 
 const INVALID_NAMESPACE_PREFIX_RE = /[\t\n\f\r \0/>]/;
 const INVALID_ATTRIBUTE_LOCAL_NAME_RE = /[\t\n\f\r \0/=>]/;

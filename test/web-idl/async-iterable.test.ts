@@ -28,7 +28,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
       },
       return: () => realm.Promise.resolve(undefined, idlType.undefined),
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const prototype = Object.getPrototypeOf(object) as object;
     const entries = getMethod(prototype, 'entries');
     const keys = getMethod(prototype, 'keys');
@@ -94,8 +94,8 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
     getMemberBinding(other, member).asyncIteratorSteps = getMemberBinding(original, member).asyncIteratorSteps;
-    const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
-    const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
+    const otherObject = otherBinding.allocatePlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const otherIterator = Reflect.apply(
       getMethod(otherObject, 'entries'), otherObject, [],
@@ -129,8 +129,8 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
     getMemberBinding(other, member).asyncIteratorSteps = getMemberBinding(original, member).asyncIteratorSteps;
-    const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
-    const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
+    const otherObject = otherBinding.allocatePlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const otherIterator = Reflect.apply(getMethod(otherObject, 'entries'), otherObject, []) as object;
 
@@ -145,7 +145,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
       next: () => realm.Promise.try(() => ['one', 1], internalType<(string | number)[]>('Array')),
       return: () => realm.Promise.resolve(undefined, idlType.undefined),
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const prototype = Reflect.getPrototypeOf(iterator);
     const next = getMethod(iterator, 'next');
@@ -197,9 +197,9 @@ describe('Web IDL asynchronously iterable declarations', () => {
     const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
     getMemberBinding(other, member).asyncIteratorSteps = getMemberBinding(original, member).asyncIteratorSteps;
-    const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
-    const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
+    const otherObject = otherBinding.allocatePlatformRecord(otherBinding.resolveInterface('AsyncPairs')).platformObject!;
     const otherIterator = Reflect.apply(getMethod(otherObject, 'entries'), otherObject, []) as object;
 
     const first = callIterator(iterator, 'next');
@@ -226,7 +226,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
       next: () => realm.Promise.try(() => endOfIteration, idlType.symbol),
       return: () => realm.Promise.resolve(undefined, idlType.undefined),
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('AsyncPairs')).platformObject!;
     const iterator = Reflect.apply(
       getMethod(object, 'entries'),
       object,
@@ -271,7 +271,7 @@ describe('Web IDL asynchronously iterable declarations', () => {
       create: () => ({}),
       next: () => realm.Promise.try(() => endOfIteration, idlType.symbol),
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     expect(getMethod(object, Symbol.asyncIterator)).toBe(getMethod(object, 'values'));
     expect(Reflect.has(object, 'entries')).toBe(false);
     expect(Reflect.has(object, 'keys')).toBe(false);

@@ -8,7 +8,6 @@ import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance, type StampedPlatformObject,
 } from './platform';
 import { RealmBinding } from './realm';
-import type { BindingContext } from './context';
 import { registerImplementationBindings } from './register';
 
 /**
@@ -50,13 +49,13 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
       throw new InternalError('Realm already has a registered binding');
     }
     this.#realmBindings.set(realm, binding);
-    return binding.context;
+    return binding;
   }
 
   /** Find a realm's binding context in this world without registering it. */
   getBindingContext(realm: Env['realm']): BindingContext<Env> | undefined {
-    // Registration checked the environment retained by this realm's context.
-    return this.#realmBindings.get(realm)?.context as BindingContext<Env> | undefined;
+    // Registration checked the environment retained by this realm's binding.
+    return this.#realmBindings.get(realm) as BindingContext<Env> | undefined;
   }
 
   /** Find a realm's binding, including for constructor prototype selection. */
@@ -82,3 +81,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     return record?.binding.world === this ? record.realm : undefined;
   }
 }
+
+/** Public operations of a realm binding; this type does not introduce another runtime object. */
+export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = Pick<RealmBinding<Env>,
+  | 'realm' | 'Promise' | 'DOMException' | 'getEnvironment'
+  | 'install' | 'projectGlobalObject' | 'createPlatformRecord'
+  | 'jsToImpl' | 'implToJS' | 'realizeException'
+  | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'
+>;

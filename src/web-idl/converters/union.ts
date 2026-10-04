@@ -5,7 +5,7 @@ import {
 
 import type { IDLUnionType, UnionInterfaceCandidate } from '../assembly/index';
 import { IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary } from '../values/index';
-import { getPlatformRecord, isPlatformObject } from '../binding/platform';
+import { getPlatformRecord } from '../binding/platform';
 import { CallbackFunctionStamper } from '../binding/realm/callback';
 
 import { Converter, type ConversionSteps } from './converter';
@@ -32,7 +32,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         if (assembled) return this.forType(assembled).getInputSteps()(value);
       }
 
-      if (isPlatformObject(value, this.binding)) {
+      if (this.binding.isPlatformObject(value)) {
         const interfaceType = candidates.interfaces.find((candidate) =>
           this.#implements(candidate, value));
         if (interfaceType) {
@@ -134,7 +134,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
       if (value === null && candidates.includesNullable) {
         return null;
       }
-      if (isPlatformObject(value, this.binding)) {
+      if (this.binding.isPlatformObject(value)) {
         const interfaceType = candidates.interfaces.find((candidate) =>
           this.#implements(candidate, value));
         if (interfaceType) return value;

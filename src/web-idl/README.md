@@ -17,21 +17,26 @@ Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
 entry augments declaration hooks with typed `BindingContext` arguments.
 Core and full-binding type fixtures are compiled separately so the augmentation
 cannot hide a dependency in the standalone surface.
-Production code outside Core imports through `core/index.ts`; Core modules
-import their siblings directly.
+Consumers needing only Core exports use `core/index.ts`; declarations needing
+typed binding hooks use the full `index.ts`. Web IDL runtime modules import
+Core through its index, while Core modules import their siblings directly.
 
 | Modules | Responsibility |
 | --- | --- |
-| `core/declarations.ts`, `core/helpers.ts`, `core/types.ts` | Definition records, declaration builders, members, and Web IDL result descriptors |
+| `core/declarations.ts`, `core/helpers.ts` | Complete definition records and declaration builders |
+| `core/members.ts` | Member and argument records, permitted member sets, and legacy property hooks |
+| `core/types.ts` | Type expressions, literals, extended attributes, implementation identity, and binding-hook contracts |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
 | `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
-| `assembly/assembly.ts` | Compose the assembled collections, assemble type uses, and answer type queries |
-| `assembly/types.ts` | Realm-independent type contracts with resolved definitions, nested types, and applicable conversion rules |
-| `assembly/assembled.ts` | Construct assembled definitions and collections, with member searches and implementation-class lookup |
-| `binding/world.ts` | Own definitions and identity across registered realms |
-| `binding/context.ts` | Expose boundary operations, resolve injected arguments, and supply typed implementation Promises |
+| `assembly/assembly.ts` | Compose the assembled collections and cache declared type uses |
+| `assembly/types.ts` | Realm-independent type contracts, conversion rules, comparison keys, and JSON classification |
+| `assembly/interface.ts`, `dictionary.ts`, `namespace.ts`, `callback.ts`, `enumeration.ts`, `typedef.ts`, `proxy-object.ts` | Each definition family, its collection, and its construction and search logic |
+| `assembly/member.ts` | Compile member and argument types, prepare callable contracts, and group overloads |
+| `assembly/exposure.ts` | Exposure predicate shared by assembled definitions |
+| `assembly/validation.ts` | Opt-in development checks for declaration composition, cycles, markers, and type references |
+| `binding/world.ts` | Own definitions and identity across registered realms; expose their public BindingContext type |
 | `environment.ts` | Environment, realm-facility, and callback-lifecycle contracts supplied to Web IDL |
-| `binding/realm.ts` | Compose realm components and own allocation, conversion caches, association, projection, and invocation exception handling |
+| `binding/realm.ts` | Retain the environment, supply typed implementation Promises, and own allocation, conversion caches, identity, and invocation services |
 | `binding/realm/implementation.ts`, `binding/realm/member.ts` | Registered implementation steps and the platform objects and functions that invoke them |
 | `binding/register.ts` | Connect assembled declarations to implementation factories, members, and explicit bindings |
 | `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, captured-context restoration, and implementation-callable identity |
@@ -46,15 +51,16 @@ import their siblings directly.
 | `binding/realm/iterable.ts`, `binding/realm/async-iterable.ts`, `binding/realm/collection.ts`, `binding/realm/observable-array.ts` | Install interface members and retain their iterator or collection state |
 
 The coordinating modules in `binding/` compose the subsystem: `BindingWorld` owns
-assembly and realm registration, `RealmBinding` retains realm-wide state and
-services, and `BindingContext` exposes operations to consumers. Files under
-`binding/realm/` are components of that same realm binding. They retain a typed
+assembly and realm registration, and each registered realm has one `RealmBinding`
+retaining its environment, state, and services. `BindingContext` is a type selecting
+that same object's public operations; there is no separate context object. Files
+under `binding/realm/` are components of that realm binding. They retain a typed
 reference to their owner and call its allocation, identity, conversion, and
-exception services; they do not create separate realm lifecycles.
+exception services.
 
-`BindingContext` owns declaration argument injection and the implementation
+`RealmBinding` also owns declaration argument injection and the implementation
 Promise constructor that uses its conversion operations. Platform records call
-`RealmBinding` directly to associate another implementation with their owner.
+it directly to associate another implementation with their owner.
 `converters/` owns the base `Converter` and reusable type-specific algorithms;
 `ImplementationConverter` consumes IDL values into implementation values.
 `values/` holds per-value state and lifecycle operations; converters and realm
@@ -69,6 +75,13 @@ Runtime types distinguish `any`, `undefined`, `boolean`, `bigint`, `object`, and
 `symbol` directly. Each has its own converter; integer, floating-point, and string
 converters share their related algorithms and prepare fixed conversion choices
 once. Core's compact `simple` declaration syntax does not survive assembly.
+
+Assembled interfaces, namespaces, and callback interfaces answer exposure queries
+using `WebIDLRealm`'s global names, secure-context status, and cross-origin-isolation
+status. The queries read the existing declarations; bindings supply their realm.
+Member queries also apply the contributing
+fragment's requirements and, for interfaces and namespaces, the including owner's.
+The unrestricted `*` remains independent of the globals declared in the assembly.
 
 Consumers use the `assembly/`, `converters/`, `values/`, and `binding/realm/` indexes;
 modules within those folders import their siblings directly. Infra also offers
@@ -90,11 +103,14 @@ type helpers describe the boundary. `serializeDefinitions()` emits IDL syntax.
 `defineInterface()` produces a `PrimaryInterfaceDefinition`; its partials and
 included mixins are combined into an `AssembledInterface` during assembly.
 
-Assembly rejects unresolved types, duplicate primary names, orphan partials or
-includes, and inheritance or typedef cycles. Declaration mistakes are internal
-errors at construction, rather than deferred conversion failures. Forward
-references and recursive dictionary values remain valid; an unimplemented
-conversion for a recognized type is a separate runtime limitation.
+Normal assembly trusts declarations. Call `validateDefinitions()` from
+`assembly/index.ts` during development or tests to check duplicate primary names,
+orphan partials or includes, inheritance and typedef cycles, serialization markers,
+and unresolved types, including unused aliases and mixins. Browlet's complete
+declaration set has a dedicated validation test. Required type resolution still
+throws when assembly cannot produce a valid IDL type. Forward references and
+recursive dictionary values remain valid; an unimplemented conversion for a
+recognized type is a separate runtime limitation.
 Composition must supply every referenced declaration, including type identities
 whose implementations are still pending.
 
@@ -166,7 +182,7 @@ in Core. The `IDL…` prefix identifies these values without boxing every value.
 
 | Value | Payload and retained information |
 | --- | --- |
-| `IDLDictionary` | Converted members and their assembled declaration |
+| `IDLDictionary` | Converted member record, distinguished from ordinary objects during union conversion |
 | `IDLCallbackFunction`, `IDLCallbackInterface` | Author object, declaration, callback realm, captured context, and a reference to the callback binding |
 | `IDLPromise` | Realm-owned promise, fulfillment type, resolving functions, and settlement state |
 | `IDLAsyncSequence` | Author iterable, selected iterator method, iteration kind, and element type |
@@ -286,7 +302,8 @@ assembly. Declarations and their nested members and types must remain unchanged
 after assembly. Dictionaries retain their members in conversion order;
 callback interfaces index their operation declarations.
 Callable arguments and dictionary members retain their assembled types, including
-applicable conversion attributes such as `[Clamp]`. Callables also retain argument
+applicable conversion attributes such as `[Clamp]`, with names, defaults, and callback
+policies directly on the compiled records. Callables also retain argument
 optionality and minimum argument counts. This preparation happens during assembly;
 invocation and implementation conversion reuse it while reading current values.
 Optional input arguments without a supplied value or declared default remain
@@ -296,7 +313,7 @@ After realm exposure filtering, assembled overload groups prepare their argument
 choices, distinguishing positions, and function lengths. Invocation selects from
 these groups without rebuilding effective overload entries. One final group handles
 all counts beyond the longest variadic declaration, reusing its final argument contract.
-The original declarations remain the keys for member bindings.
+Compiled members remain the keys for member bindings.
 Each realm retains an `ImplementationBinding` for an assembled construct. It owns
 the construct's prototypes, constructor, and other cached platform objects;
 its `MemberBinding` objects own registered steps and generated member functions.
@@ -322,7 +339,11 @@ Async sequences prepare element conversion when opened and preserve the argument
 callback exception policy. Each advance converts its author value in the iterator's
 reaction; implementation conversion then retains that step's result or failure,
 so observing the same step again does not consume its IDL containers twice.
-Converted dictionaries carry their assembled definition and a member record;
+Synchronous sources retain their opening realm on the iterator record and run
+async-from-sync operations directly, without a private adapter object or generated
+methods. Promise adoption and realm-owned result objects remain intact, including
+the synthesized result when closing a source without a `return` method.
+Converted dictionaries carry a member record; their converter retains the assembled definition.
 IDL-to-implementation conversion updates that record in place. `type.canPassToImpl`
 allows primitives and their sequences to bypass further inspection.
 `getMembersToConvert()` selects the remaining members, including records that need
@@ -388,7 +409,7 @@ Primitive representation and implementation pass-through are fixed type fields.
 Integer types reference shared width, signedness, and conversion bounds; buffer types
 record whether they describe a view. Nullable callback types retain their applicable
 legacy callback declaration, while the setter selects attribute-specific conversion.
-Comparison keys and completed JSON checks remain cached in assembly; intermediate
+Comparison keys and completed JSON checks are cached on each IDL type; intermediate
 dictionary traversal results are not retained. Assembly also retains derived sequence
 descriptors used by Promise aggregates and observable array assignment.
 
@@ -433,11 +454,13 @@ Assembled interfaces collect legacy factory names and lazily prepare their overl
 groups; each realm separately retains its factory functions and implementation steps.
 Default `toJSON` prepares its exposed attribute list once per realm and interface;
 each invocation still reads current getters and converts their values into a new object.
-Realm-specific exposure and
-installation remain binding work; queries that need exposure accept a predicate
-from that binding. Mixins are
-temporary assembly inputs; contributed members retain their source declarations
-for exposure checks. Proxy receiver resolution remains live and binding checks
+Legacy indexed/named property metadata retains member bindings and prepared converters.
+Traps check live property support before input conversion and read operation hooks at
+invocation, preserving hook updates and missing-handler errors after projection.
+Bindings supply the target facts and install exposed constructs; assembled definitions
+evaluate declaration exposure. Member-selection queries can accept predicates using
+those assembled methods. Mixins are temporary assembly inputs; contributed members
+retain their source declarations for exposure checks. Proxy receiver resolution remains live and binding checks
 each candidate's world before accepting it.
 
 Name references to `DefinitionAssembly` `assembly` and references to individual
@@ -456,9 +479,9 @@ supplying its interface members. These definitions install no global or prototyp
 and emit no IDL declaration text. Using JavaScript's `Proxy` alone does not need
 this declaration: legacy indexed/named objects and observable arrays keep their
 existing binding machinery.
-`world.register(realm, createEnvironment)` returns one Binding Context per realm
-in that world. Repeated registration returns the existing context without calling
-the factory again; `world.getBindingContext(realm)` only looks it up.
+`world.register(realm, createEnvironment)` returns the realm's binding through its
+public `BindingContext` type. Repeated registration returns the same object without
+calling the factory again; `world.getBindingContext(realm)` only looks it up.
 
 Every registration supplies an environment. Its minimum shape is `{ realm }`;
 pure conversion hosts need no execution facilities. Declarations requiring more
@@ -521,6 +544,11 @@ when callbacks, retained state, or internal creation require ownership earlier.
 An implementation can therefore be stamped but not yet projected. Structured
 serialization can dispatch from that record without creating a platform object.
 HTML separately owns transferable detached state.
+
+Lazy projection asks the owning realm binding to allocate an object, then attaches
+it directly to the existing record. Attachment initializes collection storage,
+exception recognition, and unforgeable properties. New construction and global
+adoption validate the platform object before creating or reusing that same record.
 
 `ctx.associate(Impl, value)` establishes that record without projection, reusing
 the same interface and owner checks as `ctx.project()`. Nested serialization can

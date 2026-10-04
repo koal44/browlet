@@ -5,6 +5,7 @@ import { TestRealm as Realm } from './test-realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
+import { PlatformRecord } from '../../src/web-idl/binding/platform';
 import {
   attr, defineInterface, definePartialInterface, idlType, impl, op, stringifier, xattr,
   type AttributeMember, type NamedArgumentsExtendedAttribute,
@@ -31,7 +32,7 @@ describe('Web IDL initial objects', () => {
       newTarget,
     });
 
-    binding.install();
+    binding.installDefinitions();
     const Interface = requireFunction(
       Reflect.get(realm.global, 'OverriddenConstructor'),
     );
@@ -62,7 +63,7 @@ describe('Web IDL initial objects', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
 
-    binding.install();
+    binding.installDefinitions();
     const Interface = requireFunction(
       Reflect.get(realm.global, 'IllegalConstructor'),
     );
@@ -93,8 +94,8 @@ describe('Web IDL initial objects', () => {
     );
     binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new HiddenImpl();
 
-    const installed = binding.install();
-    const object = binding.createPlatformRecord(binding.resolveInterface('HiddenInterface')).platformObject!;
+    const installed = binding.installDefinitions();
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('HiddenInterface')).platformObject!;
     const prototype = Reflect.getPrototypeOf(object);
 
     expect(installed.has('HiddenInterface')).toBe(false);
@@ -185,8 +186,8 @@ describe('Web IDL initial objects', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
 
-    windowBinding.install();
-    workerBinding.install();
+    windowBinding.installDefinitions();
+    workerBinding.installDefinitions();
 
     expect(Reflect.get(windowRealm.global, 'LegacyWidget'))
       .toBe(Reflect.get(windowRealm.global, 'Widget'));
@@ -226,7 +227,7 @@ describe('Web IDL initial objects', () => {
       },
     };
 
-    binding.install();
+    binding.installDefinitions();
     const Widget = requireFunction(Reflect.get(realm.global, 'Widget'));
     const LegacyWidget = requireFunction(
       Reflect.get(realm.global, 'LegacyWidget'),
@@ -289,7 +290,7 @@ describe('Web IDL initial objects', () => {
       },
     };
 
-    binding.install();
+    binding.installDefinitions();
     const LegacyPartialWidget = requireFunction(
       Reflect.get(realm.global, 'LegacyPartialWidget'),
     );
@@ -331,7 +332,7 @@ describe('Web IDL initial objects', () => {
           steps: function(value) { Reflect.set(this, 'value', `${name}:${typeof value}:${String(value)}`); },
         };
       }
-      binding.install();
+      binding.installDefinitions();
       const factory = requireFunction(Reflect.get(realm.global, 'LegacyWidget'));
       factories.push(factory);
 
@@ -340,7 +341,7 @@ describe('Web IDL initial objects', () => {
       expect(factory.prototype).toBe(binding.getImplementationBinding(assembled).getInterfacePrototypeObject());
       expect(Reflect.get(Reflect.construct(factory, [2 ** 32 + 7]), 'value')).toBe(`${name}:number:7`);
       expect(Reflect.get(Reflect.construct(factory, ['text']), 'value')).toBe(`${name}:string:text`);
-      binding.install();
+      binding.installDefinitions();
       expect(Reflect.get(realm.global, 'LegacyWidget')).toBe(factory);
     }
     expect(factories[0]).not.toBe(factories[1]);
@@ -377,7 +378,7 @@ describe('Web IDL initial objects', () => {
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
-    binding.install();
+    binding.installDefinitions();
     const firstInterface = requireFunction(Reflect.get(realm.global, 'Thing'));
     const firstFactory = requireFunction(
       Reflect.get(realm.global, 'LegacyThing'),
@@ -389,7 +390,7 @@ describe('Web IDL initial objects', () => {
     )?.get;
     const firstOperation: unknown = Reflect.get(firstPrototype, 'read');
 
-    binding.install();
+    binding.installDefinitions();
 
     const secondInterface = requireFunction(Reflect.get(realm.global, 'Thing'));
     const secondPrototype = secondInterface.prototype;
@@ -406,7 +407,7 @@ describe('Web IDL initial objects', () => {
       world,
       (ctx) => ({ realm: ctx.realm }),
     );
-    foreign.install();
+    foreign.installDefinitions();
     expect(Reflect.get(foreign.realm.global, 'Thing')).not.toBe(firstInterface);
     expect(Reflect.get(foreign.realm.global, 'LegacyThing'))
       .not.toBe(firstFactory);
@@ -448,7 +449,7 @@ describe('Web IDL initial objects', () => {
         return Reflect.get(receiver!.implInst, 'name') as unknown;
       },
     };
-    binding.install();
+    binding.installDefinitions();
 
     const declared = project(binding, 'DeclaredStringifier', {
       text: 'declared',
@@ -512,7 +513,7 @@ function project(
       { configurable: true, enumerable: true, value, writable: true },
     ])),
   ) as object;
-  return binding.projectPlatformObject(implementation, assembled).platformObject!;
+  return new PlatformRecord(implementation, assembled, binding).project();
 }
 
 function requireFunction(value: unknown): RealmFunction {

@@ -49,8 +49,7 @@ export class PromiseConverter<Type extends IDLPromiseType = IDLPromiseType> exte
         const assembly = this.binding.assembly;
         if (
             value.type.kind === 'implementation' ||
-            assembly.getConversionTypeKey(assembly.getPromiseResultType(value.type)) !==
-            assembly.getConversionTypeKey(type.resultType)
+            assembly.getPromiseResultType(value.type).conversionKey !== type.resultType.conversionKey
         ) {
           throw new InternalError('Promise result type does not match its Web IDL declaration');
         }

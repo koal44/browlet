@@ -55,7 +55,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = function() {
       return pairs.get(this) ?? [];
     };
-    const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     pairs.set(getPlatformRecord(object)!.implInst, [
       ['one', 1],
       ['two', 2],
@@ -114,7 +114,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const { binding, member, definition } = createPairBinding();
     const pairs: ValuePair[] = [['one', 1]];
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = () => pairs;
-    const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const entries = getMethod(object, 'entries');
     const iterator = Reflect.apply(entries, object, []) as object;
 
@@ -190,7 +190,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const [keyImplementation, keyObject] = createPairValue();
     const [valueImplementation, valueObject] = createPairValue();
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(collectionInterface.name)), member).valuePairsSteps = () => [[keyImplementation, valueImplementation]];
-    const collection = binding.createPlatformRecord(
+    const collection = binding.allocatePlatformRecord(
       binding.resolveInterface('InterfacePairCollection'),
     ).platformObject!;
     const seen: unknown[][] = [];
@@ -265,7 +265,7 @@ describe('Web IDL synchronous iterable declarations', () => {
 
     const pair = createPairBinding();
     getMemberBinding(pair.binding.getImplementationBinding(pair.binding.resolveInterface(pair.definition.name)), pair.member).valuePairsSteps = () => [];
-    const object = pair.binding.createPlatformRecord(pair.binding.resolveInterface('PairCollection')).platformObject!;
+    const object = pair.binding.allocatePlatformRecord(pair.binding.resolveInterface('PairCollection')).platformObject!;
     const entries = getMethod(object, 'entries');
     const iterator = Reflect.apply(entries, object, []) as object;
     const next = getMethod(iterator, 'next');
@@ -286,8 +286,8 @@ describe('Web IDL synchronous iterable declarations', () => {
     const other = otherBinding.getImplementationBinding(otherBinding.resolveInterface(definition.name));
     other.createImplementation = original.createImplementation;
     getMemberBinding(other, member).valuePairsSteps = getMemberBinding(original, member).valuePairsSteps;
-    const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
-    const otherObject = otherBinding.createPlatformRecord(otherBinding.resolveInterface('PairCollection')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
+    const otherObject = otherBinding.allocatePlatformRecord(otherBinding.resolveInterface('PairCollection')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const otherIterator = Reflect.apply(getMethod(otherObject, 'entries'), otherObject, []) as object;
 
@@ -298,7 +298,7 @@ describe('Web IDL synchronous iterable declarations', () => {
   it('keeps iterator state private and independent of author property changes', () => {
     const { binding, member, definition, realm } = createPairBinding();
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), member).valuePairsSteps = () => [['one', 1], ['two', 2]];
-    const object = binding.createPlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface('PairCollection')).platformObject!;
     const iterator = Reflect.apply(getMethod(object, 'entries'), object, []) as object;
     const next = getMethod(iterator, 'next');
     expect(Reflect.ownKeys(iterator)).toEqual([]);

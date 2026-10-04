@@ -19,11 +19,6 @@ export class MaplikeBinding {
     this.#binding = binding;
   }
 
-  /** Allocate backing entries once when the platform object is initialized. */
-  initialize(record: PlatformRecord): void {
-    record.mapEntries ??= new Map();
-  }
-
   // Web IDL §3.7.11 Maplike declarations — install the declared properties.
   defineMembers(
     target: object,
@@ -283,11 +278,6 @@ export class SetlikeBinding {
 
   constructor(binding: RealmBinding) {
     this.#binding = binding;
-  }
-
-  /** Allocate backing entries once when the platform object is initialized. */
-  initialize(record: PlatformRecord): void {
-    record.setEntries ??= new Set();
   }
 
   // Web IDL §3.7.12 Setlike declarations — install the declared properties.

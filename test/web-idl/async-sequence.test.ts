@@ -4,7 +4,7 @@ import { getMemberBinding } from '../support/web-idl-binding';
 
 import { TestRealm as Realm } from './test-realm';
 import { BindingWorld } from '../../src/web-idl/binding/world';
-import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
+import { DefinitionAssembly, type IDLType } from '../../src/web-idl/assembly/index';
 import { endOfIteration, type AsyncIterator } from '../../src/infra/iteration';
 import {
   IDLAsyncSequence, type AsyncSequenceIterator,
@@ -165,6 +165,74 @@ describe('Web IDL async sequences', () => {
       .toBeInstanceOf(realm.intrinsics.typeError);
   });
 
+  it.each(['next', 'return'] as const)('keeps sync %s failures in the opening realm', async (operation) => {
+    const openingRealm = new Realm();
+    const { binding, realm } = createBinding();
+    const source = {
+      [Symbol.iterator]: () => ({ next: () => 42, return: () => 42 }),
+    };
+    const converter = binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long)));
+    const iterator = converter.jsToIDL(source).open(openingRealm);
+    const promise = operation === 'next' ? nextValue(iterator, binding) : iterator.close('stop', realm).promise;
+
+    expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    await expect(promise).rejects.toBeInstanceOf(openingRealm.intrinsics.typeError);
+    await expect(promise).rejects.not.toBeInstanceOf(realm.intrinsics.typeError);
+  });
+
+  it('uses the invocation realm for element conversion after sync adaptation', async () => {
+    const openingRealm = new Realm();
+    const { binding, realm } = createBinding();
+    const source = {
+      [Symbol.iterator]: () => ({ next: () => ({ done: false, value: Symbol() }) }),
+    };
+    const converter = binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long)));
+    const iterator = converter.jsToIDL(source).open(openingRealm);
+
+    await expect(nextValue(iterator, binding)).rejects.toBeInstanceOf(realm.intrinsics.typeError);
+  });
+
+  it.each(['sync', 'async'] as const)('preserves %s close adoption when return is absent', async (kind) => {
+    const openingRealm = new Realm();
+    const { binding, realm } = createBinding();
+    const source = {
+      [kind === 'sync' ? Symbol.iterator : Symbol.asyncIterator]: () => ({ next: () => ({ done: true }) }),
+    };
+    const converter = binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long)));
+    const iterator = converter.jsToIDL(source).open(openingRealm);
+    const results: object[] = [];
+    const order: string[] = [];
+    const prototype = openingRealm.intrinsics.objectPrototype;
+    Object.defineProperty(prototype, 'then', {
+      configurable: true,
+      get(this: object) { results.push(this); return undefined; },
+    });
+
+    try {
+      const close = iterator.close('stop', realm).promise;
+      expect(close).toBeInstanceOf(realm.intrinsics.promise.constructor);
+      const settled = close.then((value) => {
+        expect(value).toBeUndefined();
+        order.push('closed');
+      });
+      realm.queueMicrotask(() => { order.push('queued'); });
+      await settled;
+
+      expect(order).toEqual(kind === 'sync' ? ['queued', 'closed'] : ['closed', 'queued']);
+      if (kind === 'sync') {
+        expect(results.length).toBeGreaterThan(0);
+        for (const result of results) {
+          expect(Object.getPrototypeOf(result)).toBe(prototype);
+          expect(result).toEqual({ done: true, value: 'stop' });
+        }
+      } else {
+        expect(results).toEqual([]);
+      }
+    } finally {
+      Reflect.deleteProperty(prototype, 'then');
+    }
+  });
+
   it('rejects abrupt IteratorNext completions before later microtasks', async () => {
     const { binding, realm } = createBinding();
     const source = {
@@ -215,7 +283,7 @@ describe('Web IDL async sequences', () => {
     interfaceBinding.createImplementation = () => new AsyncSequenceConsumerImpl();
     getMemberBinding(interfaceBinding, asyncOperation).operationSteps = (_receiver, _value) => 'async';
     getMemberBinding(interfaceBinding, stringOperation).operationSteps = (_receiver, _value) => 'string';
-    const object = binding.createPlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
+    const object = binding.allocatePlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     let gets = 0;
     const source = Object.defineProperty({}, Symbol.asyncIterator, {
       get() {
@@ -250,8 +318,8 @@ function requireAsyncSequence(
   return value;
 }
 
-function nextValue(
-  iterator: AsyncSequenceIterator,
+function nextValue<Element extends IDLType>(
+  iterator: AsyncSequenceIterator<Element>,
   binding: RealmBinding,
 ): Promise<unknown> {
   return iterator.nextValue(binding.realm,

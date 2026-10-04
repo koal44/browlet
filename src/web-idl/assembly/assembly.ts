@@ -11,15 +11,18 @@ import {
   IDLFrozenArrayType, IDLAsyncSequenceType, IDLRecordType, IDLDictionaryType, IDLCallbackFunctionType,
   IDLCallbackInterfaceType, IDLInterfaceType, IDLProxyType,
 } from './types';
-import {
-  AssembledInterfaces, AssembledCallbackInterfaces, AssembledCallbackFunctions, AssembledNamespaces,
-  AssembledDictionaries, AssembledEnumerations, AssembledTypedefs, AssembledProxyObjects,
-  type AssemblySteps,
-} from './assembled';
+import { AssembledInterfaces } from './interface';
+import { AssembledCallbackInterfaces, AssembledCallbackFunctions } from './callback';
+import { AssembledNamespaces } from './namespace';
+import { AssembledDictionaries } from './dictionary';
+import { AssembledEnumerations } from './enumeration';
+import { AssembledTypedefs } from './typedef';
+import { AssembledProxyObjects } from './proxy-object';
 
 /**
  * Combines declarations for all realms in one binding world.
  * Definitions finish assembly during construction; type uses are assembled and cached on demand.
+ * Inputs must be valid declarations; validateDefinitions() checks them separately during development.
  * Declarations, including their members and types, must remain unchanged afterward.
  */
 export class DefinitionAssembly {
@@ -46,12 +49,6 @@ export class DefinitionAssembly {
   #types = new Map<WebIDLType, IDLType>();
   /** Named type inputs used by bindings without manufacturing declaration descriptors. */
   #namedTypes = new Map<string, IDLType>();
-  /** Completed JSON-type checks; incomplete recursive dictionary checks are not retained. */
-  #jsonTypeResults = new Map<IDLType, boolean>();
-  /** Type comparison keys that ignore annotations for overload selection. */
-  #overloadTypeKeys = new Map<IDLType, string>();
-  /** Type comparison keys that retain conversion attributes and nested types. */
-  #conversionTypeKeys = new Map<IDLType, string>();
 
   /** Derived sequence descriptors reused by aggregate and observable-array conversions. */
   #sequenceTypesByElementType = new Map<IDLType, IDLSequenceType>();
@@ -59,16 +56,6 @@ export class DefinitionAssembly {
   #integerLiteralValues = new Map<IntegerLiteral, bigint>();
 
   constructor(definitions: Definition[]) {
-    const names = new Set<string>();
-    for (const definition of definitions) {
-      switch (definition.kind) {
-        case 'includes': case 'partial-interface': case 'partial-interface-mixin':
-        case 'partial-dictionary': case 'partial-namespace': continue;
-      }
-      if (names.has(definition.name)) throw new InternalError(`Duplicate Web IDL definition ${definition.name}`);
-      names.add(definition.name);
-    }
-
     // Member types can name later declarations or their own enclosing construct.
     // Index every named target before compiling those types; discard these steps afterward.
     const finish: AssemblySteps[] = [];
@@ -78,7 +65,7 @@ export class DefinitionAssembly {
     this.namespaces = new AssembledNamespaces(definitions, finish);
     this.dictionaries = new AssembledDictionaries(definitions, finish);
     this.enumerations = new AssembledEnumerations(definitions);
-    this.typedefs = new AssembledTypedefs(definitions, finish);
+    this.typedefs = new AssembledTypedefs(definitions);
     this.proxyObjects = new AssembledProxyObjects(definitions);
     this.builtinTypes = Object.fromEntries(Object.entries(idlType).map(([name, type]) =>
       [name, this.getIDLType(type)])) as DefinitionAssembly['builtinTypes'];
@@ -137,93 +124,11 @@ export class DefinitionAssembly {
     return type;
   }
 
-  /** Get an overload comparison key with aliases resolved and annotations ignored. */
-  getOverloadTypeKey(type: IDLType): string {
-    const cached = this.#overloadTypeKeys.get(type);
-    if (cached !== undefined) return cached;
-    let key: string;
-    switch (type.kind) {
-      case 'any': case 'undefined': case 'boolean': case 'bigint': case 'object': case 'symbol':
-        key = type.kind;
-        break;
-      case 'integer': case 'float': case 'string': case 'buffer-source':
-        key = type.name;
-        break;
-      case 'interface': case 'dictionary': case 'enumeration': case 'callback-function':
-      case 'callback-interface': case 'proxy-object':
-        key = `reference:${type.assembled.primary.name}`;
-        break;
-      case 'nullable': key = `${this.getOverloadTypeKey(type.innerType)}?`; break;
-      case 'union': key = `(${type.memberTypes.map((member) => this.getOverloadTypeKey(member)).join(' or ')})`; break;
-      case 'sequence': case 'async-sequence': case 'frozen-array': case 'observable-array':
-        key = `${type.kind}<${this.getOverloadTypeKey(type.elementType)}>`;
-        break;
-      case 'promise': key = `promise<${this.getOverloadTypeKey(type.resultType)}>`; break;
-      case 'record': key = `record<${this.getOverloadTypeKey(type.keyType)}, ${this.getOverloadTypeKey(type.valueType)}>`; break;
-    }
-    this.#overloadTypeKeys.set(type, key);
-    return key;
-  }
-
-  /** Compare result descriptors, including conversion attributes and nested types. */
-  getConversionTypeKey(type: IDLType): string {
-    const cached = this.#conversionTypeKeys.get(type);
-    if (cached !== undefined) return cached;
-    let parts: string[];
-    switch (type.kind) {
-      case 'any': case 'undefined': case 'boolean': case 'bigint': case 'object': case 'symbol':
-        parts = [];
-        break;
-      case 'integer': case 'float': case 'string': case 'buffer-source': parts = [type.name]; break;
-      case 'interface': case 'dictionary': case 'enumeration': case 'callback-function':
-      case 'callback-interface': case 'proxy-object': parts = [type.assembled.primary.name]; break;
-      case 'union': parts = type.memberTypes.map((member) => this.getConversionTypeKey(member)).sort(); break;
-      case 'record': parts = [this.getConversionTypeKey(type.keyType), this.getConversionTypeKey(type.valueType)]; break;
-      case 'nullable': parts = [this.getConversionTypeKey(type.innerType)]; break;
-      case 'promise': parts = [this.getConversionTypeKey(type.resultType)]; break;
-      default: parts = [this.getConversionTypeKey(type.elementType)];
-    }
-    const key = JSON.stringify([
-      type.kind, parts, type.attributes.map((attribute) => JSON.stringify(attribute)).sort(),
-    ]);
-    this.#conversionTypeKeys.set(type, key);
-    return key;
-  }
-
   /** Resolve aliases and annotations before selecting an observable array's element type. */
   getObservableArrayElementType(type: IDLType): IDLType | undefined {
     return type.kind === 'observable-array'
       ? type.elementType
       : undefined;
-  }
-
-  /** Whether the declared type can contribute values to a default toJSON operation. */
-  // https://webidl.spec.whatwg.org/#dfn-json-types
-  isJSONType(type: IDLType, seen?: Set<string>): boolean {
-    if (!seen) {
-      const cached = this.#jsonTypeResults.get(type);
-      if (cached !== undefined) return cached;
-      // Recursive checks depend on the current dictionary path; retain only completed root answers.
-      const result = this.isJSONType(type, new Set());
-      this.#jsonTypeResults.set(type, result);
-      return result;
-    }
-    switch (type.kind) {
-      case 'integer': case 'float': case 'string': case 'boolean': case 'object':
-        return true;
-      case 'nullable': return this.isJSONType(type.innerType, seen);
-      case 'sequence': case 'frozen-array': return this.isJSONType(type.elementType, seen);
-      case 'union': return type.memberTypes.every((member) => this.isJSONType(member, seen));
-      case 'record': return this.isJSONType(type.valueType, seen);
-      case 'enumeration': return true;
-      case 'interface': return type.assembled.hasToJSON();
-      case 'dictionary': {
-        const name = type.assembled.primary.name;
-        if (seen.has(name)) return false;
-        return type.assembled.isJSONType(this, new Set(seen).add(name));
-      }
-      default: return false;
-    }
   }
 
   #assembleType(type: WebIDLType, inheritedAttributes?: ExtendedAttribute[]): IDLType {
@@ -289,6 +194,9 @@ export class DefinitionAssembly {
     }
   }
 }
+
+/** Construction work held only until the assembly has indexed all named definitions. */
+export type AssemblySteps = (assembly: DefinitionAssembly) => void;
 
 /** Static counterpart of declaration assembly; this mapping is confined to the input boundary. */
 type TypeFromDeclaration<Type extends WebIDLType> =

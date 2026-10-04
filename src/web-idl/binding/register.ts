@@ -9,30 +9,24 @@ import type {
   MemberBinding, OperationSteps, StringificationBehavior,
 } from './realm/index';
 import type { RealmBinding } from './realm';
-import type { BindingContext } from './context';
 
 /** Register implementation factories and member steps before the world publishes this realm. */
 export function registerImplementationBindings(binding: RealmBinding): void {
   for (const assembled of binding.assembly.interfaces.values()) {
-    registerInterfaceImplementation(
-      binding,
-      assembled,
-      binding.context,
-    );
+    registerInterfaceImplementation(binding, assembled);
   }
 }
 
 // Connect interface declarations to implementation members and factories.
 function registerInterfaceImplementation(
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
   assembled: AssembledInterface,
-  context: BindingContext,
 ): void {
   const definition = assembled.primary.implementation;
   if (!definition) return;
 
   const implClass = definition.implClass;
-  const implementationBinding = realmBinding.getImplementationBinding(assembled);
+  const implementationBinding = binding.getImplementationBinding(assembled);
 
   for (const { member } of assembled.members) {
     const memberBinding = implementationBinding.getOrCreateMemberBinding(member);
@@ -40,34 +34,33 @@ function registerInterfaceImplementation(
       case 'attribute':
         if (member.attributeFunction || member.get || member.set) {
           registerDefinedAttribute(
-            memberBinding, member, assembled, context, realmBinding,
+            memberBinding, member, assembled, binding,
           );
         } else {
           registerAttribute(
             memberBinding,
             member,
             member.static ? implClass : implClass.prototype,
-            context,
-            realmBinding,
+            binding,
           );
         }
         break;
       case 'constructor': {
         if (member.construct) {
           const construct = member.construct;
-          const convert = realmBinding.implementationConverter.createArgumentConverter(member);
+          const convert = binding.implementationConverter.createArgumentConverter(member);
           memberBinding.constructorBehavior = {
             kind: 'construct',
             steps: (values) => {
-              const args = convert(values, context);
-              return realmBinding.callImplementation(construct, undefined, [context, ...args]);
+              const args = convert(values, binding);
+              return binding.callImplementation(construct, undefined, [binding, ...args]);
             },
           };
         } else if (member.invoke) {
           memberBinding.constructorBehavior = {
             kind: 'initialize',
             steps: createDefinedConstructorSteps(
-              member.invoke, member, context, realmBinding,
+              member.invoke, member, binding,
             ),
           };
         } else {
@@ -76,8 +69,7 @@ function registerInterfaceImplementation(
             steps: createImplementationConstructorSteps(
               implClass,
               member,
-              context,
-              realmBinding,
+              binding,
               member.constructWith ?? definition.constructWith,
             ),
           };
@@ -88,7 +80,7 @@ function registerInterfaceImplementation(
         if (hasExtendedAttribute(member.extendedAttributes, 'Default')) break;
         if (member.invoke) {
           memberBinding.operationSteps = createDefinedOperationSteps(
-            member.invoke, member, context, realmBinding,
+            member.invoke, member, binding,
           );
         } else {
           if (member.name === undefined) {
@@ -99,8 +91,7 @@ function registerInterfaceImplementation(
             member,
             member.name,
             member.static ? implClass : implClass.prototype,
-            context,
-            realmBinding,
+            binding,
             member.invokeWith,
           );
         }
@@ -112,19 +103,19 @@ function registerInterfaceImplementation(
             } : {
               // Project adapter for Web IDL §2.5.6.1 Indexed properties — supported property indices.
               supportsIndex(index: number) {
-                return realmBinding.callImplementation(
+                return binding.callImplementation(
                   indexedGetter.supportsIndex,
                   this,
-                  [index, context],
+                  [index, binding],
                 );
               },
             }),
             // Project adapter for Web IDL §2.5.6.1 Indexed properties — supported property indices.
             getSupportedPropertyIndices() {
-              return realmBinding.callImplementation(
+              return binding.callImplementation(
                 indexedGetter.getSupportedPropertyIndices,
                 this,
-                [context],
+                [binding],
               );
             },
           };
@@ -134,10 +125,10 @@ function registerInterfaceImplementation(
           memberBinding.namedPropertySteps = {
             // Project adapter for Web IDL §2.5.6.2 Named properties — supported property names.
             getSupportedPropertyNames() {
-              return realmBinding.callImplementation(
+              return binding.callImplementation(
                 getSupportedPropertyNames,
                 this,
-                [context],
+                [binding],
               );
             },
           };
@@ -149,7 +140,7 @@ function registerInterfaceImplementation(
           registerPairIterable(
             memberBinding,
             implClass.prototype,
-            realmBinding,
+            binding,
           );
         }
         break;
@@ -163,8 +154,7 @@ function registerInterfaceImplementation(
         memberBinding.asyncIteratorSteps = createAsyncIteratorSteps(
           factory as (this: object, ...values: unknown[]) => object,
           member,
-          context,
-          realmBinding,
+          binding,
         );
         break;
       }
@@ -172,18 +162,18 @@ function registerInterfaceImplementation(
         registerStringifier(
           memberBinding,
           implClass.prototype,
-          realmBinding,
+          binding,
         );
         break;
     }
   }
 
-  implementationBinding.createImplementation = () => realmBinding.callImplementation(
+  implementationBinding.createImplementation = () => binding.callImplementation(
     constructImplementationObject,
     undefined,
     [
       implClass,
-      context.resolveArguments(
+      binding.resolveArguments(
         [],
         definition.constructWith ?? [],
       ),
@@ -191,10 +181,10 @@ function registerInterfaceImplementation(
   );
   const initializeImplementation = definition.initializeImplementation;
   if (initializeImplementation) {
-    implementationBinding.initializeImplementation = (value) => realmBinding.callImplementation(
+    implementationBinding.initializeImplementation = (value) => binding.callImplementation(
       initializeImplementation,
       undefined,
-      [context, value],
+      [binding, value],
     );
   }
 }
@@ -215,43 +205,41 @@ function registerDefinedAttribute(
   memberBinding: MemberBinding,
   member: IDLAttribute,
   assembled: AssembledInterface,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): void {
   const createSteps = member.attributeFunction;
   const steps: AttributeSteps = {
     // Invoke a declared getter or obtain its realm-owned attribute function.
     get(receiver) {
-      const owner = receiver?.binding ?? realmBinding;
-      const ownerContext = receiver ? owner.context : context;
+      const owner = receiver?.binding ?? binding;
       if (createSteps) {
-        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, ownerContext));
+        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, owner));
       }
       if (!member.get) {
         throw new InternalError(
           `Web IDL attribute ${member.name} has no getter binding`,
         );
       }
-      return realmBinding.callImplementation(
+      return binding.callImplementation(
         member.get,
         receiver?.implInst ?? null,
-        [ownerContext],
+        [owner],
       );
     },
   };
   const set = member.set;
   if (set && !member.readonly) {
-    const convert = realmBinding.implementationConverter.createConverter(member.type, {
+    const convert = binding.implementationConverter.createConverter(member.type, {
       callbackExceptionBehavior: member.callbackExceptionBehavior,
     });
     steps.set = (receiver, value) => {
-      const operationContext = receiver?.binding.context ?? context;
-      realmBinding.callImplementation(
+      const operationBinding = receiver?.binding ?? binding;
+      binding.callImplementation(
         set,
         receiver?.implInst ?? null,
         [
-          operationContext,
-          convert(value, operationContext),
+          operationBinding,
+          convert(value, operationBinding),
         ],
       );
     };
@@ -263,17 +251,16 @@ function registerDefinedAttribute(
 function createDefinedConstructorSteps(
   invoke: NonNullable<IDLConstructor['invoke']>,
   assembled: AssembledCallable,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): ConstructorSteps {
-  const convert = realmBinding.implementationConverter.createArgumentConverter(assembled);
+  const convert = binding.implementationConverter.createArgumentConverter(assembled);
   return function(...values) {
-    realmBinding.callImplementation(
+    binding.callImplementation(
       invoke,
       this,
       [
-        context,
-        ...convert(values, context),
+        binding,
+        ...convert(values, binding),
       ],
     );
   };
@@ -283,40 +270,38 @@ function createDefinedConstructorSteps(
 function createImplementationConstructorSteps(
   implClass: ImplementationClass,
   assembled: AssembledCallable,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
 ): ImplementationConstructorSteps {
-  const convert = realmBinding.implementationConverter.createArgumentConverter(assembled);
-  return (values) => realmBinding.callImplementation(
+  const convert = binding.implementationConverter.createArgumentConverter(assembled);
+  return (values) => binding.callImplementation(
     constructImplementationObject,
     undefined,
     [
       implClass,
-      context.resolveArguments(
-        convert(values, context),
+      binding.resolveArguments(
+        convert(values, binding),
         injectedArguments,
       ),
     ],
   );
 }
 
-// Adapt converted arguments and the receiver context for a declared invocation.
+// Adapt converted arguments and the receiver binding for a declared invocation.
 function createDefinedOperationSteps(
   invoke: NonNullable<IDLOperation['invoke']>,
   assembled: IDLOperation,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): OperationSteps {
-  const convert = realmBinding.implementationConverter.createArgumentConverter(assembled);
+  const convert = binding.implementationConverter.createArgumentConverter(assembled);
   return (receiver, ...values) => {
-    const operationContext = receiver?.binding.context ?? context;
-    return realmBinding.callImplementation(
+    const operationBinding = receiver?.binding ?? binding;
+    return binding.callImplementation(
       invoke,
       receiver?.implInst ?? null,
       [
-        operationContext,
-        ...convert(values, operationContext),
+        operationBinding,
+        ...convert(values, operationBinding),
       ],
     );
   };
@@ -327,22 +312,21 @@ function createDefinedOperationSteps(
 function createAsyncIteratorSteps(
   factory: (this: object, ...values: unknown[]) => object,
   assembled: IDLAsyncIterable,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): AsyncIteratorSteps {
-  const convert = realmBinding.implementationConverter.createArgumentConverter(assembled);
+  const convert = binding.implementationConverter.createArgumentConverter(assembled);
   return {
     // Project adapter for "asynchronous iterator initialization steps": call our iterator factory.
     create(target, argumentsList) {
-      return realmBinding.callImplementation(
+      return binding.callImplementation(
         factory,
         target,
-        convert(argumentsList, context),
+        convert(argumentsList, binding),
       );
     },
     // Project adapter for "get the next iteration result": invoke the implementation iterator.
     next(iterator: AsyncIteratorValue) {
-      return realmBinding.callImplementation(
+      return binding.callImplementation(
         iterator.next,
         iterator,
         [],
@@ -352,7 +336,7 @@ function createAsyncIteratorSteps(
       ? {
         // Project adapter for "asynchronous iterator return": invoke the implementation iterator.
         return(iterator: AsyncIteratorValue, value: unknown) {
-          return realmBinding.callImplementation(
+          return binding.callImplementation(
             iterator.return!,
             iterator,
             [value],
@@ -374,8 +358,7 @@ function registerAttribute(
   memberBinding: MemberBinding,
   member: IDLAttribute,
   target: object,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): void {
   const descriptor = findDescriptor(target, member.name);
   // eslint-disable-next-line @typescript-eslint/unbound-method -- Accessors are explicitly applied to the implementation receiver.
@@ -383,7 +366,7 @@ function registerAttribute(
   // Instance fields exist only after construction. Check them on access rather
   // than creating an implementation merely to inspect its shape.
   const get: AttributeSteps['get'] = getter
-    ? (receiver) => realmBinding.callImplementation(getter, receiver?.implInst ?? target, []) as unknown
+    ? (receiver) => binding.callImplementation(getter, receiver?.implInst ?? target, []) as unknown
     : (receiver) => {
       const impl = receiver?.implInst ?? target;
       try {
@@ -392,7 +375,7 @@ function registerAttribute(
         }
         return (impl as Record<string, unknown>)[member.name];
       } catch (exception) {
-        throw realmBinding.realizeException(exception);
+        throw binding.realizeException(exception);
       }
     };
   const set = getter !== undefined
@@ -405,7 +388,7 @@ function registerAttribute(
         throw new InternalError(`Web IDL attribute ${member.name} is not writable`);
       }
     };
-  const convert = set && !member.readonly ? realmBinding.implementationConverter.createConverter(member.type, {
+  const convert = set && !member.readonly ? binding.implementationConverter.createConverter(member.type, {
     callbackExceptionBehavior: member.callbackExceptionBehavior,
   }) : undefined;
   memberBinding.attributeSteps = {
@@ -414,12 +397,12 @@ function registerAttribute(
       ? {
         // Adapt the converted attribute value before storing it.
         set(receiver, value) {
-          const operationContext = receiver?.binding.context ?? context;
-          realmBinding.callImplementation(
+          const operationBinding = receiver?.binding ?? binding;
+          binding.callImplementation(
             set,
             receiver?.implInst ?? target,
             [
-              convert(value, operationContext),
+              convert(value, operationBinding),
             ],
           );
         },
@@ -435,8 +418,7 @@ function registerOperation(
   assembled: IDLOperation,
   name: string,
   target: object,
-  context: BindingContext,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
 ): void {
   const value: unknown = findDescriptor(target, name)?.value;
@@ -446,17 +428,17 @@ function registerOperation(
     );
   }
   const method = value as (this: object | null, ...values: unknown[]) => unknown;
-  const convert = realmBinding.implementationConverter.createArgumentConverter(assembled);
+  const convert = binding.implementationConverter.createArgumentConverter(assembled);
 
   memberBinding.operationSteps = (receiver, ...values) => {
-    const operationContext = receiver?.binding.context ?? context;
-    return realmBinding.callImplementation(
+    const operationBinding = receiver?.binding ?? binding;
+    return binding.callImplementation(
       method,
       receiver?.implInst ?? null,
-      operationContext.resolveArguments(
-        convert(values, operationContext),
+      operationBinding.resolveArguments(
+        convert(values, operationBinding),
         injectedArguments,
-        context,
+        binding,
       ),
     );
   };
@@ -467,7 +449,7 @@ function registerOperation(
 function registerPairIterable(
   memberBinding: MemberBinding,
   target: object,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): void {
   const value: unknown = findDescriptor(target, 'getEntryList')?.value;
   if (typeof value !== 'function') {
@@ -477,7 +459,7 @@ function registerPairIterable(
   }
   const getEntryList = value as ValuePairsSteps;
   memberBinding.valuePairsSteps = function() {
-    return realmBinding.callImplementation(getEntryList, this, []);
+    return binding.callImplementation(getEntryList, this, []);
   };
 }
 
@@ -486,7 +468,7 @@ function registerPairIterable(
 function registerStringifier(
   memberBinding: MemberBinding,
   target: object,
-  realmBinding: RealmBinding,
+  binding: RealmBinding,
 ): void {
   const value: unknown = findDescriptor(target, 'toString')?.value;
   if (typeof value !== 'function') {
@@ -494,7 +476,7 @@ function registerStringifier(
   }
   const stringify = value as StringificationBehavior;
   memberBinding.stringificationBehavior = function() {
-    return realmBinding.callImplementation(
+    return binding.callImplementation(
       stringify,
       this,
       [],

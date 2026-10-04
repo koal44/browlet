@@ -14,6 +14,7 @@ import {
   BindingWorld, defineInterface, impl, xattr, type StampedPlatformObject,
   type SerialSteps, type TransferSteps, type SerializationContext, type DeserializationContext,
 } from '../../../../src/web-idl/index';
+import { validateDefinitions } from '../../../../src/web-idl/assembly/index';
 
 describe('HTML structured-data platform contracts', () => {
   it('runs DOMException steps across realms through exact interface metadata', () => {
@@ -137,11 +138,11 @@ describe('HTML structured-data platform contracts', () => {
       });
 
       for (const definition of [missingMarker, malformed, duplicate]) {
-        expect(() => new BindingWorld([definition])).toThrow(
+        expect(() => validateDefinitions([definition])).toThrow(
           'must declare exactly one [' + name + '] marker',
         );
       }
-      expect(() => new BindingWorld([complete])).not.toThrow();
+      expect(() => validateDefinitions([complete])).not.toThrow();
     }
   });
 

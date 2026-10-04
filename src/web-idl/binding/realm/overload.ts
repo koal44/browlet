@@ -3,7 +3,7 @@ import { getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod } 
 
 import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads } from '../../assembly/index';
 import { IDLAsyncSequence } from '../../values/index';
-import { getPlatformRecord, isPlatformObject } from '../platform';
+import { getPlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */
@@ -18,9 +18,9 @@ export function createOverloadResolver<Callable extends AssembledCallable>(
   const converters = callable.arguments.map((argument) => {
     const converter = binding.getConverter(argument.type);
     const convert = converter.getJSToIDLSteps();
-    const getDefault = argument.primary.default === undefined
+    const getDefault = argument.default === undefined
       ? undefined
-      : converter.createDefaultSteps(argument.primary.default);
+      : converter.createDefaultSteps(argument.default);
     return (value: unknown) => argument.optionality === 'optional' && value === undefined
       ? getDefault?.()
       : convert(value);
@@ -128,8 +128,8 @@ export function resolveOverload<Callable extends AssembledCallable>(
 
   while (i < selected.arguments.length) {
     const argument = selected.arguments[i]!;
-    if (argument.primary.default !== undefined) {
-      values.push(binding.getConverter(argument.type).createDefault(argument.primary.default));
+    if (argument.default !== undefined) {
+      values.push(binding.getConverter(argument.type).createDefault(argument.default));
     } else if (argument.optionality !== 'variadic') {
       values.push(undefined);
     }
@@ -167,7 +167,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     if (matches.length > 0) return { candidates: matches };
   }
 
-  if (isPlatformObject(value, binding)) {
+  if (binding.isPlatformObject(value)) {
     matches = candidates.filter((callable) => {
       const type = callable.getArgument(index)!.type;
       return containsImplementedInterface(type, value, binding) ||
@@ -313,9 +313,9 @@ function convertArgument(
   binding: RealmBinding,
 ): unknown {
   if (argument.optionality === 'optional' && value === undefined) {
-    return argument.primary.default === undefined
+    return argument.default === undefined
       ? undefined
-      : binding.getConverter(argument.type).createDefault(argument.primary.default);
+      : binding.getConverter(argument.type).createDefault(argument.default);
   }
   return binding.getConverter(argument.type).jsToIDL(value);
 }

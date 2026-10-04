@@ -17,14 +17,20 @@ export {
   defineCallbackInterface, defineCallbackFunction, defineEnumeration, defineTypedef, defineProxyObject,
 } from './declarations';
 export type {
-  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceMember, ConstructorMember,
-  IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
-  InterfaceMixinDefinition, PartialInterfaceMixinDefinition, MixinMember, IncludesDefinition,
-  DictionaryDefinition, PartialDictionaryDefinition, DictionaryMember,
-  NamespaceDefinition, PartialNamespaceDefinition, NamespaceMember,
+  PrimaryInterfaceDefinition, PartialInterfaceDefinition,
+  InterfaceMixinDefinition, PartialInterfaceMixinDefinition, IncludesDefinition,
+  DictionaryDefinition, PartialDictionaryDefinition,
+  NamespaceDefinition, PartialNamespaceDefinition,
   CallbackInterfaceDefinition, CallbackFunctionDefinition, ProxyObjectDefinition, Definition,
   EnumerationDefinition, TypedefDefinition,
 } from './declarations';
+
+export type {
+  InterfaceMember, MixinMember, NamespaceMember, ConstructorMember,
+  ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, StringifierMember,
+  IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
+  DictionaryMember, ArgumentDefinition, IndexedGetterDeclaration, SupportedPropertyNamesSteps,
+} from './members';
 
 export {
   ctor, attr, roAttr, attrFn, op, staticOp, arg, dictMember, constant, stringifier,
@@ -40,14 +46,12 @@ export {
   undefinedDefault, emptySequence, emptyDictionary,
 } from './types';
 export type {
-  ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, StringifierMember, ArgumentDefinition,
   WebIDLType, AnnotatedType, AsyncSequenceType, NullableType, UnionType,
   SimpleType, StringType, ReferenceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
-  Exposure, ExtendedAttribute, NamedArgumentsExtendedAttribute,
+  Exposed, ExtendedAttribute, NamedArgumentsExtendedAttribute,
   ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior,
-  IndexedGetterDeclaration, SupportedPropertyNamesSteps,
 } from './types';
 
 export {

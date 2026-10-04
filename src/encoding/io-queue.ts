@@ -1,6 +1,6 @@
-import { idlType } from '../web-idl/index';
 import { internalType, type InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
+import { idlType } from '../web-idl/core/index';
 
 /** Encoding Standard §3 — A persistent end marker, distinct from an empty open queue. */
 export const endOfQueue = Symbol('end-of-queue');

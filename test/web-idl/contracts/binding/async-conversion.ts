@@ -1,7 +1,7 @@
 import type { AsyncIterator, InternalPromise } from '../../../../src/infra/index';
 import { asyncSequence, idlType, promise, record, reference, sequence } from '../../../../src/web-idl/core/index';
 import type { IDLIntegerType, IDLSequenceType } from '../../../../src/web-idl/assembly/index';
-import type { BindingContext } from '../../../../src/web-idl/binding/context';
+import type { BindingContext } from '../../../../src/web-idl/binding/world';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
 
 declare const binding: RealmBinding;

@@ -110,6 +110,6 @@ function createBindings() {
   const second = world.getRealmBinding(secondContext.realm)!;
   const target = second.realm.evaluate('(function Target() {})', 'target.js') as JSFunction;
   Reflect.set(target, 'prototype', null);
-  const Example = getInstalledInterface(first.install(), 'Example');
+  const Example = getInstalledInterface(first.installDefinitions(), 'Example');
   return { first, second, target, Example };
 }
