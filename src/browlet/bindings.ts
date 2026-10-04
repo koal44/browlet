@@ -259,7 +259,7 @@ export function createBoundExecution(context: BindingContext<BrowletEnvironment>
     get DOMException() { return context.DOMException; },
     createDOMException,
     createEvent: (EventConstructor = EventImpl) => {
-      const event = context.construct(EventConstructor, '', {});
+      const event = context.construct(EventConstructor, ['', {}]);
       event.isTrusted = true;
       return event;
     },

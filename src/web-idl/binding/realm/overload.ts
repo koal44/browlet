@@ -1,47 +1,54 @@
 import { InternalError } from '../../../infra/index';
 import { getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod } from '../../../js-engine/index';
 
-import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads } from '../../assembly/index';
+import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads, OverloadGroup } from '../../assembly/index';
 import { IDLAsyncSequence } from '../../values/index';
-import { getPlatformRecord } from '../platform';
+import { compileSteps } from '../../compiler';
+import { getPlatformRecord, type PlatformRecord } from '../platform';
 import type { RealmBinding } from '../realm';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */
 export function createOverloadResolver<Callable extends AssembledCallable>(
   overloads: AssembledOverloads<Callable>,
   binding: RealmBinding,
+  label: string,
 ): (argumentsList: unknown[]) => ResolvedOverload<Callable> {
   if (overloads.callables.length !== 1) {
     return (argumentsList) => resolveOverload(overloads, argumentsList, binding);
   }
   const callable = overloads.callables[0]!;
-  const converters = callable.arguments.map((argument) => {
+  const dependencies: Record<string, unknown> = { callable, binding, throwTypeError };
+  const expressions = callable.arguments.map((argument, index) => {
     const converter = binding.getConverter(argument.type);
-    const convert = converter.getJSToIDLSteps();
-    const getDefault = argument.default === undefined
-      ? undefined
-      : converter.createDefaultSteps(argument.default);
-    return (value: unknown) => argument.optionality === 'optional' && value === undefined
-      ? getDefault?.()
-      : convert(value);
+    dependencies[`convert${index}`] = converter.getJSToIDLSteps();
+    if (argument.default !== undefined) dependencies[`default${index}`] = converter.createDefaultSteps(argument.default);
+    const convert = `convert${index}(value${index})`;
+    return argument.optionality === 'optional'
+      ? `value${index} === undefined ? ${argument.default === undefined ? 'undefined' : `default${index}()`} : ${convert}`
+      : convert;
   });
-  const variadic = callable.variadicArgument && converters.at(-1);
+  const fixedCount = callable.arguments.length - (callable.variadicArgument ? 1 : 0);
+  const fixed = expressions.slice(0, fixedCount).map((expression, index) => `
+    const value${index} = ${index} < argumentsList.length ? argumentsList[${index}] : undefined;
+    const converted${index} = ${expression};
+  `).join('');
   // A single callable needs the argument-count check and conversions, but no
   // candidate search or distinguishing-argument processing.
   // https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
-  return (argumentsList) => {
-    if (argumentsList.length < callable.minimumArgumentCount) {
+  return compileSteps<(argumentsList: unknown[]) => ResolvedOverload<Callable>>(`${label}:arguments`, dependencies,
+    `function convertArguments(argumentsList) {
+    if (argumentsList.length < ${callable.minimumArgumentCount}) {
       return throwTypeError(binding, 'No overload accepts this argument count');
     }
-    const count = variadic
-      ? Math.max(converters.length - 1, argumentsList.length)
-      : converters.length;
-    const values: unknown[] = [];
-    for (let index = 0; index < count; index++) {
-      values.push((converters[index] ?? variadic!)(argumentsList[index]));
-    }
+    ${fixed}
+    const values = [${Array.from({ length: fixedCount }, (_, index) => `converted${index}`).join(', ')}];
+    ${callable.variadicArgument ? `
+      for (let index = ${fixedCount}; index < argumentsList.length; index++) {
+        values.push(convert${fixedCount}(argumentsList[index]));
+      }
+    ` : ''}
     return { callable, values };
-  };
+  }`);
 }
 
 // https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm
@@ -79,9 +86,8 @@ export function resolveOverload<Callable extends AssembledCallable>(
   let asyncSequenceMethod: AsyncSequenceMethod | undefined;
   if (i === distinguishingIndex) {
     const resolution = resolveDistinguishingArgument(
-      candidates,
+      group,
       argumentsList[i],
-      i,
       binding,
     );
     candidates = resolution.candidates;
@@ -146,11 +152,11 @@ export type ResolvedOverload<Callable extends AssembledCallable> = {
 
 // Extracted from Web IDL §3.6 Overload resolution algorithm — select by the distinguishing argument.
 function resolveDistinguishingArgument<Callable extends AssembledCallable>(
-  candidates: Callable[],
+  group: OverloadGroup<Callable>,
   value: unknown,
-  index: number,
   binding: RealmBinding,
 ): DistinguishingResolution<Callable> {
+  const { callables: candidates, distinguishingIndex: index } = group;
   let matches: Callable[];
 
   if (value === undefined) {
@@ -167,12 +173,16 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     if (matches.length > 0) return { candidates: matches };
   }
 
-  if (binding.isPlatformObject(value)) {
-    matches = candidates.filter((callable) => {
-      const type = callable.getArgument(index)!.type;
-      return containsImplementedInterface(type, value, binding) ||
-        type.candidates.hasObject;
-    });
+  const record = getPlatformRecord(value);
+  const localRecord = record?.binding.world === binding.world ? record : undefined;
+  if (localRecord || binding.assembly.proxyObjects.is(value)) {
+    matches = localRecord && !group.hasProxyCandidates
+      ? group.getInterfaceCandidates(localRecord.assembled)
+      : candidates.filter((callable) => {
+        const type = callable.getArgument(index)!.type;
+        return containsImplementedInterface(type, value, localRecord) ||
+          type.candidates.hasObject;
+      });
     if (matches.length > 0) return { candidates: matches };
   }
 
@@ -265,42 +275,35 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     if (matches.length > 0) return { candidates: matches };
   }
 
+  const primitive = group.primitiveCandidates;
   if (typeof value === 'boolean') {
-    matches = candidates.filter((callable) =>
-      callable.getArgument(index)!.type.candidates.hasBoolean);
+    matches = primitive.boolean;
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'number') {
-    matches = candidates.filter((callable) =>
-      !!callable.getArgument(index)!.type.candidates.numeric);
+    matches = primitive.numeric;
     if (matches.length > 0) return { candidates: matches };
   }
 
   if (typeof value === 'bigint') {
-    matches = candidates.filter((callable) =>
-      callable.getArgument(index)!.type.candidates.hasBigInt);
+    matches = primitive.bigint;
     if (matches.length > 0) return { candidates: matches };
   }
 
-  matches = candidates.filter((callable) =>
-    !!callable.getArgument(index)!.type.candidates.string);
+  matches = primitive.string;
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter((callable) =>
-    !!callable.getArgument(index)!.type.candidates.numeric);
+  matches = primitive.numeric;
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter((callable) =>
-    callable.getArgument(index)!.type.candidates.hasBoolean);
+  matches = primitive.boolean;
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter((callable) =>
-    callable.getArgument(index)!.type.candidates.hasBigInt);
+  matches = primitive.bigint;
   if (matches.length > 0) return { candidates: matches };
 
-  matches = candidates.filter((callable) =>
-    callable.getArgument(index)!.type.candidates.hasAny);
+  matches = primitive.any;
   if (matches.length > 0) return { candidates: matches };
 
   return throwTypeError(binding, 'No overload matches the argument value');
@@ -324,13 +327,11 @@ function convertArgument(
 function containsImplementedInterface(
   type: IDLType,
   value: unknown,
-  binding: RealmBinding,
+  record: PlatformRecord | undefined,
 ): boolean {
   return type.candidates.interfaces.some((candidate) => {
     if (candidate.kind === 'interface') {
-      const record = getPlatformRecord(value);
-      return record?.binding.world === binding.world &&
-        record.implements(candidate.assembled);
+      return record?.implements(candidate.assembled);
     }
     return candidate.assembled.is(value);
   });

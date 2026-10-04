@@ -4,7 +4,7 @@ import { TestRealm as Realm } from './test-realm';
 import { throwDOMException } from '../../src/web-idl/core/dom-exception';
 import {
   arg, atArg, attr, attrFn, onError, cbDict, ctor,
-  defineCallbackFunction, defineDictionary, defineIncludes, defineInterface,
+  defineCallbackFunction, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineInterfaceMixin, definePartialDictionary, defineTypedef, dictMember, idlType, integer,
   impl, implementationType, indexedGetter, iter, namedGetter, nullable, op, staticOp,
   promise as promiseType, roAttr, record, reference, unwrapArg, sequence,
@@ -413,6 +413,72 @@ describe('Web IDL implementation bindings', () => {
     expect(implementation.label).toBe('updated');
     expect(typeof Object.getOwnPropertyDescriptor(Fields.prototype, 'count')?.get).toBe('function');
     expect('internal' in object).toBe(false);
+  });
+
+  it('coerces automatic enum setters once and keeps borrowed-setter errors in the method realm', () => {
+    class ModeHolderImpl { mode = 'fast'; }
+    const definition = defineInterface({
+      name: 'ModeHolder', exposed: '*', implementation: impl(ModeHolderImpl),
+      members: [ctor(), attr('mode', reference('Mode'))],
+    });
+    const world = new BindingWorld([
+      defineEnumeration({ name: 'Mode', values: ['fast', 'slow'] }), definition,
+    ]);
+    const realm = new Realm();
+    const foreignRealm = new Realm();
+    for (const currentRealm of [realm, foreignRealm]) {
+      world.register(currentRealm, (ctx) => ({ realm: ctx.realm })).install(currentRealm.global);
+    }
+    const ModeHolder = Reflect.get(realm.global, 'ModeHolder') as new() => { mode: string; };
+    const ForeignModeHolder = Reflect.get(foreignRealm.global, 'ModeHolder') as typeof ModeHolder;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrowed accessor is applied to an explicit receiver.
+    const setter = Object.getOwnPropertyDescriptor(ForeignModeHolder.prototype, 'mode')!.set!;
+    const object = new ModeHolder();
+    let coercions = 0;
+    Reflect.apply(setter, object, [{ toString() { coercions++; return 'slow'; } }]);
+    expect(coercions).toBe(1);
+    expect(object.mode).toBe('slow');
+    Reflect.apply(setter, object, ['invalid']);
+    expect(object.mode).toBe('slow');
+    Reflect.apply(setter, object, ['fast']);
+    expect(object.mode).toBe('fast');
+    expect(() => Reflect.apply(setter, object, [Symbol('mode')]))
+      .toThrow(foreignRealm.intrinsics.typeError);
+    expect(() => Reflect.apply(setter, {}, ['fast']))
+      .toThrow(foreignRealm.intrinsics.typeError);
+    const thrown = new Error('coercion failed');
+    let caught: unknown;
+    try { Reflect.apply(setter, object, [{ toString() { throw thrown; } }]); }
+    catch (exception) { caught = exception; }
+    expect(caught).toBe(thrown);
+  });
+
+  it('uses live field descriptors and preserves errors thrown by implementation setters', () => {
+    class FieldImpl { value = 1; }
+    const definition = defineInterface({
+      name: 'Field', exposed: '*', implementation: impl(FieldImpl),
+      members: [ctor(), attr('value', idlType.long)],
+    });
+    const realm = new Realm();
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const Field = Reflect.get(realm.global, 'Field') as new() => { value: number; };
+    const object = new Field();
+    const implementation = getImplementationObject(object);
+    assert(implementation instanceof FieldImpl);
+    const thrown = new Error('implementation setter failed');
+    let writes = 0;
+    Object.defineProperty(implementation, 'value', {
+      configurable: true,
+      set() { writes++; throw thrown; },
+    });
+    let caught: unknown;
+    try { object.value = 2; }
+    catch (exception) { caught = exception; }
+    expect(caught).toBe(thrown);
+    expect(writes).toBe(1);
+    Object.defineProperty(implementation, 'value', { value: 1, writable: false });
+    expect(() => { object.value = 2; }).toThrow();
+    expect(implementation.value).toBe(1);
   });
 
   it('retains implementation accessors and supports static fields', () => {

@@ -7,7 +7,7 @@ import { BindingWorld } from '../../src/web-idl/binding/world';
 import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { PlatformRecord } from '../../src/web-idl/binding/platform';
 import {
-  attr, defineInterface, definePartialInterface, idlType, impl, op, stringifier, xattr,
+  attr, ctor, defineInterface, definePartialInterface, idlType, impl, op, stringifier, xattr,
   type AttributeMember, type NamedArgumentsExtendedAttribute,
   type OperationMember, type StringifierMember,
 } from '../../src/web-idl/core/index';
@@ -159,6 +159,50 @@ describe('Web IDL initial objects', () => {
     expect(Object.getOwnPropertyDescriptors(first)).toEqual(firstDescriptors);
   });
 
+  it('retains inherited unforgeable descriptors separately in each realm', () => {
+    class ParentImpl { label = 'parent'; }
+    class ChildImpl extends ParentImpl { read(): string { return this.label; } }
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'Parent', exposed: '*', implementation: impl(ParentImpl),
+        members: [attr('label', idlType.DOMString, xattr('LegacyUnforgeable'))],
+      }),
+      defineInterface({
+        name: 'Child', inherits: 'Parent', exposed: '*', implementation: impl(ChildImpl),
+        members: [ctor(), op('read', idlType.DOMString, [], xattr('LegacyUnforgeable'))],
+      }),
+    ]);
+    const firstRealm = new Realm();
+    const secondRealm = new Realm();
+    const first = world.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
+    const second = world.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
+    first.install(firstRealm.global);
+    second.install(secondRealm.global);
+    const Constructor = Reflect.get(firstRealm.global, 'Child') as new() => object;
+    const constructed = new Constructor();
+    const projected = first.project(ChildImpl, new ChildImpl());
+    const foreign = second.project(ChildImpl, new ChildImpl());
+
+    for (const name of ['label', 'read']) {
+      const descriptor = Object.getOwnPropertyDescriptor(constructed, name)!;
+      expect(descriptor.configurable).toBe(false);
+      expect(Object.getOwnPropertyDescriptor(projected, name)).toEqual(descriptor);
+      const foreignDescriptor = Object.getOwnPropertyDescriptor(foreign, name)!;
+      const field = name === 'label' ? 'get' : 'value';
+      const method: unknown = Reflect.get(descriptor, field);
+      const foreignMethod: unknown = Reflect.get(foreignDescriptor, field);
+      expect(method).toBeInstanceOf(firstRealm.intrinsics.function);
+      expect(foreignMethod).toBeInstanceOf(secondRealm.intrinsics.function);
+      expect(foreignMethod).not.toBe(method);
+    }
+    Reflect.set(constructed, 'label', 'changed');
+    expect(Reflect.apply(requireFunction(Reflect.get(constructed, 'read')), constructed, [])).toBe('changed');
+    expect(Reflect.get(projected, 'label')).toBe('parent');
+    expect(Reflect.get(foreign, 'label')).toBe('parent');
+    expect(Reflect.deleteProperty(constructed, 'label')).toBe(false);
+    expect(Reflect.defineProperty(constructed, 'read', { value() {} })).toBe(false);
+  });
+
   it('installs legacy window aliases only in Window realms', () => {
     const interfaceIDL = defineInterface({
       name: 'Widget',
@@ -222,8 +266,8 @@ describe('Web IDL initial objects', () => {
     };
     getMemberBinding(interfaceBinding, factory).constructorBehavior = {
       kind: 'initialize',
-      steps: function(value) {
-        Reflect.set(this, 'value', value);
+      steps: function(receiver, [value]) {
+        Reflect.set(receiver, 'value', value);
       },
     };
 
@@ -285,8 +329,8 @@ describe('Web IDL initial objects', () => {
     };
     getMemberBinding(interfaceBinding, factory).constructorBehavior = {
       kind: 'initialize',
-      steps: function(value) {
-        Reflect.set(this, 'value', value);
+      steps: function(receiver, [value]) {
+        Reflect.set(receiver, 'value', value);
       },
     };
 
@@ -329,7 +373,7 @@ describe('Web IDL initial objects', () => {
       for (const factory of [numericFactory, stringFactory]) {
         getMemberBinding(interfaceBinding, factory).constructorBehavior = {
           kind: 'initialize',
-          steps: function(value) { Reflect.set(this, 'value', `${name}:${typeof value}:${String(value)}`); },
+          steps: function(receiver, [value]) { Reflect.set(receiver, 'value', `${name}:${typeof value}:${String(value)}`); },
         };
       }
       binding.installDefinitions();

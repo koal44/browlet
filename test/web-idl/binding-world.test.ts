@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { TestRealm as Realm } from './test-realm';
 import {
   arg, atArg, attr, BindingWorld, ctor,
-  defineProxyObject, defineInterface, idlType, impl, invokeWith, namedGetter, op,
+  defineProxyObject, defineInterface, idlType, impl, invokeWith, namedGetter, op, promise,
   reference, roAttr, xattr, type BindingContext,
 } from '../../src/web-idl/index';
 import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
@@ -339,6 +339,58 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(() => { Reflect.apply(fail, object, []); }).not.toThrow(receiverRealm.intrinsics.typeError);
   });
 
+  it.each([
+    ['long', 'accessor'], ['long', 'field'],
+    ['Promise<long>', 'accessor'], ['Promise<long>', 'field'],
+  ] as const)('keeps borrowed automatic %s %s failures in the method realm', async (kind, storage) => {
+    let failure: unknown = new InternalTypeError('Getter failure');
+    class AccessorImpl {
+      get value(): never { throw failure; }
+    }
+    class FieldImpl { value = 0; }
+    const ReceiverImpl = storage === 'field' ? FieldImpl : AccessorImpl;
+    const definition = defineInterface({
+      name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
+      members: [roAttr('value', kind === 'long' ? idlType.long : promise(idlType.long))],
+    });
+    const world = new BindingWorld([definition]);
+    const receiverRealm = new Realm();
+    const methodRealm = new Realm();
+    const receiverContext = world.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
+    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.global);
+    const implementation = new ReceiverImpl();
+    if (storage === 'field') {
+      // Registration sees a field. Its live read must still realize a later getter failure.
+      Object.defineProperty(implementation, 'value', { get() { throw failure; } });
+    }
+    const object = receiverContext.project(ReceiverImpl, implementation);
+    const Constructor = Reflect.get(methodRealm.global, definition.name) as { prototype: object; };
+    const getter = Reflect.getOwnPropertyDescriptor(Constructor.prototype, 'value')!.get!;
+    const readFailure = async (): Promise<unknown> => {
+      let result: unknown;
+      try {
+        result = Reflect.apply(getter, object, []);
+      } catch (exception) {
+        expect(kind).toBe('long');
+        return exception;
+      }
+      expect(kind).toBe('Promise<long>');
+      expect(result).toBeInstanceOf(receiverRealm.intrinsics.promise.constructor);
+      expect(result).not.toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
+      return (result as Promise<unknown>).then(
+        () => { throw new Error('Expected the getter promise to reject'); },
+        (reason: unknown) => reason,
+      );
+    };
+
+    const exception = await readFailure();
+    expect(exception).toBeInstanceOf(methodRealm.intrinsics.typeError);
+    expect(exception).not.toBeInstanceOf(receiverRealm.intrinsics.typeError);
+    const authorError = new receiverRealm.intrinsics.typeError('Author failure');
+    failure = authorError;
+    expect(await readFailure()).toBe(authorError);
+  });
+
   it('injects declared dependencies into internal construction', () => {
     const positioned = () => 'positioned';
     class ConstructedImpl {
@@ -366,7 +418,7 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     const implementation = registration.construct(
       ConstructedImpl,
-      'semantic',
+      ['semantic'],
     );
 
     expect(implementation.context).toBe(registration);

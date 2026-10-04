@@ -10,7 +10,7 @@ export {
   type IntegerConversionMode, type IntegerTypeName,
 } from './types';
 export {
-  AssembledCallable, AssembledOverloads, AssembledArgument, type MemberPlacement,
+  AssembledCallable, AssembledOverloads, AssembledArgument, type OverloadGroup, type MemberPlacement,
   type IDLAttribute, type IDLConstant, type IDLOperation, type IDLConstructor, type IDLIterable,
   type IDLAsyncIterable, type IDLMaplike, type IDLSetlike, type IDLNamedArguments,
   type IDLInterfaceMember, type IDLNamespaceMember,

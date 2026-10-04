@@ -73,7 +73,7 @@ describe('Web IDL namespace objects', () => {
         return '1.0';
       },
     };
-    getMemberBinding(namespaceBinding, echo).operationSteps = function(receiver, value) {
+    getMemberBinding(namespaceBinding, echo).operationSteps = function(receiver, [value]) {
       receivers.push(receiver);
       return value;
     };

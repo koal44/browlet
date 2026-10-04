@@ -222,7 +222,7 @@ async function fixture(server: Server = createServer((request, response) => {
   const operation = createFetchOperation(request, env);
   const text = (response: FetchResponse) => {
     const context = getBindingContext(realm);
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
     return browlet.evaluate(async () => (globalThis as unknown as { networkResponse: Response; }).networkResponse.text());
   };
   return { browlet, env, origin, request, operation, authentication, text };

@@ -35,7 +35,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   declare iteratorPrototype?: object;
   declare asyncIteratorPrototype?: object;
   declare namedPropertiesObject?: object;
-  declare unforgeablesObject?: object;
+  /** Own unforgeable descriptors shared by instances; null when this interface has none. */
+  declare unforgeableDescriptors?: PropertyDescriptorMap | null;
   declare legacyPropertyMetadata?: LegacyPropertyMetadata | null;
   /** Exposed attribute declarations, without retaining their changing values. */
   declare defaultToJSONAttributes?: DefaultToJSONAttribute[];
@@ -68,7 +69,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       (entry) => assembled.isMemberExposed(entry, realmBinding.realm),
     );
     const overridden = this.overriddenConstructor;
-    const resolve = createOverloadResolver(constructors, realmBinding);
+    const resolve = createOverloadResolver(constructors, realmBinding, `${assembled.primary.name}:constructor`);
     const object: JSFunction = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (overridden) {
@@ -103,7 +104,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     );
 
     this.interfaceObject = object;
-    this.getUnforgeableObject();
+    this.getUnforgeableDescriptors();
     Reflect.setPrototypeOf(
       object,
       assembled.parentAssembled
@@ -161,7 +162,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     if (existing) return existing;
 
     const overloads = assembled.getLegacyFactoryOverloads(name);
-    const resolve = createOverloadResolver(overloads, realmBinding);
+    const resolve = createOverloadResolver(overloads, realmBinding, `${assembled.primary.name}.${name}:factory`);
     const function_ = realmBinding.realm.createFunction(
       (_thisArgument, argumentsList, newTarget) => {
         if (!newTarget) {
@@ -496,19 +497,21 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     }
   }
 
-  /** Retain unforgeable property descriptors for installation on each platform instance. */
-  getUnforgeableObject(
+  /** Prepare instance property descriptors once, including the absence of unforgeable members. */
+  // The spec's internal [[Unforgeables]] object never changes after its members are installed.
+  getUnforgeableDescriptors(
     this: ImplementationBinding<AssembledInterface>,
-  ): object {
+  ): PropertyDescriptorMap | null {
     const realmBinding = this.binding;
-    if (this.unforgeablesObject) return this.unforgeablesObject;
+    if (this.unforgeableDescriptors !== undefined) return this.unforgeableDescriptors;
 
     const object = realmBinding.realm.createOrdinaryObject(null);
-    this.unforgeablesObject = object;
+    this.unforgeableDescriptors = null;
     this.defineAttributes(object, 'unforgeable');
     this.defineOperations(object, 'unforgeable');
     this.defineStringifier(object, 'unforgeable');
-    return object;
+    const descriptors = Object.getOwnPropertyDescriptors(object);
+    return this.unforgeableDescriptors = Reflect.ownKeys(descriptors).length === 0 ? null : descriptors;
   }
 
   // https://webidl.spec.whatwg.org/#named-properties-object

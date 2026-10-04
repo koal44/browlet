@@ -294,8 +294,8 @@ describe('Web IDL types', () => {
     expect(type.elementType.isPrimitive).toBe(true);
     expect(type.elementType.canPassToImpl).toBe(true);
     expect(assembly.getIDLType(record(idlType.DOMString, idlType.long)).canPassToImpl).toBe(false);
-    expect(assembly.getIDLType(frozenArray(idlType.long)).canPassToImpl).toBe(false);
-    expect(assembly.builtinTypes.any.canPassToImpl).toBe(false);
+    expect(assembly.getIDLType(frozenArray(idlType.long)).canPassToImpl).toBe(true);
+    expect(assembly.builtinTypes.any.canPassToImpl).toBe(true);
   });
 
   it('shares integer formats across uses while retaining their conversion modes', () => {

@@ -84,7 +84,7 @@ async function fixture(protocol: 'http/1.1' | 'h2', respond: (response: ServerRe
   const receive = async () => {
     const response = await operation.start();
     const context = getBindingContext(realm);
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
     return response;
   };
   return { browlet, operation, receive };

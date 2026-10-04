@@ -16,6 +16,7 @@ import type { RealmBinding } from '../binding/realm';
 import {
   CallbackFunctionStamper, type StampedCallbackFunction, type CallbackInvoker,
 } from '../binding/realm/callback';
+import { compileSteps } from '../compiler';
 
 /** Prepare and perform IDL-to-implementation conversion using one realm's binding machinery. */
 export class ImplementationConverter {
@@ -29,22 +30,32 @@ export class ImplementationConverter {
     this.#binding = binding;
   }
 
-  /** Prepare a callable's argument conversions, including its variadic tail. */
-  createArgumentConverter(assembled: AssembledCallable): (values: unknown[], context: BindingContext) => unknown[] {
-    const converters = assembled.arguments.map((argument) => {
-      const convert = this.createConverter(argument.type, argument);
+  /** Prepare argument conversions, or return undefined when the IDL list can pass through unchanged. */
+  createArgumentConverter(
+    assembled: AssembledCallable,
+  ): ((values: unknown[], context: BindingContext) => unknown[]) | undefined {
+    const dependencies: Record<string, unknown> = {};
+    const statements: string[] = [];
+    for (const [index, argument] of assembled.arguments.entries()) {
+      if (argument.type.canPassToImpl && !argument.callbackDictionary && !argument.implClasses?.length) continue;
+      dependencies[`convert${index}`] = this.createConverter(argument.type, argument);
+      const position = argument.optionality === 'variadic' ? 'index' : `${index}`;
       // Callback dictionaries also convert an omitted input into an empty dictionary.
-      return argument.callbackDictionary ? convert : (value: unknown, context: BindingContext) =>
-        value === undefined ? undefined : convert(value, context);
-    });
-    const variadic = assembled.variadicArgument && converters.at(-1);
-    return (values, context) => {
-      // Consume the invocation's fresh list; the intermediate IDL values are no longer needed.
-      for (let index = 0; index < values.length; index++) {
-        values[index] = (converters[index] ?? variadic!)(values[index], context);
-      }
+      const statement = `
+        ${argument.callbackDictionary ? '' : `if (values[${position}] !== undefined)`}
+        values[${position}] = convert${index}(values[${position}], context);
+      `;
+      statements.push(argument.optionality === 'variadic'
+        ? `for (let index = ${index}; index < values.length; index++) { ${statement} }`
+        : `if (values.length > ${index}) { ${statement} }`);
+    }
+    if (!statements.length) return;
+    const label = assembled.arguments.map((argument) => argument.type.conversionKey).join(',');
+    // Consume the invocation's fresh list; the intermediate IDL values are no longer needed.
+    return compileSteps(`implementation-arguments:${label}`, dependencies, `function convertArguments(values, context) {
+      ${statements.join('\n')}
       return values;
-    };
+    }`);
   }
 
   /** Prepare conversion from a declared IDL value to the representation its implementation consumes. */
@@ -82,11 +93,11 @@ export class ImplementationConverter {
       const convert = this.#getDictionaryConverter(type.assembled, options.callbackExceptionBehavior);
       return (value, context) => convert(convertInput(value), context, value);
     }
+    if (type.canPassToImpl) return (value) => value;
     if (type.kind === 'nullable') {
       const convert = this.#createConverter(type.innerType, options);
       return (value, context, callbackThis) => value === null ? null : convert(value, context, callbackThis);
     }
-    if (type.canPassToImpl) return (value) => value;
     if (type.kind === 'sequence') {
       const convertElement = this.createConverter(type.elementType, {
         callbackExceptionBehavior: options.callbackExceptionBehavior,

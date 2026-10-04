@@ -52,7 +52,7 @@ function registerInterfaceImplementation(
           memberBinding.constructorBehavior = {
             kind: 'construct',
             steps: (values) => {
-              const args = convert(values, binding);
+              const args = convert ? convert(values, binding) : values;
               return binding.callImplementation(construct, undefined, [binding, ...args]);
             },
           };
@@ -254,13 +254,13 @@ function createDefinedConstructorSteps(
   binding: RealmBinding,
 ): ConstructorSteps {
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
-  return function(...values) {
+  return (receiver, values) => {
     binding.callImplementation(
       invoke,
-      this,
+      receiver,
       [
         binding,
-        ...convert(values, binding),
+        ...(convert ? convert(values, binding) : values),
       ],
     );
   };
@@ -280,7 +280,7 @@ function createImplementationConstructorSteps(
     [
       implClass,
       binding.resolveArguments(
-        convert(values, binding),
+        convert ? convert(values, binding) : values,
         injectedArguments,
       ),
     ],
@@ -294,14 +294,14 @@ function createDefinedOperationSteps(
   binding: RealmBinding,
 ): OperationSteps {
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
-  return (receiver, ...values) => {
+  return (receiver, values) => {
     const operationBinding = receiver?.binding ?? binding;
     return binding.callImplementation(
       invoke,
       receiver?.implInst ?? null,
       [
         operationBinding,
-        ...convert(values, operationBinding),
+        ...(convert ? convert(values, operationBinding) : values),
       ],
     );
   };
@@ -315,13 +315,13 @@ function createAsyncIteratorSteps(
   binding: RealmBinding,
 ): AsyncIteratorSteps {
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
-  return {
+  const steps: AsyncIteratorSteps = {
     // Project adapter for "asynchronous iterator initialization steps": call our iterator factory.
     create(target, argumentsList) {
       return binding.callImplementation(
         factory,
         target,
-        convert(argumentsList, binding),
+        convert ? convert(argumentsList, binding) : argumentsList,
       );
     },
     // Project adapter for "get the next iteration result": invoke the implementation iterator.
@@ -332,19 +332,14 @@ function createAsyncIteratorSteps(
         [],
       );
     },
-    ...(assembled.return
-      ? {
-        // Project adapter for "asynchronous iterator return": invoke the implementation iterator.
-        return(iterator: AsyncIteratorValue, value: unknown) {
-          return binding.callImplementation(
-            iterator.return!,
-            iterator,
-            [value],
-          );
-        },
-      }
-      : {}),
   };
+  if (assembled.return) {
+    // Project adapter for "asynchronous iterator return": invoke the implementation iterator.
+    steps.return = (iterator: AsyncIteratorValue, value: unknown) => binding.callImplementation(
+      iterator.return!, iterator, [value],
+    );
+  }
+  return steps;
 }
 
 type AsyncIteratorValue = {
@@ -367,48 +362,24 @@ function registerAttribute(
   // than creating an implementation merely to inspect its shape.
   const get: AttributeSteps['get'] = getter
     ? (receiver) => binding.callImplementation(getter, receiver?.implInst ?? target, []) as unknown
-    : (receiver) => {
-      const impl = receiver?.implInst ?? target;
-      try {
-        if (!(member.name in impl)) {
-          throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
-        }
-        return (impl as Record<string, unknown>)[member.name];
-      } catch (exception) {
-        throw binding.realizeException(exception);
-      }
-    };
+    : memberBinding.createFieldGetter(member, target);
   const set = getter !== undefined
     ? setter
-    : function(this: object, value: unknown): void {
-      if (!(member.name in this)) {
-        throw new InternalError(`Web IDL attribute ${member.name} has no implementation`);
-      }
-      if (!Reflect.set(this, member.name, value)) {
-        throw new InternalError(`Web IDL attribute ${member.name} is not writable`);
-      }
-    };
+    : memberBinding.createFieldSetter(member);
   const convert = set && !member.readonly ? binding.implementationConverter.createConverter(member.type, {
     callbackExceptionBehavior: member.callbackExceptionBehavior,
   }) : undefined;
-  memberBinding.attributeSteps = {
-    get,
-    ...(set && convert
-      ? {
-        // Adapt the converted attribute value before storing it.
-        set(receiver, value) {
-          const operationBinding = receiver?.binding ?? binding;
-          binding.callImplementation(
-            set,
-            receiver?.implInst ?? target,
-            [
-              convert(value, operationBinding),
-            ],
-          );
-        },
-      }
-      : {}),
-  };
+  const steps: AttributeSteps = { get };
+  if (set && convert) {
+    // Adapt the converted attribute value before storing it.
+    steps.set = (receiver, value) => {
+      const operationBinding = receiver?.binding ?? binding;
+      binding.callImplementation(
+        set, receiver?.implInst ?? target, [convert(value, operationBinding)],
+      );
+    };
+  }
+  memberBinding.attributeSteps = steps;
 }
 
 // Register an implementation method adapter.
@@ -430,13 +401,19 @@ function registerOperation(
   const method = value as (this: object | null, ...values: unknown[]) => unknown;
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
 
-  memberBinding.operationSteps = (receiver, ...values) => {
+  if (!convert && !injectedArguments.length) {
+    memberBinding.operationSteps = (receiver, values) =>
+      binding.callImplementation(method, receiver?.implInst ?? null, values);
+    return;
+  }
+
+  memberBinding.operationSteps = (receiver, values) => {
     const operationBinding = receiver?.binding ?? binding;
     return binding.callImplementation(
       method,
       receiver?.implInst ?? null,
       operationBinding.resolveArguments(
-        convert(values, operationBinding),
+        convert ? convert(values, operationBinding) : values,
         injectedArguments,
         binding,
       ),

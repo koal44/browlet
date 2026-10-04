@@ -95,14 +95,18 @@ function assembleDictionary(
   if (assembled.parentAssembled) assembleDictionary(assembled.parentAssembled, visited, assembly);
 
   const members = [...definition.members];
-  for (const partial of assembled.partials) members.push(...partial.members);
+  for (const partial of assembled.partials) {
+    for (const member of partial.members) members.push(member);
+  }
   // Web IDL identifiers are ASCII, so code-unit and code-point order coincide.
   members.sort((left, right) => {
     if (left.name < right.name) return -1;
     if (left.name > right.name) return 1;
     return 0;
   });
-  if (assembled.parentAssembled) assembled.members.push(...assembled.parentAssembled.members);
+  if (assembled.parentAssembled) {
+    for (const member of assembled.parentAssembled.members) assembled.members.push(member);
+  }
   for (const member of members) assembled.members.push(new AssembledDictionaryMember(member, assembly));
   assembled.hasCompleteShape = assembled.members.every((member) =>
     member.required || member.default !== undefined);

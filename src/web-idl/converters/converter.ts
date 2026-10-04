@@ -111,7 +111,7 @@ export abstract class Converter<Type extends IDLType = IDLType> {
     }
   }
 
-  /** Convert an IDL value to its author representation, realizing internal exception requests. */
+  /** Convert an IDL value to its author representation using its declared type. */
   idlToJS<ValueType extends IDLType>(this: Converter<ValueType>, value: unknown): JSValue<ValueType> {
     return this.getIDLToJSSteps()(value);
   }
@@ -133,13 +133,9 @@ export abstract class Converter<Type extends IDLType = IDLType> {
     return this.#inputEntry as ConversionSteps<IDLValue<ValueType>>;
   }
 
-  /** Retain output conversion and its binding's exception realization. */
+  /** Retain output conversion; arbitrary object converters also realize exception values. */
   getIDLToJSSteps<ValueType extends IDLType>(this: Converter<ValueType>): ConversionSteps<JSValue<ValueType>> {
-    if (!this.#output) {
-      const convert = this.createOutputSteps();
-      const realize = this.binding.realizeException;
-      this.#output = convert ? (value) => convert(realize(value)) : realize;
-    }
+    this.#output ??= this.createOutputSteps() ?? ((value) => value);
     return this.#output as ConversionSteps<JSValue<ValueType>>;
   }
 

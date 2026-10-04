@@ -59,7 +59,7 @@ describe('File API FileReader foundation', () => {
   it('creates events in its environment before the reader is projected', async () => {
     const context = getContext(createWindow());
     const reader = createReader(context);
-    const blob = context.construct(BlobImpl, ['content'], {});
+    const blob = context.construct(BlobImpl, [['content'], {}]);
     const events: EventImpl[] = [];
     reader.addEventListener('load', (event) => { events.push(event); });
 

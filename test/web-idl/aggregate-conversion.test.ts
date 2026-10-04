@@ -69,13 +69,14 @@ describe('Sequence and record conversion through implementations', () => {
     expect(input[0]!.count).toBe('4');
   });
 
-  it('unwraps and reprojects record values without changing platform identity or realm', () => {
+  it.each(['record', 'sequence'] as const)('unwraps and reprojects %s values without changing platform identity or realm', (kind) => {
     class ItemImpl { value = 1; }
-    let received!: Record<string, ItemImpl>;
+    type Entries<Value> = Record<string, Value> | Value[];
+    let received!: Entries<ItemImpl>;
     class EchoImpl {
-      echo(value: Record<string, ItemImpl>) { received = value; return value; }
+      echo(value: Entries<ItemImpl>) { received = value; return value; }
     }
-    const type = record(idlType.DOMString, reference(ItemImpl));
+    const type = kind === 'sequence' ? sequence(reference(ItemImpl)) : record(idlType.DOMString, reference(ItemImpl));
     const world = new BindingWorld([
       defineInterface({ name: 'Item', implementation: impl(ItemImpl), members: [] }),
       defineInterface({
@@ -89,13 +90,16 @@ describe('Sequence and record conversion through implementations', () => {
     const other = world.register(otherRealm, (ctx) => ({ realm: ctx.realm }));
     const implementation = new ItemImpl();
     const platform = other.project(ItemImpl, implementation);
-    const Echo = Reflect.get(realm.global, 'Echo') as new() => { echo(value: unknown): Record<string, object>; };
-    const result = new Echo().echo({ item: platform });
+    const Echo = Reflect.get(realm.global, 'Echo') as new() => { echo(value: unknown): Entries<object>; };
+    const result = new Echo().echo(kind === 'sequence' ? [platform] : { item: platform });
+    const item = Array.isArray(result) ? result[0]! : result.item!;
 
-    expect(received.item).toBe(implementation);
-    expect(result.item).toBe(platform);
-    expect(Object.getPrototypeOf(result)).toBe(realm.intrinsics.objectPrototype);
-    expect(other.getObjectRecord(result.item!)!.binding.realm).toBe(otherRealm);
+    expect(Array.isArray(received) ? received[0] : received.item).toBe(implementation);
+    expect(item).toBe(platform);
+    expect(Object.getPrototypeOf(result)).toBe(kind === 'sequence'
+      ? realm.intrinsics.array.prototype : realm.intrinsics.objectPrototype);
+    expect(other.getObjectRecord(item)!.binding.realm).toBe(otherRealm);
+    expect(() => new Echo().echo(kind === 'sequence' ? [{}] : { item: {} })).toThrow(realm.intrinsics.typeError);
   });
 
   it.each(['direct', 'prepared'] as const)('converts callback-interface records through a union in the %s path', (mode) => {

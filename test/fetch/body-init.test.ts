@@ -26,7 +26,7 @@ describe('BodyInit extraction', () => {
     const fixture = createFetchFixture();
     const convert = (value: unknown) => fixture.context.jsToImpl(value, reference('BodyInit')) as BodyInitValue;
     expect(convert('\ud800')).toBe('\ufffd');
-    const blob = fixture.context.construct(BlobImpl, ['contents']);
+    const blob = fixture.context.construct(BlobImpl, [['contents']]);
     const platform = fixture.context.project(BlobImpl, blob);
     expect(convert(platform)).toBe(blob);
     const { body } = FetchBody.extract(convert(platform), false, fixture.env);
@@ -49,7 +49,7 @@ describe('BodyInit extraction', () => {
 
   it('serializes URLSearchParams immediately while preserving repeated fields', async () => {
     const fixture = createFetchFixture();
-    const params = fixture.context.construct(URLSearchParamsImpl, 'a=one+two&a=%E2%82%AC');
+    const params = fixture.context.construct(URLSearchParamsImpl, ['a=one+two&a=%E2%82%AC']);
     const { body, type } = FetchBody.extract(params, false, fixture.env);
     params.append('later', 'ignored');
     expect(type).toBe('application/x-www-form-urlencoded;charset=UTF-8');
@@ -70,7 +70,7 @@ describe('BodyInit extraction', () => {
   it('creates a Blob body stream on the extracting environment instead of the Blob creator', async () => {
     const creator = createFetchFixture();
     const consumer = createFetchFixture();
-    const blob = creator.context.construct(BlobImpl, ['retained bytes']);
+    const blob = creator.context.construct(BlobImpl, [['retained bytes']]);
     const { body } = FetchBody.extract(blob, false, consumer.env);
     expect(body.stream.env === consumer.env).toBe(true);
     expect(body.source).toBe(blob);

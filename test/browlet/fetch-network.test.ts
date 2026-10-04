@@ -248,7 +248,7 @@ describe('HTTP network responses through the real transport and page', () => {
       const operation = createFetchOperation(request, env);
       const response = await operation.start();
       const context = getBindingContext(realm);
-      Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+      Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
       expect(await browlet.evaluate(async () => {
         const { networkResponse } = globalThis as unknown as NetworkPage;
         const reader = networkResponse.body!.getReader();
@@ -287,7 +287,7 @@ describe('HTTP network responses through the real transport and page', () => {
       const operation = createFetchOperation(request, env);
       const response = await operation.start();
       const context = getBindingContext(realm);
-      Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+      Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
       await browlet.evaluate(async () => {
         const { networkResponse } = globalThis as unknown as NetworkPage;
         await networkResponse.body!.cancel('enough');
@@ -315,7 +315,7 @@ async function fixture(start = true) {
   const response = start ? await operation.start() : new FetchResponse();
   if (start) {
     const context = getBindingContext(realm);
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
   }
   return { browlet, env, transport, operation, response };
 }

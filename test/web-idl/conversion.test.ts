@@ -497,6 +497,35 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     expect(steps).toEqual(['get a', 'convert a']);
   });
 
+  it.each([true, false])('preserves prototype-named dictionary members as own data properties (required: %s)', (required) => {
+    const options = defineDictionary({
+      name: 'PrototypeNames', members: [
+        { name: '__proto__', type: idlType.object, required },
+        { name: 'constructor', type: idlType.DOMString, required },
+        { name: 'toString', type: idlType.long, required },
+      ],
+    });
+    const { binding } = createBinding([options]);
+    const converter = binding.getConverter(binding.assembly.getIDLType(reference(options.name)));
+    const prototypeValue = {};
+    const input = { ['__proto__']: prototypeValue, constructor: 'constructor', toString: '7' };
+    const dictionary = jsToIDL(input, converter) as IDLDictionary;
+    expect(Object.getPrototypeOf(dictionary.record)).toBe(Object.prototype);
+    expect(Object.getOwnPropertyDescriptor(dictionary.record, '__proto__')).toEqual({
+      value: prototypeValue, writable: true, enumerable: true, configurable: true,
+    });
+    expect(Object.getOwnPropertyDescriptor(dictionary.record, 'constructor')?.value).toBe('constructor');
+    expect(Object.getOwnPropertyDescriptor(dictionary.record, 'toString')?.value).toBe(7);
+    const output = idlToJS(dictionary, converter) as object;
+    expect(Object.getPrototypeOf(output)).toBe(binding.realm.intrinsics.objectPrototype);
+    expect(Object.getOwnPropertyDescriptor(output, '__proto__')?.value).toBe(prototypeValue);
+    if (!required) {
+      const empty = jsToIDL(null, converter) as IDLDictionary;
+      expect(Object.keys(empty.record)).toEqual([]);
+      expect(Object.keys(idlToJS(empty, converter) as object)).toEqual([]);
+    }
+  });
+
   it('keeps recursive dictionary values and nested mutable defaults independent', () => {
     const node = reference('RecursiveOptions');
     const options = defineDictionary({

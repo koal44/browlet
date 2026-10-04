@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   arg, ctor, defineDictionary, defineProxyObject, defineInterface, emptySequence,
-  frozenArray, idlType, impl, reference, sequence, staticOp, xattr,
+  frozenArray, idlType, impl, reference, sequence, staticOp, union, xattr,
   type Definition, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
@@ -23,7 +23,7 @@ describe('Web IDL effective overload sets', () => {
     ], binding);
     const overloads = new AssembledOverloads([callable]);
     const resolve = mode === 'prepared'
-      ? createOverloadResolver(overloads, binding)
+      ? createOverloadResolver(overloads, binding, 'variadic')
       : (values: unknown[]) => resolveOverload(overloads, values, binding);
     const resolveArguments = (...values: unknown[]) => resolve(values).values;
 
@@ -39,7 +39,7 @@ describe('Web IDL effective overload sets', () => {
       { name: 'values', optional: true, default: emptySequence, type: sequence(idlType.double) },
       { name: 'label', optional: true, type: idlType.DOMString },
     ], binding);
-    const resolve = createOverloadResolver(new AssembledOverloads([callable]), binding);
+    const resolve = createOverloadResolver(new AssembledOverloads([callable]), binding, 'defaults');
     const first = resolve([]).values;
     const values = first[0] as number[];
     values.push(99);
@@ -47,6 +47,32 @@ describe('Web IDL effective overload sets', () => {
     expect(resolve([]).values).toEqual([[], undefined]);
     expect(resolve([undefined, 'label']).values).toEqual([[], 'label']);
     expect(resolve([[1, '2'], null, Symbol('ignored')]).values).toEqual([[1, 2], 'null']);
+  });
+
+  it('does not read author array prototype getters for omitted arguments', () => {
+    class OptionalArgumentImpl {}
+    const definition = defineInterface({
+      name: 'OptionalArgument', exposed: '*', implementation: impl(OptionalArgumentImpl),
+      members: [staticOp('read', idlType.DOMString,
+        [arg('value', idlType.DOMString, { optional: true, default: 'fallback' })],
+        { invoke(_ctx, value) { return value; } },
+      )],
+    });
+    const realm = new Realm();
+    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const OptionalArgument = Reflect.get(realm.global, definition.name) as { read(value?: unknown): string; };
+    let reads = 0;
+    Object.defineProperty(realm.intrinsics.array.prototype, '0', {
+      configurable: true,
+      get() { reads++; return 'prototype'; },
+    });
+    let result: string;
+    try {
+      result = OptionalArgument.read();
+    } finally {
+      Reflect.deleteProperty(realm.intrinsics.array.prototype, '0');
+    }
+    expect({ result, reads }).toEqual({ result: 'fallback', reads: 0 });
   });
 
   it('selects by value category and converts the selected arguments', () => {
@@ -342,6 +368,81 @@ describe('Web IDL effective overload sets', () => {
       callable,
       values: [false, undefined],
     });
+  });
+
+  it('reuses interface matches across instances and realms without admitting another world', () => {
+    class BaseImpl {
+      constructor(public label: string) {}
+    }
+    class DerivedImpl extends BaseImpl {}
+    class ChooserImpl {}
+    const definitions = [
+      defineInterface({ name: 'Base', exposed: '*', implementation: impl(BaseImpl), members: [] }),
+      defineInterface({ name: 'Derived', exposed: '*', inherits: 'Base', implementation: impl(DerivedImpl), members: [] }),
+      defineInterface({
+        name: 'Chooser', exposed: '*', implementation: impl(ChooserImpl),
+        members: [
+          staticOp('choose', idlType.DOMString,
+            [arg('prefix', idlType.DOMString), arg('value', union(reference(BaseImpl), idlType.long))],
+            { invoke(_ctx, prefix, value) { return `${prefix}:matched:${typeof value === 'number' ? value : value.label}`; } },
+          ),
+          staticOp('choose', idlType.DOMString,
+            [arg('prefix', idlType.DOMString), arg('value', idlType.DOMString)],
+            { invoke(_ctx, prefix, value) { return `${prefix}:string:${value}`; } },
+          ),
+        ],
+      }),
+    ];
+    const world = new BindingWorld(definitions);
+    const realm = new Realm();
+    const binding = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+    binding.install(realm.global);
+    const otherRealm = new Realm();
+    const otherBinding = world.register(otherRealm, (ctx) => ({ realm: ctx.realm }));
+    const foreignBinding = new BindingWorld(definitions).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const first = binding.project(BaseImpl, new BaseImpl('first'));
+    const second = binding.project(BaseImpl, new BaseImpl('second'));
+    const derived = otherBinding.project(DerivedImpl, new DerivedImpl('derived'));
+    const foreign = foreignBinding.project(BaseImpl, new BaseImpl('foreign'));
+    const Chooser = Reflect.get(realm.global, 'Chooser') as { choose(prefix: unknown, value: unknown): string; };
+    const trace: string[] = [];
+    Object.defineProperty(foreign, 'toString', { value() { trace.push('value'); return 'foreign'; } });
+    Object.defineProperty(derived, Symbol.iterator, { get() { throw new Error('Must select the interface first'); } });
+
+    for (let repeat = 0; repeat < 3; repeat++) {
+      expect(Chooser.choose('p', first)).toBe('p:matched:first');
+      expect(Chooser.choose('p', second)).toBe('p:matched:second');
+      expect(Chooser.choose('p', derived)).toBe('p:matched:derived');
+      expect(Chooser.choose('p', 4.8)).toBe('p:matched:4');
+      expect(Chooser.choose('p', 'text')).toBe('p:string:text');
+      trace.length = 0;
+      expect(Chooser.choose({ toString() { trace.push('prefix'); return 'p'; } }, foreign))
+        .toBe('p:string:foreign');
+      expect(trace).toEqual(['prefix', 'value']);
+    }
+    expect(() => Chooser.choose('p', Symbol('value'))).toThrow(realm.intrinsics.typeError);
+  });
+
+  it('keeps proxy recognition dependent on the value when ordinary interface matches are reused', () => {
+    const first = {};
+    const second = {};
+    let recognized: object = first;
+    const binding = createBinding([
+      defineInterface({ name: 'Node', members: [] }),
+      defineProxyObject({ name: 'LiveProxy', is: (value) => value === recognized }),
+    ]);
+    const assembled = binding.assembly.interfaces.get('Node')!;
+    binding.initializePlatformObject(first, assembled, {});
+    binding.initializePlatformObject(second, assembled, {});
+    const proxy = namedOperation('proxy', reference('LiveProxy'), binding);
+    const string = namedOperation('string', idlType.DOMString, binding);
+    const resolveArguments = createOverloadResolver(new AssembledOverloads([proxy, string]), binding, 'live proxy');
+
+    expect(resolveArguments([first])).toEqual({ callable: proxy, values: [first] });
+    expect(resolveArguments([second])).toEqual({ callable: string, values: ['[object Object]'] });
+    recognized = second;
+    expect(resolveArguments([first])).toEqual({ callable: string, values: ['[object Object]'] });
+    expect(resolveArguments([second])).toEqual({ callable: proxy, values: [second] });
   });
 });
 

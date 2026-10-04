@@ -140,7 +140,7 @@ export class GlobalPlatformObjectBinding {
 
     const steps = this.#binding.getMemberBinding(properties.assembled, properties.getter)?.operationSteps;
     if (!steps) throw new InternalError('Missing named property getter implementation');
-    const value = steps(record, property);
+    const value = steps(record, [property]);
     return {
       configurable: true,
       enumerable: !properties.unenumerable,

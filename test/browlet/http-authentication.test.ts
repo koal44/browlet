@@ -563,7 +563,7 @@ async function fixture(handle: (request: IncomingMessage | Http2ServerRequest, r
   };
   const text = (response: FetchResponse) => {
     const context = getBindingContext(realm);
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
     return browlet.evaluate(async () => (globalThis as unknown as { networkResponse: Response; }).networkResponse.text());
   };
   return { browlet, env, origin, seen, operation, text, store: env.userAgent.httpAuthentication };

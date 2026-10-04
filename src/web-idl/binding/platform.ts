@@ -70,12 +70,8 @@ export class PlatformRecord<T extends object = object> {
       }
       // https://webidl.spec.whatwg.org/#js-platform-objects
       // Copy each interface's unforgeable properties onto the new platform object.
-      Object.defineProperties(
-        platformObject,
-        Object.getOwnPropertyDescriptors(
-          binding.getImplementationBinding(ancestorAssembled).getUnforgeableObject(),
-        ),
-      );
+      const descriptors = binding.getImplementationBinding(ancestorAssembled).getUnforgeableDescriptors();
+      if (descriptors) Object.defineProperties(platformObject, descriptors);
     }
     return this.platformObject;
   }

@@ -443,7 +443,7 @@ async function fixture(server: Server) {
   };
   const text = (response: FetchResponse) => {
     const context = getBindingContext(getRelevantRealm(browlet.window));
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
     return browlet.evaluate(async () => (globalThis as unknown as { networkResponse: Response; }).networkResponse.text());
   };
   return { browlet, env, origin, request, get, text };

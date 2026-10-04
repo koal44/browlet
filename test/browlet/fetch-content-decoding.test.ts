@@ -126,7 +126,7 @@ async function fixture(bytes: Buffer, coding?: string) {
   const operation = createFetchOperation(request, env);
   const response = await operation.start();
   const context = getBindingContext(realm);
-  Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+  Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
   const text = () => browlet.evaluate(async () => (globalThis as unknown as NetworkPage).networkResponse.text());
   return { browlet, env, operation, response, text, createDecoder, paused: paused.promise };
 }

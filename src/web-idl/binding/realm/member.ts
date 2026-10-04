@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/index';
-import { isObject, type JSFunction } from '../../../js-engine/index';
+import { isObject, type JSFunction, type RealmFunctionSteps } from '../../../js-engine/index';
 import {
   hasExtendedAttribute, type AttributeFunctionSteps, type StringifierMember, type ExtendedAttribute,
 } from '../../core/index';
@@ -10,6 +10,7 @@ import {
 } from '../../assembly/index';
 import { IDLPromise } from '../../values/index';
 import { CallbackFunctionConverter, type Converter, type ConversionSteps } from '../../converters/index';
+import { compileSteps } from '../../compiler';
 
 import type { PlatformRecord, StampedImplInstance } from '../platform';
 import type { AsyncIteratorSteps } from './async-iterable';
@@ -48,6 +49,37 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     this.#implementationBinding = implementationBinding;
   }
 
+  /** Prepare live field access with property-access feedback isolated to this interface member. */
+  createFieldGetter(attribute: IDLAttribute, target: object): AttributeSteps['get'] {
+    const { binding, assembled } = this.#implementationBinding;
+    return compileSteps<AttributeSteps['get']>(`${assembled.primary.name}.${attribute.name}:field-get`,
+      { name: attribute.name, target, binding, InternalError }, `function getField(receiver) {
+        const impl = receiver?.implInst ?? target;
+        try {
+          if (!(name in impl)) {
+            throw new InternalError("Web IDL attribute " + name + " has no implementation");
+          }
+          return impl[name];
+        } catch (exception) {
+          throw binding.realizeException(exception);
+        }
+      }`,
+    );
+  }
+
+  /** Prepare live field assignment with property-access feedback isolated to this interface member. */
+  createFieldSetter(attribute: IDLAttribute): (this: object, value: unknown) => void {
+    const { assembled } = this.#implementationBinding;
+    return compileSteps(`${assembled.primary.name}.${attribute.name}:field-set`,
+      { name: attribute.name, InternalError }, `function setField(value) {
+        if (!(name in this)) {
+          throw new InternalError("Web IDL attribute " + name + " has no implementation");
+        }
+        this[name] = value;
+      }`,
+    );
+  }
+
   /** Retain the function returned by this attribute in its receiver's realm. */
   getAttributeFunction(
     this: MemberBinding<MemberOwner>,
@@ -83,53 +115,73 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const implementation = interfaceAssembled && attribute.inherit
       ? interfaceAssembled.getInheritedAttribute(attribute)
       : attribute;
-    return this.#getter = realmBinding.realm.createFunction((thisArgument) => {
-      let resultConverter: Converter | undefined;
-      try {
-        const receiver = interfaceAssembled && !attribute.static
-          ? realmBinding.getReceiverRecord(
-            thisArgument,
-            interfaceAssembled,
-            attribute.name,
-            'getter',
-            lenient,
-          )
-          : null;
-        if (receiver === invalidReceiver) return undefined;
-        resultConverter = !receiver || receiver.binding === realmBinding
-          ? defaultConverter
-          : receiver.binding.getConverter(attribute.type);
+    const steps = this.attributeSteps;
+    // Select the ordinary getter once; special attributes keep their own dispatch below.
+    let getterSteps: RealmFunctionSteps;
+    if (
+      interfaceAssembled && !attribute.static && !lenient && !elementType &&
+      implementation === attribute && attribute.type.kind !== 'promise' && steps
+    ) {
+      getterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:get`,
+        { realmBinding, assembled: interfaceAssembled, name: attribute.name, type: attribute.type, steps, convertResult },
+        `function getAttribute(thisArgument) {
+          const receiver = realmBinding.getReceiverRecord(thisArgument, assembled, name, "getter", false);
+          const convert = receiver.binding === realmBinding
+            ? convertResult
+            : receiver.binding.getConverter(type).getIDLToJSSteps();
+          return convert(steps.get(receiver));
+        }`,
+      );
+    } else {
+      getterSteps = (thisArgument) => {
+        let resultConverter: Converter | undefined;
+        try {
+          const receiver = interfaceAssembled && !attribute.static
+            ? realmBinding.getReceiverRecord(
+              thisArgument,
+              interfaceAssembled,
+              attribute.name,
+              'getter',
+              lenient,
+            )
+            : null;
+          if (receiver === invalidReceiver) return undefined;
+          resultConverter = !receiver || receiver.binding === realmBinding
+            ? defaultConverter
+            : receiver.binding.getConverter(attribute.type);
 
-        if (elementType) {
-          if (!receiver) {
-            throw new InternalError('Observable array attribute was not regular');
+          if (elementType) {
+            if (!receiver) {
+              throw new InternalError('Observable array attribute was not regular');
+            }
+            return realmBinding.observableArrays.get(
+              receiver,
+              attribute,
+              elementType,
+            );
           }
-          return realmBinding.observableArrays.get(
-            receiver,
-            attribute,
-            elementType,
-          );
-        }
 
-        const steps = (implementation === attribute
-          ? this
-          : realmBinding.getMemberBinding(assembled, implementation))?.attributeSteps;
-        if (!steps) {
-          throw missingImplementation(
-            assembled,
-            `attribute ${attribute.name}`,
+          const steps = (implementation === attribute
+            ? this
+            : realmBinding.getMemberBinding(assembled, implementation))?.attributeSteps;
+          if (!steps) {
+            throw missingImplementation(
+              assembled,
+              `attribute ${attribute.name}`,
+            );
+          }
+          const value = steps.get(receiver);
+          return resultConverter === defaultConverter ? convertResult(value) : resultConverter.getIDLToJSSteps()(value);
+        } catch (exception) {
+          return this.#handlePromiseException(
+            attribute.type,
+            exception,
+            resultConverter ?? defaultConverter,
           );
         }
-        const value = steps.get(receiver);
-        return resultConverter === defaultConverter ? convertResult(value) : resultConverter.getIDLToJSSteps()(value);
-      } catch (exception) {
-        return this.#handlePromiseException(
-          attribute.type,
-          exception,
-          resultConverter ?? defaultConverter,
-        );
-      }
-    }, { length: 0, name: `get ${attribute.name}` });
+      };
+    }
+    return this.#getter = realmBinding.realm.createFunction(getterSteps, { length: 0, name: `get ${attribute.name}` });
   }
 
   /** Retain the realm-owned setter function and its prepared conversions. */
@@ -164,75 +216,102 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const convertInput = legacyCallback
       ? CallbackFunctionConverter.createAttributeSteps(inputConverter, legacyCallback)
       : inputConverter.getJSToIDLSteps();
-    return this.#setter = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
-      const value = argumentsList[0];
-      const jsValue = realmBinding.resolveThisValue(thisArgument);
-      const receiver = attribute.static
-        ? null
-        : realmBinding.getReceiverRecord(
-          jsValue,
-          interfaceAssembled,
-          attribute.name,
-          'setter',
-          lenient,
-        );
-      if (replaceable) {
-        if (!isObject(jsValue)) return realmBinding.throwTypeError('Invalid receiver');
-        if (!Reflect.defineProperty(jsValue, attribute.name, {
-          configurable: true,
-          enumerable: true,
-          value,
-          writable: true,
-        })) {
-          return realmBinding.throwTypeError(
-            `Could not replace attribute ${attribute.name}`,
+    const steps = this.attributeSteps;
+    // Select ordinary assignment once, as with ordinary attribute getters.
+    if (!replaceable && !putForwards && !lenientSetter && !observableArrayElementType && steps?.set) {
+      const setterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:set`,
+        { realmBinding, interfaceAssembled, attribute, lenient, invalidReceiver, convertInput, enumeration, steps },
+        `function setAttribute(thisArgument, argumentsList) {
+          const receiver = attribute.static ? null : realmBinding.getReceiverRecord(
+            thisArgument, interfaceAssembled, attribute.name, 'setter', lenient);
+          if (receiver === invalidReceiver) return undefined;
+          const value = argumentsList[0];
+          // Enum inputs that are already strings need only the membership check.
+          const idlValue = enumeration && typeof value === 'string' ? value : convertInput(value);
+          if (enumeration && !enumeration.hasValue(idlValue)) return undefined;
+          steps.set(receiver, idlValue);
+          return undefined;
+        }`,
+      );
+      return this.#setter = realmBinding.realm.createFunction(setterSteps, { length: 1, name: `set ${attribute.name}` });
+    }
+    const setterSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${attribute.name}:set`,
+      {
+        realmBinding, assembled, interfaceAssembled, attribute, replaceable, putForwards, lenientSetter, lenient,
+        observableArrayElementType, enumeration, convertInput, memberBinding: this, invalidReceiver,
+        isObject, InternalError, missingImplementation,
+      },
+      `function setAttribute(thisArgument, argumentsList) {
+        const value = argumentsList[0];
+        const jsValue = realmBinding.resolveThisValue(thisArgument);
+        const receiver = attribute.static
+          ? null
+          : realmBinding.getReceiverRecord(
+            jsValue,
+            interfaceAssembled,
+            attribute.name,
+            'setter',
+            lenient,
+          );
+        if (replaceable) {
+          if (!isObject(jsValue)) return realmBinding.throwTypeError('Invalid receiver');
+          if (!Reflect.defineProperty(jsValue, attribute.name, {
+            configurable: true,
+            enumerable: true,
+            value,
+            writable: true,
+          })) {
+            return realmBinding.throwTypeError(
+              'Could not replace attribute ' + attribute.name,
+            );
+          }
+          return undefined;
+        }
+        if (receiver === invalidReceiver || lenientSetter) return undefined;
+
+        if (putForwards) {
+          if (!receiver) throw new InternalError('PutForwards used on a static attribute');
+          if (!isObject(jsValue)) {
+            return realmBinding.throwTypeError('Invalid receiver');
+          }
+          const forwarded = jsValue[attribute.name];
+          if (!isObject(forwarded)) {
+            return realmBinding.throwTypeError(
+              attribute.name + ' does not reference an object',
+            );
+          }
+          Reflect.set(forwarded, putForwards, value);
+          return undefined;
+        }
+
+        if (observableArrayElementType) {
+          if (!receiver) {
+            throw new InternalError('Observable array attribute was not regular');
+          }
+          realmBinding.observableArrays.replace(
+            receiver,
+            attribute,
+            observableArrayElementType,
+            value,
+          );
+          return undefined;
+        }
+
+        const idlValue = convertInput(value);
+        // https://webidl.spec.whatwg.org/#dfn-attribute-setter
+        if (enumeration && !enumeration.hasValue(idlValue)) return undefined;
+        const steps = memberBinding.attributeSteps;
+        if (!steps?.set) {
+          throw missingImplementation(
+            assembled,
+            'attribute setter ' + attribute.name,
           );
         }
+        steps.set(receiver, idlValue);
         return undefined;
-      }
-      if (receiver === invalidReceiver || lenientSetter) return undefined;
-
-      if (putForwards) {
-        if (!receiver) throw new InternalError('PutForwards used on a static attribute');
-        if (!isObject(jsValue)) {
-          return realmBinding.throwTypeError('Invalid receiver');
-        }
-        const forwarded = (jsValue as Record<string, unknown>)[attribute.name];
-        if (!isObject(forwarded)) {
-          return realmBinding.throwTypeError(
-            `${attribute.name} does not reference an object`,
-          );
-        }
-        Reflect.set(forwarded, putForwards, value);
-        return undefined;
-      }
-
-      if (observableArrayElementType) {
-        if (!receiver) {
-          throw new InternalError('Observable array attribute was not regular');
-        }
-        realmBinding.observableArrays.replace(
-          receiver,
-          attribute,
-          observableArrayElementType,
-          value,
-        );
-        return undefined;
-      }
-
-      const idlValue = convertInput(value);
-      // https://webidl.spec.whatwg.org/#dfn-attribute-setter
-      if (enumeration && !enumeration.hasValue(idlValue as string)) return undefined;
-      const steps = this.attributeSteps;
-      if (!steps?.set) {
-        throw missingImplementation(
-          assembled,
-          `attribute setter ${attribute.name}`,
-        );
-      }
-      steps.set(receiver, idlValue);
-      return undefined;
-    }, { length: 1, name: `set ${attribute.name}` });
+      }`,
+    );
+    return this.#setter = realmBinding.realm.createFunction(setterSteps, { length: 1, name: `set ${attribute.name}` });
   }
 
   /** Retain the realm-owned operation function and its prepared conversions. */
@@ -245,7 +324,7 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     const { binding: realmBinding, assembled } = this.#implementationBinding;
     const source = operations.callables[0];
     if (!source) throw new InternalError(`Operation group ${name} is empty`);
-    const resolve = createOverloadResolver(operations, realmBinding);
+    const resolve = createOverloadResolver(operations, realmBinding, `${assembled.primary.name}.${name}`);
     const interfaceAssembled = assembled instanceof AssembledInterface ? assembled : undefined;
     const implementationBinding = this.#implementationBinding;
     for (const member of operations.callables) {
@@ -253,52 +332,57 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
       binding.isDefaultOperation = hasExtendedAttribute(member.extendedAttributes, 'Default');
       binding.convertResult = realmBinding.getConverter(member.returns).getIDLToJSSteps();
     }
-    return this.#operation = realmBinding.realm.createFunction((thisArgument, argumentsList) => {
-      try {
-        const receiver = interfaceAssembled && !source.static
-          ? realmBinding.getReceiverRecord(
-            thisArgument,
-            interfaceAssembled,
-            name,
-            'method',
-            false,
-          )
-          : null;
-        // Default to receiver-realm allocation while Web IDL's broader realm rules are unresolved.
-        // https://github.com/whatwg/webidl/issues/135
-        const resultBinding = receiver?.binding ?? realmBinding;
-        const overload = resolve(argumentsList);
-        const operation = overload.callable;
-        const operationBinding = operation === source
-          ? this
-          : implementationBinding.getOrCreateMemberBinding(operation);
-        const steps = operationBinding.operationSteps;
-        if (operationBinding.isDefaultOperation) {
-          if (!receiver || !interfaceAssembled) {
-            throw new InternalError('Default operation used as a static operation');
+    // Failed Promise-returning calls allocate in the invoked method's realm.
+    const handleException = (exception: unknown) => this.#handlePromiseException(
+      source.returns, exception, realmBinding.getConverter(source.returns),
+    );
+    const operationSteps = compileSteps<RealmFunctionSteps>(`${assembled.primary.name}.${name}:operation`,
+      {
+        realmBinding, assembled, source, interfaceAssembled, name, resolve, implementationBinding,
+        memberBinding: this, InternalError, missingImplementation, handleException,
+      },
+      `function invokeOperation(thisArgument, argumentsList) {
+        try {
+          const receiver = interfaceAssembled && !source.static
+            ? realmBinding.getReceiverRecord(
+              thisArgument,
+              interfaceAssembled,
+              name,
+              'method',
+              false,
+            )
+            : null;
+          // Default to receiver-realm allocation while Web IDL's broader realm rules are unresolved.
+          // https://github.com/whatwg/webidl/issues/135
+          const resultBinding = receiver?.binding ?? realmBinding;
+          const overload = resolve(argumentsList);
+          const operation = overload.callable;
+          const operationBinding = operation === source
+            ? memberBinding
+            : implementationBinding.getOrCreateMemberBinding(operation);
+          const steps = operationBinding.operationSteps;
+          if (operationBinding.isDefaultOperation) {
+            if (!receiver || !interfaceAssembled) {
+              throw new InternalError('Default operation used as a static operation');
+            }
+            return operationBinding.convertResult(
+              realmBinding.getImplementationBinding(interfaceAssembled).runDefaultToJSON(receiver),
+            );
           }
-          return operationBinding.convertResult!(
-            realmBinding.getImplementationBinding(interfaceAssembled).runDefaultToJSON(receiver),
-          );
+          if (!steps) {
+            throw missingImplementation(assembled, 'operation ' + name);
+          }
+          const convertResult = resultBinding === realmBinding
+            ? operationBinding.convertResult
+            : resultBinding.getConverter(operation.returns).getIDLToJSSteps();
+          const result = steps(receiver, overload.values);
+          return convertResult(result);
+        } catch (exception) {
+          return handleException(exception);
         }
-        if (!steps) {
-          throw missingImplementation(assembled, `operation ${name}`);
-        }
-        const convertResult = resultBinding === realmBinding
-          ? operationBinding.convertResult!
-          : resultBinding.getConverter(operation.returns).getIDLToJSSteps();
-        const result = steps(receiver, ...overload.values);
-        return convertResult(result);
-      } catch (exception) {
-        return this.#handlePromiseException(
-          source.returns,
-          exception,
-          // Invocation failure creates a new promise in the method realm;
-          // allocation of a successful implementation result is unrelated.
-          realmBinding.getConverter(source.returns),
-        );
-      }
-    }, { length: operations.minimumArgumentCount, name });
+      }`,
+    );
+    return this.#operation = realmBinding.realm.createFunction(operationSteps, { length: operations.minimumArgumentCount, name });
   }
 
   /** Retain the realm-owned stringifier function and its prepared conversions. */
@@ -372,11 +456,13 @@ export type AttributeSteps = {
   set?(receiver: PlatformRecord | null, value: unknown): void;
 };
 
+/** Initialize an allocated implementation, consuming the invocation's fresh converted argument list. */
 export type ConstructorSteps = (
-  this: object,
-  ...values: unknown[]
+  receiver: object,
+  values: unknown[],
 ) => void;
 
+/** Construct an implementation, consuming the invocation's fresh converted argument list. */
 export type ImplementationConstructorSteps = (
   values: unknown[],
 ) => object;
@@ -395,10 +481,10 @@ export type StringificationBehavior = (
   this: StampedImplInstance,
 ) => unknown;
 
-/** Member adapters receive the recognized record before the converted arguments. */
+/** Member adapters consume the invocation's fresh converted argument list and may modify it in place. */
 export type OperationSteps = (
   receiver: PlatformRecord | null,
-  ...values: unknown[]
+  values: unknown[],
 ) => unknown;
 
 export type MemberOwner = AssembledInterface | AssembledNamespace;

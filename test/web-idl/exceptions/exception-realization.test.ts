@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   RangeError as InternalRangeError, SyntaxError as InternalSyntaxError,
-  TypeError as InternalTypeError,
+  TypeError as InternalTypeError, ExceptionRequestStamper,
 } from '../../../src/infra/exceptions';
 import {
   createDOMException, DOMException as InternalDOMException,
@@ -44,6 +44,17 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     expect(Reflect.ownKeys(exception)).toEqual(Reflect.ownKeys(new native('original message')));
     expect(Exception.is(exception)).toBe(true);
     expect(Exception.is(new native('author exception'))).toBe(false);
+  });
+
+  it('rejects a duplicate stamp and preserves the original frozen request', () => {
+    const exception = Object.freeze(create());
+    const request = ExceptionRequestStamper.get(exception);
+
+    expect(request?.exception).toBe(exception);
+    expect(request?.type).toBe(name);
+    expect(() => ExceptionRequestStamper.stamp(exception, 'TypeError')).toThrow(TypeError);
+    expect(ExceptionRequestStamper.get(exception)).toBe(request);
+    expect(ExceptionRequestStamper.get(exception)?.type).toBe(name);
   });
 
   it('retains one invisible realization across realms for a frozen internal exception', () => {

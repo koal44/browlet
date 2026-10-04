@@ -8,7 +8,7 @@ import {
 } from '../core/index';
 
 import { undefinedType, type IDLType, type IDLDictionaryType } from './types';
-import type { AssembledInterfaceMember } from './interface';
+import type { AssembledInterface, AssembledInterfaceMember } from './interface';
 import type { AssembledNamespaceMember } from './namespace';
 import type { DefinitionAssembly } from './assembly';
 
@@ -88,7 +88,7 @@ export class AssembledOverloads<Callable extends AssembledCallable = AssembledCa
   maximumArgumentCount = 0;
 
   /** Applicable callables and distinguishing argument index for each allowed argument count. */
-  #candidatesByArgumentCount: OverloadCandidates<Callable>[] = [];
+  #candidatesByArgumentCount: OverloadGroup<Callable>[] = [];
 
   constructor(callables: Callable[]) {
     this.callables = callables;
@@ -127,12 +127,12 @@ export class AssembledOverloads<Callable extends AssembledCallable = AssembledCa
           }
         }
       }
-      this.#candidatesByArgumentCount.push({ callables: candidates, distinguishingIndex });
+      this.#candidatesByArgumentCount.push(new OverloadGroup(candidates, distinguishingIndex));
     }
   }
 
   /** Return the shared candidates for an invocation; callers must not modify the list. */
-  getCandidates(argumentCount: number): OverloadCandidates<Callable> {
+  getCandidates(argumentCount: number): OverloadGroup<Callable> {
     return this.#candidatesByArgumentCount[Math.min(argumentCount, this.#candidatesByArgumentCount.length - 1)]!;
   }
 }
@@ -160,10 +160,56 @@ export type OperationFilter = (
 
 type ArgumentOptionality = 'required' | 'optional' | 'variadic';
 
-type OverloadCandidates<Callable extends AssembledCallable> = {
+/** One argument-count group's shared candidates and lazy distinguishing-type selections. */
+export class OverloadGroup<Callable extends AssembledCallable> {
   callables: Callable[];
   distinguishingIndex: number;
-};
+  /** Proxy recognition depends on the incoming value, not just its assembled interface. */
+  hasProxyCandidates: boolean;
+  #primitiveCandidates?: PrimitiveOverloadCandidates<Callable>;
+  /** Reuse interface and object matches for every instance of the same concrete interface. */
+  #candidatesByInterface = new Map<AssembledInterface, Callable[]>();
+
+  constructor(callables: Callable[], distinguishingIndex: number) {
+    this.callables = callables;
+    this.distinguishingIndex = distinguishingIndex;
+    this.hasProxyCandidates = distinguishingIndex >= 0 && callables.some((callable) =>
+      callable.getArgument(distinguishingIndex)!.type.candidates.interfaces.some((type) => type.kind === 'proxy-object'));
+  }
+
+  /** Retain interface and object matches for this concrete interface; proxy matches remain value-dependent. */
+  getInterfaceCandidates(assembled: AssembledInterface): Callable[] {
+    let candidates = this.#candidatesByInterface.get(assembled);
+    if (!candidates) {
+      candidates = this.callables.filter((callable) => {
+        const branches = callable.getArgument(this.distinguishingIndex)!.type.candidates;
+        return branches.hasObject || branches.interfaces.some((type) =>
+          type.kind === 'interface' && assembled.implements(type.assembled));
+      });
+      this.#candidatesByInterface.set(assembled, candidates);
+    }
+    return candidates;
+  }
+
+  /** Retain every match in declaration order; callers must not modify these lists. */
+  get primitiveCandidates(): PrimitiveOverloadCandidates<Callable> {
+    if (this.#primitiveCandidates) return this.#primitiveCandidates;
+    const candidates: PrimitiveOverloadCandidates<Callable> = {
+      boolean: [], numeric: [], bigint: [], string: [], any: [],
+    };
+    for (const callable of this.callables) {
+      const branches = callable.getArgument(this.distinguishingIndex)!.type.candidates;
+      if (branches.hasBoolean) candidates.boolean.push(callable);
+      if (branches.numeric) candidates.numeric.push(callable);
+      if (branches.hasBigInt) candidates.bigint.push(callable);
+      if (branches.string) candidates.string.push(callable);
+      if (branches.hasAny) candidates.any.push(callable);
+    }
+    return this.#primitiveCandidates = candidates;
+  }
+}
+
+type PrimitiveOverloadCandidates<Callable> = Record<'boolean' | 'numeric' | 'bigint' | 'string' | 'any', Callable[]>;
 
 type MemberFromDeclaration<Member> =
   Member extends AttributeMember ? IDLAttribute : Member extends ConstantMember ? IDLConstant

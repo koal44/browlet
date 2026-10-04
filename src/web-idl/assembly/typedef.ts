@@ -23,7 +23,9 @@ export class AssembledTypedefs extends Map<string, AssembledTypedef> {
   resolve(type: WebIDLType, collectedAttributes?: ExtendedAttribute[]): Exclude<WebIDLType, { kind: 'annotated'; }> {
     while (true) {
       if (type.kind === 'annotated') {
-        collectedAttributes?.push(...type.extendedAttributes);
+        if (collectedAttributes) {
+          for (const attribute of type.extendedAttributes) collectedAttributes.push(attribute);
+        }
         type = type.type;
         continue;
       }

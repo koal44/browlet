@@ -14,6 +14,7 @@ describe('Web IDL definition assembly', () => {
     const assembly = new DefinitionAssembly([
       defineEnumeration({ name: 'Mode', values: ['fast', 'slow'] }),
       defineDictionary({ name: 'Options', members: [] }),
+      defineInterface({ name: 'Item', members: [] }),
     ]);
     const primitive = nullable(union(idlType.long, reference('Mode')));
     const numbers = sequence(idlType.long);
@@ -27,7 +28,12 @@ describe('Web IDL definition assembly', () => {
     expect(assembly.getIDLType(nestedNumbers).canPassToImpl).toBe(true);
     expect(assembly.getIDLType(dictionaries).canPassToImpl).toBe(false);
     expect(assembly.getIDLType(idlType.any).isPrimitive).toBe(false);
-    expect(assembly.getIDLType(idlType.any).canPassToImpl).toBe(false);
+    expect(assembly.getIDLType(idlType.any).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(idlType.object).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(idlType.ArrayBuffer).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(reference('Item')).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(sequence(nullable(reference('Item')))).canPassToImpl).toBe(true);
+    expect(assembly.getIDLType(union(reference('Item'), reference('Options'))).canPassToImpl).toBe(false);
     expect(assembly.getIDLType(idlType.symbol).isPrimitive).toBe(true);
   });
 

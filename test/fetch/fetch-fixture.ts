@@ -38,9 +38,9 @@ export function createFetchFixture(world?: BindingWorld<ClientEnvironment>) {
     env,
     createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, env), env),
     createRequest: (record: FetchRequest, signal: AbortSignalCapability, guard: HeadersGuard = 'request') =>
-      context.construct(RequestImpl, record, guard, signal),
+      context.construct(RequestImpl, [record, guard, signal]),
     createResponse: (record = new FetchResponse(), guard: HeadersGuard = 'response') =>
-      context.construct(ResponseImpl, record, guard),
+      context.construct(ResponseImpl, [record, guard]),
     createHeaders: () => context.construct(HeadersImpl),
   };
 }

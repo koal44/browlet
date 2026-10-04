@@ -46,7 +46,9 @@ export function roAttr<Env = unknown>(
   type: WebIDLType,
   options: ReadonlyAttributeOptions<Env> = {},
 ): AttributeMember<Env> {
-  return attr(name, type, { ...options, readonly: true });
+  const member = attr(name, type, options);
+  member.readonly = true;
+  return member;
 }
 
 /**
@@ -73,13 +75,14 @@ export function op<Env = unknown>(
   argumentsList: ArgumentDefinition[] = [],
   options: OperationOptions<Env> = {},
 ): OperationMember<Env> {
-  return {
+  const member: OperationMember<Env> = {
     ...options,
     arguments: argumentsList,
     kind: 'operation',
-    ...(name === undefined ? {} : { name }),
     returns,
   };
+  if (name !== undefined) member.name = name;
+  return member;
 }
 
 /** Declare an operation on the interface object, automatically bound to the implementation class. */
@@ -96,7 +99,9 @@ export function staticOp<Env = unknown>(
   argumentsList: ArgumentDefinition[] = [],
   options: StaticOperationOptions<Env> = {},
 ): OperationMember<Env> {
-  return op(name, returns, argumentsList, { ...options, static: true });
+  const member = op(name, returns, argumentsList, options);
+  member.static = true;
+  return member;
 }
 
 /** Declare an author argument's IDL conversion, optionality, and default. */

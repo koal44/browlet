@@ -201,7 +201,7 @@ async function fixture(server: Http2SecureServer) {
   const receive = async () => {
     const response = await operation.start();
     const context = getBindingContext(realm);
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
     return response;
   };
   return { browlet, env, request, operation, receive };

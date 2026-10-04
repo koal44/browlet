@@ -42,6 +42,7 @@ Core through its index, while Core modules import their siblings directly.
 | `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, captured-context restoration, and implementation-callable identity |
 | `binding/realm/overload.ts` | Select a callable and convert its arguments for invocation |
 | `converters/factory.ts` | Select the converter subclass for an assembled type |
+| `compiler.ts` | Compile internal binding and conversion steps with explicit dependencies and separate optimization feedback |
 | `converters/converter.ts` | Base Converter, shared rules and ownership, defaults, and conversion error boundaries |
 | `converters/` | Type-specific Converter subclasses and IDL-to-implementation conversion |
 | `values/` | Runtime IDL dictionaries, callbacks, promises, and iterable/iterator state |
@@ -75,6 +76,13 @@ Runtime types distinguish `any`, `undefined`, `boolean`, `bigint`, `object`, and
 `symbol` directly. Each has its own converter; integer, floating-point, and string
 converters share their related algorithms and prepare fixed conversion choices
 once. Core's compact `simple` declaration syntax does not survive assembly.
+
+Member dispatch, single-callable argument conversion, and dictionary input conversion
+compile specialized JavaScript when their existing binding or conversion plan is
+prepared. Declaration strings enter generated bodies as encoded literals; runtime
+objects enter as parameters. Exposed functions still come from the owning realm's
+function factory. Generated bodies require runtime coverage because TypeScript
+checks only the surrounding contracts.
 
 Assembled interfaces, namespaces, and callback interfaces answer exposure queries
 using `WebIDLRealm`'s global names, secure-context status, and cross-origin-isolation
@@ -151,7 +159,8 @@ implementation: impl(TextEncoderImpl, {
 
 `atArg()` inserts the dependency into the implementation argument list; converted
 author arguments fill the remaining positions. Both public construction and
-`ctx.construct()` use the declaration. Operation-specific dependencies use
+`ctx.construct(Impl, argumentsList)` use the declaration; the latter accepts an
+existing argument array without spreading or changing it. Operation-specific dependencies use
 `invokeWith()`. Keep implementation-only arguments last when translating a spec
 signature. Ordinary implementations receive `env`, never the Binding Context.
 An `atArg()` resolver receives `(receiver, method)` contexts. Select
@@ -345,7 +354,8 @@ methods. Promise adoption and realm-owned result objects remain intact, includin
 the synthesized result when closing a source without a `return` method.
 Converted dictionaries carry a member record; their converter retains the assembled definition.
 IDL-to-implementation conversion updates that record in place. `type.canPassToImpl`
-allows primitives and their sequences to bypass further inspection.
+identifies values already in their implementation representation, including unwrapped
+interfaces, ordinary objects, and sequences of such values. Binding overrides still apply.
 `getMembersToConvert()` selects the remaining members, including records that need
 unpacking; ordinary objects pass through unchanged.
 Direct and prepared implementation conversion share dictionary member plans,
@@ -658,8 +668,12 @@ rather than projecting an intermediate `Promise<any>` that could adopt values.
 Infra exception requests and Core DOMException requests are realm-neutral.
 Realize a failure once, at its first realm-owned observable boundary; the private
 realization record preserves identity on later delivery. Author-thrown values
-retain their identity. When an algorithm stores or shares a newly created error
-before returning, allocate it through the selected `env.exec.TypeError`,
+retain their identity. Output conversion realizes exception values for `any`,
+`object`, and the object branch of a union. Containers delegate to their member
+converters; an interface result projects its implementation directly. Thrown
+failures and Promise rejections are realized at their invocation/delivery boundary.
+When an algorithm stores or shares a newly created error before returning,
+allocate it through the selected `env.exec.TypeError`,
 `RangeError`, or `DOMException` constructor. Binding supplies the original
 `DOMException` independently of its writable global property.
 Later Promise delivery must not decide that error's realm.

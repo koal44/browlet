@@ -882,7 +882,7 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
           implClass: ImplementationClass<T>,
           argumentsList: unknown[],
         ): T {
-          return ctx.construct(implClass, ...argumentsList);
+          return ctx.construct(implClass, argumentsList);
         },
       })),
       atArg(1, (ctx) => ctx.realm.env),

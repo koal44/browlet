@@ -281,8 +281,8 @@ describe('Web IDL async sequences', () => {
     );
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(definition.name));
     interfaceBinding.createImplementation = () => new AsyncSequenceConsumerImpl();
-    getMemberBinding(interfaceBinding, asyncOperation).operationSteps = (_receiver, _value) => 'async';
-    getMemberBinding(interfaceBinding, stringOperation).operationSteps = (_receiver, _value) => 'string';
+    getMemberBinding(interfaceBinding, asyncOperation).operationSteps = (_receiver, [_value]) => 'async';
+    getMemberBinding(interfaceBinding, stringOperation).operationSteps = (_receiver, [_value]) => 'string';
     const object = binding.allocatePlatformRecord(binding.resolveInterface(definition.name)).platformObject!;
     let gets = 0;
     const source = Object.defineProperty({}, Symbol.asyncIterator, {

@@ -306,7 +306,7 @@ async function fixture(respond: RequestListener) {
   };
   const text = (response: FetchResponse) => {
     const context = getBindingContext(realm);
-    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, response, 'response')));
+    Reflect.set(browlet.window, 'networkResponse', project(context.construct(ResponseImpl, [response, 'response'])));
     return browlet.evaluate(async () => (globalThis as unknown as { networkResponse: Response; }).networkResponse.text());
   };
   const complete = (request: FetchRequest) => {

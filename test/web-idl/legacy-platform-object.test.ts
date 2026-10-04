@@ -32,8 +32,8 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        values.set(this, ['zero', 'one']);
+      steps: function(receiver) {
+        values.set(receiver, ['zero', 'one']);
       },
     };
     getMemberBinding(interfaceBinding, getter).indexedPropertySteps = {
@@ -42,7 +42,7 @@ describe('Web IDL legacy platform objects', () => {
       },
       unsupportedValue: undefined,
     };
-    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, index) {
+    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, [index]) {
       return values.get(receiver!.implInst)?.[index as number];
     };
     getMemberBinding(interfaceBinding, length).attributeSteps = {
@@ -106,7 +106,7 @@ describe('Web IDL legacy platform objects', () => {
 
     let value = 2;
     getterBinding.operationSteps = () => value;
-    getMemberBinding(interfaceBinding, setter).operationSteps = (_receiver, _index, converted) => { value = converted as number; };
+    getMemberBinding(interfaceBinding, setter).operationSteps = (_receiver, [_index, converted]) => { value = converted as number; };
     expect(Reflect.get(object, '0')).toBe(2);
     expect(Reflect.set(object, '0', '3')).toBe(true);
     expect(Reflect.get(object, '0')).toBe(3);
@@ -133,8 +133,8 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        values.set(this, new Map([[0, 1]]));
+      steps: function(receiver) {
+        values.set(receiver, new Map([[0, 1]]));
       },
     };
     getMemberBinding(interfaceBinding, getter).indexedPropertySteps = {
@@ -145,10 +145,10 @@ describe('Web IDL legacy platform objects', () => {
         return values.get(this)?.has(index) ?? false;
       },
     };
-    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, index) {
+    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, [index]) {
       return values.get(receiver!.implInst)?.get(index as number);
     };
-    getMemberBinding(interfaceBinding, setter).operationSteps = function(receiver, index, value) {
+    getMemberBinding(interfaceBinding, setter).operationSteps = function(receiver, [index, value]) {
       values.get(receiver!.implInst)?.set(index as number, value as number);
     };
     const Interface = getInstalledInterface(binding.installDefinitions(), 'WritableIndexed');
@@ -189,11 +189,11 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        values.set(this, new Map([[0, 'initial']]));
+      steps: function(receiver) {
+        values.set(receiver, new Map([[0, 'initial']]));
       },
     };
-    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, index) {
+    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, [index]) {
       return values.get(receiver!.implInst)?.get(index as number);
     };
     getMemberBinding(interfaceBinding, getter).indexedPropertySteps = {
@@ -279,8 +279,8 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        values.set(this, new Map([
+      steps: function(receiver) {
+        values.set(receiver, new Map([
           ['alpha', 'named alpha'],
           ['length', 'named length'],
           ['toString', 'named toString'],
@@ -292,7 +292,7 @@ describe('Web IDL legacy platform objects', () => {
         return new Set(values.get(this)?.keys());
       },
     };
-    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, name) {
+    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, [name]) {
       return values.get(receiver!.implInst)?.get(name as string);
     };
     getMemberBinding(interfaceBinding, length).attributeSteps = {
@@ -426,8 +426,8 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        values.set(this, new Map([
+      steps: function(receiver) {
+        values.set(receiver, new Map([
           ['alpha', 'named alpha'],
           ['length', 'named length'],
           ['toString', 'named toString'],
@@ -441,13 +441,13 @@ describe('Web IDL legacy platform objects', () => {
         return new Set(values.get(this)?.keys());
       },
     };
-    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, name) {
+    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, [name]) {
       return values.get(receiver!.implInst)?.get(name as string);
     };
-    getMemberBinding(interfaceBinding, setter).operationSteps = function(receiver, name, value) {
+    getMemberBinding(interfaceBinding, setter).operationSteps = function(receiver, [name, value]) {
       values.get(receiver!.implInst)?.set(name as string, value);
     };
-    getMemberBinding(interfaceBinding, deleter).operationSteps = function(receiver, name) {
+    getMemberBinding(interfaceBinding, deleter).operationSteps = function(receiver, [name]) {
       if (name === 'locked') return false;
       return values.get(receiver!.implInst)?.delete(name as string) ?? false;
     };
@@ -535,11 +535,11 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        values.set(this, new Map([['existing', 'initial']]));
+      steps: function(receiver) {
+        values.set(receiver, new Map([['existing', 'initial']]));
       },
     };
-    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, name) {
+    getMemberBinding(interfaceBinding, getter).operationSteps = function(receiver, [name]) {
       return values.get(receiver!.implInst)?.get(name as string);
     };
     getMemberBinding(interfaceBinding, getter).namedPropertySteps = {
@@ -585,9 +585,9 @@ describe('Web IDL legacy platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
-      steps: function() {
-        indices.set(this, new Map([[0, 'indexed zero']]));
-        names.set(this, new Map([
+      steps: function(receiver) {
+        indices.set(receiver, new Map([[0, 'indexed zero']]));
+        names.set(receiver, new Map([
           ['0', 'named zero'], ['1', 'named one'], ['alpha', 'named alpha'],
         ]));
       },
@@ -605,16 +605,16 @@ describe('Web IDL legacy platform objects', () => {
         return new Set(names.get(this)?.keys());
       },
     };
-    getMemberBinding(interfaceBinding, indexGetter).operationSteps = function(receiver, index) {
+    getMemberBinding(interfaceBinding, indexGetter).operationSteps = function(receiver, [index]) {
       return indices.get(receiver!.implInst)?.get(index as number);
     };
-    getMemberBinding(interfaceBinding, indexSetter).operationSteps = function(receiver, index, value) {
+    getMemberBinding(interfaceBinding, indexSetter).operationSteps = function(receiver, [index, value]) {
       indices.get(receiver!.implInst)?.set(index as number, value as string);
     };
-    getMemberBinding(interfaceBinding, nameGetter).operationSteps = function(receiver, name) {
+    getMemberBinding(interfaceBinding, nameGetter).operationSteps = function(receiver, [name]) {
       return names.get(receiver!.implInst)?.get(name as string);
     };
-    getMemberBinding(interfaceBinding, nameSetter).operationSteps = function(receiver, name, value) {
+    getMemberBinding(interfaceBinding, nameSetter).operationSteps = function(receiver, [name, value]) {
       names.get(receiver!.implInst)?.set(name as string, value as string);
     };
     const Interface = getInstalledInterface(binding.installDefinitions(), 'IndexedAndNamed');

@@ -180,7 +180,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   /** Construct and associate an implementation using its declared injected arguments. */
   construct<T extends object>(
     implClass: ImplementationClass<T>,
-    ...argumentsList: unknown[]
+    argumentsList: unknown[] = [],
   ): StampedImplInstance<T> {
     const assembled = this.resolveInterface(implClass);
     const definition = assembled.primary.implementation;
@@ -454,7 +454,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ): StampedPlatformObject {
     if (behavior.kind === 'initialize') {
       const record = this.allocatePlatformRecord(assembled, newTarget);
-      Reflect.apply(behavior.steps, record.implInst, values);
+      behavior.steps(record.implInst, values);
       return record.platformObject!;
     }
 

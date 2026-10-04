@@ -8,6 +8,7 @@ import { Converter, type ConversionSteps } from './converter';
 /** Preserve any author value without coercion. */
 export class AnyConverter extends Converter<IDLAnyType> {
   protected createInputSteps(): ConversionSteps { return (value) => value; }
+  protected override createOutputSteps(): ConversionSteps { return this.binding.realizeException; }
 }
 
 /** Discard an input or implementation result for an undefined contract. */
@@ -34,6 +35,8 @@ export class ObjectConverter extends Converter<IDLObjectType> {
       return value;
     };
   }
+
+  protected override createOutputSteps(): ConversionSteps { return this.binding.realizeException; }
 }
 
 /** Accept symbols without coercion. */

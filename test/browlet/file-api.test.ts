@@ -144,7 +144,7 @@ describe('File API Blob projection', () => {
     const context = getBindingContext(getRelevantRealm(first));
     const blob = projectBlob(
       first,
-      context.construct(BlobImpl, ['A']),
+      context.construct(BlobImpl, [['A']]),
     );
     const secondBlobPrototype = requireObject(
       requireFunction(second, 'Blob'),
@@ -442,13 +442,11 @@ describe('File API File and FileList projection', () => {
     const ctx = getBindingContext(getRelevantRealm(window));
     const file = ctx.construct(
       FileImpl,
-      ['payload'],
-      'payload.txt',
-      { lastModified: 42, type: 'text/plain' },
+      [['payload'], 'payload.txt', { lastModified: 42, type: 'text/plain' }],
     );
     const list = ctx.project(
       FileListImpl,
-      ctx.construct(FileListImpl, [file]),
+      ctx.construct(FileListImpl, [[file]]),
     ) as StampedPlatformObject<FileList>;
     if (accessed) expect(list.item(0)?.name).toBe('payload.txt');
 
@@ -570,7 +568,7 @@ function createFileList(
   const context = getBindingContext(getRelevantRealm(window));
   const implementation = context.construct(
     FileListImpl,
-    files.map((file) => requireFileImplementation(window, file)),
+    [files.map((file) => requireFileImplementation(window, file))],
   );
   return {
     implementation,

@@ -138,7 +138,7 @@ describe('Web IDL global platform objects', () => {
     const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(window.name));
     getMemberBinding(interfaceBinding, title).attributeSteps = { get: () => 'global title' };
     getMemberBinding(interfaceBinding, ping).operationSteps = () => 'pong';
-    getMemberBinding(interfaceBinding, namedItem).operationSteps = (_receiver, name) =>
+    getMemberBinding(interfaceBinding, namedItem).operationSteps = (_receiver, [name]) =>
       values.get(name as string);
     getMemberBinding(interfaceBinding, namedItem).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(values.keys()),
@@ -426,7 +426,7 @@ describe('Web IDL global platform objects', () => {
       new BindingWorld([]),
       (ctx) => ({ realm: ctx.realm }),
     );
-    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), getter).operationSteps = (_receiver, name) =>
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), getter).operationSteps = (_receiver, [name]) =>
       name === 'answer' ? 'named answer' : undefined;
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), getter).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(['answer']),

@@ -569,6 +569,6 @@ function assembleInterface(
     }
   }
   for (const include of includes ?? []) {
-    assembled.members.push(...mixinMembers.get(include.mixin)!);
+    for (const member of mixinMembers.get(include.mixin)!) assembled.members.push(member);
   }
 }

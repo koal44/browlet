@@ -4,6 +4,7 @@ import { defineDataProperty, isObject } from '../../js-engine/index';
 import type { WebIDLRealm } from '../environment';
 import type { IDLDictionaryType } from '../assembly/index';
 import { IDLDictionary } from '../values/index';
+import { compileSteps } from '../compiler';
 import type { RealmBinding } from '../binding/realm';
 import { Converter, type ConversionSteps } from './converter';
 
@@ -27,53 +28,45 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
 
   #prepareInput(): ConversionSteps<IDLDictionary> {
     const assembled = this.type.assembled;
-    const members = assembled.members.map((member) => {
-      const converter = this.binding.getConverter(member.type, this.realm);
-      return {
-        member,
-        converter,
-        convert: converter.getInputSteps(),
-        getDefault: member.default === undefined
-            ? undefined
-            : converter.createDefaultSteps(member.default),
-      };
-    });
-    // Required/defaulted members always exist after successful conversion. Copy
-    // their layout together; sparse dictionaries only create present properties.
-    const complete = assembled.hasCompleteShape;
-    const template: Record<string, unknown> = {};
-    if (complete) {
-      for (const { member } of members) defineDataProperty(template, member.name, undefined);
-    }
-    // Nested dictionaries defer their own member preparation until invocation,
-    // so recursive references can reuse the converter without expanding here.
-    return (value) => {
-      if (!isObject(value) && value !== undefined && value !== null) {
-        throw new this.realm.intrinsics.typeError('A dictionary value must be an object');
-      }
-      const record: Record<string, unknown> = complete ? { ...template } : {};
-      const entries: [string, unknown][] | undefined = complete ? undefined : [];
-      for (const { member, converter, convert, getDefault } of members) {
-        const memberValue = value === undefined || value === null
-            ? undefined
-            : (value as Record<string, unknown>)[member.name];
-        let converted: unknown;
-        if (memberValue !== undefined) {
-          converted = convert(memberValue);
-        } else if (getDefault) {
-          converted = getDefault();
-        } else if (member.required) {
-          converter.throwTypeError(`Required dictionary member ${member.name} is missing`);
-        } else {
-          continue;
-        }
-        if (entries) entries.push([member.name, converted]);
-        else record[member.name] = converted;
-      }
-      // Object.fromEntries creates sparse own properties together, without
-      // inherited setters or deleting absent fields from the complete layout.
-      return new IDLDictionary(entries ? Object.fromEntries(entries) : record);
+    const dependencies: Record<string, unknown> = {
+      IDLDictionary, isObject, TypeError: this.realm.intrinsics.typeError,
     };
+    const complete = assembled.hasCompleteShape;
+    const members = assembled.members.map((member, index) => {
+      const converter = this.binding.getConverter(member.type, this.realm);
+      dependencies[`convert${index}`] = converter.getInputSteps();
+      if (member.default !== undefined) dependencies[`default${index}`] = converter.createDefaultSteps(member.default);
+      const key = JSON.stringify(member.name);
+      const missing = member.default !== undefined ? `converted${index} = default${index}();`
+        : member.required ? `throw new TypeError(${JSON.stringify(`Required dictionary member ${member.name} is missing`)});`
+        : '';
+      // Each declared member gets its own read, conversion, and write sites.
+      // Missing optional members never become own properties, including __proto__.
+      return `
+        const value${index} = value === undefined || value === null ? undefined : value[${key}];
+        let converted${index};
+        if (value${index} !== undefined) converted${index} = convert${index}(value${index});
+        else { ${missing} }
+        ${complete ? '' : `
+          ${member.required || member.default !== undefined ? '' : `if (value${index} !== undefined)`}
+          entries.push([${key}, converted${index}]);
+        `}
+      `;
+    });
+    const fields = complete ? assembled.members.map((member, index) =>
+      `[${JSON.stringify(member.name)}]: converted${index}`).join(', ') : '';
+    // Nested dictionaries keep their lazy entry steps, so recursion does not
+    // expand during compilation. Mutable defaults still run per conversion.
+    return compileSteps<ConversionSteps<IDLDictionary>>(`${assembled.primary.name}:dictionary-input`, dependencies,
+      `function convertDictionary(value) {
+        if (!isObject(value) && value !== undefined && value !== null) {
+          throw new TypeError('A dictionary value must be an object');
+        }
+        ${complete ? '' : 'const entries = [];'}
+        ${members.join('\n')}
+        return new IDLDictionary(${complete ? `{${fields}}` : 'Object.fromEntries(entries)'});
+      }`,
+    );
   }
 
   protected override createOutputSteps(): ConversionSteps<object> {

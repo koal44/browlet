@@ -258,7 +258,7 @@ export class LegacyPlatformObjectBinding {
     if (!steps) {
       throw new InternalError('Missing named property getter implementation');
     }
-    const value = steps(this.#getReceiverRecord(target), property);
+    const value = steps(this.#getReceiverRecord(target), [property]);
     return {
       configurable: true,
       enumerable: !properties.unenumerable,
@@ -483,7 +483,7 @@ export class LegacyPlatformObjectBinding {
       if (!steps) {
         throw new InternalError('Missing indexed property setter implementation');
       }
-      steps(this.#getReceiverRecord(target), index, converted);
+      steps(this.#getReceiverRecord(target), [index, converted]);
       return;
     }
 
@@ -513,7 +513,7 @@ export class LegacyPlatformObjectBinding {
       if (!steps) {
         throw new InternalError('Missing named property setter implementation');
       }
-      steps(this.#getReceiverRecord(target), property, converted);
+      steps(this.#getReceiverRecord(target), [property, converted]);
       return;
     }
 
@@ -546,7 +546,7 @@ export class LegacyPlatformObjectBinding {
 
     const steps = deleter.binding?.operationSteps;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
-    const result = steps(this.#getReceiverRecord(target), property);
+    const result = steps(this.#getReceiverRecord(target), [property]);
     return !deleter.returnsBoolean || result !== false;
   }
 
@@ -581,7 +581,7 @@ export class LegacyPlatformObjectBinding {
   ): unknown {
     const steps = properties.getter.operationSteps;
     if (!steps) throw new InternalError('Missing indexed property getter implementation');
-    return steps(this.#getReceiverRecord(implementation), index);
+    return steps(this.#getReceiverRecord(implementation), [index]);
   }
 
   // Proxy traps run after their implementation has been associated with the platform object.

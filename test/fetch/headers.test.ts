@@ -691,9 +691,9 @@ describe('Headers realm allocation', () => {
     const { realm: foreignRealm, context: foreign } = createFetchFixture(fixture.bindings);
     const createObject = (context: BindingContext<ClientEnvironment>) => name === 'Request'
       ? context.project(RequestImpl, context.construct(
-        RequestImpl, createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal,
+        RequestImpl, [createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal],
       ))
-      : context.project(ResponseImpl, context.construct(ResponseImpl, new FetchResponse(), 'response'));
+      : context.project(ResponseImpl, context.construct(ResponseImpl, [new FetchResponse(), 'response']));
     const receiver = createObject(fixture.context);
     const foreignReceiver = createObject(foreign);
     // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrowing the getter is the behavior under test.

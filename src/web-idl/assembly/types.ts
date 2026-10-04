@@ -126,6 +126,7 @@ abstract class PrimitiveType extends Type {
 
 export class IDLAnyType extends Type {
   kind = 'any' as const;
+  override canPassToImpl = true;
 }
 
 export class IDLUndefinedType extends PrimitiveType {
@@ -142,6 +143,7 @@ export class IDLBigIntType extends PrimitiveType {
 
 export class IDLObjectType extends Type {
   kind = 'object' as const;
+  override canPassToImpl = true;
 }
 
 export class IDLSymbolType extends PrimitiveType {
@@ -189,6 +191,7 @@ export class IDLStringType extends PrimitiveType {
 
 export class IDLBufferType extends Type {
   kind = 'buffer-source' as const;
+  override canPassToImpl = true;
   name: BufferTypeName;
   /** Whether values are views whose sharing and resizing rules apply to their backing buffer. */
   isView: boolean;
@@ -259,6 +262,8 @@ export class IDLAsyncSequenceType<Element extends IDLType = IDLType> extends Typ
 
 export class IDLFrozenArrayType<Element extends IDLType = IDLType> extends Type {
   kind = 'frozen-array' as const;
+  // JS-to-IDL conversion has already projected and frozen the element array.
+  override canPassToImpl = true;
   elementType: Element;
 
   constructor(elementType: Element, attributes: ExtendedAttribute[] = []) {
@@ -301,6 +306,8 @@ export class IDLPromiseType<Result extends IDLType = IDLType> extends Type {
 
 export class IDLInterfaceType extends Type {
   kind = 'interface' as const;
+  // JS-to-IDL conversion has already unwrapped the platform object.
+  override canPassToImpl = true;
   assembled: AssembledInterface;
 
   constructor(assembled: AssembledInterface, attributes: ExtendedAttribute[] = []) {
@@ -346,11 +353,13 @@ export class IDLCallbackInterfaceType extends Type {
   constructor(assembled: AssembledCallbackInterface, attributes: ExtendedAttribute[] = []) {
     super(attributes);
     this.assembled = assembled;
+    this.canPassToImpl = !assembled.primary.toImpl;
   }
 }
 
 export class IDLProxyType extends Type {
   kind = 'proxy-object' as const;
+  override canPassToImpl = true;
   assembled: AssembledProxyObject;
 
   constructor(assembled: AssembledProxyObject, attributes: ExtendedAttribute[] = []) {

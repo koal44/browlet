@@ -18,6 +18,8 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
     const candidates = this.type.candidates;
     const convertCallbackFunction = candidates.callbackFunction && this.forType(candidates.callbackFunction).getInputSteps();
     const convertCallbackInterface = candidates.callbackInterface && this.forType(candidates.callbackInterface).getInputSteps();
+    const convertNumeric = candidates.numeric && this.forType(candidates.numeric).getInputSteps();
+    const convertString = candidates.string && this.forType(candidates.string).getInputSteps();
     return (value) => {
       if (value === undefined && candidates.hasUndefined) {
         return undefined;
@@ -99,25 +101,22 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         if (candidates.hasBoolean) return value;
       }
       if (typeof value === 'number') {
-        const numeric = candidates.numeric;
-        if (numeric) return this.forType(numeric).getInputSteps()(value);
+        if (convertNumeric) return convertNumeric(value);
       }
       if (typeof value === 'bigint') {
         if (candidates.hasBigInt) return value;
       }
 
-      const string = candidates.string;
-      if (string) return this.forType(string).getInputSteps()(value);
+      if (convertString) return convertString(value);
 
-      const numeric = candidates.numeric;
       const bigint = candidates.hasBigInt;
-      if (numeric && bigint) {
+      if (convertNumeric && bigint) {
         const primitive = toPrimitive(value, 'number');
         return typeof primitive === 'bigint'
             ? primitive
-            : this.forType(numeric).getInputSteps()(primitive);
+            : convertNumeric(primitive);
       }
-      if (numeric) return this.forType(numeric).getInputSteps()(value);
+      if (convertNumeric) return convertNumeric(value);
 
       if (candidates.hasBoolean) return Boolean(value);
       if (bigint) return toBigInt(value);
@@ -138,7 +137,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         const interfaceType = candidates.interfaces.find((candidate) =>
           this.#implements(candidate, value));
         if (interfaceType) return value;
-        if (candidates.hasObject) return value;
+        if (candidates.hasObject) return this.binding.realizeException(value);
       }
       if (isObject(value)) {
         for (const candidate of candidates.interfaces) {
@@ -190,7 +189,7 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
         if (buffer) return this.forType(buffer).idlToJS(value);
         if (candidates.dictionary) return this.forType(candidates.dictionary).idlToJS(value);
         if (candidates.record) return this.forType(candidates.record).idlToJS(value);
-        if (candidates.hasObject) return value;
+        if (candidates.hasObject) return this.binding.realizeException(value);
       }
       throw new InternalError('IDL union value has no matching specific type');
     };
