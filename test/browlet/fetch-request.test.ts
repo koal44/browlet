@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import type { HTMLBaseElement, Request, RequestInit, Window } from '../../src/browlet/platform';
 import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { CSPDirectives, CSPDirectiveValue } from '../../src/browlet/browsing/policy/csp/directives';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
@@ -41,7 +42,7 @@ describe('Fetch Request construction', () => {
   it('resolves URLs and referrers using the document API base URL', async () => {
     const browlet = new Browlet({ route: () => '' });
     await browlet.navigate('https://example.test/base/page');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window as Window & Pick<typeof globalThis, 'TypeError'>;
     const request = new window.Request('resource', { referrer: '../from', referrerPolicy: 'origin' });
     expect(request.url).toBe('https://example.test/base/resource');
     expect(request.referrer).toBe('https://example.test/from');
@@ -55,9 +56,9 @@ describe('Fetch Request construction', () => {
   it('uses the document base element when resolving Request URLs', async () => {
     const browlet = new Browlet({ route: () => '<base href="https://example.test/base/">' });
     await browlet.navigate('https://example.test/page');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window as Window & Pick<typeof globalThis, 'TypeError'>;
     expect(new window.Request('resource').url).toBe('https://example.test/base/resource');
-    const base = window.document.getElementsByTagName('base')[0]!;
+    const base = window.document.getElementsByTagName('base')[0] as HTMLBaseElement;
     base.href = '/changed/';
     const request = new window.Request('resource', { referrer: 'from' });
     expect(request.url).toBe('https://example.test/changed/resource');
@@ -257,7 +258,7 @@ describe('Fetch Request bodies and cloning', () => {
   it('requires duplex for supplied streams, forbids keepalive and no-cors, and marks preflight', () => {
     const window = createWindow();
     const body = new window.ReadableStream();
-    const init = { method: 'POST', body, duplex: 'half' };
+    const init: RequestInit = { method: 'POST', body, duplex: 'half' };
     expect(() => new window.Request(url, { method: 'POST', body })).toThrow(window.TypeError);
     expect(() => new window.Request(url, { ...init, keepalive: true })).toThrow(window.TypeError);
     expect(() => new window.Request(url, { ...init, mode: 'no-cors' })).toThrow(window.TypeError);
@@ -405,7 +406,7 @@ describe('Fetch client population with HTML settings', () => {
   it('checks populated integrity policies and submits typed reports using the actual Window Document URL', async () => {
     const browlet = new Browlet({ route: () => '<base href="https://resource.test/assets/">' });
     await browlet.navigate('https://document.test/page#fragment');
-    const window = browlet.window as Window & typeof globalThis;
+    const window = browlet.window as Window & Pick<typeof globalThis, 'TypeError'>;
     const realm = getRelevantRealm(window);
     const env = realm.env;
     const response = new FetchResponse();
@@ -548,8 +549,8 @@ describe('Fetch client settings ownership', () => {
 
 const url = 'https://example.test/start';
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as Window & typeof globalThis;
+function createWindow(): Window & Pick<typeof globalThis, 'TypeError'> {
+  return new Browlet({ route: () => '' }).window as Window & Pick<typeof globalThis, 'TypeError'>;
 }
 
 function implementation(window: Window, request: Request): RequestImpl {

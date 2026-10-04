@@ -3,6 +3,7 @@ import { createEnvironment } from '../../js-engine/execution-fixture';
 import { observe, createWritableStream } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { Window } from '../../../src/browlet/platform';
 import {
   WritableStreamImpl, type WritableStreamDefaultControllerImpl,
 } from '../../../src/streams/index';

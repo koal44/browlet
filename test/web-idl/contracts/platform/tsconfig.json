@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ESNext"],
+    "types": [],
+    "incremental": true,
+    "tsBuildInfoFile": "../../../../dist/.typecheck/platform-contracts.tsbuildinfo"
+  },
+  "include": ["./*.ts"]
+}

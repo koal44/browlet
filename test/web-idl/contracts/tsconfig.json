@@ -7,11 +7,13 @@
     "module": "ESNext",
     "moduleResolution": "Bundler",
     "types": ["node"],
+    "lib": ["ESNext", "DOM"],
     "rootDir": "../../.."
   },
   "files": [],
   "references": [
     { "path": "./core" },
-    { "path": "./binding" }
+    { "path": "./binding" },
+    { "path": "./platform" }
   ]
 }

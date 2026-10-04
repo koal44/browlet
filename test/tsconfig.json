@@ -5,6 +5,7 @@
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "types": ["node"],
+    "lib": ["ESNext", "DOM"],
     "noUncheckedIndexedAccess": true,
     "outDir": "../dist/.typecheck/test",
     "tsBuildInfoFile": "../dist/.typecheck/test.tsbuildinfo"

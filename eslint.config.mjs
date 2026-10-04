@@ -21,6 +21,7 @@ export default defineConfig(
   {
     ignores: [
       'dist/**',
+      'src/browlet/platform.d.ts',
       'packages/*/dist/**',
       'scratch/**',
       'node-compat/experimental/**',

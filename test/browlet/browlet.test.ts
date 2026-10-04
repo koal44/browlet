@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   Browlet,
 } from '../../src/browlet/browlet';
+import type { Element } from '../../src/browlet/platform';
 import { getRelevantRealm, unwrap } from '../../src/browlet/bindings';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
@@ -16,7 +17,7 @@ describe('Browlet', () => {
     const browlet = new Browlet({ route: () => '' });
 
     expect(browlet).toBeInstanceOf(Browlet);
-    expect(browlet.document.documentElement.localName).toBe('html');
+    expect(browlet.document.documentElement!.localName).toBe('html');
     expect(browlet.window.document).toBe(browlet.document);
     expect(browlet.window.window).toBe(browlet.window);
     expect(browlet.window.self).toBe(browlet.window);
@@ -27,10 +28,11 @@ describe('Browlet', () => {
       route: () => '<main id="target" style="opacity: 0.25"></main>',
     });
     await browlet.navigate('https://example.test/');
-    const target = browlet.document.getElementById('target');
-    if (!target) throw new Error('Expected target element');
-
-    expect(browlet.window.getComputedStyle(target).opacity).toBe('0.25');
+    expect(await browlet.evaluate(() => {
+      const target = document.getElementById('target');
+      if (!target) throw new Error('Expected target element');
+      return getComputedStyle(target).opacity;
+    })).toBe('0.25');
   });
 
   it('initializes a navigated document from its response URL', async () => {
@@ -89,33 +91,15 @@ describe('Browlet', () => {
   it('installs realm-specific DOM constructors on the window', () => {
     const first = new Browlet({ route: () => '' });
     const second = new Browlet({ route: () => '' });
-    const EventConstructor = Reflect.get(first.window, 'Event') as typeof Event;
-    const CustomEventConstructor = Reflect.get(
-      first.window,
-      'CustomEvent',
-    ) as typeof CustomEvent;
-    const EventTargetConstructor = Reflect.get(
-      first.window,
-      'EventTarget',
-    ) as typeof EventTarget;
-    const NodeConstructor = Reflect.get(first.window, 'Node') as typeof Node;
-    const CharacterDataConstructor = Reflect.get(
-      first.window,
-      'CharacterData',
-    ) as typeof CharacterData;
-    const DocumentConstructor = Reflect.get(
-      first.window,
-      'Document',
-    ) as typeof Document;
-    const ElementConstructor = Reflect.get(
-      first.window,
-      'Element',
-    ) as typeof Element;
-    const HTMLElementConstructor = Reflect.get(
-      first.window,
-      'HTMLElement',
-    ) as typeof HTMLElement;
-    const TextConstructor = Reflect.get(first.window, 'Text') as typeof Text;
+    const EventConstructor = first.window.Event;
+    const CustomEventConstructor = first.window.CustomEvent;
+    const EventTargetConstructor = first.window.EventTarget;
+    const NodeConstructor = first.window.Node;
+    const CharacterDataConstructor = first.window.CharacterData;
+    const DocumentConstructor = first.window.Document;
+    const ElementConstructor = first.window.Element;
+    const HTMLElementConstructor = first.window.HTMLElement;
+    const TextConstructor = first.window.Text;
     const event = new EventConstructor('ready');
     const customEvent = new CustomEventConstructor('answer', { detail: 42 });
     const element = first.document.createElement('main');
@@ -131,7 +115,7 @@ describe('Browlet', () => {
     expect(first.document).toBeInstanceOf(NodeConstructor);
     expect(first.document).toBeInstanceOf(DocumentConstructor);
     expect(first.document).not.toBeInstanceOf(
-      Reflect.get(second.window, 'Document') as typeof Document,
+      second.window.Document,
     );
     expect(element).toBeInstanceOf(HTMLElementConstructor);
     expect(element).toBeInstanceOf(ElementConstructor);
@@ -151,18 +135,9 @@ describe('Browlet', () => {
 
   it('creates specialized HTML elements using its realm interfaces', () => {
     const browlet = new Browlet({ route: () => '' });
-    const HTMLHeadElementConstructor = Reflect.get(
-      browlet.window,
-      'HTMLHeadElement',
-    ) as typeof HTMLHeadElement;
-    const HTMLStyleElementConstructor = Reflect.get(
-      browlet.window,
-      'HTMLStyleElement',
-    ) as typeof HTMLStyleElement;
-    const HTMLLinkElementConstructor = Reflect.get(
-      browlet.window,
-      'HTMLLinkElement',
-    ) as typeof HTMLLinkElement;
+    const HTMLHeadElementConstructor = browlet.window.HTMLHeadElement;
+    const HTMLStyleElementConstructor = browlet.window.HTMLStyleElement;
+    const HTMLLinkElementConstructor = browlet.window.HTMLLinkElement;
 
     expect(browlet.document.head).toBeInstanceOf(HTMLHeadElementConstructor);
     expect(browlet.document.createElement('style'))
@@ -173,14 +148,8 @@ describe('Browlet', () => {
 
   it('distinguishes known, unknown, and potential custom HTML elements', () => {
     const browlet = new Browlet({ route: () => '' });
-    const HTMLElementConstructor = Reflect.get(
-      browlet.window,
-      'HTMLElement',
-    ) as typeof HTMLElement;
-    const HTMLUnknownElementConstructor = Reflect.get(
-      browlet.window,
-      'HTMLUnknownElement',
-    ) as typeof HTMLUnknownElement;
+    const HTMLElementConstructor = browlet.window.HTMLElement;
+    const HTMLUnknownElementConstructor = browlet.window.HTMLUnknownElement;
     const known = browlet.document.createElement('main');
     const unknown = browlet.document.createElement('notanelement');
     const potentialCustom = browlet.document.createElement('x-example');
@@ -194,18 +163,9 @@ describe('Browlet', () => {
 
   it('selects element interfaces from parser namespaces', () => {
     const browlet = new Browlet({ route: () => '' });
-    const SVGElementConstructor = Reflect.get(
-      browlet.window,
-      'SVGElement',
-    ) as typeof SVGElement;
-    const SVGStyleElementConstructor = Reflect.get(
-      browlet.window,
-      'SVGStyleElement',
-    ) as typeof SVGStyleElement;
-    const MathMLElementConstructor = Reflect.get(
-      browlet.window,
-      'MathMLElement',
-    ) as typeof MathMLElement;
+    const SVGElementConstructor = browlet.window.SVGElement;
+    const SVGStyleElementConstructor = browlet.window.SVGStyleElement;
+    const MathMLElementConstructor = browlet.window.MathMLElement;
 
     expect(browlet.document.createElementNS(SVG_NAMESPACE, 'svg'))
       .toBeInstanceOf(SVGElementConstructor);
@@ -252,10 +212,7 @@ describe('Browlet', () => {
   it('exposes window events and browser timer IDs', async () => {
     const browlet = new Browlet({ route: () => '' });
     const events: Event[] = [];
-    const EventConstructor = Reflect.get(
-      browlet.window,
-      'Event',
-    ) as typeof Event;
+    const EventConstructor = browlet.window.Event;
     const event = new EventConstructor('custom');
 
     browlet.window.addEventListener('custom', (received) => {
@@ -274,10 +231,7 @@ describe('Browlet', () => {
 
   it('fires trusted events using the target realm interface family', () => {
     const browlet = new Browlet({ route: () => '' });
-    const EventConstructor = Reflect.get(
-      browlet.window,
-      'Event',
-    ) as typeof Event;
+    const EventConstructor = browlet.window.Event;
     let received: Event | undefined;
 
     browlet.document.addEventListener('ready', (event) => {
@@ -291,10 +245,7 @@ describe('Browlet', () => {
 
   it('preserves listener identity through Web IDL callback conversion', () => {
     const browlet = new Browlet({ route: () => '' });
-    const EventConstructor = Reflect.get(
-      browlet.window,
-      'Event',
-    ) as typeof Event;
+    const EventConstructor = browlet.window.Event;
     const handleEvent = vi.fn();
     const callback = { handleEvent };
 
@@ -308,10 +259,7 @@ describe('Browlet', () => {
 
   it('invokes callback-interface objects with their object as receiver', () => {
     const browlet = new Browlet({ route: () => '' });
-    const EventConstructor = Reflect.get(
-      browlet.window,
-      'Event',
-    ) as typeof Event;
+    const EventConstructor = browlet.window.Event;
     const callback = {
       receiver: undefined as unknown,
       handleEvent(this: { receiver: unknown; }) {
@@ -328,10 +276,7 @@ describe('Browlet', () => {
   it('converts event listener option dictionaries at the Web IDL boundary', () => {
     const browlet = new Browlet({ route: () => '' });
     const accesses: string[] = [];
-    const AbortController_ = Reflect.get(
-      browlet.window,
-      'AbortController',
-    ) as typeof AbortController;
+    const AbortController_ = browlet.window.AbortController;
     const signal = new AbortController_().signal;
     const listener = () => {};
     const options = {
@@ -353,10 +298,7 @@ describe('Browlet', () => {
 
   it('tracks and restores the legacy current window event', () => {
     const browlet = new Browlet({ route: () => '' });
-    const EventConstructor = Reflect.get(
-      browlet.window,
-      'Event',
-    ) as typeof Event;
+    const EventConstructor = browlet.window.Event;
     const outer = new EventConstructor('outer');
     const inner = new EventConstructor('inner');
     const observations: (Event | undefined)[] = [];
@@ -378,10 +320,7 @@ describe('Browlet', () => {
 
   it('reports listener exceptions without interrupting dispatch', () => {
     const browlet = new Browlet({ route: () => '' });
-    const EventConstructor = Reflect.get(
-      browlet.window,
-      'Event',
-    ) as typeof Event;
+    const EventConstructor = browlet.window.Event;
     const reported = new Error('reported listener failure');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const following = vi.fn();
@@ -544,9 +483,9 @@ describe('Browlet', () => {
     ]);
     expect(link.sheet).not.toBeNull();
     expect(link.sheet?.ownerNode).toBe(link);
-    expect(browlet.document.styleSheets.item(0)).toBe(link.sheet);
+    expect((browlet.document.styleSheets as Pick<StyleSheetList, 'item'>).item(0)).toBe(link.sheet);
 
-    function isHtmlLink(element: Element): element is HTMLLinkElement {
+    function isHtmlLink(element: Element): element is Element & Pick<HTMLLinkElement, 'sheet'> {
       return element.namespaceURI === HTML_NAMESPACE && element.localName === 'link';
     }
   });

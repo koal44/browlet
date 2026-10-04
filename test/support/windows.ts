@@ -1,4 +1,5 @@
 import type { Browlet } from '../../src/browlet/browlet';
+import type { Window } from '../../src/browlet/platform';
 import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../../src/browlet/bindings';
 import { WindowAgent } from '../../src/browlet/scripting/agents';
 

@@ -1,6 +1,7 @@
 import type { WindowImpl } from './window';
 import { defineProxyObject, type StampedPlatformObject } from '../../../web-idl/index';
 import { InternalError } from '../../../infra/internal-error';
+import type { Window, WindowProxy } from '../../platform';
 
 /** Retains a WindowProxy's platform identity and current Window association. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
@@ -116,17 +117,6 @@ export class WindowProxyHandle implements ProxyHandler<object> {
     );
   }
 }
-
-/** Author-visible Window surface forwarded through a stable exotic identity. */
-// PROVISIONAL: this lib.dom surface is asserted at composition, not derived
-// from the implemented Window declarations; see ROADMAP.md.
-export type WindowProxy = Window & {
-  frames: WindowProxy;
-  parent: WindowProxy;
-  self: WindowProxy;
-  readonly top: WindowProxy;
-  readonly window: WindowProxy;
-};
 
 /** Paired implementation and platform identities of one projected Window. */
 export type WindowAssociation = {

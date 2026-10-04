@@ -47,6 +47,11 @@ interface merely to make a direct test resemble author code.
 Implementation classes need not satisfy their platform interfaces in `lib.dom`;
 check author-facing types at the projected API boundary.
 
+Source projects use the ECMAScript libraries without `lib.dom`. Define and import
+implementation value types in their owning subsystem. Test and WPT projects
+explicitly include DOM declarations to type author code; source projects retain
+their separate compiler configurations.
+
 ## Environments and execution
 
 The current convention passes the owning **environment**, named `env`, to an

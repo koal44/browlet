@@ -1,5 +1,6 @@
 * text=auto eol=lf
 
 dist/** linguist-generated=true
+src/browlet/platform.d.ts linguist-generated=true
 test/selectlet/scenarios/fixtures/** linguist-vendored=true
 test/selectlet/perf/engines/** linguist-vendored=true

@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { createTestDocument } from '../../support/dom';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import type { WindowProxy } from '../../../src/browlet/platform';
 import {
   getRelevantRealm, setAssociatedWindow,
 } from '../../../src/browlet/bindings';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
-import type { WindowProxy } from '../../../src/browlet/browsing/window/window-proxy';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import type { Window } from '../../../src/browlet/platform';
 
 describe('Streams constructor bindings', () => {
   it.each([

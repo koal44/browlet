@@ -5,6 +5,7 @@
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
     "types": ["node"],
+    "lib": ["ESNext", "DOM"],
     "outDir": "../dist/.typecheck/wpt",
     "tsBuildInfoFile": "../dist/.typecheck/wpt.tsbuildinfo"
   },

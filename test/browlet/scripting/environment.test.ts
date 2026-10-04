@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { createDocument, getBindingContext, getRelevantRealm, setAssociatedWindow } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { Document, Window } from '../../../src/browlet/platform';
 import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
 import { createDocumentState } from '../../../src/browlet/browsing/navigation/session-history';
 import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
@@ -126,7 +127,7 @@ describe('Window environment referrer sources', () => {
     const browlet = new Browlet({ route: () => '<iframe srcdoc="<p>child</p>"></iframe>' });
     await browlet.navigate('https://example.test/parent');
     const iframe = browlet.document.getElementsByTagName('iframe').item(0)!;
-    const document = iframe.contentDocument;
+    const document = Reflect.get(iframe, 'contentDocument') as Document | null;
     expect(document).toBeTruthy();
     const env = getRelevantRealm(document!).env;
     const request = new FetchRequest(parseURL('https://example.test/target').url!, env, env.userAgent);

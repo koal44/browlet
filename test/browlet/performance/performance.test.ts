@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import type { WindowProxy } from '../../../src/browlet/platform';
 
 /*
  * High Resolution Time sections 1.2 and 3–8, together with the corresponding

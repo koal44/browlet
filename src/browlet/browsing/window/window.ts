@@ -8,7 +8,8 @@ import {
   impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/index';
 import { LocationImpl } from './location';
-import type { WindowProxy, WindowProxyHandle } from './window-proxy';
+import type { WindowProxyHandle } from './window-proxy';
+import type { WindowProxy } from '../../platform';
 import type { PerformanceImpl } from '../../performance/performance';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../scripting/global-scope';
 import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/web-idl';

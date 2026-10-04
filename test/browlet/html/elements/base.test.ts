@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../src/browlet/browlet';
+import type { HTMLBaseElement, Window } from '../../../../src/browlet/platform';
 import { getRelevantRealm } from '../../../../src/browlet/bindings';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
@@ -13,7 +14,7 @@ describe('HTMLBaseElement', () => {
     await browlet.navigate('https://example.test/dir/page');
     const window = browlet.window as Window & typeof globalThis;
     const document = window.document;
-    const base = document.getElementsByTagName('base')[0]!;
+    const base = document.getElementsByTagName('base')[0] as HTMLBaseElement;
     expect(base).toBeInstanceOf(window.HTMLBaseElement);
     expect(base).toBeInstanceOf(window.HTMLElement);
     expect(base.href).toBe('https://example.test/assets/');
@@ -21,7 +22,7 @@ describe('HTMLBaseElement', () => {
     expect(document.baseURI).toBe(base.href);
     expect(document.URL).toBe('https://example.test/dir/page');
 
-    const detached = document.createElement('base');
+    const detached = document.createElement('base') as HTMLBaseElement;
     expect(detached).toBeInstanceOf(window.HTMLBaseElement);
     expect(detached.href).toBe(document.URL);
     expect(detached.target).toBe('');

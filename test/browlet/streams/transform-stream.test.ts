@@ -2,6 +2,7 @@ import { idlType } from '../../../src/web-idl/core/index';
 import { createPromiseConstructor, createTransformStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { ReadableStreamDefaultReader } from '../../../src/browlet/platform';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import {
   TransformStreamImpl, type TransformStreamDefaultControllerImpl,
@@ -53,10 +54,10 @@ describe('transform-stream implementation', () => {
         };
       },
     };
-    const Constructor = Reflect.get(window, 'TransformStream') as typeof TransformStream;
+    const Constructor = window.TransformStream;
     const stream = new Constructor(transformer);
     expect(getters).toEqual(['flush', 'start', 'transform']);
-    const reader = stream.readable.getReader();
+    const reader = stream.readable.getReader() as ReadableStreamDefaultReader;
     const writer = stream.writable.getWriter();
     const read = observeBrowletPromise(window, reader.read());
     const write = observeBrowletPromise(window, writer.write('chunk'));

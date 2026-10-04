@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
+import type { WindowProxy } from '../../../src/browlet/platform';
 import { createSandboxEnvironment } from '../../../src/browlet/bindings';
 import {
   AbortSignalImpl, type AbortAlgorithmHandle,

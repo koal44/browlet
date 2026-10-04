@@ -1,6 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { Window } from '../../../src/browlet/platform';
 import { observeBrowletPromise, performTestMicrotaskCheckpoint } from '../test-runtime';
+
+// Web IDL leaves stream payloads untyped; these byte-stream tests use the library's generic signatures.
+type ByteStreamWindow = Omit<Window, 'ReadableStream' | 'WritableStream'> & Pick<
+  typeof globalThis,
+  'ReadableStream' | 'WritableStream' | 'Uint8Array' | 'ArrayBuffer' | 'Uint16Array' | 'DataView'
+>;
 
 describe('byte-stream buffer ownership', () => {
   it('delivers owned chunks to a sink without changing their byte range', async () => {
@@ -118,17 +125,17 @@ describe('byte-stream buffer ownership', () => {
   });
 });
 
-function createWindow(): Window & typeof globalThis {
-  return new Browlet({ route: () => '' }).window as Window & typeof globalThis;
+function createWindow(): ByteStreamWindow {
+  return new Browlet({ route: () => '' }).window as unknown as ByteStreamWindow;
 }
 
-function complete<Result>(window: Window, promise: Promise<Result>): Promise<Result> {
+function complete<Result>(window: ByteStreamWindow, promise: Promise<Result>): Promise<Result> {
   const result = observeBrowletPromise(window, promise);
   performTestMicrotaskCheckpoint(window);
   return result;
 }
 
-function expectOwnedBytes(window: Window & typeof globalThis, view: ArrayBufferView): void {
+function expectOwnedBytes(window: ByteStreamWindow, view: ArrayBufferView): void {
   expect(view).toBeInstanceOf(window.Uint8Array);
   expect(view.buffer).toBeInstanceOf(window.ArrayBuffer);
 }

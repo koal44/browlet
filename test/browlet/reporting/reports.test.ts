@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { Window } from '../../../src/browlet/platform';
 import { ReportImpl, ReportBodyImpl } from '../../../src/browlet/reporting/report';
 import type { IntegrityViolationReportBody } from '../../../src/fetch/policy';
 import { reference } from '../../../src/web-idl/index';

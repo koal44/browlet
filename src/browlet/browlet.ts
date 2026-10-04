@@ -5,6 +5,7 @@ import { isHeaderValue } from '../fetch/index';
 import { createMicrotaskQueue } from '../js-engine/index';
 import { internalType, type InternalPromise } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
+import type { Document, WindowProxy } from './platform';
 import { project, getRelevantRealm } from './bindings';
 import { createAndInitializeDocument } from './browsing/document-lifecycle';
 import { TopLevelTraversable } from './browsing/navigable';
@@ -174,7 +175,7 @@ export class Browlet {
     return parser.parse(source).then(() => {
       document.finishLoading();
       return this.window;
-    }, undefined, internalType<Window>('Window'));
+    }, undefined, internalType<WindowProxy>('WindowProxy'));
   }
 
   #executeScript(

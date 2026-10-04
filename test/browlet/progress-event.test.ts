@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import type { Window } from '../../src/browlet/platform';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
 

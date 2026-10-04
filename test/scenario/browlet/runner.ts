@@ -57,7 +57,8 @@ async function runScenario(scenario: Scenario): Promise<void> {
     : `<!doctype html><html><body>${scenario.markup}</body></html>`;
   const browlet = new Browlet({ route: () => source });
   await browlet.navigate(scenario.url ?? 'https://example.test/');
-  const document = browlet.document;
+  // Shared browser scenarios also exercise DOM members whose declarations are unfinished.
+  const document = browlet.document as unknown as Document;
   const selectlet = createSelectlet(document);
 
   for (const [stepIndex, step] of steps.entries()) {

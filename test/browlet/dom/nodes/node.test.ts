@@ -9,6 +9,6 @@ describe('Node text content', () => {
 
     await browlet.navigate('https://example.test/');
 
-    expect(browlet.document.body.textContent).toBe('Local page');
+    expect(Reflect.get(browlet.document.body!, 'textContent')).toBe('Local page');
   });
 });

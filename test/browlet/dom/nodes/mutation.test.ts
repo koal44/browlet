@@ -176,8 +176,8 @@ describe('DOM insertion validity', () => {
     const first = new Browlet({ route: () => '' });
     const second = new Browlet({ route: () => '' });
     const root = first.document.createElement('root');
-    const Node_ = Reflect.get(second.window, 'Node') as typeof Node;
-    const DOMException_ = Reflect.get(second.window, 'DOMException') as typeof DOMException;
+    const Node_ = second.window.Node;
+    const DOMException_ = second.window.DOMException;
     expect(() => Node_.prototype.appendChild.call(root, root)).toThrow(DOMException_);
   });
 });

@@ -12,6 +12,7 @@ records backend constraints and unresolved behavior.
 | --- | --- |
 | [`core/index.ts`](core/index.ts) | Host-neutral declarations, common definitions, IDL serialization, and DOMException state and recognition; no engine or binding runtime |
 | [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, and stamped-object types |
+| [`generate.ts`](generate.ts) | Development-only TypeScript emission from a completed DefinitionAssembly |
 
 Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
 entry augments declaration hooks with typed `BindingContext` arguments.
@@ -709,12 +710,29 @@ tests for conversion. [DOM binding](../../test/browlet/dom-binding.test.ts) and
 including borrowed methods, repeated identity, nested results, and realm-owned
 buffers, streams, and errors. Implementation tests use post-conversion values.
 
-Still to do: generate platform TypeScript declarations from the IDL definitions
-and add independent compile-only API fixtures to `typecheck`. For example,
-`CSSStyleSheet.replace()` exposes `Promise<CSSStyleSheet>`, while its implementation
-returns `InternalPromise<CSSStyleSheetImpl>`. Existing contract tests check the
-declaration/binding machinery, not that generated author-facing surface; WPT and
-projected runtime tests continue to check actual exposure and behavior.
+`generatePlatformTypes(assembly, options)` emits a type-only module from assembled
+interfaces, mixins, partials, callbacks, dictionaries, enums, and aliases. The
+caller supplies the complete declaration collection, including common definitions.
+Proxy shapes require an explicit `proxyInterfaces` mapping; recognition hooks
+cannot describe a TypeScript interface. An optional `exposure` selects global names,
+secure-context status, and isolation. By default the output includes conditional
+facilities; types do not guarantee their availability in every realm.
+
+Run `npm run generate:types` after declaration changes. The checked-in
+[`platform.d.ts`](../browlet/platform.d.ts) is shipped through `browlet/platform`;
+`typecheck` and package builds reject stale output. Generation uses TypeScript
+transpilation, so missing output does not prevent regenerating it. Independent
+[API fixtures](../../test/web-idl/contracts/platform/api.ts) compile without
+`lib.dom`, Node globals, or implementation types. Browlet's public WindowProxy
+and Document use these module types; generation does not augment global scope.
+
+Inputs describe conventional IDL-shaped values, not every JavaScript coercion.
+Sequences accept iterables and return arrays; callbacks reverse the conversion
+directions. Output dictionaries use separate `Result` interfaces and do not promise
+input defaults. Named property getters have no string index signature, which would
+conflict with ordinary members. Opaque declarations stay opaque, including current
+CSSOM placeholders. WPT and projected runtime tests still establish behavior;
+declaration generation does not certify that unfinished bindings are implemented.
 
 CSSOM projection and restoring `ObservableArray<CSSStyleSheet>` remain with
 [style integration](../browlet/style/ROADMAP.md#next-boundary-change).

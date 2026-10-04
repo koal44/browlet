@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { Window } from '../../../src/browlet/platform';
 import { extractHighWaterMark } from '../../../src/streams/index';
 import { RangeError } from '../../../src/infra/exceptions';
 

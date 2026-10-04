@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../src/browlet/browlet';
+import type { HTMLBaseElement, Window } from '../../src/browlet/platform';
 
 describe('Fetch Response construction', () => {
   it('constructs a default response with a nullable body and mutable headers', () => {
@@ -101,7 +102,7 @@ describe('Fetch Response factories', () => {
     const otherWindow = other.window as Window & typeof globalThis;
     expect(otherWindow.Response.redirect.call(ownerWindow.Response, 'next').headers.get('Location'))
       .toBe('https://other.test/other/next');
-    otherWindow.document.getElementsByTagName('base')[0]!.href = '/changed/';
+    (otherWindow.document.getElementsByTagName('base')[0] as HTMLBaseElement).href = '/changed/';
     expect(otherWindow.Response.redirect('next').headers.get('Location')).toBe('https://other.test/changed/next');
   });
 

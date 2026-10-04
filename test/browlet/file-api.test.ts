@@ -8,6 +8,7 @@ import {
 } from '../../src/file/index';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import type { Blob, FileList, Window } from '../../src/browlet/platform';
 import { InternalError } from '../../src/infra/internal-error';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import type { StampedPlatformObject } from '../../src/web-idl/index';
@@ -266,7 +267,7 @@ describe('File API Blob projection', () => {
   it('structured-clones Blob data into a distinct wrapper', async () => {
     const window = createWindow();
     const blob = constructBlob(window, ['payload'], { type: 'Text/PLAIN' });
-    const clone = window.structuredClone(blob);
+    const clone = window.structuredClone(blob) as Blob;
 
     expect(clone).not.toBe(blob);
     expect(clone).toBeInstanceOf(requireFunction(window, 'Blob'));
@@ -450,7 +451,7 @@ describe('File API File and FileList projection', () => {
     ) as StampedPlatformObject<FileList>;
     if (accessed) expect(list.item(0)?.name).toBe('payload.txt');
 
-    const clone = window.structuredClone(list);
+    const clone = window.structuredClone(list) as FileList;
 
     if (!accessed) expect(ctx.getObjectRecord(file)?.platformObject).toBeUndefined();
     expect(clone).toBeInstanceOf(requireFunction(window, 'FileList'));
@@ -469,7 +470,7 @@ describe('File API File and FileList projection', () => {
     );
     const list = ctx.project(FileListImpl, new FileListImpl([file, file])) as StampedPlatformObject<FileList>;
 
-    const clone = window.structuredClone(list);
+    const clone = window.structuredClone(list) as FileList;
 
     expect(ctx.getObjectRecord(file)?.platformObject).toBeUndefined();
     expect(clone.length).toBe(2);
@@ -493,7 +494,7 @@ describe('File API File and FileList projection', () => {
       get file() { return list.item(0); },
     };
 
-    const clone = targetWindow.structuredClone(source);
+    const clone = targetWindow.structuredClone(source) as typeof source;
 
     expect(clone.list.item(0)).toBe(clone.file);
     expect(clone.file).toBeInstanceOf(requireFunction(targetWindow, 'File'));

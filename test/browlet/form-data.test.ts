@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import type { Window } from '../../src/browlet/platform';
 import { FileImpl } from '../../src/file/index';
 import { FormDataImpl } from '../../src/xhr/index';
 

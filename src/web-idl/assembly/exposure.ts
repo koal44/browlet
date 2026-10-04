@@ -4,7 +4,10 @@ import type { WebIDLRealm } from '../environment';
 
 // https://webidl.spec.whatwg.org/#dfn-exposed
 // https://webidl.spec.whatwg.org/#dfn-conditionally-exposed
-export function matchesExposure(construct: Exposable, realm: WebIDLRealm): boolean {
+export function matchesExposure(
+  construct: Exposable,
+  realm: Pick<WebIDLRealm, 'globalNames' | 'secureContext' | 'crossOriginIsolated'>,
+): boolean {
   const exposed = construct.exposed;
   if (
     exposed !== undefined && exposed !== '*' &&

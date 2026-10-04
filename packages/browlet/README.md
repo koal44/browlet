@@ -36,6 +36,18 @@ function arguments require handles, which are not implemented yet.
 
 Browlet is under active development.
 
+Platform types generated from the registered Web IDL declarations are available
+through the type-only `browlet/platform` entry:
+
+```ts
+import type { Window, Document, Event } from 'browlet/platform';
+```
+
+`Browlet.window`, `Browlet.document`, and navigation results use these types.
+These are explicit module types and need no `lib.dom`. They describe the declared
+surface; conditional features still depend on the realm, and provisional CSSOM
+declarations remain opaque. This entry exports no runtime constructors.
+
 ## License
 
 MIT

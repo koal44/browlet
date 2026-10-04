@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
+import type { WindowProxy } from '../../src/browlet/platform';
 
 describe('Browlet evaluation bridge', () => {
   it('evaluates source and functions in the page and awaits their results', async () => {

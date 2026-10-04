@@ -27,10 +27,9 @@ actual V8 WindowProxy in `bindings/core/v8/window_proxy.*`, reinforcing that
 the proxy is binding/engine machinery attached to—but not identical with—the
 Window implementation.
 
-The `WindowProxy` TypeScript surface currently uses `lib.dom.Window` by
-assertion. Binding stamps connect implementation/platform identities, but do
-not verify that all ambient Window members have been implemented. Full member
-coverage remains part of the Window work above.
+The generated `WindowProxy` type aliases the declared Window platform surface;
+`WindowProxyHandle` retains the internal proxy state. Undeclared compatibility
+properties and the missing Window members above are not promised by the types.
 
 `Window.postMessage()` belongs on Window, with its future algorithms in
 `communication/window-messaging.ts`; it must consume the single structured-data

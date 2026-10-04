@@ -150,7 +150,7 @@ describe('Secure Contexts: Window classification', () => {
     expect(realm.envRecord).toBe(realm.env);
     expect(realm.env.isSecureContext).toBe(expected);
     expect(browlet.window.isSecureContext).toBe(expected);
-    expect(browlet.document.title).toBe(String(expected));
+    expect(Reflect.get(browlet.document, 'title')).toBe(String(expected));
     expect(await browlet.evaluate(() => isSecureContext)).toBe(expected);
   });
 

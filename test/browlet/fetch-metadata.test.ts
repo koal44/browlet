@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
 import { Browlet } from '../../src/browlet/browlet';
+import type { Window } from '../../src/browlet/platform';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { createOpaqueOrigin } from '../../src/url/origin';

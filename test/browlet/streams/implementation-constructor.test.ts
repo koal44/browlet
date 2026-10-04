@@ -66,7 +66,7 @@ describe('Streams callback dictionary bindings', () => {
       },
       get type() { order.push('type'); return undefined; },
     };
-    const Constructor = Reflect.get(window, 'ReadableStream') as typeof ReadableStream;
+    const Constructor = window.ReadableStream;
     const stream = new Constructor(source);
     const canceled = observeBrowletPromise(window, stream.cancel());
     performTestMicrotaskCheckpoint(window);
@@ -94,7 +94,7 @@ describe('Streams callback dictionary bindings', () => {
       get type() { order.push('type'); return undefined; },
       get write() { order.push('write'); return undefined; },
     };
-    const Constructor = Reflect.get(window, 'WritableStream') as typeof WritableStream;
+    const Constructor = window.WritableStream;
     const stream = new Constructor(sink);
     const closed = observeBrowletPromise(window, stream.close());
     performTestMicrotaskCheckpoint(window);

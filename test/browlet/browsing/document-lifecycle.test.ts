@@ -9,6 +9,7 @@ import {
   getBindingContext, getRelevantRealm,
 } from '../../../src/browlet/bindings';
 import { Browlet } from '../../../src/browlet/browlet';
+import type { Window } from '../../../src/browlet/platform';
 import { createAndInitializeDocument } from '../../../src/browlet/browsing/document-lifecycle';
 import { NavigationParams } from '../../../src/browlet/browsing/navigation/params';
 import { Realm, WindowRealm } from '../../../src/browlet/scripting/realm';
@@ -540,9 +541,7 @@ describe('navigation lifecycle', () => {
   it('exposes the browsing context WindowProxy as Document.defaultView', async () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window;
-    const Document_ = Reflect.get(windowProxy, 'Document') as {
-      new(): Document;
-    };
+    const Document_ = windowProxy.Document;
 
     expect(new Document_().defaultView).toBeNull();
     expect(browlet.document.defaultView).toBe(windowProxy);

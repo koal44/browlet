@@ -11,6 +11,7 @@ import {
   BindingWorld, type GlobalObjectAllocation,
   type BindingContext, type StampedImplInstance, type StampedPlatformObject,
 } from '../web-idl/index';
+import type { Node, Window } from './platform';
 import { locationIDL } from './browsing/window/location';
 import { integrityViolationReportBodyIDL } from './browsing/policy/integrity-policy';
 import { coepViolationReportBodyIDL } from './browsing/policy/coep';

@@ -27,6 +27,10 @@ const selectedNames = requestedNames.length === 0
   ? packageNames
   : packageNames.filter((name) => requestedNames.includes(name));
 
+if (selectedNames.includes('browlet')) {
+  execFileSync(process.execPath, ['scripts/generate-platform-types.mjs', '--check'], { cwd: rootDir, stdio: 'inherit' });
+}
+
 for (const name of selectedNames) {
   await buildPackage(name);
 }
@@ -67,6 +71,11 @@ async function buildPackage(name) {
     ],
     { cwd: rootDir, stdio: 'inherit' },
   );
+
+  // Ship the platform-only entry separately, without mixing ambient DOM names into the main bundle.
+  if (name === 'browlet') {
+    fs.copyFileSync(path.join(rootDir, 'src/browlet/platform.d.ts'), path.join(distDir, 'platform.d.ts'));
+  }
 
   const isExternal = (id) => id.startsWith('node:') || dependencies.some(
     dependency => id === dependency || id.startsWith(`${dependency}/`),
@@ -111,7 +120,16 @@ async function buildPackage(name) {
 
   const dtsBundle = await rollup({
     input: path.join(entryDir, 'index.d.ts'),
-    plugins: [dts()],
+    plugins: [{
+      name: 'platform-types',
+      resolveId(source, importer) {
+        // tsc does not copy declaration inputs; retain the separately shipped platform module.
+        if (name === 'browlet' && importer
+          && path.resolve(path.dirname(importer), source) === path.join(tmpDir, 'src/browlet/platform')) {
+          return { id: './platform.js', external: true };
+        }
+      },
+    }, dts()],
   });
 
   await dtsBundle.write({

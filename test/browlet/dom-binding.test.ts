@@ -180,7 +180,7 @@ describe('Browlet DOM binding', () => {
     const browlet = createBrowlet();
     const element = browlet.document.createElement('main');
     element.setAttribute('id', 'named');
-    browlet.document.body.appendChild(element);
+    browlet.document.body!.appendChild(element);
 
     expect(Reflect.get(browlet.window, 'named')).toBe(element);
 
@@ -196,7 +196,7 @@ describe('Browlet DOM binding', () => {
     const second = document.createElement('aside');
     first.setAttribute('id', 'first');
     parent.appendChild(first);
-    document.body.appendChild(parent);
+    document.body!.appendChild(parent);
     const children = parent.children;
 
     expect(children).toBe(parent.children);
@@ -224,8 +224,8 @@ describe('Browlet DOM binding', () => {
     const document = browlet.document;
     const first = document.createElement('main');
     const second = document.createElement('main');
-    document.body.appendChild(first);
-    document.body.appendChild(second);
+    document.body!.appendChild(first);
+    document.body!.appendChild(second);
 
     const elements = document.getElementsByTagName('main');
 
@@ -410,7 +410,7 @@ describe('Browlet DOM binding', () => {
     });
     await browlet.navigate('https://example.test/');
     const document = browlet.document;
-    const element = document.documentElement;
+    const element = document.documentElement!;
     const text = document.createTextNode('content');
     const comment = document.createComment('note');
     const detachedAttribute = document.createAttribute('DATA-detached');

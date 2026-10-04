@@ -1,10 +1,11 @@
 import { createServer, type RequestListener, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
+import type { WindowProxy } from '../../src/browlet/platform';
 import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../../src/browlet/bindings';
 import { BrowsingContext } from '../../src/browlet/browsing/browsing-context';
-import type { WindowProxy } from '../../src/browlet/browsing/window/window-proxy';
 import { closeServer, listen } from './loader/http-fixture';
+import type { Window } from '../../src/browlet/platform';
 
 const cleanup: (() => Promise<void>)[] = [];
 afterEach(async () => {

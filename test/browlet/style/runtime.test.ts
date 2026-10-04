@@ -54,7 +54,7 @@ describe('Stylelet execution integration', () => {
     'completes stylesheet work with the %s document host', async (kind) => {
       const browlet = new Browlet({ route: () => '<main></main>' });
       if (kind === 'navigated') await browlet.navigate('https://example.test/');
-      const DocumentConstructor = Reflect.get(browlet.window, 'Document') as new () => Document;
+      const DocumentConstructor = browlet.window.Document;
       const document = kind === 'constructed'
         ? new DocumentConstructor()
         : browlet.document;

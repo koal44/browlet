@@ -18,7 +18,7 @@ describe('Origin interface', () => {
   it('creates origins from strings and URL platform objects', () => {
     const browlet = new Browlet({ route: () => '' });
     const Origin = getOriginConstructor(browlet.window);
-    const URL = Reflect.get(browlet.window, 'URL') as typeof globalThis.URL;
+    const URL = browlet.window.URL;
     const fromString = Origin.from('https://www.example.com/path');
     const fromURL = Origin.from(new URL('https://www.example.com/elsewhere'));
     const fromOrigin = Origin.from(fromString);

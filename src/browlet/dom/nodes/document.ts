@@ -19,7 +19,7 @@ import type { FetchRequest, FetchResponse } from '../../../fetch/index';
 import type { NavigationTimingRecord } from '../../performance/navigation';
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
-import type { WindowProxy } from '../../browsing/window/window-proxy';
+import type { WindowProxy } from '../../platform';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import { PolicyContainer } from '../../browsing/policy/container';
 import { OpenerPolicy } from '../../browsing/policy/coop';

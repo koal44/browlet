@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { Browlet } from '../../src/browlet/browlet';
+import type { Window } from '../../src/browlet/platform';
 import { singleByteDecodeDigests } from '../encoding/gen/single-byte-vectors';
 import {
   observeBrowletPromise, performTestMicrotaskCheckpoint,
