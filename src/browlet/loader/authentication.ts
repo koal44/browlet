@@ -79,7 +79,7 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
     const target = request.traversableForUserPrompts;
     if (target === null || target === undefined) throw new InternalError('HTTP authentication prompt requires a traversable');
     const P = this.#userAgent.HostPromise;
-    const result = P.withResolvers(internalType<AuthenticationEntry | null>('AuthenticationEntry?'));
+    const result = P.withResolvers(internalType<AuthenticationEntry | null>());
     // This signal belongs to the Node-facing prompt hook, not a page's AbortSignal implementation.
     const cancellation = new AbortController();
     const removeCancellation = controller.addCancellationSteps(() => {
@@ -101,7 +101,7 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
       result.reject(error);
       return result.promise;
     }
-    P.fromValue(answer, NativePromise, internalType<AuthenticationCredentials | null>('AuthenticationCredentials?')).observe((credentials) => {
+    P.fromValue(answer, NativePromise, internalType<AuthenticationCredentials | null>()).observe((credentials) => {
       if (result.isResolved) return;
       removeCancellation();
       if (generation !== this.#generation || credentials === null ||

@@ -59,7 +59,7 @@ P.resolve([{ value: 'wrong', done: false }], sequence(resultType));
 // @ts-expect-error A named IDL reference needs its implementation association.
 P.withResolvers(reference('Result'));
 
-const queueType = internalType<Result>('QueueResult');
+const queueType = internalType<Result>();
 P.resolve({ value: 1, done: true }, queueType);
 // @ts-expect-error Implementation-only values also have a selected contract.
 P.resolve({ value: 'wrong', done: true }, queueType);

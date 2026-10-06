@@ -93,13 +93,13 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it('completes collection through the byte source\'s promise queue', async () => {
     const queue = createMicrotaskQueue();
     const env = createEnvironment(new TestRealm({ microtaskQueue: queue }));
-    const source = env.exec.Promise.withResolvers(internalType<Uint8Array<ArrayBufferLike> | null>('OptionalResult'));
+    const source = env.exec.Promise.withResolvers(internalType<Uint8Array<ArrayBufferLike> | null>());
     const bytes = Uint8Array.of(4, 5);
     const headers: Uint8Array[] = [];
     const errors: unknown[] = [];
     const readBytes = vi.fn<ReadResourceBytes>()
       .mockReturnValueOnce(source.promise)
-      .mockImplementation(() => env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>('Result')));
+      .mockImplementation(() => env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>()));
 
     void readResourceHeader(readBytes, deadline).then(
       (header) => { headers.push(header); },
@@ -133,7 +133,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it('reads incrementally with one deadline and combines the prefix into exact-sized storage', async () => {
     const reads = [Uint8Array.of(1, 2), Uint8Array.of(3), null];
     const readBytes = vi.fn<ReadResourceBytes>(() =>
-      env.exec.Promise.fromValue(reads.shift() ?? null, env.exec.NativePromise, internalType<Uint8Array<ArrayBuffer> | null>('OptionalResult')));
+      env.exec.Promise.fromValue(reads.shift() ?? null, env.exec.NativePromise, internalType<Uint8Array<ArrayBuffer> | null>()));
 
     const header = await observe(readResourceHeader(readBytes, deadline));
 
@@ -150,7 +150,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     chunk.fill(7);
     const readBytes = vi.fn<ReadResourceBytes>()
       .mockReturnValueOnce(env.exec.Promise.fromValue(chunk, env.exec.NativePromise, idlType.Uint8Array))
-      .mockImplementation(() => env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>('Result')));
+      .mockImplementation(() => env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>()));
 
     const header = await observe(readResourceHeader(readBytes, deadline));
 
@@ -167,7 +167,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     let offset = 0;
     const readBytes = vi.fn<ReadResourceBytes>((max) => {
       const length = Math.min(max, 127, source.length - offset);
-      if (length === 0) return env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>('Result'));
+      if (length === 0) return env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>());
       const chunk = source.subarray(offset, offset + length);
       offset += length;
       return env.exec.Promise.fromValue(chunk, env.exec.NativePromise, idlType.Uint8Array);
@@ -184,9 +184,9 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     const chunks = [Uint8Array.of(1, 2, 3), Uint8Array.of(4, 5)];
     let now = 90;
     const readBytes = vi.fn<ReadResourceBytes>((_maxBytes, readDeadline) => {
-      if (now >= readDeadline) return env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>('Result'));
+      if (now >= readDeadline) return env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>());
       now += 10;
-      return env.exec.Promise.fromValue(chunks.shift() ?? null, env.exec.NativePromise, internalType<Uint8Array<ArrayBuffer> | null>('OptionalResult'));
+      return env.exec.Promise.fromValue(chunks.shift() ?? null, env.exec.NativePromise, internalType<Uint8Array<ArrayBuffer> | null>());
     });
 
     expect([...await observe(readResourceHeader(readBytes, deadline))]).toEqual([1, 2, 3]);
@@ -195,7 +195,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   });
 
   it('keeps collected bytes when a pending source read ends at the deadline', async () => {
-    const pending = env.exec.Promise.withResolvers(internalType<Uint8Array<ArrayBufferLike> | null>('OptionalResult'));
+    const pending = env.exec.Promise.withResolvers(internalType<Uint8Array<ArrayBufferLike> | null>());
     const readStarted = env.exec.Promise.withResolvers(idlType.undefined);
     const readBytes = vi.fn<ReadResourceBytes>()
       .mockReturnValueOnce(env.exec.Promise.fromValue(Uint8Array.of(1, 2, 3), env.exec.NativePromise, idlType.Uint8Array))
@@ -214,7 +214,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   });
 
   it('returns an empty header when the source ends before supplying bytes', async () => {
-    const readBytes = vi.fn<ReadResourceBytes>(() => env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>('Result')));
+    const readBytes = vi.fn<ReadResourceBytes>(() => env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>()));
 
     expect(await observe(readResourceHeader(readBytes, deadline))).toEqual(new Uint8Array());
     expect(readBytes).toHaveBeenCalledExactlyOnceWith(maximumResourceHeaderLength, deadline);
@@ -224,7 +224,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     const bytes = encoder.encode('<html>');
     const readBytes = vi.fn<ReadResourceBytes>()
       .mockReturnValueOnce(env.exec.Promise.fromValue(bytes, env.exec.NativePromise, idlType.Uint8Array))
-      .mockReturnValueOnce(env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>('Result')));
+      .mockReturnValueOnce(env.exec.Promise.fromValue(null, env.exec.NativePromise, internalType<null>()));
 
     const resourceHeader = await observe(readResourceHeader(readBytes, deadline));
     const detection = detectSuppliedMIMEType({
@@ -246,7 +246,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
     const cancellation = new Error('cancelled');
 
     await expect(observe(readResourceHeader(
-      () => env.exec.Promise.reject(cancellation, internalType<Uint8Array<ArrayBufferLike> | null>('OptionalResult')),
+      () => env.exec.Promise.reject(cancellation, internalType<Uint8Array<ArrayBufferLike> | null>()),
       deadline,
     ))).rejects.toBe(cancellation);
   });
@@ -254,7 +254,7 @@ describe('MIME Sniffing §5.2: reading the resource header', () => {
   it.each(['first', 'later'] as const)('propagates a %s read failure rejected by the source runtime', async (which) => {
     const failure = new Error('source failed');
     const readBytes = vi.fn<ReadResourceBytes>(() =>
-      env.exec.Promise.try(() => { throw failure; }, internalType<Uint8Array | null>('ResourceBytes')));
+      env.exec.Promise.try(() => { throw failure; }, internalType<Uint8Array | null>()));
     if (which === 'later') readBytes.mockReturnValueOnce(env.exec.Promise.fromValue(Uint8Array.of(1), env.exec.NativePromise, idlType.Uint8Array));
 
     const result = readResourceHeader(readBytes, deadline);

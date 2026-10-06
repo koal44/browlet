@@ -176,7 +176,7 @@ function copyEvaluationValue(
     return set;
   }
   if (hasErrorData(value)) {
-    const error = value as Error;
+    const error = value;
     const name = String(error.name);
     const constructors: Record<string, ErrorConstructor> = realm ? {
       Error: realm.intrinsics.error, TypeError: realm.intrinsics.typeError,

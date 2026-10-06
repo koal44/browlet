@@ -762,6 +762,8 @@ function createWebIDLPromiseConstructor(binding: RealmBinding): typeof InternalP
   return class WebIDLPromise<T> extends binding.realm.Promise<T> {
     static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
       if (type.kind === 'implementation') return super.withResolvers(type);
+      // eslint-disable-next-line @typescript-eslint/no-this-alias -- Adopted values are observed through the destination constructor.
+      const P = this;
       const resultType = binding.assembly.getPromiseResultType(type);
       const converter = binding.getConverter(resultType);
       const toImpl = binding.implementationConverter.createConverter(resultType, {});
@@ -774,7 +776,14 @@ function createWebIDLPromiseConstructor(binding: RealmBinding): typeof InternalP
         resolve(value) {
           try {
             if (value instanceof InternalPromise) {
-              idlPromise.resolve(value.backing);
+              if (value.backing === idlPromise.promise ||
+                (!value.usesInternalStorage && value.type.kind !== 'implementation' &&
+                  binding.assembly.getPromiseResultType(value.type).conversionKey === resultType.conversionKey)) {
+                // Preserve native adoption, including identity and self-resolution rejection.
+                idlPromise.resolve(value.backing);
+              } else {
+                idlPromise.adopt(P.fromInternal(value), converter.getIDLToJSSteps());
+              }
             } else {
               // Conversion precedes the native resolving function, including reentrant resolution.
               idlPromise.resolve(converter.idlToJS(value));

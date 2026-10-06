@@ -54,7 +54,7 @@ describe('standalone execution', () => {
     });
     const failure = new Error('Observer failed');
 
-    exec.Promise.resolve(1, internalType<number>('number')).observe(
+    exec.Promise.resolve(1, internalType<number>()).observe(
       () => { throw failure; },
       (reason) => { throw reason; },
     );

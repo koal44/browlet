@@ -36,7 +36,7 @@ export function utf8DecodeQueue(
   return input.waitFor(3, env).then(() => {
     if (hasBOM(input.peek(3)!)) input.readAvailable(3);
     return utf8DecodeWithoutBOMQueue(input, output, env);
-  }, undefined, internalType<IOQueue<string>>('CodePointQueue'));
+  }, undefined, internalType<IOQueue<string>>());
 }
 
 /** Encoding §6 — UTF-8 decode without BOM; append to the caller's output. */
@@ -44,7 +44,7 @@ export function utf8DecodeWithoutBOMQueue(
   input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), env: JSEnvironment,
 ): InternalPromise<IOQueue<string>> {
   const decoder = new UTF8Decoder();
-  return processQueue(input, () => decoder.decode(input, output), env).then(() => output, undefined, internalType<IOQueue<string>>('CodePointQueue'));
+  return processQueue(input, () => decoder.decode(input, output), env).then(() => output, undefined, internalType<IOQueue<string>>());
 }
 
 /** Encoding §6 — Fatal decoding leaves the emitted prefix and unread input available. */
@@ -53,7 +53,7 @@ export function utf8DecodeWithoutBOMOrFailQueue(
 ): InternalPromise<IOQueue<string> | null> {
   const decoder = new UTF8Decoder();
   return processQueue(input, () => decoder.decode(input, output, 'fatal'), env)
-    .then((result) => typeof result === 'object' ? null : output, undefined, internalType<IOQueue<string> | null>('CodePointQueue?'));
+    .then((result) => typeof result === 'object' ? null : output, undefined, internalType<IOQueue<string> | null>());
 }
 
 /** Encoding §6 — UTF-8 encode, retaining streaming input and supplied output. */
@@ -61,7 +61,7 @@ export function utf8EncodeQueue(
   input: IOQueue<string>, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), env: JSEnvironment,
 ): InternalPromise<IOQueue<Uint8Array>> {
   const encoder = new UTF8Encoder();
-  return processQueue(input, () => encoder.encode(input, output), env).then(() => output, undefined, internalType<IOQueue<Uint8Array>>('ByteQueue'));
+  return processQueue(input, () => encoder.encode(input, output), env).then(() => output, undefined, internalType<IOQueue<Uint8Array>>());
 }
 
 // -- Encoding §8: UTF-8 -------------------------------------------------

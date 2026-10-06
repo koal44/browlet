@@ -167,12 +167,12 @@ export class CSSStyleSheetImpl
       return this.env.exec.Promise.reject(new this.env.exec.DOMException(
         'This stylesheet cannot be replaced.',
         'NotAllowedError',
-      ), internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
+      ), internalType<CSSStyleSheetImpl>());
     }
 
     this.#disallowModification = true;
 
-    const result = this.env.exec.Promise.withResolvers(internalType<CSSStyleSheetImpl>('CSSStyleSheetImpl'));
+    const result = this.env.exec.Promise.withResolvers(internalType<CSSStyleSheetImpl>());
     const reject = (error: unknown): void => {
       this.#disallowModification = false;
       result.reject(error);

@@ -113,8 +113,9 @@ Each realm supplies a `Promise` constructor extending
 Infra's [`InternalPromise`](../infra/promises.ts) with realm-owned observation. Static creation
 methods and instance chaining retain that constructor. `Promise.fromInternal()`
 selects the consumer's reaction destination while sharing the existing native
-backing and source conversion. Private payloads
-are boxed to avoid thenable adoption. The `withResolvers()` result's `isResolved`
+backing, source conversion, and private fulfillment storage. Private values stay
+on their original internal Promise; the native backing signals completion without
+adopting them. The `withResolvers()` result's `isResolved`
 becomes true when the first `resolve()` or `reject()` call is accepted, even while
 waiting for another Promise's outcome; it does not inspect native settlement.
 

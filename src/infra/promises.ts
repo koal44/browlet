@@ -5,37 +5,45 @@ import { InternalError } from './internal-error';
 export class InternalPromise<T> {
   backing: Promise<unknown>;
   type: PromiseResultType<T>;
-  #read: (value: unknown) => T;
+  /** Native-value conversion, or the Promise retaining a private implementation value. */
+  #read: ((value: unknown) => T) | InternalPromise<T>;
+  /** Private fulfillment value; its native backing signals completion without adopting it. */
+  #value: T | undefined;
 
-  constructor(backing: Promise<unknown>, type: PromiseResultType<T>, read: (value: unknown) => T) {
+  constructor(backing: Promise<unknown>, type: PromiseResultType<T>, read?: ((value: unknown) => T) | InternalPromise<T>) {
     // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- JavaScript callers must supply a descriptor.
     if (!type) throw new InternalError('A Promise result type is required');
     this.backing = backing;
     this.type = type;
-    this.#read = read;
+    this.#read = read ?? this;
   }
 
+  /** Whether the backing signals completion while an implementation value is stored separately. */
+  get usesInternalStorage(): boolean { return typeof this.#read !== 'function'; }
+
   static withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
-    const backing = NativePromise.withResolvers<Payload<T>>();
-    const promise = new this(backing.promise, type, (value) => (value as Payload<T>).value);
-    let isResolved = false;
-    return {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Detached resolvers retain their allocation constructor.
+    const P = this;
+    const backing = NativePromise.withResolvers<void>();
+    const promise = new this(backing.promise, type);
+    const result = {
       promise,
-      get isResolved() { return isResolved; },
-      resolve: (value) => {
-        if (isResolved) return;
-        isResolved = true;
+      isResolved: false,
+      resolve(value: T | InternalPromise<T>) {
+        if (result.isResolved) return;
+        result.isResolved = true;
         if (value instanceof InternalPromise) {
           if (value === promise) backing.reject(new TypeError('Promise cannot resolve itself'));
-          else this.fromInternal(value).observe((item) => { backing.resolve(payload(item)); }, backing.reject);
-        } else { backing.resolve(payload(value)); }
+          else P.fromInternal(value).observe((item) => { promise.#value = item; backing.resolve(); }, backing.reject);
+        } else { promise.#value = value; backing.resolve(); }
       },
-      reject: (reason) => {
-        if (isResolved) return;
-        isResolved = true;
+      reject(reason: unknown) {
+        if (result.isResolved) return;
+        result.isResolved = true;
         backing.reject(reason);
       },
     };
+    return result;
   }
 
   static resolve<T>(value: NoInfer<T> | InternalPromise<NoInfer<T>>, type: PromiseResultType<T>): InternalPromise<T> {
@@ -57,7 +65,7 @@ export class InternalPromise<T> {
     } catch (error) { return this.reject(error, type); }
   }
 
-  /** Change reaction ownership while retaining the original backing and fulfillment conversion. */
+  /** Change reaction ownership while retaining the backing, fulfillment conversion, and private storage. */
   static fromInternal<T>(source: InternalPromise<T>): InternalPromise<T> {
     if (source.constructor === this) return source;
     return new this(source.backing, source.type, source.#read);
@@ -119,7 +127,7 @@ export class InternalPromise<T> {
   observe(fulfill: (value: T) => void, reject: (reason: unknown) => void, conversionFailed = reject): void {
     this.observeNative((value) => {
       let item: T;
-      try { item = this.#read(value); }
+      try { item = typeof this.#read === 'function' ? this.#read(value) : this.#read.#value as T; }
       catch (error) { conversionFailed(error); return; }
       fulfill(item);
     }, reject);
@@ -139,26 +147,22 @@ export type InternalPromiseWithResolvers<T> = {
   reject: (reason: unknown) => void;
 };
 
-/** Name an implementation result that needs no binding conversion. */
-export function internalType<T>(name: string): InternalType<T> {
-  return { kind: 'implementation', name } as InternalType<T>;
+/** Select implementation-only results using one shared marker; T is a compile-time contract. */
+export function internalType<T>(): InternalType<T> {
+  return internalResultType as InternalType<T>;
 }
 
 /** A result descriptor whose kind and contents are interpreted by its owner. */
 export type PromiseResultType<T> = { kind: string; } & ResultValue<T>;
-export type InternalType<T> = { kind: 'implementation'; name: string; } & ResultValue<T>;
+export type InternalType<T> = { kind: 'implementation'; } & ResultValue<T>;
 export type ResultValue<T> = { [resultValue]: T; };
 
 /** Derive the payload from the selected descriptor, including nested result types. */
 export type PromiseResult<D> = D extends ResultValue<infer T> ? T : unknown;
 
 declare const resultValue: unique symbol;
+const internalResultType = { kind: 'implementation' } as InternalType<unknown>;
 
-type Payload<T> = { value: T; };
-function payload<T>(value: T): Payload<T> {
-  // Hide the value's then property, and prevent the carrier from inheriting one.
-  return { __proto__: null, value } as Payload<T>;
-}
 // eslint-disable-next-line no-restricted-syntax -- Native backing storage; the selected constructor owns observation.
 const NativePromise = globalThis.Promise;
 // eslint-disable-next-line @typescript-eslint/unbound-method -- Captured intrinsic called with Reflect.apply.

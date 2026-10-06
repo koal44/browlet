@@ -175,7 +175,7 @@ export class Browlet {
     return parser.parse(source).then(() => {
       document.finishLoading();
       return this.window;
-    }, undefined, internalType<WindowProxy>('WindowProxy'));
+    }, undefined, internalType<WindowProxy>());
   }
 
   #executeScript(

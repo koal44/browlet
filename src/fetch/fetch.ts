@@ -468,7 +468,7 @@ function httpNetworkOrCacheFetch(
           const cachedValue = candidate === null ? null : encodeBasicCredentials(candidate.username, candidate.password);
           // Rejected credentials cannot retry automatically; a fresh prompt may still supply them.
           const answer = candidate !== null && cachedValue !== null && !rejected?.has(cachedValue)
-          ? userAgent.HostPromise.resolve(candidate, internalType<AuthenticationEntry>('AuthenticationEntry'))
+          ? userAgent.HostPromise.resolve(candidate, internalType<AuthenticationEntry>())
           : authentication.prompt(request, challenge.realm, sentEntry, params.controller).then((entry) => {
             if (entry !== null && !params.canceled && generation === authentication.generation) {
               setURLUsername(url, entry.username);
@@ -1225,7 +1225,7 @@ class NetworkUpload implements HTTPUploadSource {
   read(): InternalPromise<Uint8Array | null> {
     if (this.#pending) throw new InternalError('HTTP transport requested concurrent upload reads');
     const { env, request } = this.#params;
-    const result = request.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>('UploadChunk'));
+    const result = request.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>());
     this.#pending = result;
     env.exec.queueTask('network', () => {
       if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
@@ -1407,10 +1407,10 @@ class NetworkBody {
 const upperBufferLimit = 64 * 1024;
 const lowerBufferLimit = 32 * 1024;
 
-const responseType = internalType<FetchResponse>('FetchResponse');
-const optionalResponseType = internalType<FetchResponse | null>('FetchResponse?');
-const redirectResponseType = internalType<FetchResponse | undefined>('RedirectResponse');
-const requestType = internalType<FetchRequest>('FetchRequest');
+const responseType = internalType<FetchResponse>();
+const optionalResponseType = internalType<FetchResponse | null>();
+const redirectResponseType = internalType<FetchResponse | undefined>();
+const requestType = internalType<FetchRequest>();
 
 type HTTPAttempt = {
   httpParams: FetchParams;
@@ -1418,4 +1418,4 @@ type HTTPAttempt = {
   includeCredentials: boolean;
   sentEntry: AuthenticationEntry | null;
 };
-const attemptType = internalType<HTTPAttempt | FetchResponse>('HTTPAttempt');
+const attemptType = internalType<HTTPAttempt | FetchResponse>();

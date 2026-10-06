@@ -19,7 +19,7 @@ describe('ordinary readable-stream implementation', () => {
     const { Promise: P } = env.exec;
     const values = ['first', 'second'];
     const stream = ReadableStreamImpl.from({
-      next: () => P.fromValue(values.shift() ?? endOfIteration, env.exec.NativePromise, internalType<string | typeof endOfIteration>('OptionalResult')),
+      next: () => P.fromValue(values.shift() ?? endOfIteration, env.exec.NativePromise, internalType<string | typeof endOfIteration>()),
       return: () => P.resolve(undefined, idlType.undefined),
     }, env);
     const reader = stream.getReader({});

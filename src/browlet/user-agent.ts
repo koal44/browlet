@@ -183,7 +183,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   ): InternalPromise<FetchResponse | ServiceWorkerTimingInfo | null> {
     // PROVISIONAL(Service Workers): no registrations or active workers exist yet.
     // Return without preparing an unused request/body branch.
-    return this.HostPromise.try(() => null, internalType<FetchResponse | ServiceWorkerTimingInfo | null>('ServiceWorkerResult'));
+    return this.HostPromise.try(() => null, internalType<FetchResponse | ServiceWorkerTimingInfo | null>());
   }
 
   /** Select internal network scheduling state for a request. */
@@ -240,7 +240,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     // Bytes need no stream or execution owner from the retiring Window.
     request.body = ReportImpl.serialize(reports);
     for (const report of reports) report.attempts++;
-    const result = HostPromise.withResolvers(internalType<ReportDeliveryResult>('ReportDeliveryResult'));
+    const result = HostPromise.withResolvers(internalType<ReportDeliveryResult>());
     // This clientless request has no Window to receive response callbacks.
     // The sandbox owns stream execution; the request retains the report's
     // original origin and remains clientless.

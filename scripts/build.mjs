@@ -120,6 +120,7 @@ async function buildPackage(name) {
 
   const dtsBundle = await rollup({
     input: path.join(entryDir, 'index.d.ts'),
+    external: isExternal,
     plugins: [{
       name: 'platform-types',
       resolveId(source, importer) {

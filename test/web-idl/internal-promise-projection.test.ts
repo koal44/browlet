@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import type { InternalPromise, InternalPromiseWithResolvers } from '../../src/infra/promises';
+import { internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../../src/infra/promises';
 import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
+import type { JSEnvironment } from '../../src/js-engine/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import {
-  defineInterface, idlType, impl, implementationType, op, promise, reference, roAttr,
-} from '../../src/web-idl/core/index';
+  atArg, ctor, defineInterface, idlType, impl, implementationType, op, promise, reference, roAttr,
+} from '../../src/web-idl/index';
+import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
 import { TestRealm } from './test-realm';
 
 describe('InternalPromise result projection', () => {
@@ -40,6 +42,20 @@ describe('InternalPromise result projection', () => {
     expect(await observed).toEqual(mode === 'adopt'
       ? [{ status: 'fulfilled', value: adopted }, { status: 'fulfilled', value: 19 }]
       : [{ status: 'rejected', reason: failure }, { status: 'rejected', reason: failure }]);
+  });
+
+  it.each(['implementation', 'platform'] as const)('delivers a private asynchronous helper result to the %s consumer', async (consumer) => {
+    const realm = new TestRealm();
+    const binding = new BindingWorld<TestEnvironment>([countReaderIDL]).register(realm, (ctx) => createEnvironment(realm, ctx));
+    binding.install(realm.global);
+    if (consumer === 'platform') {
+      const CountReader = Reflect.get(realm.global, 'CountReader') as new() => { read(): Promise<number>; };
+      await expect(new CountReader().read()).resolves.toBe(7);
+    } else {
+      const reader = new CountReaderImpl(binding.getEnvironment());
+      const result = new Promise<number>((resolve, reject) => { reader.read().observe(resolve, reject); });
+      await expect(result).resolves.toBe(7);
+    }
   });
 
   it.each(['fulfill', 'reject'] as const)('retains the receiver projection on %s', async (mode) => {
@@ -79,6 +95,19 @@ class ResultChildImpl {
   constructor(public value = 7) {}
 }
 
+class CountReaderImpl {
+  constructor(public env: JSEnvironment) {}
+
+  read(): InternalPromise<number> {
+    return this.env.exec.Promise.resolve(undefined, idlType.undefined)
+      .then(() => this.#readCount(), undefined, idlType.long);
+  }
+
+  #readCount(): InternalPromise<number> {
+    return this.env.exec.Promise.resolve(7, internalType<number>());
+  }
+}
+
 function createFixture() {
   const bindings = new BindingWorld([ownerIDL, childIDL]);
   const realm = new TestRealm();
@@ -97,4 +126,11 @@ const childIDL = defineInterface({
 const ownerIDL = defineInterface({
   name: 'ResultOwner', exposed: '*', implementation: impl(ResultOwnerImpl),
   members: [roAttr('result', promise(reference('ResultChild'))), op('map', promise(idlType.long))],
+});
+
+// interface CountReader { constructor(); Promise<long> read(); };
+const countReaderIDL = defineInterface<JSEnvironment>({
+  name: 'CountReader', exposed: '*',
+  implementation: impl(CountReaderImpl, { constructWith: [atArg(0, (ctx) => ctx.getEnvironment())] }),
+  members: [ctor([]), op('read', promise(idlType.long))],
 });

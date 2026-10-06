@@ -5,10 +5,11 @@ import { RealmBinding } from '../../src/web-idl/binding/realm';
 import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 
 import {
-  annotated, defineTypedef, idlType, implementationType, promise, reference, sequence, xattr,
+  annotated, defineDictionary, defineTypedef, dictMember, idlType, implementationType, promise, reference, sequence, xattr,
 } from '../../src/web-idl/core/index';
 import { InternalError } from '../../src/infra/internal-error';
 import { internalType } from '../../src/infra/promises';
+import { TypeError as TypeErrorRequest } from '../../src/infra/exceptions';
 import { TestRealm } from './test-realm';
 
 describe('declared Promise ownership', () => {
@@ -84,10 +85,115 @@ describe('declared Promise ownership', () => {
   it('retains implementation result metadata without exposing its private representation', () => {
     const realm = new TestRealm();
     const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
-    const type = internalType<number>('Counter');
+    const type = internalType<number>();
     const source = binding.Promise.resolve(7, type);
     expect(source.type).toBe(type);
     expect(() => binding.getConverter(binding.assembly.getIDLType(promise(idlType.long))).idlToJS(source)).toThrow(InternalError);
+  });
+
+  it.each(['pending', 'settled'] as const)('adopts a %s implementation result before accepting later settlement attempts', async (state) => {
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
+    const source = binding.Promise.withResolvers(internalType<number>());
+    if (state === 'settled') source.resolve(7);
+    const declared = binding.Promise.withResolvers(idlType.long);
+    declared.resolve(source.promise);
+    expect(declared.isResolved).toBe(true);
+    declared.resolve(99);
+    declared.reject('late rejection');
+    if (state === 'pending') source.resolve(7);
+    const exposed = binding.getConverter(binding.assembly.getIDLType(promise(idlType.long))).idlToJS(declared.promise);
+    await expect(exposed).resolves.toBe(7);
+  });
+
+  it('decodes a host Promise even when it carries the destination IDL descriptor', async () => {
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
+    const source = binding.Promise.fromInternal(new TestRealm().Promise.resolve(7, idlType.long));
+    const declared = binding.Promise.resolve(source, idlType.long);
+    await expect(declared.backing).resolves.toBe(7);
+    expect(() => binding.getConverter(binding.assembly.getIDLType(promise(idlType.long))).idlToJS(source)).toThrow(InternalError);
+  });
+
+  it('reads the implementation value when adopting a different native result contract', async () => {
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
+    const source = binding.Promise.fromNative(Promise.resolve(42), String, idlType.DOMString);
+    const declared = binding.Promise.resolve(source, idlType.USVString);
+    await expect(declared.backing).resolves.toBe('42');
+  });
+
+  it('retains native result identity when adopting a compatible contract from another realm', async () => {
+    const world = new BindingWorld([]);
+    const first = new TestRealm();
+    const second = new TestRealm();
+    const a = world.register(first, (ctx) => ({ realm: ctx.realm }));
+    const b = world.register(second, (ctx) => ({ realm: ctx.realm }));
+    const type = sequence(idlType.long);
+    const source = a.Promise.resolve([7], type);
+    const imported = b.Promise.fromInternal(source);
+    const declared = b.Promise.resolve(imported, type);
+    expect(declared.backing).toBeInstanceOf(second.intrinsics.promise.constructor);
+    expect(await declared.backing).toBe(await source.backing);
+  });
+
+  it('allocates an adopted implementation result in the destination realm', async () => {
+    const world = new BindingWorld([]);
+    const first = new TestRealm();
+    const second = new TestRealm();
+    const a = world.register(first, (ctx) => ({ realm: ctx.realm }));
+    const b = world.register(second, (ctx) => ({ realm: ctx.realm }));
+    const source = a.Promise.resolve([7], internalType<number[]>());
+    const declared = b.Promise.resolve(source, sequence(idlType.long));
+    expect(declared.backing).toBeInstanceOf(second.intrinsics.promise.constructor);
+    const value = await declared.backing;
+    expect(value).toEqual([7]);
+    expect(value).toBeInstanceOf(second.intrinsics.array);
+    expect(value).not.toBeInstanceOf(first.intrinsics.array);
+  });
+
+  it.each(['direct', 'view'] as const)('rejects %s self-adoption in the destination realm', async (mode) => {
+    const realm = new TestRealm();
+    const binding = new RealmBinding(new DefinitionAssembly([]), realm, new BindingWorld([]), (ctx) => ({ realm: ctx.realm }));
+    const declared = binding.Promise.withResolvers(idlType.long);
+    const source = mode === 'direct' ? declared.promise
+      : binding.Promise.fromNative(declared.promise.backing, () => 7, internalType<number>());
+    declared.resolve(source);
+    expect(declared.isResolved).toBe(true);
+    await expect(declared.promise.backing).rejects.toBeInstanceOf(realm.intrinsics.typeError);
+  });
+
+  it.each(['rejection', 'reading'] as const)('realizes an adopted implementation failure during %s in the destination realm', async (mode) => {
+    const world = new BindingWorld([]);
+    const first = new TestRealm();
+    const second = new TestRealm();
+    const a = world.register(first, (ctx) => ({ realm: ctx.realm }));
+    const b = world.register(second, (ctx) => ({ realm: ctx.realm }));
+    const failure = new TypeErrorRequest('source failed');
+    const source = mode === 'rejection'
+      ? a.Promise.reject(failure, internalType<number>())
+      : a.Promise.fromNative(Promise.resolve(7), () => { throw failure; }, internalType<number>());
+    const declared = b.Promise.resolve(source, idlType.long);
+    await expect(declared.backing).rejects.toBeInstanceOf(second.intrinsics.typeError);
+  });
+
+  it.each(['reenter', 'throw'] as const)('settles adopted values when destination conversion can %s', async (mode) => {
+    const definition = defineDictionary({ name: 'Result', members: [dictMember('value', idlType.long)] });
+    const world = new BindingWorld([definition]);
+    const binding = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    const declared = binding.Promise.withResolvers(implementationType<{ value: number; }>(reference('Result')));
+    const failure = new Error('conversion failed');
+    const source = binding.Promise.resolve({
+      get value() {
+        if (mode === 'throw') throw failure;
+        declared.reject('reentrant rejection');
+        return 7;
+      },
+    }, internalType<{ value: number; }>());
+    declared.resolve(source);
+    expect(declared.isResolved).toBe(true);
+    if (mode === 'throw') await expect(declared.promise.backing).rejects.toBe(failure);
+    else await expect(declared.promise.backing).resolves.toEqual({ value: 7 });
   });
 
   it('resolves aliases inside nested result types while retaining conversion attributes', async () => {

@@ -76,8 +76,8 @@ export function decodeQueue(
     const bom = bomSniff(input);
     if (bom) input.readAvailable(bom === 'UTF-8' ? 3 : 2);
     const decoder = getDecoder(bom ?? encoding);
-    return processQueue(input, () => decoder.decode(input, output, 'replacement'), env).then(() => output, undefined, internalType<IOQueue<string>>('CodePointQueue'));
-  }, undefined, internalType<IOQueue<string>>('CodePointQueue'));
+    return processQueue(input, () => decoder.decode(input, output, 'replacement'), env).then(() => output, undefined, internalType<IOQueue<string>>());
+  }, undefined, internalType<IOQueue<string>>());
 }
 
 /** §6.1 — BOM sniff; undefined requests more input, without consuming it. */
@@ -99,7 +99,7 @@ export function encodeQueue(
   input: IOQueue<string>, encoding: Encoding, output: IOQueue<Uint8Array> = new IOQueue<Uint8Array>(), env: JSEnvironment,
 ): InternalPromise<IOQueue<Uint8Array>> {
   const encoder = getEncoder(encoding);
-  return processQueue(input, () => encoder.encode(input, output, 'html'), env).then(() => output, undefined, internalType<IOQueue<Uint8Array>>('ByteQueue'));
+  return processQueue(input, () => encoder.encode(input, output, 'html'), env).then(() => output, undefined, internalType<IOQueue<Uint8Array>>());
 }
 
 /** §6.1 — Encode or fail for complete input, as used by synchronous URL parsing. */
@@ -116,5 +116,5 @@ export function encodeOrFail(
   return processQueue(input, () => encoder.encode(input, output, 'fatal'), env).then((result) => {
     output.push(endOfQueue);
     return typeof result === 'object' ? result.error : null;
-  }, undefined, internalType<number | null>('EncodingError'));
+  }, undefined, internalType<number | null>());
 }

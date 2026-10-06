@@ -141,7 +141,7 @@ describe('internal Promise results', () => {
   it('keeps the result descriptor through rejection, same-type chaining, and import', () => {
     const a = createTarget();
     const b = createTarget();
-    const type = internalType<number>('Count');
+    const type = internalType<number>();
     const result = a.Promise.withResolvers(type);
     expect(result.promise.type).toBe(type);
     expect(result.promise.then().type).toBe(type);
@@ -195,7 +195,7 @@ describe('internal Promise results', () => {
   itPassesWith('explicitQueues')('maps one retained payload in separate destinations without thenable adoption', () => {
     const a = createTarget();
     const b = createTarget();
-    const pending = a.Promise.withResolvers(internalType<{ then: never; value: number; }>('Result'));
+    const pending = a.Promise.withResolvers(internalType<{ then: never; value: number; }>());
     const values: unknown[] = [];
     const payload = { value: 7, get then(): never { throw new Error('Payload is not a thenable'); } };
     pending.promise.then((value) => value.value + 1, undefined, idlType.double)
@@ -265,7 +265,7 @@ describe('internal Promise results', () => {
     const failure = new Error('failed input');
     P.all([first.promise, second.promise], sequence(idlType.double))
       .observe((value) => { values.push(value); }, fail);
-    P.all([], internalType<unknown[]>('EmptyResults'))
+    P.all([], internalType<unknown[]>())
       .observe((value) => { values.push(value); }, fail);
     P.all([first.promise, P.reject(failure, idlType.double)], sequence(idlType.double))
       .observe(fail, (reason) => { values.push(reason); });

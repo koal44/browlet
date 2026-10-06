@@ -1,4 +1,4 @@
-import { InternalError } from '../../infra/index';
+import { InternalError, type InternalPromise } from '../../infra/index';
 
 import type { WebIDLRealm } from '../environment';
 import type { IDLType } from '../assembly/index';
@@ -68,9 +68,20 @@ export class IDLPromise<Type extends IDLType = IDLType> {
   reject(reason?: unknown): void {
     if (this.resolved) return;
     this.resolved = true;
-    const reject = this.#reject;
-    const realize = this.#realizeException;
-    reject(realize ? realize(reason) : reason);
+    this.#rejectValue(reason);
+  }
+
+  /** Accept adoption once, then project the source's implementation value before native resolution. */
+  adopt<Result>(source: InternalPromise<Result>, convertValue: (value: Result) => unknown): void {
+    if (this.resolved) return;
+    this.resolved = true;
+    const reject = (reason: unknown) => { this.#rejectValue(reason); };
+    source.observe((value) => {
+      try {
+        const resolve = this.#resolve;
+        resolve(convertValue(value));
+      } catch (error) { reject(error); }
+    }, reject);
   }
 
   /** React to JS values without conversion, keeping the result promise in this promise's realm. */
@@ -124,6 +135,12 @@ export class IDLPromise<Type extends IDLType = IDLType> {
       undefined,
       onRejected,
     );
+  }
+
+  #rejectValue(reason: unknown): void {
+    const reject = this.#reject;
+    const realize = this.#realizeException;
+    reject(realize ? realize(reason) : reason);
   }
 }
 

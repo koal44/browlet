@@ -141,7 +141,7 @@ describe('Web IDL promise member binding', () => {
     class ItemsImpl {
       constructor(public item: ItemImpl, public P: typeof InternalPromise) {}
       createIterator() {
-        return { next: () => this.P.try(() => this.item, internalType<ItemImpl>('ItemImpl')) };
+        return { next: () => this.P.try(() => this.item, internalType<ItemImpl>()) };
       }
     }
     const itemIDL = defineInterface({
@@ -376,7 +376,7 @@ class OrdinaryPromiseOwnerImpl {
     let visited = false;
     return {
       next: () => {
-        if (visited) return this.#Promise.resolve(endOfIteration, internalType<typeof endOfIteration>('endOfIteration'));
+        if (visited) return this.#Promise.resolve(endOfIteration, internalType<typeof endOfIteration>());
         visited = true;
         return this.pending.promise;
       },

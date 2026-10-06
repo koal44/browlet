@@ -19,6 +19,38 @@ import * as scheduling from '../../../src/browlet/integration/scripting';
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('stream read Promise boundaries', () => {
+  it.each(['queued', 'pending', 'closed'] as const)(
+    'resolves the exposed result during %s read completion', async (mode) => {
+      const browlet = new Browlet({ route: () => '' });
+      const trace = await browlet.evaluate((mode) => {
+        const trace: string[] = [];
+        let controller!: ReadableStreamDefaultController;
+        const reader = new ReadableStream({ start(value) { controller = value; } }).getReader();
+        if (mode === 'queued') controller.enqueue('chunk');
+        if (mode === 'closed') controller.close();
+        Object.defineProperty(Object.prototype, 'then', {
+          configurable: true,
+          get(this: object) {
+            if (Object.hasOwn(this, 'done')) trace.push('resolve result');
+            return undefined;
+          },
+        });
+        try {
+          void reader.read();
+          trace.push('read returned');
+          if (mode === 'pending') {
+            controller.enqueue('chunk');
+            trace.push('enqueue returned');
+          }
+        } finally { Reflect.deleteProperty(Object.prototype, 'then'); }
+        return trace;
+      }, mode);
+      expect(trace).toEqual(mode === 'pending'
+        ? ['read returned', 'resolve result', 'enqueue returned']
+        : ['resolve result', 'read returned']);
+    },
+  );
+
   itPassesWith('explicitQueues').each(['chunk', 'close', 'error'] as const)(
     'projects a borrowed read on %s in the receiver queue', (mode) => runInHostTask(() => {
       const { first, second } = createFixture();

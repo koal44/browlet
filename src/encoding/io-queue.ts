@@ -213,7 +213,7 @@ export function processQueue<T extends QueueChunk, Error>(
   steps: () => QueueResult<Error>,
   env: JSEnvironment,
 ): InternalPromise<Exclude<QueueResult<Error>, 'waiting'>> {
-  const resultType = internalType<Exclude<QueueResult<Error>, 'waiting'>>('QueueResult');
+  const resultType = internalType<Exclude<QueueResult<Error>, 'waiting'>>();
   const run = (): Exclude<QueueResult<Error>, 'waiting'> | InternalPromise<Exclude<QueueResult<Error>, 'waiting'>> => {
     const result = steps();
     return result === 'waiting' ? input.waitFor(1, env).then(run, undefined, resultType) : result;

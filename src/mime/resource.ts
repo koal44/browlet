@@ -107,7 +107,7 @@ export function readResourceHeader(
         offset += chunk.length;
       }
       return header;
-    }, undefined, internalType<Uint8Array>('ResourceHeader'));
+    }, undefined, internalType<Uint8Array>());
   }
 }
 

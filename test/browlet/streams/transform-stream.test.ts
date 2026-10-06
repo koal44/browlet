@@ -1,5 +1,8 @@
-import { idlType } from '../../../src/web-idl/core/index';
+import { idlType, type StampedPlatformObject } from '../../../src/web-idl/index';
+import { internalType } from '../../../src/infra/promises';
+import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createPromiseConstructor, createTransformStream, observe } from './implementation-fixture';
+import { createTestContext } from './environment';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { ReadableStreamDefaultReader } from '../../../src/browlet/platform';
@@ -234,6 +237,30 @@ describe('transform-stream projection', () => {
     expect(projectedStream?.assembled.name)
       .toBe('TransformStream');
     expect(projectedStream?.implInst).toBe(stream);
+  });
+
+  it('waits for a private asynchronous transform after releasing backpressure', async () => {
+    const binding = createTestContext();
+    const env = binding.getEnvironment();
+    const completion = env.exec.Promise.withResolvers(internalType<void>());
+    const transform = new TransformStreamImpl(null, {}, {}, env);
+    transform.setUp((chunk) => {
+      transform.enqueue(chunk);
+      return completion.promise;
+    });
+    const platform = binding.project(TransformStreamImpl, transform) as StampedPlatformObject<TransformStream>;
+    const writer = platform.writable.getWriter();
+    const reader = platform.readable.getReader();
+    const writing = writer.write('chunk');
+    let written = false;
+    void writing.then(() => { written = true; });
+    // Let the write reach the backpressure wait before requesting a read.
+    await nextTurn();
+    expect(written).toBe(false);
+    await expect(reader.read()).resolves.toEqual({ value: 'chunk', done: false });
+    expect(written).toBe(false);
+    completion.resolve();
+    await expect(writing).resolves.toBeUndefined();
   });
 
   it('keeps implementation state off the platform objects', () => {

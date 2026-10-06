@@ -243,8 +243,12 @@ and observation. `env.exec.Promise` supplies the owner's
 constructor with static creation methods, taking the descriptor last. `then()`
 keeps that descriptor unless given a new one. JS Engine specializes observation;
 Web IDL extends that constructor with declared-result conversion and checks the
-descriptor at exposure. Importing changes the view's constructor while retaining
-the native backing and source conversion; subsequent results use the destination.
+descriptor and storage representation at exposure. Importing changes the view's
+constructor while retaining the native backing, storage representation, and source
+conversion; subsequent results use the destination. Declared adoption preserves
+compatible native results and converts other representations in the destination.
+Private fulfillment values stay on their internal Promise, shared by imported
+views; its native backing signals completion without adopting the value.
 Native async/await belongs at host boundaries; returning a Promise cannot repair work
 already scheduled on the wrong queue.
 

@@ -659,7 +659,7 @@ TypeScript requires the new descriptor when the callback changes the payload
 type. An explicit descriptor also permits changes such as DOMString to USVString,
 whose TypeScript payloads are both `string`.
 `P.fromInternal(source)` changes the view's constructor and reaction destination while
-retaining its descriptor, native backing, and source fulfillment conversion.
+retaining its descriptor, native backing, storage representation, and source fulfillment conversion.
 Its next `then()` allocates through the destination constructor.
 
 Binding supplies a `WebIDLPromise` subclass of the realm's constructor, inheriting
@@ -670,12 +670,20 @@ the reaction. Both consumers share adoption, rejection, identity, and handled
 state. Binding checks the result descriptor and returns the view's `backing`
 directly; it owns the allocation and conversion contract. There is no projection
 cache or second settlement, and returning the backing cannot change its realm.
+When a declared Promise adopts another internal Promise, direct native adoption
+requires a native-value backing with a matching conversion contract. Otherwise,
+the destination observes the source's implementation value and projects it through
+its own result converter. Adoption claims settlement before waiting for the source;
+conversion failures and internal rejections are realized in the destination realm.
+Private backing storage cannot be exposed merely because its descriptor matches.
 
-Implementation records outside IDL use named `internalType<T>(name)` descriptors
-through the same static methods. Their boxed values retain implementation identity and
-do not adopt arbitrary `then` properties. A host without Binding also retains
-values without IDL conversion; their backing Promises retain implementation
-payloads. `P.fromValue(value, env.exec.NativePromise, type)` uses native Promise
+Implementation records outside IDL use `internalType<T>()` through the same static
+methods. All calls return the same marker; `T` retains the compile-time result
+contract without allocating a descriptor. Private fulfillment values stay on the
+internal Promise; its native backing signals completion without adopting arbitrary
+`then` properties. Imported views retain that value's original storage owner.
+A host without Binding also retains values this way without IDL conversion.
+`P.fromValue(value, env.exec.NativePromise, type)` uses native Promise
 resolution; `NativePromise` is the owner's captured JavaScript constructor. Forwarding
 through `try()` or `fromValue()` preserves an existing internal Promise's contract.
 There is no untyped creation path or separate Promise class for private methods.

@@ -48,6 +48,7 @@ export class PromiseConverter<Type extends IDLPromiseType = IDLPromiseType> exte
         const type = this.type;
         const assembly = this.binding.assembly;
         if (
+            value.usesInternalStorage ||
             value.type.kind === 'implementation' ||
             assembly.getPromiseResultType(value.type).conversionKey !== type.resultType.conversionKey
         ) {
