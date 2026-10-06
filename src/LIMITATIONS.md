@@ -127,10 +127,20 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   native `next()` brand checks. Retire the fallback when the native factory is
   required. See [JSRealm](js-engine/realm.ts) and
   [collection tests](../test/web-idl/collection.test.ts).
-- **Symbol overload selection:** Web IDL's distinguishability table admits
-  Symbol/string overloads, but the selection ladder omits a Symbol branch. The
-  approved [expected failure](../test/web-idl/overload.test.ts) awaits resolution
-  of that specification gap rather than inventing a rule.
+- **`SPEC_GAP(webidl-symbol-selection)`:** Web IDL's
+  [distinguishability table](https://webidl.spec.whatwg.org/#dfn-distinguishable)
+  admits Symbol/string overloads and unions, but both the
+  [overload](https://webidl.spec.whatwg.org/#dfn-overload-resolution-algorithm)
+  and [union](https://webidl.spec.whatwg.org/#es-union) selection algorithms omit
+  a Symbol branch. Browlet selects a declared symbol branch for a primitive
+  JavaScript Symbol before coercing fallbacks. Nullable and union branches use
+  the same prepared candidates; boxed Symbols retain object/conversion rules.
+  This completes the type distinction without claiming browser precedent:
+  Chromium, Firefox, and WebKit's inspected IDL declarations had no consumers,
+  and [Blink rejects the type during binding generation](https://raw.githubusercontent.com/chromium/chromium/main/third_party/blink/renderer/bindings/scripts/bind_gen/blink_v8_bridge.py).
+  Revisit when the specification supplies selection rules. The
+  [overload](../test/web-idl/overload.test.ts) and
+  [conversion](../test/web-idl/conversion.test.ts) regressions cover this choice.
 - **CSSOM projection:** CSSStyleSheet and related platform interfaces remain
   incomplete; `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
   interface brand check. Direct CSSOM APIs currently allocate exceptions in the

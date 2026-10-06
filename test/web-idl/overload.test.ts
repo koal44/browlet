@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   arg, ctor, defineDictionary, defineProxyObject, defineInterface, emptySequence,
-  frozenArray, idlType, impl, reference, sequence, staticOp, union, xattr,
+  frozenArray, idlType, impl, nullable, reference, sequence, staticOp, union, xattr,
   type Definition, type OperationMember,
 } from '../../src/web-idl/core/index';
 import { TestRealm as Realm } from './test-realm';
@@ -297,18 +297,31 @@ describe('Web IDL effective overload sets', () => {
     expect(() => new Converted([Symbol('element')])).toThrow(realm.intrinsics.typeError);
   });
 
-  it.fails('selects a symbol overload for a symbol value', () => {
+  it.each([
+    ['symbol', idlType.symbol],
+    ['nullable symbol', nullable(idlType.symbol)],
+    ['union containing symbol', union(idlType.symbol, idlType.long)],
+  ] as const)('selects a %s overload before the string fallback', (_name, type) => {
     const binding = createBinding([]);
-    const symbol = namedOperation('symbol', idlType.symbol, binding);
+    const symbol = namedOperation('symbol', type, binding);
     const string = namedOperation('string', idlType.DOMString, binding);
     const value = Symbol('value');
 
-    // Web IDL declares symbol and DOMString distinguishable, but its overload
-    // selection ladder currently has no branch for a JavaScript Symbol value.
-    expect(resolve([symbol, string], [value], binding)).toEqual({
-      callable: symbol,
-      values: [value],
-    });
+    for (const callables of [[symbol, string], [string, symbol]]) {
+      const resolver = createOverloadResolver(new AssembledOverloads(callables), binding, 'symbol');
+      expect(resolver([value])).toEqual({ callable: symbol, values: [value] });
+      expect(resolver(['value'])).toEqual({ callable: string, values: ['value'] });
+      expect(() => resolver([Object(value)])).toThrow(binding.realm.intrinsics.typeError);
+    }
+  });
+
+  it('retains string conversion failures when no overload accepts symbols', () => {
+    const binding = createBinding([]);
+    const string = namedOperation('string', idlType.DOMString, binding);
+    const numeric = namedOperation('numeric', idlType.long, binding);
+
+    expect(() => resolve([string, numeric], [Symbol('value')], binding))
+      .toThrow(binding.realm.intrinsics.typeError);
   });
 
   it('selects optional and platform-object overloads', () => {

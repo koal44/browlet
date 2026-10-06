@@ -168,7 +168,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
   if (value === null || value === undefined) {
     matches = candidates.filter((callable) => {
       const branches = callable.getArgument(index)!.type.candidates;
-      return branches.includesNullable || branches.dictionary;
+      return branches.hasNullable || branches.dictionary;
     });
     if (matches.length > 0) return { candidates: matches };
   }
@@ -276,19 +276,28 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
   }
 
   const primitive = group.primitiveCandidates;
-  if (typeof value === 'boolean') {
-    matches = primitive.boolean;
-    if (matches.length > 0) return { candidates: matches };
-  }
-
-  if (typeof value === 'number') {
-    matches = primitive.numeric;
-    if (matches.length > 0) return { candidates: matches };
-  }
-
-  if (typeof value === 'bigint') {
-    matches = primitive.bigint;
-    if (matches.length > 0) return { candidates: matches };
+  switch (typeof value) {
+    case 'boolean':
+      matches = primitive.boolean;
+      if (matches.length > 0) return { candidates: matches };
+      break;
+    case 'number':
+      matches = primitive.numeric;
+      if (matches.length > 0) return { candidates: matches };
+      break;
+    case 'bigint':
+      matches = primitive.bigint;
+      if (matches.length > 0) return { candidates: matches };
+      break;
+    case 'string':
+      matches = primitive.string;
+      if (matches.length > 0) return { candidates: matches };
+      break;
+    // SPEC_GAP(webidl-symbol-selection): Select symbols before coercing fallbacks; see src/LIMITATIONS.md.
+    case 'symbol':
+      matches = primitive.symbol;
+      if (matches.length > 0) return { candidates: matches };
+      break;
   }
 
   matches = primitive.string;

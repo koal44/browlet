@@ -156,7 +156,7 @@ describe('Web IDL types', () => {
       expect(!!assembly.getIDLType(type).candidates.array).toBe(true);
       expect(!!assembly.getIDLType(type).candidates.frozenArray).toBe(true);
       expect(!!assembly.getIDLType(type).candidates.sequence).toBe(false);
-      expect(assembly.getIDLType(type).candidates.includesNullable).toBe(true);
+      expect(assembly.getIDLType(type).candidates.hasNullable).toBe(true);
       expect(assembly.getIDLType(type).candidates.hasUndefined).toBe(false);
       expect(assembly.getIDLType(array).candidates.sequence?.elementType).toBeUndefined();
       expect(assembly.getIDLType(sequence(idlType.long)).candidates.soleNumeric).toBeUndefined();
@@ -328,9 +328,9 @@ describe('Web IDL types', () => {
     );
 
     expect(assembly.getIDLType(type).candidates.nullableMemberCount).toBe(1);
-    expect(assembly.getIDLType(type).candidates.includesNullable).toBe(true);
-    expect(assembly.getIDLType(reference('MaybeEvent')).candidates.includesNullable).toBe(true);
-    expect(assembly.getIDLType(idlType.DOMString).candidates.includesNullable).toBe(false);
+    expect(assembly.getIDLType(type).candidates.hasNullable).toBe(true);
+    expect(assembly.getIDLType(reference('MaybeEvent')).candidates.hasNullable).toBe(true);
+    expect(assembly.getIDLType(idlType.DOMString).candidates.hasNullable).toBe(false);
   });
 
   it('detects undefined through annotations, nullable types, unions, and typedefs', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { InternalError } from '../../src/infra/index';
 import { TestRealm as Realm } from './test-realm';
 import type { IDLType, IDLFloatType } from '../../src/web-idl/assembly/index';
 import type { Converter } from '../../src/web-idl/converters/converter';
@@ -160,6 +161,30 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
       expectRealmTypeError(() => jsToIDL(minimum - 1, enforce), realm);
       expectRealmTypeError(() => jsToIDL(maximum + 1, enforce), realm);
     }
+  });
+
+  it('preserves symbols in unions before string conversion', () => {
+    const { binding, realm } = createBinding();
+    const converter = binding.getConverter(binding.assembly.getIDLType(union(idlType.symbol, idlType.DOMString)));
+    const value = Symbol('value');
+
+    expect(jsToIDL(value, converter)).toBe(value);
+    expect(idlToJS(value, converter)).toBe(value);
+    expect(jsToIDL('value', converter)).toBe('value');
+    expect(idlToJS('value', converter)).toBe('value');
+    expect(jsToIDL(42, converter)).toBe('42');
+    expectRealmTypeError(() => jsToIDL(Object(value), converter), realm);
+  });
+
+  it('returns null and undefined only when the union declares them', () => {
+    const { binding } = createBinding();
+    const nullableUnion = binding.getConverter(binding.assembly.getIDLType(union(nullable(idlType.long), idlType.DOMString)));
+    const undefinedUnion = binding.getConverter(binding.assembly.getIDLType(union(idlType.undefined, idlType.DOMString)));
+
+    expect(idlToJS(null, nullableUnion)).toBeNull();
+    expect(idlToJS(undefined, undefinedUnion)).toBeUndefined();
+    expect(() => idlToJS(undefined, nullableUnion)).toThrow(InternalError);
+    expect(() => idlToJS(null, undefinedUnion)).toThrow(InternalError);
   });
 
   it('preserves floating-point restrictions, rounding, and negative zero', () => {

@@ -1,3 +1,4 @@
+import { assertNever } from '../../infra/index';
 import type { BufferTypeName, ExtendedAttribute } from '../core/index';
 
 import type { AssembledInterface } from './interface';
@@ -371,7 +372,7 @@ export class IDLProxyType extends Type {
 /** Branches used by union conversion and overload selection, retaining their exact type contracts. */
 export class IDLTypeCandidates {
   /** Branches in declaration order, with nullable wrappers and nested unions removed. */
-  types: IDLType[] = [];
+  types: FlattenedIDLType[] = [];
   /** Buffer branches indexed by their required engine buffer name. */
   buffers = new Map<BufferTypeName, IDLBufferType>();
   /** Interface and proxy branches that can recognize platform objects. */
@@ -380,12 +381,13 @@ export class IDLTypeCandidates {
   hasAny = false;
   hasBoolean = false;
   hasBigInt = false;
+  hasSymbol = false;
   hasObject = false;
   hasUndefined = false;
   /** Whether a buffer branch accepts an ArrayBuffer or SharedArrayBuffer rather than a view. */
   hasArrayBuffer = false;
   /** Whether the type includes null through a nullable wrapper or branch. */
-  includesNullable: boolean;
+  hasNullable: boolean;
   /** Nullable wrappers encountered while flattening branches, excluding container contents. */
   nullableMemberCount: number;
   /** First numeric branch, excluding bigint, used by union conversion. */
@@ -407,7 +409,7 @@ export class IDLTypeCandidates {
 
   constructor(type: IDLType) {
     this.nullableMemberCount = appendCandidateTypes(type, this.types);
-    this.includesNullable = type.kind === 'nullable' || this.nullableMemberCount === 1;
+    this.hasNullable = type.kind === 'nullable' || this.nullableMemberCount === 1;
     let numericCount = 0;
     for (const candidate of this.types) {
       switch (candidate.kind) {
@@ -424,6 +426,7 @@ export class IDLTypeCandidates {
         case 'string': case 'enumeration': this.string ??= candidate; break;
         case 'any': this.hasAny = true; break;
         case 'boolean': this.hasBoolean = true; break;
+        case 'symbol': this.hasSymbol = true; break;
         case 'object': this.hasObject = true; break;
         case 'undefined': this.hasUndefined = true; break;
         case 'buffer-source':
@@ -444,11 +447,16 @@ export class IDLTypeCandidates {
         case 'dictionary': this.dictionary ??= candidate; break;
         case 'callback-function': this.callbackFunction ??= candidate; break;
         case 'callback-interface': this.callbackInterface ??= candidate; break;
+        // These types have no branch in union conversion or overload selection.
+        case 'promise': case 'observable-array': break;
+        default: assertNever(candidate);
       }
     }
     if (numericCount !== 1) this.soleNumeric = undefined;
   }
 }
+
+type FlattenedIDLType = Exclude<IDLType, IDLNullableType | IDLUnionType>;
 
 /** Interface and proxy branches already linked to the definitions that recognize them. */
 export type UnionInterfaceCandidate = IDLInterfaceType | IDLProxyType;
@@ -492,7 +500,7 @@ export const anyType = new IDLAnyType();
 export const undefinedType = new IDLUndefinedType();
 
 // https://webidl.spec.whatwg.org/#dfn-flattened-union-member-types
-function appendCandidateTypes(type: IDLType, types: IDLType[]): number {
+function appendCandidateTypes(type: IDLType, types: FlattenedIDLType[]): number {
   if (type.kind === 'nullable') return 1 + appendCandidateTypes(type.innerType, types);
   if (type.kind === 'union') {
     let nullableCount = 0;

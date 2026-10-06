@@ -195,7 +195,7 @@ export class OverloadGroup<Callable extends AssembledCallable> {
   get primitiveCandidates(): PrimitiveOverloadCandidates<Callable> {
     if (this.#primitiveCandidates) return this.#primitiveCandidates;
     const candidates: PrimitiveOverloadCandidates<Callable> = {
-      boolean: [], numeric: [], bigint: [], string: [], any: [],
+      boolean: [], numeric: [], bigint: [], symbol: [], string: [], any: [],
     };
     for (const callable of this.callables) {
       const branches = callable.getArgument(this.distinguishingIndex)!.type.candidates;
@@ -204,12 +204,13 @@ export class OverloadGroup<Callable extends AssembledCallable> {
       if (branches.hasBigInt) candidates.bigint.push(callable);
       if (branches.string) candidates.string.push(callable);
       if (branches.hasAny) candidates.any.push(callable);
+      if (branches.hasSymbol) candidates.symbol.push(callable);
     }
     return this.#primitiveCandidates = candidates;
   }
 }
 
-type PrimitiveOverloadCandidates<Callable> = Record<'boolean' | 'numeric' | 'bigint' | 'string' | 'any', Callable[]>;
+type PrimitiveOverloadCandidates<Callable> = Record<'boolean' | 'numeric' | 'bigint' | 'symbol' | 'string' | 'any', Callable[]>;
 
 type MemberFromDeclaration<Member> =
   Member extends AttributeMember ? IDLAttribute : Member extends ConstantMember ? IDLConstant
