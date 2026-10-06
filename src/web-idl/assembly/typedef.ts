@@ -19,7 +19,7 @@ export class AssembledTypedefs extends Map<string, AssembledTypedef> {
     }
   }
 
-  /** Strip aliases and annotations, optionally retaining the encountered conversion attributes. */
+  /** Strip aliases and annotations, optionally collecting conversion attributes. */
   resolve(type: WebIDLType, collectedAttributes?: ExtendedAttribute[]): Exclude<WebIDLType, { kind: 'annotated'; }> {
     while (true) {
       if (type.kind === 'annotated') {

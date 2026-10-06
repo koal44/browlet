@@ -44,9 +44,9 @@ export class DefinitionAssembly {
   proxyObjects: AssembledProxyObjects;
   /** Compiled built-in contracts shared by member bindings and converters. */
   builtinTypes: { [Name in keyof typeof idlType]: TypeFromDeclaration<(typeof idlType)[Name]>; };
-
   /** Compiled contracts indexed by declaration identity at the assembly input boundary. */
-  #types = new Map<WebIDLType, IDLType>();
+  typesByDeclaration = new Map<WebIDLType, IDLType>();
+
   /** Named type inputs used by bindings without manufacturing declaration descriptors. */
   #namedTypes = new Map<string, IDLType>();
 
@@ -74,10 +74,10 @@ export class DefinitionAssembly {
 
   /** Assemble one declared use, sharing its type and conversion rules across realms. */
   getIDLType<Type extends WebIDLType>(type: Type): TypeFromDeclaration<Type> {
-    const cached = this.#types.get(type);
+    const cached = this.typesByDeclaration.get(type);
     if (cached) return cached as TypeFromDeclaration<Type>;
     const assembled = this.#assembleType(type);
-    this.#types.set(type, assembled);
+    this.typesByDeclaration.set(type, assembled);
     return assembled as TypeFromDeclaration<Type>;
   }
 

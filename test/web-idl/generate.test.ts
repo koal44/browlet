@@ -10,10 +10,192 @@ import {
   defineNamespace, definePartialDictionary, definePartialInterface, definePartialInterfaceMixin,
   definePartialNamespace, defineProxyObject, defineTypedef, dictMember, frozenArray, idlType,
   impl, iter, maplike, nullable, op, promise, record, reference, roAttr, sequence, setlike,
-  staticOp, stringifier, union, xattr,
+  staticOp, stringifier, tsType, union, xattr, serializeDefinitions,
 } from '../../src/web-idl/core/index';
 
 describe('platform declaration generation', () => {
+  it('infers operation parameters independently, including mixins and nested type annotations', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterfaceMixin({
+        name: 'Clone', members: [
+          op('clone', tsType(idlType.any, 'T'),
+            [arg('value', tsType(idlType.any, 'T'))],
+            { typeParameters: [{ name: 'T', default: 'any' }] },
+          ),
+        ],
+      }),
+      defineInterface({
+        name: 'Host', members: [
+          op('collect', promise(sequence(tsType(idlType.any, 'T'))),
+            [arg('values', sequence(tsType(idlType.any, 'T')))],
+            { typeParameters: [{ name: 'T', extends: 'object' }] },
+          ),
+        ],
+      }),
+      defineIncludes({ interface: 'Host', mixin: 'Clone' }),
+    ]);
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Host } from './platform';
+      declare const host: Host;
+      const number: number = host.clone(1);
+      const text: string = host.clone('text');
+      const copy = host.clone({ count: 1 });
+      declare const unknownValue: unknown;
+      const unknownCopy = host.clone(unknownValue);
+      const values: Promise<{ count: number }[]> = host.collect(new Set([{ count: 1 }]));
+      // @ts-expect-error the clone retains the input property type
+      const wrong: string = copy.count;
+      // @ts-expect-error unknown input remains unknown
+      unknownCopy.count;
+      // @ts-expect-error the declared constraint applies at the call site
+      host.collect([1]);
+    `)).toEqual([]);
+  });
+
+  it('shares interface and dictionary parameters while constructors and methods infer their own arguments', () => {
+    const assembly = new DefinitionAssembly([
+      defineDictionary({
+        name: 'BoxInit', members: [
+          dictMember('value', tsType(idlType.any, 'T'), { required: true }),
+        ],
+        typeParameters: [{ name: 'T', default: 'unknown' }],
+      }),
+      defineCallbackFunction({
+        name: 'Mapper',
+        arguments: [arg('value', tsType(idlType.any, 'T'))], returns: tsType(idlType.any, 'U'),
+        typeParameters: [{ name: 'T' }, { name: 'U' }],
+      }),
+      defineCallbackInterface({
+        name: 'Visitor', members: [
+          op('visit', idlType.undefined, [arg('value', tsType(idlType.any, 'T'))]),
+        ],
+        typeParameters: [{ name: 'T' }],
+      }),
+      defineInterface({
+        name: 'Box', members: [
+          ctor([arg('init', tsType(reference('BoxInit'), 'BoxInit<T>'))]),
+          roAttr('value', tsType(idlType.any, 'T')),
+          op('map', tsType(reference('Box'), 'Box<U>'),
+            [arg('mapper', tsType(reference('Mapper'), 'Mapper<T, U>'))],
+            { typeParameters: [{ name: 'U' }] },
+          ),
+          op('visit', idlType.undefined, [arg('visitor', tsType(reference('Visitor'), 'Visitor<T>'))]),
+          staticOp('from', tsType(reference('Box'), 'Box<U>'),
+            [arg('value', tsType(idlType.any, 'U'))],
+            { typeParameters: [{ name: 'U' }] },
+          ),
+        ],
+        typeParameters: [{ name: 'T', default: 'unknown' }],
+      }),
+      definePartialInterface({ name: 'Box', members: [roAttr('values', sequence(tsType(idlType.any, 'T')))] }),
+    ]);
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Box, BoxConstructor, BoxInit, Mapper, Visitor } from './platform';
+      declare const Box: BoxConstructor;
+      const box = new Box({ value: { count: 1 } });
+      const count: number = box.value.count;
+      const values: { count: number }[] = box.values;
+      const mapped: Box<string> = box.map(value => String(value.count));
+      const from: Box<number> = Box.from(1);
+      box.visit(value => { const count: number = value.count; });
+      box.visit({ visit(value) { const count: number = value.count; } });
+      const explicit = new Box<string>({ value: 'text' });
+      const input: BoxInit<string> = { value: 'text' };
+      const mapper: Mapper<number, string> = value => String(value);
+      const visitor: Visitor<string> = value => { const text: string = value; };
+      // @ts-expect-error the constructor infers the instance's T
+      const wrong: string = box.value.count;
+      // @ts-expect-error explicit constructor type arguments are checked
+      new Box<string>({ value: 1 });
+      // @ts-expect-error interface parameters are checked on dictionary members
+      const bad: BoxInit<string> = { value: 1 };
+    `)).toEqual([]);
+  });
+
+  it('preserves type refinements through aliases and IDL annotations without changing conversion contracts', () => {
+    const small = tsType(idlType.byte, 'number');
+    const declaredType = annotated(tsType(reference('Small'), '1 | 2'), xattr('Clamp'));
+    const definitions = [
+      defineTypedef({ name: 'Small', type: small }),
+      defineTypedef({
+        name: 'Entries',
+        type: sequence(tsType(idlType.any, 'T')),
+        typeParameters: [{ name: 'T', default: 'string' }],
+      }),
+      defineInterface({
+        name: 'Host', members: [
+          op('small', declaredType),
+          op('entries', reference('Entries')),
+        ],
+      }),
+    ];
+    const assembly = new DefinitionAssembly(definitions);
+    const annotatedType = assembly.getIDLType(declaredType);
+    const ordinaryType = assembly.getIDLType(annotated(idlType.byte, xattr('Clamp')));
+    expect(assembly.typedefs.resolve(declaredType)).toBe(small);
+    expect(annotatedType).not.toHaveProperty('typescript');
+    expect(annotatedType.conversionKey).toBe(ordinaryType.conversionKey);
+    expect(annotatedType.overloadKey).toBe(ordinaryType.overloadKey);
+    expect(ordinaryType).not.toHaveProperty('typescript');
+    expect(serializeDefinitions(definitions)).toContain('typedef byte Small;');
+    expect(serializeDefinitions(definitions)).toContain('typedef sequence<any> Entries;');
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Host, Entries } from './platform';
+      declare const host: Host;
+      const number: 1 | 2 = host.small();
+      const strings: Iterable<string> = host.entries();
+      const numbers: Entries<number> = [1, 2];
+      // @ts-expect-error generic typedefs retain their parameter
+      const wrong: Entries<number> = ['text'];
+    `)).toEqual([]);
+    expect(annotatedType).not.toHaveProperty('typescript');
+  });
+
+  it('recovers refinements for unused aliases and container children with inherited attributes', () => {
+    const assembly = new DefinitionAssembly([
+      defineTypedef({
+        name: 'Unused', type: promise(tsType(idlType.any, 'T')),
+        typeParameters: [{ name: 'T', default: 'number' }],
+      }),
+      defineInterface({
+        name: 'Host', members: [
+          op('small', annotated(nullable(tsType(idlType.byte, '1 | 2')), xattr('Clamp'))),
+          op('shared',
+            annotated(nullable(union(
+              tsType(idlType.Uint8Array, 'Uint8Array<SharedArrayBuffer>'), idlType.ArrayBuffer,
+            )), xattr('AllowShared')),
+          ),
+          op('stop', tsType(idlType.undefined, 'never')),
+          op('finish', idlType.undefined),
+        ],
+      }),
+    ]);
+    const source = generatePlatformTypes(assembly);
+    expect(compile(source, `
+      import type { Host, Unused } from './platform';
+      declare const host: Host;
+      const small: 1 | 2 | null = host.small();
+      const shared: Uint8Array<SharedArrayBuffer> | ArrayBuffer | SharedArrayBuffer | null = host.shared();
+      const unused: Unused<string> = Promise.resolve('text');
+      const stopped: never = host.stop();
+      const finished: void = host.finish();
+      // @ts-expect-error the unused generic alias still retains its refinement
+      const wrong: Unused<number> = Promise.resolve('text');
+    `)).toEqual([]);
+    expect(generatePlatformTypes(assembly)).toBe(source);
+  });
+
+  it.each([
+    ['undeclared parameter', () => defineInterface({ name: 'Host', members: [roAttr('value', tsType(idlType.any, 'T'))] }), /Cannot find name 'T'/],
+    ['unknown reference', () => defineInterface({ name: 'Host', members: [roAttr('value', tsType(idlType.any, 'Missing<string>'))] }), /Cannot find name 'Missing'/],
+    ['static parameter scope', () => defineInterface({ name: 'Host', members: [staticOp('get', tsType(idlType.any, 'T'))], typeParameters: [{ name: 'T', default: 'any' }] }), /Cannot find name 'T'/],
+    ['duplicate parameters', () => defineInterface({ name: 'Host', members: [], typeParameters: [{ name: 'T' }, { name: 'T' }] }), /Duplicate identifier 'T'/],
+    ['invalid parameter name', () => defineInterface({ name: 'Host', members: [], typeParameters: [{ name: 'T, U' }] }), /Invalid TypeScript type parameter name/],
+    ['extra declaration', () => defineInterface({ name: 'Host', members: [roAttr('value', tsType(idlType.any, 'number; type Extra = string'))] }), /Expected a TypeScript type expression/],
+  ])('rejects %s during generation', (_name, definition, message) => {
+    expect(() => generatePlatformTypes(new DefinitionAssembly([definition()]))).toThrow(message);
+  });
+
   it('compiles an author API with assembled inheritance, mixins, overloads, constructors, and input/output types', () => {
     class EntryImpl {}
     const assembly = new DefinitionAssembly([

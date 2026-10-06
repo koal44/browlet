@@ -45,7 +45,7 @@ export const idlType = {
 };
 
 // Project representation of the type forms in Web IDL §2.13 Types.
-export type WebIDLType =
+export type WebIDLType = (
   | SimpleType
   | ReferenceType
   | InterfaceType
@@ -57,7 +57,11 @@ export type WebIDLType =
   | PromiseType
   | FrozenArrayType
   | ObservableArrayType
-  | AnnotatedType<WebIDLType>;
+  | AnnotatedType<WebIDLType>
+) & {
+  /** TypeScript expression for this type use in generated platform declarations. */
+  typescript?: string;
+};
 
 export type ImplementationType<T> = WebIDLType & ResultValue<T>;
 
@@ -362,6 +366,19 @@ export type DeclarationHook<
   Name extends keyof DeclarationHooks<Env, Impl, Values>
     ? DeclarationHooks<Env, Impl, Values>[Name]
     : never;
+
+// Platform declaration generation
+
+/** A TypeScript parameter scoped to a generated declaration or callable. */
+export type TypeParameter = {
+  name: string;
+  /** TypeScript constraint on an explicitly supplied or inferred type argument. */
+  extends?: string;
+  /** TypeScript default when the caller supplies no type argument and inference finds none. */
+  default?: string;
+};
+
+// Internal helpers
 
 type SimpleValue<N extends SimpleTypeName> =
   N extends 'any' ? unknown

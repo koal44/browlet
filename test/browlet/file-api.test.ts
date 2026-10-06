@@ -494,7 +494,7 @@ describe('File API File and FileList projection', () => {
       get file() { return list.item(0); },
     };
 
-    const clone = targetWindow.structuredClone(source) as typeof source;
+    const clone = targetWindow.structuredClone(source);
 
     expect(clone.list.item(0)).toBe(clone.file);
     expect(clone.file).toBeInstanceOf(requireFunction(targetWindow, 'File'));

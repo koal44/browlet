@@ -151,6 +151,21 @@ no interface declaration or separate type assertion. `reference('Name')` covers
 named IDL types such as dictionaries, callbacks, and typedefs, and forward references.
 The interface declaration continues to specify only its environment type.
 
+Generated platform declarations can refine an IDL type use with
+`tsType(idlType.any, 'T')`. A `typeParameters` list on an operation introduces
+parameters for each call; on an interface, dictionary, callback, or typedef it
+introduces parameters shared by that generated type. Entries specify `name` and
+optional TypeScript `extends` and `default` expressions. Interface constructors
+infer the instance's parameters; static operations declare their own parameters.
+Parameterized references use expressions such as
+`tsType(reference('CustomEventInit'), 'CustomEventInit<T>')`. These annotations
+preserve runtime conversion, implementation argument typing, and IDL serialization.
+Only the development-time generator follows these refinements and checks their
+expressions and scopes using TypeScript without DOM or Node globals; compiled
+runtime types carry no TypeScript refinements. See `structuredClone` in
+[`global-scope.ts`](../browlet/scripting/global-scope.ts) and `CustomEvent` in
+[`event.ts`](../browlet/dom/events/event.ts) for operation and instance examples.
+
 The [TextEncoder declaration](../encoding/text-encoder.ts) uses `JSEnvironment`.
 Its constructor dependency is declared once:
 

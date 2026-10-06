@@ -39,7 +39,7 @@ export {
   ctor, attr, roAttr, attrFn, op, staticOp, arg, dictMember, constant, stringifier,
   iter, asyncIter, maplike, setlike, indexedGetter, namedGetter,
   reference, implementationType, nullable, union, sequence, asyncSequence, record, promise,
-  frozenArray, observableArray, annotated,
+  frozenArray, observableArray, annotated, tsType,
   integer, decimal, xattr,
   impl, atArg, invokeWith, unwrapArg, cbDict, onError, hasExtendedAttribute,
 } from './helpers';
@@ -49,7 +49,7 @@ export {
   undefinedDefault, emptySequence, emptyDictionary,
 } from './types';
 export type {
-  WebIDLType, AnnotatedType, AsyncSequenceType, NullableType, UnionType,
+  WebIDLType, TypeParameter, AnnotatedType, AsyncSequenceType, NullableType, UnionType,
   SimpleType, StringType, ReferenceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,

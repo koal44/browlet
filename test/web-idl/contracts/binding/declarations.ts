@@ -1,6 +1,6 @@
 import {
   arg, cbDict, ctor, defineInterface, definePartialInterface, idlType, impl, nullable, op,
-  reference, staticOp, unwrapArg, type WebIDLEnvironment,
+  reference, staticOp, tsType, unwrapArg, type WebIDLEnvironment,
 } from '../../../../src/web-idl/index';
 
 class Example { value = 1; }
@@ -18,6 +18,17 @@ reference(exampleIDL);
 definePartialInterface<WebIDLEnvironment>({
   name: 'Example',
   members: [
+    op('consume', idlType.undefined,
+      [arg('value', tsType(reference(Example), 'Example<T>'))],
+      {
+        invoke(_ctx, value) {
+          value.value.toFixed();
+          // @ts-expect-error Platform type refinements preserve converted implementation typing.
+          value.missing;
+        },
+        typeParameters: [{ name: 'T', default: 'any' }],
+      },
+    ),
     staticOp('read', idlType.double,
       [arg('example', reference(Example)), arg('name', idlType.DOMString)],
       {

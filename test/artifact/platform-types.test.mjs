@@ -10,6 +10,14 @@ const consumers = [{
   const document: Document = window.document;
   const blob: Blob = new window.Blob(['hello']);
   const text: Promise<string> = blob.text();
+  const clone = window.structuredClone({ count: 1 });
+  const event = new window.CustomEvent('data', { detail: 'text' });
+  const count: number = clone.count;
+  const detail: string = event.detail;
+  // @ts-expect-error packaged declarations retain structuredClone inference
+  const wrongCount: string = clone.count;
+  // @ts-expect-error packaged declarations retain CustomEvent inference
+  const wrongDetail: number = event.detail;
   // @ts-expect-error only registered declarations describe the generated Window
   window.alert('hello');
 `,

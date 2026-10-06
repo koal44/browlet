@@ -1,6 +1,6 @@
 import type {
   CallbackExceptionBehavior, ConstantValue, DeclarationHook, DefaultValue, Exposed, ExtendedAttribute,
-  ImplementationClass, InjectedArgument, ReferenceType, WebIDLType,
+  ImplementationClass, InjectedArgument, ReferenceType, TypeParameter, WebIDLType,
 } from './types';
 
 // Member sets
@@ -104,6 +104,9 @@ export type ConstructorMember<Env = unknown> = {
   constructWith?: InjectedArgument<Env>[];
   /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
   invoke?: DeclarationHook<'constructor-invoke', Env>;
+
+  /** Additional TypeScript parameters scoped to this generated constructor overload. */
+  typeParameters?: TypeParameter[];
 };
 
 /** An operation overload and its explicit or automatic implementation binding. */
@@ -138,6 +141,9 @@ export type OperationMember<Env = unknown> = {
   indexedGetter?: IndexedGetterDeclaration;
   /** Live supported names for a legacy named getter, with the implementation as `this`. */
   getSupportedPropertyNames?: SupportedPropertyNamesSteps;
+
+  /** TypeScript parameters scoped to this generated operation overload. */
+  typeParameters?: TypeParameter[];
 };
 
 /** A standalone stringifier bound to the implementation's string conversion method. */

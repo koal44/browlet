@@ -1,11 +1,13 @@
+import ts from 'typescript';
+
 import { InternalError } from '../infra/index';
-import { hasExtendedAttribute } from './core/index';
+import { hasExtendedAttribute, type TypeParameter, type WebIDLType } from './core/index';
 
 import type { WebIDLRealm } from './environment';
 import type {
-  DefinitionAssembly, AssembledInterface, AssembledCallable, AssembledArgument,
+  DefinitionAssembly, AssembledInterface, AssembledArgument,
   AssembledDictionary, AssembledNamespace, IDLType, IDLInterfaceMember, IDLAttribute,
-  IDLOperation, IDLIterable, IDLAsyncIterable, IDLMaplike, IDLSetlike,
+  IDLOperation, IDLIterable, IDLAsyncIterable, IDLMaplike, IDLSetlike, IDLNullableType, IDLUnionType,
 } from './assembly/index';
 import { matchesExposure } from './assembly/exposure';
 
@@ -20,10 +22,13 @@ export interface PlatformTypeOptions {
 /**
  * Emit TypeScript declarations from a complete assembly, including any host's common declarations.
  * Inputs describe conventional IDL-shaped author values, rather than every value JavaScript can coerce.
+ * TypeScript checks the emitted module without DOM or Node globals, including explicit type refinements.
  * This development entry point does not instantiate bindings, realms, or implementation objects.
  */
 export function generatePlatformTypes(assembly: DefinitionAssembly, options: PlatformTypeOptions = {}): string {
-  return new PlatformTypeGenerator(assembly, options).generate();
+  const source = new PlatformTypeGenerator(assembly, options).generate();
+  validatePlatformTypes(source);
+  return source;
 }
 
 class PlatformTypeGenerator {
@@ -38,6 +43,8 @@ class PlatformTypeGenerator {
   #objects = new Map<object, string>();
   /** Output dictionaries use output container types; defaults belong to input conversion only. */
   #dictionaryOutputs = new Map<AssembledDictionary, string>();
+  /** TypeScript refinements recovered from declarations only for this generation run. */
+  #typeRefinements = new Map<IDLType, string>();
 
   constructor(assembly: DefinitionAssembly, options: PlatformTypeOptions) {
     this.#assembly = assembly;
@@ -56,6 +63,10 @@ class PlatformTypeGenerator {
       this.#objects.set(assembled, this.#reserve(`${assembled.primary.name}InterfaceObject`));
     }
     for (const [name, assembled] of assembly.namespaces) this.#objects.set(assembled, this.#name(name));
+
+    // Unused typedef bodies still need types for their generated declarations.
+    for (const assembled of assembly.typedefs.values()) assembly.getIDLType(assembled.primary.type);
+    for (const [declaration, type] of assembly.typesByDeclaration) this.#collectTypeRefinements(declaration, type);
   }
 
   generate(): string {
@@ -67,7 +78,7 @@ class PlatformTypeGenerator {
       blocks.push(`export type ${this.#name(name)} = ${assembled.primary.values.map(quote).join(' | ')};`);
     }
     for (const [name, assembled] of this.#assembly.typedefs) {
-      blocks.push(`export type ${this.#name(name)} = ${this.#type(this.#assembly.getIDLType(assembled.primary.type), 'input')};`);
+      blocks.push(`export type ${this.#name(name)}${this.#typeParameters(assembled.primary.typeParameters)} = ${this.#type(this.#assembly.getIDLType(assembled.primary.type), 'input')};`);
     }
     for (const [name, assembled] of this.#assembly.proxyObjects) {
       const target = this.#options.proxyInterfaces?.[name];
@@ -80,17 +91,18 @@ class PlatformTypeGenerator {
       blocks.push(this.#dictionary(assembled, 'input', this.#name(assembled.primary.name)));
     }
     for (const [name, assembled] of this.#assembly.callbackFunctions) {
-      blocks.push(`export type ${this.#name(name)} = (${this.#arguments(assembled.arguments, 'output')}) => ${this.#result(assembled.returns, 'input')};`);
+      blocks.push(`export type ${this.#name(name)}${this.#typeParameters(assembled.primary.typeParameters)} = (${this.#arguments(assembled.arguments, 'output')}) => ${this.#result(assembled.returns, 'input')};`);
     }
     for (const [name, assembled] of this.#assembly.callbackInterfaces) {
       const operations = assembled.members.filter((member): member is IDLOperation => member.kind === 'operation');
       const members = operations.map((member) => `${propertyName(member.name!)}${this.#signature(member, true)};`);
+      const nameWithParameters = this.#name(name) + this.#typeParameters(assembled.primary.typeParameters);
       // Web IDL permits a callable object for a single-operation callback interface.
       if (operations.length === 1) {
         const operation = operations[0]!;
-        blocks.push(`export type ${this.#name(name)} = {\n${indent(members)}\n} | ((${this.#arguments(operation.arguments, 'output')}) => ${this.#result(operation.returns, 'input')});`);
+        blocks.push(`export type ${nameWithParameters} = {\n${indent(members)}\n} | (${this.#typeParameters(operation.typeParameters)}(${this.#arguments(operation.arguments, 'output')}) => ${this.#result(operation.returns, 'input')});`);
       } else {
-        blocks.push(this.#interface(this.#name(name), members));
+        blocks.push(this.#interface(nameWithParameters, members));
       }
       const objectName = this.#objects.get(assembled);
       if (objectName) {
@@ -113,6 +125,7 @@ class PlatformTypeGenerator {
 
   #platformInterface(assembled: AssembledInterface): string[] {
     const name = this.#name(assembled.name);
+    const parameters = assembled.primary.typeParameters;
     const members: string[] = [];
     const ownNames = new Set<string>();
     let collection: IDLIterable | IDLAsyncIterable | IDLMaplike | IDLSetlike | undefined;
@@ -147,14 +160,19 @@ class PlatformTypeGenerator {
     if (collection) members.push(...this.#collection(collection, ownNames));
     if (assembled.isGlobal()) members.push(...this.#globals(assembled));
     const parent = assembled.parentAssembled;
-    const blocks = [this.#interface(name, members, parent && this.#name(parent.name))];
+    const blocks = [this.#interface(name + this.#typeParameters(parameters), members, parent && this.#name(parent.name))];
     const objectName = this.#objects.get(assembled);
     if (objectName) {
-      const objectMembers = [`readonly prototype: ${name};`, `[Symbol.hasInstance](value: unknown): value is ${name};`];
+      // The constructor object is shared by every instantiation; only construction infers type arguments.
+      const instance = name + typeArguments(parameters, true);
+      const objectMembers = [`readonly prototype: ${instance};`, `[Symbol.hasInstance](value: unknown): value is ${instance};`];
       for (const entry of assembled.members) {
         const member = entry.member;
         if (!this.#exposed(assembled.primary) || !this.#exposed(entry.source) || !this.#exposed(member)) continue;
-        if (member.kind === 'constructor') objectMembers.push(`new (${this.#arguments(member.arguments, 'input')}): ${name};`);
+        if (member.kind === 'constructor') {
+          const constructorParameters = member.typeParameters ? (parameters ?? []).concat(member.typeParameters) : parameters;
+          objectMembers.push(`new ${this.#typeParameters(constructorParameters)}(${this.#arguments(member.arguments, 'input')}): ${name}${typeArguments(parameters)};`);
+        }
       }
       // Interface objects inherit static members, but never inherit constructor signatures.
       const staticMembers = new Map<string, string[]>();
@@ -330,10 +348,12 @@ class PlatformTypeGenerator {
     const members = assembled.members.map((member) => {
       return `${propertyName(member.name)}${member.required ? '' : '?'}: ${this.#type(member.type, direction)};`;
     });
-    return this.#interface(name, members);
+    return this.#interface(name + this.#typeParameters(assembled.primary.typeParameters), members);
   }
 
   #type(type: IDLType, direction: Direction): string {
+    const refinement = this.#typeRefinements.get(type);
+    if (refinement !== undefined) return typeExpression(refinement);
     switch (type.kind) {
       case 'any': case 'undefined': case 'boolean': case 'bigint': case 'object': case 'symbol': return type.kind;
       case 'integer': case 'float': return 'number';
@@ -372,8 +392,8 @@ class PlatformTypeGenerator {
     }
   }
 
-  #signature(callable: AssembledCallable, callback = false): string {
-    return `(${this.#arguments(callable.arguments, callback ? 'output' : 'input')}): ${this.#result(callable.returns, callback ? 'input' : 'output')}`;
+  #signature(callable: IDLOperation, callback = false): string {
+    return `${this.#typeParameters(callable.typeParameters)}(${this.#arguments(callable.arguments, callback ? 'output' : 'input')}): ${this.#result(callable.returns, callback ? 'input' : 'output')}`;
   }
 
   #arguments(args: AssembledArgument[], direction: Direction): string {
@@ -391,7 +411,54 @@ class PlatformTypeGenerator {
   }
 
   #result(type: IDLType, direction: Direction): string {
-    return type.kind === 'undefined' ? 'void' : this.#type(type, direction);
+    return type.kind === 'undefined' && !this.#typeRefinements.has(type) ? 'void' : this.#type(type, direction);
+  }
+
+  #collectTypeRefinements(declaration: WebIDLType, type: IDLType): void {
+    while (true) {
+      if (declaration.typescript !== undefined) {
+        this.#typeRefinements.set(type, declaration.typescript);
+        return;
+      }
+      if (declaration.kind === 'annotated') {
+        declaration = declaration.type;
+        continue;
+      }
+      if (declaration.kind === 'reference') {
+        const assembled = this.#assembly.typedefs.get(declaration.name);
+        if (assembled) {
+          // Generic aliases retain their own parameter scope in generated declarations.
+          if (assembled.primary.typeParameters?.length) {
+            this.#typeRefinements.set(type, this.#name(assembled.primary.name));
+            return;
+          }
+          declaration = assembled.primary.type;
+          continue;
+        }
+      }
+      break;
+    }
+
+    // Nullable and union types pass attributes to their children, which can then
+    // have separate compiled contracts outside the declaration cache.
+    if (declaration.kind === 'nullable') {
+      this.#collectTypeRefinements(declaration.type, (type as IDLNullableType).innerType);
+    } else if (declaration.kind === 'union') {
+      const members = (type as IDLUnionType).memberTypes;
+      declaration.types.forEach((member, index) => this.#collectTypeRefinements(member, members[index]!));
+    }
+  }
+
+  #typeParameters(parameters: TypeParameter[] | undefined): string {
+    if (!parameters?.length) return '';
+    return `<${parameters.map((parameter) => {
+      if (identifier(parameter.name) !== parameter.name) {
+        throw new InternalError(`Invalid TypeScript type parameter name: ${parameter.name}`);
+      }
+      const constraint = parameter.extends === undefined ? '' : ` extends ${typeExpression(parameter.extends)}`;
+      const fallback = parameter.default === undefined ? '' : ` = ${typeExpression(parameter.default)}`;
+      return parameter.name + constraint + fallback;
+    }).join(', ')}>`;
   }
 
   #exposed(construct: Parameters<typeof matchesExposure>[0]): boolean {
@@ -419,6 +486,48 @@ class PlatformTypeGenerator {
 }
 
 type Direction = 'input' | 'output';
+
+function typeArguments(parameters: TypeParameter[] | undefined, erase = false): string {
+  return parameters?.length ? `<${parameters.map((parameter) => erase ? 'any' : parameter.name).join(', ')}>` : '';
+}
+
+/** Accept a single TypeScript type expression, preserving precedence when inserted into a larger type. */
+function typeExpression(expression: string): string {
+  const source = ts.createSourceFile('type.ts', `type Type = ${expression};`, ts.ScriptTarget.Latest, true);
+  const declaration = source.statements[0];
+  if (source.statements.length !== 1 || !declaration || !ts.isTypeAliasDeclaration(declaration) ||
+    declaration.type.getText(source) !== expression.trim()) {
+    throw new InternalError(`Expected a TypeScript type expression: ${expression}`);
+  }
+  const type = declaration.type;
+  return ts.isConditionalTypeNode(type) || ts.isFunctionTypeNode(type) || ts.isConstructorTypeNode(type)
+    ? `(${expression})` : expression;
+}
+
+/** Use the compiler to check names, generic scopes, constraints, and the complete generated surface. */
+function validatePlatformTypes(source: string): void {
+  const fileName = '__web_idl_platform__.d.ts';
+  const options: ts.CompilerOptions = {
+    strict: true, noEmit: true, skipLibCheck: false,
+    target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    lib: ['lib.esnext.d.ts'], types: [],
+  };
+  const host = ts.createCompilerHost(options);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (file, version, onError, shouldCreateNewSourceFile) =>
+    file === fileName ? ts.createSourceFile(file, source, version, true)
+      : getSourceFile(file, version, onError, shouldCreateNewSourceFile);
+  const program = ts.createProgram([fileName], options, host);
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+  if (diagnostics.length) {
+    throw new InternalError('Invalid generated platform declarations:\n' + diagnostics.map((diagnostic) => {
+      const position = diagnostic.file?.getLineAndCharacterOfPosition(diagnostic.start ?? 0);
+      const location = position ? `${position.line + 1}:${position.character + 1}: ` : '';
+      return location + ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n');
+    }).join('\n'));
+  }
+}
 
 const reservedIdentifiers = new Set((
   'any arguments await bigint boolean break case catch class const continue debugger default delete do else enum ' +

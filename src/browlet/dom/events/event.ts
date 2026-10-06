@@ -1,7 +1,7 @@
 import type { DOMEnvironment } from '../environment';
 import {
   arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
-  emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, xattr,
+  emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, tsType, xattr,
 } from '../../../web-idl/index';
 import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
 import type { EventTargetImpl } from './event-target';
@@ -443,12 +443,12 @@ export const customEventIDL = defineInterface<DOMEnvironment>({
   members: [
     ctor([
       arg('type', idlType.DOMString),
-      arg('eventInitDict', reference('CustomEventInit'), {
+      arg('eventInitDict', tsType(reference('CustomEventInit'), 'CustomEventInit<T>'), {
         default: emptyDictionary,
         optional: true,
       }),
     ]),
-    roAttr('detail', idlType.any),
+    roAttr('detail', tsType(idlType.any, 'T')),
     op('initCustomEvent', idlType.undefined, [
       arg('type', idlType.DOMString),
       arg('bubbles', idlType.boolean, { default: false, optional: true }),
@@ -456,9 +456,10 @@ export const customEventIDL = defineInterface<DOMEnvironment>({
         default: false,
         optional: true,
       }),
-      arg('detail', idlType.any, { default: null, optional: true }),
+      arg('detail', tsType(idlType.any, 'T'), { default: null, optional: true }),
     ]),
   ],
+  typeParameters: [{ name: 'T', default: 'any' }],
 });
 
 /** Event flags and payload accepted by custom-event creation. */
@@ -474,7 +475,8 @@ export interface CustomEventInitRecord<T = unknown> extends EventInitRecord {
 export const customEventInitIDL = defineDictionary({
   name: 'CustomEventInit',
   inherits: 'EventInit',
-  members: [dictMember('detail', idlType.any, { default: null })],
+  members: [dictMember('detail', tsType(idlType.any, 'T'), { default: null })],
+  typeParameters: [{ name: 'T', default: 'any' }],
 });
 
 /** One dispatch target and the event values visible at that point in the path. */

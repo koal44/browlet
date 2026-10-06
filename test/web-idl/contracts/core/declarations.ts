@@ -1,6 +1,6 @@
 import {
   arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
-  dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp,
+  dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp, tsType,
   webIDLCommonDefinitions, xattr,
   type SerialSteps, type TransferSteps,
 } from '../../../../src/web-idl/core/index';
@@ -17,6 +17,10 @@ defineInterface({ name: 'Example', implementation: impl(Example), members: [] })
 webIDLCommonDefinitions.includes(domExceptionIDL);
 
 class SavedValue { value = 1; }
+op('clone', tsType(idlType.any, 'T'),
+  [arg('value', tsType(idlType.any, 'T'))],
+  { typeParameters: [{ name: 'T', default: 'any' }] },
+);
 const serialSteps = {
   serializationSteps(value, record, _forStorage, context) {
     record.set('Value', value.value);

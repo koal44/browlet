@@ -34,6 +34,16 @@ const timeout: number = window.setTimeout(() => {}, 1);
 window.clearTimeout(timeout);
 window.queueMicrotask(() => {});
 
+const cloned = window.structuredClone({ count: 1 });
+const count: number = cloned.count;
+// @ts-expect-error structuredClone preserves the input's property types
+const wrongCount: string = cloned.count;
+
+const customEvent = new window.CustomEvent('data', { detail: { count: 1 } });
+const detailCount: number = customEvent.detail.count;
+// @ts-expect-error the constructor infers the event's detail type
+const wrongDetail: string = customEvent.detail.count;
+
 declare const unknown: unknown;
 if (unknown instanceof window.Node) { const narrowed: Node = unknown; }
 

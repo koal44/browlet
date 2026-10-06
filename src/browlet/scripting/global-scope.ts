@@ -1,6 +1,6 @@
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
-  emptyDictionary, idlType, integer, op, reference, roAttr, union, xattr, type VoidFunction,
+  emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
 } from '../../web-idl/index';
 import type { JSFunction } from '../../js-engine/index';
 import { PerformanceImpl } from '../performance/performance';
@@ -244,13 +244,16 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
       [arg('callback', reference('VoidFunction'), onError('report'))],
     ),
     // HTML §2.7.10 contributes the structured-cloning API to this mixin.
-    op('structuredClone', idlType.any, [
-      arg('value', idlType.any),
-      arg('options', reference(structuredSerializeOptionsIDL.name), {
-        default: emptyDictionary,
-        optional: true,
-      }),
-    ]),
+    op('structuredClone', tsType(idlType.any, 'T'),
+      [
+        arg('value', tsType(idlType.any, 'T')),
+        arg('options', reference(structuredSerializeOptionsIDL.name), {
+          default: emptyDictionary,
+          optional: true,
+        }),
+      ],
+      { typeParameters: [{ name: 'T', default: 'any' }] },
+    ),
   ],
 });
 

@@ -104,11 +104,11 @@ export interface EventInit {
   composed?: boolean;
 }
 
-export interface CustomEventInit {
+export interface CustomEventInit<T = any> {
   bubbles?: boolean;
   cancelable?: boolean;
   composed?: boolean;
-  detail?: any;
+  detail?: T;
 }
 
 export interface ProgressEventInit {
@@ -650,7 +650,7 @@ export interface Window extends EventTarget {
   setInterval(handler: (string | Function), timeout?: number, ...arguments_: Array<any>): number;
   clearInterval(id?: number): void;
   queueMicrotask(callback: VoidFunction): void;
-  structuredClone(value: any, options?: StructuredSerializeOptions): any;
+  structuredClone<T = any>(value: T, options?: StructuredSerializeOptions): T;
   get performance(): Performance;
   set performance(value: unknown);
   fetch(input: (Request | string), init?: RequestInit): Promise<Response>;
@@ -764,15 +764,15 @@ export interface EventConstructor {
   readonly BUBBLING_PHASE: 3;
 }
 
-export interface CustomEvent extends Event {
-  readonly detail: any;
-  initCustomEvent(type: string, bubbles?: boolean, cancelable?: boolean, detail?: any): void;
+export interface CustomEvent<T = any> extends Event {
+  readonly detail: T;
+  initCustomEvent(type: string, bubbles?: boolean, cancelable?: boolean, detail?: T): void;
 }
 
 export interface CustomEventConstructor {
-  readonly prototype: CustomEvent;
-  [Symbol.hasInstance](value: unknown): value is CustomEvent;
-  new (type: string, eventInitDict?: CustomEventInit): CustomEvent;
+  readonly prototype: CustomEvent<any>;
+  [Symbol.hasInstance](value: unknown): value is CustomEvent<any>;
+  new <T = any>(type: string, eventInitDict?: CustomEventInit<T>): CustomEvent<T>;
   readonly NONE: 0;
   readonly CAPTURING_PHASE: 1;
   readonly AT_TARGET: 2;

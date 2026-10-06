@@ -9,7 +9,7 @@ import {
   annotated, asyncSequence, decimal, defineCallbackFunction, defineDictionary, defineEnumeration, defineProxyObject,
   defineInterface, definePartialDictionary, defineTypedef, emptyDictionary, emptySequence, frozenArray,
   idlType, integer, nullable, record, reference,
-  sequence, union, xattr, type Definition,
+  sequence, tsType, union, xattr, type Definition,
 } from '../../src/web-idl/core/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
 import type { RealmBinding } from '../../src/web-idl/binding/realm';
@@ -19,6 +19,17 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s value conversion', (m
     mode === 'direct' ? converter.jsToIDL(value) : converter.getJSToIDLSteps()(value);
   const idlToJS = (value: unknown, converter: Converter): unknown =>
     mode === 'direct' ? converter.idlToJS(value) : converter.getIDLToJSSteps()(value);
+
+  it('keeps TypeScript refinements out of runtime conversion', () => {
+    const { binding } = createBinding();
+    const byte = tsType(idlType.byte, 'T');
+    const ordinary = binding.getConverter(binding.assembly.getIDLType(idlType.byte));
+    const refined = binding.getConverter(binding.assembly.getIDLType(byte));
+    const clamped = binding.getConverter(binding.assembly.getIDLType(annotated(byte, xattr('Clamp'))));
+    expect(jsToIDL('257', refined)).toBe(jsToIDL('257', ordinary));
+    expect(jsToIDL('257', clamped)).toBe(127);
+    expect(idlToJS(1, refined)).toBe(1);
+  });
 
   it('requires callable legacy callbacks through nullable aliases outside assignment', () => {
     const { binding, realm } = createBinding([

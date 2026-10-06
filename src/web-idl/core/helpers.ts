@@ -418,6 +418,13 @@ export function onError(
   };
 }
 
+// Platform declaration generation
+
+/** Refine a generated platform type without changing its IDL conversion or implementation typing. */
+export function tsType<Type extends WebIDLType>(type: Type, typescript: string): Type & { typescript: string; } {
+  return { ...type, typescript };
+}
+
 // Helper options derived from declaration members
 
 type ConstructorOptions<Env = unknown, Values extends unknown[] = unknown[]> =

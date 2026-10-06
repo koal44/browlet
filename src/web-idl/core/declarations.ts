@@ -1,5 +1,5 @@
 import type {
-  DeclarationHook, Exposed, ExtendedAttribute, ImplementationClass, InjectedArgument, WebIDLType,
+  DeclarationHook, Exposed, ExtendedAttribute, ImplementationClass, InjectedArgument, TypeParameter, WebIDLType,
 } from './types';
 import type {
   ArgumentDefinition, CallbackInterfaceMember, DictionaryMember, InterfaceMember,
@@ -39,6 +39,9 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
     /** Initialize the implementation before stamping or projection; inherited hooks run first. */
     initializeImplementation?: DeclarationHook<'initialize-implementation', Env, Impl>;
   };
+
+  /** TypeScript parameters shared by the generated instance's members and inferred by its constructors. */
+  typeParameters?: TypeParameter[];
 };
 
 /** Declare an interface; `Env` describes the environment required by its binding hooks. */
@@ -151,6 +154,9 @@ export type DictionaryDefinition = {
   inherits?: string;
   /** Extended attributes applying to this dictionary. */
   extendedAttributes?: ExtendedAttribute[];
+
+  /** TypeScript parameters shared by the generated dictionary's members. */
+  typeParameters?: TypeParameter[];
 };
 
 /** Declare dictionary conversion, including member types, required fields, and defaults. */
@@ -243,6 +249,9 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   extendedAttributes?: ExtendedAttribute[];
   /** Turn the IDL callback, including its invocation method, into the implementation's value. */
   toImpl?: DeclarationHook<'callback-interface-to-impl', Env>;
+
+  /** TypeScript parameters shared by the generated callback object's members. */
+  typeParameters?: TypeParameter[];
 };
 
 /** Declare an author callback object's operations and optional implementation conversion. */
@@ -265,6 +274,9 @@ export type CallbackFunctionDefinition = {
   arguments: ArgumentDefinition[];
   /** Extended attributes applying to this callback function. */
   extendedAttributes?: ExtendedAttribute[];
+
+  /** TypeScript parameters of the generated callback type alias. */
+  typeParameters?: TypeParameter[];
 };
 
 /** Declare conversion for calls into an author-supplied function. */
@@ -307,6 +319,9 @@ export type TypedefDefinition = {
   type: WebIDLType;
   /** Extended attributes applying to this typedef. */
   extendedAttributes?: ExtendedAttribute[];
+
+  /** TypeScript parameters of the generated type alias. */
+  typeParameters?: TypeParameter[];
 };
 
 /** Give an IDL type expression a reusable name. */
