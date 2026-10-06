@@ -1,0 +1,908 @@
+<?xml version='1.0' encoding='utf-8'?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape" width="1054" height="1054" viewBox="100 70 1054 1054" role="img" aria-labelledby="owl-title owl-desc">
+  <title id="owl-title">Browlet owl</title>
+  <desc id="owl-desc">A faceted gray owl with green eyes and a pale, sideways B-shaped facial marking.</desc>
+  <defs>
+    <linearGradient id="facet-002-fill" gradientUnits="userSpaceOnUse" x1="181.54" y1="125.39" x2="216.17" y2="226.76">
+      <stop stop-color="#807f81" />
+      <stop offset="1" stop-color="#939290" />
+    </linearGradient>
+    <linearGradient id="facet-004-fill" gradientUnits="userSpaceOnUse" x1="163.85" y1="270.83" x2="212.45" y2="250.42">
+      <stop stop-color="#313131" />
+      <stop offset="1" stop-color="#3d3d3c" />
+    </linearGradient>
+    <linearGradient id="facet-005-fill" gradientUnits="userSpaceOnUse" x1="176.00" y1="243.66" x2="212.35" y2="216.58">
+      <stop stop-color="#202121" />
+      <stop offset="1" stop-color="#2c2b2b" />
+    </linearGradient>
+    <linearGradient id="facet-012-fill" gradientUnits="userSpaceOnUse" x1="276.47" y1="211.17" x2="264.70" y2="213.36">
+      <stop stop-color="#0e0e0e" />
+      <stop offset="1" stop-color="#3e3e3e" />
+    </linearGradient>
+    <linearGradient id="facet-013-fill" gradientUnits="userSpaceOnUse" x1="320.99" y1="161.05" x2="301.82" y2="335.41">
+      <stop stop-color="#1f1f1f" />
+      <stop offset="1" stop-color="#3e3e3e" />
+    </linearGradient>
+    <linearGradient id="facet-014-fill" gradientUnits="userSpaceOnUse" x1="355.42" y1="153.28" x2="359.11" y2="345.57">
+      <stop stop-color="#6d6b6b" />
+      <stop offset="1" stop-color="#989797" />
+    </linearGradient>
+    <linearGradient id="facet-015-fill" gradientUnits="userSpaceOnUse" x1="316.49" y1="266.09" x2="334.00" y2="355.74">
+      <stop stop-color="#a6a4a3" />
+      <stop offset="1" stop-color="#b7b5b4" />
+    </linearGradient>
+    <linearGradient id="facet-017-fill" gradientUnits="userSpaceOnUse" x1="436.98" y1="286.30" x2="375.64" y2="309.19">
+      <stop stop-color="#787979" />
+      <stop offset="1" stop-color="#918f8f" />
+    </linearGradient>
+    <linearGradient id="facet-018-fill" gradientUnits="userSpaceOnUse" x1="449.02" y1="291.89" x2="400.70" y2="354.09">
+      <stop stop-color="#737373" />
+      <stop offset="1" stop-color="#918e8e" />
+    </linearGradient>
+    <linearGradient id="facet-020-fill" gradientUnits="userSpaceOnUse" x1="475.65" y1="348.07" x2="470.55" y2="309.32">
+      <stop stop-color="#8c8a8a" />
+      <stop offset="1" stop-color="#8e8d8c" />
+    </linearGradient>
+    <linearGradient id="facet-021-fill" gradientUnits="userSpaceOnUse" x1="444.48" y1="280.21" x2="439.30" y2="285.34">
+      <stop stop-color="#292929" />
+      <stop offset="1" stop-color="#444548" />
+    </linearGradient>
+    <linearGradient id="facet-023-fill" gradientUnits="userSpaceOnUse" x1="416.84" y1="259.46" x2="516.68" y2="294.22">
+      <stop stop-color="#2b2b2a" />
+      <stop offset="1" stop-color="#3d3c3c" />
+    </linearGradient>
+    <linearGradient id="facet-026-fill" gradientUnits="userSpaceOnUse" x1="532.70" y1="195.77" x2="637.51" y2="290.35">
+      <stop stop-color="#5f5f5e" />
+      <stop offset="1" stop-color="#6b6a6a" />
+    </linearGradient>
+    <linearGradient id="facet-028-fill" gradientUnits="userSpaceOnUse" x1="1103.20" y1="124.98" x2="1009.81" y2="232.82">
+      <stop stop-color="#6f6e6e" />
+      <stop offset="1" stop-color="#8e8d8c" />
+    </linearGradient>
+    <linearGradient id="facet-030-fill" gradientUnits="userSpaceOnUse" x1="1114.94" y1="265.12" x2="1007.66" y2="257.17">
+      <stop stop-color="#282727" />
+      <stop offset="1" stop-color="#3b3b3b" />
+    </linearGradient>
+    <linearGradient id="facet-038-fill" gradientUnits="userSpaceOnUse" x1="979.56" y1="211.77" x2="983.76" y2="212.16">
+      <stop stop-color="#5c5a5c" />
+      <stop offset="1" stop-color="#8c8a8c" />
+    </linearGradient>
+    <linearGradient id="facet-039-fill" gradientUnits="userSpaceOnUse" x1="911.60" y1="192.27" x2="962.83" y2="297.28">
+      <stop stop-color="#1b1b1a" />
+      <stop offset="1" stop-color="#3a3939" />
+    </linearGradient>
+    <linearGradient id="facet-040-fill" gradientUnits="userSpaceOnUse" x1="920.70" y1="140.61" x2="876.47" y2="347.45">
+      <stop stop-color="#666564" />
+      <stop offset="1" stop-color="#92908f" />
+    </linearGradient>
+    <linearGradient id="facet-041-fill" gradientUnits="userSpaceOnUse" x1="951.28" y1="262.96" x2="909.74" y2="363.49">
+      <stop stop-color="#a6a3a3" />
+      <stop offset="1" stop-color="#b4b3b3" />
+    </linearGradient>
+    <linearGradient id="facet-043-fill" gradientUnits="userSpaceOnUse" x1="817.07" y1="290.04" x2="874.12" y2="302.20">
+      <stop stop-color="#747373" />
+      <stop offset="1" stop-color="#8e8d8d" />
+    </linearGradient>
+    <linearGradient id="facet-044-fill" gradientUnits="userSpaceOnUse" x1="805.03" y1="312.86" x2="867.15" y2="340.11">
+      <stop stop-color="#6d6d6c" />
+      <stop offset="1" stop-color="#8f8d8c" />
+    </linearGradient>
+    <linearGradient id="facet-046-fill" gradientUnits="userSpaceOnUse" x1="789.48" y1="312.85" x2="771.48" y2="352.49">
+      <stop stop-color="#7a7979" />
+      <stop offset="1" stop-color="#848383" />
+    </linearGradient>
+    <linearGradient id="facet-047-fill" gradientUnits="userSpaceOnUse" x1="810.75" y1="281.30" x2="814.43" y2="285.25">
+      <stop stop-color="#181918" />
+      <stop offset="1" stop-color="#3c3c3b" />
+    </linearGradient>
+    <linearGradient id="facet-048-fill" gradientUnits="userSpaceOnUse" x1="786.14" y1="297.99" x2="797.31" y2="312.56">
+      <stop stop-color="#222121" />
+      <stop offset="1" stop-color="#323332" />
+    </linearGradient>
+    <linearGradient id="facet-049-fill" gradientUnits="userSpaceOnUse" x1="835.52" y1="255.58" x2="735.11" y2="298.89">
+      <stop stop-color="#191919" />
+      <stop offset="1" stop-color="#343434" />
+    </linearGradient>
+    <linearGradient id="facet-052-fill" gradientUnits="userSpaceOnUse" x1="685.81" y1="203.40" x2="641.84" y2="308.22">
+      <stop stop-color="#444343" />
+      <stop offset="1" stop-color="#525151" />
+    </linearGradient>
+    <linearGradient id="facet-053-fill" gradientUnits="userSpaceOnUse" x1="648.59" y1="347.25" x2="646.01" y2="300.94">
+      <stop stop-color="#393838" />
+      <stop offset="1" stop-color="#3c3b3c" />
+    </linearGradient>
+    <linearGradient id="facet-058-fill" gradientUnits="userSpaceOnUse" x1="221.83" y1="490.67" x2="264.43" y2="551.36">
+      <stop stop-color="#4e4d4d" />
+      <stop offset="1" stop-color="#5b5a5a" />
+    </linearGradient>
+    <linearGradient id="facet-059-fill" gradientUnits="userSpaceOnUse" x1="214.23" y1="505.05" x2="218.34" y2="566.77">
+      <stop stop-color="#444242" />
+      <stop offset="1" stop-color="#5e5d5d" />
+    </linearGradient>
+    <linearGradient id="facet-060-fill" gradientUnits="userSpaceOnUse" x1="175.48" y1="563.51" x2="222.99" y2="596.60">
+      <stop stop-color="#222222" />
+      <stop offset="1" stop-color="#2a2a29" />
+    </linearGradient>
+    <linearGradient id="facet-061-fill" gradientUnits="userSpaceOnUse" x1="235.69" y1="563.78" x2="212.84" y2="738.62">
+      <stop stop-color="#545454" />
+      <stop offset="1" stop-color="#646363" />
+    </linearGradient>
+    <linearGradient id="facet-062-fill" gradientUnits="userSpaceOnUse" x1="195.47" y1="798.31" x2="240.87" y2="697.45">
+      <stop stop-color="#8c8b8b" />
+      <stop offset="1" stop-color="#a29f9f" />
+    </linearGradient>
+    <linearGradient id="facet-075-fill" gradientUnits="userSpaceOnUse" x1="413.26" y1="718.74" x2="450.49" y2="767.57">
+      <stop stop-color="#6a6968" />
+      <stop offset="1" stop-color="#828181" />
+    </linearGradient>
+    <linearGradient id="facet-077-fill" gradientUnits="userSpaceOnUse" x1="505.67" y1="719.78" x2="494.57" y2="826.63">
+      <stop stop-color="#908e8e" />
+      <stop offset="1" stop-color="#a5a3a2" />
+    </linearGradient>
+    <linearGradient id="facet-079-fill" gradientUnits="userSpaceOnUse" x1="593.70" y1="674.27" x2="551.87" y2="803.72">
+      <stop stop-color="#848282" />
+      <stop offset="1" stop-color="#999797" />
+    </linearGradient>
+    <linearGradient id="facet-080-fill" gradientUnits="userSpaceOnUse" x1="526.84" y1="722.07" x2="585.74" y2="847.39">
+      <stop stop-color="#c8c6c5" />
+      <stop offset="1" stop-color="#e0dedd" />
+    </linearGradient>
+    <linearGradient id="facet-088-fill" gradientUnits="userSpaceOnUse" x1="1034.06" y1="490.39" x2="988.32" y2="548.81">
+      <stop stop-color="#4e4e4d" />
+      <stop offset="1" stop-color="#5f5e5e" />
+    </linearGradient>
+    <linearGradient id="facet-089-fill" gradientUnits="userSpaceOnUse" x1="1042.30" y1="535.05" x2="1035.40" y2="529.62">
+      <stop stop-color="#363534" />
+      <stop offset="1" stop-color="#555555" />
+    </linearGradient>
+    <linearGradient id="facet-091-fill" gradientUnits="userSpaceOnUse" x1="1082.91" y1="666.57" x2="995.16" y2="652.73">
+      <stop stop-color="#515150" />
+      <stop offset="1" stop-color="#5a5959" />
+    </linearGradient>
+    <linearGradient id="facet-100-fill" gradientUnits="userSpaceOnUse" x1="915.52" y1="850.83" x2="867.70" y2="861.22">
+      <stop stop-color="#6f6e6e" />
+      <stop offset="1" stop-color="#7b7a7a" />
+    </linearGradient>
+    <linearGradient id="facet-105-fill" gradientUnits="userSpaceOnUse" x1="845.88" y1="719.05" x2="802.14" y2="765.48">
+      <stop stop-color="#696868" />
+      <stop offset="1" stop-color="#7a7979" />
+    </linearGradient>
+    <linearGradient id="facet-107-fill" gradientUnits="userSpaceOnUse" x1="755.40" y1="722.77" x2="752.46" y2="830.69">
+      <stop stop-color="#898888" />
+      <stop offset="1" stop-color="#a2a1a0" />
+    </linearGradient>
+    <linearGradient id="facet-109-fill" gradientUnits="userSpaceOnUse" x1="677.00" y1="665.66" x2="685.76" y2="824.76">
+      <stop stop-color="#807f7e" />
+      <stop offset="1" stop-color="#999797" />
+    </linearGradient>
+    <linearGradient id="facet-110-fill" gradientUnits="userSpaceOnUse" x1="700.74" y1="719.49" x2="689.77" y2="834.01">
+      <stop stop-color="#bdbcbb" />
+      <stop offset="1" stop-color="#d4d2d1" />
+    </linearGradient>
+    <linearGradient id="facet-114-fill" gradientUnits="userSpaceOnUse" x1="296.41" y1="343.72" x2="344.38" y2="424.70">
+      <stop stop-color="#949293" />
+      <stop offset="1" stop-color="#a1a0a0" />
+    </linearGradient>
+    <linearGradient id="facet-115-fill" gradientUnits="userSpaceOnUse" x1="366.35" y1="336.77" x2="338.51" y2="413.37">
+      <stop stop-color="#d2d0cf" />
+      <stop offset="1" stop-color="#e4e3e2" />
+    </linearGradient>
+    <linearGradient id="facet-118-fill" gradientUnits="userSpaceOnUse" x1="483.27" y1="349.53" x2="512.84" y2="452.24">
+      <stop stop-color="#e5e3e2" />
+      <stop offset="1" stop-color="#f6f4f3" />
+    </linearGradient>
+    <linearGradient id="facet-125-fill" gradientUnits="userSpaceOnUse" x1="643.09" y1="478.09" x2="597.50" y2="493.67">
+      <stop stop-color="#eaeae8" />
+      <stop offset="1" stop-color="#f1efee" />
+    </linearGradient>
+    <linearGradient id="facet-126-fill" gradientUnits="userSpaceOnUse" x1="499.26" y1="476.46" x2="597.62" y2="469.13">
+      <stop stop-color="#c1bfbe" />
+      <stop offset="1" stop-color="#e4e3e2" />
+    </linearGradient>
+    <linearGradient id="facet-127-fill" gradientUnits="userSpaceOnUse" x1="597.82" y1="500.50" x2="585.90" y2="552.27">
+      <stop stop-color="#e5e4e3" />
+      <stop offset="1" stop-color="#f9f8f7" />
+    </linearGradient>
+    <linearGradient id="facet-128-fill" gradientUnits="userSpaceOnUse" x1="498.82" y1="473.28" x2="582.98" y2="527.44">
+      <stop stop-color="#d0cecd" />
+      <stop offset="1" stop-color="#f6f5f3" />
+    </linearGradient>
+    <linearGradient id="facet-132-fill" gradientUnits="userSpaceOnUse" x1="431.22" y1="394.85" x2="386.02" y2="446.84">
+      <stop stop-color="#919191" />
+      <stop offset="1" stop-color="#a7a5a4" />
+    </linearGradient>
+    <linearGradient id="facet-133-fill" gradientUnits="userSpaceOnUse" x1="460.91" y1="440.94" x2="406.21" y2="423.66">
+      <stop stop-color="#707070" />
+      <stop offset="1" stop-color="#8d8c8c" />
+    </linearGradient>
+    <linearGradient id="facet-134-fill" gradientUnits="userSpaceOnUse" x1="504.51" y1="460.30" x2="451.13" y2="437.13">
+      <stop stop-color="#656464" />
+      <stop offset="1" stop-color="#787675" />
+    </linearGradient>
+    <linearGradient id="facet-135-fill" gradientUnits="userSpaceOnUse" x1="502.20" y1="427.30" x2="493.61" y2="471.97">
+      <stop stop-color="#b6b4b3" />
+      <stop offset="1" stop-color="#c8c6c4" />
+    </linearGradient>
+    <linearGradient id="facet-136-fill" gradientUnits="userSpaceOnUse" x1="334.50" y1="388.91" x2="251.04" y2="443.00">
+      <stop stop-color="#b7b6b5" />
+      <stop offset="1" stop-color="#dcdad9" />
+    </linearGradient>
+    <linearGradient id="facet-137-fill" gradientUnits="userSpaceOnUse" x1="375.49" y1="460.27" x2="330.26" y2="455.90">
+      <stop stop-color="#555555" />
+      <stop offset="1" stop-color="#807f7f" />
+    </linearGradient>
+    <linearGradient id="facet-138-fill" gradientUnits="userSpaceOnUse" x1="357.09" y1="422.43" x2="285.55" y2="486.91">
+      <stop stop-color="#9e9d9d" />
+      <stop offset="1" stop-color="#c1c0c1" />
+    </linearGradient>
+    <linearGradient id="facet-139-fill" gradientUnits="userSpaceOnUse" x1="381.62" y1="453.55" x2="371.50" y2="414.47">
+      <stop stop-color="#323232" />
+      <stop offset="1" stop-color="#484848" />
+    </linearGradient>
+    <linearGradient id="facet-141-fill" gradientUnits="userSpaceOnUse" x1="263.41" y1="463.09" x2="277.51" y2="560.28">
+      <stop stop-color="#b4b2b2" />
+      <stop offset="1" stop-color="#c9c7c7" />
+    </linearGradient>
+    <linearGradient id="facet-144-fill" gradientUnits="userSpaceOnUse" x1="319.60" y1="500.50" x2="326.43" y2="587.75">
+      <stop stop-color="#9fa0a0" />
+      <stop offset="1" stop-color="#c5c5c4" />
+    </linearGradient>
+    <linearGradient id="facet-145-fill" gradientUnits="userSpaceOnUse" x1="299.99" y1="534.42" x2="341.81" y2="638.44">
+      <stop stop-color="#bbb9b9" />
+      <stop offset="1" stop-color="#d9d7d6" />
+    </linearGradient>
+    <linearGradient id="facet-146-fill" gradientUnits="userSpaceOnUse" x1="372.45" y1="610.17" x2="327.53" y2="650.99">
+      <stop stop-color="#d0cecd" />
+      <stop offset="1" stop-color="#eeedec" />
+    </linearGradient>
+    <linearGradient id="facet-148-fill" gradientUnits="userSpaceOnUse" x1="391.87" y1="732.92" x2="306.35" y2="667.89">
+      <stop stop-color="#cccbca" />
+      <stop offset="1" stop-color="#dddbda" />
+    </linearGradient>
+    <linearGradient id="facet-150-fill" gradientUnits="userSpaceOnUse" x1="427.55" y1="689.98" x2="479.38" y2="732.68">
+      <stop stop-color="#e4e2e1" />
+      <stop offset="1" stop-color="#e8e7e5" />
+    </linearGradient>
+    <linearGradient id="facet-151-fill" gradientUnits="userSpaceOnUse" x1="487.60" y1="680.71" x2="470.32" y2="676.91">
+      <stop stop-color="#cccaca" />
+      <stop offset="1" stop-color="#e6e6e4" />
+    </linearGradient>
+    <linearGradient id="facet-152-fill" gradientUnits="userSpaceOnUse" x1="523.40" y1="726.51" x2="470.19" y2="684.10">
+      <stop stop-color="#bebcbb" />
+      <stop offset="1" stop-color="#dedcdb" />
+    </linearGradient>
+    <linearGradient id="facet-153-fill" gradientUnits="userSpaceOnUse" x1="547.09" y1="705.90" x2="501.77" y2="649.36">
+      <stop stop-color="#bab8b7" />
+      <stop offset="1" stop-color="#dad8d7" />
+    </linearGradient>
+    <linearGradient id="facet-154-fill" gradientUnits="userSpaceOnUse" x1="550.38" y1="613.54" x2="542.51" y2="665.76">
+      <stop stop-color="#afacac" />
+      <stop offset="1" stop-color="#d9d8d7" />
+    </linearGradient>
+    <linearGradient id="facet-155-fill" gradientUnits="userSpaceOnUse" x1="510.59" y1="626.92" x2="519.43" y2="646.02">
+      <stop stop-color="#d1cfce" />
+      <stop offset="1" stop-color="#e3e2e1" />
+    </linearGradient>
+    <linearGradient id="facet-156-fill" gradientUnits="userSpaceOnUse" x1="536.83" y1="578.68" x2="535.27" y2="643.38">
+      <stop stop-color="#939192" />
+      <stop offset="1" stop-color="#c3c1c2" />
+    </linearGradient>
+    <linearGradient id="facet-157-fill" gradientUnits="userSpaceOnUse" x1="536.50" y1="558.60" x2="589.55" y2="607.67">
+      <stop stop-color="#3b3c3e" />
+      <stop offset="1" stop-color="#6a6a6b" />
+    </linearGradient>
+    <linearGradient id="facet-158-fill" gradientUnits="userSpaceOnUse" x1="976.69" y1="380.93" x2="906.62" y2="371.23">
+      <stop stop-color="#8c8c8c" />
+      <stop offset="1" stop-color="#9c9a99" />
+    </linearGradient>
+    <linearGradient id="facet-164-fill" gradientUnits="userSpaceOnUse" x1="688.44" y1="345.53" x2="737.02" y2="396.99">
+      <stop stop-color="#aba9a9" />
+      <stop offset="1" stop-color="#bdbbbb" />
+    </linearGradient>
+    <linearGradient id="facet-165-fill" gradientUnits="userSpaceOnUse" x1="636.64" y1="335.89" x2="714.47" y2="418.27">
+      <stop stop-color="#797878" />
+      <stop offset="1" stop-color="#9b9b9a" />
+    </linearGradient>
+    <linearGradient id="facet-166-fill" gradientUnits="userSpaceOnUse" x1="610.21" y1="362.45" x2="691.61" y2="440.76">
+      <stop stop-color="#949293" />
+      <stop offset="1" stop-color="#bdbbba" />
+    </linearGradient>
+    <linearGradient id="facet-170-fill" gradientUnits="userSpaceOnUse" x1="752.97" y1="482.53" x2="662.08" y2="463.13">
+      <stop stop-color="#b2b0b0" />
+      <stop offset="1" stop-color="#dcdbda" />
+    </linearGradient>
+    <linearGradient id="facet-171-fill" gradientUnits="userSpaceOnUse" x1="655.77" y1="500.56" x2="668.72" y2="552.75">
+      <stop stop-color="#dad9d7" />
+      <stop offset="1" stop-color="#f4f3f1" />
+    </linearGradient>
+    <linearGradient id="facet-172-fill" gradientUnits="userSpaceOnUse" x1="759.72" y1="486.23" x2="661.27" y2="521.37">
+      <stop stop-color="#c6c5c4" />
+      <stop offset="1" stop-color="#f2f1f0" />
+    </linearGradient>
+    <linearGradient id="facet-174-fill" gradientUnits="userSpaceOnUse" x1="650.18" y1="537.36" x2="689.52" y2="609.54">
+      <stop stop-color="#f0efed" />
+      <stop offset="1" stop-color="#fffefd" />
+    </linearGradient>
+    <linearGradient id="facet-176-fill" gradientUnits="userSpaceOnUse" x1="831.04" y1="396.38" x2="860.71" y2="443.66">
+      <stop stop-color="#939393" />
+      <stop offset="1" stop-color="#a29f9e" />
+    </linearGradient>
+    <linearGradient id="facet-177-fill" gradientUnits="userSpaceOnUse" x1="793.60" y1="432.17" x2="851.86" y2="438.34">
+      <stop stop-color="#747373" />
+      <stop offset="1" stop-color="#8c8c8c" />
+    </linearGradient>
+    <linearGradient id="facet-178-fill" gradientUnits="userSpaceOnUse" x1="783.31" y1="471.12" x2="779.92" y2="420.00">
+      <stop stop-color="#686666" />
+      <stop offset="1" stop-color="#717272" />
+    </linearGradient>
+    <linearGradient id="facet-180-fill" gradientUnits="userSpaceOnUse" x1="923.78" y1="387.87" x2="1001.84" y2="447.51">
+      <stop stop-color="#b3b2b1" />
+      <stop offset="1" stop-color="#d7d5d4" />
+    </linearGradient>
+    <linearGradient id="facet-181-fill" gradientUnits="userSpaceOnUse" x1="878.31" y1="453.42" x2="934.89" y2="464.36">
+      <stop stop-color="#525251" />
+      <stop offset="1" stop-color="#807e7e" />
+    </linearGradient>
+    <linearGradient id="facet-182-fill" gradientUnits="userSpaceOnUse" x1="906.06" y1="414.62" x2="957.82" y2="486.25">
+      <stop stop-color="#969494" />
+      <stop offset="1" stop-color="#b6b5b4" />
+    </linearGradient>
+    <linearGradient id="facet-183-fill" gradientUnits="userSpaceOnUse" x1="853.48" y1="442.87" x2="902.88" y2="430.37">
+      <stop stop-color="#2c2c2c" />
+      <stop offset="1" stop-color="#4c4a4a" />
+    </linearGradient>
+    <linearGradient id="facet-185-fill" gradientUnits="userSpaceOnUse" x1="971.21" y1="466.94" x2="992.49" y2="568.46">
+      <stop stop-color="#b7b5b5" />
+      <stop offset="1" stop-color="#c8c7c6" />
+    </linearGradient>
+    <linearGradient id="facet-188-fill" gradientUnits="userSpaceOnUse" x1="929.69" y1="499.93" x2="933.26" y2="586.37">
+      <stop stop-color="#8f8d8d" />
+      <stop offset="1" stop-color="#aeadad" />
+    </linearGradient>
+    <linearGradient id="facet-189-fill" gradientUnits="userSpaceOnUse" x1="912.26" y1="551.45" x2="956.24" y2="632.26">
+      <stop stop-color="#b8b6b7" />
+      <stop offset="1" stop-color="#d6d4d3" />
+    </linearGradient>
+    <linearGradient id="facet-190-fill" gradientUnits="userSpaceOnUse" x1="881.48" y1="610.16" x2="926.51" y2="650.96">
+      <stop stop-color="#c8c6c6" />
+      <stop offset="1" stop-color="#ebe9e8" />
+    </linearGradient>
+    <linearGradient id="facet-195-fill" gradientUnits="userSpaceOnUse" x1="762.48" y1="682.36" x2="785.91" y2="675.40">
+      <stop stop-color="#d0d0ce" />
+      <stop offset="1" stop-color="#e8e7e6" />
+    </linearGradient>
+    <linearGradient id="facet-196-fill" gradientUnits="userSpaceOnUse" x1="728.39" y1="724.14" x2="782.95" y2="688.72">
+      <stop stop-color="#bebdbb" />
+      <stop offset="1" stop-color="#dfdddc" />
+    </linearGradient>
+    <linearGradient id="facet-197-fill" gradientUnits="userSpaceOnUse" x1="708.05" y1="709.59" x2="748.18" y2="648.30">
+      <stop stop-color="#b9b7b6" />
+      <stop offset="1" stop-color="#d8d7d6" />
+    </linearGradient>
+    <linearGradient id="facet-198-fill" gradientUnits="userSpaceOnUse" x1="694.69" y1="610.15" x2="719.15" y2="674.63">
+      <stop stop-color="#b8b6b5" />
+      <stop offset="1" stop-color="#d6d5d4" />
+    </linearGradient>
+    <linearGradient id="facet-200-fill" gradientUnits="userSpaceOnUse" x1="723.44" y1="582.46" x2="714.78" y2="631.10">
+      <stop stop-color="#868585" />
+      <stop offset="1" stop-color="#b6b5b5" />
+    </linearGradient>
+    <linearGradient id="facet-201-fill" gradientUnits="userSpaceOnUse" x1="712.73" y1="575.07" x2="665.65" y2="588.30">
+      <stop stop-color="#363738" />
+      <stop offset="1" stop-color="#606060" />
+    </linearGradient>
+    <linearGradient id="facet-202-fill" gradientUnits="userSpaceOnUse" x1="418.51" y1="558.19" x2="361.03" y2="464.15">
+      <stop stop-color="#0e110f" />
+      <stop offset="1" stop-color="#2d332f" />
+    </linearGradient>
+    <linearGradient id="facet-203-fill" gradientUnits="userSpaceOnUse" x1="421.02" y1="470.39" x2="393.65" y2="485.98">
+      <stop stop-color="#191f1a" />
+      <stop offset="1" stop-color="#222c26" />
+    </linearGradient>
+    <linearGradient id="facet-204-fill" gradientUnits="userSpaceOnUse" x1="445.89" y1="442.75" x2="416.70" y2="532.83">
+      <stop stop-color="#0b0f0e" />
+      <stop offset="1" stop-color="#2c2f2d" />
+    </linearGradient>
+    <linearGradient id="facet-208-fill" gradientUnits="userSpaceOnUse" x1="449.83" y1="567.39" x2="550.80" y2="548.20">
+      <stop stop-color="#080d0b" />
+      <stop offset="1" stop-color="#171a19" />
+    </linearGradient>
+    <linearGradient id="facet-209-fill" gradientUnits="userSpaceOnUse" x1="446.40" y1="540.67" x2="514.63" y2="612.57">
+      <stop stop-color="#0e100e" />
+      <stop offset="1" stop-color="#1d211f" />
+    </linearGradient>
+    <linearGradient id="facet-210-fill" gradientUnits="userSpaceOnUse" x1="484.72" y1="568.01" x2="437.49" y2="640.12">
+      <stop stop-color="#101511" />
+      <stop offset="1" stop-color="#2c272b" />
+    </linearGradient>
+    <linearGradient id="facet-211-fill" gradientUnits="userSpaceOnUse" x1="413.71" y1="551.93" x2="444.26" y2="648.19">
+      <stop stop-color="#151513" />
+      <stop offset="1" stop-color="#343333" />
+    </linearGradient>
+    <linearGradient id="facet-212-fill" gradientUnits="userSpaceOnUse" x1="444.16" y1="541.19" x2="368.99" y2="618.91">
+      <stop stop-color="#131413" />
+      <stop offset="1" stop-color="#323231" />
+    </linearGradient>
+    <linearGradient id="facet-213-fill" gradientUnits="userSpaceOnUse" x1="429.59" y1="519.93" x2="335.19" y2="585.84">
+      <stop stop-color="#151b15" />
+      <stop offset="1" stop-color="#322e31" />
+    </linearGradient>
+    <linearGradient id="facet-214-fill" gradientUnits="userSpaceOnUse" x1="444.63" y1="544.51" x2="322.11" y2="526.58">
+      <stop stop-color="#111c11" />
+      <stop offset="1" stop-color="#2c2a2c" />
+    </linearGradient>
+    <linearGradient id="facet-215-fill" gradientUnits="userSpaceOnUse" x1="808.89" y1="541.84" x2="909.63" y2="473.09">
+      <stop stop-color="#101110" />
+      <stop offset="1" stop-color="#2f302e" />
+    </linearGradient>
+    <linearGradient id="facet-216-fill" gradientUnits="userSpaceOnUse" x1="829.67" y1="473.01" x2="869.07" y2="484.81">
+      <stop stop-color="#18201a" />
+      <stop offset="1" stop-color="#202e24" />
+    </linearGradient>
+    <linearGradient id="facet-218-fill" gradientUnits="userSpaceOnUse" x1="806.81" y1="480.00" x2="763.11" y2="495.65">
+      <stop stop-color="#141415" />
+      <stop offset="1" stop-color="#0d2415" />
+    </linearGradient>
+    <linearGradient id="facet-219-fill" gradientUnits="userSpaceOnUse" x1="738.95" y1="490.32" x2="808.27" y2="542.96">
+      <stop stop-color="#2a392f" />
+      <stop offset="1" stop-color="#2d392f" />
+    </linearGradient>
+    <linearGradient id="facet-221-fill" gradientUnits="userSpaceOnUse" x1="739.02" y1="541.88" x2="738.96" y2="579.06">
+      <stop stop-color="#0f1411" />
+      <stop offset="1" stop-color="#1b1e1e" />
+    </linearGradient>
+    <linearGradient id="facet-222-fill" gradientUnits="userSpaceOnUse" x1="789.93" y1="532.66" x2="744.06" y2="626.36">
+      <stop stop-color="#131614" />
+      <stop offset="1" stop-color="#1b201d" />
+    </linearGradient>
+    <linearGradient id="facet-223-fill" gradientUnits="userSpaceOnUse" x1="770.84" y1="589.17" x2="820.37" y2="629.24">
+      <stop stop-color="#111512" />
+      <stop offset="1" stop-color="#343333" />
+    </linearGradient>
+    <linearGradient id="facet-224-fill" gradientUnits="userSpaceOnUse" x1="846.84" y1="561.08" x2="804.02" y2="646.00">
+      <stop stop-color="#131412" />
+      <stop offset="1" stop-color="#333132" />
+    </linearGradient>
+    <linearGradient id="facet-225-fill" gradientUnits="userSpaceOnUse" x1="804.28" y1="547.86" x2="892.37" y2="618.82">
+      <stop stop-color="#131312" />
+      <stop offset="1" stop-color="#333232" />
+    </linearGradient>
+    <linearGradient id="facet-226-fill" gradientUnits="userSpaceOnUse" x1="810.16" y1="538.35" x2="922.16" y2="573.90">
+      <stop stop-color="#1a1e1c" />
+      <stop offset="1" stop-color="#2e2c2d" />
+    </linearGradient>
+    <linearGradient id="facet-227-fill" gradientUnits="userSpaceOnUse" x1="808.83" y1="534.88" x2="928.76" y2="532.03">
+      <stop stop-color="#111211" />
+      <stop offset="1" stop-color="#2f2d2d" />
+    </linearGradient>
+    <linearGradient id="facet-228-fill" gradientUnits="userSpaceOnUse" x1="514.91" y1="535.49" x2="499.42" y2="563.27">
+      <stop stop-color="#136526" />
+      <stop offset="1" stop-color="#219137" />
+    </linearGradient>
+    <linearGradient id="facet-229-fill" gradientUnits="userSpaceOnUse" x1="519.83" y1="567.81" x2="479.34" y2="577.42">
+      <stop stop-color="#2ea22c" />
+      <stop offset="1" stop-color="#4ec339" />
+    </linearGradient>
+    <linearGradient id="facet-230-fill" gradientUnits="userSpaceOnUse" x1="473.65" y1="572.28" x2="487.87" y2="610.64">
+      <stop stop-color="#67cb39" />
+      <stop offset="1" stop-color="#7fe02f" />
+    </linearGradient>
+    <linearGradient id="facet-231-fill" gradientUnits="userSpaceOnUse" x1="470.34" y1="587.99" x2="444.38" y2="616.63">
+      <stop stop-color="#a0f041" />
+      <stop offset="1" stop-color="#b2f759" />
+    </linearGradient>
+    <linearGradient id="facet-233-fill" gradientUnits="userSpaceOnUse" x1="425.99" y1="574.57" x2="402.42" y2="604.88">
+      <stop stop-color="#c0f76b" />
+      <stop offset="1" stop-color="#d0fd87" />
+    </linearGradient>
+    <linearGradient id="facet-234-fill" gradientUnits="userSpaceOnUse" x1="370.96" y1="567.13" x2="416.33" y2="577.51">
+      <stop stop-color="#9cef46" />
+      <stop offset="1" stop-color="#b9f963" />
+    </linearGradient>
+    <linearGradient id="facet-235-fill" gradientUnits="userSpaceOnUse" x1="375.24" y1="533.65" x2="395.25" y2="564.30">
+      <stop stop-color="#96ed4d" />
+      <stop offset="1" stop-color="#95ec58" />
+    </linearGradient>
+    <linearGradient id="facet-236-fill" gradientUnits="userSpaceOnUse" x1="389.68" y1="511.28" x2="384.11" y2="543.24">
+      <stop stop-color="#65cf40" />
+      <stop offset="1" stop-color="#80e33f" />
+    </linearGradient>
+    <linearGradient id="facet-237-fill" gradientUnits="userSpaceOnUse" x1="400.93" y1="484.25" x2="389.94" y2="517.79">
+      <stop stop-color="#319e31" />
+      <stop offset="1" stop-color="#49c33b" />
+    </linearGradient>
+    <linearGradient id="facet-238-fill" gradientUnits="userSpaceOnUse" x1="419.02" y1="461.39" x2="404.64" y2="504.68">
+      <stop stop-color="#175720" />
+      <stop offset="1" stop-color="#2e8738" />
+    </linearGradient>
+    <linearGradient id="facet-239-fill" gradientUnits="userSpaceOnUse" x1="445.08" y1="456.43" x2="424.71" y2="493.12">
+      <stop stop-color="#092b13" />
+      <stop offset="1" stop-color="#1a5326" />
+    </linearGradient>
+    <linearGradient id="facet-240-fill" gradientUnits="userSpaceOnUse" x1="467.23" y1="460.73" x2="451.37" y2="495.02">
+      <stop stop-color="#0c2412" />
+      <stop offset="1" stop-color="#0f481e" />
+    </linearGradient>
+    <linearGradient id="facet-241-fill" gradientUnits="userSpaceOnUse" x1="490.82" y1="475.62" x2="471.25" y2="501.12">
+      <stop stop-color="#0c2111" />
+      <stop offset="1" stop-color="#0d3a1d" />
+    </linearGradient>
+    <linearGradient id="facet-242-fill" gradientUnits="userSpaceOnUse" x1="505.63" y1="486.25" x2="490.80" y2="522.92">
+      <stop stop-color="#09250f" />
+      <stop offset="1" stop-color="#0f4321" />
+    </linearGradient>
+    <linearGradient id="facet-243-fill" gradientUnits="userSpaceOnUse" x1="519.25" y1="510.29" x2="494.54" y2="542.70">
+      <stop stop-color="#093a15" />
+      <stop offset="1" stop-color="#1b6a31" />
+    </linearGradient>
+    <linearGradient id="facet-245-fill" gradientUnits="userSpaceOnUse" x1="741.54" y1="535.65" x2="752.63" y2="562.55">
+      <stop stop-color="#105f23" />
+      <stop offset="1" stop-color="#238e3a" />
+    </linearGradient>
+    <linearGradient id="facet-246-fill" gradientUnits="userSpaceOnUse" x1="735.39" y1="578.26" x2="775.78" y2="568.80">
+      <stop stop-color="#2a9f34" />
+      <stop offset="1" stop-color="#49c134" />
+    </linearGradient>
+    <linearGradient id="facet-247-fill" gradientUnits="userSpaceOnUse" x1="769.23" y1="572.42" x2="779.02" y2="613.70">
+      <stop stop-color="#70d838" />
+      <stop offset="1" stop-color="#8eec41" />
+    </linearGradient>
+    <linearGradient id="facet-250-fill" gradientUnits="userSpaceOnUse" x1="847.35" y1="574.11" x2="829.91" y2="611.43">
+      <stop stop-color="#c3f973" />
+      <stop offset="1" stop-color="#cffb7c" />
+    </linearGradient>
+    <linearGradient id="facet-251-fill" gradientUnits="userSpaceOnUse" x1="884.04" y1="570.72" x2="836.18" y2="574.87">
+      <stop stop-color="#9cec4c" />
+      <stop offset="1" stop-color="#bdfa65" />
+    </linearGradient>
+    <linearGradient id="facet-253-fill" gradientUnits="userSpaceOnUse" x1="864.51" y1="510.94" x2="869.62" y2="543.01">
+      <stop stop-color="#56c432" />
+      <stop offset="1" stop-color="#6fd634" />
+    </linearGradient>
+    <linearGradient id="facet-254-fill" gradientUnits="userSpaceOnUse" x1="857.63" y1="480.40" x2="861.26" y2="521.97">
+      <stop stop-color="#329f30" />
+      <stop offset="1" stop-color="#3fc037" />
+    </linearGradient>
+    <linearGradient id="facet-255-fill" gradientUnits="userSpaceOnUse" x1="840.51" y1="459.60" x2="845.16" y2="507.57">
+      <stop stop-color="#1a5c23" />
+      <stop offset="1" stop-color="#2e8c36" />
+    </linearGradient>
+    <linearGradient id="facet-256-fill" gradientUnits="userSpaceOnUse" x1="805.99" y1="458.29" x2="831.19" y2="490.83">
+      <stop stop-color="#0a2a12" />
+      <stop offset="1" stop-color="#1c5a28" />
+    </linearGradient>
+    <linearGradient id="facet-257-fill" gradientUnits="userSpaceOnUse" x1="784.79" y1="460.65" x2="804.39" y2="494.51">
+      <stop stop-color="#0c2311" />
+      <stop offset="1" stop-color="#10451d" />
+    </linearGradient>
+    <linearGradient id="facet-258-fill" gradientUnits="userSpaceOnUse" x1="755.94" y1="477.95" x2="786.15" y2="495.91">
+      <stop stop-color="#0d1c10" />
+      <stop offset="1" stop-color="#0f331c" />
+    </linearGradient>
+    <linearGradient id="facet-259-fill" gradientUnits="userSpaceOnUse" x1="735.51" y1="504.20" x2="774.43" y2="507.95">
+      <stop stop-color="#061e0e" />
+      <stop offset="1" stop-color="#25412e" />
+    </linearGradient>
+    <linearGradient id="facet-260-fill" gradientUnits="userSpaceOnUse" x1="741.70" y1="507.92" x2="753.32" y2="543.19">
+      <stop stop-color="#0b2c15" />
+      <stop offset="1" stop-color="#15572b" />
+    </linearGradient>
+    <linearGradient id="facet-262-fill" gradientUnits="userSpaceOnUse" x1="627.28" y1="550.10" x2="612.79" y2="589.35">
+      <stop stop-color="#777877" />
+      <stop offset="1" stop-color="#939192" />
+    </linearGradient>
+    <linearGradient id="facet-263-fill" gradientUnits="userSpaceOnUse" x1="603.89" y1="585.30" x2="600.26" y2="620.11">
+      <stop stop-color="#929091" />
+      <stop offset="1" stop-color="#a1a1a2" />
+    </linearGradient>
+    <linearGradient id="facet-268-fill" gradientUnits="userSpaceOnUse" x1="601.08" y1="794.95" x2="631.08" y2="640.86">
+      <stop stop-color="#1f1e1e" />
+      <stop offset="1" stop-color="#2e2e2d" />
+    </linearGradient>
+    <linearGradient id="facet-269-fill" gradientUnits="userSpaceOnUse" x1="642.91" y1="567.89" x2="624.04" y2="584.67">
+      <stop stop-color="#6c6a6a" />
+      <stop offset="1" stop-color="#797a7a" />
+    </linearGradient>
+    <linearGradient id="facet-270-fill" gradientUnits="userSpaceOnUse" x1="677.68" y1="603.85" x2="626.35" y2="590.51">
+      <stop stop-color="#807e7e" />
+      <stop offset="1" stop-color="#929191" />
+    </linearGradient>
+  </defs>
+  <g id="silhouette" inkscape:groupmode="layer" inkscape:label="01 · Silhouette">
+    <polygon id="facet-001" inkscape:label="Owl silhouette" points="627.00,194.00 500.00,232.00 417.00,259.00 266.00,155.00 274.00,207.00 130.00,143.00 174.00,295.00 253.00,347.00 186.00,329.00 231.00,414.00 170.00,525.00 203.00,524.00 171.00,666.00 248.33,768.33 343.00,926.00 343.00,877.88 627.00,1000.00 911.00,877.88 911.00,926.00 1005.67,768.33 1083.00,666.00 1051.00,524.00 1084.00,525.00 1023.00,414.00 1068.00,329.00 1001.00,347.00 1080.00,295.00 1124.00,143.00 980.00,207.00 988.00,155.00 837.00,259.00 754.00,232.00" fill="#444544" />
+  </g>
+  <g id="crown" inkscape:groupmode="layer" inkscape:label="02 · Crown and ear feathers">
+    <polygon id="facet-002" inkscape:label="Left crown plane 01" points="130.00,143.00 200.00,200.00 274.00,207.00" fill="url(#facet-002-fill)" stroke="url(#facet-002-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-003" inkscape:label="Left crown plane 02" points="200.00,200.00 276.00,274.00 274.00,207.00" fill="#8e8c8b" stroke="#8e8c8b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-004" inkscape:label="Left crown plane 03" points="130.00,143.00 174.00,295.00 253.00,347.00" fill="url(#facet-004-fill)" stroke="url(#facet-004-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-005" inkscape:label="Left crown plane 04" points="130.00,143.00 253.00,347.00 200.00,200.00" fill="url(#facet-005-fill)" stroke="url(#facet-005-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-006" inkscape:label="Left crown plane 05" points="200.00,200.00 253.00,347.00 276.00,274.00" fill="#20201f" stroke="#20201f" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-007" inkscape:label="Left crown plane 06" points="276.00,274.00 253.00,347.00 274.00,357.00" fill="#20201f" stroke="#20201f" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-008" inkscape:label="Left crown plane 07" points="186.00,329.00 253.00,347.00 236.00,373.00" fill="#212121" stroke="#212121" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-009" inkscape:label="Left crown plane 08" points="253.00,347.00 274.00,357.00 236.00,373.00" fill="#222222" stroke="#222222" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-010" inkscape:label="Left crown plane 09" points="186.00,329.00 236.00,373.00 231.00,414.00" fill="#2d2d2c" stroke="#2d2d2c" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-011" inkscape:label="Left crown plane 10" points="236.00,373.00 274.00,357.00 231.00,414.00" fill="#272727" stroke="#272727" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-012" inkscape:label="Left crown plane 11" points="266.00,155.00 274.00,207.00 276.00,274.00" fill="url(#facet-012-fill)" stroke="url(#facet-012-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-013" inkscape:label="Left crown plane 12" points="266.00,155.00 276.00,274.00 389.00,345.00" fill="url(#facet-013-fill)" stroke="url(#facet-013-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-014" inkscape:label="Left crown plane 13" points="266.00,155.00 389.00,345.00 417.00,259.00" fill="url(#facet-014-fill)" stroke="url(#facet-014-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-015" inkscape:label="Left crown plane 14" points="276.00,274.00 389.00,345.00 318.00,351.00" fill="url(#facet-015-fill)" stroke="url(#facet-015-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-016" inkscape:label="Left crown plane 15" points="276.00,274.00 318.00,351.00 274.00,357.00" fill="#5a5959" stroke="#5a5959" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-017" inkscape:label="Left crown plane 16" points="417.00,259.00 389.00,345.00 435.00,281.00" fill="url(#facet-017-fill)" stroke="url(#facet-017-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-018" inkscape:label="Left crown plane 17" points="435.00,281.00 389.00,345.00 449.00,345.00" fill="url(#facet-018-fill)" stroke="url(#facet-018-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-019" inkscape:label="Left crown plane 18" points="435.00,281.00 449.00,345.00 473.00,309.00" fill="#7a7979" stroke="#7a7979" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-020" inkscape:label="Left crown plane 19" points="473.00,309.00 449.00,345.00 499.00,345.00" fill="url(#facet-020-fill)" stroke="url(#facet-020-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-021" inkscape:label="Left crown plane 20" points="417.00,259.00 435.00,281.00 473.00,309.00" fill="url(#facet-021-fill)" stroke="url(#facet-021-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-022" inkscape:label="Left crown plane 21" points="417.00,259.00 473.00,309.00 499.00,345.00" fill="#353434" stroke="#353434" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-023" inkscape:label="Left crown plane 22" points="417.00,259.00 499.00,345.00 500.00,232.00" fill="url(#facet-023-fill)" stroke="url(#facet-023-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-024" inkscape:label="Left crown plane 23" points="500.00,232.00 499.00,345.00 565.00,345.00" fill="#393838" stroke="#393838" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-025" inkscape:label="Left crown plane 24" points="500.00,232.00 565.00,345.00 627.00,302.00" fill="#50504f" stroke="#50504f" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-026" inkscape:label="Left crown plane 25" points="500.00,232.00 627.00,302.00 627.00,194.00" fill="url(#facet-026-fill)" stroke="url(#facet-026-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-027" inkscape:label="Left crown plane 26" points="565.00,345.00 627.00,302.00 627.00,345.00" fill="#545453" stroke="#545453" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-028" inkscape:label="Right crown plane 01" points="1124.00,143.00 1054.00,200.00 980.00,207.00" fill="url(#facet-028-fill)" stroke="url(#facet-028-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-029" inkscape:label="Right crown plane 02" points="1054.00,200.00 978.00,274.00 980.00,207.00" fill="#8b8989" stroke="#8b8989" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-030" inkscape:label="Right crown plane 03" points="1124.00,143.00 1080.00,295.00 1001.00,347.00" fill="url(#facet-030-fill)" stroke="url(#facet-030-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-031" inkscape:label="Right crown plane 04" points="1124.00,143.00 1001.00,347.00 1054.00,200.00" fill="#222222" stroke="#222222" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-032" inkscape:label="Right crown plane 05" points="1054.00,200.00 1001.00,347.00 978.00,274.00" fill="#20201f" stroke="#20201f" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-033" inkscape:label="Right crown plane 06" points="978.00,274.00 1001.00,347.00 980.00,357.00" fill="#1c1c1c" stroke="#1c1c1c" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-034" inkscape:label="Right crown plane 07" points="1068.00,329.00 1001.00,347.00 1018.00,373.00" fill="#202020" stroke="#202020" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-035" inkscape:label="Right crown plane 08" points="1001.00,347.00 980.00,357.00 1018.00,373.00" fill="#1f1e20" stroke="#1f1e20" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-036" inkscape:label="Right crown plane 09" points="1068.00,329.00 1018.00,373.00 1023.00,414.00" fill="#292928" stroke="#292928" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-037" inkscape:label="Right crown plane 10" points="1018.00,373.00 980.00,357.00 1023.00,414.00" fill="#262626" stroke="#262626" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-038" inkscape:label="Right crown plane 11" points="988.00,155.00 980.00,207.00 978.00,274.00" fill="url(#facet-038-fill)" stroke="url(#facet-038-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-039" inkscape:label="Right crown plane 12" points="988.00,155.00 978.00,274.00 865.00,345.00" fill="url(#facet-039-fill)" stroke="url(#facet-039-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-040" inkscape:label="Right crown plane 13" points="988.00,155.00 865.00,345.00 837.00,259.00" fill="url(#facet-040-fill)" stroke="url(#facet-040-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-041" inkscape:label="Right crown plane 14" points="978.00,274.00 865.00,345.00 936.00,351.00" fill="url(#facet-041-fill)" stroke="url(#facet-041-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-042" inkscape:label="Right crown plane 15" points="978.00,274.00 936.00,351.00 980.00,357.00" fill="#575757" stroke="#575757" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-043" inkscape:label="Right crown plane 16" points="837.00,259.00 865.00,345.00 819.00,281.00" fill="url(#facet-043-fill)" stroke="url(#facet-043-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-044" inkscape:label="Right crown plane 17" points="819.00,281.00 865.00,345.00 805.00,345.00" fill="url(#facet-044-fill)" stroke="url(#facet-044-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-045" inkscape:label="Right crown plane 18" points="819.00,281.00 805.00,345.00 781.00,309.00" fill="#737373" stroke="#737373" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-046" inkscape:label="Right crown plane 19" points="781.00,309.00 805.00,345.00 755.00,345.00" fill="url(#facet-046-fill)" stroke="url(#facet-046-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-047" inkscape:label="Right crown plane 20" points="837.00,259.00 819.00,281.00 781.00,309.00" fill="url(#facet-047-fill)" stroke="url(#facet-047-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-048" inkscape:label="Right crown plane 21" points="837.00,259.00 781.00,309.00 755.00,345.00" fill="url(#facet-048-fill)" stroke="url(#facet-048-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-049" inkscape:label="Right crown plane 22" points="837.00,259.00 755.00,345.00 754.00,232.00" fill="url(#facet-049-fill)" stroke="url(#facet-049-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-050" inkscape:label="Right crown plane 23" points="754.00,232.00 755.00,345.00 689.00,345.00" fill="#302f2f" stroke="#302f2f" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-051" inkscape:label="Right crown plane 24" points="754.00,232.00 689.00,345.00 627.00,302.00" fill="#3f3e3e" stroke="#3f3e3e" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-052" inkscape:label="Right crown plane 25" points="754.00,232.00 627.00,302.00 627.00,194.00" fill="url(#facet-052-fill)" stroke="url(#facet-052-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-053" inkscape:label="Right crown plane 26" points="689.00,345.00 627.00,302.00 627.00,345.00" fill="url(#facet-053-fill)" stroke="url(#facet-053-fill)" stroke-width="0.65" stroke-linejoin="round" />
+  </g>
+  <g id="cheeks" inkscape:groupmode="layer" inkscape:label="03 · Cheek and lower feathers">
+    <polygon id="facet-054" inkscape:label="Left feather plane 01" points="231.00,414.00 274.00,357.00 264.00,463.00" fill="#8d8b8b" stroke="#8d8b8b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-055" inkscape:label="Left feather plane 02" points="231.00,414.00 264.00,463.00 200.00,506.00" fill="#898787" stroke="#898787" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-056" inkscape:label="Left feather plane 03" points="231.00,414.00 200.00,506.00 170.00,525.00" fill="#898787" stroke="#898787" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-057" inkscape:label="Left feather plane 04" points="170.00,525.00 200.00,506.00 203.00,524.00" fill="#3e3e3e" stroke="#3e3e3e" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-058" inkscape:label="Left feather plane 05" points="200.00,506.00 264.00,463.00 245.00,565.00" fill="url(#facet-058-fill)" stroke="url(#facet-058-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-059" inkscape:label="Left feather plane 06" points="200.00,506.00 245.00,565.00 203.00,524.00" fill="url(#facet-059-fill)" stroke="url(#facet-059-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-060" inkscape:label="Left feather plane 07" points="203.00,524.00 245.00,565.00 171.00,666.00" fill="url(#facet-060-fill)" stroke="url(#facet-060-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-061" inkscape:label="Left feather plane 08" points="171.00,666.00 245.00,565.00 254.00,744.00" fill="url(#facet-061-fill)" stroke="url(#facet-061-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-062" inkscape:label="Left feather plane 09" points="171.00,666.00 254.00,744.00 248.33,768.33" fill="url(#facet-062-fill)" stroke="url(#facet-062-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-063" inkscape:label="Left feather plane 10" points="245.00,565.00 315.00,701.00 254.00,744.00" fill="#3e3e3e" stroke="#3e3e3e" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-064" inkscape:label="Left feather plane 11" points="254.00,744.00 315.00,701.00 343.00,830.00" fill="#2d2d2c" stroke="#2d2d2c" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-065" inkscape:label="Left feather plane 12" points="254.00,744.00 343.00,830.00 343.00,926.00" fill="#5b5b5b" stroke="#5b5b5b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-066" inkscape:label="Left feather plane 13" points="254.00,744.00 343.00,926.00 248.33,768.33" fill="#a7a6a5" stroke="#a7a6a5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-067" inkscape:label="Left feather plane 14" points="315.00,701.00 388.00,738.00 446.00,771.00" fill="#777777" stroke="#777777" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-068" inkscape:label="Left feather plane 15" points="315.00,701.00 446.00,771.00 387.00,858.00" fill="#484847" stroke="#484847" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-069" inkscape:label="Left feather plane 16" points="315.00,701.00 387.00,858.00 343.00,830.00" fill="#2c2b2b" stroke="#2c2b2b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-070" inkscape:label="Left feather plane 17" points="343.00,830.00 387.00,858.00 343.00,877.00" fill="#8c8a8a" stroke="#8c8a8a" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-071" inkscape:label="Left feather plane 18" points="344.70,878.61 343.00,877.00 387.00,858.00 410.02,906.70" fill="#898888" stroke="#898888" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-072" inkscape:label="Left feather plane 19" points="387.00,858.00 446.00,771.00 500.00,934.00" fill="#868585" stroke="#868585" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-073" inkscape:label="Left feather plane 20" points="410.02,906.70 387.00,858.00 500.00,934.00 488.46,940.43" fill="#a7a6a6" stroke="#a7a6a6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-074" inkscape:label="Left feather plane 21" points="488.46,940.43 500.00,934.00 503.41,946.86" fill="#a7a6a5" stroke="#a7a6a5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-075" inkscape:label="Left feather plane 22" points="388.00,738.00 475.00,738.00 446.00,771.00" fill="url(#facet-075-fill)" stroke="url(#facet-075-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-076" inkscape:label="Left feather plane 23" points="475.00,738.00 527.00,722.00 446.00,771.00" fill="#7e7d7d" stroke="#7e7d7d" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-077" inkscape:label="Left feather plane 24" points="446.00,771.00 527.00,722.00 527.00,830.00" fill="url(#facet-077-fill)" stroke="url(#facet-077-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-078" inkscape:label="Left feather plane 25" points="446.00,771.00 527.00,830.00 500.00,934.00" fill="#646363" stroke="#646363" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-079" inkscape:label="Left feather plane 26" points="527.00,722.00 565.00,665.00 627.00,828.00" fill="url(#facet-079-fill)" stroke="url(#facet-079-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-080" inkscape:label="Left feather plane 27" points="527.00,722.00 627.00,828.00 527.00,830.00" fill="url(#facet-080-fill)" stroke="url(#facet-080-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-081" inkscape:label="Left feather plane 28" points="527.00,830.00 627.00,828.00 627.00,915.00" fill="#ebe9e8" stroke="#ebe9e8" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-082" inkscape:label="Left feather plane 29" points="605.88,990.92 527.00,830.00 627.00,915.00 627.00,1000.00" fill="#878686" stroke="#878686" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-083" inkscape:label="Left feather plane 30" points="527.00,830.00 605.88,990.92 531.87,959.09 500.00,934.00" fill="#5b5b5b" stroke="#5b5b5b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-084" inkscape:label="Right feather plane 01" points="1023.00,414.00 980.00,357.00 990.00,463.00" fill="#858383" stroke="#858383" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-085" inkscape:label="Right feather plane 02" points="1023.00,414.00 990.00,463.00 1054.00,506.00" fill="#8a8888" stroke="#8a8888" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-086" inkscape:label="Right feather plane 03" points="1023.00,414.00 1054.00,506.00 1084.00,525.00" fill="#888787" stroke="#888787" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-087" inkscape:label="Right feather plane 04" points="1084.00,525.00 1054.00,506.00 1051.00,524.00" fill="#404040" stroke="#404040" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-088" inkscape:label="Right feather plane 05" points="1054.00,506.00 990.00,463.00 1009.00,565.00" fill="url(#facet-088-fill)" stroke="url(#facet-088-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-089" inkscape:label="Right feather plane 06" points="1054.00,506.00 1009.00,565.00 1051.00,524.00" fill="url(#facet-089-fill)" stroke="url(#facet-089-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-090" inkscape:label="Right feather plane 07" points="1051.00,524.00 1009.00,565.00 1083.00,666.00" fill="#252524" stroke="#252524" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-091" inkscape:label="Right feather plane 08" points="1083.00,666.00 1009.00,565.00 1000.00,744.00" fill="url(#facet-091-fill)" stroke="url(#facet-091-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-092" inkscape:label="Right feather plane 09" points="1083.00,666.00 1000.00,744.00 1005.67,768.33" fill="#929191" stroke="#929191" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-093" inkscape:label="Right feather plane 10" points="1009.00,565.00 939.00,701.00 1000.00,744.00" fill="#3d3c3c" stroke="#3d3c3c" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-094" inkscape:label="Right feather plane 11" points="1000.00,744.00 939.00,701.00 911.00,830.00" fill="#272727" stroke="#272727" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-095" inkscape:label="Right feather plane 12" points="1000.00,744.00 911.00,830.00 911.00,926.00" fill="#5b5b5b" stroke="#5b5b5b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-096" inkscape:label="Right feather plane 13" points="1000.00,744.00 911.00,926.00 1005.67,768.33" fill="#a7a6a5" stroke="#a7a6a5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-097" inkscape:label="Right feather plane 14" points="939.00,701.00 866.00,738.00 808.00,771.00" fill="#777777" stroke="#777777" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-098" inkscape:label="Right feather plane 15" points="939.00,701.00 808.00,771.00 867.00,858.00" fill="#444343" stroke="#444343" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-099" inkscape:label="Right feather plane 16" points="939.00,701.00 867.00,858.00 911.00,830.00" fill="#252424" stroke="#252424" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-100" inkscape:label="Right feather plane 17" points="911.00,830.00 867.00,858.00 911.00,877.00" fill="url(#facet-100-fill)" stroke="url(#facet-100-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-101" inkscape:label="Right feather plane 18" points="909.30,878.61 911.00,877.00 867.00,858.00 843.98,906.70" fill="#7f7e7e" stroke="#7f7e7e" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-102" inkscape:label="Right feather plane 19" points="867.00,858.00 808.00,771.00 754.00,934.00" fill="#7a7878" stroke="#7a7878" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-103" inkscape:label="Right feather plane 20" points="843.98,906.70 867.00,858.00 754.00,934.00 765.54,940.43" fill="#a7a6a6" stroke="#a7a6a6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-104" inkscape:label="Right feather plane 21" points="765.54,940.43 754.00,934.00 750.59,946.86" fill="#a7a6a6" stroke="#a7a6a6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-105" inkscape:label="Right feather plane 22" points="866.00,738.00 779.00,738.00 808.00,771.00" fill="url(#facet-105-fill)" stroke="url(#facet-105-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-106" inkscape:label="Right feather plane 23" points="779.00,738.00 727.00,722.00 808.00,771.00" fill="#7c7c7c" stroke="#7c7c7c" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-107" inkscape:label="Right feather plane 24" points="808.00,771.00 727.00,722.00 727.00,830.00" fill="url(#facet-107-fill)" stroke="url(#facet-107-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-108" inkscape:label="Right feather plane 25" points="808.00,771.00 727.00,830.00 754.00,934.00" fill="#5e5d5d" stroke="#5e5d5d" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-109" inkscape:label="Right feather plane 26" points="727.00,722.00 689.00,665.00 627.00,828.00" fill="url(#facet-109-fill)" stroke="url(#facet-109-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-110" inkscape:label="Right feather plane 27" points="727.00,722.00 627.00,828.00 727.00,830.00" fill="url(#facet-110-fill)" stroke="url(#facet-110-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-111" inkscape:label="Right feather plane 28" points="727.00,830.00 627.00,828.00 627.00,915.00" fill="#d7d5d4" stroke="#d7d5d4" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-112" inkscape:label="Right feather plane 29" points="627.00,1000.00 648.12,990.92 727.00,830.00 627.00,915.00 627.00,1000.00" fill="#6a6a6a" stroke="#6a6a6a" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-113" inkscape:label="Right feather plane 30" points="727.00,830.00 648.12,990.92 722.13,959.09 754.00,934.00" fill="#5b5b5b" stroke="#5b5b5b" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="left-chin-join-outer" inkscape:label="Left outer chin join" points="343.00,877.88 343.00,877.00 344.70,878.61" fill="#a6a6a5" stroke="#a6a6a5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="left-chin-join-inner" inkscape:label="Left inner chin join" points="503.41,946.86 500.00,934.00 531.87,959.09" fill="#a3a3a2" stroke="#a3a3a2" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="right-chin-join-outer" inkscape:label="Right outer chin join" points="911.00,877.88 911.00,877.00 909.30,878.61" fill="#a6a6a5" stroke="#a6a6a5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="right-chin-join-inner" inkscape:label="Right inner chin join" points="750.59,946.86 754.00,934.00 722.13,959.09" fill="#a3a3a2" stroke="#a3a3a2" stroke-width="0.65" stroke-linejoin="round" />
+  </g>
+  <g id="facial-marking" inkscape:groupmode="layer" inkscape:label="04 · Pale B facial feathers">
+    <polygon id="facet-114" inkscape:label="Left facial plane 01" points="274.00,357.00 318.00,351.00 354.00,419.00" fill="url(#facet-114-fill)" stroke="url(#facet-114-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-115" inkscape:label="Left facial plane 02" points="318.00,351.00 389.00,345.00 354.00,419.00" fill="url(#facet-115-fill)" stroke="url(#facet-115-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-116" inkscape:label="Left facial plane 03" points="389.00,345.00 459.00,419.00 354.00,419.00" fill="#e7e5e4" stroke="#e7e5e4" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-117" inkscape:label="Left facial plane 04" points="389.00,345.00 499.00,345.00 459.00,419.00" fill="#faf8f7" stroke="#faf8f7" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-118" inkscape:label="Left facial plane 05" points="499.00,345.00 538.00,445.00 459.00,419.00" fill="url(#facet-118-fill)" stroke="url(#facet-118-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-119" inkscape:label="Left facial plane 06" points="499.00,345.00 553.00,431.00 538.00,445.00" fill="#f1efef" stroke="#f1efef" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-120" inkscape:label="Left facial plane 07" points="499.00,345.00 565.00,345.00 553.00,431.00" fill="#cbc9c8" stroke="#cbc9c8" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-121" inkscape:label="Left facial plane 08" points="565.00,345.00 627.00,345.00 553.00,431.00" fill="#cbc9c9" stroke="#cbc9c9" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-122" inkscape:label="Left facial plane 09" points="627.00,345.00 627.00,431.00 553.00,431.00" fill="#cccbca" stroke="#cccbca" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-123" inkscape:label="Left facial plane 10" points="553.00,431.00 627.00,431.00 600.00,501.00" fill="#ebeae8" stroke="#ebeae8" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-124" inkscape:label="Left facial plane 11" points="553.00,431.00 600.00,501.00 538.00,445.00" fill="#f2f0ef" stroke="#f2f0ef" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-125" inkscape:label="Left facial plane 12" points="627.00,431.00 627.00,528.00 600.00,501.00" fill="url(#facet-125-fill)" stroke="url(#facet-125-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-126" inkscape:label="Left facial plane 13" points="538.00,445.00 600.00,501.00 499.00,473.00" fill="url(#facet-126-fill)" stroke="url(#facet-126-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-127" inkscape:label="Left facial plane 14" points="600.00,501.00 627.00,528.00 550.00,544.00" fill="url(#facet-127-fill)" stroke="url(#facet-127-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-128" inkscape:label="Left facial plane 15" points="600.00,501.00 550.00,544.00 499.00,473.00" fill="url(#facet-128-fill)" stroke="url(#facet-128-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-129" inkscape:label="Left facial plane 16" points="627.00,528.00 627.00,550.00 550.00,544.00" fill="#f7f5f4" stroke="#f7f5f4" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-130" inkscape:label="Left facial plane 17" points="550.00,544.00 627.00,550.00 580.00,618.00" fill="#fbf9f8" stroke="#fbf9f8" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-131" inkscape:label="Left facial plane 18" points="627.00,550.00 601.00,585.00 580.00,618.00" fill="#777777" stroke="#777777" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-132" inkscape:label="Left facial plane 19" points="354.00,419.00 459.00,419.00 402.00,437.00" fill="url(#facet-132-fill)" stroke="url(#facet-132-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-133" inkscape:label="Left facial plane 20" points="459.00,419.00 459.00,447.00 402.00,437.00" fill="url(#facet-133-fill)" stroke="url(#facet-133-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-134" inkscape:label="Left facial plane 21" points="459.00,419.00 499.00,473.00 459.00,447.00" fill="url(#facet-134-fill)" stroke="url(#facet-134-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-135" inkscape:label="Left facial plane 22" points="459.00,419.00 538.00,445.00 499.00,473.00" fill="url(#facet-135-fill)" stroke="url(#facet-135-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-136" inkscape:label="Left facial plane 23" points="274.00,357.00 354.00,419.00 264.00,463.00" fill="url(#facet-136-fill)" stroke="url(#facet-136-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-137" inkscape:label="Left facial plane 24" points="354.00,419.00 376.00,455.00 326.00,500.00" fill="url(#facet-137-fill)" stroke="url(#facet-137-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-138" inkscape:label="Left facial plane 25" points="354.00,419.00 326.00,500.00 264.00,463.00" fill="url(#facet-138-fill)" stroke="url(#facet-138-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-139" inkscape:label="Left facial plane 26" points="354.00,419.00 402.00,437.00 376.00,455.00" fill="url(#facet-139-fill)" stroke="url(#facet-139-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-140" inkscape:label="Left facial plane 27" points="264.00,463.00 326.00,500.00 306.00,532.00" fill="#d8d7d6" stroke="#d8d7d6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-141" inkscape:label="Left facial plane 28" points="264.00,463.00 306.00,532.00 245.00,565.00" fill="url(#facet-141-fill)" stroke="url(#facet-141-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-142" inkscape:label="Left facial plane 29" points="245.00,565.00 306.00,532.00 323.00,646.00" fill="#eeeceb" stroke="#eeeceb" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-143" inkscape:label="Left facial plane 30" points="245.00,565.00 323.00,646.00 315.00,701.00" fill="#b6b4b4" stroke="#b6b4b4" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-144" inkscape:label="Left facial plane 31" points="306.00,532.00 326.00,500.00 336.00,587.00" fill="url(#facet-144-fill)" stroke="url(#facet-144-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-145" inkscape:label="Left facial plane 32" points="306.00,532.00 336.00,587.00 323.00,646.00" fill="url(#facet-145-fill)" stroke="url(#facet-145-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-146" inkscape:label="Left facial plane 33" points="323.00,646.00 336.00,587.00 405.00,646.00" fill="url(#facet-146-fill)" stroke="url(#facet-146-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-147" inkscape:label="Left facial plane 34" points="323.00,646.00 405.00,646.00 388.00,738.00" fill="#f8f6f5" stroke="#f8f6f5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-148" inkscape:label="Left facial plane 35" points="323.00,646.00 388.00,738.00 315.00,701.00" fill="url(#facet-148-fill)" stroke="url(#facet-148-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-149" inkscape:label="Left facial plane 36" points="405.00,646.00 478.00,642.00 388.00,738.00" fill="#f6f5f4" stroke="#f6f5f4" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-150" inkscape:label="Left facial plane 37" points="388.00,738.00 478.00,642.00 475.00,738.00" fill="url(#facet-150-fill)" stroke="url(#facet-150-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-151" inkscape:label="Left facial plane 38" points="478.00,642.00 491.00,658.00 475.00,738.00" fill="url(#facet-151-fill)" stroke="url(#facet-151-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-152" inkscape:label="Left facial plane 39" points="491.00,658.00 527.00,722.00 475.00,738.00" fill="url(#facet-152-fill)" stroke="url(#facet-152-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-153" inkscape:label="Left facial plane 40" points="491.00,658.00 565.00,665.00 527.00,722.00" fill="url(#facet-153-fill)" stroke="url(#facet-153-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-154" inkscape:label="Left facial plane 41" points="491.00,658.00 580.00,618.00 565.00,665.00" fill="url(#facet-154-fill)" stroke="url(#facet-154-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-155" inkscape:label="Left facial plane 42" points="478.00,642.00 580.00,618.00 491.00,658.00" fill="url(#facet-155-fill)" stroke="url(#facet-155-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-156" inkscape:label="Left facial plane 43" points="478.00,642.00 550.00,579.00 580.00,618.00" fill="url(#facet-156-fill)" stroke="url(#facet-156-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-157" inkscape:label="Left facial plane 44" points="550.00,544.00 580.00,618.00 550.00,579.00" fill="url(#facet-157-fill)" stroke="url(#facet-157-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-158" inkscape:label="Right facial plane 01" points="980.00,357.00 936.00,351.00 900.00,419.00" fill="url(#facet-158-fill)" stroke="url(#facet-158-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-159" inkscape:label="Right facial plane 02" points="936.00,351.00 865.00,345.00 900.00,419.00" fill="#d9d8d7" stroke="#d9d8d7" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-160" inkscape:label="Right facial plane 03" points="865.00,345.00 795.00,419.00 900.00,419.00" fill="#d9d7d6" stroke="#d9d7d6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-161" inkscape:label="Right facial plane 04" points="865.00,345.00 755.00,345.00 795.00,419.00" fill="#f9f7f6" stroke="#f9f7f6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-162" inkscape:label="Right facial plane 05" points="755.00,345.00 716.00,445.00 795.00,419.00" fill="#edebea" stroke="#edebea" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-163" inkscape:label="Right facial plane 06" points="755.00,345.00 701.00,431.00 716.00,445.00" fill="#edebea" stroke="#edebea" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-164" inkscape:label="Right facial plane 07" points="755.00,345.00 689.00,345.00 701.00,431.00" fill="url(#facet-164-fill)" stroke="url(#facet-164-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-165" inkscape:label="Right facial plane 08" points="689.00,345.00 627.00,345.00 701.00,431.00" fill="url(#facet-165-fill)" stroke="url(#facet-165-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-166" inkscape:label="Right facial plane 09" points="627.00,345.00 627.00,431.00 701.00,431.00" fill="url(#facet-166-fill)" stroke="url(#facet-166-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-167" inkscape:label="Right facial plane 10" points="701.00,431.00 627.00,431.00 654.00,501.00" fill="#d7d5d4" stroke="#d7d5d4" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-168" inkscape:label="Right facial plane 11" points="701.00,431.00 654.00,501.00 716.00,445.00" fill="#ecebea" stroke="#ecebea" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-169" inkscape:label="Right facial plane 12" points="627.00,431.00 627.00,528.00 654.00,501.00" fill="#d9d7d6" stroke="#d9d7d6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-170" inkscape:label="Right facial plane 13" points="716.00,445.00 654.00,501.00 755.00,473.00" fill="url(#facet-170-fill)" stroke="url(#facet-170-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-171" inkscape:label="Right facial plane 14" points="654.00,501.00 627.00,528.00 704.00,544.00" fill="url(#facet-171-fill)" stroke="url(#facet-171-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-172" inkscape:label="Right facial plane 15" points="654.00,501.00 704.00,544.00 755.00,473.00" fill="url(#facet-172-fill)" stroke="url(#facet-172-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-173" inkscape:label="Right facial plane 16" points="627.00,528.00 627.00,550.00 704.00,544.00" fill="#edeceb" stroke="#edeceb" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-174" inkscape:label="Right facial plane 17" points="704.00,544.00 627.00,550.00 674.00,618.00" fill="url(#facet-174-fill)" stroke="url(#facet-174-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-175" inkscape:label="Right facial plane 18" points="627.00,550.00 653.00,585.00 674.00,618.00" fill="#777777" stroke="#777777" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-176" inkscape:label="Right facial plane 19" points="900.00,419.00 795.00,419.00 852.00,437.00" fill="url(#facet-176-fill)" stroke="url(#facet-176-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-177" inkscape:label="Right facial plane 20" points="795.00,419.00 795.00,447.00 852.00,437.00" fill="url(#facet-177-fill)" stroke="url(#facet-177-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-178" inkscape:label="Right facial plane 21" points="795.00,419.00 755.00,473.00 795.00,447.00" fill="url(#facet-178-fill)" stroke="url(#facet-178-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-179" inkscape:label="Right facial plane 22" points="795.00,419.00 716.00,445.00 755.00,473.00" fill="#abaaa9" stroke="#abaaa9" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-180" inkscape:label="Right facial plane 23" points="980.00,357.00 900.00,419.00 990.00,463.00" fill="url(#facet-180-fill)" stroke="url(#facet-180-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-181" inkscape:label="Right facial plane 24" points="900.00,419.00 878.00,455.00 928.00,500.00" fill="url(#facet-181-fill)" stroke="url(#facet-181-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-182" inkscape:label="Right facial plane 25" points="900.00,419.00 928.00,500.00 990.00,463.00" fill="url(#facet-182-fill)" stroke="url(#facet-182-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-183" inkscape:label="Right facial plane 26" points="900.00,419.00 852.00,437.00 878.00,455.00" fill="url(#facet-183-fill)" stroke="url(#facet-183-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-184" inkscape:label="Right facial plane 27" points="990.00,463.00 928.00,500.00 948.00,532.00" fill="#d8d5d5" stroke="#d8d5d5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-185" inkscape:label="Right facial plane 28" points="990.00,463.00 948.00,532.00 1009.00,565.00" fill="url(#facet-185-fill)" stroke="url(#facet-185-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-186" inkscape:label="Right facial plane 29" points="1009.00,565.00 948.00,532.00 931.00,646.00" fill="#f0eeed" stroke="#f0eeed" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-187" inkscape:label="Right facial plane 30" points="1009.00,565.00 931.00,646.00 939.00,701.00" fill="#b3b2b2" stroke="#b3b2b2" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-188" inkscape:label="Right facial plane 31" points="948.00,532.00 928.00,500.00 918.00,587.00" fill="url(#facet-188-fill)" stroke="url(#facet-188-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-189" inkscape:label="Right facial plane 32" points="948.00,532.00 918.00,587.00 931.00,646.00" fill="url(#facet-189-fill)" stroke="url(#facet-189-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-190" inkscape:label="Right facial plane 33" points="931.00,646.00 918.00,587.00 849.00,646.00" fill="url(#facet-190-fill)" stroke="url(#facet-190-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-191" inkscape:label="Right facial plane 34" points="931.00,646.00 849.00,646.00 866.00,738.00" fill="#f9f7f6" stroke="#f9f7f6" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-192" inkscape:label="Right facial plane 35" points="931.00,646.00 866.00,738.00 939.00,701.00" fill="#d4d2d1" stroke="#d4d2d1" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-193" inkscape:label="Right facial plane 36" points="849.00,646.00 776.00,642.00 866.00,738.00" fill="#f7f6f5" stroke="#f7f6f5" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-194" inkscape:label="Right facial plane 37" points="866.00,738.00 776.00,642.00 779.00,738.00" fill="#e6e5e3" stroke="#e6e5e3" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-195" inkscape:label="Right facial plane 38" points="776.00,642.00 763.00,658.00 779.00,738.00" fill="url(#facet-195-fill)" stroke="url(#facet-195-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-196" inkscape:label="Right facial plane 39" points="763.00,658.00 727.00,722.00 779.00,738.00" fill="url(#facet-196-fill)" stroke="url(#facet-196-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-197" inkscape:label="Right facial plane 40" points="763.00,658.00 689.00,665.00 727.00,722.00" fill="url(#facet-197-fill)" stroke="url(#facet-197-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-198" inkscape:label="Right facial plane 41" points="763.00,658.00 674.00,618.00 689.00,665.00" fill="url(#facet-198-fill)" stroke="url(#facet-198-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-199" inkscape:label="Right facial plane 42" points="776.00,642.00 674.00,618.00 763.00,658.00" fill="#dcdbda" stroke="#dcdbda" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-200" inkscape:label="Right facial plane 43" points="776.00,642.00 704.00,579.00 674.00,618.00" fill="url(#facet-200-fill)" stroke="url(#facet-200-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-201" inkscape:label="Right facial plane 44" points="704.00,544.00 674.00,618.00 704.00,579.00" fill="url(#facet-201-fill)" stroke="url(#facet-201-fill)" stroke-width="0.65" stroke-linejoin="round" />
+  </g>
+  <g id="eye-pockets" inkscape:groupmode="layer" inkscape:label="05 · Recessed eye pockets">
+    <polygon id="facet-202" inkscape:label="Left eye pocket 01" points="445.00,542.00 326.00,500.00 376.00,455.00" fill="url(#facet-202-fill)" stroke="url(#facet-202-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-203" inkscape:label="Left eye pocket 02" points="445.00,542.00 376.00,455.00 402.00,437.00" fill="url(#facet-203-fill)" stroke="url(#facet-203-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-204" inkscape:label="Left eye pocket 03" points="445.00,542.00 402.00,437.00 459.00,447.00" fill="url(#facet-204-fill)" stroke="url(#facet-204-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-205" inkscape:label="Left eye pocket 04" points="445.00,542.00 459.00,447.00 499.00,473.00" fill="#121514" stroke="#121514" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-206" inkscape:label="Left eye pocket 05" points="445.00,542.00 499.00,473.00 530.00,510.00" fill="#111414" stroke="#111414" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-207" inkscape:label="Left eye pocket 06" points="445.00,542.00 530.00,510.00 550.00,544.00" fill="#111513" stroke="#111513" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-208" inkscape:label="Left eye pocket 07" points="445.00,542.00 550.00,544.00 550.00,579.00" fill="url(#facet-208-fill)" stroke="url(#facet-208-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-209" inkscape:label="Left eye pocket 08" points="445.00,542.00 550.00,579.00 478.00,642.00" fill="url(#facet-209-fill)" stroke="url(#facet-209-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-210" inkscape:label="Left eye pocket 09" points="445.00,542.00 478.00,642.00 448.00,647.00" fill="url(#facet-210-fill)" stroke="url(#facet-210-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-211" inkscape:label="Left eye pocket 10" points="445.00,542.00 448.00,647.00 405.00,646.00" fill="url(#facet-211-fill)" stroke="url(#facet-211-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-212" inkscape:label="Left eye pocket 11" points="445.00,542.00 405.00,646.00 336.00,587.00" fill="url(#facet-212-fill)" stroke="url(#facet-212-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-213" inkscape:label="Left eye pocket 12" points="445.00,542.00 336.00,587.00 327.00,557.00" fill="url(#facet-213-fill)" stroke="url(#facet-213-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-214" inkscape:label="Left eye pocket 13" points="445.00,542.00 327.00,557.00 326.00,500.00" fill="url(#facet-214-fill)" stroke="url(#facet-214-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-215" inkscape:label="Right eye pocket 01" points="809.00,542.00 928.00,500.00 878.00,455.00" fill="url(#facet-215-fill)" stroke="url(#facet-215-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-216" inkscape:label="Right eye pocket 02" points="809.00,542.00 878.00,455.00 852.00,437.00" fill="url(#facet-216-fill)" stroke="url(#facet-216-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-217" inkscape:label="Right eye pocket 03" points="809.00,542.00 852.00,437.00 795.00,447.00" fill="#141716" stroke="#141716" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-218" inkscape:label="Right eye pocket 04" points="809.00,542.00 795.00,447.00 755.00,473.00" fill="url(#facet-218-fill)" stroke="url(#facet-218-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-219" inkscape:label="Right eye pocket 05" points="809.00,542.00 755.00,473.00 724.00,510.00" fill="url(#facet-219-fill)" stroke="url(#facet-219-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-220" inkscape:label="Right eye pocket 06" points="809.00,542.00 724.00,510.00 704.00,544.00" fill="#101513" stroke="#101513" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-221" inkscape:label="Right eye pocket 07" points="809.00,542.00 704.00,544.00 704.00,579.00" fill="url(#facet-221-fill)" stroke="url(#facet-221-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-222" inkscape:label="Right eye pocket 08" points="809.00,542.00 704.00,579.00 776.00,642.00" fill="url(#facet-222-fill)" stroke="url(#facet-222-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-223" inkscape:label="Right eye pocket 09" points="809.00,542.00 776.00,642.00 806.00,647.00" fill="url(#facet-223-fill)" stroke="url(#facet-223-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-224" inkscape:label="Right eye pocket 10" points="809.00,542.00 806.00,647.00 849.00,646.00" fill="url(#facet-224-fill)" stroke="url(#facet-224-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-225" inkscape:label="Right eye pocket 11" points="809.00,542.00 849.00,646.00 918.00,587.00" fill="url(#facet-225-fill)" stroke="url(#facet-225-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-226" inkscape:label="Right eye pocket 12" points="809.00,542.00 918.00,587.00 927.00,557.00" fill="url(#facet-226-fill)" stroke="url(#facet-226-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-227" inkscape:label="Right eye pocket 13" points="809.00,542.00 927.00,557.00 928.00,500.00" fill="url(#facet-227-fill)" stroke="url(#facet-227-fill)" stroke-width="0.65" stroke-linejoin="round" />
+  </g>
+  <g id="irises" inkscape:groupmode="layer" inkscape:label="06 · Green iris facets">
+    <polygon id="facet-228" inkscape:label="Left iris facet 01" points="491.00,540.00 523.00,540.00 520.45,570.42 488.57,557.22" fill="url(#facet-228-fill)" stroke="url(#facet-228-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-229" inkscape:label="Left iris facet 02" points="488.57,557.22 520.45,570.42 501.45,594.45 477.76,570.76" fill="url(#facet-229-fill)" stroke="url(#facet-229-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-230" inkscape:label="Left iris facet 03" points="477.76,570.76 501.45,594.45 477.81,614.37 464.79,582.96" fill="url(#facet-230-fill)" stroke="url(#facet-230-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-231" inkscape:label="Left iris facet 04" points="464.79,582.96 477.81,614.37 447.00,619.00 447.00,585.00" fill="url(#facet-231-fill)" stroke="url(#facet-231-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-232" inkscape:label="Left iris facet 05" points="447.00,585.00 447.00,619.00 415.81,615.30 430.16,580.65" fill="#b7f85d" stroke="#b7f85d" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-233" inkscape:label="Left iris facet 06" points="430.16,580.65 415.81,615.30 391.85,595.15 418.36,568.64" fill="url(#facet-233-fill)" stroke="url(#facet-233-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-234" inkscape:label="Left iris facet 07" points="418.36,568.64 391.85,595.15 369.86,571.95 407.27,556.46" fill="url(#facet-234-fill)" stroke="url(#facet-234-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-235" inkscape:label="Left iris facet 08" points="407.27,556.46 369.86,571.95 365.50,540.00 406.50,540.00" fill="url(#facet-235-fill)" stroke="url(#facet-235-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-236" inkscape:label="Left iris facet 09" points="406.50,540.00 365.50,540.00 368.93,507.66 406.35,523.16" fill="url(#facet-236-fill)" stroke="url(#facet-236-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-237" inkscape:label="Left iris facet 10" points="406.35,523.16 368.93,507.66 386.54,479.54 415.18,508.18" fill="url(#facet-237-fill)" stroke="url(#facet-237-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-238" inkscape:label="Left iris facet 11" points="415.18,508.18 386.54,479.54 413.71,459.62 428.44,495.19" fill="url(#facet-238-fill)" stroke="url(#facet-238-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-239" inkscape:label="Left iris facet 12" points="428.44,495.19 413.71,459.62 447.00,457.50 447.00,493.00" fill="url(#facet-239-fill)" stroke="url(#facet-239-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-240" inkscape:label="Left iris facet 13" points="447.00,493.00 447.00,457.50 477.81,465.63 466.33,493.34" fill="url(#facet-240-fill)" stroke="url(#facet-240-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-241" inkscape:label="Left iris facet 14" points="466.33,493.34 477.81,465.63 502.15,484.85 479.53,507.47" fill="url(#facet-241-fill)" stroke="url(#facet-241-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-242" inkscape:label="Left iris facet 15" points="479.53,507.47 502.15,484.85 519.06,510.15 489.50,522.40" fill="url(#facet-242-fill)" stroke="url(#facet-242-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-243" inkscape:label="Left iris facet 16" points="489.50,522.40 519.06,510.15 523.00,540.00 491.00,540.00" fill="url(#facet-243-fill)" stroke="url(#facet-243-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-245" inkscape:label="Right iris facet 01" points="763.00,540.00 731.00,540.00 733.55,570.42 765.43,557.22" fill="url(#facet-245-fill)" stroke="url(#facet-245-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-246" inkscape:label="Right iris facet 02" points="765.43,557.22 733.55,570.42 752.55,594.45 776.24,570.76" fill="url(#facet-246-fill)" stroke="url(#facet-246-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-247" inkscape:label="Right iris facet 03" points="776.24,570.76 752.55,594.45 776.19,614.37 789.21,582.96" fill="url(#facet-247-fill)" stroke="url(#facet-247-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-248" inkscape:label="Right iris facet 04" points="789.21,582.96 776.19,614.37 807.00,619.00 807.00,585.00" fill="#a8f54f" stroke="#a8f54f" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-249" inkscape:label="Right iris facet 05" points="807.00,585.00 807.00,619.00 838.19,615.30 823.84,580.65" fill="#b6f85e" stroke="#b6f85e" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-250" inkscape:label="Right iris facet 06" points="823.84,580.65 838.19,615.30 862.15,595.15 835.64,568.64" fill="url(#facet-250-fill)" stroke="url(#facet-250-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-251" inkscape:label="Right iris facet 07" points="835.64,568.64 862.15,595.15 884.14,571.95 846.73,556.46" fill="url(#facet-251-fill)" stroke="url(#facet-251-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-252" inkscape:label="Right iris facet 08" points="846.73,556.46 884.14,571.95 888.50,540.00 847.50,540.00" fill="#8de73d" stroke="#8de73d" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-253" inkscape:label="Right iris facet 09" points="847.50,540.00 888.50,540.00 885.07,507.66 847.65,523.16" fill="url(#facet-253-fill)" stroke="url(#facet-253-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-254" inkscape:label="Right iris facet 10" points="847.65,523.16 885.07,507.66 867.46,479.54 838.82,508.18" fill="url(#facet-254-fill)" stroke="url(#facet-254-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-255" inkscape:label="Right iris facet 11" points="838.82,508.18 867.46,479.54 840.29,459.62 825.56,495.19" fill="url(#facet-255-fill)" stroke="url(#facet-255-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-256" inkscape:label="Right iris facet 12" points="825.56,495.19 840.29,459.62 807.00,457.50 807.00,493.00" fill="url(#facet-256-fill)" stroke="url(#facet-256-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-257" inkscape:label="Right iris facet 13" points="807.00,493.00 807.00,457.50 776.19,465.63 787.67,493.34" fill="url(#facet-257-fill)" stroke="url(#facet-257-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-258" inkscape:label="Right iris facet 14" points="787.67,493.34 776.19,465.63 751.85,484.85 774.47,507.47" fill="url(#facet-258-fill)" stroke="url(#facet-258-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-259" inkscape:label="Right iris facet 15" points="774.47,507.47 751.85,484.85 734.94,510.15 764.50,522.40" fill="url(#facet-259-fill)" stroke="url(#facet-259-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-260" inkscape:label="Right iris facet 16" points="764.50,522.40 734.94,510.15 731.00,540.00 763.00,540.00" fill="url(#facet-260-fill)" stroke="url(#facet-260-fill)" stroke-width="0.65" stroke-linejoin="round" />
+  </g>
+  <g id="pupils" inkscape:groupmode="layer" inkscape:label="07 · Pupils and catchlights">
+    <polygon id="facet-244" inkscape:label="Left pupil" points="491.00,540.00 488.57,557.22 477.76,570.76 464.79,582.96 447.00,585.00 430.16,580.65 418.36,568.64 407.27,556.46 406.50,540.00 406.35,523.16 415.18,508.18 428.44,495.19 447.00,493.00 466.33,493.34 479.53,507.47 489.50,522.40" fill="#080d0a" />
+    <polygon id="facet-261" inkscape:label="Right pupil" points="763.00,540.00 765.43,557.22 776.24,570.76 789.21,582.96 807.00,585.00 823.84,580.65 835.64,568.64 846.73,556.46 847.50,540.00 847.65,523.16 838.82,508.18 825.56,495.19 807.00,493.00 787.67,493.34 774.47,507.47 764.50,522.40" fill="#080d0a" />
+    <ellipse id="left-catchlight" inkscape:label="Left catchlight" cx="433" cy="508" rx="12" ry="13" fill="#ffffff" />
+    <ellipse id="right-catchlight" inkscape:label="Right catchlight" cx="776" cy="508" rx="12" ry="13" fill="#ffffff" />
+  </g>
+  <g id="beak" inkscape:groupmode="layer" inkscape:label="08 · Beak planes">
+    <polygon id="facet-262" inkscape:label="Left beak plane 01" points="627.00,550.00 601.00,585.00 627.00,588.00" fill="url(#facet-262-fill)" stroke="url(#facet-262-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-263" inkscape:label="Left beak plane 02" points="601.00,585.00 580.00,618.00 627.00,588.00" fill="url(#facet-263-fill)" stroke="url(#facet-263-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-264" inkscape:label="Left beak plane 03" points="627.00,588.00 580.00,618.00 601.00,635.00" fill="#313030" stroke="#313030" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-265" inkscape:label="Left beak plane 04" points="627.00,588.00 601.00,635.00 627.00,684.00" fill="#4e4e4d" stroke="#4e4e4d" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-266" inkscape:label="Left beak plane 05" points="580.00,618.00 565.00,665.00 601.00,635.00" fill="#171717" stroke="#171717" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-267" inkscape:label="Left beak plane 06" points="565.00,665.00 627.00,800.00 601.00,635.00" fill="#252525" stroke="#252525" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-268" inkscape:label="Left beak plane 07" points="601.00,635.00 627.00,800.00 627.00,684.00" fill="url(#facet-268-fill)" stroke="url(#facet-268-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-269" inkscape:label="Right beak plane 01" points="627.00,550.00 653.00,585.00 627.00,588.00" fill="url(#facet-269-fill)" stroke="url(#facet-269-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-270" inkscape:label="Right beak plane 02" points="653.00,585.00 674.00,618.00 627.00,588.00" fill="url(#facet-270-fill)" stroke="url(#facet-270-fill)" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-271" inkscape:label="Right beak plane 03" points="627.00,588.00 674.00,618.00 653.00,635.00" fill="#282828" stroke="#282828" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-272" inkscape:label="Right beak plane 04" points="627.00,588.00 653.00,635.00 627.00,684.00" fill="#414040" stroke="#414040" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-273" inkscape:label="Right beak plane 05" points="674.00,618.00 689.00,665.00 653.00,635.00" fill="#171817" stroke="#171817" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-274" inkscape:label="Right beak plane 06" points="689.00,665.00 627.00,800.00 653.00,635.00" fill="#1d1c1c" stroke="#1d1c1c" stroke-width="0.65" stroke-linejoin="round" />
+    <polygon id="facet-275" inkscape:label="Right beak plane 07" points="653.00,635.00 627.00,800.00 627.00,684.00" fill="#1e1e1e" stroke="#1e1e1e" stroke-width="0.65" stroke-linejoin="round" />
+  </g>
+</svg>
