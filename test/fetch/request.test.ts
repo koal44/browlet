@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { FetchHeaders } from '../../src/fetch/headers';
 import {
-  isScriptLikeDestination, translatePotentialDestination, type Destination,
-  type PotentialDestination, FetchRequest,
-} from '../../src/fetch/request';
+  isScriptLikeDestination, translatePotentialDestination, type Destination, type PotentialDestination,
+} from '../../src/fetch/destination';
+import { FetchRequest } from '../../src/fetch/request';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createBodyFixture, readBodyBytes } from './body-fixture';

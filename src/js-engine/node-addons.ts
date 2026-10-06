@@ -1,7 +1,7 @@
 import * as vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
-import type { CollectionIteratorKind, GlobalPrototypeKind, JSFunction } from './realm';
+import type { CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSIteratorResult } from './realm';
 import type { JSJobCallback, NodeContext } from './runtime';
 import { InternalError } from '../infra/internal-error';
 
@@ -10,9 +10,9 @@ export class NodeAPI {
   #methods: Partial<AddonMethods> = {};
 
   /** Requires the V8 iterator-factory patch. */
-  createCollectionIterator: (
-    context: NodeContext, kind: CollectionIteratorKind, next: () => object,
-  ) => object;
+  createCollectionIterator: <Value>(
+    context: NodeContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
+  ) => MapIterator<Value> | SetIterator<Value>;
   createContextHandle: (options?: AddonContextOptions) => AddonContextHandle;
   createMicrotaskQueue: () => AddonMicrotaskQueueHandle;
   getFunctionRealm: (value: JSFunction) => object;
@@ -22,7 +22,7 @@ export class NodeAPI {
   isStringIterator: (value: unknown) => boolean;
   isRegExpStringIterator: (value: unknown) => boolean;
   /** Requires the V8 length-tracking patch. */
-  isLengthTrackingArrayBufferView: (view: object) => boolean;
+  isLengthTrackingArrayBufferView: (view: ArrayBufferView) => boolean;
   /** Legacy Node patch for making an existing object's prototype immutable. */
   makePrototypeImmutable: (object: object) => void;
   observePromise: (

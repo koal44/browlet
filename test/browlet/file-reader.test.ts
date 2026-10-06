@@ -226,7 +226,7 @@ describe('File API §6.2: FileReader reads', () => {
     });
     expect(arrayBuffer.result)
       .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));
-    const result = Reflect.get(context.project(FileReaderImpl, arrayBuffer), 'result') as object;
+    const result = Reflect.get(context.project(FileReaderImpl, arrayBuffer), 'result') as ArrayBuffer;
     expect(result).toBe(arrayBuffer.result);
     expect(result)
       .toBeInstanceOf(requireFunction(first, 'ArrayBuffer'));

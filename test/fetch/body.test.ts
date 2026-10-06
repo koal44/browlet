@@ -1,6 +1,6 @@
 import { observe } from '../browlet/streams/implementation-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
@@ -39,10 +39,11 @@ describe('Fetch byte sequences as bodies', () => {
     fixture.runTask();
     const result = await observe(reading);
     expect(result.done).toBe(false);
-    expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(1, 2));
+    assert(result.value !== undefined);
+    expect(getBufferSourceCopy(result.value)).toEqual(Uint8Array.of(1, 2));
     expect(Object.getPrototypeOf(result.value)).toBe(Object.getPrototypeOf(view));
     expect(getBufferSourceCopy(buffer)).toHaveLength(0);
-    expect(Object.getPrototypeOf(getBufferSourceUnderlyingBuffer(result.value as object)))
+    expect(Object.getPrototypeOf(getBufferSourceUnderlyingBuffer(result.value)))
       .toBe(Object.getPrototypeOf(buffer));
   });
 

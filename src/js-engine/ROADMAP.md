@@ -85,12 +85,34 @@ Implement these with their consuming feature, rather than adding inert hooks:
 | `HostSystemUTCEpochNanoseconds` | Temporal's relevant-settings clock; the current host clock does not install this engine hook |
 | Active function and arbitrary execution stack | Custom-element construction and script context; only controlled entries/NewTarget are currently visible |
 | Exact Promise primitives | Patch V8 to expose reaction attachment without a result Promise, then use it in the addon's `observePromise`; expose the existing `MarkAsHandled` API and remove constructor/species fallbacks |
-| Buffer and exotic internal slots | Non-destructive detach-key checks, detached-view length, and exact exotic/Error state needed by structured data |
+| Buffer and exotic internal slots | Non-destructive detach-key checks and exact exotic/Error state needed by structured data |
 
 For the last two rows, preserve the tests and replacement conditions in the
 [limitations catalog](../LIMITATIONS.md), rather than inventing stronger answers
 from the existing probes. Broaden the inventory for a new Web IDL or platform
 consumer only when it introduces an additional engine requirement.
+
+## Buffer-source byte length
+
+`SPEC_CLASH(webidl-buffer-source-byte-length)` follows current intrinsic lengths
+instead of Web IDL's literal raw `[[ByteLength]]` access. Valid fixed views retain
+their declared size; length-tracking views follow the current buffer size.
+Detached or out-of-bounds typed arrays report zero. DataViews in those states
+request a realm-neutral TypeError. Captured getters bypass author properties.
+
+Web IDL's [byte-length definition](https://webidl.spec.whatwg.org/#buffersource-byte-length)
+still reads the raw slot, which can be `auto` for length-tracking views; see
+[issue 1385](https://github.com/whatwg/webidl/issues/1385). The 2026-10-05 Chromium,
+Firefox, and WebKit probes agreed that detached input produces TypeError in
+Streams, empty decoding, zero-count TextEncoder writes, and DataCloneError in
+structured cloning. Those consumers need current storage state, not the old
+fixed-view length. The [buffer tests](../../test/js-engine/buffers.test.ts) cover
+growth, out-of-bounds views, recovery, and detachment; the integration regressions
+cover the consuming API policies and error realms.
+
+Revisit when the specification defines updated operations or a concrete consumer
+needs stored metadata. Such metadata would require a distinct operation rather
+than changing the current-length helpers to return obsolete sizes.
 
 ## Agent and isolation coupling
 

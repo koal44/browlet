@@ -46,6 +46,12 @@ typed arrays and bytes for DataView. Omitted length uses the remaining range
 and tracks resizing where applicable. The view's realm does not change the
 buffer's identity.
 
+Engine predicates accept unknown inputs and preserve their native kind in the
+type system. Buffer and built-in state operations take already validated values;
+keep that type after Web IDL conversion or a brand check. A known kind does not
+guarantee that its backing storage remains attached or in bounds. View allocation
+also preserves the backing buffer type, including shared storage.
+
 Copy operations preserve input; `transferArrayBuffer()` consumes exclusive
 storage and detaches old views, preserving resizability. The consuming
 specification decides which inputs may be transferred. Allocate final storage
@@ -78,6 +84,16 @@ proxy. Window allocation creates the immutable prototype chain before Web IDL
 populates it. Plain Node keeps the modeled global bridge. Neither path supplies
 browser cross-origin security. Detachment cancels queued V8 work, so HTML owns
 the checkpoint-before-reuse boundary.
+
+Captured host intrinsics can throw host-realm errors. Buffer metadata operations
+translate detached/out-of-bounds DataView failures into Infra TypeError requests;
+Binding realizes them in the invocation's realm. Keep these catches around the
+intrinsic only, preserving author-thrown errors. The consuming algorithm still
+chooses its policy: Streams rejects invalid storage, while `getBufferSourceView()`
+supplies an empty view for detached input used by Encoding.
+Length helpers report current intrinsic lengths, including resizing, rather than
+raw stored lengths. The [buffer-length contract](ROADMAP.md#buffer-source-byte-length)
+records the discrepancy with Web IDL's current definition.
 
 ## Queues and Promises
 

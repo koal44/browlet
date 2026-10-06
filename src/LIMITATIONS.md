@@ -100,9 +100,14 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   Ambiguous shared views are reconstructed as fixed. Retire the inference path
   when native inspection is universally available. See [buffers](js-engine/buffers.ts)
   and [structured-data tests](../test/browlet/scripting/structured-data/deserialize.test.ts).
-- **Detached view length:** Public accessors lose the original byte length of
-  an arbitrary detached view. The [buffer regression](../test/js-engine/buffers.test.ts)
-  remains an expected failure; closing it requires the missing internal-slot query.
+- **`SPEC_CLASH(webidl-buffer-source-byte-length)`:** Buffer/view length helpers
+  report current intrinsic lengths rather than the raw `[[ByteLength]]` slot.
+  Detached/out-of-bounds typed arrays return zero; DataViews request TypeError.
+  This follows the needs of current consumers while Web IDL's definition remains
+  under discussion. The [engine contract](js-engine/ROADMAP.md#buffer-source-byte-length)
+  records the specification and browser evidence; [buffer tests](../test/js-engine/buffers.test.ts)
+  cover resizing and detachment. Recovering old fixed-view lengths is not a
+  current requirement.
 - **Transfer eligibility:** There is no non-destructive query for
   `[[ArrayBufferDetachKey]]`. V8's `IsDetachable()` is not equivalent; the actual
   transfer remains authoritative. Add the correct query before claiming the

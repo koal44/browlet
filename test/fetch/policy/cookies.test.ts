@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { FetchRequest, type Destination } from '../../../src/fetch/request';
+import type { Destination } from '../../../src/fetch/destination';
+import { FetchRequest } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
 import { getSerializedCookieDefaultPath } from '../../../src/fetch/policy';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';

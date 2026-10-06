@@ -1,7 +1,4 @@
-import {
-  getBufferSourceByteLength, getBufferSourceByteOffset, getBufferSourceUnderlyingBuffer,
-  type JSEnvironment,
-} from '../js-engine/index';
+import { getBufferSourceView, type JSEnvironment } from '../js-engine/index';
 import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface,
@@ -49,12 +46,8 @@ export class TextEncoderImpl {
     source: string,
     destination: Uint8Array,
   ): TextEncoderEncodeIntoResult {
-    // An internal view of the same storage bypasses author-shadowed properties.
-    const bytes = new Uint8Array(
-      getBufferSourceUnderlyingBuffer(destination), getBufferSourceByteOffset(destination),
-      getBufferSourceByteLength(destination),
-    );
-    return utf8EncodeInto(source, bytes);
+    // Borrow intrinsic storage; a detached destination exposes no writable bytes.
+    return utf8EncodeInto(source, getBufferSourceView(destination));
   }
 }
 

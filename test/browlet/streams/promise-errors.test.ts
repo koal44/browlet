@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { createSiblingWindow } from '../../support/windows';
 
-describe('shared stream Promise failures', () => {
+describe('stream exception ownership and sharing', () => {
   it('shares a borrowed write failure between write, ready, and closed', async () => {
     const browlet = createBrowlet();
     const result = await browlet.evaluate(async () => {
@@ -179,6 +179,50 @@ describe('shared stream Promise failures', () => {
       return { returnedReadable: output === readable, methodError: error instanceof other.TypeError };
     });
     expect(result).toEqual({ returnedReadable: true, methodError: true });
+  });
+
+  it.each([false, true])('keeps detached enqueue errors in the method realm (borrowed=%s)', async (borrowed) => {
+    const browlet = createBrowlet();
+    const result = await browlet.evaluate((borrowed) => {
+      const other = Reflect.get(globalThis, 'foreignStreamRealm') as typeof globalThis;
+      const methodRealm = borrowed ? other : globalThis;
+      const buffer = new ArrayBuffer(4);
+      const views = [new DataView(buffer, 1, 2), new Uint8Array(buffer, 1, 2)];
+      structuredClone(buffer, { transfer: [buffer] });
+      let controller!: ReadableByteStreamController;
+      new ReadableStream({ type: 'bytes', start(value) { controller = value; } });
+      return views.map((view) => {
+        try { methodRealm.ReadableByteStreamController.prototype.enqueue.call(controller, view); }
+        catch (error) { return Object.getPrototypeOf(error) === methodRealm.TypeError.prototype; }
+        return false;
+      });
+    }, borrowed);
+    expect(result).toEqual([true, true]);
+  });
+
+  it.each([false, true])('keeps detached BYOB read rejections in the method realm (borrowed=%s)', async (borrowed) => {
+    const browlet = createBrowlet();
+    const result = await browlet.evaluate(async (borrowed) => {
+      const other = Reflect.get(globalThis, 'foreignStreamRealm') as typeof globalThis;
+      const methodRealm = borrowed ? other : globalThis;
+      const buffer = new ArrayBuffer(4);
+      const views = [new DataView(buffer, 1, 2), new Uint8Array(buffer, 1, 2)];
+      structuredClone(buffer, { transfer: [buffer] });
+      const reader = new ReadableStream({ type: 'bytes' }).getReader({ mode: 'byob' });
+      const results = [];
+      for (const view of views) {
+        const reading = methodRealm.ReadableStreamBYOBReader.prototype.read.call(reader, view);
+        const error: unknown = await reading.catch((error: unknown) => error);
+        results.push({
+          promise: reading instanceof methodRealm.Promise,
+          error: Object.getPrototypeOf(error) === methodRealm.TypeError.prototype,
+        });
+      }
+      await reader.cancel();
+      reader.releaseLock();
+      return results;
+    }, borrowed);
+    expect(result).toEqual([{ promise: true, error: true }, { promise: true, error: true }]);
   });
 
   it('retains the invoking realm through a nested size callback', async () => {

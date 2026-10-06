@@ -2,7 +2,7 @@ import { endOfIteration } from '../../infra/index';
 import { getMethod, isObject, type JSMethod } from '../../js-engine/index';
 
 import type { WebIDLRealm } from '../environment';
-import { anyType, type IDLType } from '../assembly/index';
+import { anyType, undefinedType, type IDLType, type IDLUndefinedType } from '../assembly/index';
 import { IDLPromise } from './promise';
 import type { IDLValue } from './value';
 
@@ -83,22 +83,22 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
 
   /** Close this iterator with the supplied reason. */
   // https://webidl.spec.whatwg.org/#async-iterator-close
-  close(reason: unknown, realm: WebIDLRealm): IDLPromise {
+  close(reason: unknown, realm: WebIDLRealm): IDLPromise<IDLUndefinedType> {
     let returnResult: unknown;
     try {
       if (this.record.syncRealm) {
         returnResult = this.record.invokeAsAsync('return', [reason], this.record.syncRealm).promise;
       } else {
         const returnMethod = getMethod(this.record.iterator, 'return', realm);
-        if (!returnMethod) return IDLPromise.fromJS(undefined, anyType, realm);
+        if (!returnMethod) return IDLPromise.fromJS(undefined, undefinedType, realm);
         returnResult = Reflect.apply(returnMethod, this.record.iterator, [reason]);
       }
     } catch (exception) {
-      return IDLPromise.rejected(exception, anyType, realm);
+      return IDLPromise.rejected(exception, undefinedType, realm);
     }
 
     const returnPromise = IDLPromise.fromJS(returnResult, anyType, realm);
-    return returnPromise.react(anyType, {
+    return returnPromise.react(undefinedType, {
       fulfilled: (result) => {
         if (!isObject(result)) {
           throw new realm.intrinsics.typeError('Iterator return result is not an object');

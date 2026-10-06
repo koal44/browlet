@@ -1,6 +1,6 @@
 import { Stamper } from '../infra/stamper';
 import {
-  bufferViewNames, getArrayBufferViewElementSize, getBufferTypeName,
+  bufferViewNames, getArrayBufferViewElementSize,
   isDetachedArrayBuffer, writeArrayBuffer,
   type ByteSequence, type JSBufferView, type JSBufferViewName,
   type RuntimeBuffers,
@@ -324,16 +324,19 @@ export class JSRealm {
   }
 
   /** ECMAScript CreateIterResultObject, using this realm's Object prototype. */
-  createIteratorResultObject(value: unknown, done: boolean): object {
+  createIteratorResultObject<Value, Done extends boolean>(value: Value, done: Done): JSIteratorResult<Value, Done> {
     const result = this.createOrdinaryObject(this.intrinsics.objectPrototype);
     return Object.defineProperties(result, {
       value: { configurable: true, enumerable: true, value, writable: true },
       done: { configurable: true, enumerable: true, value: done, writable: true },
-    });
+    }) as JSIteratorResult<Value, Done>;
   }
 
   /** Create a Map/Set-branded iterator whose steps supply each IteratorResult. */
-  createCollectionIterator(kind: CollectionIteratorKind, next: () => object): object {
+  createCollectionIterator<Value>(
+    kind: CollectionIteratorKind,
+    next: () => JSIteratorResult<Value>,
+  ): MapIterator<Value> | SetIterator<Value> {
     const native = createCollectionIterator(this.#context, kind, next);
     if (native !== undefined) return native;
 
@@ -360,10 +363,11 @@ export class JSRealm {
           ? fallbackNext : value;
       },
     });
-    return IteratorStamper.stamp(iterator, { kind, next, running: false });
+    return IteratorStamper.stamp(iterator, { kind, next, running: false }) as
+      StampedIterator<MapIterator<Value> | SetIterator<Value>>;
   }
 
-  #nextCollectionIterator(receiver: unknown, kind: CollectionIteratorKind): object {
+  #nextCollectionIterator(receiver: unknown, kind: CollectionIteratorKind): JSIteratorResult {
     const record = isObject(receiver) ? IteratorStamper.get(receiver) : undefined;
     if (!record || record.kind !== kind) {
       throw new this.intrinsics.typeError('Illegal invocation');
@@ -374,8 +378,7 @@ export class JSRealm {
       try {
         const next = record.next;
         const result = next();
-        if (!isObject(result)) throw new this.intrinsics.typeError('Iterator result is not an object');
-        if (!Reflect.get(result, 'done')) return result;
+        if (!result.done) return result;
         record.next = undefined;
       } catch (error) {
         record.next = undefined;
@@ -430,7 +433,7 @@ export class JSRealm {
   createArrayBufferView<Name extends JSBufferViewName>(
     name: Name,
     bytes: ByteSequence,
-  ): JSBufferView<Name> {
+  ): JSBufferView<Name, ArrayBuffer> {
     const elementSize = getArrayBufferViewElementSize(name);
     if (name !== 'DataView' && bytes.length % elementSize !== 0) {
       throw new InternalError(`${name} byte length is not a multiple of ${elementSize}`);
@@ -441,12 +444,12 @@ export class JSRealm {
   }
 
   /** Share storage; omitted length uses the remaining range and tracks resizing. */
-  createView<Name extends JSBufferViewName>(
+  createView<Name extends JSBufferViewName, Buffer extends ArrayBufferLike>(
     name: Name,
-    buffer: ArrayBufferLike,
+    buffer: Buffer,
     byteOffset = 0,
     length?: number,
-  ): JSBufferView<Name> {
+  ): JSBufferView<Name, Buffer> {
     const constructor = this.intrinsics.bufferSource.views[name];
     if (!constructor) {
       throw new InternalError(`The target realm has no ${name} intrinsic`);
@@ -454,13 +457,10 @@ export class JSRealm {
     return Reflect.construct(
       constructor,
       length === undefined ? [buffer, byteOffset] : [buffer, byteOffset, length],
-    ) as JSBufferView<Name>;
+    ) as JSBufferView<Name, Buffer>;
   }
 
   detachArrayBuffer(buffer: ArrayBuffer): void {
-    if (getBufferTypeName(buffer) !== 'ArrayBuffer') {
-      throw new InternalError('Only an ArrayBuffer can be detached');
-    }
     if (isDetachedArrayBuffer(buffer)) return;
     Reflect.apply(this.intrinsics.bufferSource.arrayBufferTransfer, buffer, [0]);
   }
@@ -469,9 +469,6 @@ export class JSRealm {
   // TODO: expose a non-destructive engine query for [[ArrayBufferDetachKey]].
   // IsDetachable() does not answer that question; transfer remains authoritative.
   transferArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
-    if (getBufferTypeName(buffer) !== 'ArrayBuffer') {
-      throw new InternalError('Only an ArrayBuffer can be transferred');
-    }
     if (isDetachedArrayBuffer(buffer)) {
       throw new this.intrinsics.typeError('ArrayBuffer is detached');
     }
@@ -574,6 +571,12 @@ export class JSRealm {
 
 export type CollectionIteratorKind = 'map' | 'set';
 
+/** Realm-created iterator result with both own data properties present. */
+export type JSIteratorResult<Value = unknown, Done extends boolean = boolean> = {
+  value: Value;
+  done: Done;
+};
+
 type StampedIterator<T extends object = object> = T & IteratorStamper;
 
 // Fallback state lives on the iterator, accessible to borrowed methods across realms.
@@ -597,7 +600,7 @@ class IteratorStamper extends Stamper {
 
 type FallbackIteratorRecord = {
   kind: CollectionIteratorKind;
-  next: (() => object) | undefined;
+  next: (() => JSIteratorResult) | undefined;
   running: boolean;
 };
 
@@ -618,7 +621,7 @@ export type JSIntrinsics = {
   bufferSource: {
     arrayBuffer: ArrayBufferConstructor;
     arrayBufferTransfer: (this: ArrayBuffer, newLength?: number) => ArrayBuffer;
-    cloneSharedArrayBuffer(buffer: object): object;
+    cloneSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer;
     sharedArrayBuffer?: SharedArrayBufferConstructor;
     views: Partial<Record<JSBufferViewName, BufferViewConstructor>>;
   };

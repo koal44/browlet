@@ -10,35 +10,28 @@ export class BufferSourceConverter<Type extends IDLBufferType = IDLBufferType> e
   protected createInputSteps(): ConversionSteps<ArrayBufferLike | ArrayBufferView> {
     const { name, isView, allowShared, allowResizable } = this.type;
     return (value) => {
-      if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
+      if (!JSEngine.isBufferType(value, name)) {
         throw new TypeError(`Value is not a ${name}`);
       }
 
-      if (isView) {
-        const buffer = JSEngine.getArrayBufferViewBuffer(value);
-        if (
-            JSEngine.getBufferTypeName(buffer) === 'SharedArrayBuffer' &&
-            !allowShared
-        ) {
-          throw new TypeError(`${name} is backed by a SharedArrayBuffer`);
-        }
-        if (!allowResizable && JSEngine.isResizableArrayBuffer(buffer)) {
-          throw new TypeError(`${name} is backed by a resizable buffer`);
-        }
-      } else if (!allowResizable && JSEngine.isResizableArrayBuffer(value)) {
-        throw new TypeError(`${name} is resizable`);
+      const buffer = JSEngine.isAnyArrayBuffer(value) ? value : JSEngine.getArrayBufferViewBuffer(value);
+      if (isView && !allowShared && JSEngine.isSharedArrayBuffer(buffer)) {
+        throw new TypeError(`${name} is backed by a SharedArrayBuffer`);
       }
-      return value as ArrayBufferLike | ArrayBufferView;
+      if (!allowResizable && JSEngine.isResizableArrayBuffer(buffer)) {
+        throw new TypeError(isView ? `${name} is backed by a resizable buffer` : `${name} is resizable`);
+      }
+      return value;
     };
   }
 
   protected override createOutputSteps(): ConversionSteps<ArrayBufferLike | ArrayBufferView> {
     const { name } = this.type;
     return (value) => {
-      if (!JSEngine.isObject(value) || JSEngine.getBufferTypeName(value) !== name) {
+      if (!JSEngine.isBufferType(value, name)) {
         throw new InternalError(`IDL ${name} value has the wrong buffer source type`);
       }
-      return value as ArrayBufferLike | ArrayBufferView;
+      return value;
     };
   }
 }

@@ -4,7 +4,8 @@ import { createDocument, getRelevantRealm, unwrap } from '../../../../src/browle
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
 import { InsecureRequestsPolicy } from '../../../../src/browlet/browsing/policy/upgrade-insecure-requests';
-import { FetchRequest, type Destination } from '../../../../src/fetch/request';
+import type { Destination } from '../../../../src/fetch/destination';
+import { FetchRequest } from '../../../../src/fetch/request';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { parseURL, serializeURL } from '../../../../src/url/url';
 import { createPolicyEnvironment } from './environment-fixture';

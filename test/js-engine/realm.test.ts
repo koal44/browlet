@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
 import {
@@ -216,6 +216,8 @@ describe('JavaScript Realm', () => {
     expect(getAssociatedRealm(object)).toBe(realm);
 
     const result = realm.createIteratorResultObject('value', false);
+    expectTypeOf(result.value).toEqualTypeOf<string>();
+    expectTypeOf(result.done).toEqualTypeOf<false>();
     expect(result).toEqual({ value: 'value', done: false });
     expect(Reflect.getPrototypeOf(result))
       .toBe(realm.intrinsics.objectPrototype);
@@ -254,6 +256,7 @@ describe('Realm collection iterators', () => {
     let index = 0;
     const iterator = first.createCollectionIterator(kind, () =>
       first.createIteratorResultObject(++index, false));
+    expectTypeOf<ReturnType<typeof iterator.next>>().toEqualTypeOf<IteratorResult<number, undefined>>();
     const foreignIterator = second.createCollectionIterator(kind, () =>
       second.createIteratorResultObject(undefined, true));
     const next = Reflect.get(foreignIterator, 'next') as JSFunction;

@@ -1,4 +1,4 @@
-import { getBufferSourceView, getBufferTypeName } from '../js-engine/index';
+import { getBufferSourceView, isSharedArrayBuffer, type JSBufferSource } from '../js-engine/index';
 import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
@@ -46,7 +46,7 @@ export class TextDecoderImpl {
   }
 
   decode(
-    input: object | undefined,
+    input: JSBufferSource | undefined,
     options: TextDecodeOptions,
   ): string {
     return this.#common.decode(input, options.stream);
@@ -92,11 +92,11 @@ export class TextDecoderCommonMixin {
     return this.#ignoreBOM;
   }
 
-  decode(input?: object, stream = false): string {
+  decode(input?: JSBufferSource, stream = false): string {
     let bytes = input === undefined ? undefined : getBufferSourceView(input);
     // Replacement mode consumes the input synchronously, retaining only numeric
     // decoder state. Shared memory and unread input after fatal errors need a copy.
-    if (bytes && (this.#fatal || getBufferTypeName(bytes.buffer) === 'SharedArrayBuffer')) {
+    if (bytes && (this.#fatal || isSharedArrayBuffer(bytes.buffer))) {
       bytes = new Uint8Array(bytes);
     }
     // §7.2: do not reset a streaming decoder after an error. The restored

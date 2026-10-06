@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { FetchRequest, type Destination } from '../../../../src/fetch/request';
+import type { Destination } from '../../../../src/fetch/destination';
+import { FetchRequest } from '../../../../src/fetch/request';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { parseURL, serializeURL } from '../../../../src/url/url';
 import { createPolicyEnvironment } from './environment-fixture';

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InternalError } from '../../../src/infra/internal-error';
-import { FetchRequest, type Destination, type FetchMode } from '../../../src/fetch/request';
+import type { Destination } from '../../../src/fetch/destination';
+import { FetchRequest, type FetchMode } from '../../../src/fetch/request';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
 import { createClientEnvironment, createFetchUserAgent } from '../client-fixture';

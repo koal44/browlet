@@ -1,6 +1,6 @@
 import { InternalError } from '../../../infra/index';
 import {
-  defineDataProperty, defineMethod, type JSFunction, type JSRealm,
+  defineDataProperty, defineMethod, type JSFunction, type JSIteratorResult, type JSRealm,
 } from '../../../js-engine/index';
 
 import type { IDLType, IDLMaplike, IDLSetlike, AssembledInterface } from '../../assembly/index';
@@ -526,7 +526,7 @@ class MapIteratorRecord {
   }
 
   /** Convert both sides before selecting the yielded value, as required for map iterators. */
-  next(): object {
+  next(): JSIteratorResult {
     const result = this.#iterator.next();
     if (result.done) return this.#realm.createIteratorResultObject(undefined, true);
 
@@ -566,7 +566,7 @@ class SetIteratorRecord {
   }
 
   /** Convert each entry once, sharing that converted value between both sides of a pair. */
-  next(): object {
+  next(): JSIteratorResult {
     const result = this.#iterator.next();
     if (result.done) return this.#realm.createIteratorResultObject(undefined, true);
 

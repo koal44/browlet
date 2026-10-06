@@ -1,10 +1,10 @@
 import { createEnvironment } from '../js-engine/execution-fixture';
 import { observe } from '../browlet/streams/implementation-fixture';
-import { describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 
 import { TextEncoderStreamImpl } from '../../src/encoding/text-encoder-stream';
 import { TestRealm } from '../web-idl/test-realm';
-import { getBufferSourceCopy } from '../../src/js-engine/buffers';
+import { getBufferSourceCopy, isUint8Array } from '../../src/js-engine/buffers';
 
 describe('TextEncoderStream byte production', () => {
   it.each([
@@ -16,7 +16,7 @@ describe('TextEncoderStream byte production', () => {
     const { reader, writer, env } = createEncoder();
     const read = observe(reader.read(env));
     await observe(writer.write(chunk, env));
-    expect(getBufferSourceCopy((await read).value as object)).toEqual(new TextEncoder().encode(expected));
+    expect(copyBytes((await read).value)).toEqual(new TextEncoder().encode(expected));
     await observe(writer.close());
   });
 
@@ -34,7 +34,7 @@ describe('TextEncoderStream byte production', () => {
 
     const read = observe(reader.read(env));
     await observe(write);
-    expect(getBufferSourceCopy((await read).value as object)).toEqual(Uint8Array.of(65));
+    expect(copyBytes((await read).value)).toEqual(Uint8Array.of(65));
     expect(convert).toHaveBeenCalledOnce();
     await observe(writer.close());
   });
@@ -69,16 +69,17 @@ describe('TextEncoderStream byte production', () => {
     await observe(writer.write('A\uD83D', env));
     const first = await firstRead;
     expect(first.done).toBe(false);
-    expect(getBufferSourceCopy(first.value as object)).toEqual(Uint8Array.of(65));
+    expect(copyBytes(first.value)).toEqual(Uint8Array.of(65));
 
     const secondRead = observe(reader.read(env));
     await observe(writer.write('\uDE00', env));
     const second = await secondRead;
     expect(second.done).toBe(false);
-    expect(getBufferSourceCopy(second.value as object)).toEqual(Uint8Array.of(240, 159, 152, 128));
+    expect(copyBytes(second.value)).toEqual(Uint8Array.of(240, 159, 152, 128));
 
-    (first.value as Uint8Array).fill(0);
-    expect(getBufferSourceCopy(second.value as object)).toEqual(Uint8Array.of(240, 159, 152, 128));
+    assert(isUint8Array(first.value));
+    first.value.fill(0);
+    expect(copyBytes(second.value)).toEqual(Uint8Array.of(240, 159, 152, 128));
     await observe(writer.close());
     expect(await observe(reader.read(env))).toEqual({ done: true, value: undefined });
   });
@@ -91,7 +92,7 @@ describe('TextEncoderStream byte production', () => {
 
     const result = await read;
     expect(result.done).toBe(false);
-    expect(getBufferSourceCopy(result.value as object)).toEqual(Uint8Array.of(239, 191, 189));
+    expect(copyBytes(result.value)).toEqual(Uint8Array.of(239, 191, 189));
     expect(await observe(reader.read(env))).toEqual({ done: true, value: undefined });
   });
 
@@ -107,7 +108,7 @@ describe('TextEncoderStream byte production', () => {
       for (;;) {
         const result = await observe(reader.read(env));
         if (result.done) return;
-        bytes.push(...getBufferSourceCopy(result.value as object));
+        bytes.push(...copyBytes(result.value));
       }
     })();
     for (const chunk of chunks) await observe(writer.write(chunk, env));
@@ -122,4 +123,9 @@ function createEncoder() {
   const env = createEnvironment(realm);
   const encoder = new TextEncoderStreamImpl(env);
   return { realm, env, reader: encoder.readable.getReader(), writer: encoder.writable.getWriter() };
+}
+
+function copyBytes(value: unknown): Uint8Array {
+  assert(isUint8Array(value));
+  return getBufferSourceCopy(value);
 }

@@ -68,9 +68,9 @@ export class WritableStreamImpl {
   /** Streams §5.5.1, CreateWritableStream. */
   static create(
     startAlgorithm: () => unknown,
-    writeAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
-    closeAlgorithm: () => InternalPromise<unknown>,
-    abortAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    writeAlgorithm: (chunk: unknown) => InternalPromise<void>,
+    closeAlgorithm: () => InternalPromise<void>,
+    abortAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
     env: JSEnvironment,
@@ -92,18 +92,18 @@ export class WritableStreamImpl {
   /** Streams §9.2.1, set up a WritableStream; also allocates the stream. */
   static createDefault(
     // Normalize synchronous completion to a promise; see whatwg/streams#1253.
-    writeAlgorithm: (chunk: unknown) => InternalPromise<unknown> | void,
-    closeAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
-    abortAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
+    writeAlgorithm: (chunk: unknown) => InternalPromise<void> | void,
+    closeAlgorithm: (() => InternalPromise<void> | void) | undefined,
+    abortAlgorithm: ((reason: unknown) => InternalPromise<void> | void) | undefined,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
     env: JSEnvironment,
   ): WritableStreamImpl {
     return WritableStreamImpl.create(
       () => undefined,
-      (chunk) => env.exec.Promise.try(() => writeAlgorithm(chunk), idlType.any),
-      () => env.exec.Promise.try(() => closeAlgorithm?.(), idlType.any),
-      (reason) => env.exec.Promise.try(() => abortAlgorithm?.(reason), idlType.any),
+      (chunk) => env.exec.Promise.try(() => writeAlgorithm(chunk), idlType.undefined),
+      () => env.exec.Promise.try(() => closeAlgorithm?.(), idlType.undefined),
+      (reason) => env.exec.Promise.try(() => abortAlgorithm?.(reason), idlType.undefined),
       highWaterMark,
       sizeAlgorithm,
       env,
@@ -404,14 +404,14 @@ type WritableStreamPendingAbortRequest = {
  * };
  */
 export type UnderlyingSink = {
-  abort?: (reason?: unknown) => InternalPromise<unknown> | void;
-  close?: () => InternalPromise<unknown> | void;
+  abort?: (reason?: unknown) => InternalPromise<void> | void;
+  close?: () => InternalPromise<void> | void;
   start?: (controller: WritableStreamDefaultControllerImpl) => unknown;
   type?: unknown;
   write?: (
     chunk: unknown,
     controller: WritableStreamDefaultControllerImpl,
-  ) => InternalPromise<unknown> | void;
+  ) => InternalPromise<void> | void;
 };
 
 // -- Web IDL ------------------------------------------------------------
@@ -546,9 +546,9 @@ export class WritableStreamDefaultControllerImpl {
   ): void {
     const { start, write, close, abort } = sink;
     const startAlgorithm = () => start && Reflect.apply(start, sink, [this]);
-    const writeAlgorithm = (chunk: unknown) => stream.env.exec.Promise.try(() => write?.call(sink, chunk, this), idlType.any);
-    const closeAlgorithm = () => stream.env.exec.Promise.try(() => close?.call(sink), idlType.any);
-    const abortAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => abort?.call(sink, reason), idlType.any);
+    const writeAlgorithm = (chunk: unknown) => stream.env.exec.Promise.try(() => write?.call(sink, chunk, this), idlType.undefined);
+    const closeAlgorithm = () => stream.env.exec.Promise.try(() => close?.call(sink), idlType.undefined);
+    const abortAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => abort?.call(sink, reason), idlType.undefined);
 
     this.setUp(
       stream,
@@ -584,9 +584,9 @@ export class WritableStreamDefaultControllerImpl {
   setUp(
     stream: WritableStreamImpl,
     startAlgorithm: () => unknown,
-    writeAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
-    closeAlgorithm: () => InternalPromise<unknown>,
-    abortAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    writeAlgorithm: (chunk: unknown) => InternalPromise<void>,
+    closeAlgorithm: () => InternalPromise<void>,
+    abortAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
   ): void {
@@ -735,7 +735,7 @@ export class WritableStreamDefaultControllerImpl {
   }
 
   /** WritableStreamDefaultControllerAbortSteps. */
-  abortSteps(reason: unknown): InternalPromise<unknown> {
+  abortSteps(reason: unknown): InternalPromise<void> {
     const { state } = this;
     const promise = requireAlgorithm(state.abortAlgorithm, 'abort')(reason);
     this.clearAlgorithms();
@@ -751,14 +751,14 @@ export class WritableStreamDefaultControllerImpl {
 
 type WritableStreamDefaultControllerState = {
   queue: QueueWithSizes<unknown>;
-  abortAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+  abortAlgorithm?: (reason: unknown) => InternalPromise<void>;
   abortController: AbortControllerCapability;
-  closeAlgorithm?: () => InternalPromise<unknown>;
+  closeAlgorithm?: () => InternalPromise<void>;
   started: boolean;
   strategyHighWaterMark: number;
   strategySizeAlgorithm?: QueuingStrategySize;
   stream: WritableStreamImpl;
-  writeAlgorithm?: (chunk: unknown) => InternalPromise<unknown>;
+  writeAlgorithm?: (chunk: unknown) => InternalPromise<void>;
 };
 
 // -- Web IDL ------------------------------------------------------------

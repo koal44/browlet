@@ -1,5 +1,6 @@
 import { types as nodeTypes } from 'node:util';
 import { getNativeArrayBufferViewLengthTracking } from './runtime';
+import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 
 export type RuntimeBuffers = {
@@ -9,12 +10,12 @@ export type RuntimeBuffers = {
    * Share a buffer; length is elements for typed arrays and bytes for DataView.
    * Omit length to use the remaining range and track subsequent resizing.
    */
-  createView<Name extends JSBufferViewName>(
+  createView<Name extends JSBufferViewName, Buffer extends ArrayBufferLike>(
     name: Name,
-    buffer: ArrayBufferLike,
+    buffer: Buffer,
     byteOffset?: number,
     length?: number,
-  ): JSBufferView<Name>;
+  ): JSBufferView<Name, Buffer>;
   /** Copy the supplied bytes into independent storage, preserving the source. */
   copyArrayBuffer(bytes: Uint8Array): ArrayBuffer;
   copyUint8Array(bytes: Uint8Array): Uint8Array<ArrayBuffer>;
@@ -22,8 +23,31 @@ export type RuntimeBuffers = {
   transferArrayBuffer(buffer: ArrayBuffer): ArrayBuffer;
 };
 
-export type JSBufferView<Name extends JSBufferViewName> =
-  InstanceType<(typeof globalThis)[Name]>;
+export type JSBuffer<Name extends JSBufferTypeName = JSBufferTypeName> =
+  (typeof globalThis)[Name]['prototype'];
+export type JSBufferView<
+  Name extends JSBufferViewName = JSBufferViewName,
+  Buffer extends ArrayBufferLike = ArrayBufferLike,
+> = BufferViews<Buffer>[Name];
+export type JSTypedArray = JSBufferView<Exclude<JSBufferViewName, 'DataView'>>;
+export type JSBufferSource = ArrayBufferLike | ArrayBufferView;
+
+/** Preserve both the view kind and the backing buffer selected by its allocator. */
+type BufferViews<Buffer extends ArrayBufferLike> = {
+  BigInt64Array: BigInt64Array<Buffer>;
+  BigUint64Array: BigUint64Array<Buffer>;
+  DataView: DataView<Buffer>;
+  Float16Array: Float16Array<Buffer>;
+  Float32Array: Float32Array<Buffer>;
+  Float64Array: Float64Array<Buffer>;
+  Int16Array: Int16Array<Buffer>;
+  Int32Array: Int32Array<Buffer>;
+  Int8Array: Int8Array<Buffer>;
+  Uint16Array: Uint16Array<Buffer>;
+  Uint32Array: Uint32Array<Buffer>;
+  Uint8Array: Uint8Array<Buffer>;
+  Uint8ClampedArray: Uint8ClampedArray<Buffer>;
+};
 
 export type ByteSequence = Uint8Array | number[];
 
@@ -48,98 +72,110 @@ const bufferViewElementSizes = {
   Uint32Array: 4,
   Uint8Array: 1,
   Uint8ClampedArray: 1,
-} as const;
+} as const satisfies Record<keyof BufferViews<ArrayBufferLike>, number>;
 
 export const bufferViewNames = Object.keys(bufferViewElementSizes) as JSBufferViewName[];
+
+export const isArrayBuffer: (value: unknown) => value is ArrayBuffer = nodeTypes.isArrayBuffer;
+export const isSharedArrayBuffer: (value: unknown) => value is SharedArrayBuffer = nodeTypes.isSharedArrayBuffer;
+export const isAnyArrayBuffer: (value: unknown) => value is ArrayBufferLike = nodeTypes.isAnyArrayBuffer;
+export const isDataView: (value: unknown) => value is DataView = nodeTypes.isDataView;
+export const isUint8Array: (value: unknown) => value is Uint8Array = nodeTypes.isUint8Array;
+
+/** Recognize a native view, including newer typed arrays absent from Node's typings. */
+export function isArrayBufferView(value: unknown): value is JSBufferView {
+  return nodeTypes.isArrayBufferView(value);
+}
+
+/** Match an author value against its declared buffer kind and retain that kind. */
+export function isBufferType<Name extends JSBufferTypeName>(
+  value: unknown,
+  name: Name,
+): value is JSBuffer<Name> {
+  return getBufferTypeName(value) === name;
+}
 
 /** Buffer or view with fixed-length backing storage, including shared buffers. */
 export function isFixedBufferSource(
   value: unknown,
-): value is ArrayBufferLike | ArrayBufferView {
-  if (typeof value !== 'object' || value === null) return false;
-  const name = getBufferTypeName(value);
-  if (!name) return false;
-  const buffer = name === 'ArrayBuffer' || name === 'SharedArrayBuffer'
-    ? value
-    : getArrayBufferViewBuffer(value);
-  return !isResizableArrayBuffer(buffer);
+): value is JSBufferSource {
+  if (isAnyArrayBuffer(value)) return !isResizableArrayBuffer(value);
+  return isArrayBufferView(value) && !isResizableArrayBuffer(getArrayBufferViewBuffer(value));
 }
 
 export function getBufferTypeName(
-  value: object,
+  value: unknown,
 ): JSBufferTypeName | undefined {
   if (nodeTypes.isArrayBuffer(value)) return 'ArrayBuffer';
   if (nodeTypes.isSharedArrayBuffer(value)) return 'SharedArrayBuffer';
   if (nodeTypes.isDataView(value)) return 'DataView';
-  const name: unknown = Reflect.apply(typedArrayName, value, []);
+  const name = Reflect.apply(typedArrayName, value, []);
   return typeof name === 'string' && Object.hasOwn(bufferViewElementSizes, name)
     ? name as JSBufferViewName
     : undefined;
 }
 
-export function getArrayBufferByteLength(value: object): number {
-  const name = requireBufferTypeName(value);
-  if (name === 'ArrayBuffer') {
-    return Reflect.apply(arrayBufferByteLength, value, []) as number;
-  }
-  if (name === 'SharedArrayBuffer') {
-    return Reflect.apply(
-      requireSharedArrayBufferByteLength(),
-      value,
-      [],
-    ) as number;
-  }
-  throw new InternalError(`${name} is not an ArrayBuffer type`);
+/** Read the kind of an already validated view without classifying buffers again. */
+export function getBufferViewTypeName(value: ArrayBufferView): JSBufferViewName {
+  return isDataView(value) ? 'DataView' : Reflect.apply(typedArrayName, value, []) as JSBufferViewName;
+}
+
+export function getArrayBufferByteLength(value: ArrayBufferLike): number {
+  return Reflect.apply(
+    isSharedArrayBuffer(value) ? requireSharedArrayBufferByteLength() : arrayBufferByteLength,
+    value,
+    [],
+  );
 }
 
 export function getArrayBufferMaxByteLength(
-  value: object,
+  value: ArrayBufferLike,
 ): number | undefined {
-  const name = requireBufferTypeName(value);
-  if (name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer') {
-    throw new InternalError(`${name} is not an ArrayBuffer type`);
-  }
   if (!isResizableArrayBuffer(value)) return;
   return Reflect.apply(
-    name === 'SharedArrayBuffer'
+    isSharedArrayBuffer(value)
       ? requireSharedArrayBufferMaxByteLength()
       : arrayBufferMaxByteLength,
     value,
     [],
-  ) as number;
+  );
 }
 
-export function getArrayBufferViewBuffer(value: object): ArrayBufferLike {
-  const name = requireBufferViewTypeName(value);
+export function getArrayBufferViewBuffer<Buffer extends ArrayBufferLike>(value: ArrayBufferView<Buffer>): Buffer {
   return Reflect.apply(
-    name === 'DataView' ? dataViewBuffer : typedArrayBuffer,
+    isDataView(value) ? dataViewBuffer : typedArrayBuffer,
     value,
     [],
-  ) as ArrayBufferLike;
+  ) as Buffer;
 }
 
-export function getArrayBufferViewByteLength(value: object): number {
-  const name = requireBufferViewTypeName(value);
-  return Reflect.apply(
-    name === 'DataView' ? dataViewByteLength : typedArrayByteLength,
-    value,
-    [],
-  ) as number;
+/**
+ * Read the current byte length. Detached/out-of-bounds typed arrays return zero;
+ * DataViews in those states request TypeError.
+ */
+export function getArrayBufferViewByteLength(value: ArrayBufferView): number {
+  if (!isDataView(value)) return Reflect.apply(typedArrayByteLength, value, []);
+  try {
+    return Reflect.apply(dataViewByteLength, value, []);
+  } catch {
+    // The brand is checked and the captured getter cannot invoke author code.
+    throw new TypeError('DataView is detached or out of bounds');
+  }
 }
 
-export function getArrayBufferViewByteOffset(value: object): number {
-  const name = requireBufferViewTypeName(value);
-  return Reflect.apply(
-    name === 'DataView' ? dataViewByteOffset : typedArrayByteOffset,
-    value,
-    [],
-  ) as number;
+/** Read intrinsic offset; detached or out-of-bounds DataViews request TypeError. */
+export function getArrayBufferViewByteOffset(value: ArrayBufferView): number {
+  if (!isDataView(value)) return Reflect.apply(typedArrayByteOffset, value, []);
+  try {
+    return Reflect.apply(dataViewByteOffset, value, []);
+  } catch {
+    // The brand is checked and the captured getter cannot invoke author code.
+    throw new TypeError('DataView is detached or out of bounds');
+  }
 }
 
-export function getTypedArrayLength(value: object): number {
-  const name = requireBufferViewTypeName(value);
-  if (name === 'DataView') throw new InternalError('DataView is not a typed array');
-  return Reflect.apply(typedArrayLength, value, []) as number;
+export function getTypedArrayLength(value: JSTypedArray): number {
+  return Reflect.apply(typedArrayLength, value, []);
 }
 
 export function getArrayBufferViewElementSize(
@@ -148,40 +184,33 @@ export function getArrayBufferViewElementSize(
   return bufferViewElementSizes[name];
 }
 
-export function isDetachedArrayBuffer(value: object): boolean {
-  const name = requireBufferTypeName(value);
-  if (name === 'SharedArrayBuffer') return false;
-  if (name !== 'ArrayBuffer') throw new InternalError(`${name} is not an ArrayBuffer`);
+export function isDetachedArrayBuffer(value: ArrayBufferLike): boolean {
+  if (isSharedArrayBuffer(value)) return false;
   if (arrayBufferDetached) {
     return Reflect.apply(arrayBufferDetached, value, []) === true;
   }
   try {
-    new Uint8Array(value as ArrayBuffer);
+    new Uint8Array(value);
     return false;
   } catch {
     return true;
   }
 }
 
-export function isResizableArrayBuffer(value: object): boolean {
-  const name = requireBufferTypeName(value);
-  if (name === 'SharedArrayBuffer') {
+export function isResizableArrayBuffer(value: ArrayBufferLike): boolean {
+  if (isSharedArrayBuffer(value)) {
     return sharedArrayBufferGrowable
       ? Reflect.apply(sharedArrayBufferGrowable, value, []) === true
       : false;
-  }
-  if (name !== 'ArrayBuffer') {
-    throw new InternalError(`${name} is not an ArrayBuffer type`);
   }
   return arrayBufferResizable
     ? Reflect.apply(arrayBufferResizable, value, []) === true
     : false;
 }
 
-export function isArrayBufferViewOutOfBounds(value: object): boolean {
-  const name = requireBufferViewTypeName(value);
+export function isArrayBufferViewOutOfBounds(value: ArrayBufferView): boolean {
   try {
-    if (name === 'DataView') {
+    if (isDataView(value)) {
       Reflect.apply(dataViewByteLength, value, []);
     } else {
       // Numeric view accessors collapse out-of-bounds views to zero. The
@@ -196,97 +225,109 @@ export function isArrayBufferViewOutOfBounds(value: object): boolean {
 
 /** Whether a view's specification length is auto rather than a fixed number. */
 export function isLengthTrackingArrayBufferView(
-  value: object,
+  value: ArrayBufferView,
 ): boolean {
-  const name = requireBufferViewTypeName(value);
   const native = getNativeArrayBufferViewLengthTracking(value);
   if (native !== undefined) return native;
-  return probeLengthTrackingArrayBufferView(value, name);
+  return probeLengthTrackingArrayBufferView(value, getBufferViewTypeName(value));
 }
 
-export function getBufferSourceCopy(value: object): Uint8Array {
+export function getBufferSourceCopy(value: JSBufferSource): Uint8Array<ArrayBuffer> {
   return Uint8Array.from(getBufferSourceView(value));
 }
 
-/** Borrow the actual byte range; subsequent changes to the source remain visible. */
-export function getBufferSourceView(value: object): Uint8Array {
-  const buffer = getBufferSourceUnderlyingBuffer(value);
+/** Borrow live storage so mutations stay visible; detached storage yields an empty view. */
+export function getBufferSourceView(value: JSBufferSource): Uint8Array {
+  if (isAnyArrayBuffer(value)) {
+    return isDetachedArrayBuffer(value)
+      ? new Uint8Array()
+      : new Uint8Array(value, 0, getArrayBufferByteLength(value));
+  }
+  const dataView = isDataView(value);
+  const buffer = Reflect.apply(dataView ? dataViewBuffer : typedArrayBuffer, value, []);
   if (isDetachedArrayBuffer(buffer)) return new Uint8Array();
-  const offset = getBufferSourceByteOffset(value);
-  const length = getBufferSourceByteLength(value);
+  let offset: number;
+  let length: number;
+  if (dataView) {
+    try {
+      offset = Reflect.apply(dataViewByteOffset, value, []);
+      length = Reflect.apply(dataViewByteLength, value, []);
+    } catch {
+      throw new TypeError('DataView is out of bounds');
+    }
+  } else {
+    offset = Reflect.apply(typedArrayByteOffset, value, []);
+    length = Reflect.apply(typedArrayByteLength, value, []);
+  }
   return new Uint8Array(buffer, offset, length);
 }
 
-export function getBufferSourceByteLength(value: object): number {
-  const name = requireBufferTypeName(value);
-  return isBufferViewTypeName(name)
-    ? getArrayBufferViewByteLength(value)
-    : getArrayBufferByteLength(value);
+/** Read current byte length through the buffer/view intrinsic, bypassing author properties. */
+export function getBufferSourceByteLength(value: JSBufferSource): number {
+  // SPEC_CLASH(webidl-buffer-source-byte-length): Use current intrinsic lengths rather than Web IDL's raw [[ByteLength]]; see the JS Engine roadmap.
+  return isAnyArrayBuffer(value)
+    ? getArrayBufferByteLength(value)
+    : getArrayBufferViewByteLength(value);
 }
 
-export function getBufferSourceUnderlyingBuffer(value: object): ArrayBufferLike {
-  const name = requireBufferTypeName(value);
-  return isBufferViewTypeName(name)
-    ? getArrayBufferViewBuffer(value)
-    : value as ArrayBufferLike;
+export function getBufferSourceUnderlyingBuffer(value: JSBufferSource): ArrayBufferLike {
+  return isAnyArrayBuffer(value) ? value : getArrayBufferViewBuffer(value);
 }
 
+/** Write into live storage; an invalid byte range is an implementation error. */
 export function writeArrayBuffer(
-  buffer: object,
+  buffer: ArrayBufferLike,
   bytes: ByteSequence,
   startingOffset = 0,
 ): void {
-  const name = requireBufferTypeName(buffer);
-  if (name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer') {
-    throw new InternalError(`${name} is not a buffer type`);
+  const byteCount = bytes.length;
+  const byteLength = getArrayBufferByteLength(buffer);
+  if (byteLength === 0 && isDetachedArrayBuffer(buffer)) {
+    throw new TypeError('Cannot write to a detached ArrayBuffer');
   }
-  assertWriteRange(
-    bytes.length,
-    getBufferSourceByteLength(buffer),
-    startingOffset,
-  );
+  if (byteCount === 0 && !Array.isArray(bytes) && isArrayBufferViewOutOfBounds(bytes)) {
+    throw new TypeError('Source view is detached or out of bounds');
+  }
+  assertWriteRange(byteCount, byteLength, startingOffset);
   new Uint8Array(
-    buffer as ArrayBufferLike,
+    buffer,
     startingOffset,
-    bytes.length,
+    byteCount,
   ).set(bytes);
 }
 
+/** Write into a live, in-bounds view, including when the source is empty. */
 export function writeArrayBufferView(
-  view: object,
+  view: ArrayBufferView,
   bytes: ByteSequence,
   startingOffset = 0,
 ): void {
-  const name = requireBufferTypeName(view);
-  if (!isBufferViewTypeName(name)) {
-    throw new InternalError(`${name} is not a buffer view type`);
-  }
+  const name = getBufferViewTypeName(view);
   const elementSize = getArrayBufferViewElementSize(name);
-  if (name !== 'DataView' && bytes.length % elementSize !== 0) {
+  const byteCount = bytes.length;
+  if (name !== 'DataView' && byteCount % elementSize !== 0) {
     throw new InternalError(`${name} byte length is not a multiple of ${elementSize}`);
   }
-  assertWriteRange(
-    bytes.length,
-    getBufferSourceByteLength(view),
-    startingOffset,
-  );
+  const byteLength = getArrayBufferViewByteLength(view);
+  if (byteLength === 0 && isArrayBufferViewOutOfBounds(view)) {
+    throw new TypeError('Destination view is detached or out of bounds');
+  }
+  assertWriteRange(byteCount, byteLength, startingOffset);
   writeArrayBuffer(
-    getBufferSourceUnderlyingBuffer(view),
+    getArrayBufferViewBuffer(view),
     bytes,
-    getBufferSourceByteOffset(view) + startingOffset,
+    getArrayBufferViewByteOffset(view) + startingOffset,
   );
 }
 
-export function isBufferSourceDetached(value: object): boolean {
+export function isBufferSourceDetached(value: JSBufferSource): boolean {
   return isDetachedArrayBuffer(
     getBufferSourceUnderlyingBuffer(value),
   );
 }
 
-export function getBufferSourceByteOffset(value: object): number {
-  const name = requireBufferTypeName(value);
-  if (!isBufferViewTypeName(name)) return 0;
-  return getArrayBufferViewByteOffset(value);
+export function getBufferSourceByteOffset(value: JSBufferSource): number {
+  return isAnyArrayBuffer(value) ? 0 : getArrayBufferViewByteOffset(value);
 }
 
 /*
@@ -295,12 +336,12 @@ export function getBufferSourceByteOffset(value: object): number {
  * bytes. Shared buffers cannot be restored, so their tracking remains unknown.
  */
 function probeLengthTrackingArrayBufferView(
-  value: object,
+  value: ArrayBufferView,
   name: JSBufferViewName,
 ): boolean {
   const buffer = getArrayBufferViewBuffer(value);
   if (
-    getBufferTypeName(buffer) === 'SharedArrayBuffer' ||
+    isSharedArrayBuffer(buffer) ||
     !isResizableArrayBuffer(buffer)
   ) return false;
 
@@ -334,7 +375,7 @@ function probeLengthTrackingArrayBufferView(
 
   const probeByteLength = byteOffset + byteLength - 1;
   const removedBytes = Uint8Array.from(new Uint8Array(
-    buffer as ArrayBuffer,
+    buffer,
     probeByteLength,
     bufferByteLength - probeByteLength,
   ));
@@ -344,7 +385,7 @@ function probeLengthTrackingArrayBufferView(
   } finally {
     resizeArrayBuffer(buffer, bufferByteLength);
     const restoredView = new Uint8Array(
-      buffer as ArrayBuffer,
+      buffer,
       probeByteLength,
       removedBytes.length,
     );
@@ -366,71 +407,53 @@ function assertWriteRange(
   }
 }
 
-function isBufferViewTypeName(name: JSBufferTypeName): name is JSBufferViewName {
-  return name !== 'ArrayBuffer' && name !== 'SharedArrayBuffer';
-}
-
-function requireBufferTypeName(value: object): JSBufferTypeName {
-  const name = getBufferTypeName(value);
-  if (!name) throw new InternalError('Value is not an ArrayBuffer or view');
-  return name;
-}
-
-function requireBufferViewTypeName(value: object): JSBufferViewName {
-  const name = requireBufferTypeName(value);
-  if (name === 'ArrayBuffer' || name === 'SharedArrayBuffer') {
-    throw new InternalError(`${name} is not an ArrayBuffer view`);
-  }
-  return name;
-}
-
-function resizeArrayBuffer(buffer: object, byteLength: number): void {
+function resizeArrayBuffer(buffer: ArrayBuffer, byteLength: number): void {
   if (!arrayBufferResize) {
     throw new InternalError('Resizable ArrayBuffer operations are unavailable');
   }
   Reflect.apply(arrayBufferResize, buffer, [byteLength]);
 }
 
-function getAccessor(
+function getAccessor<Value, Receiver = object>(
   object: object,
   key: PropertyKey,
-): (this: object) => unknown {
-  const getter = getOptionalAccessor(object, key);
+): (this: Receiver) => Value {
+  const getter = getOptionalAccessor<Value, Receiver>(object, key);
   if (!getter) throw new InternalError(`Missing intrinsic accessor ${String(key)}`);
   return getter;
 }
 
-function getOptionalAccessor(
+function getOptionalAccessor<Value, Receiver = object>(
   object: object,
   key: PropertyKey,
-): ((this: object) => unknown) | undefined {
+): ((this: Receiver) => Value) | undefined {
   const descriptor = Reflect.getOwnPropertyDescriptor(object, key);
   const getter = descriptor && Reflect.get(descriptor, 'get') as unknown;
   return typeof getter === 'function'
-    ? getter as (this: object) => unknown
+    ? getter as (this: Receiver) => Value
     : undefined;
 }
 
-function requireSharedArrayBufferByteLength(): (this: object) => unknown {
+function requireSharedArrayBufferByteLength(): (this: object) => number {
   if (!sharedArrayBufferByteLength) {
     throw new InternalError('SharedArrayBuffer is unavailable');
   }
   return sharedArrayBufferByteLength;
 }
 
-function requireSharedArrayBufferMaxByteLength(): (this: object) => unknown {
+function requireSharedArrayBufferMaxByteLength(): (this: object) => number {
   if (!sharedArrayBufferMaxByteLength) {
     throw new InternalError('SharedArrayBuffer maxByteLength is unavailable');
   }
   return sharedArrayBufferMaxByteLength;
 }
 
-const arrayBufferByteLength = getAccessor(ArrayBuffer.prototype, 'byteLength');
-const arrayBufferResizable = getOptionalAccessor(
+const arrayBufferByteLength = getAccessor<number>(ArrayBuffer.prototype, 'byteLength');
+const arrayBufferResizable = getOptionalAccessor<boolean>(
   ArrayBuffer.prototype,
   'resizable',
 );
-const arrayBufferMaxByteLength = getAccessor(
+const arrayBufferMaxByteLength = getAccessor<number>(
   ArrayBuffer.prototype,
   'maxByteLength',
 );
@@ -438,32 +461,32 @@ const arrayBufferResize = Reflect.get(
   ArrayBuffer.prototype,
   'resize',
 ) as ((this: object, byteLength: number) => void) | undefined;
-const arrayBufferDetached = getOptionalAccessor(
+const arrayBufferDetached = getOptionalAccessor<boolean>(
   ArrayBuffer.prototype,
   'detached',
 );
 
 const sharedArrayBufferByteLength = typeof SharedArrayBuffer === 'undefined'
   ? undefined
-  : getAccessor(SharedArrayBuffer.prototype, 'byteLength');
+  : getAccessor<number>(SharedArrayBuffer.prototype, 'byteLength');
 const sharedArrayBufferGrowable = typeof SharedArrayBuffer === 'undefined'
   ? undefined
-  : getOptionalAccessor(SharedArrayBuffer.prototype, 'growable');
+  : getOptionalAccessor<boolean>(SharedArrayBuffer.prototype, 'growable');
 const sharedArrayBufferMaxByteLength =
   typeof SharedArrayBuffer === 'undefined'
     ? undefined
-    : getOptionalAccessor(SharedArrayBuffer.prototype, 'maxByteLength');
+    : getOptionalAccessor<number>(SharedArrayBuffer.prototype, 'maxByteLength');
 
-const dataViewBuffer = getAccessor(DataView.prototype, 'buffer');
-const dataViewByteLength = getAccessor(DataView.prototype, 'byteLength');
-const dataViewByteOffset = getAccessor(DataView.prototype, 'byteOffset');
+const dataViewBuffer = getAccessor<ArrayBufferLike>(DataView.prototype, 'buffer');
+const dataViewByteLength = getAccessor<number>(DataView.prototype, 'byteLength');
+const dataViewByteOffset = getAccessor<number>(DataView.prototype, 'byteOffset');
 
 const typedArrayPrototype = Reflect.getPrototypeOf(Uint8Array.prototype)!;
-const typedArrayBuffer = getAccessor(typedArrayPrototype, 'buffer');
-const typedArrayByteLength = getAccessor(typedArrayPrototype, 'byteLength');
-const typedArrayByteOffset = getAccessor(typedArrayPrototype, 'byteOffset');
-const typedArrayLength = getAccessor(typedArrayPrototype, 'length');
-const typedArrayName = getAccessor(typedArrayPrototype, Symbol.toStringTag);
+const typedArrayBuffer = getAccessor<ArrayBufferLike>(typedArrayPrototype, 'buffer');
+const typedArrayByteLength = getAccessor<number>(typedArrayPrototype, 'byteLength');
+const typedArrayByteOffset = getAccessor<number>(typedArrayPrototype, 'byteOffset');
+const typedArrayLength = getAccessor<number>(typedArrayPrototype, 'length');
+const typedArrayName = getAccessor<string | undefined, unknown>(typedArrayPrototype, Symbol.toStringTag);
 const typedArraySet = Reflect.get(
   typedArrayPrototype,
   'set',

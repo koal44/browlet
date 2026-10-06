@@ -91,9 +91,9 @@ export class TransformStreamImpl {
 
   /** Streams §9.3.1, set up a newly-created transform stream. */
   setUp(
-    transformAlgorithm: (chunk: unknown) => InternalPromise<unknown> | void,
-    flushAlgorithm?: () => InternalPromise<unknown> | void,
-    cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown> | void,
+    transformAlgorithm: (chunk: unknown) => InternalPromise<void> | void,
+    flushAlgorithm?: () => InternalPromise<void> | void,
+    cancelAlgorithm?: (reason: unknown) => InternalPromise<void> | void,
   ): void {
     this.#initialize(
       this.env.exec.Promise.resolve(undefined, idlType.undefined),
@@ -104,9 +104,9 @@ export class TransformStreamImpl {
     );
     new TransformStreamDefaultControllerImpl().setUp(
       this,
-      (chunk) => this.env.exec.Promise.try(() => transformAlgorithm(chunk), idlType.any),
-      () => this.env.exec.Promise.try(() => flushAlgorithm?.(), idlType.any),
-      (reason) => this.env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.any),
+      (chunk) => this.env.exec.Promise.try(() => transformAlgorithm(chunk), idlType.undefined),
+      () => this.env.exec.Promise.try(() => flushAlgorithm?.(), idlType.undefined),
+      (reason) => this.env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.undefined),
     );
   }
 
@@ -181,7 +181,7 @@ export class TransformStreamImpl {
   }
 
   /** Streams §6.4.3, TransformStreamDefaultSinkWriteAlgorithm. */
-  #write(chunk: unknown): InternalPromise<unknown> {
+  #write(chunk: unknown): InternalPromise<void> {
     const { state } = this.writable;
     if (state.state !== 'writable') {
       throw new InternalError('Transform stream writable side is not writable');
@@ -192,7 +192,7 @@ export class TransformStreamImpl {
       .promise.then(() => {
         if (state.state === 'erroring') throw state.storedError;
         return this.#controller.performTransform(chunk);
-      }, undefined, idlType.any);
+      });
   }
 
   /** Streams §6.4.3, TransformStreamDefaultSinkAbortAlgorithm. */
@@ -299,10 +299,10 @@ type TransformStreamState = {
  * };
  */
 export type TransformerRecord = {
-  cancel?: (reason: unknown) => InternalPromise<unknown> | void;
+  cancel?: (reason: unknown) => InternalPromise<void> | void;
   flush?: (
     controller: TransformStreamDefaultControllerImpl,
-  ) => InternalPromise<unknown> | void;
+  ) => InternalPromise<void> | void;
   readableType?: unknown;
   start?: (
     controller: TransformStreamDefaultControllerImpl,
@@ -310,7 +310,7 @@ export type TransformerRecord = {
   transform?: (
     chunk: unknown,
     controller: TransformStreamDefaultControllerImpl,
-  ) => InternalPromise<unknown> | void;
+  ) => InternalPromise<void> | void;
   writableType?: unknown;
 };
 
@@ -447,9 +447,9 @@ export class TransformStreamDefaultControllerImpl {
 
   setUp(
     stream: TransformStreamImpl,
-    transformAlgorithm: (chunk: unknown) => InternalPromise<unknown>,
-    flushAlgorithm: () => InternalPromise<unknown>,
-    cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    transformAlgorithm: (chunk: unknown) => InternalPromise<void>,
+    flushAlgorithm: () => InternalPromise<void>,
+    cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
   ): void {
     if (stream.state.controller) throw new InternalError('TransformStream already has a controller');
     this.state = { stream, transformAlgorithm, flushAlgorithm, cancelAlgorithm };
@@ -464,14 +464,14 @@ export class TransformStreamDefaultControllerImpl {
     const { transform, flush, cancel } = transformer;
     this.setUp(
       stream,
-      (chunk) => stream.env.exec.Promise.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk, stream.env), idlType.any),
-      () => stream.env.exec.Promise.try(() => flush?.call(transformer, this), idlType.any),
-      (reason) => stream.env.exec.Promise.try(() => cancel?.call(transformer, reason), idlType.any),
+      (chunk) => stream.env.exec.Promise.try(() => transform ? transform.call(transformer, chunk, this) : this.enqueue(chunk, stream.env), idlType.undefined),
+      () => stream.env.exec.Promise.try(() => flush?.call(transformer, this), idlType.undefined),
+      (reason) => stream.env.exec.Promise.try(() => cancel?.call(transformer, reason), idlType.undefined),
     );
   }
 
   /** Streams §6.4.2, TransformStreamDefaultControllerPerformTransform. */
-  performTransform(chunk: unknown): InternalPromise<unknown> {
+  performTransform(chunk: unknown): InternalPromise<void> {
     return requireAlgorithm(this.state.transformAlgorithm, 'transform')(chunk)
       .then(undefined, (reason: unknown) => {
         this.state.stream.error(reason);
@@ -479,11 +479,11 @@ export class TransformStreamDefaultControllerImpl {
       });
   }
 
-  flush(): InternalPromise<unknown> {
+  flush(): InternalPromise<void> {
     return requireAlgorithm(this.state.flushAlgorithm, 'flush')();
   }
 
-  cancel(reason: unknown): InternalPromise<unknown> {
+  cancel(reason: unknown): InternalPromise<void> {
     return requireAlgorithm(this.state.cancelAlgorithm, 'cancel')(reason);
   }
 
@@ -495,11 +495,11 @@ export class TransformStreamDefaultControllerImpl {
 }
 
 type TransformStreamDefaultControllerState = {
-  cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+  cancelAlgorithm?: (reason: unknown) => InternalPromise<void>;
   finishPromise?: InternalPromise<void>;
-  flushAlgorithm?: () => InternalPromise<unknown>;
+  flushAlgorithm?: () => InternalPromise<void>;
   stream: TransformStreamImpl;
-  transformAlgorithm?: (chunk: unknown) => InternalPromise<unknown>;
+  transformAlgorithm?: (chunk: unknown) => InternalPromise<void>;
 };
 
 export const transformStreamDefaultControllerIDL = defineInterface<JSEnvironment>({

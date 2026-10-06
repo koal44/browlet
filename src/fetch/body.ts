@@ -4,7 +4,7 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise, PromiseResultType } from '../infra/promises';
-import { getBufferSourceCopy, getBufferTypeName, type GlobalObject, type JSEnvironment } from '../js-engine/index';
+import { getBufferSourceCopy, isUint8Array, type GlobalObject, type JSEnvironment } from '../js-engine/index';
 import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
 import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
@@ -123,7 +123,7 @@ export class FetchBody {
       reader.readChunk({
         chunkSteps(chunk) {
           let continueAlgorithm: () => void;
-          if (typeof chunk !== 'object' || chunk === null || getBufferTypeName(chunk) !== 'Uint8Array') {
+          if (!isUint8Array(chunk)) {
             continueAlgorithm = () => processBodyError(new TypeError('Body stream produced a non-Uint8Array chunk'));
           } else {
             const bytes = getBufferSourceCopy(chunk);

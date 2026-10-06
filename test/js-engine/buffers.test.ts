@@ -1,11 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, expectTypeOf, it } from 'vitest';
 
+import { TypeError as InfraTypeError } from '../../src/infra/exceptions';
+import { InternalError } from '../../src/infra/internal-error';
 import {
   getArrayBufferByteLength, getArrayBufferMaxByteLength,
   getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset,
   getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceCopy,
   getBufferSourceUnderlyingBuffer, getBufferSourceView, getBufferTypeName, getTypedArrayLength,
-  isArrayBufferViewOutOfBounds, isBufferSourceDetached, isDetachedArrayBuffer,
+  isArrayBufferView, isArrayBufferViewOutOfBounds, isBufferType, isBufferSourceDetached, isDetachedArrayBuffer,
   isFixedBufferSource, isLengthTrackingArrayBufferView, JSRealm,
   writeArrayBuffer, writeArrayBufferView,
 } from '../../src/js-engine/index';
@@ -24,6 +26,18 @@ describe('Runtime buffer ownership', () => {
     expect(Array.from(copy)).toEqual([1, 2]);
     view[1] = 8;
     expect(Array.from(source)).toEqual([90, 7, 8, 91]);
+  });
+
+  it.each([false, true])('borrows the current buffer range without following later growth (shared=%s)', (shared) => {
+    const buffer = shared
+      ? new SharedArrayBuffer(4, { maxByteLength: 8 })
+      : new ArrayBuffer(4, { maxByteLength: 8 });
+    const borrowed = getBufferSourceView(buffer);
+    if (buffer instanceof SharedArrayBuffer) buffer.grow(8);
+    else buffer.resize(8);
+    expect(borrowed.byteLength).toBe(4);
+    borrowed[0] = 7;
+    expect(new Uint8Array(buffer)[0]).toBe(7);
   });
 
   it('allocates final storage and shares it between target-realm views', () => {
@@ -60,6 +74,22 @@ describe('Runtime buffer ownership', () => {
     expect(view.buffer).toBe(source.buffer);
     view[0] = 19;
     expect(Array.from(source)).toEqual([1, 19, 3]);
+  });
+
+  it('preserves the backing buffer type when allocating views', () => {
+    const { buffers } = createFixture();
+    const ordinary = buffers.createView('Uint8Array', new ArrayBuffer(2));
+    const sharedBuffer = new SharedArrayBuffer(2);
+    const shared = buffers.createView('Uint8Array', sharedBuffer);
+    const data = buffers.createView('DataView', sharedBuffer);
+    expectTypeOf(ordinary).toEqualTypeOf<Uint8Array<ArrayBuffer>>();
+    expectTypeOf(shared).toEqualTypeOf<Uint8Array<SharedArrayBuffer>>();
+    expectTypeOf(data).toEqualTypeOf<DataView<SharedArrayBuffer>>();
+    expectTypeOf(getArrayBufferViewBuffer(shared)).toEqualTypeOf<SharedArrayBuffer>();
+    expect(shared.buffer).toBe(sharedBuffer);
+    expect(data.buffer).toBe(sharedBuffer);
+    shared[1] = 19;
+    expect(data.getUint8(1)).toBe(19);
   });
 
   it('transfers owned storage and preserves retained identity after mutation and detachment', () => {
@@ -141,6 +171,31 @@ describe('Runtime buffer ownership', () => {
 });
 
 describe('JavaScript ArrayBuffer primitives', () => {
+  it('narrows buffer kinds without consulting author properties or accepting impostors', () => {
+    const realm = new JSRealm();
+    const value: unknown = realm.evaluate('new Uint16Array(4)', 'buffer-brand.js');
+    assert(isBufferType(value, 'Uint16Array'));
+    expectTypeOf(value).toEqualTypeOf<Uint16Array>();
+    const fail = (): never => { throw new Error('author property was consulted'); };
+    Object.defineProperties(value, {
+      buffer: { get: fail },
+      byteLength: { get: fail },
+      byteOffset: { get: fail },
+      [Symbol.toStringTag]: { get: fail },
+    });
+    expect(isBufferType(value, 'Uint16Array')).toBe(true);
+    expect(isBufferType(value, 'Uint8Array')).toBe(false);
+    expect(getBufferSourceView(value)).toHaveLength(8);
+    realm.detachArrayBuffer(getArrayBufferViewBuffer(value) as ArrayBuffer);
+    expect(isBufferType(value, 'Uint16Array')).toBe(true);
+    expect(getBufferSourceView(value)).toHaveLength(0);
+
+    for (const input of [undefined, null, 1, 'bytes', {}, Object.create(Uint16Array.prototype), new Proxy(value, {})]) {
+      expect(isArrayBufferView(input)).toBe(false);
+      expect(isBufferType(input, 'Uint16Array')).toBe(false);
+    }
+  });
+
   it('recognizes fixed buffer sources across realms without accepting impostors', () => {
     const realm = new JSRealm();
     const values = realm.evaluate(`(() => {
@@ -169,10 +224,10 @@ describe('JavaScript ArrayBuffer primitives', () => {
         view: new Uint16Array(buffer, 2, 2),
       };
     })()`, 'buffers.js') as {
-      buffer: object;
-      dataView: object;
-      shared: object;
-      view: object;
+      buffer: ArrayBuffer;
+      dataView: DataView;
+      shared: SharedArrayBuffer;
+      view: Uint16Array;
     };
 
     expect(getBufferTypeName(values.buffer)).toBe('ArrayBuffer');
@@ -195,6 +250,30 @@ describe('JavaScript ArrayBuffer primitives', () => {
     expect(getArrayBufferViewByteLength(values.view)).toBe(4);
     expect(getTypedArrayLength(values.view)).toBe(2);
     expect(getArrayBufferViewElementSize('Uint16Array')).toBe(2);
+  });
+
+  it.each(['DataView', 'Uint8Array'] as const)('reads current lengths as a %s moves in and out of bounds', (name) => {
+    const realm = new JSRealm();
+    const buffer = realm.allocateArrayBuffer(8, 16);
+    const fixed = realm.createView(name, buffer, 2, 4);
+    const tracking = realm.createView(name, buffer, 2);
+
+    expect([buffer, fixed, tracking].map(getBufferSourceByteLength)).toEqual([8, 4, 6]);
+    buffer.resize(12);
+    expect([buffer, fixed, tracking].map(getBufferSourceByteLength)).toEqual([12, 4, 10]);
+
+    buffer.resize(2);
+    expect(getBufferSourceByteLength(buffer)).toBe(2);
+    expect(getBufferSourceByteLength(tracking)).toBe(0);
+    if (name === 'DataView') expect(() => getBufferSourceByteLength(fixed)).toThrow(InfraTypeError);
+    else expect(getBufferSourceByteLength(fixed)).toBe(0);
+
+    buffer.resize(1);
+    if (name === 'DataView') expect(() => getBufferSourceByteLength(tracking)).toThrow(InfraTypeError);
+    else expect(getBufferSourceByteLength(tracking)).toBe(0);
+
+    buffer.resize(8);
+    expect([buffer, fixed, tracking].map(getBufferSourceByteLength)).toEqual([8, 4, 6]);
   });
 
   it('distinguishes fixed and length-tracking resizable views', () => {
@@ -230,6 +309,41 @@ describe('JavaScript ArrayBuffer primitives', () => {
     expect(isDetachedArrayBuffer(detached)).toBe(true);
     expect(isFixedBufferSource(detached)).toBe(true);
     expect(isFixedBufferSource(detachedView)).toBe(true);
+  });
+
+  it.each([false, true])('reports accessible lengths after detachment (resizable=%s)', (resizable) => {
+    const realm = new JSRealm();
+    const buffer = realm.allocateArrayBuffer(4, resizable ? 8 : undefined);
+    const data = realm.createView('DataView', buffer, 1, 2);
+    const typed = realm.createView('Uint8Array', buffer, 1, 2);
+    const dataToEnd = realm.createView('DataView', buffer, 1);
+    const typedToEnd = realm.createView('Uint8Array', buffer, 1);
+
+    expect([buffer, data, typed, dataToEnd, typedToEnd].map(getBufferSourceByteLength))
+      .toEqual([4, 2, 2, 3, 3]);
+    realm.detachArrayBuffer(buffer);
+
+    expect(getBufferSourceByteLength(buffer)).toBe(0);
+    expect(getBufferSourceByteLength(typed)).toBe(0);
+    expect(getBufferSourceByteLength(typedToEnd)).toBe(0);
+    expect(() => getBufferSourceByteLength(data)).toThrow(InfraTypeError);
+    expect(() => getBufferSourceByteLength(dataToEnd)).toThrow(InfraTypeError);
+  });
+
+  it.each([
+    ['byteLength', 'detached', getArrayBufferViewByteLength],
+    ['byteOffset', 'detached', getArrayBufferViewByteOffset],
+    ['byteLength', 'out-of-bounds', getArrayBufferViewByteLength],
+    ['byteOffset', 'out-of-bounds', getArrayBufferViewByteOffset],
+  ] as const)('contains native %s failures for %s DataViews', (_, state, read) => {
+    const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+    const view = new DataView(buffer, 2, 4);
+    if (state === 'detached') structuredClone(buffer, { transfer: [buffer] });
+    else buffer.resize(1);
+
+    expect(() => read(view)).toThrow(InfraTypeError);
+    expect(getArrayBufferViewBuffer(view)).toBe(buffer);
+    expectTypeOf(read).parameter(0).toEqualTypeOf<ArrayBufferView>();
   });
 });
 
@@ -275,6 +389,51 @@ describe('Realm buffer creation and transfer', () => {
     expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 2]));
   });
 
+  it.each([0, 1])('rejects %i-byte writes to detached storage with an exception request', (byteCount) => {
+    const bytes = new Array<number>(byteCount).fill(1);
+    const buffer = new ArrayBuffer(4);
+    const dataView = new DataView(buffer);
+    const typedArray = new Uint8Array(buffer);
+    structuredClone(buffer, { transfer: [buffer] });
+
+    expect(() => writeArrayBuffer(buffer, bytes)).toThrow(InfraTypeError);
+    expect(() => writeArrayBufferView(dataView, bytes)).toThrow(InfraTypeError);
+    expect(() => writeArrayBufferView(typedArray, bytes)).toThrow(InfraTypeError);
+  });
+
+  it.each(['DataView', 'Uint8Array'] as const)('rejects empty writes to an out-of-bounds %s', (name) => {
+    const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+    const view = name === 'DataView' ? new DataView(buffer, 4, 4) : new Uint8Array(buffer, 4, 4);
+    buffer.resize(2);
+
+    expect(() => writeArrayBufferView(view, [])).toThrow(InfraTypeError);
+  });
+
+  it.each(['detached', 'out-of-bounds'])('contains native set failures for a %s source', (state) => {
+    const buffer = new ArrayBuffer(8, { maxByteLength: 16 });
+    const source = new Uint8Array(buffer, 4, 4);
+    if (state === 'detached') structuredClone(buffer, { transfer: [buffer] });
+    else buffer.resize(2);
+
+    expect(() => writeArrayBuffer(new ArrayBuffer(0), source)).toThrow(InfraTypeError);
+  });
+
+  it('permits empty writes to live storage and preserves source getter exceptions', () => {
+    const buffer = new ArrayBuffer(2);
+    expect(() => writeArrayBuffer(buffer, [], 2)).not.toThrow();
+    expect(() => writeArrayBufferView(new DataView(buffer, 2, 0), [])).not.toThrow();
+    expect(() => writeArrayBufferView(new Uint8Array(buffer, 2, 0), [])).not.toThrow();
+    expect(() => writeArrayBuffer(buffer, [], 3)).toThrow(InternalError);
+
+    const failure = new TypeError('source getter failed');
+    const bytes = [0];
+    Object.defineProperty(bytes, 0, { get() { throw failure; } });
+    let caught: unknown;
+    try { writeArrayBuffer(buffer, bytes); }
+    catch (error) { caught = error; }
+    expect(caught).toBe(failure);
+  });
+
   it('detects detachment and transfers into the target realm', () => {
     const firstRealm = new JSRealm();
     const secondRealm = new JSRealm();
@@ -293,29 +452,6 @@ describe('Realm buffer creation and transfer', () => {
       secondRealm.intrinsics.bufferSource.arrayBuffer,
     );
     expect(getBufferSourceCopy(transferred)).toEqual(Uint8Array.from([3, 4]));
-  });
-
-  it.fails('reads the internal byte length of detached views', () => {
-    const realm = new JSRealm();
-    const buffer = realm.createArrayBuffer([1, 2, 3, 4]);
-    const DataView_ = realm.intrinsics.bufferSource.views.DataView;
-    const Uint8Array_ = realm.intrinsics.bufferSource.views.Uint8Array;
-    if (!DataView_ || !Uint8Array_) throw new Error('Missing view intrinsics');
-
-    const views = [
-      Reflect.construct(DataView_, [buffer, 1, 2]) as object,
-      Reflect.construct(Uint8Array_, [buffer, 1, 2]) as object,
-    ];
-    realm.detachArrayBuffer(buffer);
-    const lengths = views.map((view) => {
-      try {
-        return getBufferSourceByteLength(view);
-      } catch {
-        return undefined;
-      }
-    });
-
-    expect(lengths).toEqual([2, 2]);
   });
 });
 

@@ -200,7 +200,7 @@ export class FileReaderImpl extends EventTargetImpl {
         chunkSteps: (chunk) => {
           if (this.#operation !== operation) return;
           noteFirstChunk();
-          const bytes = getBufferSourceCopy(chunk as object);
+          const bytes = getBufferSourceCopy(chunk as Uint8Array);
           chunks.push(bytes);
           operation.loaded += bytes.length;
 

@@ -1,8 +1,9 @@
 import {
   type AbortAlgorithmHandle, type AbortSignalCapability, type JSEnvironment,
-  getBufferSourceByteLength, getBufferSourceUnderlyingBuffer, type JSBufferViewName,
-  getArrayBufferViewElementSize, getBufferTypeName, isBufferSourceDetached,
-  getBufferSourceByteOffset, writeArrayBuffer, getBufferSourceCopy, writeArrayBufferView,
+  getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
+  getArrayBufferViewByteOffset, getArrayBufferViewElementSize, getBufferSourceCopy,
+  getBufferViewTypeName, isArrayBufferView, isBufferSourceDetached, isDetachedArrayBuffer,
+  isUint8Array, writeArrayBuffer, writeArrayBufferView, type JSBufferViewName,
 } from '../js-engine/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import { endOfIteration, type AsyncIterator } from '../infra/iteration';
@@ -88,8 +89,8 @@ export class ReadableStreamImpl {
   /** Streams §4.9.1, CreateReadableStream. */
   static create(
     startAlgorithm: () => unknown,
-    pullAlgorithm: () => InternalPromise<unknown>,
-    cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    pullAlgorithm: () => InternalPromise<void>,
+    cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
     env: JSEnvironment,
@@ -121,7 +122,7 @@ export class ReadableStreamImpl {
         else controller.enqueueInternal(result, env);
       }, (reason: unknown) => {
         stream.defaultController.error(reason);
-      }),
+      }, idlType.undefined),
       (reason) => P.fromInternal(iterator.return(reason)),
       0,
       () => 1,
@@ -133,8 +134,8 @@ export class ReadableStreamImpl {
   /** Streams §4.9.1, CreateReadableByteStream. */
   static createByteStream(
     startAlgorithm: () => unknown,
-    pullAlgorithm: () => InternalPromise<unknown>,
-    cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    pullAlgorithm: () => InternalPromise<void>,
+    cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
     env: JSEnvironment,
   ): ReadableStreamImpl {
     const stream = new ReadableStreamImpl(null, {}, env);
@@ -145,9 +146,9 @@ export class ReadableStreamImpl {
 
   /** Streams §9.1.1, set up with byte reading support; also allocates the stream. */
   static createWithByteReadingSupport(
-    pullAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
+    pullAlgorithm: (() => InternalPromise<void> | void) | undefined,
     // Fetch needs the cancellation reason omitted by Streams' byte-setup wording.
-    cancelAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
+    cancelAlgorithm: ((reason: unknown) => InternalPromise<void> | void) | undefined,
     highWaterMark = 0,
     env: JSEnvironment,
   ): ReadableStreamImpl {
@@ -156,8 +157,8 @@ export class ReadableStreamImpl {
     controller.setUp(
       stream,
       () => undefined,
-      () => env.exec.Promise.try(() => pullAlgorithm?.(), idlType.any),
-      (reason) => env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.any),
+      () => env.exec.Promise.try(() => pullAlgorithm?.(), idlType.undefined),
+      (reason) => env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.undefined),
       highWaterMark,
       undefined,
     );
@@ -166,16 +167,16 @@ export class ReadableStreamImpl {
 
   /** Streams §9.1.1, set up a ReadableStream; also allocates the stream. */
   static createDefault(
-    pullAlgorithm: (() => InternalPromise<unknown> | void) | undefined,
-    cancelAlgorithm: ((reason: unknown) => InternalPromise<unknown> | void) | undefined,
+    pullAlgorithm: (() => InternalPromise<void> | void) | undefined,
+    cancelAlgorithm: ((reason: unknown) => InternalPromise<void> | void) | undefined,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
     env: JSEnvironment,
   ): ReadableStreamImpl {
     return ReadableStreamImpl.create(
       () => undefined,
-      () => env.exec.Promise.try(() => pullAlgorithm?.(), idlType.any),
-      (reason) => env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.any),
+      () => env.exec.Promise.try(() => pullAlgorithm?.(), idlType.undefined),
+      (reason) => env.exec.Promise.try(() => cancelAlgorithm?.(reason), idlType.undefined),
       highWaterMark,
       sizeAlgorithm,
       env,
@@ -346,7 +347,7 @@ export class ReadableStreamImpl {
   }
 
   /** Streams §9.1, get the current BYOB request view. */
-  get byobRequestView(): object | null {
+  get byobRequestView(): Uint8Array<ArrayBuffer> | null {
     const controller = this.controller;
     if (!ReadableByteStreamControllerImpl.is(controller)) {
       throw new InternalError('A default readable stream has no BYOB request view');
@@ -481,7 +482,7 @@ export class ReadableStreamImpl {
 
     const isOrBecomesErrored = (
       state: { state: string; storedError?: unknown; },
-      promise: InternalPromise<unknown>,
+      promise: InternalPromise<void>,
       action: (reason: unknown) => void,
     ): void => {
       if (state.state === 'errored') {
@@ -493,7 +494,7 @@ export class ReadableStreamImpl {
 
     const isOrBecomesClosed = (
       state: { state: string; },
-      promise: InternalPromise<unknown>,
+      promise: InternalPromise<void>,
       action: () => void,
     ): void => {
       if (state.state === 'closed') {
@@ -505,7 +506,7 @@ export class ReadableStreamImpl {
 
     /** Streams §4.9.1, Shutdown with an action (within ReadableStreamPipeTo). */
     const shutdownWithAction = (
-      action: () => InternalPromise<unknown>,
+      action: () => InternalPromise<void>,
       originalError?: unknown,
       originalIsError = false,
     ): void => {
@@ -549,7 +550,7 @@ export class ReadableStreamImpl {
     if (signal) {
       const abortAlgorithm = () => {
         const error = signal.reason;
-        const actions: Array<() => InternalPromise<unknown>> = [];
+        const actions: Array<() => InternalPromise<void>> = [];
         if (!preventAbort) {
           actions.push(() => destination.isWritable
             ? destination.abortInternal(error)
@@ -562,7 +563,7 @@ export class ReadableStreamImpl {
         }
         shutdownWithAction(
           () => this.env.exec.Promise.all(actions.map((action) => action()), abortResultsType)
-            .then(() => undefined, undefined, idlType.any),
+            .then(() => undefined, undefined, idlType.undefined),
           error,
           true,
         );
@@ -654,7 +655,7 @@ export class ReadableStreamImpl {
       void this.cancelInternal([...reason]).then(() => cancelPromise.resolve(undefined), (error) => cancelPromise.reject(error));
     };
 
-    const pullAlgorithm = (): InternalPromise<unknown> => {
+    const pullAlgorithm = (): InternalPromise<void> => {
       if (reading) {
         readAgain = true;
         return this.env.exec.Promise.resolve(undefined, idlType.undefined);
@@ -706,14 +707,14 @@ export class ReadableStreamImpl {
       return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     };
 
-    const cancel1Algorithm = (reason: unknown): InternalPromise<unknown> => {
+    const cancel1Algorithm = (reason: unknown): InternalPromise<void> => {
       canceled1 = true;
       reason1 = reason;
       if (canceled2) settleCancelPromise([reason1, reason2]);
       return cancelPromise.promise;
     };
 
-    const cancel2Algorithm = (reason: unknown): InternalPromise<unknown> => {
+    const cancel2Algorithm = (reason: unknown): InternalPromise<void> => {
       canceled2 = true;
       reason2 = reason;
       if (canceled1) settleCancelPromise([reason1, reason2]);
@@ -862,7 +863,8 @@ export class ReadableStreamImpl {
       }
       reader.readChunk({
         chunkSteps: (chunk) => {
-          const byteChunk = requireObject(chunk);
+          // This reader belongs to a byte stream, whose controller fulfills with Uint8Array.
+          const byteChunk = chunk as Uint8Array<ArrayBuffer>;
           void this.env.exec.Promise.resolve(undefined, idlType.undefined).then(() => {
             readAgainForBranch1 = false;
             readAgainForBranch2 = false;
@@ -914,7 +916,7 @@ export class ReadableStreamImpl {
     };
 
     const pullWithBYOBReader = (
-      view: object,
+      view: ArrayBufferView<ArrayBuffer>,
       forBranch2: boolean,
     ): void => {
       if (ReadableStreamDefaultReaderImpl.is(reader)) {
@@ -936,7 +938,7 @@ export class ReadableStreamImpl {
               const byobCanceled = forBranch2 ? canceled2 : canceled1;
               const otherCanceled = forBranch2 ? canceled1 : canceled2;
               if (!otherCanceled) {
-                let clonedChunk: object;
+                let clonedChunk: Uint8Array<ArrayBuffer>;
                 try {
                   clonedChunk = cloneAsUint8Array(chunk, this.env);
                 } catch (error) {
@@ -969,7 +971,7 @@ export class ReadableStreamImpl {
             if (!byobCanceled) byobController.closeInternal(this.env);
             if (!otherCanceled) otherController.closeInternal(this.env);
             if (chunk !== undefined) {
-              assert(getBufferSourceByteLength(chunk) === 0);
+              assert(getArrayBufferViewByteLength(chunk) === 0);
               if (!byobCanceled) {
                 byobController.respondWithNewView(chunk);
               }
@@ -988,7 +990,7 @@ export class ReadableStreamImpl {
       );
     };
 
-    const pull1Algorithm = (): InternalPromise<unknown> => {
+    const pull1Algorithm = (): InternalPromise<void> => {
       if (reading) {
         readAgainForBranch1 = true;
         return this.env.exec.Promise.resolve(undefined, idlType.undefined);
@@ -1001,7 +1003,7 @@ export class ReadableStreamImpl {
       return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     };
 
-    const pull2Algorithm = (): InternalPromise<unknown> => {
+    const pull2Algorithm = (): InternalPromise<void> => {
       if (reading) {
         readAgainForBranch2 = true;
         return this.env.exec.Promise.resolve(undefined, idlType.undefined);
@@ -1014,14 +1016,14 @@ export class ReadableStreamImpl {
       return this.env.exec.Promise.resolve(undefined, idlType.undefined);
     };
 
-    const cancel1Algorithm = (reason: unknown): InternalPromise<unknown> => {
+    const cancel1Algorithm = (reason: unknown): InternalPromise<void> => {
       canceled1 = true;
       reason1 = reason;
       if (canceled2) settleCancelPromise([reason1, reason2]);
       return cancelPromise.promise;
     };
 
-    const cancel2Algorithm = (reason: unknown): InternalPromise<unknown> => {
+    const cancel2Algorithm = (reason: unknown): InternalPromise<void> => {
       canceled2 = true;
       reason2 = reason;
       if (canceled1) settleCancelPromise([reason1, reason2]);
@@ -1082,7 +1084,7 @@ export class ReadableStreamImpl {
   }
 
   /** FulfillReadIntoRequest. */
-  fulfillReadIntoRequest(chunk: object, done: boolean): void {
+  fulfillReadIntoRequest(chunk: ArrayBufferView<ArrayBuffer>, done: boolean): void {
     const reader = this.state.reader;
     assert(ReadableStreamBYOBReaderImpl.is(reader));
     const request = reader.readIntoRequests.shift();
@@ -1120,30 +1122,29 @@ export class ReadableStreamImpl {
   enqueueChunk(chunk: unknown): void {
     const controller = this.controller;
     if (ReadableByteStreamControllerImpl.is(controller)) {
-      if (
-        typeof chunk !== 'object' || chunk === null ||
-        !isArrayBufferView(chunk)
-      ) {
+      if (!isArrayBufferView(chunk)) {
         throw new InternalError('A byte stream chunk must be an ArrayBufferView');
       }
       const byobView = this.byobRequestView;
       if (
         byobView !== null &&
-        getBufferSourceUnderlyingBuffer(chunk) ===
-        getBufferSourceUnderlyingBuffer(byobView)
+        getArrayBufferViewBuffer(chunk) ===
+        getArrayBufferViewBuffer(byobView)
       ) {
         if (
-          getBufferSourceByteOffset(chunk) !==
-          getBufferSourceByteOffset(byobView) ||
-          getBufferSourceByteLength(chunk) >
-          getBufferSourceByteLength(byobView)
+          getArrayBufferViewByteOffset(chunk) !==
+          getArrayBufferViewByteOffset(byobView) ||
+          getArrayBufferViewByteLength(chunk) >
+          getArrayBufferViewByteLength(byobView)
         ) {
           throw new InternalError('A byte stream chunk exceeds its BYOB request view');
         }
-        controller.respond(getBufferSourceByteLength(chunk));
+        controller.respond(getArrayBufferViewByteLength(chunk));
         return;
       }
-      controller.enqueueInternal(chunk);
+      // Cross-spec byte producers supply ordinary-backed views. This generic
+      // entry also serves default streams, so it cannot yet retain their chunk type.
+      controller.enqueueInternal(chunk as ArrayBufferView<ArrayBuffer>);
     } else {
       controller.enqueueInternal(chunk, this.env);
     }
@@ -1165,7 +1166,7 @@ export class ReadableStreamImpl {
       available,
       byobView === null
         ? available
-        : getBufferSourceByteLength(byobView),
+        : getArrayBufferViewByteLength(byobView),
     );
     const pulled = bytes.subarray(offset, offset + pullSize);
     if (byobView === null) {
@@ -1288,8 +1289,8 @@ export type UnderlyingByteSource = UnderlyingSourceSteps<ReadableByteStreamContr
 };
 
 type UnderlyingSourceSteps<Controller> = {
-  cancel?: (reason?: unknown) => InternalPromise<unknown> | void;
-  pull?: (controller: Controller) => InternalPromise<unknown> | void;
+  cancel?: (reason?: unknown) => InternalPromise<void> | void;
+  pull?: (controller: Controller) => InternalPromise<void> | void;
   start?: (controller: Controller) => unknown;
 };
 
@@ -1543,8 +1544,8 @@ export class ReadableStreamDefaultControllerImpl {
     const controller = new ReadableStreamDefaultControllerImpl();
     const { start, pull, cancel } = source;
     const startAlgorithm = () => start && Reflect.apply(start, source, [controller]);
-    const pullAlgorithm = () => stream.env.exec.Promise.try(() => pull?.call(source, controller), idlType.any);
-    const cancelAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => cancel?.call(source, reason), idlType.any);
+    const pullAlgorithm = () => stream.env.exec.Promise.try(() => pull?.call(source, controller), idlType.undefined);
+    const cancelAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => cancel?.call(source, reason), idlType.undefined);
 
     controller.setUp(
       stream,
@@ -1710,7 +1711,7 @@ export class ReadableStreamDefaultControllerImpl {
   }
 
   /** [[CancelSteps]](reason). */
-  cancel(reason: unknown): InternalPromise<unknown> {
+  cancel(reason: unknown): InternalPromise<void> {
     const state = this.state;
     state.queue.reset();
     const result = requireAlgorithm(state.cancelAlgorithm, 'cancel')(reason);
@@ -1748,8 +1749,8 @@ export class ReadableStreamDefaultControllerImpl {
   setUp(
     stream: ReadableStreamImpl,
     startAlgorithm: () => unknown,
-    pullAlgorithm: () => InternalPromise<unknown>,
-    cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    pullAlgorithm: () => InternalPromise<void>,
+    cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
   ): void {
@@ -1785,10 +1786,10 @@ export class ReadableStreamDefaultControllerImpl {
 
 type ReadableStreamDefaultControllerState = {
   queue: QueueWithSizes<unknown>;
-  cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+  cancelAlgorithm?: (reason: unknown) => InternalPromise<void>;
   closeRequested: boolean;
   pullAgain: boolean;
-  pullAlgorithm?: () => InternalPromise<unknown>;
+  pullAlgorithm?: () => InternalPromise<void>;
   pulling: boolean;
   started: boolean;
   strategyHighWaterMark: number;
@@ -1846,8 +1847,8 @@ export class ReadableByteStreamControllerImpl {
     const controller = new ReadableByteStreamControllerImpl();
     const { start, pull, cancel } = source;
     const startAlgorithm = () => start && Reflect.apply(start, source, [controller]);
-    const pullAlgorithm = () => stream.env.exec.Promise.try(() => pull?.call(source, controller), idlType.any);
-    const cancelAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => cancel?.call(source, reason), idlType.any);
+    const pullAlgorithm = () => stream.env.exec.Promise.try(() => pull?.call(source, controller), idlType.undefined);
+    const cancelAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => cancel?.call(source, reason), idlType.undefined);
     const autoAllocateChunkSize = source.autoAllocateChunkSize;
     if (autoAllocateChunkSize === 0) {
       throw new TypeError(
@@ -1908,14 +1909,14 @@ export class ReadableByteStreamControllerImpl {
     this.closeInternal(env);
   }
 
-  enqueue(chunk: object): void {
-    if (getBufferSourceByteLength(chunk) === 0) {
+  enqueue(chunk: ArrayBufferView<ArrayBuffer>): void {
+    if (getArrayBufferViewByteLength(chunk) === 0) {
       throw new TypeError(
         'chunk must have non-zero byteLength',
       );
     }
-    if (getBufferSourceByteLength(
-      getBufferSourceUnderlyingBuffer(chunk),
+    if (getArrayBufferByteLength(
+      getArrayBufferViewBuffer(chunk),
     ) === 0) {
       throw new TypeError(
         'chunk\'s buffer must have non-zero byteLength',
@@ -1981,7 +1982,7 @@ export class ReadableByteStreamControllerImpl {
   }
 
   /** [[CancelSteps]](reason). */
-  cancel(reason: unknown): InternalPromise<unknown> {
+  cancel(reason: unknown): InternalPromise<void> {
     const state = this.state;
     this.clearPendingPullIntos();
     state.queue = [];
@@ -2046,8 +2047,8 @@ export class ReadableByteStreamControllerImpl {
   setUp(
     stream: ReadableStreamImpl,
     startAlgorithm: () => unknown,
-    pullAlgorithm: () => InternalPromise<unknown>,
-    cancelAlgorithm: (reason: unknown) => InternalPromise<unknown>,
+    pullAlgorithm: () => InternalPromise<void>,
+    cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark: number,
     autoAllocateChunkSize: number | undefined,
   ): void {
@@ -2138,23 +2139,23 @@ export class ReadableByteStreamControllerImpl {
   }
 
   /** ReadableByteStreamControllerEnqueue. */
-  enqueueInternal(chunk: object): void {
+  enqueueInternal(chunk: ArrayBufferView<ArrayBuffer>): void {
     const state = this.state;
     const streamState = state.stream.state;
     if (state.closeRequested || streamState.state !== 'readable') return;
 
-    const buffer = getBufferSourceUnderlyingBuffer(chunk);
-    const byteOffset = getBufferSourceByteOffset(chunk);
-    const byteLength = getBufferSourceByteLength(chunk);
-    if (isBufferSourceDetached(buffer)) {
+    const buffer = getArrayBufferViewBuffer(chunk);
+    const byteOffset = getArrayBufferViewByteOffset(chunk);
+    const byteLength = getArrayBufferViewByteLength(chunk);
+    if (isDetachedArrayBuffer(buffer)) {
       throw new TypeError(
         'chunk\'s buffer is detached',
       );
     }
-    const transferredBuffer = state.stream.env.exec.buffers.transferArrayBuffer(buffer as ArrayBuffer);
+    const transferredBuffer = state.stream.env.exec.buffers.transferArrayBuffer(buffer);
     const first = state.pendingPullIntos[0];
     if (first) {
-      if (isBufferSourceDetached(first.buffer)) {
+      if (isDetachedArrayBuffer(first.buffer)) {
         throw new TypeError(
           'The BYOB request\'s buffer is detached',
         );
@@ -2212,18 +2213,18 @@ export class ReadableByteStreamControllerImpl {
   }
 
   /** ReadableByteStreamControllerPullInto. */
-  pullInto(view: object, minimum: number, request: ReadIntoRequest): void {
+  pullInto(view: ArrayBufferView<ArrayBuffer>, minimum: number, request: ReadIntoRequest): void {
     const state = this.state;
-    const viewType = requireBufferViewType(view);
+    const viewType = getBufferViewTypeName(view);
     const elementSize = getArrayBufferViewElementSize(viewType);
     const minimumFill = minimum * elementSize;
-    const byteOffset = getBufferSourceByteOffset(view);
-    const byteLength = getBufferSourceByteLength(view);
-    const originalBuffer = getBufferSourceUnderlyingBuffer(view);
-    const bufferByteLength = getBufferSourceByteLength(originalBuffer);
+    const byteOffset = getArrayBufferViewByteOffset(view);
+    const byteLength = getArrayBufferViewByteLength(view);
+    const originalBuffer = getArrayBufferViewBuffer(view);
+    const bufferByteLength = getArrayBufferByteLength(originalBuffer);
     let buffer: ArrayBuffer;
     try {
-      buffer = state.stream.env.exec.buffers.transferArrayBuffer(originalBuffer as ArrayBuffer);
+      buffer = state.stream.env.exec.buffers.transferArrayBuffer(originalBuffer);
     } catch (error) {
       request.errorSteps(error);
       return;
@@ -2301,12 +2302,12 @@ export class ReadableByteStreamControllerImpl {
   }
 
   /** ReadableByteStreamControllerRespondWithNewView. */
-  respondWithNewView(view: object): void {
+  respondWithNewView(view: ArrayBufferView<ArrayBuffer>): void {
     const state = this.state;
     const first = state.pendingPullIntos[0];
     assert(first !== undefined);
-    assert(!isBufferSourceDetached(getBufferSourceUnderlyingBuffer(view)));
-    const viewByteLength = getBufferSourceByteLength(view);
+    assert(!isDetachedArrayBuffer(getArrayBufferViewBuffer(view)));
+    const viewByteLength = getArrayBufferViewByteLength(view);
     const streamState = state.stream.state.state;
     if (streamState === 'closed') {
       if (viewByteLength !== 0) {
@@ -2323,13 +2324,13 @@ export class ReadableByteStreamControllerImpl {
       }
     }
     if (first.byteOffset + first.bytesFilled !==
-      getBufferSourceByteOffset(view)) {
+      getArrayBufferViewByteOffset(view)) {
       throw new RangeError(
         'The view region does not match the BYOB request',
       );
     }
-    const viewBuffer = getBufferSourceUnderlyingBuffer(view);
-    if (first.bufferByteLength !== getBufferSourceByteLength(viewBuffer)) {
+    const viewBuffer = getArrayBufferViewBuffer(view);
+    if (first.bufferByteLength !== getArrayBufferByteLength(viewBuffer)) {
       throw new RangeError(
         'The view buffer has a different capacity',
       );
@@ -2339,7 +2340,7 @@ export class ReadableByteStreamControllerImpl {
         'The view region is larger than the BYOB request',
       );
     }
-    first.buffer = state.stream.env.exec.buffers.transferArrayBuffer(viewBuffer as ArrayBuffer);
+    first.buffer = state.stream.env.exec.buffers.transferArrayBuffer(viewBuffer);
     this.respondInternal(viewByteLength);
   }
 
@@ -2476,7 +2477,7 @@ export class ReadableByteStreamControllerImpl {
     const state = this.state;
     const first = state.pendingPullIntos[0];
     assert(first !== undefined);
-    assert(!isBufferSourceDetached(first.buffer));
+    assert(!isDetachedArrayBuffer(first.buffer));
     this.invalidateBYOBRequest();
     const streamState = state.stream.state.state;
     if (streamState === 'closed') {
@@ -2552,11 +2553,11 @@ export class ReadableByteStreamControllerImpl {
 type ReadableByteStreamControllerState = {
   autoAllocateChunkSize?: number;
   byobRequest: ReadableStreamBYOBRequestImpl | null;
-  cancelAlgorithm?: (reason: unknown) => InternalPromise<unknown>;
+  cancelAlgorithm?: (reason: unknown) => InternalPromise<void>;
   closeRequested: boolean;
   pendingPullIntos: PullIntoDescriptor[];
   pullAgain: boolean;
-  pullAlgorithm?: () => InternalPromise<unknown>;
+  pullAlgorithm?: () => InternalPromise<void>;
   pulling: boolean;
   queue: ByteQueueEntry[];
   queueTotalSize: number;
@@ -2856,10 +2857,7 @@ export class ReadableStreamDefaultReaderImpl {
       chunkSteps: (chunk: unknown) => {
         let bytes: Uint8Array;
         try {
-          if (
-            typeof chunk !== 'object' || chunk === null ||
-            getBufferTypeName(chunk) !== 'Uint8Array'
-          ) {
+          if (!isUint8Array(chunk)) {
             failureSteps(new TypeError(
               'A byte stream produced a non-Uint8Array chunk',
             ));
@@ -2927,8 +2925,8 @@ export class ReadableStreamDefaultReaderImpl {
  *   boolean done;
  * };
  */
-export type ReadableStreamReadResult = {
-  value: unknown;
+export type ReadableStreamReadResult<Value = unknown> = {
+  value: Value;
   done: boolean;
 };
 
@@ -3012,30 +3010,30 @@ export class ReadableStreamBYOBReaderImpl {
 
   /** Streams §4.5.3, read(view, options). */
   read(
-    view: ArrayBufferView,
+    view: ArrayBufferView<ArrayBuffer>,
     options: ReadableStreamBYOBReaderReadOptions,
     env: JSEnvironment,
-  ): InternalPromise<ReadableStreamReadResult> {
+  ): InternalPromise<ReadableStreamReadResult<ArrayBufferView<ArrayBuffer> | undefined>> {
     const generic = this.genericReaderMixin;
     const state = generic.state;
-    const viewByteLength = getBufferSourceByteLength(view);
-    const buffer = getBufferSourceUnderlyingBuffer(view);
+    const viewByteLength = getArrayBufferViewByteLength(view);
+    const buffer = getArrayBufferViewBuffer(view);
     if (viewByteLength === 0) {
-      return env.exec.Promise.reject(new env.exec.TypeError('view must have non-zero byteLength'), readResultType);
+      return env.exec.Promise.reject(new env.exec.TypeError('view must have non-zero byteLength'), readIntoResultType);
     }
-    if (getBufferSourceByteLength(buffer) === 0) {
+    if (getArrayBufferByteLength(buffer) === 0) {
       return env.exec.Promise.reject(new env.exec.TypeError(
         'view\'s buffer must have non-zero byteLength',
-      ), readResultType);
+      ), readIntoResultType);
     }
-    if (isBufferSourceDetached(buffer)) {
-      return env.exec.Promise.reject(new env.exec.TypeError('view\'s buffer is detached'), readResultType);
+    if (isDetachedArrayBuffer(buffer)) {
+      return env.exec.Promise.reject(new env.exec.TypeError('view\'s buffer is detached'), readIntoResultType);
     }
     if (options.min === 0) {
-      return env.exec.Promise.reject(new env.exec.TypeError('options.min must be greater than 0'), readResultType);
+      return env.exec.Promise.reject(new env.exec.TypeError('options.min must be greater than 0'), readIntoResultType);
     }
 
-    const type = requireBufferViewType(view);
+    const type = getBufferViewTypeName(view);
     const elementSize = getArrayBufferViewElementSize(type);
     const viewLength = type === 'DataView'
       ? viewByteLength
@@ -3045,15 +3043,15 @@ export class ReadableStreamBYOBReaderImpl {
         `options.min must not exceed the view's ${
             type === 'DataView' ? 'byteLength' : 'length'
         }`,
-      ), readResultType);
+      ), readIntoResultType);
     }
     if (!state.stream) {
       return env.exec.Promise.reject(new env.exec.TypeError(
         'Cannot read from a stream using a released reader',
-      ), readResultType);
+      ), readIntoResultType);
     }
 
-    const promise = state.Promise.withResolvers(readResultType);
+    const promise = state.Promise.withResolvers(readIntoResultType);
     this.readInto(
       view,
       options.min,
@@ -3103,7 +3101,7 @@ export class ReadableStreamBYOBReaderImpl {
   }
 
   /** ReadableStreamBYOBReaderRead. */
-  readInto(view: object, minimum: number, request: ReadIntoRequest): void {
+  readInto(view: ArrayBufferView<ArrayBuffer>, minimum: number, request: ReadIntoRequest): void {
     const generic = this.genericReaderMixin;
     const stream = generic.state.stream;
     if (!stream) throw new InternalError('Cannot read through a released BYOB reader');
@@ -3141,8 +3139,8 @@ export class ReadableStreamBYOBReaderImpl {
 }
 
 export type ReadIntoRequest = {
-  chunkSteps(chunk: object): void;
-  closeSteps(chunk: object | undefined): void;
+  chunkSteps(chunk: ArrayBufferView<ArrayBuffer>): void;
+  closeSteps(chunk: ArrayBufferView<ArrayBuffer> | undefined): void;
   errorSteps(reason: unknown): void;
 };
 
@@ -3206,9 +3204,9 @@ export const readableStreamBYOBReaderReadOptionsIDL = defineDictionary({
  */
 export class ReadableStreamBYOBRequestImpl {
   #controller?: ReadableByteStreamControllerImpl;
-  #view?: object;
+  #view?: Uint8Array<ArrayBuffer>;
 
-  get view(): object | null {
+  get view(): Uint8Array<ArrayBuffer> | null {
     return this.#view ?? null;
   }
 
@@ -3226,7 +3224,7 @@ export class ReadableStreamBYOBRequestImpl {
     this.#controller.respond(bytesWritten);
   }
 
-  respondWithNewView(view: object): void {
+  respondWithNewView(view: ArrayBufferView<ArrayBuffer>): void {
     if (!this.#controller) {
       throw new TypeError(
         'This BYOB request has been invalidated',
@@ -3242,7 +3240,7 @@ export class ReadableStreamBYOBRequestImpl {
 
   // -- Internal algorithms ------------------------------------------------
 
-  initialize(controller: ReadableByteStreamControllerImpl, view: object): void {
+  initialize(controller: ReadableByteStreamControllerImpl, view: Uint8Array<ArrayBuffer>): void {
     this.#controller = controller;
     this.#view = view;
   }
@@ -3280,18 +3278,10 @@ function requireAlgorithm<Algorithm>(
   return algorithm;
 }
 
-function requireBufferViewType(view: object): JSBufferViewName {
-  const type = getBufferTypeName(view);
-  if (!type || type === 'ArrayBuffer' || type === 'SharedArrayBuffer') {
-    throw new InternalError('ArrayBuffer view has no recognized view type');
-  }
-  return type;
-}
-
 function convertPullIntoDescriptor(
   descriptor: PullIntoDescriptor,
   env: JSEnvironment,
-): ArrayBufferView {
+): ArrayBufferView<ArrayBuffer> {
   assert(descriptor.bytesFilled <= descriptor.byteLength);
   assert(descriptor.bytesFilled % descriptor.elementSize === 0);
   descriptor.buffer = env.exec.buffers.transferArrayBuffer(descriptor.buffer);
@@ -3318,45 +3308,32 @@ function copyDataBlockBytes(
   );
 }
 
-function requireObject(value: unknown): object {
-  if (typeof value !== 'object' || value === null) {
-    throw new InternalError('Readable byte stream produced a non-object chunk');
-  }
-  return value;
-}
-
 function assert(condition: unknown): asserts condition {
   if (!condition) throw new InternalError('Streams implementation invariant failed');
 }
 
-function isArrayBufferView(value: object): boolean {
-  const name = getBufferTypeName(value);
-  return name !== undefined &&
-    name !== 'ArrayBuffer' &&
-    name !== 'SharedArrayBuffer';
-}
-
-function cloneAsUint8Array(value: object, env: JSEnvironment): Uint8Array<ArrayBuffer> {
+function cloneAsUint8Array(value: ArrayBufferView<ArrayBuffer>, env: JSEnvironment): Uint8Array<ArrayBuffer> {
   const bytes = env.exec.buffers.createView(
-    'Uint8Array', getBufferSourceUnderlyingBuffer(value),
-    getBufferSourceByteOffset(value), getBufferSourceByteLength(value),
+    'Uint8Array', getArrayBufferViewBuffer(value),
+    getArrayBufferViewByteOffset(value), getArrayBufferViewByteLength(value),
   );
   return env.exec.buffers.copyUint8Array(bytes);
 }
 
 function canCopyDataBlockBytes(
-  destination: object,
+  destination: ArrayBuffer,
   destinationOffset: number,
-  source: object,
+  source: ArrayBuffer,
   sourceOffset: number,
   count: number,
 ): boolean {
   return destination !== source &&
-    !isBufferSourceDetached(destination) &&
-    !isBufferSourceDetached(source) &&
-    destinationOffset + count <= getBufferSourceByteLength(destination) &&
-    sourceOffset + count <= getBufferSourceByteLength(source);
+    !isDetachedArrayBuffer(destination) &&
+    !isDetachedArrayBuffer(source) &&
+    destinationOffset + count <= getArrayBufferByteLength(destination) &&
+    sourceOffset + count <= getArrayBufferByteLength(source);
 }
 
 const readResultType = implementationType<ReadableStreamReadResult>(reference('ReadableStreamReadResult'));
-const abortResultsType = sequence(idlType.any);
+const readIntoResultType = implementationType<ReadableStreamReadResult<ArrayBufferView<ArrayBuffer> | undefined>>(readResultType);
+const abortResultsType = sequence(idlType.undefined);

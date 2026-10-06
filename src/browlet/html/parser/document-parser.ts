@@ -2,7 +2,7 @@ import { idlType } from '../../../web-idl/index';
 import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
-import { bindAsyncContext, getBufferSourceCopy, getBufferTypeName, type JSEnvironment } from '../../../js-engine/index';
+import { bindAsyncContext, getBufferSourceCopy, isUint8Array, type JSEnvironment } from '../../../js-engine/index';
 import { bomSniff, endOfQueue, getDecoder, getEncoding, IOQueue, type Decoder } from '../../../encoding/index';
 import type { FetchBody, FetchHeaders } from '../../../fetch/index';
 import type { ReadableStreamDefaultReaderImpl } from '../../../streams/index';
@@ -103,7 +103,7 @@ export class BrowletParser {
         this.#bodyReader ??= body!.stream.getDefaultReader();
         this.#bodyReader.readChunk({
           chunkSteps: (chunk) => {
-            if (typeof chunk !== 'object' || chunk === null || getBufferTypeName(chunk) !== 'Uint8Array') {
+            if (!isUint8Array(chunk)) {
               this.#stream.destroy(new InternalError('HTML response body produced a non-byte chunk'));
               return;
             }

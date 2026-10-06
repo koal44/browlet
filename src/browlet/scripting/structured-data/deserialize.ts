@@ -1,6 +1,6 @@
 import type { ScriptingEnvironment } from '../environment';
 import {
-  appendMapData, appendSetData, getBufferTypeName, isObject, writeErrorStack,
+  appendMapData, appendSetData, isAnyArrayBuffer, isObject, writeErrorStack,
 } from '../../../js-engine/index';
 import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext, type PlatformRecord,
@@ -72,7 +72,7 @@ export function structuredDeserialize(
         ctx,
         memory,
       );
-      if (!isObject(buffer)) {
+      if (!isAnyArrayBuffer(buffer)) {
         throw new InternalError('An ArrayBufferView record has no backing buffer');
       }
       const length = serialized.constructor === 'DataView'
@@ -83,20 +83,32 @@ export function structuredDeserialize(
       }
       value = realm.createView(
         serialized.constructor,
-        buffer as ArrayBufferLike,
+        buffer,
         serialized.byteOffset,
         length === 'auto' ? undefined : length,
       );
       break;
     }
-    case 'Map':
-      value = Reflect.construct(realm.intrinsics.map, []);
-      deep = true;
-      break;
-    case 'Set':
-      value = Reflect.construct(realm.intrinsics.set, []);
-      deep = true;
-      break;
+    case 'Map': {
+      const value = new realm.intrinsics.map<unknown, unknown>();
+      memory.set(serialized, value);
+      for (const entry of serialized.entries) {
+        appendMapData(
+          value,
+          structuredDeserialize(entry.key, ctx, memory),
+          structuredDeserialize(entry.value, ctx, memory),
+        );
+      }
+      return value;
+    }
+    case 'Set': {
+      const value = new realm.intrinsics.set<unknown>();
+      memory.set(serialized, value);
+      for (const entry of serialized.entries) {
+        appendSetData(value, structuredDeserialize(entry, ctx, memory));
+      }
+      return value;
+    }
     case 'Array':
       value = Reflect.construct(realm.intrinsics.array, [serialized.length]);
       deep = true;
@@ -105,10 +117,12 @@ export function structuredDeserialize(
       value = realm.createOrdinaryObject(realm.intrinsics.objectPrototype);
       deep = true;
       break;
-    case 'Error':
-      value = deserializeError(serialized, realm);
-      deep = true;
-      break;
+    case 'Error': {
+      const value = deserializeError(serialized, realm);
+      memory.set(serialized, value);
+      deserializeErrorCause(serialized, value, ctx, memory);
+      return value;
+    }
     case 'platform-object': {
       platformRecord = ctx.createPlatformRecord(serialized.interfaceName);
       if (!platformRecord) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
@@ -126,24 +140,7 @@ export function structuredDeserialize(
     throw new InternalError('A deep record has no object value');
   }
 
-  if (serialized.type === 'Map') {
-    for (const entry of serialized.entries) {
-      appendMapData(
-        value,
-        structuredDeserialize(entry.key, ctx, memory),
-        structuredDeserialize(entry.value, ctx, memory),
-      );
-    }
-  } else if (serialized.type === 'Set') {
-    for (const entry of serialized.entries) {
-      appendSetData(
-        value,
-        structuredDeserialize(entry, ctx, memory),
-      );
-    }
-  } else if (serialized.type === 'Error') {
-    deserializeErrorCause(serialized, value, ctx, memory);
-  } else if (serialized.type === 'Array' || serialized.type === 'Object') {
+  if (serialized.type === 'Array' || serialized.type === 'Object') {
     deserializeProperties(serialized.properties, value, ctx, memory);
   } else if (serialized.type === 'platform-object') {
     if (!platformRecord) {
@@ -187,16 +184,10 @@ export function structuredDeserialize(
 
 /** HTML §2.7.6, SharedArrayBuffer and GrowableSharedArrayBuffer branches. */
 function deserializeSharedArrayBuffer(
-  buffer: object,
+  buffer: SharedArrayBuffer,
   realm: Realm,
-): object {
-  if (getBufferTypeName(buffer) !== 'SharedArrayBuffer') {
-    throw new InternalError('Only a SharedArrayBuffer can share its backing store');
-  }
+): SharedArrayBuffer {
   const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
-  if (getBufferTypeName(value) !== 'SharedArrayBuffer') {
-    throw new InternalError('The host did not clone a SharedArrayBuffer');
-  }
   const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
   if (!constructor) {
     throw new InternalError('The target realm has no SharedArrayBuffer intrinsic');
@@ -248,12 +239,9 @@ function deserializeProperties(
 function deserializeError(
   serialized: ErrorSerializedRecord,
   realm: Realm,
-): object {
+): Error {
   const constructor = getErrorConstructor(serialized.name, realm);
-  const value = Reflect.construct(
-    constructor,
-    serialized.message === undefined ? [] : [serialized.message],
-  ) as object;
+  const value = new constructor(serialized.message);
   writeErrorStack(value, serialized.stack);
   return value;
 }
@@ -261,7 +249,7 @@ function deserializeError(
 /** HTML §2.7.6, interesting accompanying [[ErrorData]]. */
 function deserializeErrorCause(
   serialized: ErrorSerializedRecord,
-  value: object,
+  value: Error,
   ctx: BindingContext<ScriptingEnvironment>,
   memory: StructuredDeserializeMemory,
 ): void {

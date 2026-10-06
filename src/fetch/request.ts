@@ -15,6 +15,9 @@ import {
 import type { FormDataImpl } from '../xhr/index';
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import {
+  isNavigationDestination, isNonSubresourceDestination, isSubresourceDestination, type Destination,
+} from './destination';
+import {
   FetchHeaders, getEnvironmentDefaultUserAgent, HeadersImpl, type HeadersGuard, type HeadersInitValue,
   isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, serializeInteger,
 } from './headers';
@@ -145,17 +148,17 @@ export class FetchRequest {
 
   // https://fetch.spec.whatwg.org/#subresource-request
   get isSubresource(): boolean {
-    return subresourceDestinations.has(this.destination);
+    return isSubresourceDestination(this.destination);
   }
 
   // https://fetch.spec.whatwg.org/#non-subresource-request
   get isNonSubresource(): boolean {
-    return nonSubresourceDestinations.has(this.destination);
+    return isNonSubresourceDestination(this.destination);
   }
 
   // https://fetch.spec.whatwg.org/#navigation-request
   get isNavigation(): boolean {
-    return navigationDestinations.has(this.destination);
+    return isNavigationDestination(this.destination);
   }
 
   /** Classify the complete redirect chain relative to the resolved request origin. */
@@ -332,30 +335,6 @@ export class FetchRequest {
     appendMetadataHeadersIfTrustworthy(this);
   }
 }
-
-// https://fetch.spec.whatwg.org/#request-destination-script-like
-export function isScriptLikeDestination(destination: Destination): boolean {
-  return scriptLikeDestinations.has(destination);
-}
-
-/** Translate the potential destination "fetch" to the empty request destination. */
-// https://fetch.spec.whatwg.org/#concept-potential-destination-translate
-// UNUSED: consumer integration has not needed this destination translation yet.
-export function translatePotentialDestination(destination: PotentialDestination): Destination {
-  return destination === 'fetch' ? '' : destination;
-}
-
-const scriptLikeDestinations = new Set<Destination>([
-  'audioworklet', 'paintworklet', 'script', 'serviceworker', 'sharedworker', 'worker',
-]);
-const subresourceDestinations = new Set<Destination>([
-  '', 'audio', 'audioworklet', 'font', 'image', 'json', 'manifest', 'paintworklet',
-  'script', 'style', 'text', 'track', 'video', 'xslt',
-]);
-const nonSubresourceDestinations = new Set<Destination>([
-  'document', 'embed', 'frame', 'iframe', 'object', 'report', 'serviceworker', 'sharedworker', 'worker',
-]);
-const navigationDestinations = new Set<Destination>(['document', 'embed', 'frame', 'iframe', 'object']);
 
 /*
  * typedef (Request or USVString) RequestInfo;
@@ -631,20 +610,6 @@ export type RequestInitiator = 'audio' | 'beacon' | 'body' | 'css' | 'early-hint
 
 // https://fetch.spec.whatwg.org/#concept-request-initiator
 export type RequestInitiatorCategory = '' | 'download' | 'imageset' | 'manifest' | 'prefetch' | 'prerender' | 'xslt';
-
-/** Fetch's internal destination type includes values outside the public Web IDL enum. */
-export type Destination = RequestDestination | 'serviceworker' | 'webidentity';
-
-export type RequestDestination = EmptyDestination | 'audio' | 'audioworklet' | 'document' | 'embed' |
-  'font' | 'frame' | 'iframe' | 'image' | 'json' | 'manifest' | 'object' | 'paintworklet' |
-  'report' | 'script' | 'sharedworker' | 'style' | 'text' | 'track' | 'video' | 'worker' | 'xslt';
-
-/** No specific resource destination, as with fetch(), XHR, and beacons; not an unset value. */
-// https://fetch.spec.whatwg.org/#concept-request-destination
-export type EmptyDestination = '';
-
-// https://fetch.spec.whatwg.org/#concept-potential-destination
-export type PotentialDestination = 'fetch' | Exclude<Destination, EmptyDestination>;
 
 export type RequestMode = 'navigate' | 'same-origin' | 'no-cors' | 'cors';
 export type FetchMode = RequestMode | 'websocket' | 'webtransport';

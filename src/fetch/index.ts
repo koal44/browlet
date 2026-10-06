@@ -30,9 +30,9 @@ export type {
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue,
 } from './environment';
 export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, FetchHeaders } from './headers';
+export { isScriptLikeDestination, type Destination } from './destination';
 export {
-  requestIDL, FetchRequest, isScriptLikeDestination,
-  type Destination, type FetchMode, type RequestCredentials, type RequestInternalPriority,
+  requestIDL, FetchRequest, type FetchMode, type RequestCredentials, type RequestInternalPriority,
   type FetchRequestInfo, type FetchRequestInit,
 } from './request';
 export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type ResponseImpl } from './response';

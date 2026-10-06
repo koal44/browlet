@@ -7,6 +7,7 @@ import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
 import type { FetchController } from './controller';
+import type { Destination } from './destination';
 import type { FetchGroup } from './group';
 import type { HTTPCacheStore } from './cache-http';
 import type { CORSPreflightCache } from './cache-cors';
@@ -14,7 +15,7 @@ import type {
   ConnectionPool, HTTPContentDecoder, HTTPContentDecoderListener, HTTPTransport, NetworkPartitionKey,
 } from './transport';
 import type { FetchIntegrityPolicy, ReferrerPolicy } from './policy';
-import type { Destination, FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
+import type { FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
 import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
 

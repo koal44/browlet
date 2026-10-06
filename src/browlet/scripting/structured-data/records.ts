@@ -56,7 +56,7 @@ export type ArrayBufferSerializedRecord = {
 export type SharedArrayBufferSerializedRecord = {
   type: 'SharedArrayBuffer' | 'GrowableSharedArrayBuffer';
   /** Host token for the inaccessible shared [[ArrayBufferData]] block. */
-  buffer: object;
+  buffer: SharedArrayBuffer;
   byteLength: number;
   maxByteLength?: number;
   agentCluster: object;

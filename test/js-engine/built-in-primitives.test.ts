@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, expectTypeOf, it } from 'vitest';
 
 import * as JSEngine from '../../src/js-engine/index';
 
@@ -17,45 +17,45 @@ describe('Node/V8 built-in primitives', () => {
       string: Object('text'),
       symbol: Object(Symbol('symbol')),
     })`, 'built-in-primitives.js') as {
-      bigint: object;
-      boolean: object;
-      date: object;
-      error: object;
-      map: object;
-      number: object;
-      regexp: object;
-      set: object;
-      string: object;
-      symbol: object;
+      bigint: unknown;
+      boolean: unknown;
+      date: unknown;
+      error: unknown;
+      map: unknown;
+      number: unknown;
+      regexp: unknown;
+      set: unknown;
+      string: unknown;
+      symbol: unknown;
     };
 
-    expect(JSEngine.hasBooleanData(values.boolean)).toBe(true);
+    assert(JSEngine.hasBooleanData(values.boolean));
     expect(JSEngine.getBooleanData(values.boolean)).toBe(false);
-    expect(JSEngine.hasNumberData(values.number)).toBe(true);
+    assert(JSEngine.hasNumberData(values.number));
     expect(JSEngine.getNumberData(values.number)).toBe(4.5);
-    expect(JSEngine.hasBigIntData(values.bigint)).toBe(true);
+    assert(JSEngine.hasBigIntData(values.bigint));
     expect(JSEngine.getBigIntData(values.bigint)).toBe(7n);
-    expect(JSEngine.hasStringData(values.string)).toBe(true);
+    assert(JSEngine.hasStringData(values.string));
     expect(JSEngine.getStringData(values.string)).toBe('text');
-    expect(JSEngine.hasSymbolData(values.symbol)).toBe(true);
-    expect(JSEngine.hasDateValue(values.date)).toBe(true);
+    assert(JSEngine.hasSymbolData(values.symbol));
+    assert(JSEngine.hasDateValue(values.date));
     expect(JSEngine.getDateValue(values.date)).toBe(1234);
-    expect(JSEngine.hasRegExpMatcher(values.regexp)).toBe(true);
+    assert(JSEngine.hasRegExpMatcher(values.regexp));
     expect(JSEngine.getRegExpData(values.regexp)).toEqual({
       flags: 'dgimsuy',
       source: 'source',
     });
-    expect(JSEngine.hasMapData(values.map)).toBe(true);
+    assert(JSEngine.hasMapData(values.map));
     expect(JSEngine.copyMapData(values.map))
       .toEqual([['key', 3]]);
-    expect(JSEngine.hasSetData(values.set)).toBe(true);
+    assert(JSEngine.hasSetData(values.set));
     expect(JSEngine.copySetData(values.set)).toEqual(['entry']);
-    expect(JSEngine.hasErrorData(values.error)).toBe(true);
+    assert(JSEngine.hasErrorData(values.error));
   });
 
   it('reads and updates Map and Set data without author methods', () => {
-    const map = new Map<unknown, unknown>([['key', 'value']]);
-    const set = new Set<unknown>(['entry']);
+    const map = new Map<string, string | number>([['key', 'value']]);
+    const set = new Set<string>(['entry']);
     const fail = (): never => {
       throw new Error('author method was consulted');
     };
@@ -70,6 +70,8 @@ describe('Node/V8 built-in primitives', () => {
       [Symbol.iterator]: { get: fail },
     });
 
+    expectTypeOf(JSEngine.copyMapData(map)).toEqualTypeOf<[string, string | number][]>();
+    expectTypeOf(JSEngine.copySetData(set)).toEqualTypeOf<string[]>();
     expect(JSEngine.copyMapData(map))
       .toEqual([['key', 'value']]);
     expect(JSEngine.copySetData(set)).toEqual(['entry']);

@@ -7,7 +7,7 @@ import {
   type AddonMicrotaskQueueHandle, type ContextEvaluationOptions,
 } from './node-addons';
 import type {
-  CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSRealm,
+  CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
@@ -37,7 +37,7 @@ export function bindAsyncContext<T>(steps: () => T): () => T {
 }
 
 /** Undefined when the selected backend cannot inspect the view's length mode. */
-export function getNativeArrayBufferViewLengthTracking(value: object): boolean | undefined {
+export function getNativeArrayBufferViewLengthTracking(value: ArrayBufferView): boolean | undefined {
   return addon.getMethod('isLengthTrackingArrayBufferView')
     ? addon.isLengthTrackingArrayBufferView(value)
     : undefined;
@@ -131,11 +131,11 @@ export function getContextGlobal(context: NodeContext): object {
 }
 
 /** Undefined when the backend lacks callback-driven native iterator creation. */
-export function createCollectionIterator(
+export function createCollectionIterator<Value>(
   context: NodeContext,
   kind: CollectionIteratorKind,
-  next: () => object,
-): object | undefined {
+  next: () => JSIteratorResult<Value>,
+): MapIterator<Value> | SetIterator<Value> | undefined {
   return addon.getMethod('createCollectionIterator')
     ? addon.createCollectionIterator(context, kind, next)
     : undefined;

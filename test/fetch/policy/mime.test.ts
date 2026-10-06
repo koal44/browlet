@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { isBlockedByMIMEType, isBlockedByNosniff } from '../../../src/fetch/policy';
-import type { Destination } from '../../../src/fetch/request';
+import type { Destination } from '../../../src/fetch/destination';
 import { FetchResponse } from '../../../src/fetch/response';
 import { createFetchRequest } from '../fetch-fixture';
 

@@ -1,7 +1,7 @@
 import type { ScriptingEnvironment } from '../environment';
 import {
-  getArrayBufferMaxByteLength, getBufferSourceByteLength, getBufferTypeName,
-  isBufferSourceDetached, isObject,
+  getArrayBufferMaxByteLength, getArrayBufferByteLength, isArrayBuffer,
+  isArrayBufferView, isSharedArrayBuffer, isDetachedArrayBuffer, isObject,
 } from '../../../js-engine/index';
 import {
   DOMExceptionImpl, DOMExceptionNames,
@@ -80,19 +80,17 @@ function prepareTransfer(
   ctx: BindingContext<ScriptingEnvironment>,
 ): PreparedTransfer {
   if (!isObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-  const bufferType = getBufferTypeName(value);
   const placeholder: TransferPlaceholderSerializedRecord = {
     type: 'transfer-placeholder',
   };
-  if (bufferType === 'ArrayBuffer') {
+  if (isArrayBuffer(value)) {
     return {
       kind: 'ArrayBuffer',
       placeholder,
-      value: value as ArrayBuffer,
+      value,
     };
   }
-  if (bufferType === 'SharedArrayBuffer') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-  if (bufferType !== undefined) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+  if (isSharedArrayBuffer(value) || isArrayBufferView(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
 
   const record = ctx.getObjectRecord(value);
   if (!record) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
@@ -112,8 +110,8 @@ function performTransfer(
   ctx: BindingContext<ScriptingEnvironment>,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
-    if (isBufferSourceDetached(prepared.value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-    const byteLength = getBufferSourceByteLength(prepared.value);
+    if (isDetachedArrayBuffer(prepared.value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    const byteLength = getArrayBufferByteLength(prepared.value);
     const maxByteLength = getArrayBufferMaxByteLength(prepared.value);
     return {
       type: maxByteLength === undefined
@@ -163,7 +161,7 @@ function receiveTransfer(
 
   const value = ctx.realm.transferArrayBuffer(dataHolder.buffer);
   if (
-    getBufferSourceByteLength(value) !== dataHolder.byteLength ||
+    getArrayBufferByteLength(value) !== dataHolder.byteLength ||
     getArrayBufferMaxByteLength(value) !== dataHolder.maxByteLength
   ) {
     throw new InternalError('Received ArrayBuffer does not match its data holder');

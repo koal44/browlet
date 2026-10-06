@@ -6,9 +6,10 @@ import {
   serializeOrigin, serializeURLPath, stripURLForReporting, type Origin, type URLRecord,
 } from '../url/index';
 import { defineEnumeration } from '../web-idl/index';
+import { isScriptLikeDestination } from './destination';
 import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchEnvironment } from './environment';
 import { parseIntegrityMetadata } from './integrity';
-import { isScriptLikeDestination, type FetchRequest } from './request';
+import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
 import { isHTTPScheme, isLocalURL } from './url';
 

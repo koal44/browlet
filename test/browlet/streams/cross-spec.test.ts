@@ -1,7 +1,7 @@
 import { idlType } from '../../../src/web-idl/core/index';
 import { createEnvironment } from '../../js-engine/execution-fixture';
 import { createTransformStream, observe } from './implementation-fixture';
-import { describe, expect, it, vi } from 'vitest';
+import { assert, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import {
   createReadableStreamProxy, GenericTransformStreamMixin, ReadableStreamImpl,
   WritableStreamImpl,
@@ -95,6 +95,7 @@ describe('Streams operations for other specifications', () => {
       () => {
         const view = stream.byobRequestView;
         if (view === null) throw new Error('No current BYOB request');
+        expectTypeOf(view.buffer).toEqualTypeOf<ArrayBuffer>();
         const chunk = new Uint8Array(getBufferSourceUnderlyingBuffer(view) as ArrayBuffer, getBufferSourceByteOffset(view), 2);
         writeArrayBufferView(chunk, [7, 8]);
         stream.enqueueChunk(chunk);
@@ -110,7 +111,9 @@ describe('Streams operations for other specifications', () => {
     const result = await observe(reader.read(destination, { min: 1 }, stream.env));
 
     expect(result.done).toBe(false);
-    expect(getBufferSourceCopy(requireObject(result.value)))
+    assert(result.value !== undefined);
+    expectTypeOf(result.value.buffer).toEqualTypeOf<ArrayBuffer>();
+    expect(getBufferSourceCopy(result.value))
       .toEqual(Uint8Array.from([7, 8]));
   });
 
@@ -132,7 +135,8 @@ describe('Streams operations for other specifications', () => {
     const result = await observe(reader.read(destination, { min: 1 }, stream.env));
 
     expect(offset).toBe(4);
-    expect(getBufferSourceCopy(requireObject(result.value)))
+    assert(result.value !== undefined);
+    expect(getBufferSourceCopy(result.value))
       .toEqual(Uint8Array.from([2, 3, 4]));
   });
 
@@ -259,10 +263,3 @@ describe('Readable-stream completion steps', () => {
     expect(errored).not.toHaveBeenCalled();
   });
 });
-
-function requireObject(value: unknown): object {
-  if (typeof value !== 'object' || value === null) {
-    throw new Error('Expected an object');
-  }
-  return value;
-}

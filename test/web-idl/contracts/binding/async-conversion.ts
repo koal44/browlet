@@ -33,6 +33,7 @@ const openedElementType: IDLSequenceType<IDLIntegerType> = retainedSequence.open
 const iterator: AsyncIterator<number[]> = binding.implementationConverter.idlToImpl(retainedSequence, asyncNumbers, {}, context);
 const preparedIterator: AsyncIterator<number[]> = binding.implementationConverter.createConverter(asyncNumbers, {})(retainedSequence, context);
 const contextIterator: AsyncIterator<number[]> = context.jsToImpl(input, asyncSequence(sequence(idlType.long)));
+const closeResult: InternalPromise<void> = contextIterator.return('stop');
 class ItemImpl { value = 1; }
 const items: AsyncIterator<ItemImpl[]> = context.jsToImpl(input, asyncSequence(sequence(reference(ItemImpl))));
 // @ts-expect-error The iterator's element contract is preserved in its implementation view.

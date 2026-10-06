@@ -257,7 +257,7 @@ export class ImplementationConverter {
       },
       return: (reason) => {
         const result = iterator.close(reason, realm);
-        return context.Promise.fromNative(result.promise, () => undefined, result.type as IDLType & PromiseResultType<unknown>);
+        return context.Promise.fromNative(result.promise, () => undefined, result.type as IDLType & PromiseResultType<void>);
       },
     };
   }

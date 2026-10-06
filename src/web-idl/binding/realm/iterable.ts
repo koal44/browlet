@@ -1,5 +1,5 @@
 import { InternalError, Stamper } from '../../../infra/index';
-import { defineDataProperty, defineMethod, isObject, type JSFunction } from '../../../js-engine/index';
+import { defineDataProperty, defineMethod, isObject, type JSFunction, type JSIteratorResult } from '../../../js-engine/index';
 
 import type { IDLIterable, AssembledInterface } from '../../assembly/index';
 import { IDLCallbackFunction } from '../../values/index';
@@ -170,7 +170,7 @@ export class SynchronousIterableBinding {
     assembled: AssembledInterface,
     member: IDLIterable,
     thisArgument: unknown,
-  ): object {
+  ): JSIteratorResult {
     if (!isObject(thisArgument)) this.#throwTypeError('Illegal invocation');
     if (getPlatformRecord(thisArgument)?.binding.world === this.#binding.world) {
       this.#binding.realm.performSecurityCheck(

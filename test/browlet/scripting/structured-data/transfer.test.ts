@@ -53,7 +53,7 @@ describe('HTML structured transfer', () => {
     const view = sourceRealm.evaluate(`(() => {
       const value = new Uint8Array([1, 2, 3, 4]);
       return value.subarray(1, 3);
-    })()`, 'structured-transfer-array-buffer-view.js') as object;
+    })()`, 'structured-transfer-array-buffer-view.js') as Uint8Array;
     const buffer = getBufferSourceUnderlyingBuffer(view);
 
     const serialized = structuredSerializeWithTransfer(
@@ -62,8 +62,8 @@ describe('HTML structured transfer', () => {
       source,
     );
     const result = structuredDeserializeWithTransfer(serialized, target);
-    const clone = result.deserialized as object;
-    const transferred = result.transferredValues[0] as object;
+    const clone = result.deserialized as Uint8Array;
+    const transferred = result.transferredValues[0] as ArrayBuffer;
 
     expect(isBufferSourceDetached(buffer)).toBe(true);
     expect(getBufferSourceUnderlyingBuffer(clone)).toBe(transferred);

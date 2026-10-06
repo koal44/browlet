@@ -32,6 +32,7 @@ Import across subsystem boundaries through [index.ts](index.ts).
 | [fetch.ts](fetch.ts) | Fetch entry, main/scheme/HTTP/redirect/preflight algorithms, cache transactions, response completion, and private network stream machinery |
 | [fetch-global.ts](fetch-global.ts) | Author-facing fetch operation and abort handling |
 | [request.ts](request.ts), [response.ts](response.ts), [headers.ts](headers.ts), [body.ts](body.ts) | Fetch records, public implementations, header algorithms, and body extraction/consumption |
+| [destination.ts](destination.ts) | Destination types, classification, and potential-destination translation; no module dependencies |
 | [params.ts](params.ts), [controller.ts](controller.ts), [group.ts](group.ts), [timing.ts](timing.ts) | Per-fetch state, cancellation, environment lifetime, and timing records |
 | [environment.ts](environment.ts) | Contracts supplied by browser environments and UserAgent |
 | [policy.ts](policy.ts) | Cookies, origins, CORS/CORP/COEP, timing disclosure, metadata, upgrades, integrity requirements, and blocking checks |

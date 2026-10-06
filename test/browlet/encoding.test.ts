@@ -483,6 +483,16 @@ describe('Encoding projection', () => {
     expect(Array.from(destination)).toEqual([65, 240, 159, 152, 128]);
   });
 
+  it.each(['', 'abc'])('encodes %j into a detached destination without reading or writing', async (source) => {
+    const result = await browlet.evaluate((source) => {
+      const buffer = new ArrayBuffer(4);
+      const destination = new Uint8Array(buffer, 1, 2);
+      structuredClone(buffer, { transfer: [buffer] });
+      return new TextEncoder().encodeInto(source, destination);
+    }, source);
+    expect(result).toEqual({ read: 0, written: 0 });
+  });
+
   it('fills a two-byte destination from a longer string of two-byte scalars', () => {
     const window = browlet.window;
     const encoder = Reflect.construct(requireFunction(window, 'TextEncoder'), []) as object;

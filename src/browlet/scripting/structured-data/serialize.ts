@@ -1,17 +1,17 @@
 import type { ScriptingEnvironment } from '../environment';
 import {
-  type JSBufferViewName, copyMapData, copySetData, getArrayBufferMaxByteLength,
-  getBigIntData, getBooleanData, getBufferSourceByteLength,
-  getBufferSourceByteOffset, getBufferSourceCopy, getBufferSourceUnderlyingBuffer,
-  getBufferTypeName, getDateValue, getNumberData, getRegExpData, getStringData,
+  type JSBufferView, copyMapData, copySetData, getArrayBufferMaxByteLength,
+  getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
+  getArrayBufferViewByteOffset, getBigIntData, getBooleanData, getBufferSourceCopy,
+  getBufferViewTypeName, getDateValue, getNumberData, getRegExpData, getStringData,
   getTypedArrayLength, hasBigIntData, hasBooleanData, hasDateValue, hasErrorData,
   hasMapData, hasNumberData, hasRegExpMatcher, hasSetData, hasStringData,
-  hasSymbolData, isArgumentsObject, isArrayBufferViewOutOfBounds, isArrayIteratorObject,
-  isBufferSourceDetached, isCryptoKeyObject, isExternalObject,
+  hasSymbolData, isAnyArrayBuffer, isArgumentsObject, isArrayBufferView, isArrayBufferViewOutOfBounds,
+  isArrayIteratorObject, isCryptoKeyObject, isDataView, isDetachedArrayBuffer, isExternalObject,
   isFinalizationRegistryObject, isGeneratorObject, isKeyObject,
   isLengthTrackingArrayBufferView, isMapIteratorObject, isModuleNamespaceObject,
   isPromiseObject, isProxyObject, isRegExpStringIteratorObject,
-  isSetIteratorObject, isStringIteratorObject, isWeakMapObject,
+  isSetIteratorObject, isSharedArrayBuffer, isStringIteratorObject, isWeakMapObject,
   isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
@@ -67,7 +67,6 @@ export function structuredSerializeInternal(
     throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   }
   let serialized: SerializedRecord;
-  let deep = false;
 
   if (hasBooleanData(value)) {
     serialized = {
@@ -104,20 +103,18 @@ export function structuredSerializeInternal(
       flags,
     };
   } else {
-    const bufferType = getBufferTypeName(value);
-    if (bufferType === 'ArrayBuffer' || bufferType === 'SharedArrayBuffer') {
+    if (isAnyArrayBuffer(value)) {
       serialized = serializeBuffer(
         value,
-        bufferType,
         forStorage,
         ctx,
       );
-    } else if (bufferType !== undefined) {
+    } else if (isArrayBufferView(value)) {
       if (isArrayBufferViewOutOfBounds(value)) {
         throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
       }
       const bufferSerialized = structuredSerializeInternal(
-        getBufferSourceUnderlyingBuffer(value),
+        getArrayBufferViewBuffer(value),
         forStorage,
         ctx,
         memory,
@@ -128,20 +125,26 @@ export function structuredSerializeInternal(
       }
       serialized = {
         type: 'ArrayBufferView',
-        constructor: bufferType,
+        constructor: getBufferViewTypeName(value),
         buffer: bufferSerialized,
-        byteOffset: getBufferSourceByteOffset(value),
-        ...serializeArrayBufferViewLengths(value, bufferType),
+        byteOffset: getArrayBufferViewByteOffset(value),
+        ...serializeArrayBufferViewLengths(value),
       };
     } else if (hasMapData(value)) {
       serialized = { type: 'Map', entries: [] };
-      deep = true;
+      memory.set(identity, serialized);
+      serializeMapData(value, serialized, forStorage, ctx, memory);
+      return serialized;
     } else if (hasSetData(value)) {
       serialized = { type: 'Set', entries: [] };
-      deep = true;
+      memory.set(identity, serialized);
+      serializeSetData(value, serialized, forStorage, ctx, memory);
+      return serialized;
     } else if (hasErrorData(value) && !record) {
       serialized = serializeError(value, ctx.realm);
-      deep = true;
+      memory.set(identity, serialized);
+      serializeErrorCause(value, serialized, forStorage, ctx, memory);
+      return serialized;
     } else if (record) {
       const steps = record.assembled.serialSteps;
       if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
@@ -176,7 +179,6 @@ export function structuredSerializeInternal(
         throw new InternalError('An Array exotic object has no numeric length');
       }
       serialized = { type: 'Array', length, properties: [] };
-      deep = true;
     } else if (typeof value === 'function') {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     } else if (hasUnsupportedInternalSlots(value) ||
@@ -184,26 +186,11 @@ export function structuredSerializeInternal(
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     } else {
       serialized = { type: 'Object', properties: [] };
-      deep = true;
     }
   }
 
   memory.set(identity, serialized);
-  if (!deep) return serialized;
-
-  if (serialized.type === 'Map') {
-    serializeMapData(value, serialized, forStorage, ctx, memory);
-  } else if (serialized.type === 'Set') {
-    serializeSetData(value, serialized, forStorage, ctx, memory);
-  } else if (serialized.type === 'Error') {
-    serializeErrorCause(
-      value,
-      serialized,
-      forStorage,
-      ctx,
-      memory,
-    );
-  } else if (serialized.type === 'Array' || serialized.type === 'Object') {
+  if (serialized.type === 'Array' || serialized.type === 'Object') {
     serializeProperties(
       value,
       serialized,
@@ -211,8 +198,6 @@ export function structuredSerializeInternal(
       ctx,
       memory,
     );
-  } else {
-    throw new InternalError(`Unsupported deep record ${serialized.type}`);
   }
 
   return serialized;
@@ -220,33 +205,31 @@ export function structuredSerializeInternal(
 
 /** HTML §2.7.3, ArrayBufferView [[ByteLength]] and [[ArrayLength]]. */
 function serializeArrayBufferViewLengths(
-  value: object,
-  type: JSBufferViewName,
+  value: JSBufferView,
 ): Pick<ArrayBufferViewSerializedRecord, 'arrayLength' | 'byteLength'> {
   if (isLengthTrackingArrayBufferView(value)) {
-    return type === 'DataView'
+    return isDataView(value)
       ? { byteLength: 'auto' }
       : { arrayLength: 'auto', byteLength: 'auto' };
   }
-  return type === 'DataView'
-    ? { byteLength: getBufferSourceByteLength(value) }
+  return isDataView(value)
+    ? { byteLength: getArrayBufferViewByteLength(value) }
     : {
       arrayLength: getTypedArrayLength(value),
-      byteLength: getBufferSourceByteLength(value),
+      byteLength: getArrayBufferViewByteLength(value),
     };
 }
 
 /** HTML §2.7.3, ArrayBuffer and SharedArrayBuffer branches. */
 function serializeBuffer(
-  value: object,
-  type: 'ArrayBuffer' | 'SharedArrayBuffer',
+  value: ArrayBufferLike,
   forStorage: boolean,
   ctx: BindingContext<ScriptingEnvironment>,
 ): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
-  const byteLength = getBufferSourceByteLength(value);
+  const byteLength = getArrayBufferByteLength(value);
   const maxByteLength = getArrayBufferMaxByteLength(value);
 
-  if (type === 'SharedArrayBuffer') {
+  if (isSharedArrayBuffer(value)) {
     if (!ctx.realm.crossOriginIsolated || forStorage) {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     }
@@ -268,7 +251,7 @@ function serializeBuffer(
       };
   }
 
-  if (isBufferSourceDetached(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+  if (isDetachedArrayBuffer(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   const bytes = getBufferSourceCopy(value);
   return maxByteLength === undefined
     ? { type: 'ArrayBuffer', bytes, byteLength }
@@ -282,7 +265,7 @@ function serializeBuffer(
 
 /** HTML §2.7.3, deep serialization of [[MapData]]. */
 function serializeMapData(
-  value: object,
+  value: Map<unknown, unknown>,
   serialized: MapSerializedRecord,
   forStorage: boolean,
   ctx: BindingContext<ScriptingEnvironment>,
@@ -304,7 +287,7 @@ function serializeMapData(
 
 /** HTML §2.7.3, deep serialization of [[SetData]]. */
 function serializeSetData(
-  value: object,
+  value: Set<unknown>,
   serialized: SetSerializedRecord,
   forStorage: boolean,
   ctx: BindingContext<ScriptingEnvironment>,
@@ -349,7 +332,7 @@ function serializeProperties(
 
 /** HTML §2.7.3, the [[ErrorData]] branch. */
 function serializeError(
-  value: object,
+  value: Error,
   realm: Realm,
 ): ErrorSerializedRecord {
   const candidateName = Reflect.get(value, 'name', value) as unknown;
@@ -367,7 +350,7 @@ function serializeError(
 
 /** HTML §2.7.3, interesting accompanying [[ErrorData]]. */
 function serializeErrorCause(
-  value: object,
+  value: Error,
   serialized: ErrorSerializedRecord,
   forStorage: boolean,
   ctx: BindingContext<ScriptingEnvironment>,
