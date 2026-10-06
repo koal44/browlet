@@ -5,7 +5,7 @@ import { createMicrotaskQueue } from '../../src/js-engine/index';
 import { internalType, type InternalPromise } from '../../src/infra/promises';
 import { idlType, BindingWorld } from '../../src/web-idl/index';
 import { createEnvironment } from '../js-engine/execution-fixture';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 
 import { parseMIMEType, serializeMIMEType, type MIMEType } from '../../src/mime/mime-type';
 import {

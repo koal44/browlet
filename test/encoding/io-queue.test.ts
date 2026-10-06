@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
 import { createEnvironment } from '../js-engine/execution-fixture';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 
 describe('Encoding §3: I/O queues', () => {
   it('distinguishes empty open input from a persistent end marker', () => {

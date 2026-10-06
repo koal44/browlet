@@ -12,7 +12,7 @@ import { CookieStore } from '../../src/http/index';
 import { obtainSite, type Origin } from '../../src/url/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
-import type { TestRealm } from '../web-idl/test-realm';
+import type { TestRealm } from '../support/web-idl-realm';
 
 export function createClientEnvironment(
   url = 'https://example.test/', env: TestEnvironment = createEnvironment(),

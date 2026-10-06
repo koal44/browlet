@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { assert, describe, expect, it, vi } from 'vitest';
 
 import { TextEncoderStreamImpl } from '../../src/encoding/text-encoder-stream';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 import { getBufferSourceCopy, isUint8Array } from '../../src/js-engine/buffers';
 
 describe('TextEncoderStream byte production', () => {

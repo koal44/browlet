@@ -1,6 +1,6 @@
 import { createEnvironment } from '../../js-engine/execution-fixture';
 import type { InternalPromise } from '../../../src/infra/promises';
-import { TestRealm } from '../../web-idl/test-realm';
+import { TestRealm } from '../../support/web-idl-realm';
 import {
   type QueuingStrategyRecord, TransformStreamImpl, type TransformerRecord,
   WritableStreamImpl, type UnderlyingSink,

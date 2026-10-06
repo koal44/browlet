@@ -18,7 +18,7 @@ import {
 } from '../../src/http/index';
 import { parseMIMEType, serializeMIMEType } from '../../src/mime/index';
 import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment, type ClientEnvironment } from './client-fixture';
 

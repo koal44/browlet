@@ -1,0 +1,1005 @@
+import { describe, expect, it } from 'vitest';
+
+import { webIDLCommonDefinitions } from '../../../src/web-idl/core/common';
+import {
+  decimal, defineEnumeration, defineIncludes, defineInterface,
+  defineInterfaceMixin, definePartialInterface, frozenArray, idlType, impl, integer,
+  negativeInfinity, notANumber, positiveInfinity, reference, roAttr,
+  type AttributeMember, type ConstructorMember, type OperationMember,
+} from '../../../src/web-idl/core/index';
+import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
+import type { SecurityCheckType } from '../../../src/web-idl/environment';
+import { BindingWorld } from '../../../src/web-idl/binding/world';
+import { RealmBinding } from '../../../src/web-idl/binding/realm';
+import { getPlatformRecord, PlatformRecord } from '../../../src/web-idl/binding/platform';
+
+import { getMemberBinding } from '../../support/web-idl-binding';
+import { TestRealm as Realm, getInstalledInterface } from '../../support/web-idl-realm';
+
+describe('Web IDL realm interface bindings', () => {
+  it('projects constructors, inheritance, fragments, members, and descriptors', () => {
+    class ProjectionBaseImpl {}
+    class ProjectionDerivedImpl extends ProjectionBaseImpl {}
+    const constructor = constructorMember([
+      { name: 'value', type: idlType.long },
+    ]);
+    const value = attributeMember('value', idlType.long);
+    const describeNumber = operationMember(
+      'describe',
+      [{ name: 'value', type: idlType.long }],
+      idlType.DOMString,
+    );
+    const describeString = operationMember(
+      'describe',
+      [{ name: 'value', type: idlType.DOMString }],
+      idlType.DOMString,
+    );
+    const partialOperation = operationMember(
+      'fromPartial',
+      [],
+      idlType.DOMString,
+    );
+    const mixinOperation = operationMember(
+      'fromMixin',
+      [],
+      idlType.DOMString,
+    );
+    const staticOperation = {
+      ...operationMember('makeLabel', [], idlType.DOMString),
+      static: true,
+    } satisfies OperationMember;
+    const staticAttribute = {
+      ...attributeMember('version', idlType.DOMString, true),
+      static: true,
+    } satisfies AttributeMember;
+    const base = defineInterface({
+      name: 'ProjectionBase',
+      exposed: ['Window'],
+      members: [{
+        kind: 'constant', name: 'BASE', type: idlType.long, value: integer(1),
+      }],
+    });
+    const derived = defineInterface({
+      name: 'ProjectionDerived',
+      inherits: 'ProjectionBase',
+      exposed: ['Window'],
+      members: [
+        constructor,
+        { kind: 'constant', name: 'ANSWER', type: idlType.long, value: integer(42) },
+        value,
+        describeNumber,
+        describeString,
+        staticAttribute,
+        staticOperation,
+      ],
+    });
+    const partial = definePartialInterface({
+      name: 'ProjectionDerived',
+      members: [partialOperation],
+    });
+    const mixin = defineInterfaceMixin({
+      name: 'ProjectionMixin',
+      members: [mixinOperation],
+    });
+    const include = defineIncludes({
+      interface: 'ProjectionDerived',
+      mixin: 'ProjectionMixin',
+    });
+    const state = new WeakMap<object, number>();
+
+    const realm = new Realm();
+    const binding = new RealmBinding(
+      new DefinitionAssembly([partial, include, derived, mixin, base]),
+      realm,
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(derived.name));
+    interfaceBinding.createImplementation = () => new ProjectionDerivedImpl();
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function(receiver, [value_]) {
+        state.set(receiver, value_ as number);
+      },
+    };
+    getMemberBinding(interfaceBinding, value).attributeSteps = {
+      get(receiver) { return state.get(receiver!.implInst) ?? 0; },
+      set(receiver, value_) { state.set(receiver!.implInst, value_ as number); },
+    };
+    getMemberBinding(interfaceBinding, describeNumber).operationSteps = function(_receiver, [value_]) {
+      return `number:${String(value_)}`;
+    };
+    getMemberBinding(interfaceBinding, describeString).operationSteps = function(_receiver, [value_]) {
+      return `string:${String(value_)}`;
+    };
+    getMemberBinding(interfaceBinding, partialOperation).operationSteps = () => 'partial';
+    getMemberBinding(interfaceBinding, mixinOperation).operationSteps = () => 'mixin';
+    getMemberBinding(interfaceBinding, staticOperation).operationSteps = () => 'static';
+    getMemberBinding(interfaceBinding, staticAttribute).attributeSteps = {
+      get() { return '1.0'; },
+    };
+    const installed = binding.installDefinitions();
+    const Base = getInstalledInterface(installed, 'ProjectionBase');
+    const Derived = getInstalledInterface(installed, 'ProjectionDerived');
+
+    const instance = construct(Derived, [4.8]);
+    const prototype = Derived.prototype;
+
+    expect(installed.get('ProjectionBase')).toBe(Base);
+    expect(installed.get('ProjectionDerived')).toBe(Derived);
+    expect(Derived).toBeInstanceOf(realm.intrinsics.function);
+    expect(Derived).not.toBeInstanceOf(Function);
+    expect(prototype).toBeInstanceOf(realm.intrinsics.object);
+    expect(prototype).not.toBeInstanceOf(Object);
+    expect(Object.getPrototypeOf(Derived)).toBe(Base);
+    expect(Object.getPrototypeOf(prototype)).toBe(Base.prototype);
+    expect(Object.getPrototypeOf(instance)).toBe(prototype);
+    expect(Reflect.get(instance, 'value')).toBe(4);
+    expect(Reflect.set(instance, 'value', 8.9)).toBe(true);
+    expect(Reflect.get(instance, 'value')).toBe(8);
+    expect(call(prototype, 'describe', instance, 5.9)).toBe('number:5');
+    expect(call(prototype, 'describe', instance, 'five')).toBe('string:five');
+    expect(call(prototype, 'fromPartial', instance)).toBe('partial');
+    expect(call(prototype, 'fromMixin', instance)).toBe('mixin');
+    expect(call(Derived, 'makeLabel', null)).toBe('static');
+    expect(Reflect.get(Derived, 'version')).toBe('1.0');
+    expect(Object.hasOwn(prototype, 'version')).toBe(false);
+    expect(Reflect.get(Derived, 'ANSWER')).toBe(42);
+    expect(Reflect.get(prototype, 'ANSWER')).toBe(42);
+    expect(Reflect.get(Derived, 'BASE')).toBe(1);
+    expect(Object.getOwnPropertyDescriptor(Derived, 'prototype')).toEqual({
+      configurable: false,
+      enumerable: false,
+      value: prototype,
+      writable: false,
+    });
+    expect(Object.getOwnPropertyDescriptor(prototype, 'describe'))
+      .toMatchObject({ configurable: true, enumerable: true, writable: true });
+    const describe = Reflect.get(prototype, 'describe') as unknown;
+    if (typeof describe !== 'function') throw new Error('Missing describe');
+    expect({ length: describe.length, name: describe.name }).toEqual({
+      length: 1, name: 'describe',
+    });
+  });
+
+  it('copies mixin members with distinct host-interface identities', () => {
+    class FirstHostImpl {}
+    class SecondHostImpl {}
+    const firstConstructor = constructorMember([]);
+    const secondConstructor = constructorMember([]);
+    const value = attributeMember('value', idlType.long, true);
+    const read = operationMember('read', [], idlType.long);
+    const mixin = defineInterfaceMixin({
+      name: 'SharedMembers',
+      members: [value, read],
+    });
+    const first = defineInterface({
+      name: 'FirstHost',
+      exposed: '*', members: [firstConstructor],
+    });
+    const second = defineInterface({
+      name: 'SecondHost',
+      exposed: '*', members: [secondConstructor],
+    });
+
+    const realm = new Realm();
+    const binding = new RealmBinding(
+      new DefinitionAssembly([
+        first,
+        second,
+        mixin,
+        defineIncludes({ interface: 'FirstHost', mixin: 'SharedMembers' }),
+        defineIncludes({ interface: 'SecondHost', mixin: 'SharedMembers' }),
+      ]),
+      realm,
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const firstBinding = binding.getImplementationBinding(binding.resolveInterface(first.name));
+    firstBinding.createImplementation = () => new FirstHostImpl();
+    const secondBinding = binding.getImplementationBinding(binding.resolveInterface(second.name));
+    secondBinding.createImplementation = () => new SecondHostImpl();
+    getMemberBinding(firstBinding, firstConstructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    getMemberBinding(secondBinding, secondConstructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    getMemberBinding(firstBinding, value).attributeSteps = { get: () => 1 };
+    getMemberBinding(secondBinding, value).attributeSteps = { get: () => 1 };
+    getMemberBinding(firstBinding, read).operationSteps = () => 2;
+    getMemberBinding(secondBinding, read).operationSteps = () => 2;
+    const installed = binding.installDefinitions();
+    const First = getInstalledInterface(installed, 'FirstHost');
+    const Second = getInstalledInterface(installed, 'SecondHost');
+    const firstPrototype = getPrototype(First);
+    const secondPrototype = getPrototype(Second);
+    const firstObject = construct(First, []);
+    const secondObject = construct(Second, []);
+    const firstRead = Reflect.get(firstPrototype, 'read') as CallableFunction;
+    const secondRead = Reflect.get(secondPrototype, 'read') as CallableFunction;
+    const firstGetter = Reflect.getOwnPropertyDescriptor(
+      firstPrototype,
+      'value',
+    )?.get;
+    const secondGetter = Reflect.getOwnPropertyDescriptor(
+      secondPrototype,
+      'value',
+    )?.get;
+
+    expect(firstRead).not.toBe(secondRead);
+    expect(firstGetter).not.toBe(secondGetter);
+    expect(Reflect.apply(firstRead, firstObject, [])).toBe(2);
+    expect(Reflect.apply(secondRead, secondObject, [])).toBe(2);
+    expect(Reflect.apply(firstGetter!, firstObject, [])).toBe(1);
+    expect(Reflect.apply(secondGetter!, secondObject, [])).toBe(1);
+    expect(() => { Reflect.apply(firstRead, secondObject, []); })
+      .toThrow(realm.intrinsics.typeError);
+    expect(() => { Reflect.apply(secondRead, firstObject, []); })
+      .toThrow(realm.intrinsics.typeError);
+  });
+
+  it('materializes constant tokens as their declared IDL values', () => {
+    const constants = defineInterface({
+      name: 'ConstantValues',
+      exposed: '*',
+      members: [
+        {
+          kind: 'constant',
+          name: 'MAX_SIGNED',
+          type: idlType.longLong,
+          value: integer('9223372036854775807'),
+        },
+        {
+          kind: 'constant',
+          name: 'MAX_UNSIGNED',
+          type: idlType.unsignedLongLong,
+          value: integer('18446744073709551615'),
+        },
+        {
+          kind: 'constant', name: 'MASK', type: idlType.unsignedLong,
+          value: integer('0x0000fc00'),
+        },
+        {
+          kind: 'constant', name: 'OCTAL', type: idlType.octet,
+          value: integer('017'),
+        },
+        {
+          kind: 'constant', name: 'SINGLE', type: idlType.float,
+          value: decimal('1.337'),
+        },
+        {
+          kind: 'constant', name: 'POSITIVE_INFINITY',
+          type: idlType.unrestrictedDouble, value: positiveInfinity,
+        },
+        {
+          kind: 'constant', name: 'NEGATIVE_INFINITY',
+          type: idlType.unrestrictedFloat, value: negativeInfinity,
+        },
+        {
+          kind: 'constant', name: 'NOT_A_NUMBER',
+          type: idlType.unrestrictedDouble, value: notANumber,
+        },
+      ],
+    });
+    const binding = new RealmBinding(
+      new DefinitionAssembly([constants]),
+      new Realm(),
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const Constants = getInstalledInterface(binding.installDefinitions(), 'ConstantValues');
+
+    expect(Reflect.get(Constants, 'MAX_SIGNED'))
+      .toBe(Number(9223372036854775807n));
+    expect(Reflect.get(Constants, 'MAX_UNSIGNED'))
+      .toBe(Number(18446744073709551615n));
+    expect(Reflect.get(Constants, 'MASK')).toBe(0x0000fc00);
+    expect(Reflect.get(Constants, 'OCTAL')).toBe(0o17);
+    expect(Reflect.get(Constants, 'SINGLE')).toBe(Math.fround(1.337));
+    expect(Reflect.get(Constants, 'POSITIVE_INFINITY')).toBe(Infinity);
+    expect(Reflect.get(Constants, 'NEGATIVE_INFINITY')).toBe(-Infinity);
+    expect(Reflect.get(Constants, 'NOT_A_NUMBER')).toBeNaN();
+  });
+
+  it('brands receivers across realms and performs the security-check callsite', () => {
+    class CrossRealmImpl {}
+    const constructor = constructorMember([]);
+    const operation = operationMember('read', [], idlType.DOMString);
+    const interfaceIDL = defineInterface({
+      name: 'CrossRealmInterface',
+      exposed: '*',
+      members: [constructor, operation],
+    });
+    const assembly = new DefinitionAssembly([interfaceIDL]);
+
+    const world = new BindingWorld([]);
+    const firstRealm = new RecordingRealm();
+    const secondRealm = new RecordingRealm();
+    const first = new RealmBinding(
+      assembly,
+      firstRealm,
+      world,
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const firstInterfaceBinding = first.getImplementationBinding(first.resolveInterface(interfaceIDL.name));
+    firstInterfaceBinding.createImplementation = () => new CrossRealmImpl();
+    getMemberBinding(firstInterfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    getMemberBinding(firstInterfaceBinding, operation).operationSteps = () => 'ok';
+    const second = new RealmBinding(
+      assembly,
+      secondRealm,
+      world,
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const secondInterfaceBinding = second.getImplementationBinding(second.resolveInterface(interfaceIDL.name));
+    secondInterfaceBinding.createImplementation = () => new CrossRealmImpl();
+    getMemberBinding(secondInterfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    getMemberBinding(secondInterfaceBinding, operation).operationSteps = () => 'ok';
+    const First = getInstalledInterface(first.installDefinitions(), 'CrossRealmInterface');
+    const Second = getInstalledInterface(second.installDefinitions(), 'CrossRealmInterface');
+    const foreignObject = construct(Second, []);
+    const firstPrototype = First.prototype;
+
+    expect(call(firstPrototype, 'read', foreignObject)).toBe('ok');
+    expect(firstRealm.checks).toEqual([{
+      identifier: 'read',
+      object: foreignObject,
+      type: 'method',
+    }]);
+    expect(() => call(firstPrototype, 'read', {}, [])).toThrow(
+      firstRealm.intrinsics.typeError,
+    );
+  });
+
+  it('keeps platform identity separate from private implementation state', () => {
+    const read = operationMember('read', [], idlType.long);
+    const echo = operationMember(
+      'echo',
+      [{ name: 'value', type: reference('SeparatedIdentity') }],
+      reference('SeparatedIdentity'),
+    );
+    const interfaceIDL = defineInterface({
+      name: 'SeparatedIdentity',
+      exposed: '*',
+      members: [read, echo],
+    });
+    const assembly = new DefinitionAssembly([interfaceIDL]);
+    const assembled = assembly.interfaces.get('SeparatedIdentity');
+    if (!assembled) throw new Error('Missing assembled interface');
+
+    const implementation = new PrivateStateImplementation(42);
+
+    const realm = new RecordingRealm();
+    const binding = new RealmBinding(
+      assembly,
+      realm,
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)), read).operationSteps = function(receiver) {
+      const implInst = receiver?.implInst;
+      if (!(implInst instanceof PrivateStateImplementation)) throw new Error('Wrong implementation');
+      return PrivateStateImplementation.read(implInst);
+    };
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)), echo).operationSteps = function(receiver, [value]) {
+      expect(receiver!.implInst).toBe(implementation);
+      expect(value).toBe(implementation);
+      return value;
+    };
+    const prototype = binding.getImplementationBinding(assembled).getInterfacePrototypeObject();
+    const record = new PlatformRecord(implementation, assembled, binding);
+    const object = record.project();
+
+    expect(binding.isPlatformObject(object)).toBe(true);
+    expect(binding.isPlatformObject(implementation)).toBe(false);
+    expect(Object.getPrototypeOf(object)).toBe(prototype);
+    expect(Object.getPrototypeOf(implementation))
+      .toBe(PrivateStateImplementation.prototype);
+    expect(implementation).toBeInstanceOf(PrivateStateImplementation);
+    expect(record.platformObject).toBe(object);
+    expect(record.implInst).toBe(implementation);
+    expect(call(prototype, 'read', object)).toBe(42);
+    expect(call(prototype, 'echo', object, object)).toBe(object);
+    expect(binding.getConverter(binding.assembly.getIDLType(reference('SeparatedIdentity'))).jsToIDL(object)).toBe(implementation);
+    expect(binding.getConverter(binding.assembly.getIDLType(reference('SeparatedIdentity'))).idlToJS(implementation)).toBe(object);
+    expect(realm.checks.map(({ object: checked }) => checked)).toEqual([
+      object,
+      object,
+    ]);
+  });
+
+  it('runs the default toJSON operation over exposed JSON attributes', () => {
+    class JSONBaseImpl {}
+    class JSONDerivedImpl extends JSONBaseImpl {}
+    const constructor = constructorMember([]);
+    const inheritedValue = attributeMember('inheritedValue', idlType.long);
+    const ownValue = attributeMember('ownValue', idlType.DOMString);
+    const nonJSONValue = attributeMember('nonJSONValue', idlType.symbol);
+    const baseToJSON = {
+      ...operationMember('toJSON', [], idlType.object),
+      extendedAttributes: [noArguments('Default')],
+    } satisfies OperationMember;
+    const derivedToJSON = {
+      ...operationMember('toJSON', [], idlType.object),
+      extendedAttributes: [noArguments('Default')],
+    } satisfies OperationMember;
+    const base = defineInterface({
+      name: 'JSONBase',
+      exposed: '*',
+      members: [inheritedValue, baseToJSON],
+    });
+    const derived = defineInterface({
+      name: 'JSONDerived',
+      inherits: 'JSONBase',
+      exposed: '*',
+      members: [constructor, ownValue, nonJSONValue, derivedToJSON],
+    });
+
+    const realm = new Realm();
+    const reads: string[] = [];
+    let currentValue = 'first';
+    const binding = new RealmBinding(
+      new DefinitionAssembly([derived, base]),
+      realm,
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(derived.name));
+    interfaceBinding.createImplementation = () => new JSONDerivedImpl();
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(base.name)), inheritedValue).attributeSteps = {
+      get() { reads.push('inheritedValue'); return 12; },
+    };
+    getMemberBinding(interfaceBinding, ownValue).attributeSteps = {
+      get() { reads.push('ownValue'); return currentValue; },
+    };
+    getMemberBinding(interfaceBinding, nonJSONValue).attributeSteps = {
+      get() { throw new Error('A non-JSON getter must not be read'); },
+    };
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'JSONDerived');
+    const object = construct(Interface, []);
+    const json = call(Interface.prototype, 'toJSON', object);
+
+    expect(json).toBeInstanceOf(realm.intrinsics.object);
+    expect(json).toEqual({ inheritedValue: 12, ownValue: 'first' });
+    expect(Reflect.ownKeys(json as object)).not.toContain('nonJSONValue');
+    currentValue = 'second';
+    const later = call(Interface.prototype, 'toJSON', object);
+    expect(later).toEqual({ inheritedValue: 12, ownValue: 'second' });
+    expect(later).not.toBe(json);
+    expect(reads).toEqual(['inheritedValue', 'ownValue', 'inheritedValue', 'ownValue']);
+  });
+
+  it('keeps default toJSON exposure per realm and reads current instance values and failures', () => {
+    class JSONValuesImpl {
+      current = 1;
+      failure: Error | undefined;
+      get value() {
+        if (this.failure) throw this.failure;
+        return this.current;
+      }
+      get secureValue() { return this.current * 2; }
+    }
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'JSONValues',
+        implementation: impl(JSONValuesImpl),
+        exposed: '*',
+        members: [
+          roAttr('value', idlType.long),
+          { ...roAttr('secureValue', idlType.long), extendedAttributes: [noArguments('SecureContext')] },
+          { ...operationMember('toJSON', [], idlType.object), extendedAttributes: [noArguments('Default')] },
+        ],
+      }),
+    ]);
+
+    for (const secureContext of [true, false]) {
+      const realm = new Realm({ secureContext });
+      const ctx = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+      const value = new JSONValuesImpl();
+      const object = ctx.project(JSONValuesImpl, value);
+      const first = call(object, 'toJSON', object);
+      expect(first).toEqual(secureContext ? { value: 1, secureValue: 2 } : { value: 1 });
+      expect(first).toBeInstanceOf(realm.intrinsics.object);
+
+      value.current = 3;
+      const second = call(object, 'toJSON', object);
+      expect(second).toEqual(secureContext ? { value: 3, secureValue: 6 } : { value: 3 });
+      expect(second).not.toBe(first);
+
+      const other = new JSONValuesImpl();
+      other.current = 5;
+      const otherObject = ctx.project(JSONValuesImpl, other);
+      expect(call(otherObject, 'toJSON', otherObject))
+        .toEqual(secureContext ? { value: 5, secureValue: 10 } : { value: 5 });
+
+      value.failure = new Error('Current getter failure');
+      expect(() => call(object, 'toJSON', object)).toThrow(value.failure);
+    }
+  });
+
+  it.each([false, true])('creates default toJSON results in the function realm while preserving child ownership (projected: %s)', (projected) => {
+    class JSONPointImpl {}
+    class JSONHolderImpl {}
+    const pointToJSON = operationMember('toJSON', [], idlType.object);
+    const point = defineInterface({
+      name: 'JSONPoint',
+      implementation: impl(JSONPointImpl),
+      exposed: '*', members: [pointToJSON],
+    });
+    const pointAttribute = attributeMember(
+      'point',
+      reference('JSONPoint'),
+      true,
+    );
+    const toJSON = {
+      ...operationMember('toJSON', [], idlType.object),
+      extendedAttributes: [noArguments('Default')],
+    } satisfies OperationMember;
+    const holder = defineInterface({
+      name: 'JSONHolder',
+      exposed: '*',
+      members: [pointAttribute, toJSON],
+    });
+    const assembly = new DefinitionAssembly([holder, point]);
+
+    const world = new BindingWorld([]);
+    const local = new RealmBinding(
+      assembly,
+      new Realm(),
+      world,
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    local.getImplementationBinding(local.resolveInterface(point.name)).createImplementation = () => new JSONPointImpl();
+    local.getImplementationBinding(local.resolveInterface(holder.name)).createImplementation = () => new JSONHolderImpl();
+    const foreign = new RealmBinding(
+      assembly,
+      new Realm(),
+      world,
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    foreign.getImplementationBinding(foreign.resolveInterface(point.name)).createImplementation = () => new JSONPointImpl();
+    foreign.getImplementationBinding(foreign.resolveInterface(holder.name)).createImplementation = () => new JSONHolderImpl();
+    const pointObject = projected
+      ? local.allocatePlatformRecord(local.resolveInterface('JSONPoint')).platformObject!
+      : undefined;
+    const pointImpl = pointObject ? getPlatformRecord(pointObject)!.implInst : new JSONPointImpl();
+    getMemberBinding(local.getImplementationBinding(local.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
+      get() { return pointImpl; },
+    };
+    getMemberBinding(foreign.getImplementationBinding(foreign.resolveInterface(holder.name)), pointAttribute).attributeSteps = {
+      get() { return pointImpl; },
+    };
+    const holderObject = local.allocatePlatformRecord(local.resolveInterface('JSONHolder')).platformObject!;
+
+    const json = call(
+      foreign.getImplementationBinding(foreign.resolveInterface('JSONHolder')).getInterfacePrototypeObject(),
+      'toJSON',
+      holderObject,
+    );
+
+    expect(json).toBeInstanceOf(foreign.realm.intrinsics.object);
+    const child = Reflect.get(json as object, 'point') as object;
+    expect(getPlatformRecord(child)?.binding).toBe(local);
+    if (pointObject) expect(child).toBe(pointObject);
+  });
+
+  it('converts frozen array attributes once and returns them by identity', () => {
+    class FrozenArrayImpl {}
+    const constructor = constructorMember([]);
+    const values = attributeMember(
+      'values',
+      frozenArray(idlType.long),
+    );
+    const interfaceIDL = defineInterface({
+      name: 'FrozenArrayInterface',
+      exposed: '*',
+      members: [constructor, values],
+    });
+    const realm = new Realm();
+    const state = new WeakMap<object, readonly unknown[]>();
+
+    const binding = new RealmBinding(
+      new DefinitionAssembly([interfaceIDL]),
+      realm,
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
+    interfaceBinding.createImplementation = () => new FrozenArrayImpl();
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function(receiver) {
+        state.set(receiver, Object.freeze(new realm.intrinsics.array()));
+      },
+    };
+    getMemberBinding(interfaceBinding, values).attributeSteps = {
+      get(receiver) { return state.get(receiver!.implInst); },
+      set(receiver, value) { state.set(receiver!.implInst, value as readonly unknown[]); },
+    };
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'FrozenArrayInterface');
+    const object = construct(Interface, []);
+    const source = Object.freeze(['1', 2]);
+
+    expect(Reflect.set(object, 'values', source)).toBe(true);
+    const first: unknown = Reflect.get(object, 'values');
+    const second: unknown = Reflect.get(object, 'values');
+    if (!Array.isArray(first)) throw new Error('FrozenArray getter failed');
+    expect(first).toEqual([1, 2]);
+    expect(first).toBe(second);
+    expect(first).not.toBe(source);
+    expect(first).toBeInstanceOf(realm.intrinsics.array);
+    expect(Object.isFrozen(first)).toBe(true);
+  });
+
+  it('converts BufferSource operation arguments and results by identity', () => {
+    class BufferSourceImpl {}
+    const constructor = constructorMember([]);
+    const echo = operationMember(
+      'echo',
+      [{ name: 'source', type: reference('BufferSource') }],
+      reference('BufferSource'),
+    );
+    const interfaceIDL = defineInterface({
+      name: 'BufferSourceInterface',
+      exposed: '*',
+      members: [constructor, echo],
+    });
+
+    const realm = new Realm();
+    const binding = new RealmBinding(
+      new DefinitionAssembly([...webIDLCommonDefinitions, interfaceIDL]),
+      realm,
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
+    interfaceBinding.createImplementation = () => new BufferSourceImpl();
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: () => undefined,
+    };
+    getMemberBinding(interfaceBinding, echo).operationSteps = (_receiver, [source]) => source;
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'BufferSourceInterface');
+    const object = construct(Interface, []);
+    const view = new Uint8Array([1, 2]);
+
+    expect(call(Interface.prototype, 'echo', object, view)).toBe(view);
+    expect(() => call(
+      Interface.prototype,
+      'echo',
+      object,
+      new SharedArrayBuffer(2),
+    )).toThrow(realm.intrinsics.typeError);
+  });
+
+  it('implements applicable member extended attributes', () => {
+    class ExtendedInterfaceImpl {}
+    const constructor = constructorMember([]);
+    const unforgeable = {
+      ...attributeMember('trusted', idlType.boolean, true),
+      extendedAttributes: [noArguments('LegacyUnforgeable')],
+    } satisfies AttributeMember;
+    const replaceable = {
+      ...attributeMember('replaceable', idlType.DOMString, true),
+      extendedAttributes: [noArguments('Replaceable')],
+    } satisfies AttributeMember;
+    const forwards = {
+      ...attributeMember('forwarded', idlType.object, true),
+      extendedAttributes: [{
+        kind: 'identifier', name: 'PutForwards', value: 'value',
+      }],
+    } satisfies AttributeMember;
+    const choice = attributeMember('choice', reference('Choice'));
+    const fixed = {
+      ...operationMember('fixed', [], idlType.DOMString),
+      extendedAttributes: [noArguments('LegacyUnforgeable')],
+    } satisfies OperationMember;
+    const scoped = {
+      ...operationMember('scoped', [], idlType.undefined),
+      extendedAttributes: [noArguments('Unscopable')],
+    } satisfies OperationMember;
+    const enumeration = defineEnumeration({
+      name: 'Choice',
+      values: ['first', 'second'],
+    });
+    const interfaceIDL = defineInterface({
+      name: 'ExtendedInterface',
+      exposed: '*',
+      members: [constructor, unforgeable, replaceable, forwards, choice, fixed, scoped],
+    });
+    const forwarded = { value: '' };
+    const choices = new WeakMap<object, string>();
+
+    const binding = new RealmBinding(
+      new DefinitionAssembly([enumeration, interfaceIDL]),
+      new Realm(),
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const interfaceBinding = binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name));
+    interfaceBinding.createImplementation = () => new ExtendedInterfaceImpl();
+    getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
+      kind: 'initialize',
+      steps: function(receiver) {
+        choices.set(receiver, 'first');
+      },
+    };
+    getMemberBinding(interfaceBinding, unforgeable).attributeSteps = {
+      get() { return true; },
+    };
+    getMemberBinding(interfaceBinding, replaceable).attributeSteps = {
+      get() { return 'original'; },
+    };
+    getMemberBinding(interfaceBinding, forwards).attributeSteps = {
+      get() { return forwarded; },
+    };
+    getMemberBinding(interfaceBinding, choice).attributeSteps = {
+      get(receiver) { return choices.get(receiver!.implInst) ?? 'first'; },
+      set(receiver, value) { choices.set(receiver!.implInst, value as string); },
+    };
+    getMemberBinding(interfaceBinding, fixed).operationSteps = () => 'fixed';
+    getMemberBinding(interfaceBinding, scoped).operationSteps = () => undefined;
+    const Interface = getInstalledInterface(binding.installDefinitions(), 'ExtendedInterface');
+    const prototype = Interface.prototype;
+    const first = construct(Interface, []);
+    const second = construct(Interface, []);
+
+    const firstTrusted = Object.getOwnPropertyDescriptor(first, 'trusted');
+    const secondTrusted = Object.getOwnPropertyDescriptor(second, 'trusted');
+    expect(firstTrusted).toMatchObject({
+      configurable: false,
+      enumerable: true,
+    });
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- comparing accessor identities without invoking either function
+    expect(firstTrusted?.get).toBe(secondTrusted?.get);
+    expect(Object.hasOwn(prototype, 'trusted')).toBe(false);
+    expect(Object.getOwnPropertyDescriptor(first, 'fixed')).toMatchObject({
+      configurable: false,
+      enumerable: true,
+      writable: false,
+    });
+    expect(Object.hasOwn(prototype, 'fixed')).toBe(false);
+
+    expect(Reflect.get(first, 'replaceable')).toBe('original');
+    expect(Reflect.set(first, 'replaceable', 'shadow')).toBe(true);
+    expect(Reflect.get(first, 'replaceable')).toBe('shadow');
+    expect(Object.hasOwn(first, 'replaceable')).toBe(true);
+    Object.preventExtensions(second);
+    expect(() => Reflect.set(second, 'replaceable', 'blocked'))
+      .toThrow(binding.realm.intrinsics.typeError);
+    expect(Reflect.set(first, 'forwarded', 'forwarded value')).toBe(true);
+    expect(forwarded.value).toBe('forwarded value');
+
+    expect(Reflect.set(first, 'choice', 'second')).toBe(true);
+    expect(Reflect.get(first, 'choice')).toBe('second');
+    expect(Reflect.set(first, 'choice', 'invalid')).toBe(true);
+    expect(Reflect.get(first, 'choice')).toBe('second');
+    expect(Reflect.get(prototype, Symbol.unscopables)).toMatchObject({
+      scoped: true,
+    });
+  });
+
+  it('filters interfaces, fragments, mixins, and members by exposure', () => {
+    const normal = operationMember('normal', [], idlType.undefined);
+    const secureMember = {
+      ...operationMember('secureMember', [], idlType.undefined),
+      extendedAttributes: [noArguments('SecureContext')],
+    } satisfies OperationMember;
+    const partialMember = operationMember('partialMember', [], idlType.undefined);
+    const mixinMember = operationMember('mixinMember', [], idlType.undefined);
+    const interfaceIDL = defineInterface({
+      name: 'ExposedInterface',
+      exposed: ['Window'],
+      members: [normal, secureMember],
+    });
+    const secureInterface = defineInterface({
+      name: 'SecureInterface',
+      exposed: ['Window'],
+      extendedAttributes: [noArguments('SecureContext')],
+      members: [],
+    });
+    const isolatedInterface = defineInterface({
+      name: 'IsolatedInterface',
+      exposed: ['Window'],
+      extendedAttributes: [noArguments('CrossOriginIsolated')],
+      members: [],
+    });
+    const workerInterface = defineInterface({
+      name: 'WorkerInterface',
+      exposed: ['Worker'],
+      members: [],
+    });
+    const partial = definePartialInterface({
+      name: 'ExposedInterface',
+      extendedAttributes: [noArguments('SecureContext')],
+      members: [partialMember],
+    });
+    const mixin = defineInterfaceMixin({
+      name: 'SecureMixin',
+      extendedAttributes: [noArguments('SecureContext')],
+      members: [mixinMember],
+    });
+    const include = defineIncludes({
+      interface: 'ExposedInterface',
+      mixin: 'SecureMixin',
+    });
+    const assembly = new DefinitionAssembly([
+      interfaceIDL,
+      secureInterface,
+      isolatedInterface,
+      workerInterface,
+      partial,
+      mixin,
+      include,
+    ]);
+
+    const insecure = new RealmBinding(
+      assembly,
+      new Realm(),
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const insecureInstalled = insecure.installDefinitions();
+    const insecurePrototype = getPrototype(
+      requireInstalled(insecureInstalled, 'ExposedInterface'),
+    );
+
+    expect([...insecureInstalled.keys()]).toEqual(['ExposedInterface']);
+    expect(Reflect.ownKeys(insecurePrototype)).toContain('normal');
+    expect(Reflect.ownKeys(insecurePrototype)).not.toContain('secureMember');
+    expect(Reflect.ownKeys(insecurePrototype)).not.toContain('partialMember');
+    expect(Reflect.ownKeys(insecurePrototype)).not.toContain('mixinMember');
+
+    const privileged = new RealmBinding(
+      assembly,
+      new Realm({ crossOriginIsolated: true, secureContext: true }),
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+    const privilegedInstalled = privileged.installDefinitions();
+    const privilegedPrototype = getPrototype(
+      requireInstalled(privilegedInstalled, 'ExposedInterface'),
+    );
+
+    expect([...privilegedInstalled.keys()]).toEqual([
+      'ExposedInterface',
+      'SecureInterface',
+      'IsolatedInterface',
+    ]);
+    expect(Reflect.ownKeys(privilegedPrototype)).toEqual(expect.arrayContaining([
+      'normal', 'secureMember', 'partialMember', 'mixinMember',
+    ]));
+  });
+
+  it('matches exposure against every global name implemented by the realm', () => {
+    const workerInterface = defineInterface({
+      name: 'WorkerInterface',
+      exposed: ['Worker'], members: [],
+    });
+    const workletInterface = defineInterface({
+      name: 'WorkletInterface',
+      exposed: ['Worklet'], members: [],
+    });
+    const windowInterface = defineInterface({
+      name: 'WindowInterface',
+      exposed: ['Window'], members: [],
+    });
+    const binding = new RealmBinding(
+      new DefinitionAssembly([
+        workerInterface, workletInterface, windowInterface,
+      ]),
+      new Realm({ globalNames: ['Worker', 'Worklet'] }),
+      new BindingWorld([]),
+      (ctx) => ({ realm: ctx.realm }),
+    );
+
+    expect([...binding.installDefinitions().keys()]).toEqual([
+      'WorkerInterface', 'WorkletInterface',
+    ]);
+  });
+});
+
+class RecordingRealm extends Realm {
+  checks: SecurityCheck[] = [];
+
+  override performSecurityCheck(
+    object: object,
+    identifier: string,
+    type: SecurityCheckType,
+  ): void {
+    this.checks.push({ identifier, object, type });
+  }
+}
+
+class PrivateStateImplementation {
+  #value: number;
+
+  constructor(value: number) {
+    this.#value = value;
+  }
+
+  static read(value: PrivateStateImplementation): number {
+    return value.#value;
+  }
+}
+
+type SecurityCheck = {
+  identifier: string;
+  object: object;
+  type: SecurityCheckType;
+};
+
+function constructorMember(
+  args: ConstructorMember['arguments'],
+): ConstructorMember {
+  return { arguments: args, kind: 'constructor' };
+}
+
+function attributeMember(
+  name: string,
+  type: AttributeMember['type'],
+  readonly = false,
+): AttributeMember {
+  return { kind: 'attribute', name, readonly, type };
+}
+
+function operationMember(
+  name: string,
+  args: OperationMember['arguments'],
+  returns: OperationMember['returns'],
+): OperationMember {
+  return { arguments: args, kind: 'operation', name, returns };
+}
+
+function noArguments(name: string) {
+  return { kind: 'no-arguments', name } as const;
+}
+
+function call(
+  target: object,
+  name: PropertyKey,
+  receiver: unknown,
+  ...argumentsList: unknown[]
+): unknown {
+  const method = Reflect.get(target, name) as unknown;
+  if (typeof method !== 'function') throw new Error(`${String(name)} is not callable`);
+  return Reflect.apply(method, receiver, argumentsList);
+}
+
+function construct(target: object, argumentsList: unknown[]): object {
+  if (typeof target !== 'function') throw new Error('Target is not callable');
+  return Reflect.construct(
+    target as unknown as new (...values: unknown[]) => object,
+    argumentsList,
+  );
+}
+
+function requireInstalled(
+  installed: Map<string, object>,
+  name: string,
+): object {
+  const object = installed.get(name);
+  if (!object) throw new Error(`${name} was not installed`);
+  return object;
+}
+
+function getPrototype(object: object): object {
+  const prototype = Reflect.get(object, 'prototype') as unknown;
+  if (prototype === null || typeof prototype !== 'object') {
+    throw new Error('Interface has no prototype object');
+  }
+  return prototype;
+}

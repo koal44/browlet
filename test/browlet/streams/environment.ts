@@ -3,7 +3,7 @@ import {
   BindingWorld, defineInterface, xattr, type BindingContext,
 } from '../../../src/web-idl/index';
 import { createEnvironment, type TestEnvironment } from '../../js-engine/execution-fixture';
-import { TestRealm } from '../../web-idl/test-realm';
+import { TestRealm } from '../../support/web-idl-realm';
 
 export function createTestContext(): BindingContext<TestEnvironment> {
   const realm = new TestRealm();

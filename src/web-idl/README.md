@@ -727,14 +727,21 @@ identities. WindowProxy remains HTML-owned and distinct from WindowImpl.
 
 ## Tests and remaining integration
 
+Runtime tests mirror the source owners in `test/web-idl/{core,assembly,converters,values,binding}`.
+Registration tests use `binding/register.test.ts` and the topic suites in
+`binding/register/`; realm components use `binding/realm/`. Shared fixtures live
+in `test/support/`. The compile-only projects in `contracts/` separately check
+Core, full Binding, and generated platform declarations without widening their
+dependencies to match the runtime harness.
+
 ```powershell
 npm.cmd run test:types
 node scripts/with-node.mjs vitest run --project=unit test/web-idl
 ```
 
-Use [binding-world tests](../../test/web-idl/binding-world.test.ts) for ownership,
-[constructor tests](../../test/web-idl/constructor-realm.test.ts) for allocation,
-and [callback](../../test/web-idl/callback.test.ts)/[Promise projection](../../test/web-idl/promise-projection.test.ts)
+Use [binding-world tests](../../test/web-idl/binding/world.test.ts) for ownership,
+[constructor tests](../../test/web-idl/binding/constructor-realm.test.ts) for allocation,
+and [callback](../../test/web-idl/binding/realm/callback.test.ts)/[Promise projection](../../test/web-idl/binding/promise-projection.test.ts)
 tests for conversion. [DOM binding](../../test/browlet/dom-binding.test.ts) and
 [File API](../../test/browlet/file-api.test.ts) prove the browser composition,
 including borrowed methods, repeated identity, nested results, and realm-owned
@@ -770,5 +777,5 @@ CSSOM projection and restoring `ObservableArray<CSSStyleSheet>` remain with
 security policy to [Window](../browlet/browsing/window/ROADMAP.md), and new platform
 transfer types to [structured data](../browlet/scripting/structured-data/ROADMAP.md).
 Declarations or provisional hooks alone do not establish those behaviors.
-The [shared limitations catalog](../LIMITATIONS.md) retains the unresolved
-Symbol-overload case and the engine-sensitive tests.
+The [shared limitations catalog](../LIMITATIONS.md) records the Symbol-selection
+specification gap and the engine-sensitive tests.

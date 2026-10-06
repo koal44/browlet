@@ -24,8 +24,8 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   function prototypes and callable Proxy traps can defeat exact constructor
   realm selection. Replace that fallback when exact lookup is available on all
   supported paths, preserving cross-realm construction and callback tests.
-  Sources: [runtime](js-engine/runtime.ts), [constructor tests](../test/web-idl/constructor-realm.test.ts),
-  [callback tests](../test/web-idl/callback.test.ts).
+  Sources: [runtime](js-engine/runtime.ts), [constructor tests](../test/web-idl/binding/constructor-realm.test.ts),
+  [callback tests](../test/web-idl/binding/realm/callback.test.ts).
 - **`node-vm-global-proxy`:** Plain Node cannot reuse Browlet's modeled
   WindowProxy as the VM's actual top-level `this`. Its JavaScript proxy must
   also relax forwarded nonconfigurable descriptors across retargeting. The
@@ -83,7 +83,7 @@ bypasses author replacement of `then` but still observes `constructor`/`@@specie
 Native observation on the supported Node 26/custom paths avoids those accesses;
 the older Node 24 native implementation still consults `constructor`. The
 backend-sensitive expectations are in [engine Promise tests](../test/js-engine/promises.test.ts)
-and [Web IDL Promise tests](../test/web-idl/promise.test.ts).
+and [Web IDL Promise tests](../test/web-idl/values/promise.test.ts).
 
 Even the native API creates an unreachable derived Promise rather than exposing
 the exact no-result-capability form of `PerformPromiseThen`. Browlet also marks a
@@ -138,7 +138,7 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   preserve ordinary iteration, prototypes, and live results but fail borrowed
   native `next()` brand checks. Retire the fallback when the native factory is
   required. See [JSRealm](js-engine/realm.ts) and
-  [collection tests](../test/web-idl/collection.test.ts).
+  [collection tests](../test/web-idl/binding/realm/collection.test.ts).
 - **`SPEC_GAP(webidl-symbol-selection)`:** Web IDL's
   [distinguishability table](https://webidl.spec.whatwg.org/#dfn-distinguishable)
   admits Symbol/string overloads and unions, but both the
@@ -151,8 +151,8 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   Chromium, Firefox, and WebKit's inspected IDL declarations had no consumers,
   and [Blink rejects the type during binding generation](https://raw.githubusercontent.com/chromium/chromium/main/third_party/blink/renderer/bindings/scripts/bind_gen/blink_v8_bridge.py).
   Revisit when the specification supplies selection rules. The
-  [overload](../test/web-idl/overload.test.ts) and
-  [conversion](../test/web-idl/conversion.test.ts) regressions cover this choice.
+  [overload](../test/web-idl/binding/realm/overload.test.ts) and
+  [union conversion](../test/web-idl/converters/union.test.ts) regressions cover this choice.
 - **CSSOM projection:** CSSStyleSheet and related platform interfaces remain
   incomplete; `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
   interface brand check. Direct CSSOM APIs currently allocate exceptions in the

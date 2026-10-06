@@ -2,8 +2,6 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
-import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
-import { generatePlatformTypes } from '../../src/web-idl/generate';
 import {
   annotated, arg, asyncIter, attr, constant, ctor, defineCallbackFunction, defineCallbackInterface,
   defineDictionary, defineEnumeration, defineIncludes, defineInterface, defineInterfaceMixin,
@@ -12,6 +10,8 @@ import {
   impl, iter, maplike, nullable, op, promise, record, reference, roAttr, sequence, setlike,
   staticOp, stringifier, tsType, union, xattr, serializeDefinitions,
 } from '../../src/web-idl/core/index';
+import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
+import { generatePlatformTypes } from '../../src/web-idl/generate';
 
 describe('platform declaration generation', () => {
   it('infers operation parameters independently, including mixins and nested type annotations', () => {

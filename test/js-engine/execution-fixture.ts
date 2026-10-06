@@ -3,7 +3,7 @@ import { deserialize, serialize } from 'node:v8';
 import {
   queueNetworkingTask, type AbortControllerCapability, type JSEnvironment, type RealmExecution,
 } from '../../src/js-engine/index';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 import { BindingWorld, type BindingContext, type WebIDLEnvironment, type WebIDLExecution } from '../../src/web-idl/index';
 import { readableStreamReadResultIDL } from '../../src/streams/index';
 

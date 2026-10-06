@@ -3,7 +3,7 @@ import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { TextDecoderStreamImpl } from '../../src/encoding/text-decoder-stream';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 
 describe('TextDecoderStream chunk conversion', () => {
   it.each([

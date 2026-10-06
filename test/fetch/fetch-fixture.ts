@@ -13,7 +13,7 @@ import { urlIDLDefinitions } from '../../src/url/api';
 import { parseURL } from '../../src/url/url';
 import { BindingWorld, defineInterface } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';
-import { TestRealm } from '../web-idl/test-realm';
+import { TestRealm } from '../support/web-idl-realm';
 import { createClientEnvironment, createFetchUserAgent, type ClientEnvironment } from './client-fixture';
 
 export function createFetchRequest(
