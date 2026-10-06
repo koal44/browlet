@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../../../test-runtime';
 import { TypeError as TypeErrorRequest } from '../../../../src/infra/exceptions';
 
 import {
@@ -461,10 +462,26 @@ describe('HTML structured serialization', () => {
     });
   });
 
-  it.fails('rejects decorated Array Iterator internal slots', () => {
+  itPassesWith('iteratorPredicates')('rejects decorated built-in iterators without author code', () => {
     const ctx = createContext();
     const iterator = Object.assign([][Symbol.iterator](), { marker: true });
     expectDataCloneError(() => structuredSerialize(iterator, ctx));
+
+    const iterators: Array<Iterator<unknown>> = [
+      [1, 2].values(), 'ab'[Symbol.iterator](), 'ab'.matchAll(/./g),
+    ];
+    for (const value of iterators) {
+      const next = value.next.bind(value);
+      let getterRan = false;
+      Object.defineProperty(value, 'marker', {
+        enumerable: true,
+        get() { getterRan = true; return true; },
+      });
+      Object.setPrototypeOf(value, null);
+      expectDataCloneError(() => structuredSerialize(value, ctx));
+      expect(getterRan).toBe(false);
+      expect(next().done).toBe(false);
+    }
   });
 
   it('dispatches serializable platform objects by exact primary interface', () => {
@@ -487,6 +504,7 @@ describe('HTML structured serialization', () => {
     }
     expect(serialized.fields.get('Name')).toBe('IndexSizeError');
     expect(serialized.fields.get('Message')).toBe('message');
+    expect(serialized.fields.get('Stack')).toBe(source.stack);
     expect(serialized.fields.has('ignored')).toBe(false);
   });
 

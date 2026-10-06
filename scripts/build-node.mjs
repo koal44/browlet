@@ -33,6 +33,9 @@ try {
   const lengthTracking = readFileSync(arrayBufferHeader, 'utf8').includes('bool IsLengthTracking() const;');
   const containerHeader = resolve(dirname(isolateHeader), 'v8-container.h');
   const collectionIterators = readFileSync(containerHeader, 'utf8').includes('class V8_EXPORT CollectionIterator');
+  const valueHeader = readFileSync(resolve(dirname(isolateHeader), 'v8-value.h'), 'utf8');
+  const iteratorPredicates = ['IsArrayIterator', 'IsStringIterator', 'IsRegExpStringIterator']
+    .every(name => valueHeader.includes(`bool ${name}() const;`));
   const environment = compilerEnvironment();
   const compiler = run('where.exe', ['cl.exe'], { env: environment }).split(/\r?\n/u)[0];
 
@@ -48,6 +51,7 @@ try {
     ...(hostHooks ? ['/DNODE_COMPAT_HOST_HOOKS'] : []),
     ...(lengthTracking ? ['/DNODE_COMPAT_ARRAY_BUFFER_LENGTH_TRACKING'] : []),
     ...(collectionIterators ? ['/DNODE_COMPAT_COLLECTION_ITERATORS'] : []),
+    ...(iteratorPredicates ? ['/DNODE_COMPAT_ITERATOR_PREDICATES'] : []),
     ...includes.map(path => `/I${path}`),
     `/Fo${build}\\`,
   ];

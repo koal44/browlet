@@ -15,6 +15,8 @@ const supported = {
   explicitQueues: !!addon.getMethod('createMicrotaskQueue'),
   functionRealms: !!addon.getMethod('getFunctionRealm'),
   hostHooks: !!setHostHooks,
+  iteratorPredicates: !!addon.getMethod('isArrayIterator') &&
+    !!addon.getMethod('isStringIterator') && !!addon.getMethod('isRegExpStringIterator'),
   lengthTracking: !!addon.getMethod('isLengthTrackingArrayBufferView'),
   'v24+': nodeMajor >= 24,
   'v26+': nodeMajor >= 26,

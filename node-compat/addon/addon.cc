@@ -9,12 +9,25 @@ using namespace v8;
 
 void ObservePromise(const FunctionCallbackInfo<Value>& args);
 
+#ifdef NODE_COMPAT_ITERATOR_PREDICATES
+template <bool (Value::*predicate)() const>
+void IsIterator(const FunctionCallbackInfo<Value>& args) {
+  args.GetReturnValue().Set(((*args[0])->*predicate)());
+}
+#endif
+
 void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
                 v8::Local<v8::Context> context) {
   InitializeVm(exports, context);
   InitializeArrayBuffer(exports, context);
   InitializeHostHooks(exports, context);
   NODE_SET_METHOD(exports, "observePromise", ObservePromise);
+#ifdef NODE_COMPAT_ITERATOR_PREDICATES
+  NODE_SET_METHOD(exports, "isArrayIterator", IsIterator<&Value::IsArrayIterator>);
+  NODE_SET_METHOD(exports, "isStringIterator", IsIterator<&Value::IsStringIterator>);
+  NODE_SET_METHOD(exports, "isRegExpStringIterator",
+                  IsIterator<&Value::IsRegExpStringIterator>);
+#endif
 }
 
 void ForwardPromiseResult(const FunctionCallbackInfo<Value>& args, bool rejected) {

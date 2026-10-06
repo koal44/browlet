@@ -23,6 +23,9 @@ if (native.installHostHooks) {
 exports.getRealm = native.getRealm;
 exports.getFunctionRealm = native.getFunctionRealm;
 exports.observePromise = native.observePromise;
+exports.isArrayIterator = native.isArrayIterator;
+exports.isStringIterator = native.isStringIterator;
+exports.isRegExpStringIterator = native.isRegExpStringIterator;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;
 exports.createMicrotaskQueue = native.createMicrotaskQueue;
 exports.createCollectionIterator = native.createCollectionIterator;

@@ -17,6 +17,10 @@ export class NodeAPI {
   createMicrotaskQueue: () => AddonMicrotaskQueueHandle;
   getFunctionRealm: (value: JSFunction) => object;
   getRealm: (value: object) => object;
+  /** Require the V8 iterator-brand predicates. */
+  isArrayIterator: (value: unknown) => boolean;
+  isStringIterator: (value: unknown) => boolean;
+  isRegExpStringIterator: (value: unknown) => boolean;
   /** Requires the V8 length-tracking patch. */
   isLengthTrackingArrayBufferView: (view: object) => boolean;
   /** Legacy Node patch for making an existing object's prototype immutable. */
@@ -39,6 +43,9 @@ export class NodeAPI {
     this.createMicrotaskQueue = this.#loadMethod(backend, 'createMicrotaskQueue');
     this.getFunctionRealm = this.#loadMethod(backend, 'getFunctionRealm');
     this.getRealm = this.#loadMethod(backend, 'getRealm');
+    this.isArrayIterator = this.#loadMethod(backend, 'isArrayIterator');
+    this.isStringIterator = this.#loadMethod(backend, 'isStringIterator');
+    this.isRegExpStringIterator = this.#loadMethod(backend, 'isRegExpStringIterator');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');
     this.observePromise = this.#loadMethod(backend, 'observePromise');

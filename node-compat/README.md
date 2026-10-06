@@ -133,6 +133,7 @@ access; it does not implement browser cross-origin policy.
 | `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
 | `createCollectionIterator(context, kind, next)` | Requires `CollectionIterator::New`. Produces native Map/Set-branded iterators; the callback owns result conversion/allocation, V8 owns iteration lifecycle. |
 | `isLengthTrackingArrayBufferView(view)` | Requires `ArrayBufferView::IsLengthTracking()`. Reads auto/fixed length without mutation, including shared, detached, and out-of-bounds views. |
+| `isArrayIterator(value)`, `isStringIterator(value)`, `isRegExpStringIterator(value)` | Require the corresponding V8 `Value` predicates. Inspect the native brand without reading properties or advancing the iterator; proxies and prototype impostors return false. |
 | `setHostHooks(hooks)` | Requires the five V8 interception APIs below. Header detection controls whether the addon exports it. |
 
 Callback iterators have no table-backed entries for native debugger/Node previews.

@@ -6,11 +6,12 @@ import {
   getBufferTypeName, getDateValue, getNumberData, getRegExpData, getStringData,
   getTypedArrayLength, hasBigIntData, hasBooleanData, hasDateValue, hasErrorData,
   hasMapData, hasNumberData, hasRegExpMatcher, hasSetData, hasStringData,
-  hasSymbolData, isArgumentsObject, isArrayBufferViewOutOfBounds,
+  hasSymbolData, isArgumentsObject, isArrayBufferViewOutOfBounds, isArrayIteratorObject,
   isBufferSourceDetached, isCryptoKeyObject, isExternalObject,
   isFinalizationRegistryObject, isGeneratorObject, isKeyObject,
   isLengthTrackingArrayBufferView, isMapIteratorObject, isModuleNamespaceObject,
-  isPromiseObject, isProxyObject, isSetIteratorObject, isWeakMapObject,
+  isPromiseObject, isProxyObject, isRegExpStringIteratorObject,
+  isSetIteratorObject, isStringIteratorObject, isWeakMapObject,
   isWeakRefObject, isWeakSetObject, nativeCloneRejectsPropertylessObject,
   readErrorStack, toString,
 } from '../../../js-engine/index';
@@ -153,8 +154,7 @@ export function structuredSerializeInternal(
         fields: createStructuredDataRecord(),
       };
       memory.set(identity, serialized);
-      steps.serializationSteps(
-        record.implInst,
+      record.serializationSteps(
         serialized.fields,
         forStorage,
         {
@@ -167,6 +167,7 @@ export function structuredSerializeInternal(
             return structuredSerializeInternal(subValue, forStorage, ctx, memory);
           },
         },
+        steps,
       );
       return serialized;
     } else if (Array.isArray(value)) {
@@ -384,6 +385,7 @@ function serializeErrorCause(
 
 function hasUnsupportedInternalSlots(value: object): boolean {
   return isArgumentsObject(value) ||
+    isArrayIteratorObject?.(value) ||
     isCryptoKeyObject(value) ||
     isExternalObject(value) ||
     isGeneratorObject(value) ||
@@ -391,7 +393,9 @@ function hasUnsupportedInternalSlots(value: object): boolean {
     isMapIteratorObject(value) ||
     isModuleNamespaceObject(value) ||
     isPromiseObject(value) ||
+    isRegExpStringIteratorObject?.(value) ||
     isSetIteratorObject(value) ||
+    isStringIteratorObject?.(value) ||
     isWeakMapObject(value) ||
     isWeakSetObject(value) ||
     isWeakRefObject(value) ||

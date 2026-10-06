@@ -327,6 +327,38 @@ describe('HTML structured deserialization', () => {
     ));
   });
 
+  it.each(['DOMException', 'QuotaExceededError'] as const)(
+    'preserves %s stacks when cloning through another realm', (interfaceName) => {
+      const { source, sourceRealm, target, targetRealm } = createContexts();
+      const Constructor = Reflect.get(sourceRealm.global, interfaceName) as typeof DOMException;
+      const TargetConstructor = Reflect.get(targetRealm.global, interfaceName) as typeof DOMException;
+      const exception = new Constructor('original failure');
+      const stack = exception.stack;
+
+      // Serialize through the receiving realm to exercise the source object's stack accessor.
+      const clone = cloneValue(exception, target, target) as DOMException;
+      expect(stack).toBeTypeOf('string');
+      expect(stack).not.toBe('');
+      expect(clone).toBeInstanceOf(TargetConstructor);
+      expect(clone.stack).toBe(stack);
+      expect((cloneValue(clone, target, source) as DOMException).stack).toBe(stack);
+    },
+  );
+
+  it('does not invoke an author stack getter when cloning a DOMException', () => {
+    const { source, sourceRealm, target } = createContexts();
+    const Constructor = Reflect.get(sourceRealm.global, 'DOMException') as typeof DOMException;
+    const exception = new Constructor('original failure');
+    let reads = 0;
+    Object.defineProperty(exception, 'stack', {
+      get() { reads++; throw new Error('author stack'); },
+    });
+
+    const clone = cloneValue(exception, source, target) as DOMException;
+    expect(reads).toBe(0);
+    expect(clone.stack).toBe('');
+  });
+
   it('restores only specified DOMException interface state', () => {
     const { source, sourceRealm, target, targetRealm } = createContexts();
     const SourceDOMException = Reflect.get(

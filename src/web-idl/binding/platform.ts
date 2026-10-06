@@ -1,6 +1,9 @@
 import { InternalError, Stamper, type ObservableArrayHandle } from '../../infra/index';
-import { isObject } from '../../js-engine/index';
-import { DOMExceptionImpl, DOMExceptionStamper, type ImplementationClass } from '../core/index';
+import { isObject, readErrorStack, writeErrorStack } from '../../js-engine/index';
+import {
+  DOMExceptionImpl, DOMExceptionStamper, type ImplementationClass, type StructuredDataRecord,
+  type SerialSteps, type SerializationContext, type DeserializationContext,
+} from '../core/index';
 
 import type { WebIDLRealm } from '../environment';
 import type { IDLAttribute, AssembledInterface } from '../assembly/index';
@@ -50,6 +53,28 @@ export class PlatformRecord<T extends object = object> {
   project(): StampedPlatformObject {
     return this.platformObject ??
       this.attachPlatformObject(this.binding.allocatePlatformObject(this.implInst, this.assembled));
+  }
+
+  /** Save a serializable interface's implementation state and engine-owned exception stack. */
+  serializationSteps(
+    serialized: StructuredDataRecord, forStorage: boolean, context: SerializationContext, steps: SerialSteps,
+  ): void {
+    steps.serializationSteps(this.implInst, serialized, forStorage, context);
+    // Core owns name/message; the JavaScript binding supplies the native Error state.
+    // https://webidl.spec.whatwg.org/#idl-DOMException
+    if (DOMExceptionImpl.is(this.implInst)) {
+      const stack = readErrorStack(this.project(), this.realm);
+      serialized.set('Stack', typeof stack === 'string' ? stack : '');
+    }
+  }
+
+  /** Restore a serializable interface's implementation state and stack in its destination realm. */
+  deserializationSteps(serialized: StructuredDataRecord, context: DeserializationContext, steps: SerialSteps): void {
+    steps.deserializationSteps(serialized, this.implInst, this.realm, context);
+    if (DOMExceptionImpl.is(this.implInst)) {
+      const fields = serialized as StructuredDataRecord<{ Stack: string; }>;
+      writeErrorStack(this.project(), fields.get('Stack'));
+    }
   }
 
   /** Attach a fresh or validated platform object and initialize its per-object binding state. */

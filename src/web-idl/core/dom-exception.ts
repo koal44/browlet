@@ -169,6 +169,7 @@ export function isDOMException(value: unknown, name: string): boolean {
 }
 
 // https://webidl.spec.whatwg.org/#idl-DOMException
+// PlatformRecord supplies the JavaScript binding's [[Stack]] alongside this implementation state.
 const domExceptionSerialSteps = {
   serializationSteps(value, serialized) {
     serialized.set('Name', value.name);

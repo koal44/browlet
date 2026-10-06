@@ -76,10 +76,11 @@ already use the shared implementation.
 [the limitations catalog](../../../LIMITATIONS.md) own missing engine primitives.
 Keep their approved failures visible rather than weakening graph behavior.
 
-- Built-in slot predicates and the bounded propertyless-iterator probe recognize
-  supported families. Unknown native slot-bearing objects and decorated iterators
-  remain limited; probing an arbitrary property graph could invoke getters twice
-  or misattribute a nested failure.
+- Built-in slot predicates recognize Array, String, and RegExp String iterators
+  on the patched backend even when decorated. The bounded propertyless-object
+  probe remains for unrecognized native types; decorated iterator helpers and
+  other unsupported families remain limited. Probing an arbitrary property graph
+  could invoke getters twice or misattribute a nested failure.
 - Native length-mode inspection preserves growable/shared view behavior. Without
   it, the reversible ordinary ArrayBuffer probe cannot safely recover ambiguous
   growable SharedArrayBuffer views. Do not clone an arbitrarily large backing

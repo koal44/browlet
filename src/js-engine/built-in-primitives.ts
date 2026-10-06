@@ -1,5 +1,6 @@
 import { types as nodeTypes } from 'node:util';
 
+import { addon } from './node-addons';
 import type { JSRealm } from './realm';
 import { InternalError } from '../infra/internal-error';
 
@@ -14,6 +15,7 @@ import { InternalError } from '../infra/internal-error';
 type ObjectPredicate = (value: object) => boolean;
 
 export const isArgumentsObject: ObjectPredicate = nodeTypes.isArgumentsObject;
+export const isArrayIteratorObject = addon.getMethod('isArrayIterator');
 export const hasBigIntData: ObjectPredicate = nodeTypes.isBigIntObject;
 export const hasBooleanData: ObjectPredicate = nodeTypes.isBooleanObject;
 export const isCryptoKeyObject: ObjectPredicate = nodeTypes.isCryptoKey;
@@ -30,9 +32,11 @@ export const hasNumberData: ObjectPredicate = nodeTypes.isNumberObject;
 export const isPromiseObject: ObjectPredicate = nodeTypes.isPromise;
 export const isProxyObject: ObjectPredicate = nodeTypes.isProxy;
 export const hasRegExpMatcher: ObjectPredicate = nodeTypes.isRegExp;
+export const isRegExpStringIteratorObject = addon.getMethod('isRegExpStringIterator');
 export const hasSetData: ObjectPredicate = nodeTypes.isSet;
 export const isSetIteratorObject: ObjectPredicate = nodeTypes.isSetIterator;
 export const hasStringData: ObjectPredicate = nodeTypes.isStringObject;
+export const isStringIteratorObject = addon.getMethod('isStringIterator');
 export const hasSymbolData: ObjectPredicate = nodeTypes.isSymbolObject;
 export const isWeakMapObject: ObjectPredicate = nodeTypes.isWeakMap;
 export const isWeakSetObject: ObjectPredicate = nodeTypes.isWeakSet;
@@ -110,7 +114,9 @@ export function appendSetData(value: object, entryValue: unknown): void {
  * V8 represents it through a realm-specific own accessor until userland or
  * structured deserialization replaces that accessor with a data property.
  * Reading or writing that representation only approximates internal-slot
- * access; HTML decides the serialized form.
+ * access; HTML and Web IDL decide the serialized form. Native formatting may
+ * run author name/message getters or Error.prepareStackTrace; a formatting
+ * failure leaves the stack unavailable rather than failing serialization.
  */
 export function readErrorStack(
   value: object,
@@ -121,9 +127,12 @@ export function readErrorStack(
   if ('value' in descriptor) return descriptor.value;
 
   const getter = realm.intrinsics.errorStack;
-  return getter && descriptor.get === getter
-    ? Reflect.apply(getter, value, [])
-    : undefined;
+  if (!getter || descriptor.get !== getter) return;
+  try {
+    return Reflect.apply(getter, value, []);
+  } catch {
+    return undefined;
+  }
 }
 
 export function writeErrorStack(value: object, stack: string): void {

@@ -548,6 +548,13 @@ from the matching serializer, not arbitrary author input. Required fields must
 be populated by that serializer; TypeScript does not prove that every path writes
 them. The HTML traversal keeps the interface-specific shape opaque.
 
+HTML invokes `record.serializationSteps()` and `record.deserializationSteps()`
+to combine those implementation hooks with JavaScript binding state.
+DOMException and its derived interfaces retain the native Error stack through
+the source object's own realm, then restore it on the destination platform
+object. Core's hooks remain engine-independent. Stack access uses the existing
+[`node-v8-error-stack` accommodation](../LIMITATIONS.md#buffers-and-engine-internal-slots).
+
 ## Identity and construction
 
 One [`PlatformRecord`](binding/platform.ts) is privately stamped onto both an

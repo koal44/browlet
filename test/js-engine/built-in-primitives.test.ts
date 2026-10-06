@@ -82,7 +82,7 @@ describe('Node/V8 built-in primitives', () => {
     expect(JSEngine.copySetData(set)).toEqual(['entry', 'second']);
   });
 
-  it('reads and restores V8 Error stacks without author accessors', () => {
+  it('reads and restores V8 Error stacks without invoking author stack accessors', () => {
     const realm = new JSEngine.JSRealm();
     const error = realm.evaluate(
       "new Error('failed')",
@@ -103,6 +103,16 @@ describe('Node/V8 built-in primitives', () => {
     });
     expect(JSEngine.readErrorStack(error, realm)).toBeUndefined();
     expect(authorGetterRan).toBe(false);
+  });
+
+  it('treats failed native stack formatting as unavailable stack data', () => {
+    const realm = new JSEngine.JSRealm();
+    const error = realm.evaluate("new Error('failed')", 'failed-stack-formatting.js') as object;
+    Object.defineProperty(error, 'name', {
+      get() { throw new Error('name formatting failed'); },
+    });
+
+    expect(JSEngine.readErrorStack(error, realm)).toBeUndefined();
   });
 
   it('recognizes known unsupported internal-slot objects without traps', () => {

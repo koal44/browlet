@@ -110,14 +110,21 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   [engine roadmap](js-engine/ROADMAP.md).
 - **Error internals:** `node-v8-error-stack` reads the known own stack accessor
   or data property, not an exposed `[[Stack]]`. V8's own-property layout differs
-  from an inherited standardized stack accessor, and Error.isError availability
-  varies by runtime. Preserve [DOMException tests](../test/browlet/dom-exception.test.ts)
+  from the proposed inherited stack accessor, whose test runs only when the
+  engine provides it. Error.isError availability also varies by runtime.
+  Error and DOMException serialization preserve readable stack strings;
+  replaced stack accessors are not invoked. Native formatting can still run
+  author name/message getters or Error.prepareStackTrace. Failed formatting
+  leaves the stack unavailable and serialization writes an empty string.
+  Preserve [DOMException tests](../test/browlet/dom-exception.test.ts)
   and serialization behavior when adopting exact primitives.
-- **Unrecognized exotics:** `node-v8-exotic-object-slots` can probe propertyless
-  values through native cloning, but cannot safely inspect every decorated
-  exotic without author effects. The decorated Array Iterator regression in
+- **Unrecognized exotics:** The patched backend exposes exact Array, String,
+  and RegExp String iterator brands, including iterators with added properties.
+  Without those predicates, the decorated-iterator regression in
   [serialization tests](../test/browlet/scripting/structured-data/serialize.test.ts)
-  remains an expected failure. Exact engine brand predicates replace this probe.
+  remains an expected failure. `node-v8-exotic-object-slots` probes other
+  propertyless values through native cloning; decorated iterator helpers and
+  other unrecognized exotics still cannot be inspected safely without author effects.
 
 ## Web IDL boundaries
 

@@ -155,10 +155,8 @@ export function structuredDeserialize(
         `${platformRecord.assembled.name} has no serialization steps`,
       );
     }
-    steps.deserializationSteps(
+    platformRecord.deserializationSteps(
       serialized.fields,
-      platformRecord.implInst,
-      realm,
       {
         unwrap: (platformObject, implClass) => {
           const implementation = ctx.unwrap(platformObject, implClass);
@@ -178,6 +176,7 @@ export function structuredDeserialize(
           );
         },
       },
+      steps,
     );
   } else {
     throw new InternalError(`Unsupported deep record ${serialized.type}`);
