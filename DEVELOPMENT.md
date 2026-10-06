@@ -1,0 +1,93 @@
+# Development
+
+See the [project architecture](src/ARCHITECTURE.md) for shared ownership,
+[Web IDL](src/web-idl/README.md) for declarations and binding,
+[implementation priority](src/PRIORITY.md) for the work ahead, and
+[known limitations](src/LIMITATIONS.md) for current constraints.
+
+## Getting started
+
+```sh
+node scripts/vendor.ts undici
+npm install
+npm run build:node
+npm run build
+npm run test:unit
+```
+
+Runtime tests currently require Windows x64 and Visual Studio's C++ tools;
+see [Node runtime selection](#node-runtime-selection) before building the addon.
+Use `npm.cmd` in PowerShell.
+
+Undici is temporarily pinned and patched through [vendor-lock.json](vendor-lock.json)
+to preserve HTTP/2 response fields while [upstream #5898](https://github.com/nodejs/undici/issues/5898)
+is unresolved. Prepare it before installing dependencies; the vendor command needs
+only Node, npm, and Git. Source, tests, and builds use that same local package. See
+[vendor/README.md](vendor/README.md) for verification and removal of the patch.
+
+`npm run clean` removes the root `dist/` and `test-results/` folders.
+
+`test:unit` checks the Web IDL type contracts incrementally before running Vitest.
+Use `npm run test:types` to run just those compiler checks. Their fixtures live in
+`test/web-idl/contracts/`; the core and binding projects remain separate so their
+callback declarations do not merge. Build metadata is kept in `dist/.typecheck/`.
+
+### Node runtime selection
+
+The [compatibility addon](node-compat/README.md) adds shared microtask queues
+and reusable contexts to a selected Node base. Copy `.env.example` to `.env`:
+
+- `NODE_BASE`: `custom`, `24.19.0`, or `26.8.1` (default: `24.19.0`).
+- `NODE_RUNTIME`: `compat` enables the addon; `stock` runs the base alone
+  (default: `compat`).
+- `CUSTOM_NODE_SOURCE`: absolute path to the regular Node source checkout,
+  required for the custom base.
+
+Addon builds and all test commands use these settings. The shell environment
+overrides `.env`. Each base has its own addon binary. Local settings, downloaded
+dependencies and generated binaries are not committed.
+
+```powershell
+npm.cmd run test:unit
+npm.cmd run test:artifact
+npm.cmd run test:node-compat
+npm.cmd run test:quick
+```
+
+The internal `scripts/with-node.mjs` launcher reads the selection, reports the
+actual executable and addon, and forwards test arguments and exit status.
+It accepts `node`, `vitest`, and `playwright`; package scripts call it directly
+to avoid another shell-parsing step through a nested package-script alias.
+The compat runtime checks its queues and context handles before running the
+tests. Browlet's bootstrap and navigation use native Window allocation with
+immutable global prototypes, covered by the browsing and runtime tests.
+
+Build the custom Node engine in its regular checkout, then compile the addon
+against that checkout's headers and import library. The addon workflow does
+not build the Node engine. See the compatibility README for preparation and
+build commands.
+
+Neither backend treats Node's shared VM principal as browser origin policy.
+Composite test commands call the same runtime-selecting test scripts. Browser
+oracles use the selected Node for Playwright; the browser engines are independent.
+
+## Continuous integration
+
+The [CI workflow](.github/workflows/ci.yml) uses Windows Server 2022, official
+Node 26.8.1, and the compatibility addon. It prepares the patched Undici package,
+installs locked dependencies, builds the addon, then runs type/lint checks,
+package builds, unit/type-contract tests, native tests, and package artifact tests.
+These are the steps in `npm.cmd run test:quick`, shown separately in Actions so
+failures are easy to locate. This is one supported configuration, not the full
+[runtime matrix](node-compat/README.md#runtime-test-matrix).
+
+The separate [WPT workflow](.github/workflows/wpt.yml) uses the same runtime,
+installs the pinned upstream selection, and retains raw results and a progress
+SVG. Runs on `main` publish those files through GitHub Pages, updating the
+README image automatically. See [WPT publication setup](wpt/README.md#progress-graphic).
+Both workflows run on pushes and pull requests and can be rerun manually.
+Browser oracle suites remain separate from these jobs.
+
+## License
+
+MIT. Each distributable package includes its own license file.

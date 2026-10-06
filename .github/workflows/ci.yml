@@ -3,6 +3,7 @@ name: CI
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -13,14 +14,31 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      NODE_BASE: 26.8.1
+      NODE_RUNTIME: compat
 
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 22.19.0
+          node-version: 26.8.1
           cache: npm
-      - run: node scripts/vendor.ts undici
-      - run: npm ci
-      - run: npm run test:quick
+      - name: Prepare patched dependency
+        run: node scripts/vendor.ts undici
+      - name: Install dependencies
+        run: npm.cmd ci
+      - name: Build compatibility addon
+        run: npm.cmd run build:node
+      - name: Check types and lint
+        run: npm.cmd run lint
+      - name: Build packages
+        run: npm.cmd run build
+      - name: Check contracts and unit tests
+        run: npm.cmd run test:unit
+      - name: Check native integration
+        run: npm.cmd run test:node-compat
+      - name: Check packaged artifacts
+        run: npm.cmd run test:artifact

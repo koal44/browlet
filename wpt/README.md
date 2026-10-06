@@ -92,6 +92,42 @@ does not silently skip those requirements.
 Catalogue URL counts and dynamically discovered subtest counts are separate;
 the summary's unselected count covers testharness URLs only.
 
+## Progress graphic
+
+Each run writes `test-results/wpt/progress.svg` and `test-results/wpt/results.json`,
+including raw reports, reviewed expectations, diagnostics, durations, revisions,
+and the selected runtime. A filtered run reports only the URLs it actually runs;
+configured skips and other unrun URLs remain untested.
+
+The denominator is **all testharness URLs in the pinned manifest**, including
+globals and features the runner cannot yet exercise. Visual tests, reftests,
+and other manifest types are outside this initial scope.
+Each URL contributes one unit, divided among its subtests: 11 passes and two
+failures contribute 11/13 passing and 2/13 failing. Reviewed contested failures
+are blue; other failures stay red, including expected failures. Unrun URLs are
+gray. Loading failures, harness failures, and empty reports count as one failing
+unit because their full subtest population is unknown.
+
+The [generator](progress.ts) keeps the total and legend inside the SVG.
+The [WPT workflow](../.github/workflows/wpt.yml) runs the selected suites on
+Windows x64 with Node 26.8.1 and the compatibility addon, retaining the graphic
+and results even when tests fail. Unexpected results still fail the job.
+
+On `main`, the workflow also publishes the generated files through GitHub Pages:
+[progress.svg](https://koal44.github.io/browlet/wpt/progress.svg) and
+[results.json](https://koal44.github.io/browlet/wpt/results.json). The root README
+loads that published image, so no copying or generated-image commits are needed.
+Pull requests and other branches retain artifacts without replacing public results.
+A completed report is published even when tests fail; canceled runs and setup
+failures without a report leave the previous publication in place.
+
+Enable this once in **Settings → Pages → Build and deployment → Source → GitHub
+Actions**. The `github-pages` environment must allow deployments from `main`.
+See GitHub's [custom Pages workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
+The image becomes available after the first deployment; GitHub's image cache may
+briefly lag later updates. Use the linked workflow run and its artifact to inspect
+the exact result. A local or filtered run never changes the published image.
+
 The [roadmap](ROADMAP.md) orders failure investigation, CI/reporting, and server
 integration against the HTML loading prerequisites.
 

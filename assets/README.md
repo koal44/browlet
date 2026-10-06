@@ -1,4 +1,6 @@
-# Browlet artwork
+# Browlet assets
+
+## Artwork
 
 - [browlet.svg](browlet.svg): editable master, with named Inkscape layers and
   a transparent background.
@@ -20,3 +22,10 @@ For the repository's root README:
 
 GitHub serves this relative image path from the same branch as the README.
 The PNG can also be uploaded separately wherever an attachment is useful.
+
+## WPT progress
+
+The README's WPT image is generated and published by CI through GitHub Pages.
+The [WPT runner and generator](../wpt/README.md#progress-graphic) also retain the
+underlying results. Progress graphics are generated output, not artwork stored
+in this directory.

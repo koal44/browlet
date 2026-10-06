@@ -1,0 +1,73 @@
+name: Web Platform Tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wpt-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wpt:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      NODE_BASE: 26.8.1
+      NODE_RUNTIME: compat
+    outputs:
+      pages-artifact-id: ${{ steps.pages.outputs.artifact_id }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 26.8.1
+          cache: npm
+      - name: Prepare patched dependency
+        run: node scripts/vendor.ts undici
+      - name: Install dependencies
+        run: npm.cmd ci
+      - name: Build compatibility addon
+        run: npm.cmd run build:node
+      - name: Install pinned WPT selection
+        run: npm.cmd run install:wpt
+      - name: Run Web Platform Tests
+        run: npm.cmd run test:browlet:wpt
+      - name: Retain results and progress graphic
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: wpt-results
+          path: test-results/wpt/
+          if-no-files-found: warn
+      # A completed report includes failures; publishing it must not require green tests.
+      - name: Prepare public progress
+        id: pages
+        if: >-
+          ${{ !cancelled() && github.ref == 'refs/heads/main' &&
+              github.event_name != 'pull_request' && hashFiles('test-results/wpt/results.json') != '' }}
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: test-results/
+
+  publish:
+    needs: wpt
+    if: ${{ !cancelled() && needs.wpt.outputs.pages-artifact-id != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Publish WPT results and progress graphic
+        id: deployment
+        uses: actions/deploy-pages@v4

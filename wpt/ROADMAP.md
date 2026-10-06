@@ -9,7 +9,8 @@ resolved. Broader coverage should accompany implementation milestones in
 ## A. Investigate the selected tests
 
 The FileReader/event-loop repair and typed native Promise views clear the selected
-WPT failures without changing expectations. All 82 selected documents now pass.
+WPT failures without changing expectations. All 82 selected documents now match
+their reviewed expectations.
 
 The borrowed-stream regressions, including the recovered release, termination,
 and piping cases, are fixed. Browser disagreements remain recorded in
@@ -23,6 +24,11 @@ Completion: every selected unexpected result has a fix or a reviewed disposition
 with harness errors and unhandled rejections still visible.
 
 ## B. Reports and CI at the presentation checkpoint
+
+The runner now saves raw results and a fractional progress SVG, retained by the
+WPT workflow and published from `main` through GitHub Pages for the README.
+The first hosted run must verify installation, tests, and publication together.
+WPT-compatible report interchange remains to be completed.
 
 This work can precede full HTML loading. Coordinate it with the GitHub/package
 presentation pass, after A:
