@@ -35,9 +35,10 @@ File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
 The [WPT roadmap](../wpt/ROADMAP.md) accompanies these stages. The selected suite's
-unexpected failures are resolved; add reports and bounded CI with the project
-presentation pass. Broaden test coverage as each owning subsystem becomes ready,
-rather than postponing all conformance work until the browser is complete.
+unexpected failures are resolved, and CI runs the selection and publishes its
+results and progress graphic. WPT-compatible report interchange and server
+integration remain open. Broaden test coverage as each owning subsystem becomes
+ready, rather than postponing all conformance work until the browser is complete.
 
 ## Dependency order
 

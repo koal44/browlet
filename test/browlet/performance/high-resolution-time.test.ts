@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
-  Clock, Moment, UnsafeMoment, monotonicClock,
+  Clock, Moment, UnsafeMoment, monotonicClock, wallClock,
 } from '../../../src/browlet/performance/clock';
 import {
   EnvironmentTiming, initializeEstimatedMonotonicTimeOfUnixEpoch,
@@ -44,6 +44,34 @@ describe('High Resolution Time algorithms', () => {
     expect(timing.getTimeOriginTimestamp().milliseconds)
       .toBe(1_000);
   });
+
+  it.each([-60_000, 60_000])(
+    'preserves the time origin and elapsed time after a %i ms wall-clock adjustment',
+    (adjustment) => {
+      const wall = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+      const monotonic = vi.spyOn(globalThis.performance, 'now').mockReturnValue(25);
+      try {
+        const estimatedEpoch = initializeEstimatedMonotonicTimeOfUnixEpoch(wallClock, monotonicClock);
+        const timing = new EnvironmentTiming({
+          crossOriginIsolatedCapability: false,
+          timeOrigin: monotonicClock.unsafeCurrentTime().coarsen(),
+        }, estimatedEpoch);
+
+        expect(timing.getTimeOriginTimestamp().milliseconds).toBe(1_000);
+        expect(timing.currentHighResolutionTime().milliseconds).toBe(0);
+
+        wall.mockReturnValue(1_000 + adjustment);
+        monotonic.mockReturnValue(65);
+
+        expect(timing.currentWallTime().milliseconds).toBe(1_000 + adjustment);
+        expect(timing.getTimeOriginTimestamp().milliseconds).toBe(1_000);
+        expect(timing.currentHighResolutionTime().milliseconds).toBe(40);
+      } finally {
+        monotonic.mockRestore();
+        wall.mockRestore();
+      }
+    },
+  );
 
   it('reports relative time from the settings-object origin', () => {
     const timing = new EnvironmentTiming({

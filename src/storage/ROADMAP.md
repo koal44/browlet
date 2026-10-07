@@ -11,8 +11,7 @@ author-facing StorageManager API remain later work.
 
 ## Sources and boundaries
 
-Local source: `whatwg-storage/storage.bs`, relative to the
-[reference root](../fetch/README.md#sources).
+Local source: `whatwg-storage/storage.bs`.
 Read §4's model before implementing §4.2 keys. Later substrate work follows
 §§4–7; the §8 public API needs explicit browser integration.
 

@@ -130,7 +130,6 @@ and endpoint isolation. `fetch-delivery.test.ts` covers real OPTIONS/POST delive
 failure/removal, destruction before and during uploads, and unused-body disposal.
 These proofs do not establish periodic scheduling or inactive-history disposal.
 
-The local source is `w3c-reporting/index.bs` under the
-[reference root](../../fetch/README.md#sources). Use its generic and
+The local source is `w3c-reporting/index.bs`. Use its generic and
 document-centered frameworks together; keep the global/Document adaptation
 inside Browlet. Policy-specific report-only/enforcement tests stay with producers.

@@ -1,30 +1,30 @@
 # Node compatibility
 
-The maintained native backend for Browlet's JS Engine integration. The addon
-supplies explicit microtask queues, reusable context handles, native global
-allocation, realm lookup, and Promise observation on supported official Node
-builds. Additional V8 patches expose job hooks, collection iterators, and buffer
-view inspection. HTML owns the policy applied through those facilities.
+Browlet uses this native addon to control microtask checkpoints, identify the
+realm of an object, and preserve the global proxy across navigation. HTML owns
+the scheduling and browser policy applied through those engine facilities.
 
-## Source and build ownership
+Stock Node runs through JS Engine's fallback paths. On supported official Node
+builds, the addon supplies explicit queues, native contexts and globals, realm
+lookup, and Promise observation. The [V8 patch set](../vendor/_patches/node-v8.patch)
+adds callback/job hooks, native collection iterators, and further iterator and
+buffer-view inspection. The patch includes engine regressions and records its
+upstream Node revision. [Known limitations](../src/LIMITATIONS.md) describes
+the observable constraints of each runtime.
 
-| Location | Responsibility |
+## Code and regressions
+
+| Area | Implementation and evidence |
 | --- | --- |
-| [addon/](addon/) | Native implementation and JavaScript entry; `vm.cc` owns contexts/queues, `property-delegate.cc` global forwarding, and `host-hooks.*` callback/job integration |
-| [test/](test/) | Standalone capability, lifetime, GC, and host-hook regressions |
-| [build-node.mjs](../scripts/build-node.mjs) | Official dependency preparation and addon compilation |
-| `CUSTOM_NODE_SOURCE` | Regular Node checkout: engine patches on `v8-patches`, engine builds there |
-| `experimental/` | Independent, ignored Git repository for probes and findings; not a build dependency |
-| `.cache/`, `addon/build/`, `results/` | Ignored official dependencies, addon outputs, and temporary investigation results |
+| Contexts, globals, and microtask queues | [vm.cc](addon/vm.cc), [property-delegate.cc](addon/property-delegate.cc); [queue and Promise tests](test/capabilities.test.cjs), [browser global tests](../test/browlet/browsing/native-global.test.ts) |
+| Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
+| Native value inspection and iteration | [Iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
 
-Keep Node source and engine builds in the regular checkout, not under Browlet.
-The custom base uses its `out/Release/node.exe`, `node.lib`, and source headers
-directly. The older `browlet-node-compat-history` branch is reference material.
-Each repository has its own index; addon and engine changes are separate work.
+The [standalone suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
-## Build and run on Windows x64
+## Build and run
 
-Copy [.env.example](../.env.example) to `.env` and choose the defaults:
+Copy [.env.example](../.env.example) to `.env` and select the runtime:
 
 ```ini
 NODE_BASE=24.19.0
@@ -37,22 +37,32 @@ NODE_RUNTIME=compat
 loads the matching addon; `stock` disables it. Shell settings override `.env`,
 and explicit command options override both. The defaults are `24.19.0/compat`.
 
-```powershell
-npm.cmd run build:node -- --base 24.19.0
-npm.cmd run test:unit
-npm.cmd run test:node-compat
-# One-off selection and a focused suite:
-node scripts/with-node.mjs --base 26.8.1 --runtime compat vitest run --project=unit test/js-engine
+The launcher uses the selected cached official runtime or configured custom executable.
+
+```sh
+npm run install:node -- --base 24.19.0
+npm run build:node-compat -- --base 24.19.0
+npm run test:unit
+npm run test:node-compat
+# Run a focused suite:
+node scripts/with-node.mjs vitest run --project=unit test/js-engine
 ```
 
-Building requires Visual Studio's Desktop development with C++ workload.
-The build uses an existing x64 developer prompt, `VSINSTALLDIR`, or `vswhere`.
-It downloads missing official runtimes, headers, and import libraries, verifies
-pinned hashes, and reuses the cache. Windows x64 is the supported target.
+The [installer](../scripts/install-node.mjs) downloads official runtimes and
+headers, plus import libraries on Windows. It verifies pinned hashes and reuses
+the cache on Windows and Linux x64.
+Building the addon requires:
 
-For `custom`, first build Node in `CUSTOM_NODE_SOURCE`, then run
-`npm.cmd run build:node -- --base custom`. This compiles only the addon;
-changing the base never builds the engine. Rebuild the addon after an engine
+- **Windows x64:** Visual Studio's Desktop development with C++ workload. Standalone
+  Build Tools is sufficient. The build uses an x64 developer prompt, `VSINSTALLDIR`,
+  or `vswhere`.
+- **Linux x64:** A C++20 compiler such as GCC or Clang. The build uses `c++` by
+  default; set `CXX` to select another compiler executable.
+
+For stock mode, omit the addon build and select `NODE_RUNTIME=stock`.
+
+For `custom`, first [build Node](../BUILDING.md#v8-patches) in `CUSTOM_NODE_SOURCE`, then run
+`npm run build:node-compat -- --base custom`. Rebuild the addon after an engine
 rebuild, even when the reported Node version is unchanged.
 
 Each base has its own `addon/build/<base>/node-compat.node` and `node.json`.
@@ -72,6 +82,9 @@ Three bases, each with the addon disabled or enabled, give six configurations.
 Package test commands run **one selected configuration**; `test:all` does not
 sweep this matrix.
 
+CI covers both official versions on Windows and Linux, with stock and compat unit
+and artifact tests plus native addon tests. Custom Node/V8 builds are tested locally.
+
 | Base | `stock` | `compat` |
 | --- | --- | --- |
 | `24.19.0` | Official Node fallback paths | Native queues/globals; older Promise-observation limit |
@@ -89,7 +102,7 @@ need a matrix sweep. Run type contracts once, then repeat the launcher command
 with each base/runtime pair; append paths for focused checks:
 
 ```powershell
-npm.cmd run test:types
+npm run test:types
 node scripts/with-node.mjs --base custom --runtime compat vitest run --project=unit
 ```
 
@@ -99,9 +112,8 @@ Addon changes also need the native suite on each supported base:
 node scripts/with-node.mjs --base custom --runtime compat node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
 ```
 
-Record passed, failed, and unavailable runs per configuration. Capability-gated
-Vitest tests use `itPassesWith(...)` to retain required assertions as approved
-expected failures on unsupported paths; unexpected passes require review.
+Capability-gated Vitest tests use `itPassesWith(...)` to retain required assertions
+as approved expected failures on unsupported paths; unexpected passes require review.
 Ordinary asynchronous completion remains required on every backend.
 
 ## Contexts, globals, and optional facilities
@@ -124,9 +136,8 @@ follows bound/proxy targets without traps and rejects revoked callable proxies.
 `globalPrototypeChain` preallocates an immutable global proxy/target and ordered
 `mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same
 layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
-behavior and `setGlobalObject()` selects the Window target. This avoids the old
-post-creation immutability patch. Node's shared VM security token permits embedder
-access; it does not implement browser cross-origin policy.
+behavior and `setGlobalObject()` selects the Window target. Node's shared VM
+security token permits embedder access; it does not implement browser cross-origin policy.
 
 | Optional operation | Availability and contract |
 | --- | --- |
@@ -137,11 +148,6 @@ access; it does not implement browser cross-origin policy.
 | `setHostHooks(hooks)` | Requires the five V8 interception APIs below. Header detection controls whether the addon exports it. |
 
 Callback iterators have no table-backed entries for native debugger/Node previews.
-
-Use operation availability rather than a version label. [Known limitations](../src/LIMITATIONS.md)
-owns the observable fallback constraints. Native global acceptance lives in
-[native-global.test.ts](../test/browlet/browsing/native-global.test.ts) and the
-Document lifecycle tests; the standalone suite also checks retained-context GC.
 
 ## Host hooks
 

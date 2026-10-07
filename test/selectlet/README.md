@@ -1,57 +1,33 @@
 # Selectlet scenarios
 
-Reusable selector scenarios, migrated from older selector suites and newer regression and WPT coverage.
-
-The Playwright runner compares Selectlet against native DOM behavior in Chromium, Firefox, and WebKit. The Browlet runner exercises the supported subset directly in Browlet; its remaining failures expose Browlet host behavior that has not been implemented yet.
+Selector scenarios from legacy suites, regressions, and WPT. By default, the
+Playwright runner compares Selectlet with native DOM behavior in Chromium,
+Firefox, and WebKit, then checks explicit expectations. Cases can select a single
+engine. The Browlet runner checks explicit expectations for its supported subset.
 
 ## Install
 
-Requires Node.js (which includes npm).
-
-```sh
-npm install
-npx playwright install
-```
-
-`npm install` pulls in the dev dependencies needed to run the scripts. `npx playwright install` installs the browser binaries used by the harness.
+Follow [Building Browlet](../../BUILDING.md), including the Node runtime and
+[browser setup](../../BUILDING.md#browser-tests).
 
 ## Run
 
-Run the Playwright oracle:
-
 ```sh
 npm run build
+# Compare with browsers:
 npm run test:selectlet:oracle
-```
-
-Run the same corpus through Browlet:
-
-```sh
+# Run through Browlet:
 npm run test:selectlet:browlet
-```
-
-Run only cases marked `fixme`:
-
-```sh
+# Review cases marked fixme:
 npm run test:selectlet:oracle:fixme
-```
-
-Run a subset by label, for example:
-
-```sh
+# Filter by label:
 npm run test:selectlet:oracle jquery
 npm run test:selectlet:oracle:fixme w3c
 ```
 
-For faster iteration, run a subset by label or mark a scenario/case `only`.
-
 `fixme` cases are open questions or known mismatches found during migration and need review.
 
 ## Tests
-
-Tests are written as scenario collections and run through the shared harness.
-
-A typical test file looks like this:
 
 ```ts
 import { runScenarios } from '../../scenario/dispatch';
@@ -78,16 +54,8 @@ Scenarios can:
 - use steps to change page state between groups of cases
 - express cases using `select`, `first`, `match`, `closest`, `byId`, `byTag`, and `byClass`
 - attach expectations such as `count`, `ids`, `classes`, `throws`, and inclusion/exclusion checks
-- use query source refs when a query should run relative to a specific node, including rehomed sources for detached nodes and fragments
+- use query source refs to query a specific node in its original document, detached, or rehomed into a `DocumentFragment`
 - mark scenarios or cases as `skip`, `only`, `fail`, or `fixme`
-
-## Philosophy
-
-The harness reduces selector tests to two things: a query and a source.
-
-Cases always compare `selectlet` against native browser behavior. Explicit expectations are extra assertions on top of that comparison.
-
-Query sources can also be rehomed, so the same ref can be tested in its original document, detached, or inside a `DocumentFragment`.
 
 ## Notes
 

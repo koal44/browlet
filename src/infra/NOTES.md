@@ -1,9 +1,5 @@
 # Infra translation notes
 
-This is a checklist for translating WHATWG algorithms into TypeScript. It is
-not an implementation plan for Infra and should stay substantially shorter than
-the specification.
-
 ## Default posture
 
 - Reproduce the required result, not the specification's pseudocode shape.

@@ -33,7 +33,7 @@ export function renderProgress(progress: WptProgress): string {
   let offset = 0;
   const bars = segments.map(({ name, value }) => {
     const width = progress.total === 0 ? 0 : 360 * value / progress.total;
-    const rectangle = `    <rect class="${name}" x="${offset}" width="${width}" height="8" />`;
+    const rectangle = `      <rect class="${name}" x="${offset}" width="${width}" height="8" />`;
     offset += width;
     return rectangle;
   }).join('\n');
@@ -42,8 +42,8 @@ export function renderProgress(progress: WptProgress): string {
     `    <text x="${x + 11}" y="27">${label} ${escapeXml(percent)}</text>`,
   ).join('\n');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="360" height="58" viewBox="0 0 360 58" role="img" aria-labelledby="title description">
-  <title id="title">Web Platform Tests progress</title>
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="82" viewBox="0 0 384 82" role="img" aria-labelledby="title description">
+  <title id="title">Web Platform Tests coverage</title>
   <desc id="description">${escapeXml(description)}; of ${total} testharness tests. Each test URL has equal weight; completed subtests contribute fractions. Harness and loading failures count as failing tests.</desc>
   <style>
     .passing { fill: #2da44e; }
@@ -63,13 +63,13 @@ export function renderProgress(progress: WptProgress): string {
   <defs>
     <clipPath id="bar"><rect width="360" height="8" rx="4" /></clipPath>
   </defs>
-  <g clip-path="url(#bar)">
+  <g transform="translate(12 12)">
+    <g clip-path="url(#bar)">
 ${bars}
-  </g>
-  <g>
+    </g>
 ${legend}
+    <text class="total" y="51">of ${total} tests</text>
   </g>
-  <text class="total" y="51">of ${total} tests</text>
 </svg>
 `;
 }

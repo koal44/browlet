@@ -24,7 +24,7 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 ## Environments and allocation
 
-`JSEnvironment` supplies `exec: RealmExecution` and
+`JSEnvironment` supplies `realm: JSRealm`, `exec: RealmExecution`, and
 `queueNetworkingTask(steps, destination)`. The shared method either enqueues on
 an explicit parallel queue or delegates global delivery to `exec.networking`.
 The environment can be HTML settings, sandbox execution, or another host's

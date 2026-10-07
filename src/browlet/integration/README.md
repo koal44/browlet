@@ -1,12 +1,10 @@
 # Browlet integration
 
-This directory contains Browlet's cross-specification integrations. The
-top-level [`bindings.ts`](../bindings.ts) is the composition root which
-assembles interface and proxy object definitions with realm bindings,
-and connects execution facilities to their owners.
+Browlet's cross-specification adapters. [`bindings.ts`](../bindings.ts) composes
+interface and proxy definitions, realm bindings, and execution facilities through
+one module-private `BindingWorld`.
 
-The functions exported by `bindings.ts` compose realms through one module-private
-`BindingWorld`. `createWindowEnvironment()` allocates the realm and
+`createWindowEnvironment()` allocates the realm and
 execution facilities before constructing Window and installing its platform global.
 `scripting/environment.ts` creates realm facilities; `bindings.ts` completes
 them with its Promise constructor, DOM event/abort allocation, and structured
@@ -25,18 +23,9 @@ The mixin uses `env.exec.clone()` and derives timer ownership from
 `env.realm`, without retaining a Binding Context or a separate execution
 argument.
 
-A standalone subsystem owns the contract for each capability it consumes. A
-provider module here connects that contract to Browlet-owned behavior. The
-provider may know both sides of that boundary, but it must not use the
-composition root's functions to rediscover a Binding Context already
-available to the consuming algorithm.
-
-Integration modules contain cross-owner behavior and wiring. They may also
-contain Browlet's completion of a standalone subsystem when one concrete
-platform implementation inherently depends on Browlet-owned facilities. Keep
-that implementation whole on the Browlet side of the boundary rather than
-splitting its state into a host-neutral facade and a browser-specific object.
-Domain-local behavior still remains with its owning subsystem.
+Providers implement contracts owned by the consuming subsystem. Browser-dependent
+implementations such as FileReader stay whole here; domain-local behavior stays
+with its subsystem. See the [composition rules](../../ARCHITECTURE.md#choosing-a-dependency).
 
 - `file/` connects File API algorithms to HTML scheduling,
   supplies platform line ending policy, and owns `FileReader`, whose concrete
@@ -55,7 +44,3 @@ Domain-local behavior still remains with its owning subsystem.
 - `network/` supplies the UserAgent's Node/Undici HTTP transport and per-response
   native content decoders. Fetch owns request processing and stream delivery;
   the adapters own connections, TLS, native I/O, and compression facilities.
-
-File and DOMException serialization steps live beside their implementations and
-attach directly to the Web IDL declarations. HTML invokes their portable step
-contracts; they need no integration module or separate registration.

@@ -47,7 +47,7 @@ processing with the per-item handlers and append to a supplied output queue:
 | `finished` | Processing completed and the output end marker was appended. |
 | `{ error }` | Fatal processing stopped; partial output and unread input remain available. |
 
-These results are ordinary values. `processQueue` subscribes to input readiness
+`processQueue` subscribes to input readiness
 through the runtime when processing returns `waiting`; byte/scalar loops do not
 schedule promises. Fatal codec processing leaves output open. The `encodeOrFail`
 operations additionally append its end marker, including on error, as required
@@ -89,17 +89,17 @@ including restored ASCII and independence from later input-buffer mutation.
 
 From the repository root:
 
-```powershell
+```sh
 node --import tsx src/encoding/scripts/generate-tables.mjs
 node --import tsx src/encoding/scripts/generate-tables.mjs --check
-npm.cmd run test:unit -- test/encoding test/browlet/encoding.test.ts
+npm run test:unit -- test/encoding test/browlet/encoding.test.ts
 ```
 
 The generator downloads the published `index-<name>.txt` files, validates their
 entries, and checks packing through the runtime loader. It writes `gen/indexes.ts`
 and independent mapping digests under `test/encoding/gen/`. Both generator modes
 require network access; builds and runtime use checked-in data. Canonical names
-and labels are maintained directly in `encodings.ts`.
+and labels are maintained in [core/labels.ts](core/labels.ts).
 
 Indexes expand on first use; reverse lookups are also lazy. Packed source strings
 are present at module load. Source URLs, published identifiers, and WHATWG data
@@ -107,4 +107,4 @@ attribution remain in the generated files; retain `scripts/WHATWG-LICENSE.txt`.
 
 Tests cover mapping digests, Unicode scalars, malformed input, chunk boundaries,
 BOM handling, resumable errors, supplied output, and realm ownership through the
-projected APIs. Performance investigations are separate from these regressions.
+projected APIs.

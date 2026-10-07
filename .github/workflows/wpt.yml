@@ -31,8 +31,10 @@ jobs:
         run: node scripts/vendor.ts undici
       - name: Install dependencies
         run: npm.cmd ci
+      - name: Install selected Node runtime
+        run: npm.cmd run install:node
       - name: Build compatibility addon
-        run: npm.cmd run build:node
+        run: npm.cmd run build:node-compat
       - name: Install pinned WPT selection
         run: npm.cmd run install:wpt
       - name: Run Web Platform Tests

@@ -76,13 +76,10 @@ browser policy owns Integrity-Policy parsing and reports.
 
 ## Retained specification decisions
 
-These are approved choices, not new review requests. Identifiers match source
-markers. Revisit them when the specification or implementation evidence changes.
-Browser observations below were collected in September 2026, not rechecked by
-this documentation consolidation; Playwright WebKit observations are not Safari
-claims. Tests live in `test/fetch`, `test/browlet/fetch-*.test.ts`, and the linked
-owners. Callable-shape choices already accepted are documented in code, not
-kept as pending mismatch flags.
+Identifiers match source markers. Browser observations were collected in
+September 2026; WebKit results refer to Playwright's build. Tests live in
+`test/fetch`, `test/browlet/fetch-*.test.ts`, and the linked subsystems.
+Revisit these decisions when the specification or implementation evidence changes.
 
 ### Completion and execution
 

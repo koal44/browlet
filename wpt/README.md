@@ -8,21 +8,19 @@ directory is a sparse Git checkout; upstream assertions remain unchanged.
 
 ## Install and run
 
-```powershell
-npm.cmd run install:wpt
-npm.cmd run test:browlet:wpt
+```sh
+npm run install:wpt
+npm run test:browlet:wpt
 # Run one configured suite:
-npm.cmd run test:browlet:wpt -- -t 'fetch:'
+npm run test:browlet:wpt -- -t 'fetch:'
 # Test the selection and expectation machinery:
 node scripts/with-node.mjs vitest run --project=unit test/wpt
 ```
 
-The [installer](scripts/install.ts) caches the official manifest under `.cache/`,
-checking its revision against the lock. It reuses Git objects already downloaded
-and fetches a commit only when missing. Changing the selection can still require
-additional blobs.
-Rerun installation after changing suites or the lock. Dirty upstream checkouts
-are rejected, and the runner checks that checkout HEAD matches the lock.
+The [installer](scripts/install.ts) caches the pinned manifest under `.cache/`
+and reuses downloaded Git objects. Rerun it after changing suites or the lock;
+an expanded selection may require additional downloads. Dirty upstream checkouts
+are rejected, and the runner checks that HEAD matches the lock.
 
 ## Suite configuration
 
@@ -70,9 +68,7 @@ directory. This example illustrates the shape, not current classifications:
   Harness scripts and direct `META: script` dependencies are installed automatically.
 
 Timeouts, not-run results, failed preconditions, harness errors, and
-document-loading failures remain unexpected. They are not excused by ordinary
-failure rules. Further outcome expectations require an explicit review and
-extension of the configuration.
+document-loading failures remain unexpected, even with a `failing` rule.
 
 ## Results and current boundary
 
@@ -116,7 +112,7 @@ and results even when tests fail. Unexpected results still fail the job.
 On `main`, the workflow also publishes the generated files through GitHub Pages:
 [progress.svg](https://koal44.github.io/browlet/wpt/progress.svg) and
 [results.json](https://koal44.github.io/browlet/wpt/results.json). The root README
-loads that published image, so no copying or generated-image commits are needed.
+loads the published image.
 Pull requests and other branches retain artifacts without replacing public results.
 A completed report is published even when tests fail; canceled runs and setup
 failures without a report leave the previous publication in place.
@@ -124,13 +120,10 @@ failures without a report leave the previous publication in place.
 Enable this once in **Settings → Pages → Build and deployment → Source → GitHub
 Actions**. The `github-pages` environment must allow deployments from `main`.
 See GitHub's [custom Pages workflow documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages).
-The image becomes available after the first deployment; GitHub's image cache may
-briefly lag later updates. Use the linked workflow run and its artifact to inspect
-the exact result. A local or filtered run never changes the published image.
+GitHub's image cache may lag updates; the workflow artifact contains the exact
+result. Local runs do not publish.
 
-The [roadmap](ROADMAP.md) orders failure investigation, CI/reporting, and server
-integration against the HTML loading prerequisites.
-
-Upstream references: [custom runner guidance](https://web-platform-tests.org/running-tests/custom-runner.html),
+Further work: [roadmap](ROADMAP.md). Upstream references:
+[custom runner guidance](https://web-platform-tests.org/running-tests/custom-runner.html),
 [expectation metadata](https://web-platform-tests.org/tools/wptrunner/docs/expectation.html).
 Our suite configuration is a Browlet adapter, not native wptrunner INI metadata.

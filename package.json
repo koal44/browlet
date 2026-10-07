@@ -23,10 +23,12 @@
   "scripts": {
     "clean": "node scripts/clean.mjs",
     "build": "node scripts/build.mjs",
-    "build:node": "node scripts/build-node.mjs",
+    "build:node-compat": "node scripts/build-node-compat.mjs",
     "lint": "node --run typecheck && eslint src test wpt scripts packages node-compat",
     "typecheck": "node scripts/generate-platform-types.mjs --check && tsc -b . test/web-idl/contracts/platform",
     "generate:types": "node scripts/generate-platform-types.mjs",
+    "install:browsers": "playwright install",
+    "install:node": "node scripts/install-node.mjs",
     "install:vendor": "node scripts/vendor.ts",
     "install:wpt": "tsx wpt/scripts/install.ts",
     "test:types": "tsc -b test/web-idl/contracts",
@@ -41,8 +43,7 @@
     "test:stylelet:oracle:fixme": "cross-env HARNESS_MODE=fixme node scripts/with-node.mjs playwright test --project=stylelet",
     "test:selectlet:perf": "node scripts/with-node.mjs playwright test --project=perf --workers=1",
     "test:quick": "node --run lint && node --run build && node --run test:unit && node --run test:node-compat && node --run test:artifact",
-    "test:all": "node --run test:quick && node --run test:selectlet:oracle && node --run test:stylelet:oracle",
-    "test:all2": "node --run test:quick && node --run test:browlet:wpt && node --run test:selectlet:oracle && node --run test:stylelet:oracle"
+    "test:all": "node --run test:quick && node --run test:browlet:wpt && node --run test:selectlet:oracle && node --run test:stylelet:oracle"
   },
   "devDependencies": {
     "@playwright/test": "1.61.1",

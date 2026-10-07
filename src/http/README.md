@@ -93,12 +93,11 @@ Browser policy supplies SameSite and access decisions; see [cookies](ROADMAP.md#
 ## Tests and sources
 
 Run `node scripts/with-node.mjs vitest run --project=unit test/http`.
-Tests under `test/http/` follow the module layout, with basic cases before
-specialized behavior. Separate HTTPWG tests use the [upstream fixtures](../../test/http/fixtures/httpwg/README.md)
+HTTPWG tests use the [upstream fixtures](../../test/http/fixtures/httpwg/README.md)
 for independent parsing/serialization expectations and provenance. Fetch, MIME,
 authentication, and Reporting tests exercise the actual consumers.
 
 Governing sources are RFC 9110/9111, RFC 5861, RFC 7617, RFC 9651, Fetch's shared
 HTTP algorithms, and the layered-cookies draft. Algorithm comments link exact
-sections. Local copies live under the [reference root](../fetch/README.md#sources).
+sections.
 Remaining work and retained browser evidence belong to [ROADMAP.md](ROADMAP.md).

@@ -25,26 +25,20 @@ with harness errors and unhandled rejections still visible.
 
 ## B. Reports and CI at the presentation checkpoint
 
-The runner now saves raw results and a fractional progress SVG, retained by the
+The runner saves raw results and a fractional progress SVG, retained by the
 WPT workflow and published from `main` through GitHub Pages for the README.
-The first hosted run must verify installation, tests, and publication together.
-WPT-compatible report interchange remains to be completed.
+The [first hosted run](https://github.com/koal44/browlet/actions/runs/37537559787)
+verified installation, tests, and publication together. CI uses a fixed Node/addon
+configuration and fails on unexpected results and harness errors.
 
-This work can precede full HTML loading. Coordinate it with the GitHub/package
-presentation pass, after A:
+Remaining work, independent of full HTML loading:
 
 - Save WPT-compatible machine-readable results with original URL/subtest names
-  and statuses. Retain Browlet/WPT revisions, runtime/backend, selected suites,
-  durations, and reviewed expectations/reasons alongside the report.
-- Choose a reproducible Node/addon configuration using the existing
-  [runtime guidance](../node-compat/README.md#runtime-test-matrix). Keep results
-  from different configurations distinguishable.
-- Gate changes on a bounded selection, unexpected failures, unexpected passes,
-  and harness errors. Add broader scheduled coverage as capabilities arrive;
-  coverage reporting must distinguish raw passes from expected failures.
-- Cache the pinned checkout/manifest, retain failure artifacts, and report
-  selected, skipped, and unselected test URLs separately from executed subtests.
-  Do not present a selected-suite percentage as overall WPT conformance.
+  and statuses. Carry the existing revision, runtime, suite, duration, and reviewed
+  expectation metadata into that report.
+- Cache the pinned checkout and manifest between CI runs.
+- Add broader scheduled coverage as capabilities arrive. Keep runtime
+  configurations distinguishable and raw passes separate from expected failures.
 - Review upstream revision updates as changes to tests and expectations together.
   Show added/removed URLs and changed results before accepting new expectations.
 

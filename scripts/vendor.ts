@@ -97,7 +97,7 @@ function fetchGitSpec(name: string, spec: GitSpec): void {
 
   if (patch) {
     console.log(`[vendor] ${name}: applying ${patch}`);
-    git(['apply', '--whitespace=error', '--quiet', patch], dir);
+    git(['apply', '--whitespace=error', patch], dir);
   }
 
   console.log(`[vendor] ${name} ready @ ${dir}`);

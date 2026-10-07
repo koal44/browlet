@@ -3,8 +3,15 @@
 This subsystem implements the [Fetch Standard](https://fetch.spec.whatwg.org/)
 for Browlet and other specification consumers. It owns request/response records,
 policy checks, HTTP transactions, body streams, and the author-facing Fetch APIs.
-The planned delivery slices and independent dependency preflight are complete;
-the [roadmap](ROADMAP.md) records the completed audit and remaining work.
+
+The [Node adapter](../browlet/integration/network/node-transport.ts) uses Undici's
+dispatcher for HTTP/1.1 and HTTP/2 transport. Browlet implements Fetch behavior
+and supplies its own public objects, streams, and promises. The temporary
+[Undici patches](../../vendor/README.md#undici) preserve transport information
+and behavior needed by the Fetch algorithms.
+
+Related implementations are [Streams](../streams/README.md), [File/Blob](../file/ROADMAP.md),
+and [HTTP](../http/README.md). The [roadmap](ROADMAP.md) records remaining Fetch work.
 
 ## Entry points
 
@@ -61,14 +68,10 @@ and HSTS. Its sandbox supplies execution for work that outlives a Window, such
 as retired Reporting deliveries. Reserved HTML environment records supply early
 origin/partition state without pretending to be complete settings objects.
 
-The [Node adapter](../browlet/integration/network/node-transport.ts) uses Undici's dispatcher
-for HTTP/1.1 and HTTP/2 wire I/O. Browlet owns Fetch policy and its own public
-objects, streams, and promises. Native callbacks return work through the owner's
+Native transport callbacks return work through the owner's
 networking tasks. Upload pulls follow transport demand; response backpressure
 pauses both decoding and wire input. A separate
 [decoder](../browlet/integration/network/node-decoder.ts) chain handles each compressed response.
-The temporary Undici patches and their removal criteria live in
-[vendor/README.md](../../vendor/README.md).
 
 ## Bodies and caches
 
@@ -97,8 +100,11 @@ From the repository root, run the implementation and browser Fetch suites:
 node scripts/with-node.mjs vitest run --project=unit test/fetch test/browlet/fetch
 ```
 
+For transport investigations, start with the [HTTP/2 regressions](../../test/browlet/fetch-http2.test.ts),
+[response framing](../../test/browlet/fetch-response-framing.test.ts), and
+[Node adapter tests](../../test/browlet/integration/network/).
 Related suites under `test/browlet/loader`, `test/browlet/reporting`, and
-`test/streams` cover transport, retained delivery, and stream completion.
+`test/browlet/streams` cover document loading, retained delivery, and stream completion.
 Use real bindings for author conversion and realm behavior, controlled transport
 for algorithm ordering, and loopback HTTP/HTTPS for actual wire behavior.
 Browser comparisons are evidence for recorded decisions, not conformance proof.
@@ -109,8 +115,3 @@ Fetch-specific companion standards are [SRI](https://w3c.github.io/webappsec-sub
 [Fetch Metadata](https://w3c.github.io/webappsec-fetch-metadata/), and HTML's
 [multipart encoder](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#multipart/form-data-encoding-algorithm).
 The roadmap links remaining dependencies and reviewed disagreements.
-
-Local reference sources live under `C:/Users/rando/source/repos/_web-platform/specs/`:
-Fetch uses `whatwg-fetch/fetch.bs`, HTML uses `whatwg-html/source`, W3C drafts
-usually use `index.bs`, and published RFC text lives in `rfcs/`. Consult each
-owner's roadmap for its specific source; runtime dependencies are separate.

@@ -18,10 +18,6 @@ with attribution in [LICENSE.WHATWG.md](./LICENSE.WHATWG.md).
 | [queuing-strategy.ts](./queuing-strategy.ts) | Strategy records, extraction algorithms, Count and ByteLength interfaces |
 | [queue-with-sizes.ts](./queue-with-sizes.ts) | Queue entries and total-size bookkeeping |
 
-Each interface's implementation and Web IDL declaration live together. Algorithm
-comments identify the relevant specification section; methods use the owning
-implementation as their receiver.
-
 ## Runtime and bindings
 
 A stream retains one trailing `JSEnvironment` and passes it to derived streams.
@@ -71,10 +67,7 @@ The wider ownership rules live in [ARCHITECTURE.md](../ARCHITECTURE.md);
 
 ## Specification correspondence
 
-Internal organization can use methods, combined factories, and closed-over state
-while preserving observable behavior. Callback order, Promise settlement order,
-error propagation, identity, and buffer ownership still matter. A hidden Promise
-object does not by itself make the timing of its reactions unobservable.
+A hidden Promise object does not by itself make the timing of its reactions unobservable.
 
 `pullFromBytes` advances an offset instead of removing a byte-sequence prefix.
 The local `copyDataBlockBytes` copies between ArrayBuffer backing stores, which
@@ -104,9 +97,9 @@ Promise allocation rules.
 
 From the repository root:
 
-```powershell
-npm.cmd run test:unit -- test/browlet/streams
-npm.cmd run test:browlet:wpt
+```sh
+npm run test:unit -- test/browlet/streams
+npm run test:browlet:wpt
 ```
 
 The [unit tests](../../test/browlet/streams) cover implementation records and

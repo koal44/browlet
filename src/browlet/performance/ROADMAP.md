@@ -96,7 +96,7 @@ This section owns the timing integration gate linked from the
 [Fetch roadmap](../../fetch/ROADMAP.md#owner-integration-gates). Existing clocks remain the
 foundation; collecting raw Fetch timestamps does not complete entry delivery.
 
-Read these sources, with paths relative to the [reference root](../../fetch/README.md#sources):
+Reference specifications and their local checkout paths:
 
 | Specification | Local source | Role |
 | --- | --- | --- |

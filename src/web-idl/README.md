@@ -18,9 +18,7 @@ Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
 entry augments declaration hooks with typed `BindingContext` arguments.
 Core and full-binding type fixtures are compiled separately so the augmentation
 cannot hide a dependency in the standalone surface.
-Consumers needing only Core exports use `core/index.ts`; declarations needing
-typed binding hooks use the full `index.ts`. Web IDL runtime modules import
-Core through its index, while Core modules import their siblings directly.
+Web IDL runtime modules import Core through its index; Core modules import their siblings directly.
 
 | Modules | Responsibility |
 | --- | --- |
@@ -61,9 +59,6 @@ under `binding/realm/` are components of that realm binding. They retain a typed
 reference to their owner and call its allocation, identity, conversion, and
 exception services.
 
-`RealmBinding` also owns declaration argument injection and the implementation
-Promise constructor that uses its conversion operations. Platform records call
-it directly to associate another implementation with their owner.
 `converters/` owns the base `Converter` and reusable type-specific algorithms;
 `ImplementationConverter` consumes IDL values into implementation values.
 `values/` holds per-value state and lifecycle operations; converters and realm
@@ -98,11 +93,9 @@ modules within those folders import their siblings directly. Infra also offers
 an index, while direct foundation imports remain available for narrow consumers,
 including standalone Core.
 
-Order imports from foundations upward: Infra, JS Engine, and Core share one
-block, followed by environment and assembly contracts, values, converters, and
-binding collaborators. Keep small import lists compact; a large group of sibling
-imports can have its own block. Keep type-only owner references alongside their
-related module imports.
+Order imports from Infra, JS Engine, and Core through environment/assembly,
+values, converters, and binding collaborators. Keep type-only owner references
+alongside their related imports.
 
 ## Declaring an interface
 
@@ -727,15 +720,12 @@ identities. WindowProxy remains HTML-owned and distinct from WindowImpl.
 
 ## Tests and remaining integration
 
-Runtime tests mirror the source owners in `test/web-idl/{core,assembly,converters,values,binding}`.
-Registration tests use `binding/register.test.ts` and the topic suites in
-`binding/register/`; realm components use `binding/realm/`. Shared fixtures live
-in `test/support/`. The compile-only projects in `contracts/` separately check
-Core, full Binding, and generated platform declarations without widening their
-dependencies to match the runtime harness.
+Runtime tests mirror the source under `test/web-idl/`; shared fixtures live in
+`test/support/`. The compile-only projects in `test/web-idl/contracts/` check Core,
+full Binding, and generated platform declarations with separate dependencies.
 
-```powershell
-npm.cmd run test:types
+```sh
+npm run test:types
 node scripts/with-node.mjs vitest run --project=unit test/web-idl
 ```
 

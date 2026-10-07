@@ -1,11 +1,8 @@
 # Known limitations
 
-This catalog records observable constraints shared across engine, binding, and
-browser integration. It is not an inventory of every unimplemented API:
-[PRIORITY.md](PRIORITY.md) and owner roadmaps cover that work. The linked tests
-retain the required behavior, including approved expected failures. Runtime
-results depend on the selected base and available capabilities; this catalog
-does not claim a fresh test run on every backend.
+Runtime and integration constraints, with regression tests and replacement
+conditions. Results depend on the selected base and capabilities.
+[PRIORITY.md](PRIORITY.md) and owner roadmaps track unimplemented APIs.
 
 ## Runtime selection
 

@@ -210,7 +210,7 @@ checks/ordering, shared reports, active Document initialization, and composed
 inheritance. Full iframe/navigation/worker behavior must be tested when its
 owners exist; policy-unit coverage does not establish it.
 
-Local sources under the [reference root](../../../fetch/README.md#sources) are
+Local source checkouts include
 `w3c-secure-contexts/index.bs`, `w3c-referrer-policy/index.src.html`,
 `w3c-subresource-integrity/index.bs`, `w3c-mixed-content/index.bs`, and
 `w3c-upgrade-insecure-requests/index.bs`. Retained browser comparisons are

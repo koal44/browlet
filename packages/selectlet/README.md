@@ -2,7 +2,8 @@
 
 A TypeScript CSS selector engine for JavaScript DOM implementations.
 
-Selectlet provides selector APIs such as `matches()`, `closest()`, `querySelector()`, and `querySelectorAll()` for DOM environments outside browser engines. It is developed against Playwright oracle tests for Chromium, Firefox, and WebKit, including translated WPT cases.
+Works with browser and jsdom documents, or a host's own node representation
+through a DOM adapter. Queries return the original elements.
 
 ## Installation
 
@@ -12,109 +13,80 @@ npm install selectlet
 
 ## Usage
 
-### ESM
-
 ```js
-import { createSelectlet } from "selectlet";
+import { createSelectlet } from 'selectlet';
 
-const sx = createSelectlet(document);
+const selectors = createSelectlet(document);
 
-const items = sx.select(".item[data-active]");
-const first = sx.first("main article");
-const ok = sx.matches(":is(button, input)", element);
-const closest = sx.closest("section", element);
+const items = selectors.select('main .item');
+const first = selectors.first('main .item');
+
+if (first) {
+  const active = selectors.matches('[data-active]', first);
+  const parent = selectors.closest('main', first);
+}
 ```
 
-### CommonJS
+`select()` returns an array by default; `first()` and `closest()` return an
+element or `null`. Queries default to the supplied document. Pass a document,
+element, or document fragment as the second argument to `select()` or `first()`
+to change the query scope.
 
-```js
-const { createSelectlet } = require("selectlet");
+`byId(id, source?)`, `byTag(tag, source?)`, `byTagNs(namespace, localName, source?)`,
+and `byClass(className, source?)` provide direct lookups. `byId()` returns an element
+or `null`; the others return the configured collection type.
 
-const sx = createSelectlet(document);
+Use `selectors.registerPseudo(name, predicate)` to register a custom pseudo-class.
+The name excludes the leading `:`; the predicate receives an element and returns
+a boolean. Its type is exported as `CustomPseudoPredicate`.
 
-const items = sx.select(".item");
-```
+The package includes TypeScript declarations, ESM and CommonJS exports, and a
+browser build at `dist/selectlet.js` that exposes `createSelectlet` globally.
 
-### Browser/global build
+## Configuration
 
-The browser build exposes `createSelectlet` on the global object.
+Pass options through `createSelectlet(document, { config })`:
 
-```html
-<script src="selectlet.js"></script>
-<script>
-  const sx = createSelectlet(document);
-  const buttons = sx.select("button");
-</script>
-```
+| Option | Default | Effect |
+| --- | --- | --- |
+| `NODE_LIST` | `false` | Return a NodeList-like indexed object instead of an array. |
+| `MUTATE_IDS` | `false` | Allow temporary ID changes during duplicate-ID lookup; observable by mutation observers. |
+| `CACHE_WATERMARK` | `1024` | Soft limit on selector and regex caches; `0` disables automatic clearing. |
 
-## API
+`selectors.context` exposes the engine's `SelectletContext`, including query state
+and caches. The separate `errors.syntax` option adapts syntax errors at the API boundary.
 
-```ts
-const sx = createSelectlet(document, options);
-```
+## Host integration
 
-```ts
-type Selectlet = {
-  version: string;
-  context: SelectletContext;
-
-  byId(id: string, source?: QuerySource): Element | null;
-  byTag(tag: string, source?: QuerySource): ElementList;
-  byTagNs(ns: string | null, local: string, source?: QuerySource): ElementList;
-  byClass(cls: string, source?: QuerySource): ElementList;
-
-  matches(sel: string, el: Element): boolean;
-  select(sel: string, source?: QuerySource): ElementList;
-  first(sel: string, source?: QuerySource): Element | null;
-  closest(sel: string, el: Element): Element | null;
-
-  registerPseudo(name: string, predicate: CustomPseudoPredicate): void;
-};
-```
-
-`QuerySource` may be a `Document`, `Element`, or `DocumentFragment`.
-
-By default, multi-element APIs return arrays. With `NODE_LIST` enabled, they return a NodeList-like indexed object.
-
-## DOM operations
-
-`SelectletContext` holds an engine's query state and caches; it replaces the old
-`Snapshot` class and `snapshot` property. Pass an existing host owner with
-`createSelectlet(document, { env })`. `SelectletEnvironment` requires
-`userAgent.dom`, and Browlet's environment satisfies that contract directly.
-An explicit `env` takes precedence over `dom`. Selectlet currently needs no
-execution facilities. The optional `errors.syntax` adapter remains an API-boundary
-choice, separate from DOM ownership.
-
-Selectlet and Stylelet accept the same `dom` option, typed as `DOMOperations`.
-The default `standardDOM` uses ordinary browser and jsdom platform APIs. Hosts
-with different node representations supply their own operations; Selectlet
-returns the original objects and never reads their fields directly.
-
-Compatible hosts can reuse the default operations and replace individual ones:
+Selectlet and Stylelet share the exported `DOMOperations` contract. The default
+`standardDOM` uses ordinary browser and jsdom properties. Supply `dom` for a
+different node representation, or override individual operations:
 
 ```js
 import { createSelectlet, standardDOM } from 'selectlet';
 
-const sx = createSelectlet(document, {
+const states = new WeakMap();
+const selectors = createSelectlet(document, {
   dom: {
     ...standardDOM,
-    hasCustomState: (element, name) => states.get(element)?.has(name) === true
-  }
+    hasCustomState: (element, name) => states.get(element)?.has(name) === true,
+  },
 });
 ```
 
-Here `states` is the host's map of elements to their custom states; the public DOM
-does not expose that lookup. A complete implementation provider supplies tree,
-attribute, document, control, and media operations. Optional `cachedIds`,
-`cachedClasses`, `collectionArray`, `walkElements`, and `treeVersion` operations
-retain fast host lookup paths. The exported `DOMOperations` type documents their
-contracts. Supply an increasing `treeVersion` only when it covers every mutation
-relevant to selector caches.
+A complete provider supplies tree, attribute, document, control, and media
+operations. Optional `cachedIds`, `cachedClasses`, `collectionArray`, and
+`walkElements` operations preserve fast host lookups. Supply an increasing
+`treeVersion` only if it covers every mutation relevant to selector caches.
+
+An existing `SelectletEnvironment` can be passed as `{ env }`; its `userAgent.dom`
+takes precedence over `dom`. Browlet supplies this environment directly. Selectlet
+requires no execution facilities.
 
 ## Status
 
-Selectlet is under active development, with ongoing Playwright/WPT conformance and selector API performance work.
+Selectlet is under active development. Its tests include WPT-derived cases and
+comparisons with Chromium, Firefox, and WebKit through Playwright.
 
 ## License
 

@@ -4,7 +4,7 @@
   "engines": {
     "node": ">=22.19.0"
   },
-  "description": "A browser-like TypeScript runtime for JavaScript",
+  "description": "A headless JavaScript browser, written in TypeScript and built against web standards",
   "homepage": "https://github.com/koal44/browlet/tree/main/packages/browlet",
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",

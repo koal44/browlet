@@ -1,12 +1,15 @@
 # Browlet
 
-Browlet is a browser-like TypeScript runtime. It brings together the repository's DOM, Web IDL, URL, HTML lifecycle, and CSS work behind a higher-level API.
+A headless JavaScript browser, written in TypeScript and built against web standards.
+
+Browlet is in early development. DOM, HTML, and CSS coverage is incomplete, and
+the API is still changing. See the [project overview](https://github.com/koal44/browlet)
+for current status and WPT coverage.
 
 ## Installation
 
-```sh
-npm install browlet
-```
+The npm alpha release is currently a placeholder. For the current implementation,
+[build from source](https://github.com/koal44/browlet/blob/main/BUILDING.md#build-from-source).
 
 ## Usage
 
@@ -34,7 +37,7 @@ Calling it in the page returns a page Promise; arguments and results are
 copied, and callbacks remain installed after navigation. Live DOM objects and
 function arguments require handles, which are not implemented yet.
 
-Browlet is under active development.
+## Platform types
 
 Platform types generated from the registered Web IDL declarations are available
 through the type-only `browlet/platform` entry:

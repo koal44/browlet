@@ -1,0 +1,2709 @@
+Browlet V8 extensions for Node.js
+
+Upstream: https://github.com/nodejs/node.git
+Base: 6f41e415639b5ec3dd816e44945cc73b4d7651e3
+Source: v8-patches at 4695be8073d575c495936e4dbfeeb1094f435186
+
+diff --git a/deps/v8/include/v8-array-buffer.h b/deps/v8/include/v8-array-buffer.h
+index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf47c4af7df 100644
+--- a/deps/v8/include/v8-array-buffer.h
++++ b/deps/v8/include/v8-array-buffer.h
+@@ -450,6 +450,14 @@ class V8_EXPORT ArrayBufferView : public Object {
+    */
+   size_t ByteLength();
+ 
++  /**
++   * Returns whether this view tracks the length of its resizable ArrayBuffer
++   * or growable SharedArrayBuffer. Fixed-length views return false, including
++   * views over fixed-length buffers. Detachment or becoming out of bounds
++   * does not change this property.
++   */
++  bool IsLengthTracking() const;
++
+   /**
+    * Copy the contents of the ArrayBufferView's buffer to an embedder defined
+    * memory without additional overhead that calling ArrayBufferView::Buffer
+diff --git a/deps/v8/include/v8-callbacks.h b/deps/v8/include/v8-callbacks.h
+index e5eba5a203b8bc4d0c05b1f0d6cbdffd352d4a06..b40b0d3db5232ecdf3f27a074d589fa5358fedb2 100644
+--- a/deps/v8/include/v8-callbacks.h
++++ b/deps/v8/include/v8-callbacks.h
+@@ -458,6 +458,41 @@ using HostInitializeImportMetaObjectCallback = void (*)(Local<Context> context,
+ using HostCreateShadowRealmContextCallback =
+     MaybeLocal<Context> (*)(Local<Context> initiator_context);
+ 
++/**
++ * Captures continuation preserved embedder data for a FinalizationRegistry's
++ * cleanup callback when the registry is constructed.
++ */
++using FinalizationRegistryCaptureHook =
++    Local<Value> (*)(Local<Value> cleanup_callback);
++
++/**
++ * Invokes a FinalizationRegistry cleanup callback with an undefined receiver
++ * and its held value. The hook must call the callback and propagate its result
++ * or exception.
++ */
++using FinalizationRegistryCallHook = MaybeLocal<Value> (*)(
++    Local<Context> context, Local<Function> callback, Local<Value> held_value);
++
++/**
++ * Takes ownership of scheduling a generic job in its realm. Currently used for
++ * notified Atomics.waitAsync resolutions, after native delivery to the waiting
++ * isolate. The host must retain the function and schedule it asynchronously in
++ * that isolate. The function runs at most once and does not enqueue itself.
++ * The hook must not throw. Timeout delivery is unaffected.
++ */
++using GenericJobEnqueueHook = void (*)(Local<Context> realm,
++                                       Local<Function> job);
++
++/**
++ * Transfers scheduling of a timeout job to the host. The host must retain the
++ * function and run it asynchronously in the realm's isolate after at least
++ * milliseconds. The function may be called only once; if its waiter has been
++ * notified, it does nothing. The hook must not throw.
++ */
++using TimeoutJobEnqueueHook = void (*)(Local<Context> realm,
++                                       Local<Function> job,
++                                       double milliseconds);
++
+ /**
+  * IsJSApiWrapperNativeErrorCallback is called on an JSApiWrapper object to
+  * determine if Error.isError should return true or false. For instance, in an
+diff --git a/deps/v8/include/v8-container.h b/deps/v8/include/v8-container.h
+index 380999e5ee4596027d22c56c1ceeb44654b4e3a3..b42d963bee8a2bb46b833de5de02a18425ffae3c 100644
+--- a/deps/v8/include/v8-container.h
++++ b/deps/v8/include/v8-container.h
+@@ -18,6 +18,33 @@ namespace v8 {
+ 
+ class Context;
+ class Isolate;
++class Function;
++
++/** Creates callback-driven iterators with a native collection iterator brand.
++ */
++class V8_EXPORT CollectionIterator {
++ public:
++  enum class Kind { kMap, kSet };
++
++  /**
++   * Creates an iterator with the context's intrinsic Map or Set iterator
++   * prototype. The matching native iterator next method accepts this object,
++   * including when that method is borrowed from another context.
++   *
++   * Each next call invokes the callback with undefined as receiver and no
++   * arguments. The callback must return an IteratorResult object. While done
++   * is false, that object is returned unchanged; the embedder is responsible
++   * for its realm and any per-step value conversion. A truthy done completes
++   * the iterator and returns { value: undefined, done: true }.
++   *
++   * An exception from the callback or reading done, or a non-object result,
++   * permanently completes the iterator. Reentrant next calls throw TypeError.
++   * Completed iterators release the callback and never invoke it again.
++   * Creation does not invoke the callback.
++   */
++  static MaybeLocal<Object> New(Local<Context> context, Kind kind,
++                                Local<Function> next);
++};
+ 
+ /**
+  * An instance of the built-in array constructor (ECMA-262, 15.4.2).
+diff --git a/deps/v8/include/v8-internal.h b/deps/v8/include/v8-internal.h
+index fab0f3cc4909816ec13e38e15792fb0d57b83241..dcea081405d503b2a0018991ef9518e5f565ecee 100644
+--- a/deps/v8/include/v8-internal.h
++++ b/deps/v8/include/v8-internal.h
+@@ -662,6 +662,7 @@ enum ExternalPointerTag : uint16_t {
+   kWasmManagedDataTag,
+   kWasmNativeModuleTag,
+   kBackingStoreTag,
++  kAsyncWaiterTimeoutTaskTag,
+   kIcuBreakIteratorTag,
+   kIcuUnicodeStringTag,
+   kIcuListFormatterTag,
+diff --git a/deps/v8/include/v8-isolate.h b/deps/v8/include/v8-isolate.h
+index f929f13a4de8ffb5b1f1222aa5034d186a29963e..bff757fcf49da5611c1c6ca3249d138751f3d5ef 100644
+--- a/deps/v8/include/v8-isolate.h
++++ b/deps/v8/include/v8-isolate.h
+@@ -1126,6 +1126,12 @@ class V8_EXPORT Isolate {
+    */
+   MaybeLocal<Data> GetCurrentHostDefinedOptions();
+ 
++  /**
++   * Like GetCurrentHostDefinedOptions(), optionally including frames with a
++   * different security token from the current context.
++   */
++  MaybeLocal<Data> GetCurrentHostDefinedOptions(bool include_cross_origin);
++
+   /**
+    * Schedules a v8::Exception::Error with the given message.
+    * See ThrowException for more details. Templatized to provide compile-time
+@@ -1382,6 +1388,65 @@ class V8_EXPORT Isolate {
+    */
+   void SetPromiseRejectCallback(PromiseRejectCallback callback);
+ 
++  /**
++   * Sets the hook for capturing continuation preserved embedder data at Promise
++   * reaction or thenable registration. The returned data is retained for the
++   * corresponding job; the caller's data is restored after capture.
++   *
++   * The hook must not throw and must return a nonempty handle. Requires
++   * continuation preserved embedder data support. Passing nullptr disables
++   * capture without changing data retained by existing registrations.
++   */
++  void SetPromiseCaptureHook(PromiseCaptureHook hook);
++
++  /**
++   * Sets the hook for invoking Promise reaction handlers and the then method
++   * of resolve-thenable jobs. Captured continuation data is available while
++   * the hook runs. The job processes the callback's result or exception after
++   * the hook returns. Passing nullptr restores direct calls. Jobs without a
++   * handler do not invoke the hook.
++   */
++  void SetPromiseCallHook(PromiseCallHook hook);
++
++  /**
++   * Transfers scheduling of newly created Promise jobs to the host.
++   */
++  void SetPromiseJobEnqueueHook(PromiseJobEnqueueHook hook);
++
++  /**
++   * Sets the hook for handing generic jobs to the host's task scheduler.
++   * Passing nullptr restores V8's normal delivery path.
++   */
++  void SetGenericJobEnqueueHook(GenericJobEnqueueHook hook);
++
++  /**
++   * Sets the hook for handing timeout jobs to the host's timer scheduler.
++   * Passing nullptr restores V8's normal scheduling for new timeouts.
++   */
++  void SetTimeoutJobEnqueueHook(TimeoutJobEnqueueHook hook);
++
++  /**
++   * Sets the hook for capturing continuation preserved embedder data after
++   * FinalizationRegistry constructor validation and prototype lookup. The
++   * returned data is retained on the registry and restored for each cleanup
++   * callback. The caller's data is restored after capture and cleanup, including
++   * when cleanup throws.
++   *
++   * The hook must not throw and must return a nonempty handle. Requires
++   * continuation preserved embedder data support. Passing nullptr disables
++   * capture without changing data retained by existing registries. Registries
++   * constructed without a hook keep their existing cleanup behavior.
++   */
++  void SetFinalizationRegistryCaptureHook(FinalizationRegistryCaptureHook hook);
++
++  /**
++   * Sets the hook for invoking a FinalizationRegistry cleanup callback for each
++   * held value. Captured continuation data is available while the hook runs.
++   * The hook can clean up callback state before cleanup continues or an
++   * exception is reported. Passing nullptr restores direct calls.
++   */
++  void SetFinalizationRegistryCallHook(FinalizationRegistryCallHook hook);
++
+   /**
+    * This is a part of experimental Api and might be changed without further
+    * notice.
+diff --git a/deps/v8/include/v8-promise.h b/deps/v8/include/v8-promise.h
+index b1f85e6e50ec7e564853bbdaea954d950fb04324..6fd0ed8973ab46ab817674553ef1cffd6759e7a4 100644
+--- a/deps/v8/include/v8-promise.h
++++ b/deps/v8/include/v8-promise.h
+@@ -12,6 +12,7 @@
+ namespace v8 {
+ 
+ class Context;
++class MicrotaskQueue;
+ 
+ #ifndef V8_PROMISE_INTERNAL_FIELD_COUNT
+ // Defined using gn arg `v8_promise_internal_field_count`.
+@@ -154,6 +155,55 @@ enum class PromiseHookType { kInit, kResolve, kBefore, kAfter };
+ using PromiseHook = void (*)(PromiseHookType type, Local<Promise> promise,
+                              Local<Value> parent);
+ 
++/**
++ * The kind of Promise job associated with a callback.
++ */
++enum class PromiseJobKind { kReaction, kThenable };
++
++/**
++ * Captures continuation preserved embedder data for a Promise registration.
++ * The hook is not called for reactions with no callable handlers.
++ *
++ * \param kind The registration kind.
++ * \param on_fulfilled_or_then The fulfillment handler for a reaction, or the
++ * then method for a thenable. The fulfillment handler may be undefined.
++ * \param on_rejected The rejection handler for a reaction, or undefined for a
++ * thenable. The rejection handler may be undefined.
++ */
++using PromiseCaptureHook = Local<Value> (*)(PromiseJobKind kind,
++                                            Local<Value> on_fulfilled_or_then,
++                                            Local<Value> on_rejected);
++
++/**
++ * The callback selected for invocation by a Promise job.
++ */
++enum class PromiseCallbackKind { kFulfill, kReject, kThenable };
++
++/**
++ * Invokes a Promise job callback with its original receiver and arguments.
++ * The kind distinguishes fulfillment from rejection even when both handlers
++ * are the same function. The hook must call the callback and propagate its
++ * result or exception.
++ */
++using PromiseCallHook = MaybeLocal<Value> (*)(Local<Context> context,
++                                              PromiseCallbackKind kind,
++                                              Local<Function> callback,
++                                              Local<Value> receiver, int argc,
++                                              Local<Value> argv[]);
++
++/**
++ * Takes ownership of scheduling a Promise job. The function runs the original
++ * job at most once and propagates an escaping exception to its caller. It does
++ * not enqueue itself. The host must retain it and schedule it asynchronously.
++ * An empty realm denotes ECMAScript's null realm. The queue belongs to V8's
++ * execution context for this job. The hook must not throw. Passing nullptr
++ * restores V8's normal enqueue path.
++ */
++using PromiseJobEnqueueHook = void (*)(Local<Context> realm,
++                                       MicrotaskQueue* queue,
++                                       PromiseJobKind kind,
++                                       Local<Function> job);
++
+ // --- Promise Reject Callback ---
+ enum PromiseRejectEvent {
+   kPromiseRejectWithNoHandler = 0,
+diff --git a/deps/v8/include/v8-value.h b/deps/v8/include/v8-value.h
+index c2fd021ed23ff6b2e6c84c871ab3f7fb24807708..e199519c7388c5896a7f4dbed9217be870fe44f8 100644
+--- a/deps/v8/include/v8-value.h
++++ b/deps/v8/include/v8-value.h
+@@ -226,6 +226,21 @@ class V8_EXPORT Value : public Data {
+    */
+   bool IsSet() const;
+ 
++  /**
++   * Returns true if this value is an Array Iterator.
++   */
++  bool IsArrayIterator() const;
++
++  /**
++   * Returns true if this value is a String Iterator.
++   */
++  bool IsStringIterator() const;
++
++  /**
++   * Returns true if this value is a RegExp String Iterator.
++   */
++  bool IsRegExpStringIterator() const;
++
+   /**
+    * Returns true if this value is a Map Iterator.
+    */
+diff --git a/deps/v8/src/api/api.cc b/deps/v8/src/api/api.cc
+index 48da5b35b8721e319ba6e3743c013a3092a06606..24209cc7d20112e04dc38fa482da457ee51a0406 100644
+--- a/deps/v8/src/api/api.cc
++++ b/deps/v8/src/api/api.cc
+@@ -3856,6 +3856,18 @@ bool Value::IsGeneratorObject() const {
+   return IsJSGeneratorObject(*Utils::OpenDirectHandle(this));
+ }
+ 
++bool Value::IsArrayIterator() const {
++  return IsJSArrayIterator(*Utils::OpenDirectHandle(this));
++}
++
++bool Value::IsStringIterator() const {
++  return IsJSStringIterator(*Utils::OpenDirectHandle(this));
++}
++
++bool Value::IsRegExpStringIterator() const {
++  return IsJSRegExpStringIterator(*Utils::OpenDirectHandle(this));
++}
++
+ bool Value::IsMapIterator() const {
+   return IsJSMapIterator(*Utils::OpenDirectHandle(this));
+ }
+@@ -8366,6 +8378,15 @@ void v8::TypecheckWitness::Update(Local<Value> baseline) {
+ #endif
+ }
+ 
++MaybeLocal<Object> CollectionIterator::New(Local<Context> context, Kind kind,
++                                           Local<Function> next) {
++  PrepareForExecutionScope api_scope{context,
++                                     RCCId::kAPI_CollectionIterator_New};
++  auto iterator = api_scope.i_isolate()->factory()->NewJSCallbackIterator(
++      Utils::OpenDirectHandle(*next), kind == Kind::kMap);
++  return api_scope.Escape(Utils::ToLocal(i::Cast<i::JSObject>(iterator)));
++}
++
+ Local<v8::Map> v8::Map::New(Isolate* v8_isolate) {
+   i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
+   ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Map_New);
+@@ -9249,6 +9270,10 @@ v8::MemorySpan<uint8_t> v8::ArrayBufferView::GetContents(
+           data_view->GetByteLength()};
+ }
+ 
++bool v8::ArrayBufferView::IsLengthTracking() const {
++  return Utils::OpenDirectHandle(this)->is_length_tracking();
++}
++
+ bool v8::ArrayBufferView::HasBuffer() const {
+   auto self = Utils::OpenDirectHandle(this);
+   if (!IsJSTypedArray(*self)) return true;
+@@ -9789,9 +9814,16 @@ v8::Local<v8::Context> Isolate::GetIncumbentContext() {
+ }
+ 
+ v8::MaybeLocal<v8::Data> Isolate::GetCurrentHostDefinedOptions() {
++  return GetCurrentHostDefinedOptions(false);
++}
++
++v8::MaybeLocal<v8::Data> Isolate::GetCurrentHostDefinedOptions(
++    bool include_cross_origin) {
+   i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(this);
+   i::DirectHandle<i::Script> script;
+-  if (!i_isolate->CurrentReferrerScript().ToHandle(&script)) return {};
++  if (!i_isolate->CurrentReferrerScript(include_cross_origin).ToHandle(&script)) {
++    return {};
++  }
+   return ToApiHandle<Data>(
+       i::direct_handle(script->host_defined_options(), i_isolate));
+ }
+@@ -10534,6 +10566,36 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
+   i_isolate->SetPromiseRejectCallback(callback);
+ }
+ 
++void Isolate::SetPromiseCaptureHook(PromiseCaptureHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetPromiseCaptureHook(hook);
++}
++
++void Isolate::SetPromiseCallHook(PromiseCallHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetPromiseCallHook(hook);
++}
++
++void Isolate::SetPromiseJobEnqueueHook(PromiseJobEnqueueHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetPromiseJobEnqueueHook(hook);
++}
++
++void Isolate::SetGenericJobEnqueueHook(GenericJobEnqueueHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetGenericJobEnqueueHook(hook);
++}
++
++void Isolate::SetTimeoutJobEnqueueHook(TimeoutJobEnqueueHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetTimeoutJobEnqueueHook(hook);
++}
++
++void Isolate::SetFinalizationRegistryCaptureHook(
++    FinalizationRegistryCaptureHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetFinalizationRegistryCaptureHook(hook);
++}
++
++void Isolate::SetFinalizationRegistryCallHook(
++    FinalizationRegistryCallHook hook) {
++  reinterpret_cast<i::Isolate*>(this)->SetFinalizationRegistryCallHook(hook);
++}
++
+ void Isolate::SetExceptionPropagationCallback(
+     ExceptionPropagationCallback callback) {
+   if (callback == nullptr) return;
+diff --git a/deps/v8/src/builtins/builtins-collections-gen.cc b/deps/v8/src/builtins/builtins-collections-gen.cc
+index 1c75a1423292636565c877720a0d6e0c87fbf1ff..3ad39015d5f0d2d766a3a87c162a2299252025bc 100644
+--- a/deps/v8/src/builtins/builtins-collections-gen.cc
++++ b/deps/v8/src/builtins/builtins-collections-gen.cc
+@@ -2268,8 +2268,10 @@ TF_BUILTIN(MapIteratorPrototypeNext, CollectionsBuiltinsAssembler) {
+   const auto maybe_receiver = Parameter<Object>(Descriptor::kReceiver);
+   const auto context = Parameter<Context>(Descriptor::kContext);
+ 
+-  // Ensure that {maybe_receiver} is actually a JSMapIterator.
+-  Label if_receiver_valid(this), if_receiver_invalid(this, Label::kDeferred);
++  // Accept table-backed iterators or an embedder callback iterator of this
++  // kind.
++  Label if_receiver_valid(this), if_receiver_invalid(this, Label::kDeferred),
++      if_callback_iterator(this, Label::kDeferred);
+   GotoIf(TaggedIsSmi(maybe_receiver), &if_receiver_invalid);
+   const TNode<Uint16T> receiver_instance_type =
+       LoadInstanceType(CAST(maybe_receiver));
+@@ -2279,7 +2281,19 @@ TF_BUILTIN(MapIteratorPrototypeNext, CollectionsBuiltinsAssembler) {
+   GotoIf(InstanceTypeEqual(receiver_instance_type, JS_MAP_KEY_ITERATOR_TYPE),
+          &if_receiver_valid);
+   Branch(InstanceTypeEqual(receiver_instance_type, JS_MAP_VALUE_ITERATOR_TYPE),
+-         &if_receiver_valid, &if_receiver_invalid);
++         &if_receiver_valid, &if_callback_iterator);
++  BIND(&if_callback_iterator);
++  GotoIfNot(
++      InstanceTypeEqual(receiver_instance_type, JS_CALLBACK_ITERATOR_TYPE),
++      &if_receiver_invalid);
++  GotoIfNot(
++      SmiEqual(LoadObjectField<Smi>(CAST(maybe_receiver),
++                                    JSCallbackIterator::kKindOffset),
++               SmiConstant(static_cast<int>(JSCallbackIteratorKind::kMap))),
++      &if_receiver_invalid);
++  TNode<JSCallbackIterator> callback_iterator = CAST(maybe_receiver);
++  Return(CallBuiltin(Builtin::kCallbackIteratorNext, context,
++                     callback_iterator));
+   BIND(&if_receiver_invalid);
+   ThrowTypeError(context, MessageTemplate::kIncompatibleMethodReceiver,
+                  StringConstant(kMethodName), maybe_receiver);
+@@ -2454,8 +2468,10 @@ TF_BUILTIN(SetIteratorPrototypeNext, CollectionsBuiltinsAssembler) {
+   const auto maybe_receiver = Parameter<Object>(Descriptor::kReceiver);
+   const auto context = Parameter<Context>(Descriptor::kContext);
+ 
+-  // Ensure that {maybe_receiver} is actually a JSSetIterator.
+-  Label if_receiver_valid(this), if_receiver_invalid(this, Label::kDeferred);
++  // Accept table-backed iterators or an embedder callback iterator of this
++  // kind.
++  Label if_receiver_valid(this), if_receiver_invalid(this, Label::kDeferred),
++      if_callback_iterator(this, Label::kDeferred);
+   GotoIf(TaggedIsSmi(maybe_receiver), &if_receiver_invalid);
+   const TNode<Uint16T> receiver_instance_type =
+       LoadInstanceType(CAST(maybe_receiver));
+@@ -2463,7 +2479,19 @@ TF_BUILTIN(SetIteratorPrototypeNext, CollectionsBuiltinsAssembler) {
+          &if_receiver_valid);
+   Branch(
+       InstanceTypeEqual(receiver_instance_type, JS_SET_KEY_VALUE_ITERATOR_TYPE),
+-      &if_receiver_valid, &if_receiver_invalid);
++      &if_receiver_valid, &if_callback_iterator);
++  BIND(&if_callback_iterator);
++  GotoIfNot(
++      InstanceTypeEqual(receiver_instance_type, JS_CALLBACK_ITERATOR_TYPE),
++      &if_receiver_invalid);
++  GotoIfNot(
++      SmiEqual(LoadObjectField<Smi>(CAST(maybe_receiver),
++                                    JSCallbackIterator::kKindOffset),
++               SmiConstant(static_cast<int>(JSCallbackIteratorKind::kSet))),
++      &if_receiver_invalid);
++  TNode<JSCallbackIterator> callback_iterator = CAST(maybe_receiver);
++  Return(CallBuiltin(Builtin::kCallbackIteratorNext, context,
++                     callback_iterator));
+   BIND(&if_receiver_invalid);
+   ThrowTypeError(context, MessageTemplate::kIncompatibleMethodReceiver,
+                  StringConstant(kMethodName), maybe_receiver);
+diff --git a/deps/v8/src/builtins/builtins-definitions.h b/deps/v8/src/builtins/builtins-definitions.h
+index 1a40d9e2f149adbec0131e5c4e3cc482ea02ad1b..625db489e36a34ae66f22856987a9c1398714dbe 100644
+--- a/deps/v8/src/builtins/builtins-definitions.h
++++ b/deps/v8/src/builtins/builtins-definitions.h
+@@ -450,6 +450,7 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
+                                                                                \
+   /* Microtask helpers */                                                      \
+   TFS(EnqueueMicrotask, NeedsContext::kYes, kMicrotask)                        \
++  TFJ(RunPromiseJob, kDontAdaptArgumentsSentinel)                              \
+   ASM(RunMicrotasksTrampoline, RunMicrotasksEntry)                             \
+   TFC(RunMicrotasks, RunMicrotasks)                                            \
+                                                                                \
+@@ -1145,6 +1146,8 @@ constexpr int kGearboxGenericBuiltinIdOffset = -2;
+   CPP(AtomicsIsLockFree, JSParameterCount(1))                                  \
+   CPP(AtomicsWait, JSParameterCount(4))                                        \
+   CPP(AtomicsWaitAsync, JSParameterCount(4))                                   \
++  CPP(AtomicsResolveAsyncWait, JSParameterCount(0))                            \
++  CPP(AtomicsWaitAsyncTimeout, JSParameterCount(0))                            \
+   CPP(AtomicsPause, kDontAdaptArgumentsSentinel)                               \
+                                                                                \
+   /* String */                                                                 \
+diff --git a/deps/v8/src/builtins/builtins-microtask-queue-gen.cc b/deps/v8/src/builtins/builtins-microtask-queue-gen.cc
+index 6c7b6890aa11b3ab6f2b82f80ddf6cb1e8b21c79..8ad6ab95fe40ac10ba07d7c0ec06dc7f7c6c7307 100644
+--- a/deps/v8/src/builtins/builtins-microtask-queue-gen.cc
++++ b/deps/v8/src/builtins/builtins-microtask-queue-gen.cc
+@@ -38,7 +38,8 @@ class MicrotaskQueueBuiltinsAssembler : public CodeStubAssembler {
+ 
+   void PrepareForContext(TNode<Context> microtask_context, Label* bailout);
+   void RunSingleMicrotask(TNode<Context> current_context,
+-                          TNode<Microtask> microtask);
++                          TNode<Microtask> microtask,
++                          TVariable<Object>* escaping_exception = nullptr);
+   void IncrementFinishedMicrotaskCount(TNode<RawPtrT> microtask_queue);
+ 
+   TNode<Context> GetCurrentContext();
+@@ -143,7 +144,8 @@ void MicrotaskQueueBuiltinsAssembler::ClearContinuationPreservedEmbedderData() {
+ #endif  // V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+ 
+ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
+-    TNode<Context> current_context, TNode<Microtask> microtask) {
++    TNode<Context> current_context, TNode<Microtask> microtask,
++    TVariable<Object>* escaping_exception) {
+   CSA_DCHECK(this, TaggedIsNotSmi(microtask));
+   CSA_DCHECK(this, Word32BinaryNot(IsExecutionTerminating()));
+ 
+@@ -292,9 +294,13 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
+ 
+     BIND(&if_exception);
+     {
+-      // Report unhandled microtask exceptions in respective native context.
+-      CallRuntime(Runtime::kReportMessageFromMicrotask, microtask_context,
+-                  var_exception.value());
++      if (escaping_exception != nullptr) {
++        *escaping_exception = var_exception.value();
++      } else {
++        // Report unhandled microtask exceptions in respective native context.
++        CallRuntime(Runtime::kReportMessageFromMicrotask, microtask_context,
++                    var_exception.value());
++      }
+       Goto(&rewind_entered_context_and_done);
+     }
+   }
+@@ -342,9 +348,13 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
+ 
+     BIND(&if_exception);
+     {
+-      // Report unhandled microtask exceptions in respective native context.
+-      CallRuntime(Runtime::kReportMessageFromMicrotask, microtask_context,
+-                  var_exception.value());
++      if (escaping_exception != nullptr) {
++        *escaping_exception = var_exception.value();
++      } else {
++        // Report unhandled microtask exceptions in respective native context.
++        CallRuntime(Runtime::kReportMessageFromMicrotask, microtask_context,
++                    var_exception.value());
++      }
+       Goto(&rewind_entered_context_and_done);
+     }
+   }
+@@ -392,9 +402,13 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
+ 
+     BIND(&if_exception);
+     {
+-      // Report unhandled microtask exceptions in respective native context.
+-      CallRuntime(Runtime::kReportMessageFromMicrotask, microtask_context,
+-                  var_exception.value());
++      if (escaping_exception != nullptr) {
++        *escaping_exception = var_exception.value();
++      } else {
++        // Report unhandled microtask exceptions in respective native context.
++        CallRuntime(Runtime::kReportMessageFromMicrotask, microtask_context,
++                    var_exception.value());
++      }
+       Goto(&rewind_entered_context_and_done);
+     }
+   }
+@@ -404,6 +418,9 @@ void MicrotaskQueueBuiltinsAssembler::RunSingleMicrotask(
+ 
+   BIND(&rewind_entered_context_and_done);
+   {
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++    ClearContinuationPreservedEmbedderData();
++#endif
+     RewindEnteredContext(saved_entered_context_count);
+     SetCurrentContext(current_context);
+     Goto(&done);
+@@ -589,6 +606,19 @@ TF_BUILTIN(EnqueueMicrotask, MicrotaskQueueBuiltinsAssembler) {
+   Label if_shutdown(this, Label::kDeferred);
+   GotoIf(WordEqual(microtask_queue, IntPtrConstant(0)), &if_shutdown);
+ 
++  Label enqueue_normally(this);
++  auto hook = Load<RawPtrT>(ExternalConstant(
++      ExternalReference::promise_job_enqueue_hook_address(isolate())));
++  GotoIf(WordEqual(hook, IntPtrConstant(0)), &enqueue_normally);
++  auto type = LoadInstanceType(microtask);
++  GotoIf(Word32Equal(type, Int32Constant(CALLABLE_TASK_TYPE)),
++         &enqueue_normally);
++  GotoIf(Word32Equal(type, Int32Constant(CALLBACK_TASK_TYPE)),
++         &enqueue_normally);
++  CallRuntime(Runtime::kEnqueuePromiseJob, context, microtask);
++  Return(UndefinedConstant());
++  BIND(&enqueue_normally);
++
+   TNode<RawPtrT> ring_buffer = GetMicrotaskRingBuffer(microtask_queue);
+   TNode<IntPtrT> capacity = GetMicrotaskQueueCapacity(microtask_queue);
+   TNode<IntPtrT> size = GetMicrotaskQueueSize(microtask_queue);
+@@ -627,6 +657,35 @@ TF_BUILTIN(EnqueueMicrotask, MicrotaskQueueBuiltinsAssembler) {
+   Return(UndefinedConstant());
+ }
+ 
++TF_BUILTIN(RunPromiseJob, MicrotaskQueueBuiltinsAssembler) {
++  auto context = Parameter<Context>(Descriptor::kContext);
++  auto argc = UncheckedParameter<Int32T>(Descriptor::kJSActualArgumentsCount);
++  CodeStubArguments args(this, argc);
++  TNode<Object> task = LoadContextElement(context, Context::MIN_CONTEXT_SLOTS);
++  Label consumed(this, Label::kDeferred);
++  GotoIf(IsUndefined(task), &consumed);
++  StoreContextElement(context, Context::MIN_CONTEXT_SLOTS, UndefinedConstant());
++  auto previous_task = CodeAssembler::LoadRoot(RootIndex::kCurrentMicrotask);
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++  auto previous_data = GetContinuationPreservedEmbedderData();
++  ClearContinuationPreservedEmbedderData();
++#endif
++  TVARIABLE(Object, exception, TheHoleConstant());
++  RunSingleMicrotask(context, CAST(task), &exception);
++  StoreRoot(RootIndex::kCurrentMicrotask, previous_task);
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++  SetContinuationPreservedEmbedderData(previous_data);
++#endif
++  Label success(this);
++  GotoIf(IsTheHole(exception.value()), &success);
++  CallRuntime(Runtime::kReThrow, context, exception.value());
++  Unreachable();
++  BIND(&success);
++  args.PopAndReturn(UndefinedConstant());
++  BIND(&consumed);
++  ThrowTypeError(context, MessageTemplate::kPromiseJobAlreadyRun);
++}
++
+ TF_BUILTIN(RunMicrotasks, MicrotaskQueueBuiltinsAssembler) {
+   // Load the current context from the isolate.
+   TNode<Context> current_context = GetCurrentContext();
+diff --git a/deps/v8/src/builtins/builtins-sharedarraybuffer.cc b/deps/v8/src/builtins/builtins-sharedarraybuffer.cc
+index 99540c0c688a7900cb24f97c171f8b6f76c15857..df465a1627dd77511be7d918a4bf687c49a4c2f9 100644
+--- a/deps/v8/src/builtins/builtins-sharedarraybuffer.cc
++++ b/deps/v8/src/builtins/builtins-sharedarraybuffer.cc
+@@ -11,6 +11,7 @@
+ #include "src/logging/counters.h"
+ #include "src/numbers/conversions-inl.h"
+ #include "src/objects/js-array-buffer-inl.h"
++#include "src/objects/js-promise-inl.h"
+ #include "src/objects/objects-inl.h"
+ 
+ namespace v8 {
+@@ -275,6 +276,33 @@ BUILTIN(AtomicsWaitAsync) {
+                 timeout);
+ }
+ 
++// Host-owned resolution job for a notified Atomics.waitAsync waiter.
++BUILTIN(AtomicsResolveAsyncWait) {
++  HandleScope scope(isolate);
++  DirectHandle<Context> context(args.target()->context(), isolate);
++  DirectHandle<Object> promise(context->GetNoCell(Context::MIN_CONTEXT_SLOTS),
++                               isolate);
++  if (IsUndefined(*promise, isolate)) {
++    THROW_NEW_ERROR_RETURN_FAILURE(
++        isolate, NewTypeError(MessageTemplate::kGenericJobAlreadyRun));
++  }
++  context->SetNoCell(Context::MIN_CONTEXT_SLOTS,
++                     ReadOnlyRoots(isolate).undefined_value());
++  if (JSPromise::Resolve(Cast<JSPromise>(promise),
++                         isolate->factory()->ok_string())
++          .is_null()) {
++    return ReadOnlyRoots(isolate).exception();
++  }
++  return ReadOnlyRoots(isolate).undefined_value();
++}
++
++// Host-owned timeout job for an Atomics.waitAsync waiter.
++BUILTIN(AtomicsWaitAsyncTimeout) {
++  HandleScope scope(isolate);
++  RETURN_RESULT_OR_FAILURE(isolate, FutexEmulation::RunAsyncWaiterTimeoutJob(
++                                        isolate, args.target()));
++}
++
+ namespace {
+ V8_NOINLINE Maybe<bool> CheckAtomicsPauseIterationNumber(
+     Isolate* isolate, DirectHandle<Object> iteration_number) {
+diff --git a/deps/v8/src/builtins/finalization-registry.tq b/deps/v8/src/builtins/finalization-registry.tq
+index c68d5d6765d8bdfc1290c4872c928a071c64856a..2194e0bd9b609477d8014ddae744c8370c116127 100644
+--- a/deps/v8/src/builtins/finalization-registry.tq
++++ b/deps/v8/src/builtins/finalization-registry.tq
+@@ -8,6 +8,8 @@ extern runtime ShrinkFinalizationRegistryUnregisterTokenMap(
+     Context, JSFinalizationRegistry): void;
+ extern runtime JSFinalizationRegistryRegisterWeakCellWithUnregisterToken(
+     implicit context: Context)(JSFinalizationRegistry, WeakCell): void;
++extern transitioning runtime CaptureFinalizationRegistryContext(
++    implicit context: Context)(Callable): JSAny;
+ }
+ 
+ namespace weakref {
+@@ -15,6 +17,8 @@ namespace weakref {
+ extern macro WeakCollectionsBuiltinsAssembler::GotoIfCannotBeHeldWeakly(JSAny):
+     void labels NotWeakKey;
+ 
++extern macro CodeStubAssembler::HasFinalizationRegistryCaptureHook(): bool;
++
+ transitioning macro PushCell(
+     finalizationRegistry: JSFinalizationRegistry, cell: WeakCell): void {
+   dcheck(finalizationRegistry == cell.finalization_registry);
+@@ -53,10 +57,18 @@ transitioning javascript builtin FinalizationRegistryConstructor(
+   // 4. Let fn be the active function object.
+   // 5. Set finalizationRegistry.[[Realm]] to fn.[[Realm]].
+   finalizationRegistry.native_context = context;
+-  // 6. Set finalizationRegistry.[[CleanupCallback]] to cleanupCallback.
++  // 6. Set finalizationRegistry.[[CleanupCallback]] to
++  // HostMakeJobCallback(cleanupCallback).
+   finalizationRegistry.cleanup = cleanupCallback;
+   finalizationRegistry.flags =
+       SmiTag(FinalizationRegistryFlags{scheduled_for_cleanup: false});
++  @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++    finalizationRegistry.continuation_preserved_embedder_data = TheHole;
++    if (HasFinalizationRegistryCaptureHook()) {
++      finalizationRegistry.continuation_preserved_embedder_data =
++          runtime::CaptureFinalizationRegistryContext(cleanupCallback);
++    }
++  }
+   // 7. Set finalizationRegistry.[[Cells]] to be an empty List.
+   dcheck(finalizationRegistry.active_cells == Undefined);
+   dcheck(finalizationRegistry.cleared_cells == Undefined);
+diff --git a/deps/v8/src/builtins/iterator-helpers.tq b/deps/v8/src/builtins/iterator-helpers.tq
+index 65d2c0b66f70e3ca42862ebf300e24d8a5c4e394..5ca4a73c5425eb16f629fa72b52c9dd6f92ab238 100644
+--- a/deps/v8/src/builtins/iterator-helpers.tq
++++ b/deps/v8/src/builtins/iterator-helpers.tq
+@@ -2,6 +2,41 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++// Callback-driven collection iterators created through the embedder API.
++transitioning builtin CallbackIteratorNext(
++    implicit context: Context)(iterator: JSCallbackIterator): JSAny {
++  const state = SmiUntag<JSCallbackIteratorState>(iterator.state);
++  if (state == JSCallbackIteratorState::kExecuting) {
++    ThrowTypeError(MessageTemplate::kGeneratorRunning);
++  }
++  if (state == JSCallbackIteratorState::kCompleted) {
++    return AllocateJSIteratorResult(Undefined, True);
++  }
++
++  iterator.state = SmiTag<JSCallbackIteratorState>(
++      JSCallbackIteratorState::kExecuting);
++  try {
++    const next = UnsafeCast<Callable>(iterator.next);
++    const result = Call(context, next, Undefined);
++    const object = Cast<JSReceiver>(result) otherwise ThrowTypeError(
++        MessageTemplate::kIteratorResultNotAnObject, 'CollectionIterator');
++    if (ToBoolean(GetProperty(object, 'done'))) {
++      iterator.next = Undefined;
++      iterator.state = SmiTag<JSCallbackIteratorState>(
++          JSCallbackIteratorState::kCompleted);
++      return AllocateJSIteratorResult(Undefined, True);
++    }
++    iterator.state = SmiTag<JSCallbackIteratorState>(
++        JSCallbackIteratorState::kSuspended);
++    return object;
++  } catch (e, message) {
++    iterator.next = Undefined;
++    iterator.state = SmiTag<JSCallbackIteratorState>(
++        JSCallbackIteratorState::kCompleted);
++    ReThrowWithMessage(context, e, message);
++  }
++}
++
+ // --- Utilities
+ 
+ namespace iterator {
+diff --git a/deps/v8/src/builtins/promise-abstract-operations.tq b/deps/v8/src/builtins/promise-abstract-operations.tq
+index a1d246ee32754922d493e5df471625136c263c2c..b628dffe37e831690cc9c4234479180cceeb24ad 100644
+--- a/deps/v8/src/builtins/promise-abstract-operations.tq
++++ b/deps/v8/src/builtins/promise-abstract-operations.tq
+@@ -115,6 +115,7 @@ transitioning macro MorphAndEnqueuePromiseReaction(
+         UnsafeCast<PromiseFulfillReactionJobTask>(promiseReaction);
+     promiseReactionJobTask.argument = argument;
+     promiseReactionJobTask.context = handlerContext;
++    promiseReactionJobTask.job_realm = PromiseJobRealm(primaryHandler);
+     EnqueueMicrotask(handlerContext, promiseReactionJobTask);
+     static_assert(
+         kPromiseReactionFulfillHandlerOffset ==
+@@ -134,6 +135,7 @@ transitioning macro MorphAndEnqueuePromiseReaction(
+         UnsafeCast<PromiseRejectReactionJobTask>(promiseReaction);
+     promiseReactionJobTask.argument = argument;
+     promiseReactionJobTask.context = handlerContext;
++    promiseReactionJobTask.job_realm = PromiseJobRealm(primaryHandler);
+     promiseReactionJobTask.handler = primaryHandler;
+     EnqueueMicrotask(handlerContext, promiseReactionJobTask);
+     static_assert(
+@@ -453,6 +455,8 @@ transitioning macro PerformPromiseThenImpl(
+     implicit context: Context)(promise: JSPromise,
+     onFulfilled: Callable|Undefined, onRejected: Callable|Undefined,
+     resultPromiseOrCapability: JSPromise|PromiseCapability|Undefined): void {
++  const capturedContext =
++      CapturePromiseJobContext(kReactionContext, onFulfilled, onRejected);
+   if (promise.Status() == PromiseState::kPending) {
+     // The {promise} is still in "Pending" state, so we just record a new
+     // PromiseReaction holding both the onFulfilled and onRejected callbacks.
+@@ -463,6 +467,9 @@ transitioning macro PerformPromiseThenImpl(
+ 
+     const reaction = NewPromiseReaction(
+         promiseReactions, resultPromiseOrCapability, onFulfilled, onRejected);
++    @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++      reaction.continuation_preserved_embedder_data = capturedContext;
++    }
+     promise.reactions_or_result = reaction;
+   } else {
+     const reactionsOrResult = promise.reactions_or_result;
+@@ -484,6 +491,9 @@ transitioning macro PerformPromiseThenImpl(
+           runtime::PromiseRevokeReject(promise);
+         }
+       }
++    @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++      microtask.continuation_preserved_embedder_data = capturedContext;
++    }
+     EnqueueMicrotask(handlerContext, microtask);
+   }
+   promise.SetHasHandler();
+diff --git a/deps/v8/src/builtins/promise-jobs.tq b/deps/v8/src/builtins/promise-jobs.tq
+index 859a10858005dd3c93a04fc002979ff96d645c25..97c520e89d3e999aa3425de78283dac0df7c799b 100644
+--- a/deps/v8/src/builtins/promise-jobs.tq
++++ b/deps/v8/src/builtins/promise-jobs.tq
+@@ -4,10 +4,17 @@
+ 
+ #include 'src/builtins/builtins-promise.h'
+ 
++namespace runtime {
++extern transitioning runtime CallPromiseThenable(
++    implicit context: Context)(Callable, JSReceiver, JSFunction,
++    JSFunction): JSAny;
++}
++
+ // https://tc39.es/ecma262/#sec-promise-jobs
+ namespace promise {
+ extern macro IsJSPromiseMap(Map): bool;
+ extern macro NeedsAnyPromiseHooks(): bool;
++extern macro CodeStubAssembler::HasPromiseCallHook(): bool;
+ 
+ // https://tc39.es/ecma262/#sec-promiseresolvethenablejob
+ transitioning builtin PromiseResolveThenableJob(
+@@ -25,8 +32,9 @@ transitioning builtin PromiseResolveThenableJob(
+   const nativeContext = LoadNativeContext(context);
+   const promiseThen = *NativeContextSlot(ContextSlot::PROMISE_THEN_INDEX);
+   const thenableMap = thenable.map;
++  const hasCallHook = HasPromiseCallHook();
+   if (TaggedEqual(then, promiseThen) && IsJSPromiseMap(thenableMap) &&
+-      !NeedsAnyPromiseHooks() &&
++      !NeedsAnyPromiseHooks() && !hasCallHook &&
+       IsPromiseSpeciesLookupChainIntact(nativeContext, thenableMap)) {
+     // We know that the {thenable} is a JSPromise, which doesn't require
+     // any special treatment and that {then} corresponds to the initial
+@@ -64,6 +72,11 @@ transitioning builtin PromiseResolveThenableJob(
+     const resolve = funcs.resolve;
+     const reject = funcs.reject;
+     try {
++      // HostCallJobCallback: cleanup in the hook precedes rejection below.
++      if (hasCallHook) {
++        return runtime::CallPromiseThenable(
++            UnsafeCast<Callable>(then), thenable, resolve, reject);
++      }
+       return Call(
+           context, UnsafeCast<Callable>(then), thenable, resolve, reject);
+     } catch (e, _message) {
+diff --git a/deps/v8/src/builtins/promise-misc.tq b/deps/v8/src/builtins/promise-misc.tq
+index 702a3e622bf4fa65e41caee2be3cdd481384e314..fe55c7052066477350cc31af46ef17cce82806b9 100644
+--- a/deps/v8/src/builtins/promise-misc.tq
++++ b/deps/v8/src/builtins/promise-misc.tq
+@@ -13,6 +13,9 @@ extern transitioning runtime ThrowNoAccess(implicit context: Context)(): never;
+ 
+ extern transitioning runtime ReportMessageFromMicrotask(
+     implicit context: Context)(JSAny): JSAny;
++
++extern transitioning runtime CapturePromiseJobContext(
++    implicit context: Context)(Smi, JSAny, JSAny): JSAny;
+ }
+ 
+ // Unsafe functions that should be used very carefully.
+@@ -77,6 +80,12 @@ macro InnerNewJSPromise(implicit context: Context)(): JSPromise {
+   return promise;
+ }
+ 
++macro PromiseJobRealm(implicit context: Context)(
++    handler: Callable|Undefined): NativeContext|Undefined {
++  if (handler == Undefined) return Undefined;
++  return LoadNativeContext(ExtractHandlerContext(handler));
++}
++
+ macro NewPromiseFulfillReactionJobTask(
+     implicit context: Context)(handlerContext: Context, argument: Object,
+     handler: Callable|Undefined,
+@@ -90,7 +99,8 @@ macro NewPromiseFulfillReactionJobTask(
+       argument,
+       context: handlerContext,
+       handler,
+-      promise_or_capability: promiseOrCapability
++      promise_or_capability: promiseOrCapability,
++      job_realm: PromiseJobRealm(handler)
+     };
+   }
+ 
+@@ -100,7 +110,8 @@ macro NewPromiseFulfillReactionJobTask(
+       argument,
+       context: handlerContext,
+       handler,
+-      promise_or_capability: promiseOrCapability
++      promise_or_capability: promiseOrCapability,
++      job_realm: PromiseJobRealm(handler)
+     };
+   }
+ }
+@@ -118,7 +129,8 @@ macro NewPromiseRejectReactionJobTask(
+       argument,
+       context: handlerContext,
+       handler,
+-      promise_or_capability: promiseOrCapability
++      promise_or_capability: promiseOrCapability,
++      job_realm: PromiseJobRealm(handler)
+     };
+   }
+ 
+@@ -128,7 +140,8 @@ macro NewPromiseRejectReactionJobTask(
+       argument,
+       context: handlerContext,
+       handler,
+-      promise_or_capability: promiseOrCapability
++      promise_or_capability: promiseOrCapability,
++      job_realm: PromiseJobRealm(handler)
+     };
+   }
+ }
+@@ -300,6 +313,29 @@ transitioning macro NewJSPromise(
+   return instance;
+ }
+ 
++extern macro CodeStubAssembler::HasPromiseCaptureHook(): bool;
++const kReactionContext: constexpr int31
++    generates 'static_cast<int>(v8::PromiseJobKind::kReaction)';
++const kThenableContext: constexpr int31
++    generates 'static_cast<int>(v8::PromiseJobKind::kThenable)';
++
++transitioning macro CapturePromiseJobContext(
++    implicit context: Context)(kind: constexpr int31,
++    onFulfilledOrThen: Callable|Undefined,
++    onRejected: Callable|Undefined): Object {
++  @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++    if ((onFulfilledOrThen != Undefined || onRejected != Undefined) &&
++        HasPromiseCaptureHook()) {
++      return runtime::CapturePromiseJobContext(
++          SmiConstant(kind), onFulfilledOrThen, onRejected);
++    }
++    return macros::GetContinuationPreservedEmbedderData();
++  }
++  @ifnot(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++    return Undefined;
++  }
++}
++
+ macro NewPromiseReaction(
+     implicit context: Context)(next: Zero|PromiseReaction,
+     promiseOrCapability: JSPromise|PromiseCapability|Undefined,
+@@ -313,7 +349,8 @@ macro NewPromiseReaction(
+       next: next,
+       reject_handler: rejectHandler,
+       fulfill_handler: fulfillHandler,
+-      promise_or_capability: promiseOrCapability
++      promise_or_capability: promiseOrCapability,
++      job_realm: Undefined
+     };
+   }
+ 
+@@ -323,7 +360,8 @@ macro NewPromiseReaction(
+       next: next,
+       reject_handler: rejectHandler,
+       fulfill_handler: fulfillHandler,
+-      promise_or_capability: promiseOrCapability
++      promise_or_capability: promiseOrCapability,
++      job_realm: Undefined
+     };
+   }
+ }
+@@ -357,7 +395,8 @@ macro NewPromiseResolveThenableJobTask(
+       context: nativeContext,
+       promise_to_resolve: promiseToResolve,
+       thenable,
+-      then
++      then,
++      job_realm: nativeContext
+     };
+   }
+ 
+@@ -367,7 +406,8 @@ macro NewPromiseResolveThenableJobTask(
+       context: nativeContext,
+       promise_to_resolve: promiseToResolve,
+       thenable,
+-      then
++      then,
++      job_realm: nativeContext
+     };
+   }
+ }
+@@ -488,6 +528,8 @@ transitioning javascript builtin SetContinuationPreservedEmbedderData(
+ transitioning builtin AsyncAwaitNonThenableFastPath(
+     implicit context: Context)(value: JSAny, onResolve: JSFunction,
+     throwaway: JSPromise|Undefined): Undefined {
++  const capturedContext =
++      CapturePromiseJobContext(kReactionContext, onResolve, Undefined);
+   // Extract the handler context from the resolve closure.
+   const handlerContext: Context = onResolve.context;
+ 
+@@ -496,6 +538,9 @@ transitioning builtin AsyncAwaitNonThenableFastPath(
+   // the microtask runs.
+   const task = NewPromiseFulfillReactionJobTask(
+       handlerContext, value, onResolve, throwaway);
++  @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++    task.continuation_preserved_embedder_data = capturedContext;
++  }
+ 
+   // Enqueue the microtask.
+   EnqueueMicrotask(handlerContext, task);
+diff --git a/deps/v8/src/builtins/promise-reaction-job.tq b/deps/v8/src/builtins/promise-reaction-job.tq
+index 3ea7ca28abefeb888e56eb476028c1a271e79923..0946d005ba7b2bcdb03c017dd35029aa9f65d574 100644
+--- a/deps/v8/src/builtins/promise-reaction-job.tq
++++ b/deps/v8/src/builtins/promise-reaction-job.tq
+@@ -4,6 +4,11 @@
+ 
+ #include 'src/builtins/builtins-promise-gen.h'
+ 
++namespace runtime {
++extern transitioning runtime CallPromiseReaction(
++    implicit context: Context)(Callable, JSAny, Smi): JSAny;
++}
++
+ namespace promise {
+ 
+ transitioning macro RejectPromiseReactionJob(
+@@ -82,8 +87,15 @@ transitioning macro PromiseReactionJob(
+     }
+   } else {
+     try {
+-      const result =
+-          Call(context, UnsafeCast<Callable>(handler), Undefined, argument);
++      // HostCallJobCallback: cleanup precedes settling the derived promise.
++      let result: JSAny;
++      if (HasPromiseCallHook()) {
++        result = runtime::CallPromiseReaction(
++            UnsafeCast<Callable>(handler), argument, SmiConstant(reactionType));
++      } else {
++        result = Call(
++            context, UnsafeCast<Callable>(handler), Undefined, argument);
++      }
+       if (promiseOrCapability == Undefined) {
+         // There's no [[Capability]] for this promise reaction job, which
+         // means that this is a specification-internal operation (aka
+diff --git a/deps/v8/src/builtins/promise-resolve.tq b/deps/v8/src/builtins/promise-resolve.tq
+index 202180adbbae91a689a667c40d20b4b1b9cb6edd..b140fae0e9535df7c3729c525c6e06c876a9a56a 100644
+--- a/deps/v8/src/builtins/promise-resolve.tq
++++ b/deps/v8/src/builtins/promise-resolve.tq
+@@ -175,11 +175,17 @@ transitioning builtin ResolvePromise(
+     }
+     goto Enqueue;
+   } label Enqueue {
++    // Capture host data at the HostMakeJobCallback registration point.
++    const capturedContext = CapturePromiseJobContext(
++        kThenableContext, UnsafeCast<Callable>(then), Undefined);
+     // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,
+     //                                             thenAction).
+     const task = NewPromiseResolveThenableJobTask(
+         promise, UnsafeCast<JSReceiver>(resolution),
+         UnsafeCast<Callable>(then));
++    @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA) {
++      task.continuation_preserved_embedder_data = capturedContext;
++    }
+ 
+     // 14. Perform HostEnqueuePromiseJob(job.[[Job]], job.[[Realm]]).
+     // 15. Return undefined.
+diff --git a/deps/v8/src/codegen/code-stub-assembler.cc b/deps/v8/src/codegen/code-stub-assembler.cc
+index 5d666df3dce12fa638871783ae46ec2237d87db7..7fdebc38bfaad0347f6e65613ae2c1e8bf805419 100644
+--- a/deps/v8/src/codegen/code-stub-assembler.cc
++++ b/deps/v8/src/codegen/code-stub-assembler.cc
+@@ -18466,6 +18466,18 @@ TNode<Uint32T> CodeStubAssembler::PromiseHookFlags() {
+     ExternalReference::promise_hook_flags_address(isolate())));
+ }
+ 
++TNode<BoolT> CodeStubAssembler::HasPromiseCaptureHook() {
++  auto hook = Load<RawPtrT>(ExternalConstant(
++      ExternalReference::promise_capture_hook_address(isolate())));
++  return WordNotEqual(hook, IntPtrConstant(0));
++}
++
++TNode<BoolT> CodeStubAssembler::HasPromiseCallHook() {
++  auto hook = Load<RawPtrT>(ExternalConstant(
++      ExternalReference::promise_call_hook_address(isolate())));
++  return WordNotEqual(hook, IntPtrConstant(0));
++}
++
+ TNode<BoolT> CodeStubAssembler::IsAnyPromiseHookEnabled(TNode<Uint32T> flags) {
+   uint32_t mask = Isolate::PromiseHookFields::HasContextPromiseHook::kMask |
+                   Isolate::PromiseHookFields::HasIsolatePromiseHook::kMask;
+@@ -18505,6 +18517,13 @@ TNode<BoolT> CodeStubAssembler::NeedsAnyPromiseHooks(TNode<Uint32T> flags) {
+   return Word32NotEqual(flags, Int32Constant(0));
+ }
+ 
++TNode<BoolT> CodeStubAssembler::HasFinalizationRegistryCaptureHook() {
++  auto hook = Load<RawPtrT>(ExternalConstant(
++      ExternalReference::finalization_registry_capture_hook_address(
++          isolate())));
++  return WordNotEqual(hook, IntPtrConstant(0));
++}
++
+ TNode<Code> CodeStubAssembler::LoadBuiltin(TNode<Smi> builtin_id) {
+   CSA_SBXCHECK(this,
+                SmiBelow(builtin_id, SmiConstant(Builtins::kBuiltinCount)));
+diff --git a/deps/v8/src/codegen/code-stub-assembler.h b/deps/v8/src/codegen/code-stub-assembler.h
+index 0d73215183fe9ea914f0199999dada8746651844..d943f90a961bd124e627db83757d765aae751c8d 100644
+--- a/deps/v8/src/codegen/code-stub-assembler.h
++++ b/deps/v8/src/codegen/code-stub-assembler.h
+@@ -4405,6 +4405,8 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
+   // Promise helpers
+   TNode<Uint32T> PromiseHookFlags();
+   TNode<BoolT> HasAsyncEventDelegate();
++  TNode<BoolT> HasPromiseCaptureHook();
++  TNode<BoolT> HasPromiseCallHook();
+ #ifdef V8_ENABLE_JAVASCRIPT_PROMISE_HOOKS
+   TNode<BoolT> IsContextPromiseHookEnabled(TNode<Uint32T> flags);
+ #endif
+@@ -4433,6 +4435,9 @@ class V8_EXPORT_PRIVATE CodeStubAssembler
+     return NeedsAnyPromiseHooks(PromiseHookFlags());
+   }
+ 
++  // FinalizationRegistry helpers
++  TNode<BoolT> HasFinalizationRegistryCaptureHook();
++
+   // for..in helpers
+   void CheckPrototypeEnumCache(TNode<JSReceiver> receiver,
+                                TNode<Map> receiver_map, Label* if_fast,
+diff --git a/deps/v8/src/codegen/compiler.cc b/deps/v8/src/codegen/compiler.cc
+index 2dc782458e5f34f17bcc2aff8c99cb7566ce0bb3..2d304664f67cbeb45d537bc4d2a13346d9da9615 100644
+--- a/deps/v8/src/codegen/compiler.cc
++++ b/deps/v8/src/codegen/compiler.cc
+@@ -3311,9 +3311,22 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
+     DCHECK_EQ(eval_position, kNoSourcePosition);
+     eval_cache_position = -parameters_end_pos;
+   }
++  DirectHandle<SharedFunctionInfo> eval_cache_info = outer_info;
++  if (restriction == NO_PARSE_RESTRICTION &&
++      eval_position == kNoSourcePosition) {
++    // Indirect eval uses the caller's origin without inheriting its scope.
++    // Negative positions distinguish its code offsets from direct eval sites.
++    DebuggableStackFrameIterator it(isolate);
++    if (!it.done() && it.is_javascript()) {
++      FrameSummary summary = it.GetTopValidFrame();
++      eval_cache_info =
++          direct_handle(summary.AsJavaScript().function()->shared(), isolate);
++      eval_cache_position = -summary.code_offset() - 1;
++    }
++  }
+   CompilationCache* compilation_cache = isolate->compilation_cache();
+   InfoCellPair eval_result = compilation_cache->LookupEval(
+-      source, outer_info, context, language_mode, eval_cache_position);
++      source, eval_cache_info, context, language_mode, eval_cache_position);
+   if (eval_result.has_js_function()) {
+     DirectHandle<JSFunction> result =
+         direct_handle(eval_result.js_function(), isolate);
+@@ -3364,11 +3377,16 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
+     if (!IsNativeContext(*context)) {
+       maybe_outer_scope_info = direct_handle(context->scope_info(), isolate);
+     }
+-    script = parse_info.CreateScript(
+-        isolate, source, kNullMaybeHandle,
+-        OriginOptionsForEval(outer_info->script(), parsing_while_debugging));
+-    script->set_eval_from_shared(*outer_info);
+-    if (eval_position == kNoSourcePosition) {
++    script =
++        parse_info.CreateScript(isolate, source, kNullMaybeHandle,
++                                OriginOptionsForEval(eval_cache_info->script(),
++                                                     parsing_while_debugging));
++    script->set_eval_from_shared(*eval_cache_info);
++    if (eval_position == kNoSourcePosition &&
++        restriction == NO_PARSE_RESTRICTION) {
++      // Reuse the caller and undo the cache key's extra offset.
++      eval_position = eval_cache_position + 1;
++    } else if (eval_position == kNoSourcePosition) {
+       // If the position is missing, attempt to get the code offset by
+       // walking the stack. Do not translate the code offset into source
+       // position, but store it as negative value for lazy translation.
+@@ -3411,8 +3429,8 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
+       // Make sure to cache this result.
+       DirectHandle<FeedbackCell> new_feedback_cell(result->raw_feedback_cell(),
+                                                    isolate);
+-      compilation_cache->UpdateEval(source, outer_info, result, language_mode,
+-                                    eval_cache_position);
++      compilation_cache->UpdateEval(source, eval_cache_info, result,
++                                    language_mode, eval_cache_position);
+     }
+   } else {
+     result = Factory::JSFunctionBuilder{isolate, shared_info, context}
+@@ -3423,7 +3441,7 @@ MaybeDirectHandle<JSFunction> Compiler::GetFunctionFromEval(
+     JSFunction::InitializeFeedbackCell(isolate, result, &is_compiled_scope,
+                                        true);
+     if (allow_eval_cache) {
+-      compilation_cache->PutEval(source, outer_info, result,
++      compilation_cache->PutEval(source, eval_cache_info, result,
+                                  eval_cache_position);
+     }
+   }
+diff --git a/deps/v8/src/codegen/external-reference.cc b/deps/v8/src/codegen/external-reference.cc
+index 45fd753aad0866706a877e6e8329367d7f738074..e181aeb2303129e39ee30c40b570b4bd4f508649 100644
+--- a/deps/v8/src/codegen/external-reference.cc
++++ b/deps/v8/src/codegen/external-reference.cc
+@@ -1629,6 +1629,27 @@ ExternalReference ExternalReference::promise_hook_address(Isolate* isolate) {
+   return ExternalReference(isolate->promise_hook_address());
+ }
+ 
++ExternalReference ExternalReference::finalization_registry_capture_hook_address(
++    Isolate* isolate) {
++  return ExternalReference(
++      isolate->finalization_registry_capture_hook_address());
++}
++
++ExternalReference ExternalReference::promise_capture_hook_address(
++    Isolate* isolate) {
++  return ExternalReference(isolate->promise_capture_hook_address());
++}
++
++ExternalReference ExternalReference::promise_call_hook_address(
++    Isolate* isolate) {
++  return ExternalReference(isolate->promise_call_hook_address());
++}
++
++ExternalReference ExternalReference::promise_job_enqueue_hook_address(
++    Isolate* isolate) {
++  return ExternalReference(isolate->promise_job_enqueue_hook_address());
++}
++
+ ExternalReference ExternalReference::async_event_delegate_address(
+     Isolate* isolate) {
+   return ExternalReference(isolate->async_event_delegate_address());
+diff --git a/deps/v8/src/codegen/external-reference.h b/deps/v8/src/codegen/external-reference.h
+index 25121bcc2fc9901915e8e22cfcee008b345e187b..bfe7d2eeba136e714ee69df3aa835d861c48f55f 100644
+--- a/deps/v8/src/codegen/external-reference.h
++++ b/deps/v8/src/codegen/external-reference.h
+@@ -56,6 +56,12 @@ enum class IsolateFieldId : uint8_t;
+   V(address_of_pending_message, "address_of_pending_message")                  \
+   V(promise_hook_flags_address, "Isolate::promise_hook_flags_address()")       \
+   V(promise_hook_address, "Isolate::promise_hook_address()")                   \
++  V(finalization_registry_capture_hook_address,                                \
++    "Isolate::finalization_registry_capture_hook_address()")                   \
++  V(promise_capture_hook_address, "Isolate::promise_capture_hook_address()")   \
++  V(promise_call_hook_address, "Isolate::promise_call_hook_address()")         \
++  V(promise_job_enqueue_hook_address,                                          \
++    "Isolate::promise_job_enqueue_hook_address()")                             \
+   V(async_event_delegate_address, "Isolate::async_event_delegate_address()")   \
+   V(debug_is_active_address, "Debug::is_active_address()")                     \
+   V(debug_hook_on_function_call_address,                                       \
+diff --git a/deps/v8/src/common/message-template.h b/deps/v8/src/common/message-template.h
+index 012ae2fecf5c5dc93cf41f5da4ee1f7ac80e710d..4fe8835e7d93a7dc9187b8e3e31a322db75bdda3 100644
+--- a/deps/v8/src/common/message-template.h
++++ b/deps/v8/src/common/message-template.h
+@@ -390,6 +390,9 @@ namespace internal {
+   T(WrongArgs, "%: Arguments list has wrong type")                             \
+   /* ReferenceError */                                                         \
+   T(NotDefined, "% is not defined")                                            \
++  T(GenericJobAlreadyRun, "Generic job has already run")                       \
++  T(TimeoutJobAlreadyRun, "Timeout job has already run")                       \
++  T(PromiseJobAlreadyRun, "Promise job has already run")                       \
+   T(SuperAlreadyCalled, "Super constructor may only be called once")           \
+   T(AccessedUninitializedVariable, "Cannot access '%' before initialization")  \
+   T(UnsupportedSuper, "Unsupported reference to 'super'")                      \
+diff --git a/deps/v8/src/compiler/turbofan-types.cc b/deps/v8/src/compiler/turbofan-types.cc
+index dc7e524dd7fb67506ac1b8cd88f549b8e1f536a6..ed41f67ed0684282bef8eee96cedd01bef9e97d4 100644
+--- a/deps/v8/src/compiler/turbofan-types.cc
++++ b/deps/v8/src/compiler/turbofan-types.cc
+@@ -279,6 +279,7 @@ Type::bitset BitsetType::Lub(MapRefLike map, JSHeapBroker* broker) {
+     case JS_MAP_KEY_VALUE_ITERATOR_TYPE:
+     case JS_MAP_VALUE_ITERATOR_TYPE:
+     case JS_STRING_ITERATOR_TYPE:
++    case JS_CALLBACK_ITERATOR_TYPE:
+     case JS_ASYNC_FROM_SYNC_ITERATOR_TYPE:
+     case JS_ITERATOR_MAP_HELPER_TYPE:
+     case JS_ITERATOR_FILTER_HELPER_TYPE:
+diff --git a/deps/v8/src/diagnostics/objects-debug.cc b/deps/v8/src/diagnostics/objects-debug.cc
+index cc48051953edb8918f94ef387273c4105c49a710..c455ca48aa339fc99f0a6ab7c8e5ef4d2150f90f 100644
+--- a/deps/v8/src/diagnostics/objects-debug.cc
++++ b/deps/v8/src/diagnostics/objects-debug.cc
+@@ -1805,6 +1805,20 @@ void JSMap::JSMapVerify(Isolate* isolate) {
+   // TODO(arv): Verify OrderedHashTable too.
+ }
+ 
++void JSCallbackIterator::JSCallbackIteratorVerify(Isolate* isolate) {
++  TorqueGeneratedClassVerifiers::JSCallbackIteratorVerify(*this, isolate);
++  CHECK(IsUndefined(next(), isolate) || IsCallable(next()));
++  CHECK_GE(kind(), static_cast<int>(JSCallbackIteratorKind::kMap));
++  CHECK_LE(kind(), static_cast<int>(JSCallbackIteratorKind::kSet));
++  CHECK_GE(state(),
++           static_cast<int>(JSCallbackIteratorState::kSuspended));
++  CHECK_LE(state(),
++           static_cast<int>(JSCallbackIteratorState::kCompleted));
++  CHECK_EQ(
++      IsUndefined(next(), isolate),
++      state() == static_cast<int>(JSCallbackIteratorState::kCompleted));
++}
++
+ void JSSetIterator::JSSetIteratorVerify(Isolate* isolate) {
+   CHECK(IsJSSetIterator(*this));
+   JSCollectionIteratorVerify(isolate);
+diff --git a/deps/v8/src/diagnostics/objects-printer.cc b/deps/v8/src/diagnostics/objects-printer.cc
+index 6f1507c5ea9eb5a3836e50b0d49aa3ce2e2d9e8d..bec0a88e4545305f203d7e5c85a61847da7d8fa9 100644
+--- a/deps/v8/src/diagnostics/objects-printer.cc
++++ b/deps/v8/src/diagnostics/objects-printer.cc
+@@ -2194,6 +2194,14 @@ void JSCollectionIterator::JSCollectionIteratorPrint(std::ostream& os,
+   JSObjectPrintBody(os, *this);
+ }
+ 
++void JSCallbackIterator::JSCallbackIteratorPrint(std::ostream& os) {
++  JSObjectPrintHeader(os, *this, "JSCallbackIterator");
++  os << "\n - next: " << Brief(next());
++  os << "\n - kind: " << kind();
++  os << "\n - state: " << state();
++  JSObjectPrintBody(os, *this);
++}
++
+ void JSSetIterator::JSSetIteratorPrint(std::ostream& os) {
+   JSCollectionIteratorPrint(os, "JSSetIterator");
+ }
+diff --git a/deps/v8/src/execution/futex-emulation.cc b/deps/v8/src/execution/futex-emulation.cc
+index 26074a2314090a0c1837fdac18c71a6115c84169..8d3da5ab3fd2ccef1dd17de866aebb78540470a3 100644
+--- a/deps/v8/src/execution/futex-emulation.cc
++++ b/deps/v8/src/execution/futex-emulation.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "src/execution/futex-emulation.h"
+ 
++#include <algorithm>
+ #include <limits>
+ 
+ #include "src/api/api-inl.h"
+@@ -14,9 +15,11 @@
+ #include "src/execution/isolate.h"
+ #include "src/execution/vm-state-inl.h"
+ #include "src/handles/handles-inl.h"
++#include "src/heap/factory.h"
+ #include "src/numbers/conversions.h"
+ #include "src/objects/js-array-buffer-inl.h"
+ #include "src/objects/js-promise-inl.h"
++#include "src/objects/managed-inl.h"
+ #include "src/objects/objects-inl.h"
+ #include "src/tasks/cancelable-task.h"
+ 
+@@ -169,6 +172,8 @@ class ResolveAsyncWaiterPromisesTask : public CancelableTask {
+ 
+ class AsyncWaiterTimeoutTask : public CancelableTask {
+  public:
++  static constexpr ExternalPointerTag kManagedTag = kAsyncWaiterTimeoutTaskTag;
++
+   AsyncWaiterTimeoutTask(CancelableTaskManager* cancelable_task_manager,
+                          FutexWaitListNode* node)
+       : CancelableTask(cancelable_task_manager), node_(node) {}
+@@ -353,7 +358,7 @@ Tagged<Object> FutexEmulation::Wait(Isolate* isolate, WaitMode mode,
+   }
+   DCHECK_EQ(mode, WaitMode::kAsync);
+   return WaitAsync(isolate, array_buffer, addr, value, use_timeout,
+-                   rel_timeout_ns, call_type);
++                   rel_timeout_ns, rel_timeout_ms, call_type);
+ }
+ 
+ template <typename T>
+@@ -502,7 +507,8 @@ FutexWaitListNode::FutexWaitListNode(std::weak_ptr<BackingStore> backing_store,
+ template <typename T>
+ Tagged<Object> FutexEmulation::WaitAsync(
+     Isolate* isolate, DirectHandle<JSArrayBuffer> array_buffer, size_t addr,
+-    T value, bool use_timeout, int64_t rel_timeout_ns, CallType call_type) {
++    T value, bool use_timeout, int64_t rel_timeout_ns, double rel_timeout_ms,
++    CallType call_type) {
+   base::TimeDelta rel_timeout =
+       base::TimeDelta::FromNanoseconds(rel_timeout_ns);
+ 
+@@ -513,6 +519,12 @@ Tagged<Object> FutexEmulation::WaitAsync(
+ 
+   enum class ResultKind { kNotEqual, kTimedOut, kAsync };
+   ResultKind result_kind;
++  std::unique_ptr<AsyncWaiterTimeoutTask> timeout_task;
++  base::TimeTicks timeout_start;
++  const bool host_timeout =
++      isolate->has_timeout_job_enqueue_hook() && rel_timeout_ms != V8_INFINITY;
++  const bool immediate_timeout =
++      host_timeout ? rel_timeout_ms == 0 : use_timeout && rel_timeout_ns == 0;
+   void* wait_location = FutexWaitList::ToWaitLocation(*array_buffer, addr);
+   // Get a weak pointer to the backing store, to be stored in the async state of
+   // the node.
+@@ -534,7 +546,7 @@ Tagged<Object> FutexEmulation::WaitAsync(
+ #endif
+     if (loaded_value != value) {
+       result_kind = ResultKind::kNotEqual;
+-    } else if (use_timeout && rel_timeout_ns == 0) {
++    } else if (immediate_timeout) {
+       result_kind = ResultKind::kTimedOut;
+     } else {
+       result_kind = ResultKind::kAsync;
+@@ -542,15 +554,23 @@ Tagged<Object> FutexEmulation::WaitAsync(
+       FutexWaitListNode* node = new FutexWaitListNode(
+           std::move(backing_store), wait_location, promise_capability, isolate);
+ 
+-      if (use_timeout) {
+-        node->async_state_->timeout_time = base::TimeTicks::Now() + rel_timeout;
++      if (use_timeout || host_timeout) {
++        timeout_start = base::TimeTicks::Now();
++        // Host timers need only a nonzero timeout marker on the waiter;
++        // retain the original milliseconds instead of narrowing to nanoseconds.
++        node->async_state_->timeout_time =
++            host_timeout ? timeout_start : timeout_start + rel_timeout;
+         auto task = std::make_unique<AsyncWaiterTimeoutTask>(
+             node->async_state_->isolate_for_async_waiters
+                 ->cancelable_task_manager(),
+             node);
+         node->async_state_->timeout_task_id = task->id();
+-        node->async_state_->task_runner->PostNonNestableDelayedTask(
+-            std::move(task), rel_timeout.InSecondsF());
++        if (host_timeout) {
++          timeout_task = std::move(task);
++        } else {
++          node->async_state_->task_runner->PostNonNestableDelayedTask(
++              std::move(task), rel_timeout.InSecondsF());
++        }
+       }
+ 
+       wait_list->AddNode(node);
+@@ -622,6 +642,28 @@ Tagged<Object> FutexEmulation::WaitAsync(
+       break;
+   }
+ 
++  if (timeout_task) {
++    // Hand off outside the wait-list mutex, after retaining the Promise.
++    // Notification still cancels this task through its registered task ID.
++    auto task = Managed<AsyncWaiterTimeoutTask>::From(
++        isolate, sizeof(AsyncWaiterTimeoutTask), std::move(timeout_task));
++    DirectHandle<NativeContext> realm(isolate->native_context());
++    auto context =
++        factory->NewBuiltinContext(realm, Context::MIN_CONTEXT_SLOTS + 1);
++    context->SetNoCell(Context::MIN_CONTEXT_SLOTS, *task);
++    auto shared = factory->NewSharedFunctionInfoForBuiltin(
++        factory->empty_string(), Builtin::kAtomicsWaitAsyncTimeout, 0, kAdapt);
++    shared->set_language_mode(LanguageMode::kStrict);
++    auto job = Factory::JSFunctionBuilder{isolate, shared, context}
++                   .set_map(direct_handle(
++                       realm->strict_function_without_prototype_map(), isolate))
++                   .Build();
++    double milliseconds = std::max(
++        0.0, rel_timeout_ms -
++                 (base::TimeTicks::Now() - timeout_start).InMillisecondsF());
++    isolate->EnqueueTimeoutJob(realm, job, milliseconds);
++  }
++
+   return *result;
+ }
+ 
+@@ -790,6 +832,27 @@ void FutexEmulation::ResolveAsyncWaiterPromise(FutexWaitListNode* node) {
+     } else {
+       DCHECK(!node->waiting_);
+       result_string = isolate->factory()->ok_string();
++      if (isolate->has_generic_job_enqueue_hook()) {
++        // The native wakeup has reached the waiting isolate and released the
++        // wait-list mutex. Retain the Promise in the job so the waiter and its
++        // timeout can be retired before the host runs the job.
++        auto realm =
++            Cast<NativeContext>(Utils::OpenDirectHandle(*native_context));
++        auto context = isolate->factory()->NewBuiltinContext(
++            realm, Context::MIN_CONTEXT_SLOTS + 1);
++        context->SetNoCell(Context::MIN_CONTEXT_SLOTS, *promise);
++        auto shared = isolate->factory()->NewSharedFunctionInfoForBuiltin(
++            isolate->factory()->empty_string(),
++            Builtin::kAtomicsResolveAsyncWait, 0, kAdapt);
++        shared->set_language_mode(LanguageMode::kStrict);
++        auto job =
++            Factory::JSFunctionBuilder{isolate, shared, context}
++                .set_map(direct_handle(
++                    realm->strict_function_without_prototype_map(), isolate))
++                .Build();
++        isolate->EnqueueGenericJob(realm, job);
++        return;
++      }
+     }
+     MaybeDirectHandle<Object> resolve_result =
+         JSPromise::Resolve(promise, result_string);
+@@ -861,6 +924,26 @@ void FutexEmulation::HandleAsyncWaiterTimeout(FutexWaitListNode* node) {
+   delete node;
+ }
+ 
++MaybeDirectHandle<Object> FutexEmulation::RunAsyncWaiterTimeoutJob(
++    Isolate* isolate, DirectHandle<JSFunction> job) {
++  DirectHandle<Context> context(job->context(), isolate);
++  DirectHandle<Object> data(context->GetNoCell(Context::MIN_CONTEXT_SLOTS),
++                            isolate);
++  if (IsUndefined(*data, isolate)) {
++    THROW_NEW_ERROR(isolate,
++                    NewTypeError(MessageTemplate::kTimeoutJobAlreadyRun));
++  }
++  auto managed = Cast<Managed<AsyncWaiterTimeoutTask>>(data);
++  auto task = managed->get();
++  // Destroy the task when this call finishes, so it cannot remain registered
++  // as running until GC. CancelableTask::Run ignores cancelled waiters.
++  managed->SetManagedObject(nullptr);
++  context->SetNoCell(Context::MIN_CONTEXT_SLOTS,
++                     ReadOnlyRoots(isolate).undefined_value());
++  task->Run();
++  return isolate->factory()->undefined_value();
++}
++
+ void FutexEmulation::IsolateDeinit(Isolate* isolate) {
+   FutexWaitList* wait_list = GetWaitList();
+   NoGarbageCollectionMutexGuard lock_guard(wait_list->mutex());
+diff --git a/deps/v8/src/execution/futex-emulation.h b/deps/v8/src/execution/futex-emulation.h
+index 4c1d9c79c2cc0b8119e8603e657fe3987da5529d..f0120aa58f5c09f32c9a2407bcc23ba3ecb23428 100644
+--- a/deps/v8/src/execution/futex-emulation.h
++++ b/deps/v8/src/execution/futex-emulation.h
+@@ -38,6 +38,7 @@ class FutexWaitList;
+ 
+ class Isolate;
+ class JSArrayBuffer;
++class JSFunction;
+ class JSPromise;
+ 
+ class FutexWaitListNode {
+@@ -183,6 +184,10 @@ class FutexEmulation : public AllStatic {
+   // Variant 2: Pass raw |addr| (used for WebAssembly atomic.notify).
+   static int Wake(void* addr, uint32_t num_waiters_to_wake);
+ 
++  // Run a host-scheduled timeout job, consuming its retained task.
++  static MaybeDirectHandle<Object> RunAsyncWaiterTimeoutJob(
++      Isolate* isolate, DirectHandle<JSFunction> job);
++
+   // Called before |isolate| dies. Removes async waiters owned by |isolate|.
+   static void IsolateDeinit(Isolate* isolate);
+ 
+@@ -217,7 +222,8 @@ class FutexEmulation : public AllStatic {
+   static Tagged<Object> WaitAsync(Isolate* isolate,
+                                   DirectHandle<JSArrayBuffer> array_buffer,
+                                   size_t addr, T value, bool use_timeout,
+-                                  int64_t rel_timeout_ns, CallType call_type);
++                                  int64_t rel_timeout_ns, double rel_timeout_ms,
++                                  CallType call_type);
+ 
+   // Resolve the Promises of the async waiters which belong to |isolate|.
+   static void ResolveAsyncWaiterPromises(Isolate* isolate);
+diff --git a/deps/v8/src/execution/isolate.cc b/deps/v8/src/execution/isolate.cc
+index e86eabdbf07d4097dcc3b743ddaf3ac438ed34d7..117f29d89cadcd5988d6246e80ac4f69f28bcf59 100644
+--- a/deps/v8/src/execution/isolate.cc
++++ b/deps/v8/src/execution/isolate.cc
+@@ -19,6 +19,7 @@
+ #include <utility>
+ 
+ #include "include/v8-callbacks.h"
++#include "include/v8-function.h"
+ #include "include/v8-template.h"
+ #include "src/api/api-arguments-inl.h"
+ #include "src/api/api-inl.h"
+@@ -1825,10 +1826,16 @@ size_t Isolate::CurrentScriptIdsAndContexts(
+   return visitor.FrameCount();
+ }
+ 
+-MaybeDirectHandle<Script> Isolate::CurrentReferrerScript() {
++MaybeDirectHandle<Script> Isolate::CurrentReferrerScript(
++    bool include_cross_origin) {
+   TRACE_EVENT0(TRACE_DISABLED_BY_DEFAULT("v8.stack_trace"), __func__);
+   CurrentScriptStackVisitor visitor{};
+-  VisitStack(this, &visitor);
++  auto options = StackTrace::kDetailed;
++  if (include_cross_origin) {
++    options = static_cast<StackTrace::StackTraceOptions>(
++        options | StackTrace::kExposeFramesAcrossSecurityOrigins);
++  }
++  VisitStack(this, &visitor, options);
+   DirectHandle<Script> script;
+   if (!visitor.CurrentScript().ToHandle(&script)) {
+     return MaybeDirectHandle<Script>();
+@@ -7224,6 +7231,183 @@ void Isolate::RunPromiseHook(PromiseHookType type,
+   promise_hook_(type, v8::Utils::ToLocal(promise), v8::Utils::ToLocal(parent));
+ }
+ 
++DirectHandle<Object> Isolate::CapturePromiseJobContext(
++    v8::PromiseJobKind kind, DirectHandle<Object> on_fulfilled_or_then,
++    DirectHandle<Object> on_rejected) {
++  DirectHandle<Object> ambient(
++      isolate_data()->continuation_preserved_embedder_data(), this);
++  if (promise_capture_hook_ == nullptr) return ambient;
++  v8::Context::BackupIncumbentScope incumbent_scope(
++      GetIncumbentContextForJobCallback());
++  ExternalCallbackScope scope(this, FUNCTION_ADDR(promise_capture_hook_));
++  auto captured =
++      promise_capture_hook_(kind, v8::Utils::ToLocal(on_fulfilled_or_then),
++                            v8::Utils::ToLocal(on_rejected));
++  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
++  CHECK(!has_exception());
++  CHECK(!captured.IsEmpty());
++  return v8::Utils::OpenDirectHandle(*captured);
++}
++
++MaybeDirectHandle<Object> Isolate::CallPromiseCallback(
++    v8::PromiseCallbackKind kind, DirectHandle<JSReceiver> callback,
++    DirectHandle<Object> receiver, int argc, v8::Local<v8::Value> argv[]) {
++  DCHECK_NOT_NULL(promise_call_hook_);
++  v8::Local<v8::Value> result;
++  ExternalCallbackScope scope(this, FUNCTION_ADDR(promise_call_hook_));
++  if (!promise_call_hook_(v8::Utils::ToLocal(native_context()), kind,
++                          v8::Utils::ToLocal(callback).As<v8::Function>(),
++                          v8::Utils::ToLocal(receiver), argc, argv)
++           .ToLocal(&result)) {
++    return {};
++  }
++  return v8::Utils::OpenDirectHandle(*result);
++}
++
++namespace {
++
++struct PromiseJobInfo {
++  v8::PromiseJobKind kind;
++  DirectHandle<NativeContext> context;
++  v8::Local<v8::Context> realm;
++};
++
++PromiseJobInfo GetPromiseJobInfo(Isolate* isolate,
++                                 DirectHandle<Microtask> task) {
++  Tagged<Context> context;
++  Tagged<Object> realm;
++  v8::PromiseJobKind kind;
++  if (IsPromiseResolveThenableJobTask(*task)) {
++    auto job = Cast<PromiseResolveThenableJobTask>(task);
++    context = job->context();
++    realm = job->job_realm();
++    kind = v8::PromiseJobKind::kThenable;
++  } else {
++    auto job = Cast<PromiseReactionJobTask>(task);
++    context = job->context();
++    realm = job->job_realm();
++    kind = v8::PromiseJobKind::kReaction;
++  }
++  v8::Local<v8::Context> api_realm;
++  if (!IsUndefined(realm)) {
++    api_realm =
++        v8::Utils::ToLocal(direct_handle(Cast<NativeContext>(realm), isolate));
++  }
++  return {kind, direct_handle(context->native_context(), isolate), api_realm};
++}
++
++}  // namespace
++
++void Isolate::EnqueuePromiseJob(DirectHandle<Microtask> task) {
++  auto info = GetPromiseJobInfo(this, task);
++  auto* queue = info.context->microtask_queue();
++  if (queue == nullptr) return;
++  if (promise_job_enqueue_hook_ == nullptr) {
++    queue->EnqueueMicrotask(*task);
++    return;
++  }
++  auto context = factory()->NewBuiltinContext(info.context,
++                                              Context::MIN_CONTEXT_SLOTS + 1);
++  context->SetNoCell(Context::MIN_CONTEXT_SLOTS, *task);
++  auto shared = factory()->NewSharedFunctionInfoForBuiltin(
++      factory()->empty_string(), Builtin::kRunPromiseJob, 0, kDontAdapt);
++  shared->set_language_mode(LanguageMode::kStrict);
++  auto job =
++      v8::internal::Factory::JSFunctionBuilder{this, shared, context}
++          .set_map(direct_handle(
++              info.context->strict_function_without_prototype_map(), this))
++          .Build();
++  DirectHandle<Object> ambient(
++      isolate_data()->continuation_preserved_embedder_data(), this);
++  ExternalCallbackScope scope(this, FUNCTION_ADDR(promise_job_enqueue_hook_));
++  promise_job_enqueue_hook_(info.realm, queue, info.kind,
++                            v8::Utils::ToLocal(job));
++  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
++  CHECK(!has_exception());
++}
++
++void Isolate::EnqueueGenericJob(DirectHandle<NativeContext> realm,
++                                DirectHandle<JSFunction> job) {
++  DCHECK_NOT_NULL(generic_job_enqueue_hook_);
++  DirectHandle<Object> ambient(
++      isolate_data()->continuation_preserved_embedder_data(), this);
++  ExternalCallbackScope scope(this, FUNCTION_ADDR(generic_job_enqueue_hook_));
++  generic_job_enqueue_hook_(v8::Utils::ToLocal(realm), v8::Utils::ToLocal(job));
++  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
++  CHECK(!has_exception());
++}
++
++void Isolate::EnqueueTimeoutJob(DirectHandle<NativeContext> realm,
++                                DirectHandle<JSFunction> job,
++                                double milliseconds) {
++  DCHECK_NOT_NULL(timeout_job_enqueue_hook_);
++  DirectHandle<Object> ambient(
++      isolate_data()->continuation_preserved_embedder_data(), this);
++  ExternalCallbackScope scope(this, FUNCTION_ADDR(timeout_job_enqueue_hook_));
++  timeout_job_enqueue_hook_(v8::Utils::ToLocal(realm), v8::Utils::ToLocal(job),
++                            milliseconds);
++  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
++  CHECK(!has_exception());
++}
++
++DirectHandle<Object> Isolate::CaptureFinalizationRegistryContext(
++    DirectHandle<Object> cleanup_callback) {
++  DirectHandle<Object> ambient(
++      isolate_data()->continuation_preserved_embedder_data(), this);
++  DCHECK_NOT_NULL(finalization_registry_capture_hook_);
++  v8::Context::BackupIncumbentScope incumbent_scope(
++      GetIncumbentContextForJobCallback());
++  ExternalCallbackScope scope(
++      this, FUNCTION_ADDR(finalization_registry_capture_hook_));
++  auto captured =
++      finalization_registry_capture_hook_(v8::Utils::ToLocal(cleanup_callback));
++  isolate_data()->set_continuation_preserved_embedder_data(*ambient);
++  CHECK(!has_exception());
++  CHECK(!captured.IsEmpty());
++  return v8::Utils::OpenDirectHandle(*captured);
++}
++
++MaybeDirectHandle<Object> Isolate::CallFinalizationRegistryCallback(
++    DirectHandle<Object> callback, DirectHandle<Object> held_value) {
++  if (!finalization_registry_call_hook_) {
++    DirectHandle<Object> args[] = {held_value};
++    return Execution::Call(this, callback, factory()->undefined_value(),
++                           base::VectorOf(args));
++  }
++  v8::Local<v8::Value> result;
++  ExternalCallbackScope scope(this,
++                              FUNCTION_ADDR(finalization_registry_call_hook_));
++  if (!finalization_registry_call_hook_(
++           v8::Utils::ToLocal(native_context()),
++           v8::Utils::ToLocal(callback).As<v8::Function>(),
++           v8::Utils::ToLocal(held_value))
++           .ToLocal(&result)) {
++    ReportPendingMessages();
++    return {};
++  }
++  return v8::Utils::OpenDirectHandle(*result);
++}
++
++v8::Local<v8::Context> Isolate::GetIncumbentContextForJobCallback() {
++  // A builtin can leave its own context in the physical caller frame. Use the
++  // logical script frame for this notification, respecting a newer backup.
++  DebuggableStackFrameIterator frames(this);
++  const auto* backup = top_backup_incumbent_scope();
++  v8::Local<v8::Context> incumbent;
++  if (!frames.done() &&
++      (backup == nullptr ||
++       frames.frame()->sp() < backup->JSStackComparableAddressPrivate())) {
++    incumbent = v8::Utils::ToLocal(frames.GetTopValidFrame().native_context())
++                    .As<v8::Context>();
++  } else if (backup != nullptr) {
++    incumbent = backup->backup_incumbent_context_;
++  } else {
++    incumbent = reinterpret_cast<v8::Isolate*>(this)
++                    ->GetEnteredOrMicrotaskContext();
++  }
++  return incumbent;
++}
++
+ void Isolate::OnAsyncFunctionSuspended(DirectHandle<JSPromise> promise,
+                                        DirectHandle<JSPromise> parent) {
+   DCHECK(!promise->has_async_task_id());
+diff --git a/deps/v8/src/execution/isolate.h b/deps/v8/src/execution/isolate.h
+index 9e0888eab6cad4ce87c9fd68ffd8f0bbd5a3da07..348bc1ce4a1ec475c7e1c87346ace8f719e469ef 100644
+--- a/deps/v8/src/execution/isolate.h
++++ b/deps/v8/src/execution/isolate.h
+@@ -1001,7 +1001,8 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
+   size_t CurrentScriptIdsAndContexts(
+       v8::MemorySpan<StackTrace::ScriptIdAndContext> frame_data);
+ 
+-  MaybeDirectHandle<Script> CurrentReferrerScript();
++  MaybeDirectHandle<Script> CurrentReferrerScript(
++      bool include_cross_origin = false);
+   bool GetStackTraceLimit(Isolate* isolate, int* result);
+ 
+   Address GetAbstractPC(int* line, int* column);
+@@ -1879,6 +1880,63 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
+   void UpdatePromiseHookProtector();
+   void PromiseHookStateUpdated();
+ 
++  void SetPromiseCaptureHook(v8::PromiseCaptureHook hook) {
++    promise_capture_hook_ = hook;
++  }
++  Address promise_capture_hook_address() {
++    return reinterpret_cast<Address>(&promise_capture_hook_);
++  }
++  DirectHandle<Object> CapturePromiseJobContext(
++      v8::PromiseJobKind kind, DirectHandle<Object> on_fulfilled_or_then,
++      DirectHandle<Object> on_rejected);
++  void SetPromiseCallHook(v8::PromiseCallHook hook) {
++    promise_call_hook_ = hook;
++  }
++  Address promise_call_hook_address() {
++    return reinterpret_cast<Address>(&promise_call_hook_);
++  }
++  MaybeDirectHandle<Object> CallPromiseCallback(
++      v8::PromiseCallbackKind kind, DirectHandle<JSReceiver> callback,
++      DirectHandle<Object> receiver, int argc, v8::Local<v8::Value> argv[]);
++  void SetPromiseJobEnqueueHook(v8::PromiseJobEnqueueHook hook) {
++    promise_job_enqueue_hook_ = hook;
++  }
++  Address promise_job_enqueue_hook_address() {
++    return reinterpret_cast<Address>(&promise_job_enqueue_hook_);
++  }
++  void EnqueuePromiseJob(DirectHandle<Microtask> task);
++  void SetGenericJobEnqueueHook(v8::GenericJobEnqueueHook hook) {
++    generic_job_enqueue_hook_ = hook;
++  }
++  bool has_generic_job_enqueue_hook() const {
++    return generic_job_enqueue_hook_ != nullptr;
++  }
++  void EnqueueGenericJob(DirectHandle<NativeContext> realm,
++                         DirectHandle<JSFunction> job);
++  void SetTimeoutJobEnqueueHook(v8::TimeoutJobEnqueueHook hook) {
++    timeout_job_enqueue_hook_ = hook;
++  }
++  bool has_timeout_job_enqueue_hook() const {
++    return timeout_job_enqueue_hook_ != nullptr;
++  }
++  void EnqueueTimeoutJob(DirectHandle<NativeContext> realm,
++                         DirectHandle<JSFunction> job, double milliseconds);
++  void SetFinalizationRegistryCaptureHook(
++      v8::FinalizationRegistryCaptureHook hook) {
++    finalization_registry_capture_hook_ = hook;
++  }
++  Address finalization_registry_capture_hook_address() {
++    return reinterpret_cast<Address>(&finalization_registry_capture_hook_);
++  }
++  DirectHandle<Object> CaptureFinalizationRegistryContext(
++      DirectHandle<Object> cleanup_callback);
++  void SetFinalizationRegistryCallHook(v8::FinalizationRegistryCallHook hook) {
++    finalization_registry_call_hook_ = hook;
++  }
++  MaybeDirectHandle<Object> CallFinalizationRegistryCallback(
++      DirectHandle<Object> callback, DirectHandle<Object> held_value);
++  v8::Local<v8::Context> GetIncumbentContextForJobCallback();
++
+   void AddDetachedContext(DirectHandle<Context> context);
+   void CheckDetachedContextsAfterGC();
+ 
+@@ -2634,6 +2692,14 @@ class V8_EXPORT_PRIVATE Isolate final : private HiddenFactory {
+   base::RandomNumberGenerator* fuzzer_rng_ = nullptr;
+   v8::Isolate::ReleaseCppHeapCallback release_cpp_heap_callback_ = nullptr;
+   PromiseHook promise_hook_ = nullptr;
++  v8::PromiseCaptureHook promise_capture_hook_ = nullptr;
++  v8::PromiseCallHook promise_call_hook_ = nullptr;
++  v8::PromiseJobEnqueueHook promise_job_enqueue_hook_ = nullptr;
++  v8::GenericJobEnqueueHook generic_job_enqueue_hook_ = nullptr;
++  v8::TimeoutJobEnqueueHook timeout_job_enqueue_hook_ = nullptr;
++  v8::FinalizationRegistryCaptureHook finalization_registry_capture_hook_ =
++      nullptr;
++  v8::FinalizationRegistryCallHook finalization_registry_call_hook_ = nullptr;
+   HostImportModuleDynamicallyCallback host_import_module_dynamically_callback_ =
+       nullptr;
+   HostImportModuleWithPhaseDynamicallyCallback
+diff --git a/deps/v8/src/heap/factory.cc b/deps/v8/src/heap/factory.cc
+index 32b47dee39fffeba5760d26ee217189f6d8b4377..7e1e65c1b3ad50b11dfc085c370955e532c751c7 100644
+--- a/deps/v8/src/heap/factory.cc
++++ b/deps/v8/src/heap/factory.cc
+@@ -1696,6 +1696,7 @@ Factory::NewPromiseResolveThenableJobTask(
+   microtask->set_promise_to_resolve(*promise_to_resolve, SKIP_WRITE_BARRIER);
+   microtask->set_thenable(*thenable, SKIP_WRITE_BARRIER);
+   microtask->set_then(*then, SKIP_WRITE_BARRIER);
++  microtask->set_job_realm(context->native_context(), SKIP_WRITE_BARRIER);
+   microtask->set_context(*context, SKIP_WRITE_BARRIER);
+ #ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
+   microtask->set_continuation_preserved_embedder_data(
+@@ -3736,6 +3737,23 @@ DirectHandle<JSAsyncFromSyncIterator> Factory::NewJSAsyncFromSyncIterator(
+   return iterator;
+ }
+ 
++DirectHandle<JSCallbackIterator> Factory::NewJSCallbackIterator(
++    DirectHandle<JSReceiver> next, bool is_map) {
++  DCHECK(IsCallable(*next));
++  DirectHandle<Map> map(
++      is_map ? isolate()->native_context()->callback_map_iterator_map()
++             : isolate()->native_context()->callback_set_iterator_map(),
++      isolate());
++  auto iterator = Cast<JSCallbackIterator>(NewJSObjectFromMap(map));
++  DisallowGarbageCollection no_gc;
++  iterator->set_next(*next);
++  iterator->set_kind(static_cast<int>(
++      is_map ? JSCallbackIteratorKind::kMap : JSCallbackIteratorKind::kSet));
++  iterator->set_state(
++      static_cast<int>(JSCallbackIteratorState::kSuspended));
++  return iterator;
++}
++
+ DirectHandle<JSMap> Factory::NewJSMap() {
+   DirectHandle<Map> map(isolate()->native_context()->js_map_map(), isolate());
+   DirectHandle<JSMap> js_map = Cast<JSMap>(NewJSObjectFromMap(map));
+diff --git a/deps/v8/src/heap/factory.h b/deps/v8/src/heap/factory.h
+index 67abd4458664c12fdad97756dd938b3268aa3ec5..5d29dff84130a96be9b59f35d8f42b81c0f38441 100644
+--- a/deps/v8/src/heap/factory.h
++++ b/deps/v8/src/heap/factory.h
+@@ -58,6 +58,7 @@ class JSSyncDisposableStack;
+ class JSAsyncDisposableStack;
+ class JSGeneratorObject;
+ class JSMap;
++class JSCallbackIterator;
+ class JSMapIterator;
+ class JSModuleNamespace;
+ class JSPromise;
+@@ -883,6 +884,9 @@ class V8_EXPORT_PRIVATE Factory : public FactoryBase<Factory> {
+   DirectHandle<JSAsyncFromSyncIterator> NewJSAsyncFromSyncIterator(
+       DirectHandle<JSReceiver> sync_iterator, DirectHandle<Object> next);
+ 
++  DirectHandle<JSCallbackIterator> NewJSCallbackIterator(
++      DirectHandle<JSReceiver> next, bool is_map);
++
+   DirectHandle<JSMap> NewJSMap();
+   DirectHandle<JSSet> NewJSSet();
+ 
+diff --git a/deps/v8/src/init/bootstrapper.cc b/deps/v8/src/init/bootstrapper.cc
+index dca2648b3a933559c757e00399e5c4c48db5ecef..d8745524dd46481b4aea5ab88190d717c3684e7b 100644
+--- a/deps/v8/src/init/bootstrapper.cc
++++ b/deps/v8/src/init/bootstrapper.cc
+@@ -5276,6 +5276,14 @@ void Genesis::InitializeIteratorFunctions() {
+     set_key_value_iterator_map->set_instance_type(
+         JS_SET_KEY_VALUE_ITERATOR_TYPE);
+     native_context->set_set_key_value_iterator_map(*set_key_value_iterator_map);
++
++    DirectHandle<Map> callback_iterator_map =
++        factory->NewContextfulMapForCurrentContext(
++            JS_CALLBACK_ITERATOR_TYPE, JSCallbackIterator::kHeaderSize,
++            TERMINAL_FAST_ELEMENTS_KIND, 0);
++    Map::SetPrototype(isolate, callback_iterator_map, prototype);
++    callback_iterator_map->SetConstructor(*set_iterator_function);
++    native_context->set_callback_set_iterator_map(*callback_iterator_map);
+   }
+ 
+   {  // -- M a p I t e r a t o r
+@@ -5315,6 +5323,14 @@ void Genesis::InitializeIteratorFunctions() {
+         Map::Copy(isolate, map_key_iterator_map, "JS_MAP_VALUE_ITERATOR_TYPE");
+     map_value_iterator_map->set_instance_type(JS_MAP_VALUE_ITERATOR_TYPE);
+     native_context->set_map_value_iterator_map(*map_value_iterator_map);
++
++    DirectHandle<Map> callback_iterator_map =
++        factory->NewContextfulMapForCurrentContext(
++            JS_CALLBACK_ITERATOR_TYPE, JSCallbackIterator::kHeaderSize,
++            TERMINAL_FAST_ELEMENTS_KIND, 0);
++    Map::SetPrototype(isolate, callback_iterator_map, prototype);
++    callback_iterator_map->SetConstructor(*map_iterator_function);
++    native_context->set_callback_map_iterator_map(*callback_iterator_map);
+   }
+ 
+   {  // -- A s y n c F u n c t i o n
+diff --git a/deps/v8/src/logging/runtime-call-stats.h b/deps/v8/src/logging/runtime-call-stats.h
+index 66b0450b2eab3105845d6742e8afc4c4d8072828..2879850170a2dfd99a85e7c32c68b22d7b8738e5 100644
+--- a/deps/v8/src/logging/runtime-call-stats.h
++++ b/deps/v8/src/logging/runtime-call-stats.h
+@@ -84,6 +84,7 @@ namespace v8::internal {
+   V(Isolate_ValidateAndCanonicalizeUnicodeLocaleId)        \
+   V(JSON_Parse)                                            \
+   V(JSON_Stringify)                                        \
++  V(CollectionIterator_New)                                \
+   V(Map_AsArray)                                           \
+   V(Map_Clear)                                             \
+   V(Map_Delete)                                            \
+diff --git a/deps/v8/src/objects/contexts.h b/deps/v8/src/objects/contexts.h
+index 2bb6bce8c887236bb4c3e9bc0a34a03af08bc876..3c886bf370c3ca879c8aa660e576223e351121d3 100644
+--- a/deps/v8/src/objects/contexts.h
++++ b/deps/v8/src/objects/contexts.h
+@@ -274,6 +274,8 @@ enum ContextLookupFlags {
+   V(WITH_CONTEXT_MAP_INDEX, Map, with_context_map)                             \
+   V(DEBUG_EVALUATE_CONTEXT_MAP_INDEX, Map, debug_evaluate_context_map)         \
+   V(JS_RAB_GSAB_DATA_VIEW_MAP_INDEX, Map, js_rab_gsab_data_view_map)           \
++  V(CALLBACK_MAP_ITERATOR_MAP_INDEX, Map, callback_map_iterator_map)           \
++  V(CALLBACK_SET_ITERATOR_MAP_INDEX, Map, callback_set_iterator_map)           \
+   V(MAP_CACHE_INDEX, Object, map_cache)                                        \
+   V(MAP_KEY_ITERATOR_MAP_INDEX, Map, map_key_iterator_map)                     \
+   V(MAP_KEY_VALUE_ITERATOR_MAP_INDEX, Map, map_key_value_iterator_map)         \
+diff --git a/deps/v8/src/objects/js-collection-iterator-inl.h b/deps/v8/src/objects/js-collection-iterator-inl.h
+index f803f0eabc2c1b757ded7ad50bb42b3622fb16df..2618e428ab7bf81ad09b709fd05e22197fcc9b70 100644
+--- a/deps/v8/src/objects/js-collection-iterator-inl.h
++++ b/deps/v8/src/objects/js-collection-iterator-inl.h
+@@ -19,6 +19,7 @@ namespace internal {
+ #include "torque-generated/src/objects/js-collection-iterator-tq-inl.inc"
+ 
+ TQ_OBJECT_CONSTRUCTORS_IMPL(JSCollectionIterator)
++TQ_OBJECT_CONSTRUCTORS_IMPL(JSCallbackIterator)
+ 
+ }  // namespace internal
+ }  // namespace v8
+diff --git a/deps/v8/src/objects/js-collection-iterator.h b/deps/v8/src/objects/js-collection-iterator.h
+index 00a674abceb009a7d594e6cb2a8e2d76f4cbfa60..943ec02f79bcda0882fa6e3a427b1b33b8f6f3e3 100644
+--- a/deps/v8/src/objects/js-collection-iterator.h
++++ b/deps/v8/src/objects/js-collection-iterator.h
+@@ -16,8 +16,22 @@
+ namespace v8 {
+ namespace internal {
+ 
++enum class JSCallbackIteratorKind { kMap, kSet };
++enum class JSCallbackIteratorState { kSuspended, kExecuting, kCompleted };
++
+ #include "torque-generated/src/objects/js-collection-iterator-tq.inc"
+ 
++// Deliberately outside the native table-backed iterator type ranges: optimized
++// Map/Set next paths must not interpret this object's callback as a hash table.
++class JSCallbackIterator
++    : public TorqueGeneratedJSCallbackIterator<JSCallbackIterator, JSObject> {
++ public:
++  DECL_PRINTER(JSCallbackIterator)
++  DECL_VERIFIER(JSCallbackIterator)
++
++  TQ_OBJECT_CONSTRUCTORS(JSCallbackIterator)
++};
++
+ class JSCollectionIterator
+     : public TorqueGeneratedJSCollectionIterator<JSCollectionIterator,
+                                                  JSObject> {
+diff --git a/deps/v8/src/objects/js-collection-iterator.tq b/deps/v8/src/objects/js-collection-iterator.tq
+index 7560cfbe2cfbf3558db7c5a56c09bd7d77f43319..3b83fb563ad4c781c44f8a4e68add502dadde974 100644
+--- a/deps/v8/src/objects/js-collection-iterator.tq
++++ b/deps/v8/src/objects/js-collection-iterator.tq
+@@ -2,6 +2,20 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++extern enum JSCallbackIteratorKind extends uint31 { kMap, kSet }
++extern enum JSCallbackIteratorState extends uint31 {
++  kSuspended,
++  kExecuting,
++  kCompleted
++}
++
++extern class JSCallbackIterator extends JSObject {
++  // Callable until completion, then cleared.
++  next: JSReceiver|Undefined;
++  kind: SmiTagged<JSCallbackIteratorKind>;
++  state: SmiTagged<JSCallbackIteratorState>;
++}
++
+ @abstract
+ extern class JSCollectionIterator extends JSObject {
+   // The backing hash table mapping keys to values.
+diff --git a/deps/v8/src/objects/js-objects.cc b/deps/v8/src/objects/js-objects.cc
+index 9c1f619fd0d75e59f5ce2a53d252bacbdbecd3c2..e7207eac84589c950775bf5a85abc60133584c6e 100644
+--- a/deps/v8/src/objects/js-objects.cc
++++ b/deps/v8/src/objects/js-objects.cc
+@@ -2545,6 +2545,8 @@ int JSObject::GetHeaderSize(InstanceType type,
+       return JSAsyncFunctionObject::kHeaderSize;
+     case JS_ASYNC_GENERATOR_OBJECT_TYPE:
+       return JSAsyncGeneratorObject::kHeaderSize;
++    case JS_CALLBACK_ITERATOR_TYPE:
++      return JSCallbackIterator::kHeaderSize;
+     case JS_ASYNC_FROM_SYNC_ITERATOR_TYPE:
+       return JSAsyncFromSyncIterator::kHeaderSize;
+     case JS_GLOBAL_PROXY_TYPE:
+diff --git a/deps/v8/src/objects/js-weak-refs.cc b/deps/v8/src/objects/js-weak-refs.cc
+index f125cc630d0f670279094e1c89653f5c244284e2..9328b41892cf2f0caeec587ae7281cd3acf21737 100644
+--- a/deps/v8/src/objects/js-weak-refs.cc
++++ b/deps/v8/src/objects/js-weak-refs.cc
+@@ -4,7 +4,7 @@
+ 
+ #include "src/objects/js-weak-refs.h"
+ 
+-#include "src/execution/execution.h"
++#include "include/v8-exception.h"
+ #include "src/objects/js-weak-refs-inl.h"
+ 
+ namespace v8 {
+@@ -56,6 +56,11 @@ Maybe<bool> JSFinalizationRegistry::Cleanup(
+ 
+   // 2. Let callback be finalizationRegistry.[[CleanupCallback]].
+   DirectHandle<Object> callback(finalization_registry->cleanup(), isolate);
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++  DirectHandle<Object> captured_context(
++      finalization_registry->continuation_preserved_embedder_data(), isolate);
++  const bool has_captured_context = !IsTheHole(*captured_context);
++#endif
+ 
+   // 3. While finalizationRegistry.[[Cells]] contains a Record cell such that
+   //    cell.[[WeakRefTarget]] is empty, an implementation may perform the
+@@ -72,12 +77,31 @@ Maybe<bool> JSFinalizationRegistry::Cleanup(
+ 
+     // c. Perform ? HostCallJobCallback(callback, undefined,
+     //    « cell.[[HeldValue]] »).
+-    DirectHandle<Object> args[] = {
+-        direct_handle(weak_cell->holdings(), isolate)};
+-    if (Execution::Call(isolate, callback,
+-                        isolate->factory()->undefined_value(),
+-                        base::VectorOf(args))
+-            .is_null()) {
++    DirectHandle<Object> held_value(weak_cell->holdings(), isolate);
++    MaybeDirectHandle<Object> result;
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++    if (has_captured_context) {
++      // A nested API call can report an exception before the callback returns.
++      // Hold the exception until ambient CPED has been restored.
++      v8::TryCatch catcher(reinterpret_cast<v8::Isolate*>(isolate));
++      DirectHandle<Object> ambient(
++          isolate->isolate_data()->continuation_preserved_embedder_data(),
++          isolate);
++      isolate->isolate_data()->set_continuation_preserved_embedder_data(
++          *captured_context);
++      result = isolate->CallFinalizationRegistryCallback(callback, held_value);
++      isolate->isolate_data()->set_continuation_preserved_embedder_data(
++          *ambient);
++      if (result.is_null()) catcher.ReThrow();
++    } else
++#endif
++    {
++      result = isolate->CallFinalizationRegistryCallback(callback, held_value);
++    }
++    if (result.is_null()) {
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++      if (has_captured_context) isolate->ReportPendingMessages();
++#endif
+       if (key_map_may_need_shrink) ShrinkKeyMap(isolate, finalization_registry);
+       return Nothing<bool>();
+     }
+diff --git a/deps/v8/src/objects/js-weak-refs.tq b/deps/v8/src/objects/js-weak-refs.tq
+index e0e6ae54e156b2703abe985205e4a1fe4a4df554..a4ccba3e2ced634e2f3b4351bbd0c9f5e4cfe8c7 100644
+--- a/deps/v8/src/objects/js-weak-refs.tq
++++ b/deps/v8/src/objects/js-weak-refs.tq
+@@ -9,6 +9,9 @@ bitfield struct FinalizationRegistryFlags extends uint31 {
+ extern class JSFinalizationRegistry extends JSObject {
+   native_context: NativeContext;
+   cleanup: Callable;
++  // TheHole means construction did not opt into host context capture.
++  @if(V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA)
++  continuation_preserved_embedder_data: Object;
+   active_cells: Undefined|WeakCell;
+   cleared_cells: Undefined|WeakCell;
+   key_map: Object;
+diff --git a/deps/v8/src/objects/map.cc b/deps/v8/src/objects/map.cc
+index 00f7af813c2da971d71a6b2d775d1f7461990677..12036631b6aa822ef64a3d1252f9030fd1c2ddda 100644
+--- a/deps/v8/src/objects/map.cc
++++ b/deps/v8/src/objects/map.cc
+@@ -259,6 +259,7 @@ VisitorId Map::GetVisitorId(Tagged<Map> map) {
+     case JS_ARRAY_ITERATOR_TYPE:
+     case JS_ARRAY_TYPE:
+     case JS_ASYNC_DISPOSABLE_STACK_TYPE:
++    case JS_CALLBACK_ITERATOR_TYPE:
+     case JS_ASYNC_FROM_SYNC_ITERATOR_TYPE:
+     case JS_ASYNC_FUNCTION_OBJECT_TYPE:
+     case JS_ASYNC_GENERATOR_OBJECT_TYPE:
+diff --git a/deps/v8/src/objects/object-list-macros.h b/deps/v8/src/objects/object-list-macros.h
+index 731a274c0da63f87f16993681624cd248b3447aa..30248a431cfec2c5f36736e9d3547f878a1ecf79 100644
+--- a/deps/v8/src/objects/object-list-macros.h
++++ b/deps/v8/src/objects/object-list-macros.h
+@@ -151,6 +151,7 @@ namespace internal {
+   V(JSAtomicsMutex)                             \
+   V(JSBoundFunction)                            \
+   V(JSCollection)                               \
++  V(JSCallbackIterator)                         \
+   V(JSCollectionIterator)                       \
+   V(JSCustomElementsObject)                     \
+   V(JSDataView)                                 \
+diff --git a/deps/v8/src/objects/objects.cc b/deps/v8/src/objects/objects.cc
+index 779a8506f7afef74f8544f2b225d44f81bd53ff9..e0f7d2a8e98ad3a4faa5fad3d6c0f51471c7f019 100644
+--- a/deps/v8/src/objects/objects.cc
++++ b/deps/v8/src/objects/objects.cc
+@@ -4801,6 +4801,12 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
+     return Fulfill(promise, resolution_recv);
+   }
+ 
++  // Capture host data at the HostMakeJobCallback registration point.
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++  auto captured_context = isolate->CapturePromiseJobContext(
++      v8::PromiseJobKind::kThenable, then_action,
++      isolate->factory()->undefined_value());
++#endif
+   // 13. Let job be NewPromiseResolveThenableJob(promise, resolution,
+   //                                             thenAction).
+   DirectHandle<NativeContext> then_context;
+@@ -4813,6 +4819,9 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
+       isolate->factory()->NewPromiseResolveThenableJobTask(
+           promise, resolution_recv, Cast<JSReceiver>(then_action),
+           then_context);
++#ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
++  task->set_continuation_preserved_embedder_data(*captured_context);
++#endif
+   if (isolate->debug()->is_active() && IsJSPromise(*resolution_recv)) {
+     // Mark the dependency of the new {promise} on the {resolution}.
+     Object::SetProperty(isolate, resolution_recv,
+@@ -4821,7 +4830,7 @@ MaybeHandle<Object> JSPromise::Resolve(DirectHandle<JSPromise> promise,
+         .Check();
+   }
+   MicrotaskQueue* microtask_queue = then_context->microtask_queue();
+-  if (microtask_queue) microtask_queue->EnqueueMicrotask(*task);
++  if (microtask_queue) isolate->EnqueuePromiseJob(task);
+ 
+   // 15. Return undefined.
+   return isolate->factory()->undefined_value();
+@@ -4878,6 +4887,12 @@ Handle<Object> JSPromise::TriggerPromiseReactions(
+           JSReceiver::GetContextForMicrotask(Cast<JSReceiver>(primary_handler))
+               .ToHandle(&handler_context);
+     }
++    DirectHandle<UnionOf<NativeContext, Undefined>> job_realm =
++        isolate->factory()->undefined_value();
++    if (!IsUndefined(*primary_handler)) {
++      job_realm =
++          has_handler_context ? handler_context : isolate->native_context();
++    }
+     if (!has_handler_context && IsJSReceiver(*secondary_handler)) {
+       has_handler_context = JSReceiver::GetContextForMicrotask(
+                                 Cast<JSReceiver>(secondary_handler))
+@@ -4932,7 +4947,9 @@ Handle<Object> JSPromise::TriggerPromiseReactions(
+ 
+     MicrotaskQueue* microtask_queue = handler_context->microtask_queue();
+     if (microtask_queue) {
+-      microtask_queue->EnqueueMicrotask(*Cast<PromiseReactionJobTask>(task));
++      auto job = Cast<PromiseReactionJobTask>(task);
++      job->set_job_realm(*job_realm);
++      isolate->EnqueuePromiseJob(job);
+     }
+   }
+ 
+diff --git a/deps/v8/src/objects/promise-inl.h b/deps/v8/src/objects/promise-inl.h
+index 4ab516e9e3f5595dcf63a13c0163d7882c3f9940..ae35e4c9a504a2f618d71de5776402e181d70f33 100644
+--- a/deps/v8/src/objects/promise-inl.h
++++ b/deps/v8/src/objects/promise-inl.h
+@@ -151,6 +151,32 @@ void PromiseReaction::set_promise_or_capability(
+   promise_or_capability_.store(this, value, mode);
+ }
+ 
++Tagged<UnionOf<NativeContext, Undefined>> PromiseReaction::job_realm() const {
++  return job_realm_.load();
++}
++void PromiseReaction::set_job_realm(
++    Tagged<UnionOf<NativeContext, Undefined>> value, WriteBarrierMode mode) {
++  job_realm_.store(this, value, mode);
++}
++
++Tagged<UnionOf<NativeContext, Undefined>> PromiseReactionJobTask::job_realm()
++    const {
++  return job_realm_.load();
++}
++void PromiseReactionJobTask::set_job_realm(
++    Tagged<UnionOf<NativeContext, Undefined>> value, WriteBarrierMode mode) {
++  job_realm_.store(this, value, mode);
++}
++
++Tagged<UnionOf<NativeContext, Undefined>>
++PromiseResolveThenableJobTask::job_realm() const {
++  return job_realm_.load();
++}
++void PromiseResolveThenableJobTask::set_job_realm(
++    Tagged<UnionOf<NativeContext, Undefined>> value, WriteBarrierMode mode) {
++  job_realm_.store(this, value, mode);
++}
++
+ }  // namespace internal
+ }  // namespace v8
+ 
+diff --git a/deps/v8/src/objects/promise.h b/deps/v8/src/objects/promise.h
+index 15f237e60d274538a7c81b0b0f81c14a30ae2025..c7031805a091948ed9659c0bdcf97bb4aed24f67 100644
+--- a/deps/v8/src/objects/promise.h
++++ b/deps/v8/src/objects/promise.h
+@@ -51,6 +51,10 @@ V8_OBJECT class PromiseReactionJobTask : public Microtask {
+       Tagged<UnionOf<JSPromise, PromiseCapability, Undefined>> value,
+       WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+ 
++  inline Tagged<UnionOf<NativeContext, Undefined>> job_realm() const;
++  inline void set_job_realm(Tagged<UnionOf<NativeContext, Undefined>> value,
++                            WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
++
+   using BodyDescriptor = StructBodyDescriptor;
+ 
+   DECL_VERIFIER(PromiseReactionJobTask)
+@@ -67,6 +71,7 @@ V8_OBJECT class PromiseReactionJobTask : public Microtask {
+   TaggedMember<UnionOf<JSCallable, Undefined>> handler_;
+   TaggedMember<UnionOf<JSPromise, PromiseCapability, Undefined>>
+       promise_or_capability_;
++  TaggedMember<UnionOf<NativeContext, Undefined>> job_realm_;
+ } V8_OBJECT_END;
+ 
+ // Struct to hold state required for a PromiseReactionJob of type "Fulfill".
+@@ -106,6 +111,10 @@ V8_OBJECT class PromiseResolveThenableJobTask : public Microtask {
+   inline void set_then(Tagged<JSReceiver> value,
+                        WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+ 
++  inline Tagged<UnionOf<NativeContext, Undefined>> job_realm() const;
++  inline void set_job_realm(Tagged<UnionOf<NativeContext, Undefined>> value,
++                            WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
++
+   using BodyDescriptor = StructBodyDescriptor;
+ 
+   DECL_VERIFIER(PromiseResolveThenableJobTask)
+@@ -119,6 +128,7 @@ V8_OBJECT class PromiseResolveThenableJobTask : public Microtask {
+   TaggedMember<JSPromise> promise_to_resolve_;
+   TaggedMember<JSReceiver> thenable_;
+   TaggedMember<JSReceiver> then_;
++  TaggedMember<UnionOf<NativeContext, Undefined>> job_realm_;
+ } V8_OBJECT_END;
+ 
+ // Struct to hold the state of a PromiseCapability.
+@@ -193,6 +203,10 @@ V8_OBJECT class PromiseReaction : public StructLayout {
+       Tagged<UnionOf<JSPromise, PromiseCapability, Undefined>> value,
+       WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
+ 
++  inline Tagged<UnionOf<NativeContext, Undefined>> job_realm() const;
++  inline void set_job_realm(Tagged<UnionOf<NativeContext, Undefined>> value,
++                            WriteBarrierMode mode = UPDATE_WRITE_BARRIER);
++
+   using BodyDescriptor = StructBodyDescriptor;
+ 
+   DECL_VERIFIER(PromiseReaction)
+@@ -213,6 +227,7 @@ V8_OBJECT class PromiseReaction : public StructLayout {
+   TaggedMember<UnionOf<JSCallable, Undefined>> fulfill_handler_;
+   TaggedMember<UnionOf<JSPromise, PromiseCapability, Undefined>>
+       promise_or_capability_;
++  TaggedMember<UnionOf<NativeContext, Undefined>> job_realm_;
+ } V8_OBJECT_END;
+ 
+ template <>
+diff --git a/deps/v8/src/objects/promise.tq b/deps/v8/src/objects/promise.tq
+index e1e0176de1babc9456672ebea8b96c0432e1a626..d91580e2d0f284342ccb37f3e548b57210ba5426 100644
+--- a/deps/v8/src/objects/promise.tq
++++ b/deps/v8/src/objects/promise.tq
+@@ -41,6 +41,7 @@ extern class PromiseReaction extends Struct {
+   // Either a JSPromise (in case of native promises), a PromiseCapability
+   // (general case), or undefined (in case of await).
+   promise_or_capability: JSPromise|PromiseCapability|Undefined;
++  job_realm: NativeContext|Undefined;
+ }
+ 
+ // PromiseReactionJobTask constants
+@@ -65,6 +66,7 @@ extern class PromiseReactionJobTask extends Microtask {
+   // Either a JSPromise (in case of native promises), a PromiseCapability
+   // (general case), or undefined (in case of await).
+   promise_or_capability: JSPromise|PromiseCapability|Undefined;
++  job_realm: NativeContext|Undefined;
+ }
+ 
+ @cppObjectLayoutDefinition
+@@ -79,4 +81,5 @@ extern class PromiseResolveThenableJobTask extends Microtask {
+   promise_to_resolve: JSPromise;
+   thenable: JSReceiver;
+   then: JSReceiver;
++  job_realm: NativeContext|Undefined;
+ }
+diff --git a/deps/v8/src/runtime/runtime-promise.cc b/deps/v8/src/runtime/runtime-promise.cc
+index 3c9d7184189915aededd5824400713a7300c193c..39307fea5ce02e4834b2f38c9d11d9c814aa44c1 100644
+--- a/deps/v8/src/runtime/runtime-promise.cc
++++ b/deps/v8/src/runtime/runtime-promise.cc
+@@ -107,6 +107,44 @@ RUNTIME_FUNCTION(Runtime_PromiseHookAfter) {
+   return ReadOnlyRoots(isolate).undefined_value();
+ }
+ 
++RUNTIME_FUNCTION(Runtime_EnqueuePromiseJob) {
++  HandleScope scope(isolate);
++  isolate->EnqueuePromiseJob(args.at<Microtask>(0));
++  return ReadOnlyRoots(isolate).undefined_value();
++}
++
++RUNTIME_FUNCTION(Runtime_CapturePromiseJobContext) {
++  HandleScope scope(isolate);
++  DCHECK_EQ(3, args.length());
++  auto kind = static_cast<v8::PromiseJobKind>(args.smi_value_at(0));
++  return *isolate->CapturePromiseJobContext(kind, args.at<Object>(1),
++                                          args.at<Object>(2));
++}
++
++RUNTIME_FUNCTION(Runtime_CallPromiseThenable) {
++  HandleScope scope(isolate);
++  DCHECK_EQ(4, args.length());
++  v8::Local<v8::Value> argv[] = {v8::Utils::ToLocal(args.at<Object>(2)),
++                                 v8::Utils::ToLocal(args.at<Object>(3))};
++  RETURN_RESULT_OR_FAILURE(
++      isolate, isolate->CallPromiseCallback(v8::PromiseCallbackKind::kThenable,
++                                            args.at<JSReceiver>(0),
++                                            args.at<JSReceiver>(1), 2, argv));
++}
++
++RUNTIME_FUNCTION(Runtime_CallPromiseReaction) {
++  HandleScope scope(isolate);
++  DCHECK_EQ(3, args.length());
++  auto kind = args.smi_value_at(2) == PromiseReaction::kFulfill
++                  ? v8::PromiseCallbackKind::kFulfill
++                  : v8::PromiseCallbackKind::kReject;
++  v8::Local<v8::Value> argv[] = {v8::Utils::ToLocal(args.at<Object>(1))};
++  RETURN_RESULT_OR_FAILURE(isolate,
++                           isolate->CallPromiseCallback(
++                               kind, args.at<JSReceiver>(0),
++                               isolate->factory()->undefined_value(), 1, argv));
++}
++
+ RUNTIME_FUNCTION(Runtime_RejectPromise) {
+   HandleScope scope(isolate);
+   DCHECK_EQ(3, args.length());
+diff --git a/deps/v8/src/runtime/runtime-weak-refs.cc b/deps/v8/src/runtime/runtime-weak-refs.cc
+index 2c79dd1f99609703fead13092cf67d008f30897b..1298e7fac0f3f94bf5f6140dca4ee1eb5b42fe4a 100644
+--- a/deps/v8/src/runtime/runtime-weak-refs.cc
++++ b/deps/v8/src/runtime/runtime-weak-refs.cc
+@@ -23,6 +23,12 @@ RUNTIME_FUNCTION(
+   return ReadOnlyRoots(isolate).undefined_value();
+ }
+ 
++RUNTIME_FUNCTION(Runtime_CaptureFinalizationRegistryContext) {
++  HandleScope scope(isolate);
++  DCHECK_EQ(1, args.length());
++  return *isolate->CaptureFinalizationRegistryContext(args.at<Object>(0));
++}
++
+ RUNTIME_FUNCTION(Runtime_JSWeakRefAddToKeptObjects) {
+   HandleScope scope(isolate);
+   DCHECK_EQ(1, args.length());
+diff --git a/deps/v8/src/runtime/runtime.h b/deps/v8/src/runtime/runtime.h
+index ee6cc6f20608ec707dc55b382a818583162de8ae..7bcb98e479d61d34ec41d9490be834ce440c4043 100644
+--- a/deps/v8/src/runtime/runtime.h
++++ b/deps/v8/src/runtime/runtime.h
+@@ -437,6 +437,10 @@ constexpr bool CanTriggerGC(T... properties) {
+   F(PromiseHookAfter, 1, 1)              \
+   F(PromiseHookBefore, 1, 1)             \
+   F(PromiseHookInit, 2, 1)               \
++  F(CallPromiseThenable, 4, 1)           \
++  F(CallPromiseReaction, 3, 1)           \
++  F(EnqueuePromiseJob, 1, 1)             \
++  F(CapturePromiseJobContext, 3, 1)      \
+   F(PromiseRejectEventFromStack, 2, 1)   \
+   F(PromiseRevokeReject, 1, 1)           \
+   F(RejectPromise, 3, 1)                 \
+@@ -821,6 +825,7 @@ constexpr bool CanTriggerGC(T... properties) {
+   F(WasmTraceEndExecution, 0, 1)
+ 
+ #define FOR_EACH_INTRINSIC_WEAKREF(F, I)                             \
++  F(CaptureFinalizationRegistryContext, 1, 1)                        \
+   F(JSFinalizationRegistryRegisterWeakCellWithUnregisterToken, 2, 1) \
+   F(JSWeakRefAddToKeptObjects, 1, 1)
+ 
+diff --git a/deps/v8/test/cctest/test-api-array-buffer.cc b/deps/v8/test/cctest/test-api-array-buffer.cc
+index e66b216f0751f1bd089428d66f4ae1097ab09bb9..25f09bdbbca0ce938fc7d9fd0a89cfa367885626 100644
+--- a/deps/v8/test/cctest/test-api-array-buffer.cc
++++ b/deps/v8/test/cctest/test-api-array-buffer.cc
+@@ -1111,6 +1111,27 @@ void TestArrayBufferViewGetContent(const char* source, void* expected) {
+ }
+ }  // namespace
+ 
++TEST(ArrayBufferView_IsLengthTracking) {
++  LocalContext env;
++  v8::HandleScope scope(env.isolate());
++  auto views = CompileRun(R"(
++    (() => {
++      const fixed = new ArrayBuffer(8);
++      const resizable = new ArrayBuffer(8, {maxByteLength: 16});
++      const shared = new SharedArrayBuffer(8, {maxByteLength: 16});
++      return [new Uint8Array(fixed), new DataView(fixed),
++              new Uint8Array(resizable, 2, 2), new DataView(resizable, 2, 2),
++              new Uint8Array(shared, 2, 2), new DataView(shared, 2, 2),
++              new Uint8Array(resizable, 2), new DataView(resizable, 2),
++              new Uint8Array(shared, 2), new DataView(shared, 2)];
++    })()
++  )").As<v8::Array>();
++  for (uint32_t i = 0; i < views->Length(); ++i) {
++    auto view = views->Get(env.local(), i).ToLocalChecked().As<v8::ArrayBufferView>();
++    CHECK_EQ(i >= 6, view->IsLengthTracking());
++  }
++}
++
+ TEST(ArrayBufferView_GetContentsSmallUint8) {
+   const char* source = "new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9])";
+   uint8_t expected[]{1, 2, 3, 4, 5, 6, 7, 8, 9};
+diff --git a/deps/v8/test/cctest/test-api.cc b/deps/v8/test/cctest/test-api.cc
+index 9b5fdd3cfd9669420294d88dba5b8f03e6e1b1e1..460fbaa8bec1e094343c69b72af79b9e4c3d4aee 100644
+--- a/deps/v8/test/cctest/test-api.cc
++++ b/deps/v8/test/cctest/test-api.cc
+@@ -1863,6 +1863,61 @@ THREADED_TEST(IsGeneratorFunctionOrObject) {
+   CHECK(!func->IsGeneratorObject());
+ }
+ 
++THREADED_TEST(IsBuiltinIterator) {
++  LocalContext env;
++  v8::Isolate* isolate = env.isolate();
++  v8::HandleScope scope(isolate);
++
++  auto iterators = CompileRun(R"(
++    var iterators = [[1, 2].values(), 'ab'[Symbol.iterator](),
++                     'ab'.matchAll(/./g)];
++    var nextMethods = iterators.map(iterator => iterator.next);
++    var impostors = iterators.map(iterator =>
++        Object.create(Object.getPrototypeOf(iterator)));
++    var fail = () => { throw new Error('Author code ran'); };
++    var proxies = iterators.map(iterator => new Proxy(iterator, {
++      get: fail, getPrototypeOf: fail, ownKeys: fail
++    }));
++    var revoked = Proxy.revocable(iterators[0], {});
++    revoked.revoke();
++    for (var iterator of iterators) {
++      Object.defineProperties(iterator, {
++        marker: { enumerable: true, get: fail },
++        [Symbol.toStringTag]: { get: fail },
++        next: { get: fail }
++      });
++      Object.setPrototypeOf(iterator, null);
++    }
++    iterators;
++  )").As<v8::Array>();
++  bool (v8::Value::*predicates[])() const = {
++      &v8::Value::IsArrayIterator, &v8::Value::IsStringIterator,
++      &v8::Value::IsRegExpStringIterator};
++  for (uint32_t i = 0; i < 3; ++i) {
++    auto value = iterators->Get(env.local(), i).ToLocalChecked();
++    for (uint32_t j = 0; j < 3; ++j) {
++      CHECK_EQ(i == j, ((*value)->*predicates[j])());
++    }
++  }
++  CHECK(CompileRun(R"(
++    nextMethods[0].call(iterators[0]).value === 1 &&
++    nextMethods[1].call(iterators[1]).value === 'a' &&
++    nextMethods[2].call(iterators[2]).value[0] === 'a'
++  )")->IsTrue());
++  auto others = CompileRun(R"(
++    [undefined, null, 1, 'ab', [], {}, ...impostors, ...proxies,
++     revoked.proxy, new Map().entries(), new Set().values(),
++     (function* () {})(), { [Symbol.toStringTag]: 'Array Iterator' }]
++  )").As<v8::Array>();
++  for (uint32_t i = 0; i < others->Length(); ++i) {
++    auto value = others->Get(env.local(), i).ToLocalChecked();
++    for (auto predicate : predicates) {
++      CHECK(!((*value)->*predicate)());
++    }
++  }
++  CHECK(CompileRun("new Uint8Array(2).entries()")->IsArrayIterator());
++}
++
+ THREADED_TEST(IsAsyncFunction) {
+   LocalContext env;
+   v8::Isolate* isolate = env.isolate();
+@@ -25653,6 +25708,45 @@ THREADED_TEST(TestGetCurrentHostDefinedOptions) {
+   }
+ }
+ 
++void GetCurrentHostDefinedOptionsAcrossOriginsTest(
++    const v8::FunctionCallbackInfo<Value>& info) {
++  auto* isolate = info.GetIsolate();
++  auto context = isolate->GetCurrentContext();
++  auto token = context->GetSecurityToken();
++  CHECK(isolate->GetCurrentHostDefinedOptions().IsEmpty());
++  auto options = isolate->GetCurrentHostDefinedOptions(true)
++                     .ToLocalChecked()
++                     .As<v8::PrimitiveArray>();
++  CHECK(options->Get(isolate, 0)->StrictEquals(v8_num(4.2)));
++  CHECK(isolate->GetCurrentHostDefinedOptions(false).IsEmpty());
++  CHECK(context == isolate->GetCurrentContext());
++  CHECK(token == context->GetSecurityToken());
++}
++
++THREADED_TEST(TestGetCurrentHostDefinedOptionsAcrossOrigins) {
++  LocalContext env;
++  auto* isolate = CcTest::isolate();
++  v8::HandleScope scope(isolate);
++  auto callback =
++      v8::Function::New(isolate->GetCurrentContext(),
++                        GetCurrentHostDefinedOptionsAcrossOriginsTest)
++          .ToLocalChecked();
++  auto author = v8::Context::New(isolate);
++  v8::Context::Scope author_scope(author);
++  author->Global()->Set(author, v8_str("test"), callback).ToChecked();
++  auto options = v8::PrimitiveArray::New(isolate, 1);
++  options->Set(isolate, 0, v8_num(4.2));
++  v8::ScriptOrigin origin(v8_str("author.js"), 0, 0, false, -1,
++                          Local<v8::Value>(), false, false, false, options);
++  for (const char* text : {"test()", "eval('test()')"}) {
++    v8::ScriptCompiler::Source source(v8_str(text), origin);
++    v8::ScriptCompiler::Compile(author, &source)
++        .ToLocalChecked()
++        ->Run(author)
++        .ToLocalChecked();
++  }
++}
++
+ TEST(NewStringRangeError) {
+   // This test uses a lot of memory and fails with flaky OOM when run
+   // with --stress-incremental-marking on TSAN.
+@@ -25723,6 +25817,109 @@ TEST(SealHandleScopeNested) {
+   }
+ }
+ 
++TEST(CollectionIterator) {
++  v8::Isolate* isolate = CcTest::isolate();
++  v8::HandleScope scope(isolate);
++  LocalContext env;
++
++  for (auto kind : {v8::CollectionIterator::Kind::kMap,
++                    v8::CollectionIterator::Kind::kSet}) {
++    bool is_map = kind == v8::CollectionIterator::Kind::kMap;
++    auto next = CompileRun(R"JS(
++      (() => {
++        let count = 0;
++        return () => ({ value: ++count, done: count > 2 });
++      })()
++    )JS")
++                    .As<v8::Function>();
++    auto iterator =
++        v8::CollectionIterator::New(env.local(), kind, next).ToLocalChecked();
++    CHECK(env->Global()
++              ->Set(env.local(), v8_str("iterator"), iterator)
++              .FromJust());
++    CHECK(env->Global()
++              ->Set(env.local(), v8_str("nativeNext"),
++                    CompileRun(
++                        is_map
++                            ? "Object.getPrototypeOf(new Map().values()).next"
++                            : "Object.getPrototypeOf(new Set().values()).next"))
++              .FromJust());
++    CHECK(CompileRun(R"JS(
++      (() => {
++        if (iterator.next !== nativeNext) return false;
++        if (iterator[Symbol.iterator]() !== iterator) return false;
++        if (nativeNext.call(iterator).value !== 1) return false;
++        Object.setPrototypeOf(iterator, null);
++        if (nativeNext.call(iterator).value !== 2) return false;
++        const result = nativeNext.call(iterator);
++        if (!result.done || result.value !== undefined) return false;
++        return nativeNext.call(iterator).done;
++      })()
++    )JS")
++              ->IsTrue());
++
++    next = CompileRun("() => nativeNext.call(iterator)").As<v8::Function>();
++    iterator =
++        v8::CollectionIterator::New(env.local(), kind, next).ToLocalChecked();
++    CHECK(env->Global()
++              ->Set(env.local(), v8_str("iterator"), iterator)
++              .FromJust());
++    CHECK(CompileRun(R"JS(
++      (() => {
++        let threw = false;
++        try { nativeNext.call(iterator); }
++        catch (error) { threw = error instanceof TypeError; }
++        return threw && nativeNext.call(iterator).done;
++      })()
++    )JS")
++              ->IsTrue());
++
++    next = CompileRun("() => ({ get done() { throw undefined; } })")
++               .As<v8::Function>();
++    iterator =
++        v8::CollectionIterator::New(env.local(), kind, next).ToLocalChecked();
++    CHECK(env->Global()
++              ->Set(env.local(), v8_str("iterator"), iterator)
++              .FromJust());
++    CHECK(CompileRun(R"JS(
++      (() => {
++        let threw = false;
++        try { nativeNext.call(iterator); }
++        catch (error) { threw = error === undefined; }
++        return threw && nativeNext.call(iterator).done;
++      })()
++    )JS")
++              ->IsTrue());
++  }
++}
++
++TEST(CollectionIteratorCreationContext) {
++  v8::Isolate* isolate = CcTest::isolate();
++  v8::HandleScope scope(isolate);
++  LocalContext env;
++  auto callback =
++      CompileRun("() => ({ value: 42, done: false })").As<v8::Function>();
++  auto other = v8::Context::New(isolate);
++  auto iterator = v8::CollectionIterator::New(
++                      other, v8::CollectionIterator::Kind::kMap, callback)
++                      .ToLocalChecked();
++  CHECK(iterator->GetCreationContextChecked() == other);
++  {
++    v8::Context::Scope other_scope(other);
++    CHECK(iterator->GetPrototypeV2()->StrictEquals(
++        CompileRun("Object.getPrototypeOf(new Map().values())")));
++  }
++  CHECK(
++      env->Global()->Set(env.local(), v8_str("iterator"), iterator).FromJust());
++  CHECK(CompileRun(R"JS(
++    (() => {
++      const result = Object.getPrototypeOf(new Map().values()).next.call(iterator);
++      return result.value === 42 && Object.getPrototypeOf(result) === Object.prototype;
++    })()
++  )JS")
++            ->IsTrue());
++}
++
+ TEST(Map) {
+   v8::Isolate* isolate = CcTest::isolate();
+   v8::HandleScope handle_scope(isolate);
+diff --git a/deps/v8/test/mjsunit/regress/regress-eval-cache-origin.js b/deps/v8/test/mjsunit/regress/regress-eval-cache-origin.js
+new file mode 100644
+index 0000000000000000000000000000000000000000..5ae960455cb27afed192c813685b9a6a8efe9c88
+--- /dev/null
++++ b/deps/v8/test/mjsunit/regress/regress-eval-cache-origin.js
+@@ -0,0 +1,28 @@
++// Copyright 2026 the V8 project authors. All rights reserved.
++// Use of this source code is governed by a BSD-style license that can be
++// found in the LICENSE file.
++
++Error.prepareStackTrace = (error, frames) => frames[0].getEvalOrigin();
++
++function first(source) { return (0, eval)(source); }
++function second(source) { return (0, eval)(source); }
++
++for (const source of ['new Error()', '() => new Error()']) {
++  const values = [first(source), second(source), first(source)];
++  const errors = values.map(value =>
++    typeof value === 'function' ? value() : value);
++  assertMatches(/eval at first /, errors[0].stack);
++  assertMatches(/eval at second /, errors[1].stack);
++  assertEquals(errors[0].stack, errors[2].stack);
++}
++
++const source = 'new Error()';
++const errors = [
++  (0, eval)(source),
++  (0, eval)(source),
++  (0, eval)(source),
++];
++assertNotEquals(errors[0].stack, errors[1].stack);
++assertNotEquals(errors[1].stack, errors[2].stack);
++
++Error.prepareStackTrace = undefined;

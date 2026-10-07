@@ -1,23 +1,14 @@
 # Vendored dependencies
 
-`vendor-lock.json` records each upstream revision and its tracked patch.
+`vendor-lock.json` records the revisions and patches prepared by the vendor command.
 The generated checkouts and package archives are ignored; the source revision and patches are not.
 The preparation command resets only the selected vendor checkout to that revision.
 
 ## Undici
 
-```sh
-node scripts/vendor.ts undici
-npm install
-```
-
-This command runs before dependencies are installed, using Node's built-in
-TypeScript support. It prepares the checkout and packs its runtime files as
-`vendor/undici-8.11.2.tgz`, without running Undici's package scripts. It does not
-require tsx or run an installation hook.
-
-Undici is pinned to `328ab8435079ca6edc1236a29e45a46915456502` (8.11.2).
-`_patches/undici.patch` preserves Node's original HTTP/2 response, interim,
+The [Fetch implementation](../src/fetch/README.md) uses Undici's dispatcher for
+HTTP transport. Undici is pinned to `328ab8435079ca6edc1236a29e45a46915456502` (8.11.2).
+The [patch](_patches/undici.patch) preserves Node's original HTTP/2 response, interim,
 trailer, and CONNECT fields through Undici's raw-header APIs. Parsed-header
 consumers keep their existing representation. The patch also carries its
 upstream-style regression tests. See [Undici #5898](https://github.com/nodejs/undici/issues/5898).
@@ -37,23 +28,22 @@ expecting response body bytes. Its regression preserves the header, completes
 the empty response, and reuses the connection for the next request. Ordinary
 body-length validation remains in place.
 
-Development history is kept on `codex/http2-raw-headers-experiment` in the regular
-Undici reference checkout. The raw-header fix, iterable-body typing correction,
-unsolicited-100 repair (`41496d5d`), and 304 repair (`10e3655e`) are separate
-commits. Keep further fixes separate there before updating the tracked vendor
-patch; the generated checkout is disposable.
-
-Both workspace manifests install the archive through ordinary `undici` imports.
-Browlet bundles this dependency when packed so its artifact does not depend on a
-consumer having our vendor directory. The build copies bundled dependencies from
-the workspace installation into the package's own `node_modules`, since npm's
-workspace packing otherwise omits hoisted bundles. Undici's license is included.
-
-The focused dependency regression is:
+### Prepare and test
 
 ```sh
+npm run install:vendor -- undici
+npm install
 node --test vendor/undici/test/http2-raw-headers.js
 ```
+
+The vendor command prepares the checkout and packs its runtime files as
+`vendor/undici-8.11.2.tgz` for npm to install. The test command exercises the raw-header
+regression; Browlet's [transport regressions](../src/fetch/README.md#tests) cover
+the consuming Fetch behavior.
+
+Both workspace manifests depend on the archive. Browlet bundles Undici and its
+license when packed. The build copies it from the workspace installation into
+the package's own `node_modules`, since npm's workspace packing omits hoisted bundles.
 
 When a published Undici release includes these fixes, run Browlet's HTTP/1.1 and
 HTTP/2 regressions against it, change both manifests back to that release, update
@@ -66,3 +56,10 @@ duplicate-Location handling; Browlet owns that algorithm itself.
 `npm run install:vendor -- jsdom` prepares the existing Selectlet integration,
 including its build and jsdom dependencies. It requires the workspace's npm
 dependencies to be installed first. Omitting a name prepares all active entries.
+
+## Node.js / V8
+
+[node-v8.patch](_patches/node-v8.patch) contains the V8 extensions and regression
+tests for custom Node builds. Its header records the upstream base revision and
+the source commit. See [Node compatibility](../node-compat/README.md) for the
+capabilities, addon tests, and build instructions.

@@ -80,36 +80,25 @@ describe('Performance', () => {
     }
   });
 
-  it(
-    'correlates relative time with an epoch-comparable time origin',
-    () => {
-      const performance = requirePerformance(createBrowlet().window);
-      const timeOrigin = performance.timeOrigin;
-      const wallTimeBefore = Date.now();
-      const epochTime = timeOrigin + performance.now();
-      const wallTimeAfter = Date.now();
+  it('exposes a finite, stable time origin', () => {
+    const performance = requirePerformance(createBrowlet().window);
+    const timeOrigin = performance.timeOrigin;
 
-      expect(Number.isFinite(timeOrigin)).toBe(true);
-      expect(timeOrigin).toBeGreaterThan(0);
-      expect(performance.timeOrigin).toBe(timeOrigin);
-      expect(epochTime).toBeGreaterThanOrEqual(wallTimeBefore - 30);
-      expect(epochTime).toBeLessThanOrEqual(wallTimeAfter + 30);
-    },
-  );
+    expect(Number.isFinite(timeOrigin)).toBe(true);
+    expect(timeOrigin).toBeGreaterThan(0);
+    expect(performance.timeOrigin).toBe(timeOrigin);
+  });
 
-  it('measures elapsed time independently of the wall-clock base', async () => {
+  it('keeps its time origin as relative time advances across host tasks', async () => {
     const { window } = createBrowlet();
     const performance = requirePerformance(window);
-    const wallTimeBefore = Date.now();
+    const timeOrigin = performance.timeOrigin;
     const relativeTimeBefore = performance.now();
 
     await new Promise<void>((resolve) => window.setTimeout(resolve, 20));
 
-    const relativeDuration = performance.now() - relativeTimeBefore;
-    const wallDuration = Date.now() - wallTimeBefore;
-
-    expect(relativeDuration).toBeGreaterThanOrEqual(0);
-    expect(Math.abs(relativeDuration - wallDuration)).toBeLessThanOrEqual(30);
+    expect(performance.timeOrigin).toBe(timeOrigin);
+    expect(performance.now()).toBeGreaterThanOrEqual(relativeTimeBefore);
   });
 
   it('serializes the default Web IDL JSON surface', () => {

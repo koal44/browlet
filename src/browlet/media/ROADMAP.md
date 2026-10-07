@@ -157,5 +157,4 @@ against browser implementations before choosing an interpretation.
 | §15 conformance | Final verification across A–E |
 | §§16–17 examples/acknowledgments; appendices | Examples are integration candidates; Appendix A points playback-quality metrics to their separate specification |
 
-Keep this roadmap until the implementation and dependency decisions have been
-reviewed. Replace it with maintained documentation only with Eric's agreement.
+Keep this roadmap until the implementation and dependency decisions have been reviewed.

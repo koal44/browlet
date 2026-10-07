@@ -42,9 +42,8 @@ the older RFC 5861 references do not require adding that field's processing.
 
 ## Authentication
 
-The following choices were reviewed on 2026-09-24. Browser observations are
-retained evidence, not rechecked by this consolidation. Windows Playwright WebKit
-is not a Safari policy oracle.
+The following choices and browser evidence were reviewed on 2026-09-24.
+Windows Playwright WebKit is not a Safari policy oracle.
 
 - **basic-challenge-validation:** require a realm and unique parameter names,
   as [RFC 7617 §2](https://www.rfc-editor.org/rfc/rfc7617.html#section-2) and
@@ -166,8 +165,7 @@ Transport tests retain informational/final separation, HEAD/304 representation
 lengths, framing failures, unknown status codes, and HTTP/2 refusal recovery.
 Ordinary 408/413/503 responses are not automatically replayed, nor are consumed
 upload iterators. Trailers stay separate and currently have no consumer.
-The completed audit is not a request to implement Expect negotiation, arbitrary
-status retries, or a separate wire stack.
+Expect negotiation, arbitrary status retries, and a separate wire stack remain out of scope.
 
 ## Verification
 

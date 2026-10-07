@@ -138,5 +138,4 @@ of the page's body through projected Response.text().
 
 Extend coverage through each real consumer above, especially inline/meta and
 code-generation behavior. Independent policy tests do not prove those lifecycles.
-Local source: `w3c-csp/index.bs` under the
-[reference root](../../../../fetch/README.md#sources).
+Local source: `w3c-csp/index.bs`.

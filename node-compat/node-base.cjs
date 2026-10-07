@@ -15,18 +15,22 @@ function resolveBase(base, environment = process.env) {
     throw new Error('CUSTOM_NODE_SOURCE must be an absolute path to the regular Node source checkout');
   }
   const directory = resolve(source);
+  const windows = process.platform === 'win32';
+  const executable = custom ? `out/Release/node${windows ? '.exe' : ''}`
+    : windows ? 'node.exe' : 'bin/node';
   const includes = custom
     ? [join(directory, 'src'), join(directory, 'deps/v8/include'), join(directory, 'deps/uv/include')]
     : [join(directory, 'include/node')];
   return {
     base,
-    executable: join(directory, custom ? 'out/Release/node.exe' : 'node.exe'),
+    directory,
+    executable: join(directory, executable),
     includes,
     versionHeader: join(includes[0], 'node_version.h'),
-    library: join(directory, custom ? 'out/Release/node.lib' : 'Release/node.lib'),
+    library: windows ? join(directory, custom ? 'out/Release/node.lib' : 'Release/node.lib') : undefined,
     build: addonBuild(base),
     hint: custom ? `Build Node in CUSTOM_NODE_SOURCE (${directory}).`
-      : `Run npm run build:node -- --base ${base}.`,
+      : `Run npm run install:node -- --base ${base}.`,
   };
 }
 
@@ -43,7 +47,7 @@ function inspectNode(target) {
 }
 
 function validateBuildInputs(target, node) {
-  requireFile(target.library, `Node import library. ${target.hint}`);
+  if (target.library) requireFile(target.library, `Node import library. ${target.hint}`);
   for (const header of ['node.h', 'v8.h', 'uv.h']) {
     if (!target.includes.some(directory => existsSync(join(directory, header)))) {
       throw new Error(`Missing ${header} in ${target.includes.join(', ')}. ${target.hint}`);

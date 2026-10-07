@@ -336,5 +336,5 @@ Use stable kebab-case identifiers. Put caller contracts in JSDoc and spec URLs
 and implementation rationale in ordinary comments. Keep local invariants near
 the code; retain decision evidence and replacement conditions in the owning
 roadmap or [limitations catalog](LIMITATIONS.md). New regressions remain ordinary
-failures until Eric agrees otherwise. Completed journals and obsolete designs
-remain in Git rather than accumulating in the current architecture.
+failures until a maintainer approves their classification. Completed journals and
+obsolete designs remain in Git rather than accumulating in the current architecture.
