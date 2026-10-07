@@ -42,7 +42,7 @@ export function renderProgress(progress: WptProgress): string {
     `    <text x="${x + 11}" y="27">${label} ${escapeXml(percent)}</text>`,
   ).join('\n');
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="384" height="82" viewBox="0 0 384 82" role="img" aria-labelledby="title description">
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="372" height="58" viewBox="0 0 372 58" role="img" aria-labelledby="title description">
   <title id="title">Web Platform Tests coverage</title>
   <desc id="description">${escapeXml(description)}; of ${total} testharness tests. Each test URL has equal weight; completed subtests contribute fractions. Harness and loading failures count as failing tests.</desc>
   <style>
@@ -63,7 +63,7 @@ export function renderProgress(progress: WptProgress): string {
   <defs>
     <clipPath id="bar"><rect width="360" height="8" rx="4" /></clipPath>
   </defs>
-  <g transform="translate(12 12)">
+  <g>
     <g clip-path="url(#bar)">
 ${bars}
     </g>

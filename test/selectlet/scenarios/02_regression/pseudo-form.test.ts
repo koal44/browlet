@@ -620,7 +620,8 @@ runScenarios('pseudo-form', 'normal', [
       { select: '#reset:required', expect: { ids: [] } },
       { select: '#range:required', expect: { ids: [] } },
       { select: '#color:required', expect: { ids: [] }, browsers: ['chromium', 'firefox'] },
-      { select: '#color:required', expect: { ids: ['color'] }, browsers: ['webkit'] },
+      { select: '#color:required', expect: { ids: ['color'] }, browsers: ['webkit'], os: 'win32' },
+      { select: '#color:required', expect: { ids: [] }, browsers: ['webkit'], os: 'linux' },
     ],
   },
 
@@ -1087,10 +1088,12 @@ runScenarios('pseudo-form', 'normal', [
       { match: ':out-of-range', ref: { by: 'id', id: 'empty-number' }, expect: { count: 0 } },
 
       { select: '#empty-date:in-range', expect: { ids: ['empty-date'] }, browsers: ['chromium', 'firefox'] },
-      { select: '#empty-date:in-range', expect: { ids: [] }, browsers: ['webkit'] },
+      { select: '#empty-date:in-range', expect: { ids: [] }, browsers: ['webkit'], os: 'win32' },
+      { select: '#empty-date:in-range', expect: { ids: ['empty-date'] }, browsers: ['webkit'], os: 'linux' },
       { select: '#empty-date:out-of-range', expect: { ids: [] } },
       { match: ':in-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 1 }, browsers: ['chromium', 'firefox'] },
-      { match: ':in-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 0 }, browsers: ['webkit'] },
+      { match: ':in-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 0 }, browsers: ['webkit'], os: 'win32' },
+      { match: ':in-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 1 }, browsers: ['webkit'], os: 'linux' },
       { match: ':out-of-range', ref: { by: 'id', id: 'empty-date' }, expect: { count: 0 } },
 
       // Even required-empty is invalid for valueMissing, not rangeUnderflow/rangeOverflow.
@@ -1108,5 +1111,4 @@ runScenarios('pseudo-form', 'normal', [
       { select: '#over-number:in-range', expect: { ids: [] } },
     ],
   },
-
 ]);

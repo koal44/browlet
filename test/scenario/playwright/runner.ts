@@ -175,6 +175,7 @@ async function runCase(page: Page, caseInfo: CaseInfo): Promise<void> {
     return;
   }
   if (c.browsers && !c.browsers.includes(caseInfo.browser)) return;
+  if (c.os && c.os !== process.platform) return;
   c.engines = c.engines ?? s.engines;
 
   const result = await evalCase(page, caseInfo);

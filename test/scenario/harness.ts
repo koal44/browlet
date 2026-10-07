@@ -17,6 +17,7 @@ type CaseBase = {
   expect?: Expectation;
   status?: CaseStatus;
   browsers?: BrowserName[];
+  os?: 'win32' | 'linux';
   engines?: Engine[];
   debug?: boolean;
 };
@@ -76,7 +77,7 @@ export type Expectation = {
 
 export type EquivalentCase = DistributiveOmit<
   TestCase,
-  'expect' | 'status' | 'browsers' | 'engines'
+  'expect' | 'status' | 'browsers' | 'os' | 'engines'
 >;
 
 export const BROWSER_NAMES = ['chromium', 'firefox', 'webkit'] as const;

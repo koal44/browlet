@@ -251,6 +251,7 @@ function shouldSkipCase(testCase: TestCase): boolean {
     testCase.status === 'skip' ||
     testCase.status === 'fixme' ||
     testCase.status === 'fail' ||
+    (testCase.os && testCase.os !== process.platform) ||
     testCase.browsers?.length ||
     testCase.engines?.length
   ) {

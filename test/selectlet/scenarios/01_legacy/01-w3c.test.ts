@@ -2446,11 +2446,14 @@ runScenarios('w3c iframes 3', 'normal', [
     steps: [
       {
         cases: [
-          { select: '#set0 :read-write', expect: { ids: [] }, status: 'fail' },
+          // Windows WebKit falls back to a text input for type=color.
+          { select: '#set0 :read-write', expect: { ids: [] }, browsers: ['chromium', 'firefox'] },
+          { select: '#set0 :read-write', expect: { ids: ['color1'] }, browsers: ['webkit'], os: 'win32' },
+          { select: '#set0 :read-write', expect: { ids: [] }, browsers: ['webkit'], os: 'linux' },
 
-          // WebKit differs here on input[type=color]; expected browser variance.
           { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'color1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, browsers: ['chromium', 'firefox'] },
-          { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, browsers: ['webkit'] },
+          { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, browsers: ['webkit'], os: 'win32' },
+          { select: '#set0 :read-only', expect: { ids: ['checkbox1', 'hidden1', 'range1', 'color1', 'radio1', 'file1', 'submit1', 'image1', 'button1', 'reset1'] }, browsers: ['webkit'], os: 'linux' },
 
           { select: '#set1 :read-write', expect: { ids: ['input1'] } },
           { select: '#set1 :read-only', expect: { ids: ['input2', 'input3', 'input4', 'input5'] } },
@@ -3450,13 +3453,4 @@ runScenarios('w3c iframes 3', 'normal', [
       },
     ],
   },
-
-
 ]);
-
-
-
-
-
-
-

@@ -105,7 +105,7 @@ jobs:
         run: npm run install:browsers -- --with-deps
       - name: Check Selectlet browser scenarios
         if: matrix.node == '26.8.1'
-        run: npm run test:selectlet:oracle -- --workers=1
+        run: npm run test:selectlet:oracle -- --workers=2
       - name: Check Stylelet browser scenarios
         if: matrix.node == '26.8.1'
-        run: npm run test:stylelet:oracle -- --workers=1
+        run: npm run test:stylelet:oracle -- --workers=2

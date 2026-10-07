@@ -15,11 +15,11 @@ CSS and layout remain substantial work ahead. Scope beyond layout is still open.
 
 ## WPT Coverage
 
-<p>
+<div>
   <a href="https://github.com/koal44/browlet/actions/workflows/wpt.yml">
-    <img src="https://koal44.github.io/browlet/wpt/progress.svg" width="384" alt="Web Platform Tests coverage">
+    <img src="https://koal44.github.io/browlet/wpt/progress.svg" width="372" alt="Web Platform Tests coverage">
   </a>
-</p>
+</div>
 
 Humble beginnings: the runner currently supports a small selection of WPT tests.
 Broader coverage depends on document and script loading, DOM support, and WPT
