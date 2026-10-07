@@ -2,10 +2,10 @@
 
 const assert = require('node:assert/strict');
 const { join } = require('node:path');
-const { setImmediate: nextTurn } = require('node:timers/promises');
 const { test } = require('node:test');
 const { addonBuild } = require('../node-base.cjs');
 const compat = require('../addon/index.cjs');
+const { assertCollected } = require('./support/gc.cjs');
 
 test('function realm follows bound and proxy targets without author property access', () => {
   const first = compat.createContextHandle();
@@ -55,9 +55,11 @@ test('realm lookup keys do not retain discarded callbacks or their contexts', as
     const callback = compat.runInContext('() => 1', handle);
     const realm = compat.getFunctionRealm(callback);
     assert.equal(realm, handle.realm);
-    return [handle, callback, realm].map(value => new WeakRef(value));
+    return {
+      handle: new WeakRef(handle),
+      callback: new WeakRef(callback),
+      realm: new WeakRef(realm),
+    };
   }
-  const references = allocate();
-  for (let index = 0; index < 6; index++) { await nextTurn(); global.gc(); }
-  assert.ok(references.every(reference => reference.deref() === undefined));
+  await assertCollected(allocate());
 });

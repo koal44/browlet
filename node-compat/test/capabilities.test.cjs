@@ -8,6 +8,7 @@ const { AsyncLocalStorage } = require('node:async_hooks');
 const { Worker } = require('node:worker_threads');
 const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
+const { assertCollected } = require('./support/gc.cjs');
 
 test('native Promise observation bypasses author properties and selects the observer queue', {
   todo: Number(process.versions.node.split('.')[0]) < 26
@@ -137,9 +138,7 @@ test('a live reused proxy does not retain the previous realm', async () => {
     return { second, oldHandle, oldIntrinsic };
   }
   const { second, oldHandle, oldIntrinsic } = replace();
-  for (let i = 0; i < 6; i++) { await nextTurn(); global.gc(); }
-  assert.equal(oldHandle.deref(), undefined, 'previous context handle is collectible');
-  assert.equal(oldIntrinsic.deref(), undefined, 'previous realm intrinsic is collectible');
+  await assertCollected({ oldHandle, oldIntrinsic });
   assert.equal(compat.runInContext('globalThis', second), second.globalProxy);
 });
 
@@ -223,12 +222,14 @@ test('allocated globals and their property delegates do not retain dead contexts
     Object.defineProperties(handle.globalObject, Object.getOwnPropertyDescriptors(handle.globalProxy));
     compat.setPropertyDelegate(handle.prototypeChain[1], {});
     compat.setGlobalObject(handle, handle.globalObject);
-    return [handle, handle.globalObject, handle.prototypeChain[0], queue]
-      .map(object => new WeakRef(object));
+    return {
+      handle: new WeakRef(handle),
+      globalObject: new WeakRef(handle.globalObject),
+      immutablePrototype: new WeakRef(handle.prototypeChain[0]),
+      queue: new WeakRef(queue),
+    };
   }
-  const references = allocate();
-  for (let i = 0; i < 6; i++) { await nextTurn(); global.gc(); }
-  assert.equal(references.every(reference => reference.deref() === undefined), true);
+  await assertCollected(allocate());
 });
 
 test('Promise hooks enabled after context creation still observe its jobs', () => {
@@ -281,12 +282,9 @@ test('unreachable contexts and queue wrappers are collectible', async () => {
   function createReferences() {
     const queue = compat.createMicrotaskQueue();
     const handle = compat.createContextHandle({ microtaskQueue: queue });
-    return [new WeakRef(handle), new WeakRef(queue)];
+    return { handle: new WeakRef(handle), queue: new WeakRef(queue) };
   }
-  const references = createReferences();
-  for (let i = 0; i < 6; i++) { await nextTurn(); global.gc(); }
-  assert.equal(references[0].deref(), undefined);
-  assert.equal(references[1].deref(), undefined);
+  await assertCollected(createReferences());
 });
 
 test('independent worker initialization and environment cleanup', async () => {
