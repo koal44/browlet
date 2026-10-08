@@ -22,6 +22,84 @@ the observable constraints of each runtime.
 
 The [standalone suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
+## Contexts, globals, and optional facilities
+
+`createMicrotaskQueue()` supplies enqueue/checkpoint operations.
+`createContextHandle()` creates a native V8 context registered with Node;
+`runInContext()` evaluates there. These are not `node:vm` Contextify objects.
+The supported options are queue selection, `reuseGlobalProxyFrom`, and
+`globalPrototypeChain`; evaluation accepts filename, lineOffset, and
+`displayErrors: false`. Unsupported options fail explicitly. Dynamic-import
+callbacks, vm.Script interoperability, timeouts, and automatic afterEvaluate
+checkpoints remain outside this API.
+
+A handle separates its stable realm reference from its reusable global proxy.
+Detachment allows that proxy to transfer once to a fresh context. Retaining the
+realm reference keeps the old realm alive; `.global` is not its identity.
+`getRealm(object)` reports creation context, while `getFunctionRealm(callable)`
+follows bound/proxy targets without traps and rejects revoked callable proxies.
+
+`globalPrototypeChain` preallocates an immutable global proxy/target and ordered
+`mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same
+layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
+behavior and `setGlobalObject()` selects the Window target. Node's shared VM
+security token permits embedder access; it does not implement browser cross-origin policy.
+
+| Optional operation | Availability and contract |
+| --- | --- |
+| `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
+| `createCollectionIterator(context, kind, next)` | Requires `CollectionIterator::New`. Produces native Map/Set-branded iterators; the callback owns result conversion/allocation, V8 owns iteration lifecycle. |
+| `isLengthTrackingArrayBufferView(view)` | Requires `ArrayBufferView::IsLengthTracking()`. Reads auto/fixed length without mutation, including shared, detached, and out-of-bounds views. |
+| `isArrayIterator(value)`, `isStringIterator(value)`, `isRegExpStringIterator(value)` | Require the corresponding V8 `Value` predicates. Inspect the native brand without reading properties or advancing the iterator; proxies and prototype impostors return false. |
+| `setHostHooks(hooks)` | Requires the five V8 interception APIs below. Header detection controls whether the addon exports it. |
+
+Callback iterators have no table-backed entries for native debugger/Node previews.
+
+## Host hooks
+
+The hooks correspond to ECMAScript's [job operations](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
+One `setHostHooks()` installation owns the isolate until Node environment teardown;
+reinstallation throws `ERR_HOST_HOOKS_INSTALLED`. Workers have independent state.
+Each callback is optional; omitted enqueue hooks leave that job kind with V8.
+
+| Callback | Contract |
+| --- | --- |
+| `makeJobCallback(callback, registration)` | Return `{ callback, hostDefined }`, retaining the original callback. Each reaction/thenable registration captures separately; FinalizationRegistry captures at construction. |
+| `callJobCallback(record, receiver, args)` | Invoke the captured callback using the exact retained record; return its result or propagate its exception. |
+| `enqueuePromiseJob(job, realm, enqueue)` | Schedule the single-use job, or return `false` to leave it on its original queue. The specification realm can be null; `enqueue` includes a snapshot and reaction/thenable kind. |
+| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job; currently Atomics.waitAsync notification delivery. |
+| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule no earlier than the delay; currently Atomics.waitAsync deadlines. Calling a cancelled timeout once is harmless. |
+
+Registration/enqueue snapshots contain current, entered, and incumbent realm
+references plus opaque `hostDefinedOptions`. The addon does not interpret script
+metadata. Make defaults to `{ callback, hostDefined: undefined }`, call to
+`Reflect.apply`; either can be supplied independently.
+
+Jobs take no arguments and must run asynchronously in the required order.
+They retain the original V8 job and restore its saved continuation when called;
+calling twice throws. A Promise job's creation realm identifies its queue even
+when the specification realm is null. Returning `false` delegates immediately:
+do not also schedule that job. Generic/timeout hooks cannot decline a job.
+
+Make/enqueue callbacks must not throw: invalid records and exceptions reach
+Node's uncaught-exception machinery. Call-hook exceptions follow the original
+Promise or registry path. Private async-context state preserves application ALS;
+recursive capture of the host's own work is suppressed. Pre-installation work
+keeps its original callback path. Teardown clears native hooks/references.
+
+[JS Engine](../src/js-engine/runtime.ts) translates references to registered realms.
+[HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings and owns
+callback cleanup, microtask tasks, generic tasks, and active-time timeouts.
+Ordinary Node Promise jobs remain on Node's queues. Unrelated Node/VM
+Atomics.waitAsync is unsupported while HTML's generic/timeout hooks are installed.
+Script records and restoration remain [engine/HTML work](../src/js-engine/ROADMAP.md).
+
+When changing routing, verify unrelated Node progress and runner shutdown as well
+as page results. Earlier ambient-owner routing captured runtime diagnostics and
+prevented shutdown. Existing isolate Promise hooks and application ALS must keep
+working; [host-hooks.test.cjs](test/host-hooks.test.cjs) uses fresh workers to test
+independent installations.
+
 ## Build and run
 
 Copy [.env.example](../.env.example) to `.env` and select the runtime:
@@ -115,81 +193,3 @@ node scripts/with-node.mjs --base custom --runtime compat node --expose-gc --exp
 Capability-gated Vitest tests use `itPassesWith(...)` to retain required assertions
 as approved expected failures on unsupported paths; unexpected passes require review.
 Ordinary asynchronous completion remains required on every backend.
-
-## Contexts, globals, and optional facilities
-
-`createMicrotaskQueue()` supplies enqueue/checkpoint operations.
-`createContextHandle()` creates a native V8 context registered with Node;
-`runInContext()` evaluates there. These are not `node:vm` Contextify objects.
-The supported options are queue selection, `reuseGlobalProxyFrom`, and
-`globalPrototypeChain`; evaluation accepts filename, lineOffset, and
-`displayErrors: false`. Unsupported options fail explicitly. Dynamic-import
-callbacks, vm.Script interoperability, timeouts, and automatic afterEvaluate
-checkpoints remain outside this API.
-
-A handle separates its stable realm reference from its reusable global proxy.
-Detachment allows that proxy to transfer once to a fresh context. Retaining the
-realm reference keeps the old realm alive; `.global` is not its identity.
-`getRealm(object)` reports creation context, while `getFunctionRealm(callable)`
-follows bound/proxy targets without traps and rejects revoked callable proxies.
-
-`globalPrototypeChain` preallocates an immutable global proxy/target and ordered
-`mutable`, `immutable`, or `delegated` prototype layers. Reuse requires the same
-layout. Web IDL populates them; `setPropertyDelegate()` attaches named-property
-behavior and `setGlobalObject()` selects the Window target. Node's shared VM
-security token permits embedder access; it does not implement browser cross-origin policy.
-
-| Optional operation | Availability and contract |
-| --- | --- |
-| `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
-| `createCollectionIterator(context, kind, next)` | Requires `CollectionIterator::New`. Produces native Map/Set-branded iterators; the callback owns result conversion/allocation, V8 owns iteration lifecycle. |
-| `isLengthTrackingArrayBufferView(view)` | Requires `ArrayBufferView::IsLengthTracking()`. Reads auto/fixed length without mutation, including shared, detached, and out-of-bounds views. |
-| `isArrayIterator(value)`, `isStringIterator(value)`, `isRegExpStringIterator(value)` | Require the corresponding V8 `Value` predicates. Inspect the native brand without reading properties or advancing the iterator; proxies and prototype impostors return false. |
-| `setHostHooks(hooks)` | Requires the five V8 interception APIs below. Header detection controls whether the addon exports it. |
-
-Callback iterators have no table-backed entries for native debugger/Node previews.
-
-## Host hooks
-
-The hooks correspond to ECMAScript's [job operations](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-jobs).
-One `setHostHooks()` installation owns the isolate until Node environment teardown;
-reinstallation throws `ERR_HOST_HOOKS_INSTALLED`. Workers have independent state.
-Each callback is optional; omitted enqueue hooks leave that job kind with V8.
-
-| Callback | Contract |
-| --- | --- |
-| `makeJobCallback(callback, registration)` | Return `{ callback, hostDefined }`, retaining the original callback. Each reaction/thenable registration captures separately; FinalizationRegistry captures at construction. |
-| `callJobCallback(record, receiver, args)` | Invoke the captured callback using the exact retained record; return its result or propagate its exception. |
-| `enqueuePromiseJob(job, realm, enqueue)` | Schedule the single-use job, or return `false` to leave it on its original queue. The specification realm can be null; `enqueue` includes a snapshot and reaction/thenable kind. |
-| `enqueueGenericJob(job, realm)` | Schedule a single-use generic job; currently Atomics.waitAsync notification delivery. |
-| `enqueueTimeoutJob(job, realm, milliseconds)` | Schedule no earlier than the delay; currently Atomics.waitAsync deadlines. Calling a cancelled timeout once is harmless. |
-
-Registration/enqueue snapshots contain current, entered, and incumbent realm
-references plus opaque `hostDefinedOptions`. The addon does not interpret script
-metadata. Make defaults to `{ callback, hostDefined: undefined }`, call to
-`Reflect.apply`; either can be supplied independently.
-
-Jobs take no arguments and must run asynchronously in the required order.
-They retain the original V8 job and restore its saved continuation when called;
-calling twice throws. A Promise job's creation realm identifies its queue even
-when the specification realm is null. Returning `false` delegates immediately:
-do not also schedule that job. Generic/timeout hooks cannot decline a job.
-
-Make/enqueue callbacks must not throw: invalid records and exceptions reach
-Node's uncaught-exception machinery. Call-hook exceptions follow the original
-Promise or registry path. Private async-context state preserves application ALS;
-recursive capture of the host's own work is suppressed. Pre-installation work
-keeps its original callback path. Teardown clears native hooks/references.
-
-[JS Engine](../src/js-engine/runtime.ts) translates references to registered realms.
-[HTML](../src/browlet/scripting/host-hooks.ts) retains incumbent settings and owns
-callback cleanup, microtask tasks, generic tasks, and active-time timeouts.
-Ordinary Node Promise jobs remain on Node's queues. Unrelated Node/VM
-Atomics.waitAsync is unsupported while HTML's generic/timeout hooks are installed.
-Script records and restoration remain [engine/HTML work](../src/js-engine/ROADMAP.md).
-
-When changing routing, verify unrelated Node progress and runner shutdown as well
-as page results. Earlier ambient-owner routing captured runtime diagnostics and
-prevented shutdown. Existing isolate Promise hooks and application ALS must keep
-working; [host-hooks.test.cjs](test/host-hooks.test.cjs) uses fresh workers to test
-independent installations.
