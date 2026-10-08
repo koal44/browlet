@@ -1,6 +1,8 @@
-import type { WindowImpl } from './window';
-import { defineProxyObject, type StampedPlatformObject } from '../../../web-idl/index';
 import { InternalError } from '../../../infra/internal-error';
+import type { GlobalProxy } from '../../../js-engine/index';
+import { defineProxyObject, type StampedPlatformObject } from '../../../web-idl/index';
+
+import type { WindowImpl } from './window';
 import type { Window, WindowProxy } from '../../platform';
 
 /** Retains a WindowProxy's platform identity and current Window association. */
@@ -10,30 +12,26 @@ import type { Window, WindowProxy } from '../../platform';
 // PROVISIONAL: the traps implement fallback forwarding, not HTML's complete
 // exotic internal methods or cross-origin access checks; see ROADMAP.md.
 export class WindowProxyHandle implements ProxyHandler<object> {
-  static #handles = new WeakMap<object, WindowProxyHandle>();
+  // V8 global proxies lose private-field stamps when reused for another realm.
+  static #handles = new WeakMap<WindowProxy, WindowProxyHandle>();
 
   /** Stable global-this identity retained when navigation replaces the Window. */
   platform: WindowProxy;
   #associatedWindow: WindowAssociation | null = null;
 
-  private constructor(platform?: object) {
-    this.platform = (platform ?? new Proxy({}, this)) as WindowProxy;
+  /** Creates a handle for an engine proxy, or a new forwarding proxy when omitted. */
+  constructor(globalProxy?: GlobalProxy) {
+    this.platform = (globalProxy ?? new Proxy({}, this)) as WindowProxy;
     WindowProxyHandle.#handles.set(this.platform, this);
-  }
-
-  /** Retrieves the supplied platform's handle, creating a fallback proxy when omitted. */
-  static getOrCreate(platform?: object): WindowProxyHandle {
-    const handle = platform === undefined ? undefined : WindowProxyHandle.#handles.get(platform);
-    return handle ?? new WindowProxyHandle(platform);
   }
 
   /** Recognizes a registered WindowProxy platform object at the binding boundary. */
   static is(this: void, value: unknown): value is WindowProxy {
-    return WindowProxyHandle.#handles.has(value as object);
+    return WindowProxyHandle.#handles.has(value as WindowProxy);
   }
 
   /** Resolves the proxy to the current Window platform object for Web IDL receiver checks. */
-  static resolveReceiver(this: void, windowProxy: WindowProxy): Window | undefined {
+  static resolveReceiver(this: void, windowProxy: WindowProxy): StampedPlatformObject<Window> | undefined {
     const handle = WindowProxyHandle.#handles.get(windowProxy);
     return handle ? handle.#associatedWindow?.platform : undefined;
   }

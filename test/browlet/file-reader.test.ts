@@ -761,7 +761,7 @@ describe('File API §6.2: FileReader reads', () => {
     expect(reader.error).toMatchObject({ name });
     const error: unknown = Reflect.get(context.project(FileReaderImpl, reader), 'error');
     expect(error).toMatchObject({ name });
-    expect(error).toBeInstanceOf(requireFunction(context.realm.global, 'DOMException'));
+    expect(error).toBeInstanceOf(requireFunction(context.realm.globalObject, 'DOMException'));
     expect(context.unwrap(error, DOMExceptionImpl)).toBe(reader.error);
   });
 });

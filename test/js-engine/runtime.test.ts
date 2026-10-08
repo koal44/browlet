@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
+import { InternalError } from '../../src/infra/internal-error';
 import {
-  JSRealm, addon, createMicrotaskQueue, getAssociatedRealm,
+  JSRealm, addon, createMicrotaskQueue, getAssociatedRealm, type GlobalProxy,
 } from '../../src/js-engine/index';
+import { getContextGlobalAllocation } from '../../src/js-engine/runtime';
 import { itPassesWith } from '../test-runtime';
 import { runInHostTask } from '../support/tasks';
 
@@ -19,6 +21,8 @@ describe('JavaScript runtime', () => {
       const firstReference = addon.getRealm(retained.nested);
       const globalProxy = first.detachGlobal();
 
+      expectTypeOf(globalProxy).toEqualTypeOf<GlobalProxy>();
+      expect(first.globalProxy).toBe(globalProxy);
       expect(getAssociatedRealm(globalProxy)).toBe(first);
       expect(getAssociatedRealm(retained.nested)).toBe(first);
       expect(getAssociatedRealm(firstObject)).toBe(first);
@@ -27,7 +31,8 @@ describe('JavaScript runtime', () => {
         reuseGlobalProxyFrom: first,
       });
 
-      expect(second.global).toBe(globalProxy);
+      expect(second.globalProxy).toBe(globalProxy);
+      expect(second.globalObject).toBe(globalProxy);
       expect(getAssociatedRealm(globalProxy)).toBe(second);
       expect(second.evaluate('this', 'replacement.js')).toBe(globalProxy);
       expect(second.intrinsics.object).not.toBe(firstObject);
@@ -40,6 +45,23 @@ describe('JavaScript runtime', () => {
     },
   );
 
+  it.each(['globalObject', 'prototypeChain'])(
+    'rejects a partial global allocation missing %s',
+    (missing) => {
+      const realm = new JSRealm(createMicrotaskQueue());
+      const context = {
+        realm: {},
+        globalProxy: realm.globalProxy,
+        globalObject: {},
+        prototypeChain: [],
+        detachGlobal: () => realm.globalProxy,
+      };
+      Reflect.deleteProperty(context, missing);
+
+      expect(() => getContextGlobalAllocation(context)).toThrow(InternalError);
+    },
+  );
+
   it('drains promise jobs from its VM realms in shared FIFO order', async () => {
     await runInHostTask(() => {
       const microtaskQueue = createMicrotaskQueue();
@@ -47,8 +69,8 @@ describe('JavaScript runtime', () => {
       const second = new JSRealm(microtaskQueue);
       const order: string[] = [];
       const record = (value: string): void => { order.push(value); };
-      Reflect.set(first.global, 'record', record);
-      Reflect.set(second.global, 'record', record);
+      Reflect.set(first.globalObject, 'record', record);
+      Reflect.set(second.globalObject, 'record', record);
 
       first.evaluate(`
         Promise.resolve().then(() => {
@@ -121,8 +143,8 @@ describe('JavaScript runtime', () => {
       const first = new JSRealm(firstQueue);
       const second = new JSRealm(secondQueue);
       const order: string[] = [];
-      Reflect.set(first.global, 'order', order);
-      Reflect.set(second.global, 'order', order);
+      Reflect.set(first.globalObject, 'order', order);
+      Reflect.set(second.globalObject, 'order', order);
 
       first.evaluate(
         `Promise.resolve().then(() => order.push('first'))`,

@@ -102,7 +102,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const api = projectBody(fixture, kind,
       FetchBody.fromBytes(utf8Encode('\ufeff{"items":[{"answer":42}]}'), fixture.env));
     const foreign = projectBody(other, kind, null);
-    const json = Reflect.get(fixture.realm.global, 'JSON') as object;
+    const json = Reflect.get(fixture.realm.globalObject, 'JSON') as object;
     Reflect.set(json, 'parse', () => { throw new Error('Author replacement must not run'); });
     const value = await foreign.json.call(api) as { items: { answer: number; }[]; };
     expect(value).toEqual({ items: [{ answer: 42 }] });

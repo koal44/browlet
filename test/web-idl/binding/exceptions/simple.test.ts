@@ -22,7 +22,7 @@ describe('Web IDL simple exceptions', () => {
     const request = new Exception('invalid input');
     const error = context.realizeException(request);
 
-    expect(error).toBeInstanceOf(Reflect.get(realm.global, name));
+    expect(error).toBeInstanceOf(Reflect.get(realm.globalObject, name));
     expect(error).toHaveProperty('message', 'invalid input');
     expect(error).not.toBe(request);
     expect(foreignContext.realizeException(error)).toBe(error);

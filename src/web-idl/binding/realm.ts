@@ -308,7 +308,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   // Project installer for Web IDL §3.8 Platform objects implementing interfaces — global property references.
   installDefinitions(
-    target: object = this.globalObject?.platformObject ?? this.realm.global,
+    target: object = this.globalObject?.platformObject ?? this.realm.globalObject,
     isWindow = this.realm.globalNames.has('Window'),
   ): Map<string, object> {
     const installed = this.getExposedGlobalProperties(isWindow);
@@ -748,7 +748,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — replace a null or undefined receiver with
   // the global object.
   resolveThisValue(thisArgument: unknown): unknown {
-    return thisArgument ?? this.globalObject?.platformObject ?? this.realm.global;
+    return thisArgument ?? this.globalObject?.platformObject ?? this.realm.globalObject;
   }
 
   // Throw a TypeError allocated in this binding's realm.

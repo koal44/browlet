@@ -35,8 +35,8 @@ describe('Web IDL result allocation', () => {
     const result = call('create') as ArrayBufferLike | ArrayBufferView;
 
     expect(result).toBe(value);
-    expect(result).toBeInstanceOf(Reflect.get(sourceRealm.global, name));
-    expect(result).not.toBeInstanceOf(Reflect.get(realm.global, name));
+    expect(result).toBeInstanceOf(Reflect.get(sourceRealm.globalObject, name));
+    expect(result).not.toBeInstanceOf(Reflect.get(realm.globalObject, name));
     expect(getBufferSourceUnderlyingBuffer(result)).toBe(getBufferSourceUnderlyingBuffer(value));
     expect(getBufferSourceCopy(result)).toEqual(Uint8Array.of(1, 2, 3, 4));
     expect(call('create')).toBe(result);
@@ -84,7 +84,7 @@ describe('Web IDL result allocation', () => {
     const previous = stage === 'projected' ? context.project(ItemImpl, item) : undefined;
     const result = call('create') as object[];
     expect(result).toBeInstanceOf(realm.intrinsics.array);
-    expect(result[0]).toBeInstanceOf(Reflect.get(realm.global, 'Item'));
+    expect(result[0]).toBeInstanceOf(Reflect.get(realm.globalObject, 'Item'));
     expect(result[0]).toBe(context.project(ItemImpl, item));
     if (previous) expect(result[0]).toBe(previous);
   });
@@ -109,7 +109,7 @@ describe('Web IDL result allocation', () => {
     const result = call('createAsync') as Promise<Uint8Array>;
     expect(result).toBeInstanceOf(target.intrinsics.promise.constructor);
     const bytes = await result;
-    expect(bytes).toBeInstanceOf(Reflect.get(target.global, 'Uint8Array'));
+    expect(bytes).toBeInstanceOf(Reflect.get(target.globalObject, 'Uint8Array'));
     expect(getBufferSourceCopy(bytes)).toEqual(value);
     expect(await (call('existingAsync') as Promise<Uint8Array>)).toBe(value);
     expect(call('createAsync')).toBe(result);
@@ -181,13 +181,13 @@ function createFixture(
   const realm = new TestRealm();
   const methodRealm = new TestRealm();
   const context = bindings.register(realm, (ctx) => createEnvironment(realm, ctx));
-  context.install(realm.global);
+  context.install(realm.globalObject);
   const methodContext = bindings.register(methodRealm, (ctx) => createEnvironment(methodRealm, ctx));
-  methodContext.install(methodRealm.global);
+  methodContext.install(methodRealm.globalObject);
   const owner = promiseOwner === 'method' ? methodContext : context;
   const other = promiseOwner === 'method' ? context : methodContext;
   const receiver = context.project(ResultImpl, new ResultImpl(value, type, owner.getEnvironment(), other.getEnvironment()));
-  const MethodConstructor = Reflect.get(methodRealm.global, definition.name) as {
+  const MethodConstructor = Reflect.get(methodRealm.globalObject, definition.name) as {
     prototype: object;
   };
 

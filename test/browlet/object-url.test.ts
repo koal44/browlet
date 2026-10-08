@@ -249,7 +249,7 @@ function createWindow(userAgent = new UserAgent(), url: string | null = 'https:/
     document!.origin = obtainURLOrigin(document!.url);
   }
   return {
-    window: realm.global as Window & typeof globalThis, context,
+    window: realm.globalObject as Window & typeof globalThis, context,
     queueTask: fixture.queueTask.bind(fixture), runTask: fixture.runTask.bind(fixture),
     env: realm.env, document: document!,
   };

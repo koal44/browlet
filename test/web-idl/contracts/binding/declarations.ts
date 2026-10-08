@@ -33,7 +33,7 @@ definePartialInterface<WebIDLEnvironment>({
       [arg('example', reference(Example)), arg('name', idlType.DOMString)],
       {
         invoke(ctx, example, name) {
-          ctx.getEnvironment().realm.global;
+          ctx.getEnvironment().realm.globalObject;
           example.value.toFixed();
           name.toUpperCase();
           // @ts-expect-error Interface arguments are implementations, not arbitrary objects.

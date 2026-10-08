@@ -18,7 +18,7 @@ export type {
   NetworkingTasks, RealmExecution,
 } from './realm-execution';
 export type {
-  GlobalObject, JSFunction, JSIntrinsics, JSIteratorResult,
+  GlobalAllocation, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSIntrinsics, JSIteratorResult,
   JSMethod, RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
 export type {

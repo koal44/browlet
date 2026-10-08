@@ -26,7 +26,7 @@ export function createCSPWindow(serialized = '', disposition: CSPDisposition = '
   const loop = realm.agent.eventLoop;
   return {
     traversable, realm, env, document, policy, request,
-    window: realm.global as unknown as Window & typeof globalThis,
+    window: realm.globalObject as unknown as Window & typeof globalThis,
     scope: env.getWindowOrWorkerGlobalScopeMixin(),
     runTask: () => loop.runTaskTurn({
       createMicrotaskQueue: () => loop.microtaskQueue,

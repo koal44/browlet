@@ -1,4 +1,4 @@
-import { type JSFunction, type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
+import { type JSMicrotaskQueue, JSRealm, getAssociatedRealm } from '../../src/js-engine/index';
 import type {
   CallbackHooks, SecurityCheckType, WebIDLRealm,
 } from '../../src/web-idl/environment';
@@ -47,15 +47,6 @@ export class TestRealm extends JSRealm implements WebIDLRealm {
   }
 
   reportException(_exception: unknown): void {}
-}
-
-export function getInstalledInterface(
-  installed: Map<string, object>,
-  name: string,
-): JSFunction & { prototype: object; } {
-  const value = installed.get(name);
-  if (typeof value !== 'function') throw new Error(`${name} was not installed as an interface object`);
-  return value as JSFunction & { prototype: object; };
 }
 
 type TestRealmOptions = {

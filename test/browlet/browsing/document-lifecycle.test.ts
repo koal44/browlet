@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, expectTypeOf, it } from 'vitest';
 import { createTestDocument } from '../../support/dom';
 
 import {
@@ -60,7 +60,7 @@ describe('browsing context groups', () => {
   });
 
   it('starts a browsing context with HTML\'s scalar defaults', () => {
-    const context = new BrowsingContext(WindowProxyHandle.getOrCreate());
+    const context = new BrowsingContext(new WindowProxyHandle());
 
     expect(() => context.windowProxy.associatedWindow).toThrow(InternalError);
     expect(context.openerBrowsingContext).toBeNull();
@@ -86,13 +86,14 @@ describe('browsing context groups', () => {
 
   it.each(['activeWindow', 'activeDocument'] as const)(
     'rejects %s access before the WindowProxy has a Window', (property) => {
-      const context = new BrowsingContext(WindowProxyHandle.getOrCreate());
+      const context = new BrowsingContext(new WindowProxyHandle());
 
       expect(() => context[property]).toThrow(InternalError);
     },
   );
 
   it('gives a Window realm its Window and WindowProxy identities', () => {
+    expectTypeOf<object>().not.toExtend<ConstructorParameters<typeof WindowProxyHandle>[0]>();
     const agent = new WindowAgent();
     const creationURL = requireURL('about:blank');
     const origin = createOpaqueOrigin();
@@ -130,7 +131,7 @@ describe('browsing context groups', () => {
     const realm = getRelevantRealm(new Browlet({ route: () => '' }).window);
     const proxy = realm.windowProxy;
 
-    expect(() => { realm.windowProxy = WindowProxyHandle.getOrCreate(); })
+    expect(() => { realm.windowProxy = new WindowProxyHandle(); })
       .toThrow('Realm WindowProxy is already initialized');
     expect(() => { realm.windowProxy = proxy; })
       .toThrow('Realm WindowProxy is already initialized');

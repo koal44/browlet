@@ -23,7 +23,7 @@ declare const minimalRealm: WebIDLRealm;
 class Example { value = 1; }
 
 atArg(0, (ctx) => ctx.getEnvironment());
-attrFn((ctx) => function value() { return ctx.realm.global; });
+attrFn((ctx) => function value() { return ctx.realm.globalObject; });
 // @ts-expect-error A default binding context has no HTML timing API.
 atArg(0, (ctx) => ctx.realm.eventTimeStamp());
 
@@ -135,10 +135,10 @@ const erased: Definition[] = [definition];
 const weakened: BindingWorld<WebIDLEnvironment> = world;
 
 const minimal = new BindingWorld([]).register(minimalRealm, (ctx) => ({ realm: ctx.realm }));
-minimal.getEnvironment().realm.global;
+minimal.getEnvironment().realm.globalObject;
 // @ts-expect-error A realm-only environment has no execution contract.
 minimal.getEnvironment().exec;
 const portable: BindingContext = ctx;
-portable.getEnvironment().realm.global;
+portable.getEnvironment().realm.globalObject;
 // @ts-expect-error The getter does not allow callers to assert a different environment.
 portable.getEnvironment<HostEnvironment>();

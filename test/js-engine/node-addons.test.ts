@@ -1,12 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { NodeAPI } from '../../src/js-engine/node-addons';
+import { createContext, createMicrotaskQueue } from '../../src/js-engine/runtime';
 
 describe('Node add-on API', () => {
   it('keeps availability per operation and throws when an absent operation is called', () => {
     const api = new NodeAPI({ runInContext: (source: string) => source });
+    const context = createContext(createMicrotaskQueue());
 
     expect(api.getMethod('runInContext')).toBe(api.runInContext);
-    expect(api.runInContext('source', {})).toBe('source');
+    expect(api.runInContext('source', context)).toBe('source');
     expect(api.getMethod('createContextHandle')).toBeUndefined();
     expect(() => api.createContextHandle())
       .toThrow('Node backend does not provide createContextHandle');

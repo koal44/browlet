@@ -24,6 +24,17 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     expect(Object.getPrototypeOf(window)).toBe(WindowImpl.prototype);
     expect(platformWindow).not.toBe(window);
     expect(unwrap(platformWindow)).toBe(window);
+    const { object, prototypeChain } = realm.globalAllocation;
+    expect(object).toBe(platformWindow);
+    expect(object).toBe(realm.globalObject);
+    const windowPrototype = Object.getPrototypeOf(platformWindow) as object;
+    const namedProperties = Object.getPrototypeOf(windowPrototype) as object;
+    const eventTargetPrototype = Object.getPrototypeOf(namedProperties) as object;
+    expect(prototypeChain).toHaveLength(3);
+    expect(prototypeChain[0]).toBe(windowPrototype);
+    expect(prototypeChain[1]).toBe(namedProperties);
+    expect(prototypeChain[2]).toBe(eventTargetPrototype);
+    expect(Object.getPrototypeOf(eventTargetPrototype)).toBe(realm.intrinsics.objectPrototype);
     expect(realm.evaluate('this === window && window === globalThis', 'identity.js')).toBe(true);
     expect(realm.evaluate('this.document === document', 'document.js')).toBe(true);
     expect(realm.evaluate('Object.getPrototypeOf(this) === Window.prototype', 'prototype.js')).toBe(true);

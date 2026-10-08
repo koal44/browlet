@@ -16,7 +16,7 @@ import { PromiseConverter } from '../../../src/web-idl/converters/promise';
 import { RealmBinding } from '../../../src/web-idl/binding/realm';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 
-import { getMemberBinding } from '../../support/web-idl-binding';
+import { getMemberBinding, installTestBindings } from '../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../support/web-idl-realm';
 
 describe('Web IDL promise member binding', () => {
@@ -38,7 +38,7 @@ describe('Web IDL promise member binding', () => {
     expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
     expect(result).not.toBeInstanceOf(second.intrinsics.promise.constructor);
     expect(projected).toBe(fixture.bindings.project(child));
-    expect(projected).toBeInstanceOf(Reflect.get(first.global, 'PromiseChild'));
+    expect(projected).toBeInstanceOf(Reflect.get(first.globalObject, 'PromiseChild'));
   });
 
   it('realizes a shared rejection request once and preserves author errors', async () => {
@@ -95,7 +95,7 @@ describe('Web IDL promise member binding', () => {
 
     expect(Object.getPrototypeOf(record)).toBe(fixture.first.intrinsics.objectPrototype);
     expect(Reflect.get(record, 'value')).toBe(fixture.bindings.project(child));
-    expect(Reflect.get(record, 'value')).toBeInstanceOf(Reflect.get(fixture.first.global, 'PromiseChild'));
+    expect(Reflect.get(record, 'value')).toBeInstanceOf(Reflect.get(fixture.first.globalObject, 'PromiseChild'));
     expect(record).toHaveProperty('done', false);
     expect(record).toHaveProperty('optional', undefined);
     expect(Object.hasOwn(record, 'absent')).toBe(false);
@@ -344,15 +344,11 @@ function createOrdinaryPromiseFixture() {
   const bindings = new BindingWorld([
     promiseOwnerIDL, promiseChildIDL, promiseCallbackIDL, promiseResultIDL,
   ]);
-  const first = new Realm();
-  const second = new Realm();
-  const firstBinding = bindings.register(first, (ctx) => ({ realm: ctx.realm }));
-  const secondBinding = bindings.register(second, (ctx) => ({ realm: ctx.realm }));
-  firstBinding.install(first.global);
-  secondBinding.install(second.global);
+  const { realm: first, context: firstBinding } = installTestBindings(bindings);
+  const { realm: second } = installTestBindings(bindings);
   const implementation = new OrdinaryPromiseOwnerImpl(firstBinding.Promise);
   const owner = firstBinding.project(OrdinaryPromiseOwnerImpl, implementation);
-  const foreignConstructor = Reflect.get(second.global, 'OrdinaryPromiseOwner') as { prototype: object; };
+  const foreignConstructor = Reflect.get(second.globalObject, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };
 }
 

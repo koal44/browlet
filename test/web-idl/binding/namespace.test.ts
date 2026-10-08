@@ -94,7 +94,7 @@ describe('Web IDL namespace objects', () => {
     expect(receivers).toEqual([null, null]);
     expect(Reflect.get(tools, 'READY')).toBe(7);
     expect(Reflect.has(tools, 'hidden')).toBe(false);
-    expect(Reflect.has(realm.global, 'Nested')).toBe(false);
+    expect(Reflect.has(realm.globalObject, 'Nested')).toBe(false);
     expect(Reflect.get(binding.getImplementationBinding(binding.resolveInterface('Nested')).getInterfacePrototypeObject(), 'constructor')).toBe(Nested);
     expect(Object.prototype.toString.call(
       requireObject(Reflect.get(Nested, 'prototype')),

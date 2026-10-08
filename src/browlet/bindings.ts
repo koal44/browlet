@@ -115,12 +115,11 @@ export function createWindowEnvironment(
   });
   const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
   realm.windowImplementation = window;
-  const chain = realm.globalPrototypeChain;
   let globalObject: Window;
-  if (chain) {
-    const [windowPrototype, namedProperties, eventTargetPrototype] = chain;
-    const object = realm.allocatedGlobalObject;
-    if (!object || !windowPrototype || !namedProperties || !eventTargetPrototype) {
+  if (useAddonGlobals) {
+    const { object, prototypeChain } = realm.globalAllocation;
+    const [windowPrototype, namedProperties, eventTargetPrototype] = prototypeChain;
+    if (!windowPrototype || !namedProperties || !eventTargetPrototype) {
       throw new InternalError('Incomplete native Window allocation');
     }
     // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
@@ -138,8 +137,8 @@ export function createWindowEnvironment(
   } else {
     globalObject = projectWindow(context, window);
   }
-  realm.windowProxy = WindowProxyHandle.getOrCreate(
-    useAddonGlobals ? realm.globalThis : previousRealm?.globalThis,
+  realm.windowProxy = previousRealm?.windowProxy ?? new WindowProxyHandle(
+    useAddonGlobals ? realm.globalProxy : undefined,
   );
   realm.setGlobalObjects(globalObject, realm.windowProxy.platform);
   if (reservedEnv !== null) reservedEnv.id = '';
@@ -254,7 +253,7 @@ export function createBoundExecution(context: BindingContext<BrowletEnvironment>
   return {
     ...createExecution(realm),
     // Window installation follows binding registration; retain the live global.
-    get global() { return realm.global; },
+    get global() { return realm.globalObject; },
     Promise: context.Promise,
     // Interface binding registration finishes after execution is composed.
     get DOMException() { return context.DOMException; },

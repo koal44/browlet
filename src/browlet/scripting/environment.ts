@@ -165,7 +165,7 @@ export abstract class BrowletEnvironment extends EnvironmentRecord implements
 
   /** The platform global installed in this environment's realm. */
   get global(): RealmExecution['global'] {
-    return this.realm.global;
+    return this.realm.globalObject;
   }
 
   /** Window environments can consume their Document's preload map. */

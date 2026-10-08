@@ -6,7 +6,7 @@ import {
   defineInterface, impl, roAttr, reference, op, idlType,
 } from '../../../../src/web-idl/index';
 
-import { TestRealm } from '../../../support/web-idl-realm';
+import { installTestBindings } from '../../../support/web-idl-binding';
 
 describe('DOMException implementation projection', () => {
   it('projects frozen exception state without adding visible implementation properties', () => {
@@ -56,7 +56,7 @@ describe('DOMException implementation projection', () => {
     const value = new QuotaExceededErrorImpl('full', { quota: 10, requested: 20 });
     const platform = context.realizeException(value);
 
-    expect(platform).toBeInstanceOf(Reflect.get(context.realm.global, 'QuotaExceededError'));
+    expect(platform).toBeInstanceOf(Reflect.get(context.realm.globalObject, 'QuotaExceededError'));
     expect(platform).toMatchObject({ name: 'QuotaExceededError', quota: 10, requested: 20 });
     expect(context.unwrap(platform, QuotaExceededErrorImpl)).toBe(value);
   });
@@ -122,9 +122,7 @@ describe('DOMException implementation projection', () => {
 });
 
 function createContext(world = new BindingWorld([])) {
-  const context = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
-  context.install(context.realm.global);
-  return context;
+  return installTestBindings(world).context;
 }
 
 function caught(steps: () => unknown): unknown {

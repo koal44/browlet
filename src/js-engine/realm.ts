@@ -10,30 +10,39 @@ import { isObject } from './abstract-operations';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm,
   createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
-  getAllocatedGlobalObject, getContextGlobal, getContextPrototypeChain,
+  getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
   setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
 } from './runtime';
 import { InternalError } from '../infra/internal-error';
 
-/*
- * One JavaScript realm, backed by a Node VM context. Higher layers subclass
- * this identity to add Web IDL and HTML policy.
+/**
+ * Owns an engine context, its captured intrinsics, and realm-specific allocation.
+ * Hosts subclass this identity to supply Web IDL and HTML policy, and install
+ * their global object and global-this through initializeGlobalObjects().
  */
 export class JSRealm {
-  globalPrototypeChain: object[] | undefined;
-  allocatedGlobalObject: GlobalObject | undefined;
+  /** Built-in references captured before host initialization or author code can replace them. */
   intrinsics: JSIntrinsics;
+  /** Implementation Promise constructor whose reactions are observed through this realm. */
   Promise: typeof InternalPromise;
+
   #callableFunctionFactory: RealmFunctionFactory;
   #context: NodeContext;
   #constructibleFunctionFactory: RealmFunctionFactory;
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
+  #globalAllocation: GlobalAllocation | undefined;
   #globalObject: GlobalObject;
-  #globalThis: object;
-  #hostGlobal: RealmGlobal;
+  #globalProxy: GlobalProxy;
+  #globalThis: GlobalThis;
   #microtaskQueue: JSMicrotaskQueue;
 
+  /**
+   * Create a context on the supplied microtask queue and capture its built-ins.
+   * The host controls queue checkpoints and may share the queue across realms.
+   * Native options can reuse a detached proxy and preallocate global prototypes;
+   * host-selected globals are installed separately through initializeGlobalObjects().
+   */
   constructor(
     microtaskQueue: JSMicrotaskQueue = createMicrotaskQueue(),
     options: JSRealmOptions = {},
@@ -47,63 +56,64 @@ export class JSRealm {
       reuseGlobalProxyFrom,
       options.globalPrototypeChain,
     );
-    this.globalPrototypeChain = getContextPrototypeChain(this.#context);
-    this.allocatedGlobalObject = getAllocatedGlobalObject(this.#context);
-    if (options.globalPrototypeChain && !this.globalPrototypeChain) {
+    this.#globalAllocation = getContextGlobalAllocation(this.#context);
+    if (options.globalPrototypeChain && !this.#globalAllocation) {
       throw new InternalError('The Node backend did not allocate the requested global prototypes');
     }
-    this.#hostGlobal = getContextGlobal(this.#context) as RealmGlobal;
-    this.#globalObject = this.#hostGlobal;
-    this.#globalThis = this.#hostGlobal;
+    this.#globalProxy = getContextGlobalProxy(this.#context);
+    this.#globalObject = this.#globalProxy;
+    this.#globalThis = this.#globalProxy;
 
+    // These assertions describe pristine built-ins read from the newly created context.
     const Function_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'Function',
     ) as FunctionConstructor;
     const ArrayBuffer_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'ArrayBuffer',
     ) as ArrayBufferConstructor;
     const Boolean_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'Boolean',
     ) as BooleanConstructor;
-    const Date_ = Reflect.get(this.#hostGlobal, 'Date') as DateConstructor;
-    const Error_ = Reflect.get(this.#hostGlobal, 'Error') as ErrorConstructor;
+    const Date_ = Reflect.get(this.#globalProxy, 'Date') as DateConstructor;
+    const Error_ = Reflect.get(this.#globalProxy, 'Error') as ErrorConstructor;
     const errorStack = Reflect.getOwnPropertyDescriptor(
       Reflect.construct(Error_, []),
       'stack',
     )?.get;
     const EvalError_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'EvalError',
     ) as EvalErrorConstructor;
-    const Array_ = Reflect.get(this.#hostGlobal, 'Array') as ArrayConstructor;
-    const JSON_ = Reflect.get(this.#hostGlobal, 'JSON') as JSON;
-    const Object_ = Reflect.get(this.#hostGlobal, 'Object') as ObjectConstructor;
+    const Array_ = Reflect.get(this.#globalProxy, 'Array') as ArrayConstructor;
+    const JSON_ = Reflect.get(this.#globalProxy, 'JSON') as JSON;
+    const Object_ = Reflect.get(this.#globalProxy, 'Object') as ObjectConstructor;
     const Promise_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'Promise',
     ) as PromiseConstructor;
     const ReferenceError_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'ReferenceError',
     ) as ReferenceErrorConstructor;
-    const Reflect_ = Reflect.get(this.#hostGlobal, 'Reflect') as typeof Reflect;
+    const Reflect_ = Reflect.get(this.#globalProxy, 'Reflect') as typeof Reflect;
     const RegExp_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'RegExp',
     ) as RegExpConstructor;
-    const Map_ = Reflect.get(this.#hostGlobal, 'Map') as MapConstructor;
-    const Set_ = Reflect.get(this.#hostGlobal, 'Set') as SetConstructor;
+    const Map_ = Reflect.get(this.#globalProxy, 'Map') as MapConstructor;
+    const Set_ = Reflect.get(this.#globalProxy, 'Set') as SetConstructor;
     const SyntaxError_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'SyntaxError',
     ) as SyntaxErrorConstructor;
     const URIError_ = Reflect.get(
-      this.#hostGlobal,
+      this.#globalProxy,
       'URIError',
     ) as URIErrorConstructor;
+    // Realm-created iterators reveal the shared prototypes used by iteration algorithms.
     const arrayPrototype = Array_.prototype;
     const arrayValues = Reflect.get(
       arrayPrototype,
@@ -148,9 +158,10 @@ export class JSRealm {
       throw new InternalError('Could not obtain the realm collection iterator prototypes');
     }
 
+    // Retain the original references so replacing a global does not redirect engine operations.
     this.intrinsics = {
       array: Array_,
-      bigInt: Reflect.get(this.#hostGlobal, 'BigInt') as BigIntConstructor,
+      bigInt: Reflect.get(this.#globalProxy, 'BigInt') as BigIntConstructor,
       boolean: Boolean_,
       bufferSource: {
         arrayBuffer: ArrayBuffer_,
@@ -160,11 +171,11 @@ export class JSRealm {
         ),
         cloneSharedArrayBuffer: (buffer) => structuredClone(buffer),
         sharedArrayBuffer: Reflect.get(
-          this.#hostGlobal,
+          this.#globalProxy,
           'SharedArrayBuffer',
         ) as SharedArrayBufferConstructor | undefined,
         views: Object.fromEntries(bufferViewNames.flatMap((name) => {
-          const constructor: unknown = Reflect.get(this.#hostGlobal, name);
+          const constructor: unknown = Reflect.get(this.#globalProxy, name);
           return typeof constructor === 'function'
             ? [[name, constructor]]
             : [];
@@ -201,7 +212,7 @@ export class JSRealm {
         setIteratorPrototype,
       },
       map: Map_,
-      number: Reflect.get(this.#hostGlobal, 'Number') as NumberConstructor,
+      number: Reflect.get(this.#globalProxy, 'Number') as NumberConstructor,
       object: Object_,
       objectPrototype: Object_.prototype,
       promise: {
@@ -216,21 +227,22 @@ export class JSRealm {
         ) as JSIntrinsics['promise']['then'],
       },
       rangeError: Reflect.get(
-        this.#hostGlobal,
+        this.#globalProxy,
         'RangeError',
       ) as typeof RangeError,
       referenceError: ReferenceError_,
       reflectGet: Reflect_.get,
       regExp: RegExp_,
       set: Set_,
-      string: Reflect.get(this.#hostGlobal, 'String') as StringConstructor,
+      string: Reflect.get(this.#globalProxy, 'String') as StringConstructor,
       syntaxError: SyntaxError_,
       typeError: Reflect.get(
-        this.#hostGlobal,
+        this.#globalProxy,
         'TypeError',
       ) as typeof TypeError,
       uriError: URIError_,
     };
+    // Internal promises use this realm for observation; exposed functions must also originate here.
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- Capture the realm, not the subclass constructor.
     const realm = this;
     this.Promise = class RealmPromise<T> extends InternalPromise<T> {
@@ -247,8 +259,9 @@ export class JSRealm {
       this.#context,
     ) as RealmFunctionFactory;
 
+    // Native lookup uses the context identity; fallback lookup also needs these prototype anchors.
     associateContext(this.#context, this);
-    associateGlobalRealm(this.#hostGlobal, this);
+    associateGlobalRealm(this.#globalProxy, this);
     associateObjectRealm(this.intrinsics.functionPrototype, this);
     associateObjectRealm(this.intrinsics.objectPrototype, this);
     associateObjectRealm(
@@ -257,30 +270,43 @@ export class JSRealm {
     );
   }
 
-  get global(): GlobalObject {
-    return this.#globalObject;
-  }
-
+  /** Global target; initially the engine proxy, then the object installed by the host. */
   get globalObject(): GlobalObject {
     return this.#globalObject;
   }
 
-  get globalThis(): object {
+  /** Global this value; initially the engine proxy, then the value selected by the host. */
+  get globalThis(): GlobalThis {
     return this.#globalThis;
   }
 
-  protected get hostGlobal(): object {
-    return this.#hostGlobal;
+  /** Engine-created proxy, retained when a host supplies its own global-this value. */
+  get globalProxy(): GlobalProxy {
+    return this.#globalProxy;
   }
 
-  detachGlobal(): object {
+  /**
+   * Global target and prototypes allocated by the Node compatibility add-on.
+   * Throws if globalPrototypeChain was omitted.
+   */
+  get globalAllocation(): GlobalAllocation {
+    if (this.#globalAllocation === undefined) {
+      throw new InternalError('Realm has no preallocated global object and prototypes');
+    }
+    return this.#globalAllocation;
+  }
+
+  /** Detach the native proxy for reuse; the host must finish pending work first. */
+  detachGlobal(): GlobalProxy {
     return detachContext(this.#context);
   }
 
+  /** Install property forwarding on an object allocated with a delegated native template. */
   setPropertyDelegate(object: object, delegate: object): void {
     setPropertyDelegate(object, delegate);
   }
 
+  /** Create a realm-owned function that forwards calls and optional construction to host steps. */
   createFunction<Result>(
     steps: RealmFunctionSteps<Result>,
     options: RealmFunctionOptions,
@@ -304,6 +330,7 @@ export class JSRealm {
     return function_;
   }
 
+  /** Allocate in this realm even when the supplied prototype belongs to another realm. */
   createOrdinaryObject(prototype: object | null): object {
     const object = Reflect.construct(this.intrinsics.object, []);
     if (!Reflect.setPrototypeOf(object, prototype)) {
@@ -417,6 +444,7 @@ export class JSRealm {
     return buffer;
   }
 
+  /** Copy bytes into fresh shared storage in this realm. */
   createSharedArrayBuffer(bytes: ByteSequence, maxByteLength?: number): SharedArrayBuffer {
     const constructor = this.intrinsics.bufferSource.sharedArrayBuffer;
     if (!constructor) {
@@ -430,6 +458,7 @@ export class JSRealm {
     return buffer;
   }
 
+  /** Copy bytes into a new realm-owned view and non-shared backing buffer. */
   createArrayBufferView<Name extends JSBufferViewName>(
     name: Name,
     bytes: ByteSequence,
@@ -460,6 +489,7 @@ export class JSRealm {
     ) as JSBufferView<Name, Buffer>;
   }
 
+  /** Discard the buffer's storage; already-detached buffers are unchanged. */
   detachArrayBuffer(buffer: ArrayBuffer): void {
     if (isDetachedArrayBuffer(buffer)) return;
     Reflect.apply(this.intrinsics.bufferSource.arrayBufferTransfer, buffer, [0]);
@@ -475,6 +505,7 @@ export class JSRealm {
     return Reflect.apply(this.intrinsics.bufferSource.arrayBufferTransfer, buffer, []);
   }
 
+  /** Register native Promise reactions through this realm's backend. */
   observePromise(
     promise: Promise<unknown>,
     onFulfilled: JSFunction | undefined,
@@ -483,6 +514,7 @@ export class JSRealm {
     observePromise(this, promise, onFulfilled, onRejected);
   }
 
+  /** Evaluate a script in this realm, using the supplied source location in diagnostics. */
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
     return runWithActiveRealm(this, () =>
       runInContext(source, this.#context, {
@@ -492,31 +524,37 @@ export class JSRealm {
       }));
   }
 
+  /** Enqueue on the supplied queue without running a checkpoint. */
   protected enqueueMicrotask(steps: () => void): void {
     this.#microtaskQueue.enqueueMicrotask(steps);
   }
 
+  /**
+   * Install the host's global target and global-this, retaining captured intrinsics.
+   * Native allocations require their exact target/proxy pair; stock Node bridges
+   * global property access through the supplied global-this object.
+   */
   protected initializeGlobalObjects(
     globalObject: GlobalObject,
-    globalThis: object,
+    globalThis: GlobalThis,
   ): void {
-    if (this.#globalObject !== this.#hostGlobal) {
+    if (this.#globalObject !== this.#globalProxy) {
       throw new InternalError('Realm global objects are already initialized');
     }
     this.#globalObject = globalObject;
     this.#globalThis = globalThis;
     this.#installDefaultGlobalBindings();
 
-    if (this.globalPrototypeChain !== undefined) {
-      if (globalObject !== this.allocatedGlobalObject || globalThis !== this.#hostGlobal) {
+    if (this.#globalAllocation !== undefined) {
+      if (globalObject !== this.#globalAllocation.object || globalThis !== this.#globalProxy) {
         throw new InternalError('Native global initialization requires its allocated object and proxy');
       }
       // Intrinsics have been copied to the per-realm target. Remove configurable
       // backing properties before installing delegation so deletion/ownKeys do
       // not reveal an obsolete second copy on V8's hidden global object.
-      for (const key of Reflect.ownKeys(this.#hostGlobal)) {
-        if (Reflect.getOwnPropertyDescriptor(this.#hostGlobal, key)?.configurable) {
-          Reflect.deleteProperty(this.#hostGlobal, key);
+      for (const key of Reflect.ownKeys(this.#globalProxy)) {
+        if (Reflect.getOwnPropertyDescriptor(this.#globalProxy, key)?.configurable) {
+          Reflect.deleteProperty(this.#globalProxy, key);
         }
       }
       setGlobalObject(this.#context, globalObject);
@@ -527,9 +565,9 @@ export class JSRealm {
        * global-this so free global names still reach the modeled global graph;
        * top-level `this` remains a documented limitation.
        */
-      Reflect.setPrototypeOf(this.#hostGlobal, globalThis);
+      Reflect.setPrototypeOf(this.#globalProxy, globalThis);
     }
-    Object.defineProperty(this.#hostGlobal, 'globalThis', {
+    Object.defineProperty(this.#globalProxy, 'globalThis', {
       configurable: true,
       value: globalThis,
       writable: true,
@@ -538,20 +576,21 @@ export class JSRealm {
     associateGlobalRealm(globalThis, this);
   }
 
+  /** Lock the engine proxy's prototype when supported; native allocations are already locked. */
   protected makeHostGlobalPrototypeImmutable(): void {
-    if (this.globalPrototypeChain !== undefined) return;
-    makePrototypeImmutable(this.#hostGlobal);
+    if (this.#globalAllocation !== undefined) return;
+    makePrototypeImmutable(this.#globalProxy);
   }
 
   #installDefaultGlobalBindings(): void {
-    for (const property of Reflect.ownKeys(this.#hostGlobal)) {
+    for (const property of Reflect.ownKeys(this.#globalProxy)) {
       if (
         property === 'globalThis' ||
         Object.hasOwn(this.#globalObject, property)
       ) continue;
 
       const descriptor = Reflect.getOwnPropertyDescriptor(
-        this.#hostGlobal,
+        this.#globalProxy,
         property,
       );
       if (
@@ -605,14 +644,33 @@ type FallbackIteratorRecord = {
 };
 
 export type JSRealmOptions = {
+  /** Realm whose proxy has already been detached for this context to reuse. */
   reuseGlobalProxyFrom?: JSRealm;
+  /** Native prototype layers, ordered from the global's immediate prototype outward. */
   globalPrototypeChain?: GlobalPrototypeKind[];
 };
 
 export type GlobalPrototypeKind = 'mutable' | 'immutable' | 'delegated';
 
+/** Global target and its prototype objects, allocated together for the host to populate. */
+export type GlobalAllocation = {
+  object: GlobalObject;
+  /** Ordered from the target's immediate prototype outward, excluding Object.prototype. */
+  prototypeChain: object[];
+};
+
 /** A realm's global object; no additional property shape is required. */
 export type GlobalObject = object;
+
+/** Host-selected value of the realm's global this binding. */
+export type GlobalThis = object;
+
+declare const globalProxyBrand: unique symbol;
+
+/** An engine-created global proxy; its type-only brand adds no runtime property. */
+export type GlobalProxy = {
+  [globalProxyBrand]: true;
+};
 
 export type JSIntrinsics = {
   array: ArrayConstructor;
@@ -690,8 +748,6 @@ export type JSMethod = (
 type BufferViewConstructor = new (
   buffer: ArrayBufferLike,
 ) => object;
-
-type RealmGlobal = Record<PropertyKey, unknown>;
 
 type RealmFunctionFactory = <Result>(
   steps: RealmFunctionSteps<Result>,

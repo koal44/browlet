@@ -6,7 +6,8 @@ import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { getPlatformRecord } from '../../../src/web-idl/binding/platform';
 
 import { itPassesWith } from '../../test-runtime';
-import { TestRealm, getInstalledInterface } from '../../support/web-idl-realm';
+import { getInstalledInterface } from '../../support/web-idl-binding';
+import { TestRealm } from '../../support/web-idl-realm';
 
 describe('interface constructor prototype fallback', () => {
   for (const prototype of [null, undefined, 0]) {
@@ -22,7 +23,7 @@ describe('interface constructor prototype fallback', () => {
 
   itPassesWith('functionRealms')('follows a bound target despite a different function prototype', () => {
     const { first, second, target, Example } = createBindings();
-    Reflect.set(first.realm.global, 'foreignTarget', target);
+    Reflect.set(first.realm.globalObject, 'foreignTarget', target);
     const bound = first.realm.evaluate(
       'Function.prototype.bind.call(foreignTarget, null)', 'bound.js',
     ) as JSFunction;

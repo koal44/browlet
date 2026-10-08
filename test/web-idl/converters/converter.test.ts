@@ -9,6 +9,7 @@ import {
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 
 import { TestRealm } from '../../support/web-idl-realm';
+import { installTestBindings } from '../../support/web-idl-binding';
 
 describe('Cached converters', () => {
   it('reuses converters and prepared conversions for the same type, binding, and realm', () => {
@@ -109,11 +110,11 @@ describe('Conversion realm and implementation ownership', () => {
 
     call(owner, 'send', callback);
 
-    const values = Reflect.get(second.global, 'received') as object[];
+    const values = Reflect.get(second.globalObject, 'received') as object[];
     expect(values).toBeInstanceOf(second.intrinsics.array);
     expect(values).not.toBeInstanceOf(first.intrinsics.array);
-    expect(values[0]).toBeInstanceOf(Reflect.get(first.global, 'Child'));
-    expect(values[0]).not.toBeInstanceOf(Reflect.get(second.global, 'Child'));
+    expect(values[0]).toBeInstanceOf(Reflect.get(first.globalObject, 'Child'));
+    expect(values[0]).not.toBeInstanceOf(Reflect.get(second.globalObject, 'Child'));
   });
 
   it('reports callback return conversion failures in B', () => {
@@ -151,20 +152,20 @@ describe('Conversion realm and implementation ownership', () => {
     const { first, second, owner } = fixture();
     const callback = second.evaluate('(value) => { globalThis.received = value; }', 'receive-promise.js');
     call(owner, 'sendPromise', callback);
-    const pending = Reflect.get(second.global, 'received') as Promise<object[]>;
+    const pending = Reflect.get(second.globalObject, 'received') as Promise<object[]>;
     const values = await pending;
 
     expect(pending).toBeInstanceOf(first.intrinsics.promise.constructor);
     expect(values).toBeInstanceOf(first.intrinsics.array);
-    expect(values[0]).toBeInstanceOf(Reflect.get(first.global, 'Child'));
-    expect(values[0]).not.toBeInstanceOf(Reflect.get(second.global, 'Child'));
+    expect(values[0]).toBeInstanceOf(Reflect.get(first.globalObject, 'Child'));
+    expect(values[0]).not.toBeInstanceOf(Reflect.get(second.globalObject, 'Child'));
   });
 
   it('retains the implementation owner when realizing an internal callback-promise rejection', async () => {
     const { first, second, owner } = fixture();
     const callback = second.evaluate('(value) => { globalThis.received = value.catch(reason => reason); }', 'receive-failure.js');
     call(owner, 'sendFailure', callback);
-    const pending = Reflect.get(second.global, 'received') as Promise<unknown>;
+    const pending = Reflect.get(second.globalObject, 'received') as Promise<unknown>;
     const reason = await pending;
 
     expect(pending).toBeInstanceOf(first.intrinsics.promise.constructor);
@@ -174,12 +175,9 @@ describe('Conversion realm and implementation ownership', () => {
 });
 
 function fixture() {
-  const first = new TestRealm();
-  const second = new TestRealm();
   const world = new BindingWorld(definitions);
-  const context = world.register(first, (ctx) => ({ realm: ctx.realm }));
-  context.install(first.global);
-  world.register(second, (ctx) => ({ realm: ctx.realm })).install(second.global);
+  const { realm: first, context } = installTestBindings(world);
+  const { realm: second } = installTestBindings(world);
   const owner = context.project(SourceImpl, new SourceImpl(context.Promise));
   return { first, second, owner, binding: world.getRealmBinding(first)! };
 }

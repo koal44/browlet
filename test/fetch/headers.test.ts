@@ -714,9 +714,9 @@ describe('Headers realm allocation', () => {
     const receiverRealm = new TestRealm();
     const methodRealm = new TestRealm();
     const context = world.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
-    context.install(receiverRealm.global);
-    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.global);
-    const Constructor = Reflect.get(methodRealm.global, 'Headers') as typeof Headers;
+    context.install(receiverRealm.globalObject);
+    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.globalObject);
+    const Constructor = Reflect.get(methodRealm.globalObject, 'Headers') as typeof Headers;
     const method = Reflect.get(Constructor.prototype, 'getSetCookie');
     const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));
     const cookies = Reflect.apply(method, headers, []);

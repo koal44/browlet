@@ -80,10 +80,13 @@ Plain Node uses allocation stamps plus incomplete prototype/evaluation evidence;
 evaluating a known foreign value must not overwrite its existing association.
 
 Native context handles separate the replaceable realm from the reusable global
-proxy. Window allocation creates the immutable prototype chain before Web IDL
-populates it. Plain Node keeps the modeled global bridge. Neither path supplies
-browser cross-origin security. Detachment cancels queued V8 work, so HTML owns
-the checkpoint-before-reuse boundary.
+proxy. A requested `globalAllocation` holds the engine-created global target and
+prototype objects for Web IDL to populate; accessing it without requesting a
+prototype layout throws. `globalObject` is the installed global, while `globalThis`
+is the host-selected this value. `GlobalObject` and `GlobalThis` name those roles
+without requiring a particular property shape. Plain Node keeps the modeled
+global bridge. Neither path supplies browser cross-origin security. Detachment
+cancels queued V8 work, so HTML owns the checkpoint-before-reuse boundary.
 
 Captured host intrinsics can throw host-realm errors. Buffer metadata operations
 translate detached/out-of-bounds DataView failures into Infra TypeError requests;

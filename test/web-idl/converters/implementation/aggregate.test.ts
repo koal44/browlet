@@ -5,6 +5,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
+import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm } from '../../../support/web-idl-realm';
 
 describe('Sequence and record conversion through implementations', () => {
@@ -24,9 +25,8 @@ describe('Sequence and record conversion through implementations', () => {
       name: 'Echo', exposed: '*', implementation: impl(EchoImpl),
       members: [ctor(), op('echo', type, [arg('value', type)])],
     })]);
-    const realm = new TestRealm();
-    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Echo = Reflect.get(realm.global, 'Echo') as new() => { echo(value: unknown): Entries | Entries[]; };
+    const { realm } = installTestBindings(world);
+    const Echo = Reflect.get(realm.globalObject, 'Echo') as new() => { echo(value: unknown): Entries | Entries[]; };
     let reads = 0;
     let coercions = 0;
     const input = {
@@ -85,13 +85,12 @@ describe('Sequence and record conversion through implementations', () => {
         members: [ctor(), op('echo', type, [arg('value', type)])],
       }),
     ]);
-    const realm = new TestRealm();
     const otherRealm = new TestRealm();
-    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
+    const { realm } = installTestBindings(world);
     const other = world.register(otherRealm, (ctx) => ({ realm: ctx.realm }));
     const implementation = new ItemImpl();
     const platform = other.project(ItemImpl, implementation);
-    const Echo = Reflect.get(realm.global, 'Echo') as new() => { echo(value: unknown): Entries<object>; };
+    const Echo = Reflect.get(realm.globalObject, 'Echo') as new() => { echo(value: unknown): Entries<object>; };
     const result = new Echo().echo(kind === 'sequence' ? [platform] : { item: platform });
     const item = Array.isArray(result) ? result[0]! : result.item!;
 

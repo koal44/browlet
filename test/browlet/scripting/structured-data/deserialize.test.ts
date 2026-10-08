@@ -330,8 +330,8 @@ describe('HTML structured deserialization', () => {
   it.each(['DOMException', 'QuotaExceededError'] as const)(
     'preserves %s stacks when cloning through another realm', (interfaceName) => {
       const { source, sourceRealm, target, targetRealm } = createContexts();
-      const Constructor = Reflect.get(sourceRealm.global, interfaceName) as typeof DOMException;
-      const TargetConstructor = Reflect.get(targetRealm.global, interfaceName) as typeof DOMException;
+      const Constructor = Reflect.get(sourceRealm.globalObject, interfaceName) as typeof DOMException;
+      const TargetConstructor = Reflect.get(targetRealm.globalObject, interfaceName) as typeof DOMException;
       const exception = new Constructor('original failure');
       const stack = exception.stack;
 
@@ -347,7 +347,7 @@ describe('HTML structured deserialization', () => {
 
   it('does not invoke an author stack getter when cloning a DOMException', () => {
     const { source, sourceRealm, target } = createContexts();
-    const Constructor = Reflect.get(sourceRealm.global, 'DOMException') as typeof DOMException;
+    const Constructor = Reflect.get(sourceRealm.globalObject, 'DOMException') as typeof DOMException;
     const exception = new Constructor('original failure');
     let reads = 0;
     Object.defineProperty(exception, 'stack', {
@@ -362,19 +362,19 @@ describe('HTML structured deserialization', () => {
   it('restores only specified DOMException interface state', () => {
     const { source, sourceRealm, target, targetRealm } = createContexts();
     const SourceDOMException = Reflect.get(
-      sourceRealm.global,
+      sourceRealm.globalObject,
       'DOMException',
     ) as typeof DOMException;
     const TargetDOMException = Reflect.get(
-      targetRealm.global,
+      targetRealm.globalObject,
       'DOMException',
     ) as typeof DOMException;
     const SourceQuotaExceededError = Reflect.get(
-      sourceRealm.global,
+      sourceRealm.globalObject,
       'QuotaExceededError',
     ) as QuotaExceededErrorConstructor;
     const TargetQuotaExceededError = Reflect.get(
-      targetRealm.global,
+      targetRealm.globalObject,
       'QuotaExceededError',
     ) as QuotaExceededErrorConstructor;
     const exception = new SourceDOMException('bad index', 'IndexSizeError');
@@ -487,8 +487,8 @@ function createContexts(options: {
   const targetRealm = new Realm({ crossOriginIsolated: true });
   const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
   const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
-  source.install(sourceRealm.global);
-  target.install(targetRealm.global);
+  source.install(sourceRealm.globalObject);
+  target.install(targetRealm.globalObject);
   const agentCluster = options.agentCluster ?? new AgentCluster('concrete');
   agentCluster.add(sourceRealm.agent);
   agentCluster.add(targetRealm.agent);

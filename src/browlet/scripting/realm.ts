@@ -1,7 +1,9 @@
 import {
-  JSRealm, bindAsyncContext, getAssociatedRealm, type GlobalObject, type JSRealmOptions,
+  JSRealm, bindAsyncContext, getAssociatedRealm,
+  type GlobalObject, type GlobalThis, type JSRealmOptions,
 } from '../../js-engine/index';
 import type { CallbackHooks, SecurityCheckType, WebIDLRealm } from '../../web-idl/index';
+import type { Window, WindowProxy } from '../platform';
 import type { DocumentImpl } from '../dom/nodes/document';
 import type { EventImpl } from '../dom/events/event';
 import type { EventRealm, WindowEventRealm } from '../dom/environment';
@@ -186,7 +188,7 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
 
   setGlobalObjects(
     globalObject: GlobalObject,
-    globalThis: object,
+    globalThis: GlobalThis,
   ): void {
     this.initializeGlobalObjects(globalObject, globalThis);
     if (this.agent.agentCluster?.crossOriginIsolationMode === 'none') {
@@ -276,7 +278,7 @@ export class WindowRealm extends Realm implements WindowEventRealm {
     // once Browlet has the HTML performance timeline machinery.
   }
 
-  override setGlobalObjects(globalObject: GlobalObject, globalThis: object): void {
+  override setGlobalObjects(globalObject: Window, globalThis: WindowProxy): void {
     super.setGlobalObjects(globalObject, globalThis);
     this.agent.windowObjects.add(this.windowImplementation);
   }
@@ -284,7 +286,7 @@ export class WindowRealm extends Realm implements WindowEventRealm {
 
 export type RealmCustomizations = {
   createGlobalObject(realm: Realm): GlobalObject;
-  createGlobalThisValue?(realm: Realm, globalObject: GlobalObject): object;
+  createGlobalThisValue?(realm: Realm, globalObject: GlobalObject): GlobalThis;
 };
 
 export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;

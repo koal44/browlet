@@ -59,9 +59,9 @@ describe.each(cases)('$name realization', ({ name, create, Exception, native }) 
     const world = new BindingWorld([]);
     const binding = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
     const otherBinding = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
-    binding.install(binding.realm.global);
+    binding.install(binding.realm.globalObject);
     const error = binding.realizeException(exception);
-    const constructor: unknown = Reflect.get(binding.realm.global, name);
+    const constructor: unknown = Reflect.get(binding.realm.globalObject, name);
 
     expect(error).toBeInstanceOf(constructor);
     expect(error).toHaveProperty('name', name);

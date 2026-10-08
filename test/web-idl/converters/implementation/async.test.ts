@@ -7,6 +7,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
+import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm } from '../../../support/web-idl-realm';
 
 describe('Promise and async sequence implementation conversion', () => {
@@ -25,9 +26,8 @@ describe('Promise and async sequence implementation conversion', () => {
         arg('callbacks', asyncSequence(reference(handler.name)), onError(behavior)),
       ])],
     });
-    const realm = new TestRealm();
-    new BindingWorld([handler, runner]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Runner = Reflect.get(realm.global, 'Runner') as new() => { run(callbacks: (() => void)[]): Promise<void>; };
+    const { realm } = installTestBindings(new BindingWorld([handler, runner]));
+    const Runner = Reflect.get(realm.globalObject, 'Runner') as new() => { run(callbacks: (() => void)[]): Promise<void>; };
     const failure = new Error('callback failed');
     const callback = vi.fn(() => { throw failure; });
     const report = vi.spyOn(realm, 'reportException').mockImplementation(() => {});
@@ -52,9 +52,8 @@ describe('Promise and async sequence implementation conversion', () => {
         arg('callbacks', promise(sequence(reference(handler.name))), onError(behavior)),
       ])],
     });
-    const realm = new TestRealm();
-    new BindingWorld([handler, runner]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Runner = Reflect.get(realm.global, 'Runner') as new() => { run(callbacks: Promise<(() => void)[]>): Promise<void>; };
+    const { realm } = installTestBindings(new BindingWorld([handler, runner]));
+    const Runner = Reflect.get(realm.globalObject, 'Runner') as new() => { run(callbacks: Promise<(() => void)[]>): Promise<void>; };
     const failure = new Error('callback failed');
     const callback = vi.fn(() => { throw failure; });
     const report = vi.spyOn(realm, 'reportException').mockImplementation(() => {});

@@ -8,8 +8,8 @@ import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
-import { getMemberBinding } from '../../../support/web-idl-binding';
-import { TestRealm as Realm, getInstalledInterface } from '../../../support/web-idl-realm';
+import { getInstalledInterface, getMemberBinding } from '../../../support/web-idl-binding';
+import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL global platform objects', () => {
   it('lets projected operations call inherited internal instance methods', () => {
@@ -315,7 +315,7 @@ describe('Web IDL global platform objects', () => {
     Reflect.apply(replaceableDescriptor.set, undefined, ['shadowed']);
     expect(Object.getOwnPropertyDescriptor(global, 'replaceable'))
       .toMatchObject({ value: 'shadowed' });
-    expect(Object.hasOwn(realm.global, 'replaceable')).toBe(false);
+    expect(Object.hasOwn(realm.globalObject, 'replaceable')).toBe(false);
 
     Reflect.apply(forwardedDescriptor.set, null, ['forwarded']);
     expect(forwardedTarget.value).toBe('forwarded');

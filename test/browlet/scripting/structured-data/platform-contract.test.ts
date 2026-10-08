@@ -23,14 +23,14 @@ describe('HTML structured-data platform contracts', () => {
     const secondRealm = new Realm();
     const first = domain.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
     const second = domain.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
-    first.install(firstRealm.global);
-    second.install(secondRealm.global);
+    first.install(firstRealm.globalObject);
+    second.install(secondRealm.globalObject);
     const FirstDOMException = Reflect.get(
-      firstRealm.global,
+      firstRealm.globalObject,
       'DOMException',
     ) as typeof DOMException;
     const SecondDOMException = Reflect.get(
-      secondRealm.global,
+      secondRealm.globalObject,
       'DOMException',
     ) as typeof DOMException;
     const source = new FirstDOMException('some message', 'IndexSizeError');
@@ -71,9 +71,9 @@ describe('HTML structured-data platform contracts', () => {
     const domain = new BindingWorld([]);
     const realm = new Realm();
     const registration = domain.register(realm, (ctx) => ({ realm: ctx.realm }));
-    registration.install(realm.global);
+    registration.install(realm.globalObject);
     const QuotaExceededError = Reflect.get(
-      realm.global,
+      realm.globalObject,
       'QuotaExceededError',
     ) as QuotaExceededErrorConstructor;
     const source = new QuotaExceededError('too large', {

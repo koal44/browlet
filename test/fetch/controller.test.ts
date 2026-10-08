@@ -116,7 +116,7 @@ describe('Fetch controller lifecycle', () => {
       const env = createClientEnvironment();
       const other = createClientEnvironment();
       const DOMException = env.exec.DOMException;
-      Reflect.set(env.realm.global, 'DOMException', () => { throw new Error('Replaced constructor'); });
+      Reflect.set(env.realm.globalObject, 'DOMException', () => { throw new Error('Replaced constructor'); });
       env.exec.deserialize = () => {
         if (mode === 'throws') throw new Error('Unavailable serialized type');
         return undefined;

@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { defineProxyObject, idlType, reference, union } from '../../../src/web-idl/core/index';
 
-import { createConversionSteps, createBinding, expectRealmTypeError } from '../../support/web-idl-conversion';
+import { createBinding } from '../../support/web-idl-binding';
+import { createConversionSteps, expectRealmTypeError } from '../../support/web-idl-conversion';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s interface conversion', (mode) => {
   const { jsToIDL, idlToJS } = createConversionSteps(mode);

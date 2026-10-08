@@ -268,7 +268,7 @@ describe('ReportingObserver', () => {
     document.browsingContext = new BrowsingContext(proxy);
     sibling.window.setAssociatedDocument(document);
     setAssociatedWindow(proxy, sibling.window);
-    const otherWindow = otherRealm.global as unknown as ReportingWindow;
+    const otherWindow = otherRealm.globalObject as unknown as ReportingWindow;
     const callback = otherRealm.evaluate(`(function(reports, observer) {
       globalThis.delivered = { reports, observer, receiver: this };
     })`, 'reporting-callback.js') as ObserverCallback;
@@ -361,7 +361,7 @@ function createWindow() {
   const eventLoop = realm.agent.eventLoop;
   return {
     realm,
-    window: realm.global as unknown as ReportingWindow,
+    window: realm.globalObject as unknown as ReportingWindow,
     env: realm.env,
     scope: realm.windowImplementation.getWindowOrWorkerGlobalScopeMixin(),
     runTask: () => eventLoop.runTaskTurn({

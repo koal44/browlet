@@ -1,7 +1,9 @@
 import * as vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
-import type { CollectionIteratorKind, GlobalPrototypeKind, JSFunction, JSIteratorResult } from './realm';
+import type {
+  CollectionIteratorKind, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
+} from './realm';
 import type { JSJobCallback, NodeContext } from './runtime';
 import { InternalError } from '../infra/internal-error';
 
@@ -86,10 +88,10 @@ export type AddonMicrotaskQueueHandle = {
 
 export type AddonContextHandle = {
   readonly realm: object;
-  readonly globalProxy: object;
-  readonly globalObject?: object;
+  readonly globalProxy: GlobalProxy;
+  readonly globalObject?: GlobalObject;
   readonly prototypeChain?: object[];
-  detachGlobal(): object;
+  detachGlobal(): GlobalProxy;
 };
 
 type AddonContextOptions = {

@@ -2,7 +2,8 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import { itPassesWith } from '../test-runtime';
 
 import {
-  JSRealm, type JSFunction, createMicrotaskQueue, getAssociatedRealm,
+  JSRealm, createMicrotaskQueue, getAssociatedRealm,
+  type GlobalObject, type GlobalProxy, type GlobalThis, type JSFunction,
 } from '../../src/js-engine/index';
 
 describe('JavaScript Realm', () => {
@@ -31,12 +32,12 @@ describe('JavaScript Realm', () => {
       { constructible: true, length: 1, name: 'Example' },
     );
 
-    expect(Array_).toBe(Reflect.get(realm.global, 'Array'));
-    expect(BigInt_).toBe(Reflect.get(realm.global, 'BigInt'));
-    expect(Number_).toBe(Reflect.get(realm.global, 'Number'));
-    expect(Object_).toBe(Reflect.get(realm.global, 'Object'));
+    expect(Array_).toBe(Reflect.get(realm.globalObject, 'Array'));
+    expect(BigInt_).toBe(Reflect.get(realm.globalObject, 'BigInt'));
+    expect(Number_).toBe(Reflect.get(realm.globalObject, 'Number'));
+    expect(Object_).toBe(Reflect.get(realm.globalObject, 'Object'));
     expect(Object_).not.toBe(Object);
-    expect(String_).toBe(Reflect.get(realm.global, 'String'));
+    expect(String_).toBe(Reflect.get(realm.globalObject, 'String'));
     expect(realm.intrinsics.objectPrototype).toBe(Object_.prototype);
     expect(realm.intrinsics.functionPrototype)
       .toBe(realm.intrinsics.function.prototype);
@@ -68,12 +69,12 @@ describe('JavaScript Realm', () => {
     expect(instance.argumentsList).toEqual(['value']);
     expect(instance.newTarget).toBe(constructible);
 
-    Reflect.set(realm.global, 'Array', Array);
-    Reflect.set(realm.global, 'BigInt', BigInt);
-    Reflect.set(realm.global, 'Number', Number);
-    Reflect.set(realm.global, 'Object', Object);
-    Reflect.set(realm.global, 'String', String);
-    Reflect.set(realm.global, 'TypeError', TypeError);
+    Reflect.set(realm.globalObject, 'Array', Array);
+    Reflect.set(realm.globalObject, 'BigInt', BigInt);
+    Reflect.set(realm.globalObject, 'Number', Number);
+    Reflect.set(realm.globalObject, 'Object', Object);
+    Reflect.set(realm.globalObject, 'String', String);
+    Reflect.set(realm.globalObject, 'TypeError', TypeError);
     expect(realm.intrinsics.array).toBe(Array_);
     expect(realm.intrinsics.bigInt).toBe(BigInt_);
     expect(realm.intrinsics.number).toBe(Number_);
@@ -109,8 +110,8 @@ describe('JavaScript Realm', () => {
     first.evaluate('globalThis.answer = 41', 'first.js');
     second.evaluate('globalThis.answer = 42', 'second.js');
 
-    expect(first.evaluate('this', 'first-global.js')).toBe(first.global);
-    expect(second.evaluate('this', 'second-global.js')).toBe(second.global);
+    expect(first.evaluate('this', 'first-global.js')).toBe(first.globalObject);
+    expect(second.evaluate('this', 'second-global.js')).toBe(second.globalObject);
     expect(first.evaluate('answer', 'first.js')).toBe(41);
     expect(second.evaluate('answer', 'second.js')).toBe(42);
     expect(first.intrinsics.object).not.toBe(second.intrinsics.object);
@@ -129,7 +130,7 @@ describe('JavaScript Realm', () => {
     expect(getAssociatedRealm(foreign)).toBe(second);
     expect(getAssociatedRealm({})).toBeUndefined();
 
-    Reflect.set(first.global, 'hasActiveRealm', (value: object) =>
+    Reflect.set(first.globalObject, 'hasActiveRealm', (value: object) =>
       getAssociatedRealm(value) === first);
     expect(first.evaluate(`
       hasActiveRealm(new Proxy({}, {
@@ -140,11 +141,17 @@ describe('JavaScript Realm', () => {
 
   it('bridges one supplied global object and global-this value', () => {
     const realm = new ConfigurableRealm();
+    const globalProxy = realm.globalProxy;
     const globalObject = {};
     const globalThis = { answer: 42 };
 
+    expectTypeOf(globalProxy).toEqualTypeOf<GlobalProxy>();
+    expect(() => realm.globalAllocation).toThrow('Realm has no preallocated global object and prototypes');
     realm.setGlobalObjects(globalObject, globalThis);
 
+    expect(realm.globalProxy).toBe(globalProxy);
+    expect(realm.globalThis).toBe(globalThis);
+    expect(realm.evaluate('this', 'global-proxy.js')).toBe(globalProxy);
     expect(Reflect.get(globalObject, 'Object')).toBe(realm.intrinsics.object);
     expect(Reflect.get(globalObject, 'globalThis')).toBe(globalThis);
     expect(realm.evaluate('globalThis', 'global-this.js')).toBe(globalThis);
@@ -160,7 +167,7 @@ describe('JavaScript Realm', () => {
     const first = new JSRealm();
     const second = new JSRealm();
     second.evaluate('globalThis.target = function () {}; undefined;', 'target.js');
-    const target = Reflect.get(second.global, 'target') as object;
+    const target = Reflect.get(second.globalObject, 'target') as object;
     Reflect.setPrototypeOf(target, first.intrinsics.functionPrototype);
 
     expect(getAssociatedRealm(target)).toBe(second);
@@ -170,7 +177,7 @@ describe('JavaScript Realm', () => {
     const first = new JSRealm();
     const second = new JSRealm();
     const target = second.evaluate('(function () {})', 'target.js') as object;
-    Reflect.set(first.global, 'foreignTarget', target);
+    Reflect.set(first.globalObject, 'foreignTarget', target);
 
     expect(first.evaluate('foreignTarget', 'return-target.js')).toBe(target);
     expect(getAssociatedRealm(target)).toBe(second);
@@ -194,8 +201,8 @@ describe('JavaScript Realm', () => {
     const second = new JSRealm();
     const target = second.evaluate('(function () {})', 'target.js') as object;
     const calls: string[] = [];
-    Reflect.set(first.global, 'foreignTarget', target);
-    Reflect.set(first.global, 'record', (name: string) => { calls.push(name); });
+    Reflect.set(first.globalObject, 'foreignTarget', target);
+    Reflect.set(first.globalObject, 'record', (name: string) => { calls.push(name); });
     first.evaluate(`
       globalThis.proxy = new Proxy(foreignTarget, {
         getPrototypeOf() { record('getPrototypeOf'); return Function.prototype; },
@@ -203,7 +210,7 @@ describe('JavaScript Realm', () => {
       undefined;
     `, 'proxy.js');
 
-    const realm = getAssociatedRealm(Reflect.get(first.global, 'proxy') as object);
+    const realm = getAssociatedRealm(Reflect.get(first.globalObject, 'proxy') as object);
     expect(calls).toEqual([]);
     expect(realm).toBe(second);
   });
@@ -237,7 +244,7 @@ describe('JavaScript Realm', () => {
       const keys = Reflect.ownKeys(value);
       const prototype = Object.getPrototypeOf(value) as object | null;
       Object.freeze(value);
-      Reflect.set(second.global, 'foreignValue', value);
+      Reflect.set(second.globalObject, 'foreignValue', value);
 
       expect(getAssociatedRealm(value)).toBe(first);
       expect(second.evaluate('foreignValue', 'foreign-allocation.js')).toBe(value);
@@ -390,7 +397,7 @@ describe('Realm Promise observation', () => {
 });
 
 class ConfigurableRealm extends JSRealm {
-  setGlobalObjects(globalObject: object, globalThis: object): void {
+  setGlobalObjects(globalObject: GlobalObject, globalThis: GlobalThis): void {
     this.initializeGlobalObjects(globalObject, globalThis);
   }
 }

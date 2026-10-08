@@ -7,7 +7,7 @@ import {
 import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
-import { TestRealm as Realm } from '../../../support/web-idl-realm';
+import { installTestBindings } from '../../../support/web-idl-binding';
 
 describe('Web IDL implementation result conversion', () => {
   it('projects nested implementation results without exposing their identity', async () => {
@@ -134,18 +134,15 @@ describe('Web IDL implementation result conversion', () => {
         ),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([
       nestedResultIDL,
       nestedResultCallbackIDL,
       resultDictionaryIDL,
       ownerIDL,
     ]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    const { globalObject } = installTestBindings(world);
     type NestedResult = { label: string; };
-    const NestedResultOwner = Reflect.get(realm.global, ownerIDL.name) as {
+    const NestedResultOwner = Reflect.get(globalObject, ownerIDL.name) as {
       new(): {
         callbackArguments(
           callback: (

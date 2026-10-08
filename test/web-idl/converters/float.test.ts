@@ -3,7 +3,8 @@ import { describe, expect, it } from 'vitest';
 import type { IDLFloatType } from '../../../src/web-idl/assembly/index';
 import type { Converter } from '../../../src/web-idl/converters/converter';
 
-import { createConversionSteps, createBinding, expectRealmTypeError } from '../../support/web-idl-conversion';
+import { createBinding } from '../../support/web-idl-binding';
+import { createConversionSteps, expectRealmTypeError } from '../../support/web-idl-conversion';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s floating-point conversion', (mode) => {
   const { jsToIDL } = createConversionSteps(mode);

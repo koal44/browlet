@@ -3,7 +3,8 @@ import { describe, it } from 'vitest';
 import { idlType, record } from '../../../src/web-idl/core/index';
 
 import { TestRealm as Realm } from '../../support/web-idl-realm';
-import { createConversionSteps, createBinding, expectRealmTypeError } from '../../support/web-idl-conversion';
+import { createBinding } from '../../support/web-idl-binding';
+import { createConversionSteps, expectRealmTypeError } from '../../support/web-idl-conversion';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s record conversion', (mode) => {
   const { jsToIDL } = createConversionSteps(mode);

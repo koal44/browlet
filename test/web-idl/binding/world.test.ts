@@ -39,8 +39,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const world = new BindingWorld([exampleIDL]);
     const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
 
-    expect(context.install(realm.global)).toBeUndefined();
-    expect(Object.hasOwn(realm.global, 'Example')).toBe(true);
+    expect(context.install(realm.globalObject)).toBeUndefined();
+    expect(Object.hasOwn(realm.globalObject, 'Example')).toBe(true);
   });
 
   it('allows registration to retry after environment composition fails', () => {
@@ -105,8 +105,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const first = interfaces.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
     const second = interfaces.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
 
-    first.install(firstRealm.global);
-    second.install(secondRealm.global);
+    first.install(firstRealm.globalObject);
+    second.install(secondRealm.globalObject);
 
     const implementation = first.construct(ExampleImpl);
     const object = interfaces.project(implementation);
@@ -117,8 +117,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(interfaces.getRealm(object)).toBe(firstRealm);
     expect(second.unwrap(object, ExampleImpl))
       .toBe(implementation);
-    expect(Reflect.get(firstRealm.global, 'Example')).not
-      .toBe(Reflect.get(secondRealm.global, 'Example'));
+    expect(Reflect.get(firstRealm.globalObject, 'Example')).not
+      .toBe(Reflect.get(secondRealm.globalObject, 'Example'));
   });
 
   it('preserves proxy values while resolving member calls to their current platform receiver', () => {
@@ -146,8 +146,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     const realmB = new Realm();
     const a = world.register(realmA, (ctx) => ({ realm: ctx.realm }));
     const b = world.register(realmB, (ctx) => ({ realm: ctx.realm }));
-    a.install(realmA.global);
-    b.install(realmB.global);
+    a.install(realmA.globalObject);
+    b.install(realmB.globalObject);
     target = a.project(ReceiverImpl, new ReceiverImpl('first'));
     const prototype = Reflect.getPrototypeOf(target)!;
     const descriptor = Reflect.getOwnPropertyDescriptor(prototype, 'value')!;
@@ -159,8 +159,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(Reflect.apply(descriptor.get!, object, [])).toBe('first');
     expect(Reflect.apply(echo, object, [object])).toBe(object);
     expect(() => Reflect.apply(echo, object, [{}])).toThrow(realmA.intrinsics.typeError);
-    expect(Object.hasOwn(realmA.global, 'ProxyObject')).toBe(false);
-    expect(Object.hasOwn(realmB.global, 'ProxyObject')).toBe(false);
+    expect(Object.hasOwn(realmA.globalObject, 'ProxyObject')).toBe(false);
+    expect(Object.hasOwn(realmB.globalObject, 'ProxyObject')).toBe(false);
 
     const replacement = new ReceiverImpl('second');
     target = b.project(ReceiverImpl, replacement);
@@ -180,18 +180,18 @@ describe('Web IDL binding worlds and realm registration', () => {
     const secondRealm = new Realm();
     const first = interfaces.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
     const second = interfaces.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
-    first.install(firstRealm.global);
-    second.install(secondRealm.global);
+    first.install(firstRealm.globalObject);
+    second.install(secondRealm.globalObject);
 
     const implementation = first.construct(ExampleImpl);
     const materialized = interfaces.project(implementation);
     const object = second.project(ExampleImpl, implementation);
     const FirstExample = Reflect.get(
-      firstRealm.global,
+      firstRealm.globalObject,
       exampleIDL.name,
     ) as CallableFunction;
     const SecondExample = Reflect.get(
-      secondRealm.global,
+      secondRealm.globalObject,
       exampleIDL.name,
     ) as CallableFunction;
 
@@ -246,15 +246,15 @@ describe('Web IDL binding worlds and realm registration', () => {
     const functionRealm = new Realm();
     const receiverBinding = bindings.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
     const functionBinding = bindings.register(functionRealm, (ctx) => ({ realm: ctx.realm }));
-    receiverBinding.install(receiverRealm.global);
-    functionBinding.install(functionRealm.global);
+    receiverBinding.install(receiverRealm.globalObject);
+    functionBinding.install(functionRealm.globalObject);
 
     const factory = bindings.project(
       receiverBinding.construct(FactoryImpl),
     );
     if (!factory) throw new Error('RealmFactory was not projected');
     const ForeignFactory = Reflect.get(
-      functionRealm.global,
+      functionRealm.globalObject,
       factoryIDL.name,
     ) as { prototype: object; };
     const createResult = Reflect.get(
@@ -281,11 +281,11 @@ describe('Web IDL binding worlds and realm registration', () => {
       Reflect.apply(createBoundResult, factory, []) as object,
     ];
     const ReceiverResult = Reflect.get(
-      receiverRealm.global,
+      receiverRealm.globalObject,
       resultIDL.name,
     ) as { new(): object; };
     const ForeignResult = Reflect.get(
-      functionRealm.global,
+      functionRealm.globalObject,
       resultIDL.name,
     ) as { new(): object; };
 
@@ -304,7 +304,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
       members: [
         attr('owner', idlType.object, {
-          get(ctx) { return ctx.realm.global; },
+          get(ctx) { return ctx.realm.globalObject; },
           set(ctx, value) {
             expect(this).toBe(implInst);
             setterContext = ctx;
@@ -323,14 +323,14 @@ describe('Web IDL binding worlds and realm registration', () => {
     const receiverRealm = new Realm();
     const methodRealm = new Realm();
     const receiverContext = world.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
-    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.global);
+    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.globalObject);
     const implInst = receiverContext.construct(ReceiverImpl);
     const object = world.project(implInst)!;
-    const Constructor = Reflect.get(methodRealm.global, definition.name) as { prototype: object; };
+    const Constructor = Reflect.get(methodRealm.globalObject, definition.name) as { prototype: object; };
     const descriptor = Reflect.getOwnPropertyDescriptor(Constructor.prototype, 'owner')!;
     const token = {};
 
-    expect(Reflect.apply(descriptor.get!, object, [])).toBe(receiverRealm.global);
+    expect(Reflect.apply(descriptor.get!, object, [])).toBe(receiverRealm.globalObject);
     Reflect.apply(descriptor.set!, object, [token]);
     expect(setterContext).toBe(receiverContext);
     expect(setterValue).toBe(token);
@@ -358,14 +358,14 @@ describe('Web IDL binding worlds and realm registration', () => {
     const receiverRealm = new Realm();
     const methodRealm = new Realm();
     const receiverContext = world.register(receiverRealm, (ctx) => ({ realm: ctx.realm }));
-    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.global);
+    world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).install(methodRealm.globalObject);
     const implementation = new ReceiverImpl();
     if (storage === 'field') {
       // Registration sees a field. Its live read must still realize a later getter failure.
       Object.defineProperty(implementation, 'value', { get() { throw failure; } });
     }
     const object = receiverContext.project(ReceiverImpl, implementation);
-    const Constructor = Reflect.get(methodRealm.global, definition.name) as { prototype: object; };
+    const Constructor = Reflect.get(methodRealm.globalObject, definition.name) as { prototype: object; };
     const getter = Reflect.getOwnPropertyDescriptor(Constructor.prototype, 'value')!.get!;
     const readFailure = async (): Promise<unknown> => {
       let result: unknown;
@@ -407,7 +407,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       exposed: '*',
       implementation: impl(ConstructedImpl, {
         constructWith: [
-          atArg(0, (ctx) => ctx), atArg(1, (ctx) => ctx.realm.global), atArg(3, positioned),
+          atArg(0, (ctx) => ctx), atArg(1, (ctx) => ctx.realm.globalObject), atArg(3, positioned),
         ],
       }),
       members: [],
@@ -415,7 +415,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const interfaces = new BindingWorld([interfaceIDL]);
     const realm = new Realm();
     const registration = interfaces.register(realm, (ctx) => ({ realm: ctx.realm }));
-    registration.install(realm.global);
+    registration.install(realm.globalObject);
 
     const implementation = registration.construct(
       ConstructedImpl,
@@ -423,7 +423,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     );
 
     expect(implementation.context).toBe(registration);
-    expect(implementation.global).toBe(realm.global);
+    expect(implementation.global).toBe(realm.globalObject);
     expect(implementation.semantic).toBe('semantic');
     expect(implementation.positioned).toBe('positioned');
     expect(interfaces.getRealm(implementation)).toBe(realm);
@@ -458,11 +458,11 @@ describe('Web IDL binding worlds and realm registration', () => {
       childIDL,
       unrelatedIDL,
     ]).register(realm, (ctx) => ({ realm: ctx.realm }));
-    registration.install(realm.global);
+    registration.install(realm.globalObject);
 
     const child = new ChildImpl();
     const object = registration.project(ParentImpl, child);
-    const Child = Reflect.get(realm.global, childIDL.name) as CallableFunction;
+    const Child = Reflect.get(realm.globalObject, childIDL.name) as CallableFunction;
 
     expect(object).toBeInstanceOf(Child);
     expect(() => registration.project(
@@ -608,9 +608,9 @@ describe('Web IDL binding worlds and realm registration', () => {
     });
     const realm = new Realm();
     const ctx = new BindingWorld([interfaceIDL]).register(realm, (ctx) => ({ realm: ctx.realm }));
-    ctx.install(realm.global);
+    ctx.install(realm.globalObject);
 
-    expect(Reflect.get(realm.global, interfaceIDL.name)).toBeTypeOf('function');
+    expect(Reflect.get(realm.globalObject, interfaceIDL.name)).toBeTypeOf('function');
     expect(() => ctx.createPlatformRecord(interfaceIDL.name))
       .toThrow('Interface DeclarationOnly has no implementation creation steps');
   });
@@ -630,7 +630,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     const interfaces = new BindingWorld([interfaceIDL]);
     const realm = new Realm();
     const registration = interfaces.register(realm, (ctx) => ({ realm: ctx.realm }));
-    registration.install(realm.global);
+    registration.install(realm.globalObject);
 
     const internal = registration.createPlatformRecord(interfaceIDL.name)!;
 
@@ -641,7 +641,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(allocations).toBe(1);
     expect(publicConstructions).toBe(0);
 
-    const Constructor = Reflect.get(realm.global, interfaceIDL.name) as {
+    const Constructor = Reflect.get(realm.globalObject, interfaceIDL.name) as {
       new(): object;
     };
     const constructed = new Constructor();

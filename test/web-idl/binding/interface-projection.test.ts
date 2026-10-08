@@ -6,7 +6,7 @@ import {
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { getImplementationRecord, getPlatformRecord } from '../../../src/web-idl/binding/platform';
 
-import { TestRealm } from '../../support/web-idl-realm';
+import { installTestBindings } from '../../support/web-idl-binding';
 
 describe('interface projection ownership', () => {
   for (const stage of ['fresh', 'stamped', 'projected'] as const) {
@@ -82,7 +82,7 @@ describe('interface projection ownership', () => {
   it('uses the receiver realm for a fresh result from a borrowed operation', () => {
     const { realmA, realmB, a } = setup();
     const factory = a.project(FactoryImpl, new FactoryImpl());
-    const foreignFactory = Reflect.get(realmB.global, 'Factory') as { prototype: { create: () => object; }; };
+    const foreignFactory = Reflect.get(realmB.globalObject, 'Factory') as { prototype: { create: () => object; }; };
     const result = Reflect.apply(foreignFactory.prototype.create, factory, []);
     expect(getPlatformRecord(result)?.realm).toBe(realmA);
     expect(result).not.toBeInstanceOf(ChildImpl);
@@ -97,12 +97,8 @@ function setup() {
     ...definitions,
     defineProxyObject({ name: 'HostObject', is: (value) => value === hostObject }),
   ]);
-  const realmA = new TestRealm();
-  const realmB = new TestRealm();
-  const a = world.register(realmA, (ctx) => ({ realm: ctx.realm }));
-  const b = world.register(realmB, (ctx) => ({ realm: ctx.realm }));
-  a.install(realmA.global);
-  b.install(realmB.global);
+  const { realm: realmA, context: a } = installTestBindings(world);
+  const { realm: realmB, context: b } = installTestBindings(world);
   return {
     realmA, realmB, a, b, hostObject,
     ctxA: { binding: world.getRealmBinding(realmA)!, realm: realmA },

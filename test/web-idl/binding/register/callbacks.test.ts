@@ -11,6 +11,7 @@ import {
 } from '../../../../src/web-idl/binding/realm/callback';
 import type { WebIDLRealm } from '../../../../src/web-idl/index';
 
+import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL implementation callback conversion', () => {
@@ -32,9 +33,8 @@ describe('Web IDL implementation callback conversion', () => {
         roAttr('callbackUnion', union(idlType.DOMString, reference(result.name))),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([result, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Constructor = Reflect.get(realm.global, 'CallbackOwner') as new() => {
+    const { globalObject } = installTestBindings(new BindingWorld([result, definition]));
+    const Constructor = Reflect.get(globalObject, 'CallbackOwner') as new() => {
       callback: unknown; callbackUnion: unknown;
     };
     const owner = new Constructor();
@@ -57,9 +57,8 @@ describe('Web IDL implementation callback conversion', () => {
         op('next', reference(callback.name), [arg('callback', reference(callback.name), onError('rethrow'))]),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([callback, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Constructor = Reflect.get(realm.global, definition.name) as new() => { next(callback: Next): Next; };
+    const { globalObject } = installTestBindings(new BindingWorld([callback, definition]));
+    const Constructor = Reflect.get(globalObject, definition.name) as new() => { next(callback: Next): Next; };
     const next: Next = () => next;
     expect(new Constructor().next(next)).toBe(next);
   });
@@ -222,11 +221,9 @@ describe('Web IDL implementation callback conversion', () => {
       callbackOptions,
       interfaceIDL,
     ]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    installTestBindings(world, realm);
     const CallbackProjection = Reflect.get(
-      realm.global,
+      realm.globalObject,
       interfaceIDL.name,
     ) as new() => {
       callback: unknown;
@@ -308,8 +305,8 @@ describe('Web IDL implementation callback conversion', () => {
       ],
     });
     const realm = new Realm();
-    new BindingWorld([factory, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Constructor = Reflect.get(realm.global, definition.name) as new() => {
+    installTestBindings(new BindingWorld([factory, definition]), realm);
+    const Constructor = Reflect.get(realm.globalObject, definition.name) as new() => {
       construct(callback: (value: number) => object): number;
     };
     function Build(value: number) {
@@ -342,11 +339,11 @@ describe('Web IDL implementation callback conversion', () => {
     });
     const realm = new Realm();
     const callbackRealm = new Realm();
-    new BindingWorld([factory, definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Constructor = Reflect.get(realm.global, definition.name) as new() => { construct(callback: unknown): number; };
+    installTestBindings(new BindingWorld([factory, definition]), realm);
+    const Constructor = Reflect.get(realm.globalObject, definition.name) as new() => { construct(callback: unknown): number; };
     const owner = new Constructor();
     const prototypeReads = { count: 0 };
-    Reflect.set(callbackRealm.global, 'prototypeReads', prototypeReads);
+    Reflect.set(callbackRealm.globalObject, 'prototypeReads', prototypeReads);
     const callback = callbackRealm.evaluate(`new Proxy(function Build(value) {
       return { valueOf: () => globalThis.fail ? Infinity : value };
     }, {
@@ -365,7 +362,7 @@ describe('Web IDL implementation callback conversion', () => {
 
     expect(owner.construct(callback)).toBe(4);
     expect(prototypeReads.count).toBe(1);
-    Reflect.set(callbackRealm.global, 'fail', true);
+    Reflect.set(callbackRealm.globalObject, 'fail', true);
     expect(() => owner.construct(callback)).toThrow(callbackRealm.intrinsics.typeError);
     expect(prototypeReads.count).toBe(2);
     expect(prepareCallback.mock.calls).toEqual([[firstContext], [secondContext]]);
@@ -394,18 +391,17 @@ describe('Web IDL implementation callback conversion', () => {
         op('construct', idlType.any, [], invokeWith(atArg(0, (_receiver, method) => method.realm))),
       ],
     });
-    const conversionRealm = new Realm();
     const constructionRealm = new Realm();
     const callbackRealm = new Realm();
     const world = new BindingWorld([factory, definition]);
-    world.register(conversionRealm, (ctx) => ({ realm: ctx.realm })).install(conversionRealm.global);
-    world.register(constructionRealm, (ctx) => ({ realm: ctx.realm })).install(constructionRealm.global);
+    const { realm: conversionRealm } = installTestBindings(world);
+    installTestBindings(world, constructionRealm);
     type FactoryOwner = { construct(): unknown; };
-    const Constructor = Reflect.get(conversionRealm.global, definition.name) as {
+    const Constructor = Reflect.get(conversionRealm.globalObject, definition.name) as {
       new(callback: unknown): FactoryOwner;
       prototype: FactoryOwner;
     };
-    const OtherConstructor = Reflect.get(constructionRealm.global, definition.name) as typeof Constructor;
+    const OtherConstructor = Reflect.get(constructionRealm.globalObject, definition.name) as typeof Constructor;
     const arrow = callbackRealm.evaluate('() => ({})', 'retained-non-constructor.js');
     const owner = new Constructor(arrow);
     const prepareScript = vi.spyOn(callbackRealm.callbacks, 'prepareToRunScript');

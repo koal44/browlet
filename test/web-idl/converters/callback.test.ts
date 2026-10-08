@@ -4,7 +4,8 @@ import {
   defineCallbackFunction, defineTypedef, idlType, nullable, record, reference, sequence, xattr,
 } from '../../../src/web-idl/core/index';
 
-import { createConversionSteps, createBinding, expectRealmTypeError } from '../../support/web-idl-conversion';
+import { createBinding } from '../../support/web-idl-binding';
+import { createConversionSteps, expectRealmTypeError } from '../../support/web-idl-conversion';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s callback conversion', (mode) => {
   const { jsToIDL } = createConversionSteps(mode);

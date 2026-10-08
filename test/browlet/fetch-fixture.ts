@@ -84,7 +84,7 @@ export function createIsolatedFetchRealm() {
   const realm = new Realm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
   const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) => new SandboxEnvironment(realm, createBoundExecution(context)));
-  registration.install(realm.global);
+  registration.install(realm.globalObject);
   return createFetchRealmFixture(registration);
 }
 

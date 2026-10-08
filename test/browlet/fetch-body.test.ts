@@ -46,7 +46,7 @@ describe('Fetch body delivery through HTML', () => {
     const error = vi.fn();
     body.incrementallyRead(
       (bytes) => events.push([...bytes]), () => events.push('end'), error,
-      target.realm.global,
+      target.realm.globalObject,
     );
     expect(events).toEqual([]);
     expect(source.networkingTasks()).toHaveLength(1);
@@ -69,7 +69,7 @@ describe('Fetch body delivery through HTML', () => {
     fixture.runTask();
     const process = vi.fn();
     const error = vi.fn();
-    fixture.queueTask(() => body.readAll(process, error, fixture.realm.global));
+    fixture.queueTask(() => body.readAll(process, error, fixture.realm.globalObject));
 
     fixture.runTask();
     expect(process).not.toHaveBeenCalled();
@@ -94,7 +94,7 @@ describe('Fetch body delivery through HTML', () => {
     const firstTasks = firstRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const secondTasks = secondRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const previousTasks = new Set([...firstTasks, ...secondTasks]);
-    queueGlobalFetchTask(firstRealm.global, vi.fn());
+    queueGlobalFetchTask(firstRealm.globalObject, vi.fn());
     queueGlobalFetchTask(proxy, vi.fn());
 
     const documents = [...new Set([...firstTasks, ...secondTasks])]
@@ -144,11 +144,11 @@ describe('Fetch body delivery through HTML', () => {
     owner.queueTask(() => { result = Reflect.apply(text, receiver, []); });
     owner.runTask();
     expect(result).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
-    const completion = observeBrowletPromise(owner.realm.global, result!);
+    const completion = observeBrowletPromise(owner.realm.globalObject, result!);
     // The foreign stream's reads complete in its own queue before scheduling
     // the receiver's networking task. Stock Node drains its ambient queue here.
     await nextTurn();
-    performTestMicrotaskCheckpoint(source.realm.global);
+    performTestMicrotaskCheckpoint(source.realm.globalObject);
     expect(source.networkingTasks()).toHaveLength(0);
     expect(owner.networkingTasks()).toHaveLength(1);
     expect(owner.networkingTasks()[0]!.document).toBe(owner.document);
@@ -173,11 +173,11 @@ describe('Fetch body errors at the Promise binding boundary', () => {
 
     const bindings = new BindingWorld([bodyConsumerIDL]);
     const ownerBinding = bindings.register(owner.realm, (ctx) => ({ realm: ctx.realm }));
-    bindings.register(other.realm, (ctx) => ({ realm: ctx.realm })).install(other.realm.global);
+    bindings.register(other.realm, (ctx) => ({ realm: ctx.realm })).install(other.realm.globalObject);
     const consumer = ownerBinding.project(
-      BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.global, env),
+      BodyConsumerImpl, new BodyConsumerImpl(body, owner.realm.globalObject, env),
     );
-    const otherPrototype = (Reflect.get(other.realm.global, 'BodyConsumer') as typeof Object).prototype;
+    const otherPrototype = (Reflect.get(other.realm.globalObject, 'BodyConsumer') as typeof Object).prototype;
     const borrowed = Reflect.get(otherPrototype, method) as CallableFunction;
     const result = Reflect.apply(borrowed, consumer, []) as Promise<void>;
     expect(result).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
@@ -188,7 +188,7 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     );
     Reflect.apply(owner.realm.intrinsics.promise.then, result, [fulfilled, record]);
 
-    performTestMicrotaskCheckpoint(owner.realm.global);
+    performTestMicrotaskCheckpoint(owner.realm.globalObject);
     other.runTask();
     expect(observed).toEqual([]);
     owner.runTask();

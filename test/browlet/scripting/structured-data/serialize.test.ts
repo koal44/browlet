@@ -488,7 +488,7 @@ describe('HTML structured serialization', () => {
     const ctx = createContext();
     const { realm } = ctx;
     const DOMException_ = Reflect.get(
-      realm.global,
+      realm.globalObject,
       'DOMException',
     ) as typeof DOMException;
     const source = new DOMException_('message', 'IndexSizeError');
@@ -586,7 +586,7 @@ function createContext(options: {
   );
   agentCluster.add(realm.agent);
   const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
-  ctx.install(realm.global);
+  ctx.install(realm.globalObject);
   return ctx;
 }
 

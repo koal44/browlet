@@ -7,7 +7,8 @@ import {
 import type { IDLDictionary } from '../../../src/web-idl/values/dictionary';
 
 import { TestRealm as Realm } from '../../support/web-idl-realm';
-import { createConversionSteps, createBinding, expectRealmTypeError } from '../../support/web-idl-conversion';
+import { createBinding } from '../../support/web-idl-binding';
+import { createConversionSteps, expectRealmTypeError } from '../../support/web-idl-conversion';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s dictionary conversion', (mode) => {
   const { jsToIDL, idlToJS } = createConversionSteps(mode);

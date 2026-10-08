@@ -21,7 +21,7 @@ export function createBodyFixture() {
       runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
       queueTask(source: TaskSourceKey, steps: () => void) {
         expect(source).toBe('network');
-        const task = { global: context.realm.global, steps };
+        const task = { global: context.realm.globalObject, steps };
         tasks.push(task);
         return {
           remove() {
@@ -39,7 +39,7 @@ export function createBodyFixture() {
     scheduling,
     tasks,
     parallelSteps,
-    global: context.realm.global,
+    global: context.realm.globalObject,
     createBody: (chunks: unknown[] = []) => {
       const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, env);
       for (const chunk of chunks) stream.enqueueChunk(chunk);

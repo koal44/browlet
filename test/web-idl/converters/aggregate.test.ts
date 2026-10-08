@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { annotated, idlType, nullable, record, sequence, union, xattr } from '../../../src/web-idl/core/index';
 
-import { createConversionSteps, createBinding } from '../../support/web-idl-conversion';
+import { createBinding } from '../../support/web-idl-binding';
+import { createConversionSteps } from '../../support/web-idl-conversion';
 
 describe.each(['direct', 'prepared'] as const)('Web IDL %s sequence and record conversion', (mode) => {
   const { jsToIDL, idlToJS } = createConversionSteps(mode);

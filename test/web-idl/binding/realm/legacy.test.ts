@@ -9,8 +9,8 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
 import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
 
-import { getMemberBinding } from '../../../support/web-idl-binding';
-import { TestRealm as Realm, getInstalledInterface } from '../../../support/web-idl-realm';
+import { getInstalledInterface, getMemberBinding } from '../../../support/web-idl-binding';
+import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL legacy platform objects', () => {
   it('projects supported indices as read-only virtual own properties', () => {

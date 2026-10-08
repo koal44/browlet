@@ -7,6 +7,7 @@ import {
 import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
+import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL implementation attribute registration', () => {
@@ -23,10 +24,9 @@ describe('Web IDL implementation attribute registration', () => {
         roAttr('second', reference('Function'), attrFn(() => callback)),
       ],
     });
-    const realm = new Realm();
     const bindings = new BindingWorld([definition]);
-    bindings.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Constructor = Reflect.get(realm.global, definition.name) as new() => object;
+    const { realm } = installTestBindings(bindings);
+    const Constructor = Reflect.get(realm.globalObject, definition.name) as new() => object;
     const first = new Constructor();
     const second = new Constructor();
     const function_ = Reflect.get(first, 'first') as CallableFunction;
@@ -64,9 +64,8 @@ describe('Web IDL implementation attribute registration', () => {
         }),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Constructor = Reflect.get(realm.global, definition.name) as new() => {
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Constructor = Reflect.get(globalObject, definition.name) as new() => {
       handler: () => number;
     };
     const object = new Constructor();
@@ -95,9 +94,8 @@ describe('Web IDL implementation attribute registration', () => {
         attr('next', nullable(reference('Fields'))), roAttr('optional', idlType.any),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Fields = Reflect.get(realm.global, definition.name) as new() => {
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Fields = Reflect.get(globalObject, definition.name) as new() => {
       count: number; label: string; next: object | null; optional: unknown;
     };
     const object = new Fields();
@@ -133,10 +131,10 @@ describe('Web IDL implementation attribute registration', () => {
     const realm = new Realm();
     const foreignRealm = new Realm();
     for (const currentRealm of [realm, foreignRealm]) {
-      world.register(currentRealm, (ctx) => ({ realm: ctx.realm })).install(currentRealm.global);
+      installTestBindings(world, currentRealm);
     }
-    const ModeHolder = Reflect.get(realm.global, 'ModeHolder') as new() => { mode: string; };
-    const ForeignModeHolder = Reflect.get(foreignRealm.global, 'ModeHolder') as typeof ModeHolder;
+    const ModeHolder = Reflect.get(realm.globalObject, 'ModeHolder') as new() => { mode: string; };
+    const ForeignModeHolder = Reflect.get(foreignRealm.globalObject, 'ModeHolder') as typeof ModeHolder;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- Borrowed accessor is applied to an explicit receiver.
     const setter = Object.getOwnPropertyDescriptor(ForeignModeHolder.prototype, 'mode')!.set!;
     const object = new ModeHolder();
@@ -165,9 +163,8 @@ describe('Web IDL implementation attribute registration', () => {
       name: 'Field', exposed: '*', implementation: impl(FieldImpl),
       members: [ctor(), attr('value', idlType.long)],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Field = Reflect.get(realm.global, 'Field') as new() => { value: number; };
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Field = Reflect.get(globalObject, 'Field') as new() => { value: number; };
     const object = new Field();
     const implementation = getImplementationObject(object);
     assert(implementation instanceof FieldImpl);
@@ -205,9 +202,8 @@ describe('Web IDL implementation attribute registration', () => {
         roAttr('alias', idlType.DOMString, { static: true }),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Attributes = Reflect.get(realm.global, definition.name) as {
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Attributes = Reflect.get(globalObject, definition.name) as {
       new(): { value: number; }; label: string; alias: string;
     };
     const object = new Attributes();
@@ -227,9 +223,8 @@ describe('Web IDL implementation attribute registration', () => {
       name: 'Missing', exposed: '*', implementation: impl(MissingImpl),
       members: [ctor(), attr('value', idlType.long)],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Missing = Reflect.get(realm.global, definition.name) as new() => { value: number; };
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Missing = Reflect.get(globalObject, definition.name) as new() => { value: number; };
     const object = new Missing();
 
     expect(() => object.value).toThrow('Web IDL attribute value has no implementation');

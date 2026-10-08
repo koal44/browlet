@@ -48,7 +48,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const options = createEventLoopOptions();
     const agent = new TestAgent(options);
     const { realm, env, context } = createTestRealm(agent, 'abort-timeout');
-    context.install(realm.global);
+    context.install(realm.globalObject);
     const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
     const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
       .mockReturnValue(Symbol('Timer'));
@@ -71,7 +71,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
     const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
       .mockReturnValue(Symbol('Timer'));
-    Reflect.set(realm.global, 'waitArray', new Int32Array(new SharedArrayBuffer(4)));
+    Reflect.set(realm.globalObject, 'waitArray', new Int32Array(new SharedArrayBuffer(4)));
     realm.evaluate(`
       globalThis.result = undefined;
       Atomics.waitAsync(waitArray, 0, 0, 10).value.then(value => { result = value; });
@@ -105,8 +105,8 @@ describe('HTML callback and script-entry lifecycle', () => {
       pending.promise;
     `, 'pending-promise.js');
     for (const { realm } of [first, second]) {
-      Reflect.set(realm.global, 'promise', promise);
-      Reflect.set(realm.global, 'callback', callback);
+      Reflect.set(realm.globalObject, 'promise', promise);
+      Reflect.set(realm.globalObject, 'callback', callback);
       realm.evaluate('promise.then(callback)', 'register-promise.js');
     }
     expect(observations).toEqual([]);
@@ -155,13 +155,13 @@ describe('HTML callback and script-entry lifecycle', () => {
       },
       { length: 0, name: 'observe' },
     );
-    Reflect.set(callbackRealm.realm.global, 'observe', observe);
+    Reflect.set(callbackRealm.realm.globalObject, 'observe', observe);
     const callback = callbackRealm.realm.evaluate(
       'observe.bind(undefined)',
       'callback.js',
     );
-    Reflect.set(incumbentRealm.realm.global, 'callback', callback);
-    Reflect.set(incumbentRealm.realm.global, 'convert', (value: unknown) =>
+    Reflect.set(incumbentRealm.realm.globalObject, 'callback', callback);
+    Reflect.set(incumbentRealm.realm.globalObject, 'convert', (value: unknown) =>
       incumbentContext.getConverter(incumbentContext.assembly.getIDLType(reference('LifecycleCallback'))).jsToIDL(value));
     const callbackValue = incumbentRealm.realm.evaluate(
       'convert(callback)',
@@ -170,7 +170,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     if (!IDLCallbackFunction.is(callbackValue)) {
       throw new Error('LifecycleCallback did not convert to a callback value');
     }
-    Reflect.set(incumbentRealm.realm.global, 'invoke', () =>
+    Reflect.set(incumbentRealm.realm.globalObject, 'invoke', () =>
       callbackValue.invoke([], 'rethrow'));
     checkpoint.mockClear();
 
@@ -229,7 +229,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       entry.realm,
       new BindingWorld([]), (ctx) => ({ realm: ctx.realm }),
     );
-    Reflect.set(entry.realm.global, 'convert', (value: unknown) =>
+    Reflect.set(entry.realm.globalObject, 'convert', (value: unknown) =>
       context.getConverter(context.assembly.getIDLType(reference('LifecycleCallback'))).jsToIDL(value));
     const callbackValue = entry.realm.evaluate(
       'convert(() => {})',

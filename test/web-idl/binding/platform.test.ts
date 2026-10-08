@@ -160,9 +160,9 @@ describe('Web IDL platform-object identity and state', () => {
     );
 
     expect(binding.installDefinitions()).toEqual(new Map());
-    expect(Object.hasOwn(realm.global, choice.name)).toBe(false);
-    expect(Object.hasOwn(realm.global, callback.name)).toBe(false);
-    expect(Object.hasOwn(realm.global, alias.name)).toBe(false);
+    expect(Object.hasOwn(realm.globalObject, choice.name)).toBe(false);
+    expect(Object.hasOwn(realm.globalObject, callback.name)).toBe(false);
+    expect(Object.hasOwn(realm.globalObject, alias.name)).toBe(false);
   });
 
   it('returns the same instance with stamped state before projection', () => {

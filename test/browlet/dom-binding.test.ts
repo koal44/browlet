@@ -510,9 +510,9 @@ describe('Browlet DOM binding', () => {
     const realm = new Realm({ globalNames: ['Worker'] });
     const bindings = registerRealm(realm);
 
-    bindings.install(realm.global);
+    bindings.install(realm.globalObject);
 
-    expect(exposedNames(realm.global, [
+    expect(exposedNames(realm.globalObject, [
       'DOMException',
       'QuotaExceededError',
       'Event',
@@ -538,10 +538,10 @@ describe('Browlet DOM binding', () => {
     const realm = new Realm();
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123.5);
     const bindings = registerRealm(realm);
-    bindings.install(realm.global);
-    const Event_ = Reflect.get(realm.global, 'Event') as typeof Event;
+    bindings.install(realm.globalObject);
+    const Event_ = Reflect.get(realm.globalObject, 'Event') as typeof Event;
     const CustomEvent_ = Reflect.get(
-      realm.global,
+      realm.globalObject,
       'CustomEvent',
     ) as typeof CustomEvent;
 

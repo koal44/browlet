@@ -5,7 +5,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
-import { TestRealm as Realm } from '../../../support/web-idl-realm';
+import { installTestBindings } from '../../../support/web-idl-binding';
 
 describe('Web IDL legacy property registration', () => {
   it.each([null, undefined])('uses an explicit %s result for unsupported indices', (unsupportedValue) => {
@@ -25,9 +25,8 @@ describe('Web IDL legacy property registration', () => {
         ),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Collection = Reflect.get(realm.global, 'Collection') as new() => {
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Collection = Reflect.get(globalObject, 'Collection') as new() => {
       item(index: number): string | null | undefined;
       [index: number]: string | undefined;
     };
@@ -71,9 +70,8 @@ describe('Web IDL legacy property registration', () => {
         ),
       ],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Collection = Reflect.get(realm.global, 'Collection') as new() => object;
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Collection = Reflect.get(globalObject, 'Collection') as new() => object;
     const collection = new Collection();
 
     expect(Reflect.get(collection, '3')).toBeNull();
@@ -119,12 +117,9 @@ describe('Web IDL legacy property registration', () => {
         ),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([collectionIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
-    const Collection = Reflect.get(realm.global, collectionIDL.name) as {
+    const { globalObject } = installTestBindings(world);
+    const Collection = Reflect.get(globalObject, collectionIDL.name) as {
       new(): {
         [index: number]: string;
         [name: string]: unknown;

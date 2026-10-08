@@ -1,7 +1,41 @@
-import type { InterfaceMember, NamespaceMember, NamedArgumentsExtendedAttribute } from '../../src/web-idl/core/index';
+import type { JSFunction } from '../../src/js-engine/index';
+import type {
+  Definition, InterfaceMember, NamespaceMember, NamedArgumentsExtendedAttribute,
+} from '../../src/web-idl/core/index';
 import { AssembledInterface, type AssembledNamespace } from '../../src/web-idl/assembly/index';
+import { BindingWorld } from '../../src/web-idl/binding/world';
+import type { RealmBinding } from '../../src/web-idl/binding/realm';
 import type { ImplementationBinding } from '../../src/web-idl/binding/realm/implementation';
 import type { MemberBinding } from '../../src/web-idl/binding/realm/member';
+
+import { TestRealm } from './web-idl-realm';
+
+/** Register declarations in a fresh test realm without installing global properties. */
+export function createBinding(
+  definitions: Definition[] = [],
+): { binding: RealmBinding; realm: TestRealm; } {
+  const realm = new TestRealm();
+  const world = new BindingWorld(definitions);
+  world.register(realm, (ctx) => ({ realm: ctx.realm }));
+  return { binding: world.getRealmBinding(realm)!, realm };
+}
+
+/** Register a test realm in the supplied world and install its exposed definitions. */
+export function installTestBindings(world: BindingWorld, realm = new TestRealm()) {
+  const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+  const globalObject = realm.globalObject;
+  context.install(globalObject);
+  return { realm, context, globalObject };
+}
+
+export function getInstalledInterface(
+  installed: Map<string, object>,
+  name: string,
+): JSFunction & { prototype: object; } {
+  const value = installed.get(name);
+  if (typeof value !== 'function') throw new Error(`${name} was not installed as an interface object`);
+  return value as JSFunction & { prototype: object; };
+}
 
 /** Locate a declaration's compiled member before attaching test-specific binding steps. */
 export function getMemberBinding<Assembled extends AssembledInterface | AssembledNamespace>(

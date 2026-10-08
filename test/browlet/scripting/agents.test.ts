@@ -225,7 +225,7 @@ describe('Realm agent', () => {
       const order: string[] = [];
 
       for (const realm of [firstRealm, secondRealm, isolatedRealm]) {
-        Reflect.set(realm.global, 'record', (value: string) => {
+        Reflect.set(realm.globalObject, 'record', (value: string) => {
           order.push(value);
         });
       }

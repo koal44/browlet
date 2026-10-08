@@ -28,7 +28,7 @@ export interface TestExecution extends RealmExecution, WebIDLExecution {}
 export function createExecution(realm = new TestRealm(), binding?: BindingContext): TestExecution {
   if (!binding) return createEnvironment(realm).exec;
   return {
-    global: realm.global,
+    global: realm.globalObject,
     nativeLineEnding: '\n',
     Promise: binding.Promise,
     NativePromise: realm.intrinsics.promise.constructor,

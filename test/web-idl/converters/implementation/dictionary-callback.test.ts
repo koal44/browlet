@@ -6,6 +6,7 @@ import {
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
+import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm } from '../../../support/web-idl-realm';
 
 describe('Dictionary and callback implementation conversion', () => {
@@ -30,9 +31,8 @@ describe('Dictionary and callback implementation conversion', () => {
         ]),
       ],
     });
-    const realm = new TestRealm();
-    new BindingWorld([handler, options, runner]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Runner = Reflect.get(realm.global, 'Runner') as new() => {
+    const { realm } = installTestBindings(new BindingWorld([handler, options, runner]));
+    const Runner = Reflect.get(realm.globalObject, 'Runner') as new() => {
       run(options: Options): void; runOther(options: Options): void;
     };
     const failure = new Error('author callback failed');
@@ -76,9 +76,8 @@ describe('Dictionary and callback implementation conversion', () => {
       name: 'Runner', exposed: '*', implementation: impl(RunnerImpl),
       members: [ctor(), op('run', sequence(idlType.any), [arg('options', idlType.object, cbDict(options.name))])],
     });
-    const realm = new TestRealm();
-    new BindingWorld([handler, child, options, runner]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Runner = Reflect.get(realm.global, 'Runner') as new() => { run(options: Options): unknown[]; };
+    const { globalObject } = installTestBindings(new BindingWorld([handler, child, options, runner]));
+    const Runner = Reflect.get(globalObject, 'Runner') as new() => { run(options: Options): unknown[]; };
     const callback = function(this: unknown) { return this; };
     const first = { handler: callback, child: { handler: callback } };
     const second = { handler: callback, child: { handler: callback } };
@@ -119,17 +118,16 @@ describe('Dictionary and callback implementation conversion', () => {
         arg('value', reference(payload.name), { optional: true, default: { kind: 'empty-dictionary' } }),
       ])],
     });
-    const realm = new TestRealm();
     const callbackRealm = new TestRealm();
-    new BindingWorld([payload, callback, relay]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Relay = Reflect.get(realm.global, 'Relay') as new() => { run(callback: unknown): Payload; };
+    const { realm } = installTestBindings(new BindingWorld([payload, callback, relay]));
+    const Relay = Reflect.get(realm.globalObject, 'Relay') as new() => { run(callback: unknown): Payload; };
     let reads = 0;
     let coercions = 0;
     const source = Object.freeze({
       get count() { reads++; return { valueOf() { coercions++; return 4; } }; },
       children: Object.freeze([Object.freeze({})]),
     });
-    Reflect.set(callbackRealm.global, 'source', source);
+    Reflect.set(callbackRealm.globalObject, 'source', source);
     const reply = callbackRealm.evaluate(`(value) => {
       if (Object.getPrototypeOf(value) !== Object.prototype || !(value.values instanceof Array)) {
         throw new Error('Callback argument was allocated in the wrong realm');

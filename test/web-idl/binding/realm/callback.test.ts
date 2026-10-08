@@ -21,7 +21,7 @@ describe('Web IDL callbacks', () => {
     const ctx = { binding: binding, realm: binding.realm };
     const order: string[] = [];
     Reflect.set(
-      callbackRealm.global,
+      callbackRealm.globalObject,
       'convertCallback',
       (callback: unknown) => ctx.binding.getConverter(ctx.binding.assembly.getIDLType(reference('Increment')), ctx.realm).jsToIDL(callback),
     );
@@ -78,7 +78,7 @@ describe('Web IDL callbacks', () => {
         expect(value.invoke([[4], 1, 2], 'rethrow')).toBe(6);
       }
       expect(prepare.mock.calls).toEqual([[firstContext], [secondContext]]);
-      Reflect.set(realm.global, 'fail', true);
+      Reflect.set(realm.globalObject, 'fail', true);
       const value = values[0]!;
       if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
       expect(() => value.invoke([[4]], 'rethrow')).toThrow(realm.intrinsics.typeError);
@@ -230,7 +230,7 @@ describe('Web IDL callbacks', () => {
     const { binding, callbackRealm } = createCallbackBinding();
     const ctx = { binding: binding, realm: binding.realm };
     const exception = new Error('callback failed');
-    Reflect.set(callbackRealm.global, 'callbackFailure', exception);
+    Reflect.set(callbackRealm.globalObject, 'callbackFailure', exception);
     const callback = callbackRealm.evaluate(
       '() => { throw callbackFailure; }',
       'callback-exception.js',
@@ -255,9 +255,9 @@ describe('Web IDL callbacks', () => {
     const { binding, callbackRealm } = createCallbackBinding();
     const ctx = { binding: binding, realm: binding.realm };
     const exception = new Error('promise callback failed');
-    Reflect.set(callbackRealm.global, 'promiseCallbackFailure', exception);
+    Reflect.set(callbackRealm.globalObject, 'promiseCallbackFailure', exception);
     Reflect.set(
-      callbackRealm.global,
+      callbackRealm.globalObject,
       'convertPromiseCallback',
       (callback: unknown, name: string) => ctx.binding.getConverter(ctx.binding.assembly.getIDLType(reference(name)), ctx.realm).jsToIDL(callback),
     );
@@ -309,7 +309,7 @@ describe('Web IDL callbacks', () => {
     const { binding, callbackRealm } = createCallbackBinding();
     const ctx = { binding: binding, realm: binding.realm };
     const prototypeReads = { count: 0 };
-    Reflect.set(callbackRealm.global, 'prototypeReads', prototypeReads);
+    Reflect.set(callbackRealm.globalObject, 'prototypeReads', prototypeReads);
     const constructor = callbackRealm.evaluate(
       `new Proxy(
         function Build(value) { this.value = value; },
@@ -431,9 +431,9 @@ describe('Web IDL callbacks', () => {
     expect(Handler).toBeInstanceOf(targetRealm.intrinsics.function);
     expect(Reflect.getPrototypeOf(Handler))
       .toBe(targetRealm.intrinsics.functionPrototype);
-    expect(Reflect.get(targetRealm.global, 'ConstantHandler')).toBe(Handler);
+    expect(Reflect.get(targetRealm.globalObject, 'ConstantHandler')).toBe(Handler);
     expect(Reflect.getOwnPropertyDescriptor(
-      targetRealm.global,
+      targetRealm.globalObject,
       'ConstantHandler',
     )).toEqual({
       configurable: true,

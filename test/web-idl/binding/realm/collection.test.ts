@@ -9,9 +9,9 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
 import { getImplementationRecord, PlatformRecord } from '../../../../src/web-idl/binding/platform';
 
-import { getMemberBinding } from '../../../support/web-idl-binding';
+import { getInstalledInterface, getMemberBinding } from '../../../support/web-idl-binding';
 import { itPassesWith } from '../../../test-runtime';
-import { TestRealm as Realm, getInstalledInterface } from '../../../support/web-idl-realm';
+import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL inherited collections', () => {
   it.each(['map', 'set'] as const)('keeps inherited %s contents per object and checks borrowed receivers', (kind) => {

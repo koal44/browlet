@@ -66,8 +66,8 @@ describe('DOMException recognition', () => {
     expect(isDOMException(implementation, 'NetworkError')).toBe(false);
     expect(DOMExceptionStamper.is(implementation)).toBe(false);
     for (const ctx of [first, second]) {
-      ctx.install(ctx.realm.global);
-      const Constructor = Reflect.get(ctx.realm.global, 'DOMException') as typeof DOMException;
+      ctx.install(ctx.realm.globalObject);
+      const Constructor = Reflect.get(ctx.realm.globalObject, 'DOMException') as typeof DOMException;
       const exception = new Constructor('projected', 'AbortError');
 
       expect(exception).toBeInstanceOf(ctx.realm.intrinsics.error);
@@ -88,8 +88,8 @@ describe('DOMException recognition', () => {
 
   it('inherits recognition and Error backing for QuotaExceededError', () => {
     const ctx = new BindingWorld([]).register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
-    ctx.install(ctx.realm.global);
-    const Constructor = Reflect.get(ctx.realm.global, 'QuotaExceededError') as new (
+    ctx.install(ctx.realm.globalObject);
+    const Constructor = Reflect.get(ctx.realm.globalObject, 'QuotaExceededError') as new (
       message: string, options: { quota: number; requested: number; }
     ) => DOMException;
     const exception = new Constructor('full', { quota: 10, requested: 12 });

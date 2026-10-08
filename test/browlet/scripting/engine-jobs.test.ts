@@ -99,8 +99,8 @@ function createFixture() {
   // on a Window that has not opted into cross-origin isolation.
   const array = new Int32Array(new SharedArrayBuffer(8));
   const observations: { value: string; task: Task | null; }[] = [];
-  Reflect.set(realm.global, 'waitArray', array);
-  Reflect.set(realm.global, 'observe', (value: string) => {
+  Reflect.set(realm.globalObject, 'waitArray', array);
+  Reflect.set(realm.globalObject, 'observe', (value: string) => {
     observations.push({ value, task: loop.currentlyRunningTask });
   });
   return {

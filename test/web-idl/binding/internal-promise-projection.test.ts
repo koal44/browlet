@@ -49,9 +49,9 @@ describe('InternalPromise result projection', () => {
   it.each(['implementation', 'platform'] as const)('delivers a private asynchronous helper result to the %s consumer', async (consumer) => {
     const realm = new TestRealm();
     const binding = new BindingWorld<TestEnvironment>([countReaderIDL]).register(realm, (ctx) => createEnvironment(realm, ctx));
-    binding.install(realm.global);
+    binding.install(realm.globalObject);
     if (consumer === 'platform') {
-      const CountReader = Reflect.get(realm.global, 'CountReader') as new() => { read(): Promise<number>; };
+      const CountReader = Reflect.get(realm.globalObject, 'CountReader') as new() => { read(): Promise<number>; };
       await expect(new CountReader().read()).resolves.toBe(7);
     } else {
       const reader = new CountReaderImpl(binding.getEnvironment());

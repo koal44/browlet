@@ -8,6 +8,7 @@ import {
 import { getImplementationObject, getImplementationRecord } from '../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 
+import { installTestBindings } from '../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../support/web-idl-realm';
 
 describe('Web IDL implementation registration', () => {
@@ -41,7 +42,6 @@ describe('Web IDL implementation registration', () => {
       implementation: impl(SecondImpl),
       members: [ctor()],
     });
-    const realm = new Realm();
     const world = new BindingWorld([
       common,
       first,
@@ -49,11 +49,9 @@ describe('Web IDL implementation registration', () => {
       defineIncludes({ interface: first.name, mixin: common.name }),
       defineIncludes({ interface: second.name, mixin: common.name }),
     ]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
-    const First = Reflect.get(realm.global, first.name) as new() => FirstImpl;
-    const Second = Reflect.get(realm.global, second.name) as new() => SecondImpl;
+    const { globalObject } = installTestBindings(world);
+    const First = Reflect.get(globalObject, first.name) as new() => FirstImpl;
+    const Second = Reflect.get(globalObject, second.name) as new() => SecondImpl;
 
     expect(new First().value).toBe('first');
     expect(new Second().value).toBe('second');
@@ -83,13 +81,10 @@ describe('Web IDL implementation registration', () => {
         roAttr('value', idlType.DOMString),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([interfaceIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    const { globalObject } = installTestBindings(world);
     const AutomaticConstructor = Reflect.get(
-      realm.global,
+      globalObject,
       interfaceIDL.name,
     ) as new(value: unknown) => { value: string; };
     class Derived extends AutomaticConstructor {}
@@ -128,13 +123,10 @@ describe('Web IDL implementation registration', () => {
       }),
       members: [ctor()],
     });
-    const realm = new Realm();
     const world = new BindingWorld([interfaceIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    const { globalObject } = installTestBindings(world);
     const ContextCreated = Reflect.get(
-      realm.global,
+      globalObject,
       interfaceIDL.name,
     ) as InterfaceConstructor;
 
@@ -176,17 +168,14 @@ describe('Web IDL implementation registration', () => {
         roAttr('dependency', reference(dependencyIDL.name)),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([dependencyIDL, ownerIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    const { globalObject } = installTestBindings(world);
     const Owner = Reflect.get(
-      realm.global,
+      globalObject,
       ownerIDL.name,
     ) as InterfaceConstructor;
     const Dependency = Reflect.get(
-      realm.global,
+      globalObject,
       dependencyIDL.name,
     ) as InterfaceConstructor;
 
@@ -225,7 +214,7 @@ describe('Web IDL implementation registration', () => {
       name: 'ContextualDependency',
       exposed: 'Window',
       implementation: impl(ContextualDependencyImpl, {
-        constructWith: [atArg(1, (ctx) => ({ global: ctx.realm.global }))],
+        constructWith: [atArg(1, (ctx) => ({ global: ctx.realm.globalObject }))],
       }),
       members: [
         ctor([arg('value', idlType.DOMString)]),
@@ -239,11 +228,9 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const world = new BindingWorld([interfaceIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    installTestBindings(world, realm);
     const ContextualDependency = Reflect.get(
-      realm.global,
+      realm.globalObject,
       interfaceIDL.name,
     ) as {
       create(): ContextualDependencyImpl;
@@ -253,9 +240,9 @@ describe('Web IDL implementation registration', () => {
     const constructed = new ContextualDependency('explicit');
     const created = ContextualDependency.create();
 
-    expect(constructed.env.global).toBe(realm.global);
+    expect(constructed.env.global).toBe(realm.globalObject);
     expect(constructed.value).toBe('explicit');
-    expect(created.env.global).toBe(realm.global);
+    expect(created.env.global).toBe(realm.globalObject);
     expect(created.value).toBe('created');
   });
 
@@ -279,7 +266,7 @@ describe('Web IDL implementation registration', () => {
       name: 'Result',
       exposed: 'Window',
       implementation: impl(ResultImpl, {
-        constructWith: [atArg(0, (ctx) => ctx.realm.global)],
+        constructWith: [atArg(0, (ctx) => ctx.realm.globalObject)],
       }),
       members: [
         staticOp('create', reference('Result'),
@@ -291,16 +278,14 @@ describe('Web IDL implementation registration', () => {
     });
     const realm = new Realm();
     const world = new BindingWorld([resultIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
-    const Result = Reflect.get(realm.global, resultIDL.name) as {
+    installTestBindings(world, realm);
+    const Result = Reflect.get(realm.globalObject, resultIDL.name) as {
       create(): { global: object; };
     };
 
     const result = Result.create();
 
-    expect(result.global).toBe(realm.global);
+    expect(result.global).toBe(realm.globalObject);
   });
 
   it('declaratively connects an implementation to its interface behavior', () => {
@@ -451,12 +436,9 @@ describe('Web IDL implementation registration', () => {
         ),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([interfaceIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
-    const Product = Reflect.get(realm.global, 'Product') as {
+    const { globalObject } = installTestBindings(world);
+    const Product = Reflect.get(globalObject, 'Product') as {
       new(value: string): { value: string; };
       copy(value: unknown): { value: string; };
     };
@@ -507,11 +489,9 @@ describe('Web IDL implementation registration', () => {
       }],
     });
     const world = new BindingWorld([parentIDL, childIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
+    installTestBindings(world, realm);
     const ChildLifecycle = Reflect.get(
-      realm.global,
+      realm.globalObject,
       'ChildLifecycle',
     ) as InterfaceConstructor;
 
@@ -601,17 +581,14 @@ describe('Web IDL implementation registration', () => {
         ),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([interfaceIDL]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    const binding = world.getRealmBinding(realm)!;
-    binding.installDefinitions();
-    const ExceptionSource = Reflect.get(realm.global, 'ExceptionSource') as {
+    const { globalObject } = installTestBindings(world);
+    const ExceptionSource = Reflect.get(globalObject, 'ExceptionSource') as {
       new(): object;
       arbitrary(): void;
       requested(): void;
     };
-    const DOMException_ = Reflect.get(realm.global, 'DOMException') as
+    const DOMException_ = Reflect.get(globalObject, 'DOMException') as
       typeof DOMException;
 
     const requested = getThrown(() => ExceptionSource.requested());

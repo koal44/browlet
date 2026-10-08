@@ -12,6 +12,7 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
 import { createOverloadResolver, resolveOverload } from '../../../../src/web-idl/binding/realm/overload';
 
+import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL effective overload sets', () => {
@@ -59,9 +60,8 @@ describe('Web IDL effective overload sets', () => {
         { invoke(_ctx, value) { return value; } },
       )],
     });
-    const realm = new Realm();
-    new BindingWorld([definition]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const OptionalArgument = Reflect.get(realm.global, definition.name) as { read(value?: unknown): string; };
+    const { realm } = installTestBindings(new BindingWorld([definition]));
+    const OptionalArgument = Reflect.get(realm.globalObject, definition.name) as { read(value?: unknown): string; };
     let reads = 0;
     Object.defineProperty(realm.intrinsics.array.prototype, '0', {
       configurable: true,
@@ -145,10 +145,9 @@ describe('Web IDL effective overload sets', () => {
         ),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([definition]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Overloaded = Reflect.get(realm.global, 'Overloaded') as {
+    const { realm } = installTestBindings(world);
+    const Overloaded = Reflect.get(realm.globalObject, 'Overloaded') as {
       choose(...values: unknown[]): string;
       fixed(...values: unknown[]): number;
     };
@@ -184,10 +183,9 @@ describe('Web IDL effective overload sets', () => {
       name: 'Defaults', exposed: '*', implementation: impl(DefaultsImpl),
       members: [ctor([arg('values', sequence(idlType.long), { optional: true, default: emptySequence })])],
     });
-    const realm = new Realm();
     const world = new BindingWorld([definition]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Defaults = Reflect.get(realm.global, 'Defaults') as new(values?: unknown) => object;
+    const { globalObject } = installTestBindings(world);
+    const Defaults = Reflect.get(globalObject, 'Defaults') as new(values?: unknown) => object;
 
     expect(Defaults.length).toBe(0);
     new Defaults();
@@ -217,8 +215,8 @@ describe('Web IDL effective overload sets', () => {
     const world = new BindingWorld([definition]);
     for (const secureContext of [true, false, true]) {
       const realm = new Realm({ secureContext });
-      world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-      const ExposedOverloads = Reflect.get(realm.global, 'ExposedOverloads') as {
+      installTestBindings(world, realm);
+      const ExposedOverloads = Reflect.get(realm.globalObject, 'ExposedOverloads') as {
         choose(value?: unknown): string;
       };
       expect(ExposedOverloads.choose.length).toBe(secureContext ? 0 : 1);
@@ -290,10 +288,9 @@ describe('Web IDL effective overload sets', () => {
         ctor([arg('value', type)]),
       ],
     });
-    const realm = new Realm();
     const world = new BindingWorld([definition]);
-    world.register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.global);
-    const Converted = Reflect.get(realm.global, 'Converted') as new(value: unknown) => object;
+    const { realm } = installTestBindings(world);
+    const Converted = Reflect.get(realm.globalObject, 'Converted') as new(value: unknown) => object;
 
     expect(() => new Converted([Symbol('element')])).toThrow(realm.intrinsics.typeError);
   });
@@ -408,9 +405,7 @@ describe('Web IDL effective overload sets', () => {
       }),
     ];
     const world = new BindingWorld(definitions);
-    const realm = new Realm();
-    const binding = world.register(realm, (ctx) => ({ realm: ctx.realm }));
-    binding.install(realm.global);
+    const { realm, context: binding } = installTestBindings(world);
     const otherRealm = new Realm();
     const otherBinding = world.register(otherRealm, (ctx) => ({ realm: ctx.realm }));
     const foreignBinding = new BindingWorld(definitions).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
@@ -418,7 +413,7 @@ describe('Web IDL effective overload sets', () => {
     const second = binding.project(BaseImpl, new BaseImpl('second'));
     const derived = otherBinding.project(DerivedImpl, new DerivedImpl('derived'));
     const foreign = foreignBinding.project(BaseImpl, new BaseImpl('foreign'));
-    const Chooser = Reflect.get(realm.global, 'Chooser') as { choose(prefix: unknown, value: unknown): string; };
+    const Chooser = Reflect.get(realm.globalObject, 'Chooser') as { choose(prefix: unknown, value: unknown): string; };
     const trace: string[] = [];
     Object.defineProperty(foreign, 'toString', { value() { trace.push('value'); return 'foreign'; } });
     Object.defineProperty(derived, Symbol.iterator, { get() { throw new Error('Must select the interface first'); } });
