@@ -19,7 +19,7 @@ import type { FetchRequest, FetchResponse } from '../../../fetch/index';
 import type { NavigationTimingRecord } from '../../performance/navigation';
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
 import type { WindowImpl } from '../../browsing/window/window';
-import type { WindowProxy } from '../../platform';
+import type { WindowProxyHandle } from '../../browsing/window/window-proxy';
 import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
 import { PolicyContainer } from '../../browsing/policy/container';
 import { OpenerPolicy } from '../../browsing/policy/coop';
@@ -231,10 +231,10 @@ export class DocumentImpl extends NodeImpl {
     return this.characterSet;
   }
 
-  /** Associated WindowProxy, or null without a browsing context. */
+  /** Associated WindowProxy handle, or null without a browsing context. */
   // https://html.spec.whatwg.org/#dom-document-defaultview
-  get defaultView(): WindowProxy | null {
-    return this.browsingContext?.windowProxy.platform ?? null;
+  get defaultView(): WindowProxyHandle | null {
+    return this.browsingContext?.windowProxy ?? null;
   }
 
   // https://html.spec.whatwg.org/#dom-document-readystate

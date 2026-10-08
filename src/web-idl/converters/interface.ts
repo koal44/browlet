@@ -34,18 +34,20 @@ export class InterfaceConverter<Type extends IDLInterfaceType = IDLInterfaceType
   }
 }
 
-/** Preserve recognized proxy objects, such as a WindowProxy. */
+/** Convert between declared proxy values and their implementation handles. */
 export class ProxyObjectConverter<Type extends IDLProxyType = IDLProxyType> extends Converter<Type> {
-  protected createInputSteps(): ConversionSteps {
+  protected createInputSteps(): ConversionSteps<object> {
     const assembled = this.type.assembled;
-    return (value) => assembled.is(value) ? value : this.throwTypeError(`Value does not implement ${assembled.primary.name}`);
+    return (value) => assembled.primary.getHandle(value) ??
+      this.throwTypeError(`Value does not implement ${assembled.primary.name}`);
   }
 
-  protected override createOutputSteps(): ConversionSteps {
+  protected override createOutputSteps(): ConversionSteps<object> {
     const assembled = this.type.assembled;
     return (value) => {
-      if (assembled.is(value)) return value;
-      throw new InternalError(`IDL interface value does not implement ${assembled.primary.name}`);
+      const proxy = assembled.primary.getProxy(value);
+      if (proxy !== undefined) return proxy;
+      throw new InternalError(`IDL proxy value is not a ${assembled.primary.name} handle`);
     };
   }
 }

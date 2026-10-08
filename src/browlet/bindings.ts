@@ -163,7 +163,7 @@ export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> 
   return getBindingContext(realm).construct(DocumentImpl);
 }
 
-/** Point a proxy at a Window implementation and its existing platform object. */
+/** Point a proxy at a Window implementation's existing platform object. */
 export function setAssociatedWindow(
   windowProxy: WindowProxyHandle,
   window: WindowImpl,
@@ -172,10 +172,7 @@ export function setAssociatedWindow(
   // retrieves that same platform identity; it does not create another Window.
   const platform = world.project(window);
   if (!platform) throw new InternalError('Window has not been projected');
-  windowProxy.setAssociatedWindow({
-    implementation: window,
-    platform: platform as StampedPlatformObject<Window>,
-  });
+  windowProxy.setAssociatedWindow(platform as StampedPlatformObject<Window>);
 }
 
 /** Relevant realm of a browser object; Window and DOM-node inputs retain their concrete realm type. */

@@ -335,23 +335,24 @@ export function defineTypedef(
 // Proxy objects
 
 /** A proxy type with its own identity that stands in for a platform object, e.g. WindowProxy. */
-export type ProxyObjectDefinition = {
+export type ProxyObjectDefinition<Handle extends object = object> = {
   /** Declaration discriminator supplied by `defineProxyObject()`. */
   kind: 'proxy-object';
   /** IDL type name used to refer to these proxies. */
   name: string;
-  /** Recognize values during conversion, union selection, and overload resolution. */
-  is(value: unknown): boolean;
-  /** Retrieve the platform receiver for member calls, e.g. a WindowProxy's current Window. */
-  // Value conversion preserves the proxy object; only member receivers use this resolution.
-  resolveReceiver?(value: unknown): object | undefined;
+  /** Recognize a public proxy and retrieve its implementation handle; undefined means unrecognized. */
+  getHandle(value: unknown): Handle | undefined;
+  /** Recognize an implementation handle and retrieve its public proxy; undefined means unrecognized. */
+  getProxy(value: unknown): object | undefined;
+  /** Select the handle's current platform receiver for member calls. */
+  resolveReceiver?(handle: Handle): object | undefined;
 };
 
-/** Declare a proxy type whose identity is preserved through IDL conversion. */
+/** Declare conversion between a proxy's public identity and its implementation handle. */
 // Project declaration: describes receiver forwarding, not every use of JavaScript's Proxy.
-export function defineProxyObject(
-  definition: Omit<ProxyObjectDefinition, 'kind'>,
-): ProxyObjectDefinition {
+export function defineProxyObject<Handle extends object>(
+  definition: Omit<ProxyObjectDefinition<Handle>, 'kind'>,
+): ProxyObjectDefinition<Handle> {
   return { kind: 'proxy-object', ...definition };
 }
 

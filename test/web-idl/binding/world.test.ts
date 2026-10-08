@@ -123,16 +123,22 @@ describe('Web IDL binding worlds and realm registration', () => {
 
   it('preserves proxy values while resolving member calls to their current platform receiver', () => {
     const object = Object.freeze({});
+    const handle = { platform: object };
     let target: object | undefined;
+    let received: typeof handle | undefined;
     class ReceiverImpl {
       constructor(public value: string) {}
-      echo(value: object): object { return value; }
+      echo(value: typeof handle): typeof handle { received = value; return value; }
     }
     const world = new BindingWorld([
       defineProxyObject({
         name: 'ProxyObject',
-        is: (value) => value === object,
-        resolveReceiver: () => target,
+        getHandle: (value) => value === object ? handle : undefined,
+        getProxy: (value) => value === handle ? object : undefined,
+        resolveReceiver(receiver) {
+          expect(receiver).toBe(handle);
+          return target;
+        },
       }),
       defineInterface({
         name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
@@ -158,6 +164,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(a.unwrap(object, ReceiverImpl)).toBeUndefined();
     expect(Reflect.apply(descriptor.get!, object, [])).toBe('first');
     expect(Reflect.apply(echo, object, [object])).toBe(object);
+    expect(received).toBe(handle);
     expect(() => Reflect.apply(echo, object, [{}])).toThrow(realmA.intrinsics.typeError);
     expect(Object.hasOwn(realmA.globalObject, 'ProxyObject')).toBe(false);
     expect(Object.hasOwn(realmB.globalObject, 'ProxyObject')).toBe(false);
@@ -168,6 +175,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     Reflect.apply(descriptor.set!, object, ['changed']);
     expect(replacement.value).toBe('changed');
     expect(Reflect.apply(echo, object, [object])).toBe(object);
+    expect(received).toBe(handle);
 
     target = undefined;
     expect(binding.isPlatformObject(object)).toBe(true);

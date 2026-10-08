@@ -244,7 +244,7 @@ describe('platform declaration generation', () => {
       }),
       definePartialInterface({ name: 'Store', members: [roAttr('mode', reference('Mode'))] }),
       defineIncludes({ interface: 'Store', mixin: 'Labels' }),
-      defineProxyObject({ name: 'StoreProxy', is: () => false }),
+      defineProxyObject({ name: 'StoreProxy', getHandle: () => undefined, getProxy: () => undefined }),
     ]);
     const declarations = generatePlatformTypes(assembly, { proxyInterfaces: { StoreProxy: 'Store' } });
     expect(compile(declarations, `
@@ -407,7 +407,7 @@ describe('platform declaration generation', () => {
           roAttr('style', idlType.object, xattr(['PutForwards', 'cssText'])),
         ],
       }),
-      defineProxyObject({ name: 'WindowProxy', is: () => false }),
+      defineProxyObject({ name: 'WindowProxy', getHandle: () => undefined, getProxy: () => undefined }),
     ]);
     expect(() => generatePlatformTypes(assembly)).toThrow('proxyInterfaces');
     const declarations = generatePlatformTypes(assembly, { proxyInterfaces: { WindowProxy: 'Window' } });

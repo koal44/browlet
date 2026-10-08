@@ -2,7 +2,9 @@ import {
   type AgentCluster, type AgentClusterKey, type CrossOriginIsolationMode,
   obtainSimilarOriginWindowAgent,
 } from '../scripting/agents';
-import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../bindings';
+import {
+  createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow, unwrap,
+} from '../bindings';
 import { CustomElementRegistryImpl } from '../html/custom-elements/registry';
 import {
   serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
@@ -176,7 +178,7 @@ export class BrowsingContext {
 
   /** Current Window; throws until the WindowProxy has been connected. */
   get activeWindow(): WindowImpl {
-    return this.windowProxy.associatedWindow.implementation;
+    return unwrap<WindowImpl>(this.windowProxy.associatedWindow);
   }
 
   /** Document associated with the current Window. */

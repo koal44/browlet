@@ -494,12 +494,17 @@ records use names such as `method`, `getter`, `steps`, or `memberBinding`.
 “declaration” remains useful in prose and contracts spanning several declaration kinds.
 
 `defineProxyObject()` joins that same collection for proxies that stand in for
-platform objects, such as HTML's WindowProxy. Conversion preserves the proxy's
-identity, while an optional receiver resolver selects the platform object
-supplying its interface members. These definitions install no global or prototype
-and emit no IDL declaration text. Using JavaScript's `Proxy` alone does not need
-this declaration: legacy indexed/named objects and observable arrays keep their
-existing binding machinery.
+platform objects, such as HTML's WindowProxy. Its `getHandle()` hook retrieves a
+public proxy's implementation handle; `getProxy()` returns that handle's
+stable public identity. Both return `undefined` for values they do not recognize.
+Declared proxy values retain their handles through dictionaries, sequences,
+and unions; `any` and `object` values retain their JavaScript representation.
+An optional `resolveReceiver(handle)` selects the current platform object
+supplying interface members, so navigation can replace a Window while retaining
+its WindowProxy handle and public identity. These definitions install no global
+or prototype and emit no IDL declaration text. Using JavaScript's `Proxy` alone
+does not need this declaration: legacy indexed/named objects and observable arrays
+keep their existing binding machinery.
 `world.register(realm, createEnvironment)` returns the realm's binding through its
 public `BindingContext` type. Repeated registration returns the same object without
 calling the factory again; `world.getBindingContext(realm)` only looks it up.

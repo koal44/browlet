@@ -1,22 +1,23 @@
 import type { ProxyObjectDefinition, Definition } from '../core/index';
 
-/** A proxy type's recognition and receiver-resolution hooks. */
+/** A proxy type's handle conversion and receiver-resolution hooks. */
 export class AssembledProxyObject {
-  /** Original declaration supplying recognition and current-receiver hooks. */
+  /** Original declaration supplying handle conversion and current-receiver hooks. */
   primary: ProxyObjectDefinition;
 
   constructor(primary: ProxyObjectDefinition) {
     this.primary = primary;
   }
 
-  /** Recognize a proxy without replacing its identity during conversion. */
+  /** Recognize the public proxy during union and overload selection. */
   is(value: unknown): boolean {
-    return this.primary.is(value);
+    return this.primary.getHandle(value) !== undefined;
   }
 
   /** Select a recognized proxy's current platform receiver. */
   resolveReceiver(value: unknown): object | undefined {
-    return this.is(value) ? this.primary.resolveReceiver?.(value) : undefined;
+    const handle = this.primary.getHandle(value);
+    return handle === undefined ? undefined : this.primary.resolveReceiver?.(handle);
   }
 }
 

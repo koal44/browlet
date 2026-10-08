@@ -360,6 +360,7 @@ export class IDLCallbackInterfaceType extends Type {
 
 export class IDLProxyType extends Type {
   kind = 'proxy-object' as const;
+  /** Input conversion already supplies the proxy's implementation handle. */
   override canPassToImpl = true;
   assembled: AssembledProxyObject;
 

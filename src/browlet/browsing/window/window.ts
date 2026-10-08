@@ -9,7 +9,6 @@ import {
 } from '../../../web-idl/index';
 import { LocationImpl } from './location';
 import type { WindowProxyHandle } from './window-proxy';
-import type { WindowProxy } from '../../platform';
 import type { PerformanceImpl } from '../../performance/performance';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../scripting/global-scope';
 import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/web-idl';
@@ -53,12 +52,12 @@ export class WindowImpl extends EventTargetImpl {
     return typeof value === 'object' && value !== null && #document in value;
   }
 
-  get window(): WindowProxy {
-    return this.getWindowProxy().platform;
+  get window(): WindowProxyHandle {
+    return this.getWindowProxy();
   }
 
-  get self(): WindowProxy {
-    return this.getWindowProxy().platform;
+  get self(): WindowProxyHandle {
+    return this.getWindowProxy();
   }
 
   get document(): DocumentImpl {

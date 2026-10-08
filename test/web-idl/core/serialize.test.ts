@@ -35,7 +35,7 @@ describe('Web IDL declarations and serialization', () => {
   });
 
   it('serializes proxy type references without inventing an interface declaration', () => {
-    const proxy = defineProxyObject({ name: 'ProxyObject', is: () => false });
+    const proxy = defineProxyObject({ name: 'ProxyObject', getHandle: () => undefined, getProxy: () => undefined });
     const consumer = defineInterface({
       name: 'Consumer', members: [roAttr('value', reference('ProxyObject'))],
     });

@@ -53,11 +53,11 @@ describe('interface projection ownership', () => {
   }
 
   it('retains already-platform union values and proxy object identities', () => {
-    const { a, ctxB, hostObject } = setup();
+    const { a, ctxB, hostObject, hostHandle } = setup();
     const platformObject = a.project(ChildImpl, new ChildImpl());
     expect(ctxB.binding.getConverter(ctxB.binding.assembly.getIDLType(union(reference('Base'), idlType.DOMString)), ctxB.realm).idlToJS(platformObject)).toBe(platformObject);
-    expect(ctxB.binding.getConverter(ctxB.binding.assembly.getIDLType(reference('HostObject')), ctxB.realm).idlToJS(hostObject)).toBe(hostObject);
-    expect(ctxB.binding.getConverter(ctxB.binding.assembly.getIDLType(union(reference('Other'), reference('HostObject'), idlType.DOMString)), ctxB.realm).idlToJS(hostObject)).toBe(hostObject);
+    expect(ctxB.binding.getConverter(ctxB.binding.assembly.getIDLType(reference('HostObject')), ctxB.realm).idlToJS(hostHandle)).toBe(hostObject);
+    expect(ctxB.binding.getConverter(ctxB.binding.assembly.getIDLType(union(reference('Other'), reference('HostObject'), idlType.DOMString)), ctxB.realm).idlToJS(hostHandle)).toBe(hostObject);
   });
 
   it('preserves ordinary object and object-union values without adoption', () => {
@@ -93,14 +93,19 @@ function setup() {
   const hostObject = new Proxy(Object.freeze({}), {
     getPrototypeOf() { throw new Error('Host objects must not enter implementation discovery'); },
   });
+  const hostHandle = { platform: hostObject };
   const world = new BindingWorld([
     ...definitions,
-    defineProxyObject({ name: 'HostObject', is: (value) => value === hostObject }),
+    defineProxyObject({
+      name: 'HostObject',
+      getHandle: (value) => value === hostObject ? hostHandle : undefined,
+      getProxy: (value) => value === hostHandle ? hostObject : undefined,
+    }),
   ]);
   const { realm: realmA, context: a } = installTestBindings(world);
   const { realm: realmB, context: b } = installTestBindings(world);
   return {
-    realmA, realmB, a, b, hostObject,
+    realmA, realmB, a, b, hostObject, hostHandle,
     ctxA: { binding: world.getRealmBinding(realmA)!, realm: realmA },
     ctxB: { binding: world.getRealmBinding(realmB)!, realm: realmB },
   };

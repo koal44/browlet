@@ -20,7 +20,12 @@ describe('Web IDL direct collection and iterable receivers', () => {
       const alias = {};
       const resolveReceiver = vi.fn(() => target);
       const definitions = [
-        defineProxyObject({ name: 'CollectionProxy', is: (value) => value === alias, resolveReceiver }),
+        defineProxyObject({
+          name: 'CollectionProxy',
+          getHandle: (value) => value === alias ? alias : undefined,
+          getProxy: (value) => value === alias ? alias : undefined,
+          resolveReceiver,
+        }),
         defineInterface({
           name: 'Collection', implementation: impl(CollectionImpl),
           members: [

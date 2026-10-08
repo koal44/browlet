@@ -76,7 +76,7 @@ describe('browsing context groups', () => {
     const window = unwrap<WindowImpl>(env.global);
     const platform = project(window) as StampedPlatformObject<Window>;
     window.setAssociatedDocument(document);
-    context.windowProxy.setAssociatedWindow({ implementation: window, platform });
+    context.windowProxy.setAssociatedWindow(platform);
 
     expect(context.activeWindow).toBe(window);
     expect(context.activeDocument).toBe(document);
@@ -336,7 +336,7 @@ describe('navigables', () => {
     expect(browsingContext.popupSandboxingFlagSet.size).toBe(0);
     expect(browsingContext.activeDocument).toBe(document);
     expect(browsingContext.activeWindow).toBe(window);
-    expect(browsingContext.windowProxy.associatedWindow.implementation).toBe(window);
+    expect(browsingContext.windowProxy.associatedWindow).toBe(realm.globalObject);
 
     expect(realm.windowImplementation).toBe(window);
     expect(unwrap(realm.globalObject)).toBe(window);
@@ -542,14 +542,23 @@ describe('navigation lifecycle', () => {
   it('exposes the browsing context WindowProxy as Document.defaultView', async () => {
     const browlet = new Browlet({ route: () => '' });
     const windowProxy = browlet.window;
+    const handle = getRelevantRealm(browlet.document).windowProxy;
+    const window = unwrap<WindowImpl>(handle.associatedWindow);
     const Document_ = windowProxy.Document;
 
     expect(new Document_().defaultView).toBeNull();
     expect(browlet.document.defaultView).toBe(windowProxy);
+    expect(unwrap<DocumentImpl>(browlet.document).defaultView).toBe(handle);
+    expect(window.window).toBe(handle);
+    expect(window.self).toBe(handle);
 
     await browlet.navigate('https://example.test/');
 
     expect(browlet.document.defaultView).toBe(windowProxy);
+    expect(unwrap<DocumentImpl>(browlet.document).defaultView).toBe(handle);
+    const currentWindow = unwrap<WindowImpl>(handle.associatedWindow);
+    expect(currentWindow).not.toBe(window);
+    expect(currentWindow.window).toBe(handle);
   });
 
   it('keeps the WindowProxy while replacing the Window and realm', async () => {
@@ -565,7 +574,7 @@ describe('navigation lifecycle', () => {
     }
     const initialRealm = getRelevantRealm(initialDocument);
     const handle = initialRealm.windowProxy;
-    const initialWindow = handle.associatedWindow.implementation;
+    const initialWindow = unwrap<WindowImpl>(handle.associatedWindow);
     const InitialEvent = Reflect.get(windowProxy, 'Event') as unknown;
 
     await browlet.navigate('https://example.test/');
@@ -574,7 +583,7 @@ describe('navigation lifecycle', () => {
     const documentImpl = unwrap<DocumentImpl>(
       document,
     );
-    const window = handle.associatedWindow.implementation;
+    const window = unwrap<WindowImpl>(handle.associatedWindow);
     const realm = getRelevantRealm(document);
     expect(browlet.window).toBe(windowProxy);
     expect(document).not.toBe(initialDocument);

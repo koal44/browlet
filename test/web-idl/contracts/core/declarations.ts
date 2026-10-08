@@ -1,5 +1,5 @@
 import {
-  arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface,
+  arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface, defineProxyObject,
   dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp, tsType,
   webIDLCommonDefinitions, xattr,
   type SerialSteps, type TransferSteps,
@@ -15,6 +15,22 @@ class Example {}
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
 
 webIDLCommonDefinitions.includes(domExceptionIDL);
+
+const proxy = {};
+const handle = { platform: proxy, currentReceiver: {} };
+const proxyDefinition = defineProxyObject({
+  name: 'ExampleProxy',
+  getHandle: (value) => value === proxy ? handle : undefined,
+  getProxy: (value) => value === handle ? proxy : undefined,
+  resolveReceiver(value) {
+    // @ts-expect-error The receiver hook receives the inferred handle, not an arbitrary object.
+    value.missing;
+    return value.currentReceiver;
+  },
+});
+proxyDefinition.getHandle(proxy)?.currentReceiver;
+// @ts-expect-error Receiver resolution requires the handle's retained state.
+proxyDefinition.resolveReceiver?.(proxy);
 
 class SavedValue { value = 1; }
 op('clone', tsType(idlType.any, 'T'),

@@ -149,14 +149,15 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
           }
           if (this.binding.isPlatformObject(value)) {
             const interfaceType = candidates.interfaces.find((candidate) =>
-              this.#implements(candidate, value));
+              candidate.kind === 'interface' && this.#implements(candidate, value));
             if (interfaceType) return value;
             if (candidates.hasObject) return this.binding.realizeException(value);
           }
           for (const candidate of candidates.interfaces) {
-            if (candidate.kind !== 'interface') continue;
-            const projected = this.binding.projectImplementationObject(value, candidate.assembled);
-            if (projected) return projected;
+            const projected = candidate.kind === 'interface'
+              ? this.binding.projectImplementationObject(value, candidate.assembled)
+              : candidate.assembled.primary.getProxy(value);
+            if (projected !== undefined) return projected;
           }
           if (candidates.callbackFunction) {
             // A callback is only one possible union member; the value selects the branch.

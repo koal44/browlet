@@ -20,6 +20,13 @@ platform object to its implementation. Internal relationships use implementation
 and other post-conversion values; they do not project and immediately unwrap
 objects to call an internal operation.
 
+Declared proxy values such as WindowProxy use an implementation handle internally.
+Their binding declaration supplies `getHandle()` and `getProxy()` to convert
+between public proxies and their retained handles. Receiver resolution selects
+the handle's current platform target at invocation; retaining a handle does not
+freeze that target.
+Untyped `any` and `object` values keep their JavaScript representation.
+
 One private binding record connects those identities without changing the
 implementation's class prototype. Its `BindingWorld` supplies the identity
 scope; its realm binding supplies prototypes and member functions. Browlet's

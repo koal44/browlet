@@ -352,14 +352,16 @@ describe('Web IDL effective overload sets', () => {
     expect(selected.values[0]).toBe(implInst);
 
     const hostObject = {};
+    const hostHandle = { platform: hostObject };
     const hostBinding = createBinding([defineProxyObject({
-      is: (value) => value === hostObject,
       name: 'HostObject',
+      getHandle: (value) => value === hostObject ? hostHandle : undefined,
+      getProxy: (value) => value === hostHandle ? hostObject : undefined,
     })]);
     const host = namedOperation('host', reference('HostObject'), hostBinding);
     expect(resolve([host, string], [hostObject], hostBinding)).toEqual({
       callable: host,
-      values: [hostObject],
+      values: [hostHandle],
     });
   });
 
@@ -438,7 +440,11 @@ describe('Web IDL effective overload sets', () => {
     let recognized: object = first;
     const binding = createBinding([
       defineInterface({ name: 'Node', members: [] }),
-      defineProxyObject({ name: 'LiveProxy', is: (value) => value === recognized }),
+      defineProxyObject({
+        name: 'LiveProxy',
+        getHandle: (value) => value === recognized ? recognized : undefined,
+        getProxy: (value) => value === recognized ? recognized : undefined,
+      }),
     ]);
     const assembled = binding.assembly.interfaces.get('Node')!;
     binding.initializePlatformObject(first, assembled, {});
