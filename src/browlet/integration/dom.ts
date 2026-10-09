@@ -1,14 +1,10 @@
-import { findElementById } from '../dom/nodes/lookups';
+import {
+  findElementById, NodeImpl, type ElementImpl, type AttrImpl, type DocumentImpl, type DocumentFragmentImpl,
+  ShadowRootImpl, type TextImpl,
+} from '../dom/nodes/index';
 import type { DOMOperations } from '../../infra/index';
 import { InternalError } from '../../infra/index';
-import { NodeImpl } from '../dom/nodes/node';
-import type { ElementImpl } from '../dom/nodes/element';
-import type { AttrImpl } from '../dom/nodes/attribute';
-import type { DocumentImpl } from '../dom/nodes/document';
-import type { DocumentFragmentImpl } from '../dom/nodes/document-fragment';
-import { ShadowRootImpl } from '../dom/nodes/shadow-root';
-import type { TextImpl } from '../dom/nodes/text';
-import { HTMLElementImpl } from '../html/elements/html-element';
+import { HTMLElementImpl } from '../dom/nodes/html/index';
 
 /** Selector and style access to Browlet implementations, preserving their identities. */
 export const browletDOM: DOMOperations<

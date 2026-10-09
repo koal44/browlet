@@ -1,5 +1,4 @@
 import { InternalError } from '../infra/internal-error';
-import type { JSEnvironment } from '../js-engine/index';
 import { DOMExceptionImpl } from '../web-idl/core/index';
 import type { FetchTimingInfo } from './timing';
 import type { FetchEnvironment } from './environment';
@@ -53,7 +52,7 @@ export class FetchController {
   /** Abort active work, serializing the reason; omission differs from explicit undefined. */
   // https://fetch.spec.whatwg.org/#fetch-controller-abort
   abort(
-    ...args: [env: JSEnvironment] | [error: unknown, env: JSEnvironment]
+    ...args: [env: FetchEnvironment] | [error: unknown, env: FetchEnvironment]
   ): void {
     this.state = 'aborted';
     const fallbackError = new DOMExceptionImpl('', 'AbortError');

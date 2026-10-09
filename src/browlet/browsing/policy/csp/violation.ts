@@ -6,13 +6,12 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,
 } from '../../../../web-idl/index';
-import { EventImpl, type EventInitRecord } from '../../../dom/events/event';
-import type { DOMEnvironment } from '../../../dom/environment';
-import type { DOMHighResTimeStamp } from '../../../performance/high-resolution-time';
-import type { ElementImpl } from '../../../dom/nodes/element';
-import type { DocumentImpl } from '../../../dom/nodes/document';
-import { ReportBodyImpl } from '../../../reporting/report';
-import type { BrowletEnvironment } from '../../../scripting/environment';
+import { EventImpl, type EventInitRecord } from '../../../dom/events/index';
+import type { DOMEnvironment } from '../../../dom/index';
+import type { DOMHighResTimeStamp } from '../../../timing/index';
+import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
+import { ReportBodyImpl } from '../../../reporting/index';
+import type { BrowletEnvironment } from '../../../scripting/index';
 import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 
 /** A policy violation captured before its asynchronous event and report delivery. */

@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { constants, createSecureServer, type Http2SecureServer, type ServerHttp2Session, type ServerHttp2Stream } from 'node:http2';
 import { afterEach, describe, expect, it } from 'vitest';
-import { NodeHTTPTransport } from '../../../../src/browlet/integration/network/node-transport';
 import { UserAgent } from '../../../../src/browlet/user-agent';
+import { NodeHTTPTransport } from '../../../../src/browlet/integration/network/node-transport';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { getMIMETypeEssence } from '../../../../src/mime/index';
 import type { HTTPConnection, HTTPTransportRequest } from '../../../../src/fetch/transport';

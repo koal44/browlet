@@ -1,12 +1,16 @@
 # Browsing roadmap
 
+Browsing groups [navigation](navigation/ROADMAP.md), [Window](window/ROADMAP.md),
+and [policy](policy/ROADMAP.md). Each component has its own index; navigation
+owns the browsing-context and session-history lifecycle.
+
 ## Present
 
 - `origin.ts` implements the origin/site comparisons currently required by
   agents, navigation, and Window security decisions.
-- `browsing-context.ts`, `navigable.ts`, and `document-lifecycle.ts` form the
-  bounded top-level navigation spine.
-- `navigable.ts` derives a node's navigable and a top-level Document's
+- `navigation/browsing-context.ts`, `navigation/navigable.ts`, and
+  `navigation/document-lifecycle.ts` form the bounded top-level navigation spine.
+- `navigation/navigable.ts` derives a node's navigable and a top-level Document's
   fully-active status from the navigable's active session-history entry.
 
 ## Missing structural concepts
@@ -16,10 +20,10 @@
 | existing `origin.ts` and Document integration | Complete opaque/tuple origin and site operations, `Origin`, and the constrained `document.domain` setter | HTML §7.1.1 |
 | `site.ts` if origin.ts becomes crowded | Sites and schemeless same-site operations | HTML §7.1.1.1 |
 | `agent-cluster-key.ts` only if it no longer belongs in scripting | Origin-keyed agent-cluster selection | HTML §7.1.2 |
-| `browsing-context-group.ts` if group behavior outgrows browsing-context.ts | Browsing-context groups and related group switching | HTML §§7.1 and 7.3.2 |
-| existing `navigable.ts` | Child/related navigables, destruction, container association, active/current-entry invariants, and fully-active recursion through the container Document | HTML §§7.3.1–7.3.3 |
-| `target.ts` | Choosing/naming browsing contexts and navigables | HTML §7.3.1 |
-| existing `document-lifecycle.ts`, `NavigationParams`, and `DocumentImpl` | Creation factory selects Window/realm; navigation owns response/destination operations; Document owns initialization, loading completion, destruction, abortion, and unloading cleanup | HTML §7.5 |
+| `navigation/browsing-context-group.ts` if group behavior outgrows browsing-context.ts | Browsing-context groups and related group switching | HTML §§7.1 and 7.3.2 |
+| existing `navigation/navigable.ts` | Child/related navigables, destruction, container association, active/current-entry invariants, and fully-active recursion through the container Document | HTML §§7.3.1–7.3.3 |
+| `navigation/target.ts` | Choosing/naming browsing contexts and navigables | HTML §7.3.1 |
+| existing `navigation/document-lifecycle.ts`, `NavigationParams`, and `DocumentImpl` | Creation factory selects Window/realm; navigation owns response/destination operations; Document owns initialization, loading completion, destruction, abortion, and unloading cleanup | HTML §7.5 |
 | existing `user-agent.ts` plus the future embedder/automation boundary | Browser-UI navigation, reload, stop, traversal, creation, closing, POST confirmation, and cache-bypass requests routed through the ordinary algorithms with `browser UI` involvement | HTML §7.9 |
 
 Creator-based browsing-context creation still stops at

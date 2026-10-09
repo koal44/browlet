@@ -1,4 +1,4 @@
-import { isFixedBufferSource, type JSEnvironment } from '../js-engine/index';
+import { isFixedBufferSource } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
   reference,
@@ -6,7 +6,7 @@ import {
 import { TypeError } from '../infra/exceptions';
 import {
   GenericTransformStreamMixin, TransformStreamImpl, type ReadableStreamImpl,
-  type WritableStreamImpl,
+  type StreamsEnvironment, type WritableStreamImpl,
 } from '../streams/index';
 import { TextDecoderCommonMixin, type TextDecoderOptions } from './text-decoder';
 
@@ -25,7 +25,7 @@ export class TextDecoderStreamImpl {
   constructor(
     label: string,
     options: TextDecoderOptions,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ) {
     this.#common = new TextDecoderCommonMixin(label, options);
     const transform = new TransformStreamImpl(null, {}, {}, env);
@@ -74,7 +74,7 @@ export class TextDecoderStreamImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const textDecoderStreamIDL = defineInterface<JSEnvironment>({
+export const textDecoderStreamIDL = defineInterface<StreamsEnvironment>({
   name: 'TextDecoderStream',
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {

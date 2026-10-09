@@ -12,6 +12,7 @@ with attribution in [LICENSE.WHATWG.md](./LICENSE.WHATWG.md).
 | Module | Contents |
 | --- | --- |
 | [index.ts](./index.ts) | Entry point for other subsystems; implementation exports and IDL definitions |
+| [environment.ts](./environment.ts) | Execution requirements on the stream's existing environment |
 | [readable-stream.ts](./readable-stream.ts) | Stream, iterator, default/byte controllers, readers, BYOB request, pipe/tee algorithms |
 | [writable-stream.ts](./writable-stream.ts) | Stream, writer, controller, write/close/abort algorithms |
 | [transform-stream.ts](./transform-stream.ts) | Stream, controller, backpressure, generic-transform mixin, readable proxy |
@@ -20,8 +21,10 @@ with attribution in [LICENSE.WHATWG.md](./LICENSE.WHATWG.md).
 
 ## Runtime and bindings
 
-A stream retains one trailing `JSEnvironment` and passes it to derived streams.
-Its `env.exec` supplies execution, allocation, and task delivery.
+A stream retains one trailing `StreamsEnvironment` and passes it to derived streams.
+Its `StreamsExecution` combines `RealmExecution` with Infra's `AbortExecution` and
+`StructuredDataExecution` on the same `env.exec` object. Operations needing
+only JavaScript facilities, such as reader release, still accept `JSEnvironment`.
 Its `InternalPromise` chains retain their execution destination. Streams use that
 facility for asynchronous work; native `async`/`await` and global microtask
 scheduling are excluded by ESLint. Native backend I/O enters through explicit

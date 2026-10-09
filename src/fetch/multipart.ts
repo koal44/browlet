@@ -1,10 +1,10 @@
 import { encode, utf8DecodeWithoutBOM, type Encoding } from '../encoding/index';
-import { BlobData, FileImpl } from '../file/index';
+import { BlobData, FileImpl, type FileEnvironment } from '../file/index';
 import { TypeError } from '../infra/exceptions';
 import { toScalarValueString } from '../infra/index';
 import { lineEndingPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { TextCursor } from '../infra/text-cursor';
-import { isomorphicDecode, isomorphicEncode, randomUUID, type JSEnvironment } from '../js-engine/index';
+import { isomorphicDecode, isomorphicEncode, randomUUID } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import { percentEncodeByte } from '../url/index';
 import type { FormDataEntry } from '../xhr/index';
@@ -54,7 +54,7 @@ export type MultipartEncoding = {
 export function parseMultipartFormData(
   bytes: Uint8Array<ArrayBuffer>,
   mimeType: MIMEType,
-  env: JSEnvironment,
+  env: FileEnvironment,
 ): FormDataEntry[] {
   const boundary = mimeType.parameters.get('boundary');
   if (

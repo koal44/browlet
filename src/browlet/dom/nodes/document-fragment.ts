@@ -1,4 +1,4 @@
-import type { BrowletEnvironment } from '../../scripting/environment';
+import type { BrowletEnvironment } from '../../scripting/index';
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
 } from '../../../web-idl/index';

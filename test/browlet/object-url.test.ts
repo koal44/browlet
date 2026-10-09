@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-
 import { UserAgent } from '../../src/browlet/user-agent';
-import { BrowsingContext } from '../../src/browlet/browsing/browsing-context';
+
+import { BrowsingContext } from '../../src/browlet/browsing/navigation/browsing-context';
 import type { FetchUserAgent } from '../../src/fetch/environment';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
@@ -249,7 +249,7 @@ function createWindow(userAgent = new UserAgent(), url: string | null = 'https:/
     document!.origin = obtainURLOrigin(document!.url);
   }
   return {
-    window: realm.globalObject as Window & typeof globalThis, context,
+    window: realm.globalObject as unknown as Window & typeof globalThis, context,
     queueTask: fixture.queueTask.bind(fixture), runTask: fixture.runTask.bind(fixture),
     env: realm.env, document: document!,
   };

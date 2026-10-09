@@ -71,10 +71,12 @@ views of existing owners, not a new environment object for each subsystem.
 | [`StorageEnvironment`](storage/environment.ts) | UserAgent, creation URL, and an origin when available; usable before realm creation |
 | [`FetchEnvironmentRecord`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
 | HTML [`EnvironmentRecord`](browlet/scripting/environment.ts) | Concrete early browser state: identity, owner, creation/security state, readiness, and partition derivation |
-| [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm`, `exec: RealmExecution`, and `queueNetworkingTask(steps, destination)` for a JavaScript execution owner |
+| [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm` and `exec: RealmExecution` for a JavaScript execution owner |
+| [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort and HTML structured-data execution contracts on `exec` |
+| [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: EventRealm` and `exec: EventExecution` for event timing and allocation |
 | [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
-| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and JSEnvironment with Fetch execution facilities and client settings |
+| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
 | [`BrowletEnvironment`](browlet/scripting/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
@@ -93,26 +95,36 @@ for an actual shared implementation, not to simulate multiple class inheritance.
 
 ### Realm execution
 
-[`RealmExecution`](js-engine/realm-execution.ts) groups facilities belonging to
-one execution owner: Promises, buffers, JSON, microtasks, background scheduling,
-task delivery, abort construction, and structured data. JS Engine defines the
-contract; [`createExecution(realm)`](browlet/scripting/environment.ts) constructs
-the realm facilities. [`createBoundExecution(context)`](browlet/bindings.ts)
-adds the bound Promise, DOM allocations, and structured data at the composition
-root. Defining a contract below HTML does not transfer ownership of HTML
-algorithms to JS Engine.
+[`RealmExecution`](js-engine/realm-execution.ts) groups JavaScript facilities for
+one execution owner: Promises, errors, buffers, JSON, microtasks, background
+scheduling, and task delivery. Infra's [`execution.ts`](infra/execution.ts)
+separately defines `AbortExecution` and `StructuredDataExecution`; these
+contracts have no dependency on DOM, HTML, or JS Engine. The corresponding
+algorithms remain in DOM and HTML.
+
+`StreamsExecution` combines realm facilities with these execution contracts.
+`FileExecution` extends it with `nativeLineEnding`, required by Blob processing
+and supplied by the host. They describe the same `env.exec` object; there are no
+additional execution objects or forwarding layers. Operations that only need
+JavaScript facilities, such as releasing an existing reader, keep `JSEnvironment`.
+[`createBrowletExecution(context)`](browlet/bindings.ts) composes the complete
+browser execution object, including the bound Promise, DOM allocations, Fetch
+task delivery, and structured data. Standalone `AsyncExecution` does not require
+abort or structured-data facilities.
 
 Subsystems declare independent execution contracts. Web IDL Core's
 [`WebIDLExecution`](web-idl/core/execution.ts) supplies `DOMException` through
 its `DOMExceptionConstructor` contract, and DOM's
 [`EventExecution`](browlet/dom/environment.ts) supplies event allocation.
-`BrowletExecution` combines these with `RealmExecution` and `StyleletExecution`
+`BrowletExecution` combines these with `RealmExecution`, `FetchExecution`, and `StyleletExecution`
 on the same `env.exec` object. JS Engine does not depend on Web IDL; Core does
 not depend on JS Engine. Web IDL's realm and callback environment contracts
 remain in its full entry point.
 
-Fetch's `FetchExecution` combines engine facilities and Web IDL exception
-construction on `FetchEnvironment.exec`. Fetch receives the existing environment
+Fetch's `FetchExecution` combines File/Streams facilities, Web IDL exception
+construction, and `queueGlobalFetchTask(global, steps)` on `env.exec`.
+Fetch's `queueFetchTask(steps, destination, env)` selects parallel-queue or global
+delivery; HTML supplies the global route. Fetch receives the existing environment
 as its execution owner; the request's optional client remains a separate selection.
 The same `FetchEnvironment` contract supplies base URL, origin, policies, and
 UserAgent when used as client settings. BrowletEnvironment implements it directly.
@@ -136,7 +148,7 @@ URLs resolve at the computed stage; serialization formats the resulting value.
 CSSOM URL attributes expose strings, so these internal URLs require no platform
 projection. Stylelet does not import the URL implementation or its runtime graph.
 Stylelet also uses Encoding Core's portable label lookup and canonical encoding
-type. Its existing UserAgent supplies `EncodingCapability.decodeText(bytes, fallback)`:
+type. Its existing UserAgent supplies `decodeText(bytes, fallback)`, typed as `DecodeText`:
 Browlet forwards to Encoding's `decode`, while standalone composition supplies
 the native decoder adapter. CSS retains fallback-encoding selection; Encoding
 owns BOM override, byte decoding, and replacement handling. Encoding Core depends
@@ -157,8 +169,9 @@ The constructor's result uses Core's shared `DOMException` contract for
 Infra's `TimerHost` describes a native wake-up request returning a `TaskHandle`.
 `remove()` cancels pending work; native timer tokens remain private to the
 provider. Hosts may limit requested delays, so consumers enforcing a deadline
-must recheck their clock. Browlet supplies its Node provider explicitly to
-`GlobalTimers`, which retains HTML activity, deadline, and ordering rules.
+must recheck their clock. UserAgent supplies Browlet's Node provider through
+`timerHost`; each global's `GlobalTimers` retains HTML activity, deadline, and
+ordering rules.
 Infra's `createAsyncExecution(timerHost)` composes standalone Promise observation,
 background work, and task delivery around a supplied provider. Its `nativeTimerHost`
 captures scheduling and cancellation together, retaining their original receiver;
@@ -187,6 +200,20 @@ Browlet's adapter supplies concrete implementation types instead.
 
 ### Construction and lifetime
 
+[`Browlet`](browlet/browlet.ts) constructs UserAgent, which creates its sandbox
+through [`bindings.ts`](browlet/bindings.ts) and exposes that module's
+Window-environment factory. Bindings assembles environments for existing owners;
+it does not construct UserAgent or serve as an implementation service entry.
+UserAgent creates Window Agents; bindings creates the sandbox Agent.
+Each receives an EventLoop constructed with its host-turn callback. The loop
+creates its engine microtask queue, reads the shared clock, and schedules work as
+it arrives, without a separate start phase or per-turn options. Realm construction
+requires its owning Agent. Browsing algorithms call their UserAgent's Window
+factory; existing objects use their retained `env`, realm, and WindowProxy handle. Document allocation
+uses `env.exec.createDocument()`, preserving the binding-owned node factory without
+passing Binding Context into the lifecycle algorithms. Main-world inspection for
+tests lives in `test/support/browlet-binding.ts`.
+
 [`createWindowEnvironment()`](browlet/bindings.ts) assembles the early record,
 WindowRealm, binding, execution, and full settings before constructing Window
 with that environment. Binding registration
@@ -207,7 +234,7 @@ Global projection and global-scope mixin setup finish before consumers receive t
 Document creation retains its own HTML initialization steps.
 
 `Realm.hostDefined` permits the absence of HTML settings; `Realm.env` requires
-them and throws if they are unattached. Each UserAgent constructs its sandbox
+them and throws if they are unattached. UserAgent composition creates its sandbox
 eagerly, with a real Realm, Agent, event loop, and SandboxEnvironment, but no
 Window, Document, or attached HTML settings object. It supplies execution for
 retained browser work such as Reporting uploads and retains that UserAgent explicitly.
@@ -261,7 +288,7 @@ already scheduled on the wrong queue.
 
 `runInParallel()` schedules background steps. Completion enters the selected
 owner task before changing realm-owned streams or delivering author callbacks.
-`env.queueNetworkingTask()` accepts an explicit global or parallel queue, so
+Fetch's `queueFetchTask()` accepts an explicit global or parallel queue, so
 it works for both full settings and sandbox execution. Host-owned continuations
 use `HostPromise` without pretending to belong to a retired Document.
 
@@ -301,6 +328,33 @@ Import across subsystems through the owner's index. Infra's independent modules
 and test imports are exceptions; narrower indexes such as Web IDL Core are
 deliberate entry points. Group code by responsibility and real consumers, not
 by one folder per specification or one file per algorithm.
+
+Do not import or re-export through the current folder's or an ancestor's barrel,
+including type-only imports and implicit `.`/`..` directory imports. Named
+entries such as `../assembly/index` identify the component being consumed.
+Sibling folders can have different dependency levels: a shared foundation
+needs an explicit home, rather than making the containing barrel appear to be
+lower level. Review that ownership before substituting deep imports merely to
+remove a lint error. `browlet/no-ancestor-barrel-imports` enforces this boundary.
+
+`browlet/browsing` groups three components with separate named entry points:
+`navigation`, `window`, and `policy`. Navigation owns browsing contexts,
+navigables, document creation, and session-history state. Window owns Window,
+WindowProxy, and Location. Their consumers use the corresponding component's
+index; cooperating modules within navigation import each other directly.
+There is no umbrella browsing barrel.
+
+Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
+precision, and time origins without importing DOM or Performance. The Performance
+API consumes timing and DOM events. Event, EventTarget, and the UI Events
+specializations form one component in `browlet/dom/events`; its implementation
+modules import each other directly. XHR's ProgressEvent lives in browser
+integration and reuses that event machinery.
+
+Document, Element, and the HTML, SVG, and MathML element implementations live
+under `browlet/dom/nodes`, alongside their element-selection table. Namespace
+directories retain their indexes. Parsing and custom-element machinery remain
+under `browlet/html`; dependencies between these entries are still under review.
 
 A partial interface/dictionary/namespace amends its primary implementation.
 Co-locate its members when practical; an external package can export a declaration

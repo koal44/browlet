@@ -3,9 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { WindowProxy } from '../../../src/browlet/platform';
 import { createSandboxEnvironment } from '../../../src/browlet/bindings';
-import {
-  AbortSignalImpl, type AbortAlgorithmHandle,
-} from '../../../src/browlet/dom/abort/abort-signal';
+import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
+import type { AbortAlgorithmHandle } from '../../../src/infra/execution';
 
 /*
  * DOM section 3 and the corresponding Web Platform Tests define these public

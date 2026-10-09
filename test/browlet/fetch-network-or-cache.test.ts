@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createServer, type Server } from 'node:http';
 import { createServer as createHTTPSServer } from 'node:https';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm, project } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';

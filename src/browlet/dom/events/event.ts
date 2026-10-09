@@ -3,7 +3,7 @@ import {
   arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, tsType, xattr,
 } from '../../../web-idl/index';
-import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
+import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import type { EventTargetImpl } from './event-target';
 import { InternalError } from '../../../infra/internal-error';
 
@@ -204,8 +204,6 @@ export class EventImpl {
 
     this.#initialize(type, bubbles, cancelable);
   }
-
-  // -- Internal methods -------------------------------------------------
 
   /** Append a dispatch target with its retargeted values and shadow-tree visibility flags. */
   // https://dom.spec.whatwg.org/#concept-event-path-append

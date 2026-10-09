@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { UserAgent } from '../../../src/browlet/user-agent';
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { parseURL } from '../../../src/url/url';
 
 describe('Reporting retirement', () => {
@@ -73,7 +73,7 @@ function createWindow() {
   const traversable = TopLevelTraversable.create(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   return {
-    userAgent, window: realm.globalObject as Window & typeof globalThis,
+    userAgent, window: realm.globalObject as unknown as Window & typeof globalThis,
     scope: realm.env.getWindowOrWorkerGlobalScopeMixin(),
   };
 }

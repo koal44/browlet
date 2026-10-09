@@ -1,29 +1,25 @@
-import { BrowsingContextGroup } from './browsing/browsing-context';
-import { createSandboxEnvironment } from './bindings';
-import type { Navigable, TopLevelTraversable } from './browsing/navigable';
-import type { BrowletEnvironment } from './scripting/environment';
-import { PolicyContainer } from './browsing/policy/container';
-import { HSTSStore } from './browsing/policy/hsts';
-import type { EventLoopOptions } from './scripting/event-loop';
-import { HostPromise, requestNodeEventLoopTurn, runInParallel } from './integration/scripting';
-import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
-import { determineRequestReferrer, setRequestReferrerPolicyOnRedirect } from './browsing/policy/referrer-policy';
-import { BlobURLEntry, BlobURLStore } from './integration/file/blob-url';
-import type { ReportingEndpoint } from './reporting/endpoint';
-import { ReportImpl } from './reporting/report';
-import type { ReportDeliveryResult } from './reporting/delivery';
-import { NodeHTTPTransport } from './integration/network/node-transport';
-import { HTTPAuthenticationStore } from './loader/authentication';
-import { createContentDecoder, supportedContentCodings } from './integration/network/node-decoder';
+import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
+import { EventLoop, WindowAgent, type BrowletEnvironment } from './scripting/index';
+import {
+  PolicyContainer, HSTSStore, determineRequestReferrer, setRequestReferrerPolicyOnRedirect,
+} from './browsing/policy/index';
+import {
+  NodePromise, queueNodeTask, nodeTimerHost, browletDOM,
+} from './integration/index';
+import { unsafeSharedCurrentTime } from './timing/index';
+import { BlobURLEntry, BlobURLStore } from './integration/file/index';
+import { type ReportingEndpoint, ReportImpl, type ReportDeliveryResult } from './reporting/index';
+import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
+import { HTTPAuthenticationStore } from './loader/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
-  type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
+  type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 import { CookieStore } from '../http/index';
 import type { BlobImpl } from '../file/index';
 import type { MIMEType } from '../mime/index';
-import { randomUUID, type JSEnvironment } from '../js-engine/index';
+import { randomUUID } from '../js-engine/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
@@ -33,8 +29,9 @@ import { InternalError } from '../infra/internal-error';
 import type { StyleletUserAgent } from '../stylelet/index';
 import { decode } from '../encoding/index';
 import type { SelectletUserAgent } from '../selectlet/index';
-import { browletDOM } from './integration/dom';
 import { internalType, type InternalPromise } from '../infra/promises';
+import type { TimerHost } from '../infra/execution';
+import { createSandboxEnvironment, createWindowEnvironment } from './bindings';
 
 /** Owns browsing contexts and shared browser services that outlive individual documents. */
 export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
@@ -48,14 +45,16 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   /** Top-level windows or tabs owned by this browser. */
   topLevelTraversableSet = new Set<TopLevelTraversable>();
-  /** Host scheduling facilities supplied to new agents. */
-  eventLoopOptions: EventLoopOptions | null;
   /** Execution created with this user agent for work that can outlive pages. */
   sandbox: BrowletEnvironment;
+  /** Browser binding factory used by browsing algorithms to create Window environments. */
+  createWindowEnvironment = createWindowEnvironment;
   /** Background Fetch continuations outlive their initiating environments. */
-  HostPromise = HostPromise;
+  HostPromise = NodePromise;
   /** Background steps remain distinct from task delivery to a global. */
-  runInParallel = runInParallel;
+  runInParallel = queueNodeTask;
+  /** Host wake-ups shared by this browser's globals; each global owns its timer state. */
+  timerHost: TimerHost = nodeTimerHost;
 
   /** Default identification header value, shared by this user agent's environments. */
   // https://fetch.spec.whatwg.org/#default-user-agent-value
@@ -102,9 +101,13 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   // https://w3c.github.io/webappsec-secure-contexts/#development-environments
   trustworthyOrigins: TupleOrigin[] = [];
 
-  constructor(eventLoopOptions: EventLoopOptions | null = null) {
-    this.eventLoopOptions = eventLoopOptions;
-    this.sandbox = createSandboxEnvironment(eventLoopOptions ?? undefined, this);
+  constructor() {
+    this.sandbox = createSandboxEnvironment(this);
+  }
+
+  /** Create an Agent with its own microtask queue and running browser event loop. */
+  createWindowAgent(): WindowAgent {
+    return new WindowAgent(new EventLoop({ requestTurn: queueNodeTask }));
   }
 
   createBrowsingContextGroup(): BrowsingContextGroup {
@@ -170,7 +173,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
   // https://fetch.spec.whatwg.org/#potentially-override-response-for-a-request
-  potentiallyOverrideResponse(_request: FetchRequest, _env: JSEnvironment): FetchResponse | null {
+  potentiallyOverrideResponse(_request: FetchRequest, _env: FetchEnvironment): FetchResponse | null {
     // Fetch's default implementation lets the request proceed unchanged.
     return null;
   }
@@ -202,13 +205,12 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   /** Run browser-owned reporting work on a later host turn, yielding to runnable page tasks. */
   queueReportingTask(steps: () => void): void {
-    requestNodeEventLoopTurn(() => {
+    queueNodeTask(() => {
       for (const group of this.browsingContextGroupSet) {
         for (const cluster of group.agentClusterMap.values()) {
           for (const agent of cluster.agents) {
             const { eventLoop } = agent;
-            // Manually driven loops do not request turns that could unblock us.
-            if (eventLoop.started && eventLoop.hasRunnableTasks()) {
+            if (eventLoop.hasRunnableTasks()) {
               this.queueReportingTask(steps);
               return;
             }
@@ -240,7 +242,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     // Bytes need no stream or execution owner from the retiring Window.
     request.body = ReportImpl.serialize(reports);
     for (const report of reports) report.attempts++;
-    const result = HostPromise.withResolvers(internalType<ReportDeliveryResult>());
+    const result = this.HostPromise.withResolvers(internalType<ReportDeliveryResult>());
     // This clientless request has no Window to receive response callbacks.
     // The sandbox owns stream execution; the request retains the report's
     // original origin and remains clientless.

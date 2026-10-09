@@ -20,7 +20,7 @@ import { FetchBody } from './body';
 import type { HTTPCacheEntry, HTTPCachePartition } from './cache-http';
 import { deserializeAbortReason, type FetchController } from './controller';
 import { processDataURL } from './data-url';
-import { isOffline, type AuthenticationCredentials, type AuthenticationEntry, type FetchEnvironment } from './environment';
+import { isOffline, queueFetchTask, type AuthenticationCredentials, type AuthenticationEntry, type FetchEnvironment } from './environment';
 import {
   convertHeaderNamesToSortedLowercaseSet, documentAcceptHeaderValue, isCORSNonWildcardRequestHeaderName, isCORSSafelistedMethod,
   isNullBodyStatus, isOkStatus, isRangeStatus, isRedirectStatus, isRequestBodyHeaderName,
@@ -700,7 +700,7 @@ function httpNetworkFetch(
       return coarsenTime(request.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
     }
     function queueCallback(steps: () => void): void {
-      env.queueNetworkingTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.exec.global);
+      queueFetchTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.exec.global, env);
     }
     function endUpload(): void {
       if (uploadEnded) return;
@@ -1085,7 +1085,7 @@ function runBodySteps<T>(params: FetchParams, steps: () => NoInfer<T>, type: Pro
 
 function queueTask(params: FetchParams, steps: () => void): void {
   if (params.taskDestination === null) throw new InternalError('Fetch callback delivery requires a task destination');
-  params.env.queueNetworkingTask(steps, params.taskDestination);
+  queueFetchTask(steps, params.taskDestination, params.env);
 }
 
 /** Select or validate a private cached response, otherwise perform the wire exchange. */

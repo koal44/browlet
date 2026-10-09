@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getBindingContext, getRelevantRealm } from '../../../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../../../support/browlet-binding';
 import { Browlet } from '../../../../../src/browlet/browlet';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';

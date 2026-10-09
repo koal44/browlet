@@ -4,7 +4,7 @@ import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise, PromiseResultType } from '../infra/promises';
-import { getBufferSourceCopy, isUint8Array, type GlobalObject, type JSEnvironment } from '../js-engine/index';
+import { getBufferSourceCopy, isUint8Array, type GlobalObject } from '../js-engine/index';
 import { serializeMIMEType } from '../mime/index';
 import { ReadableStreamImpl } from '../streams/index';
 import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
@@ -12,6 +12,7 @@ import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../web-idl/index';
 import { FormDataImpl, type FormDataEntry } from '../xhr/index';
+import { queueFetchTask, type FetchEnvironment } from './environment';
 import { encodeMultipartFormData, parseMultipartFormData } from './multipart';
 import type { FetchRequest } from './request';
 import type { FetchResponse } from './response';
@@ -26,9 +27,9 @@ export class FetchBody {
   /** Total body length in bytes, or null when unknown; this is not a count of remaining bytes. */
   length: number | null = null;
   /** Owning environment shared by this body and its clones. */
-  #env: JSEnvironment;
+  #env: FetchEnvironment;
 
-  constructor(stream: ReadableStreamImpl, env: JSEnvironment) {
+  constructor(stream: ReadableStreamImpl, env: FetchEnvironment) {
     this.stream = stream;
     this.#env = env;
   }
@@ -36,7 +37,7 @@ export class FetchBody {
   /** Retain internal bytes for replay and queue a copy for delivery to the stream. */
   // https://fetch.spec.whatwg.org/#byte-sequence-as-a-body
   // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
-  static fromBytes(bytes: Uint8Array, env: JSEnvironment): FetchBody {
+  static fromBytes(bytes: Uint8Array, env: FetchEnvironment): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     // The bytes are already available; only delivery to the owning loop is deferred.
     env.exec.queueTask('network', () => {
@@ -52,7 +53,7 @@ export class FetchBody {
   }
 
   /** Create a fresh stream over a retained replay source without repeating body encoding. */
-  static fromSource(source: NonNullable<FetchBody['source']>, env: JSEnvironment): FetchBody {
+  static fromSource(source: NonNullable<FetchBody['source']>, env: FetchEnvironment): FetchBody {
     if (source instanceof BlobImpl || source instanceof BlobData) {
       const data = source instanceof BlobImpl ? source.data : source;
       const body = new FetchBody(data.stream(env), env);
@@ -66,7 +67,7 @@ export class FetchBody {
   /** Extract a converted BodyInit value, retaining its replay source and inferred Content-Type. */
   // https://fetch.spec.whatwg.org/#concept-bodyinit-extract
   // Internal byte sequences use fromBytes(); a BodyInit BufferSource must be copied.
-  static extract(object: BodyInitValue, keepalive = false, env: JSEnvironment): BodyWithType {
+  static extract(object: BodyInitValue, keepalive = false, env: FetchEnvironment): BodyWithType {
     if (object instanceof ReadableStreamImpl) {
       if (keepalive) throw new TypeError('A keepalive request cannot have a streaming body');
       if (object.disturbed || object.locked) throw new TypeError('Body stream is disturbed or locked');
@@ -132,10 +133,10 @@ export class FetchBody {
               readLoop();
             };
           }
-          env.queueNetworkingTask(continueAlgorithm, destination);
+          queueFetchTask(continueAlgorithm, destination, env);
         },
-        closeSteps: () => env.queueNetworkingTask(processEndOfBody, destination),
-        errorSteps: (error) => env.queueNetworkingTask(() => processBodyError(error), destination),
+        closeSteps: () => queueFetchTask(processEndOfBody, destination, env),
+        errorSteps: (error) => queueFetchTask(() => processBodyError(error), destination, env),
       });
     }
   }
@@ -150,9 +151,9 @@ export class FetchBody {
     const env = this.#env;
     const destination = taskDestination ?? new ParallelQueue(env.exec.runInParallel);
     const successSteps = (bytes: Uint8Array<ArrayBuffer>) =>
-      env.queueNetworkingTask(() => processBody(bytes), destination);
+      queueFetchTask(() => processBody(bytes), destination, env);
     const errorSteps = (error?: unknown) =>
-      env.queueNetworkingTask(() => processBodyError(error), destination);
+      queueFetchTask(() => processBodyError(error), destination, env);
     let reader: ReturnType<ReadableStreamImpl['getDefaultReader']>;
     try {
       reader = this.stream.getDefaultReader();
@@ -192,10 +193,10 @@ export class BodyMixin {
   /** Includer's live request or response, so body and header replacements remain visible. */
   #record: FetchRequest | FetchResponse;
   /** Environment owning body consumption, result allocation, and promise delivery. */
-  #env: JSEnvironment;
+  #env: FetchEnvironment;
 
   // Read the includer's current body and headers, including replacements.
-  constructor(record: FetchRequest | FetchResponse, env: JSEnvironment) {
+  constructor(record: FetchRequest | FetchResponse, env: FetchEnvironment) {
     this.#record = record;
     this.#env = env;
   }
@@ -279,8 +280,6 @@ export class BodyMixin {
     );
     return body.stream.pipeThroughTransform(decoder.getAssociatedTransform());
   }
-
-  // -- Internal ---------------------------------------------------------
 
   /** The extracted body shared by the API and its underlying request or response. */
   getBody(): FetchBody | null {

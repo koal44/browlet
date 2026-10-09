@@ -1,4 +1,4 @@
-import type { EventImpl } from '../events/event';
+import type { EventImpl } from '../events/index';
 import { arg, atArg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
 import { type NodeImpl, NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
@@ -20,8 +20,6 @@ export class TextImpl extends CharacterDataImpl {
   static is(value: unknown): value is TextImpl {
     return value instanceof TextImpl;
   }
-
-  // -- Internal ---------------------------------------------------------
 
   setAssignedSlot(slot: ElementImpl | null): void {
     this.#slottableMixin.assignedSlot = slot;

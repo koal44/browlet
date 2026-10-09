@@ -507,8 +507,6 @@ type ImplementationOptions<Env = unknown, Impl extends object = object> = Omit<
   'implClass'
 >;
 
-// Internal helpers
-
 // Project helper: expand shorthand extended attributes into declaration records.
 function normalizeExtendedAttribute(
   attribute: ExtendedAttributeInit,

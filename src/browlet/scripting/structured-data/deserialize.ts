@@ -1,11 +1,11 @@
 import type { ScriptingEnvironment } from '../environment';
+import type { Realm } from '../realm';
 import {
   appendMapData, appendSetData, isAnyArrayBuffer, isObject, writeErrorStack,
 } from '../../../js-engine/index';
 import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext, type PlatformRecord,
 } from '../../../web-idl/index';
-import type { Realm } from '../realm';
 import type {
   ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
   StructuredDeserializeMemory,

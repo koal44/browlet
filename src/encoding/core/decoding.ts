@@ -1,10 +1,7 @@
 import type { Encoding } from './labels';
 
-/** Complete-input decoding supplied by the host that owns the consuming subsystem. */
-export interface EncodingCapability {
-  /** Decode with replacement errors, letting a leading Unicode BOM override the fallback. */
-  decodeText(bytes: Uint8Array, fallbackEncoding: Encoding): string;
-}
+/** Decode complete input with replacement errors, letting a leading Unicode BOM override the fallback. */
+export type DecodeText = (bytes: Uint8Array, fallbackEncoding: Encoding) => string;
 
 /** Native decoding for standalone hosts, with replacement and x-user-defined support. */
 export function decodeNative(bytes: Uint8Array, fallbackEncoding: Encoding): string {

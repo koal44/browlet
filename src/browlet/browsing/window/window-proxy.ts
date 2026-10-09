@@ -1,8 +1,11 @@
 import { InternalError } from '../../../infra/internal-error';
 import type { GlobalProxy } from '../../../js-engine/index';
-import { defineProxyObject, type StampedPlatformObject } from '../../../web-idl/index';
+import {
+  defineProxyObject, getImplementationObject, type StampedImplInstance, type StampedPlatformObject,
+} from '../../../web-idl/index';
 
 import type { Window, WindowProxy } from '../../platform';
+import type { WindowImpl } from './window';
 
 /** Retains a WindowProxy's platform identity and current Window association. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-windowproxy-exotic-object
@@ -45,6 +48,11 @@ export class WindowProxyHandle implements ProxyHandler<object> {
       throw new InternalError('WindowProxy has no associated Window');
     }
     return this.#associatedWindow;
+  }
+
+  /** Implementation paired with the current Window; the association already carries its binding. */
+  get windowImplementation(): WindowImpl {
+    return getImplementationObject(this.associatedWindow) as StampedImplInstance<WindowImpl>;
   }
 
   /** Replaces the associated Window while preserving this proxy's identity. */

@@ -1,14 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
-import {
-  createDocumentState, createSessionHistoryEntry,
-} from '../../../src/browlet/browsing/navigation/session-history';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import { UserAgent } from '../../../src/browlet/user-agent';
-import { Duration, monotonicClock, UnsafeMoment } from
-  '../../../src/browlet/performance/clock';
-import type { EventLoop, EventLoopOptions } from '../../../src/browlet/scripting/event-loop';
-import { GlobalTimers } from '../../../src/browlet/scripting/timers';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { Duration } from
+  '../../../src/browlet/timing/clock';
+import type { EventLoop } from '../../../src/browlet/scripting/event-loop';
 import type { TaskHandle, TimerHost } from '../../../src/infra/execution';
 
 describe('HTML timers', () => {
@@ -118,8 +116,11 @@ describe('HTML timers', () => {
 });
 
 function createTimerFixture() {
+  const host = new ManualTimerHost();
+  const userAgent = createManualUserAgent();
+  userAgent.timerHost = host;
   const traversable = TopLevelTraversable.create(
-    new UserAgent(),
+    userAgent,
     null,
     '',
   );
@@ -128,33 +129,13 @@ function createTimerFixture() {
 
   const { env } = document;
   const eventLoop = env.responsibleEventLoop;
-  const host = new ManualTimerHost();
-  const timers = new GlobalTimers({
-    eventLoop,
-    queueTask: (steps, options) => env.exec.queueTask('timer', steps, options),
-    host,
-    time: {
-      currentHighResolutionTime: () => new Duration(host.now),
-    },
-  });
-  timers.setAssociatedDocument(document);
+  vi.spyOn(env.timing, 'currentHighResolutionTime').mockImplementation(() => new Duration(host.now));
+  const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
   return { eventLoop, host, timers, traversable };
 }
 
 function runNextTask(eventLoop: EventLoop): void {
-  expect(eventLoop.runTaskTurn(createEventLoopOptions())).toBe(true);
-}
-
-function createEventLoopOptions(): EventLoopOptions {
-  return {
-    createMicrotaskQueue: () => ({
-      kind: 'ambient',
-      enqueueMicrotask: (steps) => { queueMicrotask(steps); },
-      performMicrotaskCheckpoint: vi.fn(),
-    }),
-    requestEventLoopTurn: vi.fn(),
-    unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-  };
+  expect(eventLoop.runTaskTurn()).toBe(true);
 }
 
 class ManualTimerHost implements TimerHost {

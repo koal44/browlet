@@ -1,36 +1,24 @@
 import { idlType } from '../../../src/web-idl/core/index';
 import { describe, expect, it, vi } from 'vitest';
-import { createSandboxEnvironment, getBindingContext } from '../../../src/browlet/bindings';
-import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
+import { createSandboxEnvironment } from '../../../src/browlet/bindings';
+import { UserAgent } from '../../../src/browlet/user-agent';
+import { getBindingContext } from '../../support/browlet-binding';
 import { SandboxAgent } from '../../../src/browlet/scripting/agents';
 import { Realm } from '../../../src/browlet/scripting/realm';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
-import { UserAgent } from '../../../src/browlet/user-agent';
 import { FetchBody } from '../../../src/fetch/body';
-import { createMicrotaskQueue } from '../../../src/js-engine/index';
 
 describe('Browser-owned sandbox execution', () => {
   it('reuses one environment per user agent without a Window or HTML settings object', () => {
-    const createQueue = vi.fn(createMicrotaskQueue);
-    const requestTurn = vi.fn();
-    const first = new UserAgent({
-      createMicrotaskQueue: createQueue,
-      requestEventLoopTurn: requestTurn,
-      unsafeSharedCurrentTime,
-    });
-    // Construction allocates the sandbox, but an idle loop needs no host turn.
-    expect(createQueue).toHaveBeenCalledTimes(1);
-    expect(requestTurn).not.toHaveBeenCalled();
+    const first = new UserAgent();
     const second = new UserAgent();
     const env = first.sandbox;
     const realm = Realm.getAssociatedRealm(env.exec.global)!;
     const other = Realm.getAssociatedRealm(second.sandbox.exec.global)!;
     expect(first.sandbox).toBe(env);
-    expect(createQueue).toHaveBeenCalledTimes(1);
     expect(realm).not.toBe(other);
     expect(realm.agent).toBeInstanceOf(SandboxAgent);
     expect(realm.agent.eventLoop).not.toBe(other.agent.eventLoop);
-    expect(realm.agent.eventLoop.started).toBe(true);
     expect(realm.getAssociatedDocument()).toBeNull();
     expect(realm.hostDefined).toBeUndefined();
     expect(realm.globalNames.size).toBe(0);

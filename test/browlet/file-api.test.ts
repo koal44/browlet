@@ -6,7 +6,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, FileImpl,
   FileListImpl, type BlobByteSource,
 } from '../../src/file/index';
-import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { Blob, FileList, Window } from '../../src/browlet/platform';
 import { InternalError } from '../../src/infra/internal-error';

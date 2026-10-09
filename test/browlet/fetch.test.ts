@@ -2,8 +2,9 @@ import { createServer, type RequestListener, type ServerResponse } from 'node:ht
 import { afterEach, describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
 import type { WindowProxy } from '../../src/browlet/platform';
-import { createDocument, createWindowEnvironment, getRelevantRealm, setAssociatedWindow } from '../../src/browlet/bindings';
-import { BrowsingContext } from '../../src/browlet/browsing/browsing-context';
+import { createWindowEnvironment } from '../../src/browlet/bindings';
+import { getRelevantRealm } from '../support/browlet-binding';
+import { BrowsingContext } from '../../src/browlet/browsing/navigation/browsing-context';
 import { closeServer, listen } from './loader/http-fixture';
 import type { Window } from '../../src/browlet/platform';
 
@@ -317,11 +318,11 @@ function createRelatedWindow(first: Window): WindowProxy {
     topLevelCreationURL: creationURL, topLevelOrigin: env.origin,
   });
   const proxy = realm.windowProxy;
-  const document = createDocument(realm);
+  const document = realm.env.exec.createDocument();
   document.browsingContext = new BrowsingContext(proxy);
   document.url = creationURL;
   window.setAssociatedDocument(document);
-  setAssociatedWindow(proxy, window);
+  proxy.setAssociatedWindow(window.env.realm.globalObject);
   return proxy.platform;
 }
 

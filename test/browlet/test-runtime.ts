@@ -1,4 +1,4 @@
-import { getRelevantRealm } from '../../src/browlet/bindings';
+import { getRelevantRealm } from '../support/browlet-binding';
 
 /*
  * Direct calls from Vitest do not enter Browlet through an HTML script or

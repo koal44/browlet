@@ -1,4 +1,4 @@
-import { EventTargetImpl, type EventListenerValue } from '../dom/events/event-target';
+import { EventTargetImpl, type EventListenerValue } from '../dom/events/index';
 
 // Registration, script resources, and worker event types await the worker host.
 /** Applies service-worker listener rules before a complete worker global is available. */
@@ -12,8 +12,6 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
 
   protected abstract isServiceWorkerEventType(type: string): boolean;
   protected abstract reportWarning(message: string): void;
-
-  // -- Internal ---------------------------------------------------------
 
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
   getFetchEventListenerCallbacks(): EventListenerValue[] {

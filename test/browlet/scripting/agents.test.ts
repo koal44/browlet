@@ -1,49 +1,46 @@
+import { createManualEventLoop } from '../../support/browlet-agent';
 import { describe, expect, it, vi } from 'vitest';
+import { UserAgent } from '../../../src/browlet/user-agent';
 
-import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from '../../../src/browlet/scripting/agents';
 import { Realm } from '../../../src/browlet/scripting/realm';
-import { UserAgent } from '../../../src/browlet/user-agent';
-import {
-  monotonicClock, UnsafeMoment,
-} from '../../../src/browlet/performance/clock';
+import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import type { Domain, Host } from '../../../src/url/host';
 import type { TupleOrigin } from '../../../src/url/origin';
 import { itPassesWith } from '../../test-runtime';
 
 describe('WindowAgent', () => {
   it('contains window objects and cannot block', () => {
-    const agent = new WindowAgent();
+    const agent = new WindowAgent(createManualEventLoop());
 
     expect(agent.canBlock).toBe(false);
-    expect(agent.eventLoop.started).toBe(false);
     expect(agent.windowObjects).toEqual(new Set());
   });
 });
 
 describe('worker and worklet agents', () => {
   it('fixes each agent type\'s blocking policy', () => {
-    expect(new DedicatedWorkerAgent().canBlock).toBe(true);
-    expect(new SharedWorkerAgent().canBlock).toBe(true);
-    expect(new ServiceWorkerAgent().canBlock).toBe(false);
-    expect(new WorkletAgent().canBlock).toBe(false);
+    expect(new DedicatedWorkerAgent(createManualEventLoop()).canBlock).toBe(true);
+    expect(new SharedWorkerAgent(createManualEventLoop()).canBlock).toBe(true);
+    expect(new ServiceWorkerAgent(createManualEventLoop()).canBlock).toBe(false);
+    expect(new WorkletAgent(createManualEventLoop()).canBlock).toBe(false);
   });
 
   it('reserves each agent\'s single global scope association', () => {
-    expect(new DedicatedWorkerAgent().globalScope).toBeUndefined();
-    expect(new SharedWorkerAgent().globalScope).toBeUndefined();
-    expect(new ServiceWorkerAgent().globalScope).toBeUndefined();
-    expect(new WorkletAgent().globalScope).toBeUndefined();
+    expect(new DedicatedWorkerAgent(createManualEventLoop()).globalScope).toBeUndefined();
+    expect(new SharedWorkerAgent(createManualEventLoop()).globalScope).toBeUndefined();
+    expect(new ServiceWorkerAgent(createManualEventLoop()).globalScope).toBeUndefined();
+    expect(new WorkletAgent(createManualEventLoop()).globalScope).toBeUndefined();
   });
 });
 
 describe('Agent', () => {
   it('has a unique signifier and event loop', () => {
-    const first = new WindowAgent();
-    const second = new WindowAgent();
+    const first = new WindowAgent(createManualEventLoop());
+    const second = new WindowAgent(createManualEventLoop());
 
     expect(first.signifier).not.toBe(second.signifier);
     expect(first.eventLoop).not.toBe(second.eventLoop);
@@ -51,25 +48,33 @@ describe('Agent', () => {
 });
 
 describe('obtainSimilarOriginWindowAgent', () => {
-  it('starts each host-backed agent when the agent is created', () => {
-    const eventLoopOptions = {
-      createMicrotaskQueue: vi.fn(createMicrotaskQueue),
-      requestEventLoopTurn: vi.fn(),
-      unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-    };
-    const userAgent = new UserAgent(eventLoopOptions);
-    expect(eventLoopOptions.createMicrotaskQueue).toHaveBeenCalledOnce();
+  it('runs Window and sandbox tasks with automatic host scheduling', async () => {
+    const userAgent = new UserAgent();
+    const group = userAgent.createBrowsingContextGroup();
+    const origin = createTupleOrigin('https', createHost('example.com'));
+    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+
+    for (const loop of [agent.eventLoop, userAgent.sandbox.responsibleEventLoop]) {
+      const completed = Promise.withResolvers<void>();
+      const task = vi.fn(() => { completed.resolve(); });
+      loop.queueTask(networkingTaskSource, null, task);
+      expect(task).not.toHaveBeenCalled();
+      await completed.promise;
+      expect(task).toHaveBeenCalledOnce();
+    }
+  });
+
+  it('creates one Window Agent per cluster with a separate event loop', () => {
+    const userAgent = new UserAgent();
+    const createAgent = vi.spyOn(userAgent, 'createWindowAgent');
     const group = userAgent.createBrowsingContextGroup();
     const origin = createTupleOrigin('https', createHost('example.com'));
 
     const first = obtainSimilarOriginWindowAgent(origin, group, false);
     const second = obtainSimilarOriginWindowAgent(origin, group, false);
-
-    expect(first.eventLoop.started).toBe(true);
     expect(first.eventLoop).not.toBe(userAgent.sandbox.responsibleEventLoop);
     expect(second).toBe(first);
-    expect(eventLoopOptions.createMicrotaskQueue).toHaveBeenCalledTimes(2);
-    expect(eventLoopOptions.requestEventLoopTurn).not.toHaveBeenCalled();
+    expect(createAgent).toHaveBeenCalledOnce();
   });
 
   it('creates a site-keyed cluster by default', () => {
@@ -196,7 +201,7 @@ describe('obtainSimilarOriginWindowAgent', () => {
 
 describe('Realm agent', () => {
   it('retains the agent in which it was created', () => {
-    const agent = new WindowAgent();
+    const agent = new WindowAgent(createManualEventLoop());
     const realm = new Realm({ agent });
 
     expect(realm.agent).toBe(agent);
@@ -217,8 +222,8 @@ describe('Realm agent', () => {
   itPassesWith('explicitQueues')(
     'shares one explicit queue between its realms and isolates other agents',
     () => {
-      const firstAgent = new WindowAgent(createEventLoopOptions());
-      const secondAgent = new WindowAgent(createEventLoopOptions());
+      const firstAgent = new WindowAgent(createManualEventLoop());
+      const secondAgent = new WindowAgent(createManualEventLoop());
       const firstRealm = new Realm({ agent: firstAgent });
       const secondRealm = new Realm({ agent: firstAgent });
       const isolatedRealm = new Realm({ agent: secondAgent });
@@ -253,16 +258,8 @@ describe('Realm agent', () => {
 
 class TestAgent extends Agent {
   constructor() {
-    super(false);
+    super(false, createManualEventLoop());
   }
-}
-
-function createEventLoopOptions() {
-  return {
-    createMicrotaskQueue,
-    requestEventLoopTurn: () => {},
-    unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-  };
 }
 
 function createTupleOrigin(

@@ -8,10 +8,8 @@ import type { FetchBody, FetchHeaders } from '../../../fetch/index';
 import type { ReadableStreamDefaultReaderImpl } from '../../../streams/index';
 import { InternalError } from '../../../infra/internal-error';
 import type { InternalPromise } from '../../../infra/promises';
-import type { DocumentImpl } from '../../dom/nodes/document';
-import type { ElementImpl } from '../../dom/nodes/element';
-import type { EventLoop } from '../../scripting/event-loop';
-import { networkingTaskSource } from '../../scripting/tasks';
+import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+import { type EventLoop, networkingTaskSource } from '../../scripting/index';
 import {
   HTMLTreeAdapter, type HTMLTreeAdapterMap,
 } from './tree-adapter';

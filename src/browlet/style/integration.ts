@@ -1,5 +1,4 @@
-import type { ElementImpl } from '../dom/nodes/element';
-import type { NodeImpl } from '../dom/nodes/node';
+import type { ElementImpl, NodeImpl } from '../dom/nodes/index';
 import {
   CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
   type StyleletEnvironment,

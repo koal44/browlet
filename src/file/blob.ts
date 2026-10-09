@@ -1,7 +1,7 @@
 import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 import type { InternalPromise } from '../infra/promises';
 import { lineEndingPattern } from '../infra/patterns';
-import { type JSEnvironment, getBufferSourceCopy } from '../js-engine/index';
+import { getBufferSourceCopy } from '../js-engine/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
@@ -10,6 +10,7 @@ import {
   DOMExceptionImpl, DOMExceptionNames, type BufferSource, type SerialSteps,
 } from '../web-idl/index';
 import { BlobData, type BlobSnapshotState } from './blob-data';
+import type { FileEnvironment } from './environment';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -42,14 +43,14 @@ import { BlobData, type BlobSnapshotState } from './blob-data';
  */
 export class BlobImpl {
   #data: BlobData;
-  #env: JSEnvironment;
+  #env: FileEnvironment;
   #snapshotState: BlobSnapshotState;
   #type: string;
 
   constructor(
     blobParts: Iterable<BlobPart> = [],
     options: BlobPropertyBag = {},
-    env: JSEnvironment,
+    env: FileEnvironment,
   ) {
     this.#env = env;
     this.#data = this.#processParts(blobParts, options);
@@ -120,8 +121,6 @@ export class BlobImpl {
     return result.promise;
   }
 
-  // -- Internal operations ----------------------------------------------
-
   get data(): BlobData {
     return this.#data;
   }
@@ -130,7 +129,7 @@ export class BlobImpl {
     data: BlobData,
     type: string,
     snapshotState: BlobSnapshotState,
-    env: JSEnvironment,
+    env: FileEnvironment,
   ): BlobImpl {
     const blob = new BlobImpl([], {}, env);
     blob.#data = data;
@@ -233,7 +232,7 @@ export type BlobSerializedFields = {
 /** File API §3.1, convert line endings to native. */
 export function convertLineEndingsToNative(
   value: string,
-  env: JSEnvironment,
+  env: FileEnvironment,
 ): string {
   return value.replace(lineEndingPattern, env.exec.nativeLineEnding);
 }
@@ -281,7 +280,7 @@ export const blobPartIDL = defineTypedef({
   ),
 });
 
-export const blobIDL = defineInterface<JSEnvironment>({
+export const blobIDL = defineInterface<FileEnvironment>({
   name: 'Blob',
   exposed: ['Window', 'Worker'],
   ...xattr('Serializable'),

@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
-import { createMicrotaskQueue } from '../../../src/js-engine/index';
+import { createMicrotaskQueue, type JSMicrotaskQueue } from '../../../src/js-engine/index';
+import { createManualEventLoop } from '../../support/browlet-agent';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
-import { createBoundExecution, registerRealm } from '../../../src/browlet/bindings';
+import { createBrowletExecution, browletBindingWorld } from '../../../src/browlet/bindings';
+import { UserAgent } from '../../../src/browlet/user-agent';
 
 import { createOpaqueOrigin, type Origin } from
   '../../../src/url/origin';
@@ -19,22 +21,19 @@ import { PolicyContainer } from '../../../src/browlet/browsing/policy/container'
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
-import { UserAgent } from '../../../src/browlet/user-agent';
 import { BrowletEnvironment, EnvironmentRecord } from
   '../../../src/browlet/scripting/environment';
 import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/scripting/global-scope';
-import type { EventLoopOptions, Task } from
+import type { Task } from
   '../../../src/browlet/scripting/event-loop';
-import {
-  Moment, monotonicClock, UnsafeMoment,
-} from '../../../src/browlet/performance/clock';
+import { Moment, monotonicClock } from '../../../src/browlet/timing/clock';
 import {
   createRealm,
 } from '../../../src/browlet/scripting/realm';
 
 describe('HTML callback and script-entry lifecycle', () => {
   it('attaches the environment to its realm during construction', () => {
-    const agent = new TestAgent(createEventLoopOptions());
+    const agent = new TestAgent(createTestMicrotaskQueue());
     const { realm, env, context } = createTestRealm(agent, 'attachment');
 
     expect(realm.hostDefined).toBe(env);
@@ -45,8 +44,7 @@ describe('HTML callback and script-entry lifecycle', () => {
   });
 
   it('uses the non-Window environment timer owner for AbortSignal.timeout', () => {
-    const options = createEventLoopOptions();
-    const agent = new TestAgent(options);
+    const agent = new TestAgent(createTestMicrotaskQueue());
     const { realm, env, context } = createTestRealm(agent, 'abort-timeout');
     context.install(realm.globalObject);
     const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
@@ -58,15 +56,14 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(schedule).toHaveBeenCalledWith('AbortSignal-timeout', 10, expect.any(Function));
     expect(realm.evaluate('signal.aborted', 'before-timeout.js')).toBe(false);
     schedule.mock.calls[0]![2]();
-    expect(agent.eventLoop.runTaskTurn(options)).toBe(true);
+    expect(agent.eventLoop.runTaskTurn()).toBe(true);
     expect(realm.evaluate('[signal.aborted, signal.reason.name]', 'after-timeout.js'))
       .toEqual([true, 'TimeoutError']);
   });
 
   itPassesWith('hostHooks')('uses the non-Window environment timer owner for engine timeouts', () => {
     installHostHooks();
-    const options = { ...createEventLoopOptions(), createMicrotaskQueue };
-    const agent = new TestAgent(options);
+    const agent = new TestAgent(createMicrotaskQueue());
     const { realm, env } = createTestRealm(agent, 'engine-timeout');
     const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
     const schedule = vi.spyOn(timers, 'runStepsAfterTimeout')
@@ -80,16 +77,13 @@ describe('HTML callback and script-entry lifecycle', () => {
     // The engine supplies the remaining deadline, after any setup time has elapsed.
     expect(schedule).toHaveBeenCalledWith('JavaScript', expect.any(Number), expect.any(Function));
     schedule.mock.calls[0]![2]();
-    expect(agent.eventLoop.runTaskTurn(options)).toBe(true);
+    expect(agent.eventLoop.runTaskTurn()).toBe(true);
     expect(realm.evaluate('result', 'after-timeout.js')).toBe('timed-out');
   });
 
   itPassesWith('hostHooks')('retains each Promise registration incumbent independently of the callback realm', () => {
     installHostHooks();
-    const agent = new TestAgent({
-      ...createEventLoopOptions(),
-      createMicrotaskQueue,
-    });
+    const agent = new TestAgent(createMicrotaskQueue());
     const first = createTestRealm(agent, 'first-registration');
     const second = createTestRealm(agent, 'second-registration');
     const callbackRealm = createTestRealm(agent, 'callback');
@@ -126,7 +120,7 @@ describe('HTML callback and script-entry lifecycle', () => {
 
   it('retains the stored incumbent for a bound platform callback', () => {
     const checkpoint = vi.fn();
-    const agent = new TestAgent(createEventLoopOptions(checkpoint));
+    const agent = new TestAgent(createTestMicrotaskQueue(checkpoint));
     const callbackRealm = createTestRealm(agent, 'callback');
     const incumbentRealm = createTestRealm(agent, 'incumbent');
     const assembly = new DefinitionAssembly([defineCallbackFunction({
@@ -189,11 +183,11 @@ describe('HTML callback and script-entry lifecycle', () => {
 
   it('keeps backup incumbent stacks independent per event loop', () => {
     const first = createTestRealm(
-      new TestAgent(createEventLoopOptions()),
+      new TestAgent(createTestMicrotaskQueue()),
       'first',
     );
     const second = createTestRealm(
-      new TestAgent(createEventLoopOptions()),
+      new TestAgent(createTestMicrotaskQueue()),
       'second',
     );
     const firstLoop = first.realm.agent.eventLoop;
@@ -217,7 +211,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       reenter = undefined;
       steps?.();
     });
-    const agent = new TestAgent(createEventLoopOptions(checkpoint));
+    const agent = new TestAgent(createTestMicrotaskQueue(checkpoint));
     const entry = createTestRealm(agent, 'reentrant');
     const assembly = new DefinitionAssembly([defineCallbackFunction({
       arguments: [],
@@ -251,8 +245,9 @@ describe('HTML callback and script-entry lifecycle', () => {
 });
 
 class TestAgent extends Agent {
-  constructor(options: EventLoopOptions) {
-    super(false, options);
+  constructor(microtaskQueue: JSMicrotaskQueue) {
+    super(false, createManualEventLoop());
+    this.eventLoop.microtaskQueue = microtaskQueue;
   }
 }
 
@@ -314,22 +309,18 @@ function createTestRealm(
     topLevelCreationURL: null,
     topLevelOrigin: null,
   });
-  const context = registerRealm(realm, (binding) => new TestEnvironment(realm, record, createBoundExecution(binding)));
+  const context = browletBindingWorld.register(realm, (binding) => new TestEnvironment(realm, record, createBrowletExecution(binding)));
   const env = realm.env;
   return { realm, env, context };
 }
 
-function createEventLoopOptions(
+function createTestMicrotaskQueue(
   performMicrotaskCheckpoint: () => void = () => {},
-): EventLoopOptions {
+): JSMicrotaskQueue {
   return {
-    createMicrotaskQueue: () => ({
-      kind: 'ambient',
-      enqueueMicrotask: (steps) => { queueMicrotask(steps); },
-      performMicrotaskCheckpoint,
-    }),
-    requestEventLoopTurn: () => {},
-    unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
+    kind: 'ambient',
+    enqueueMicrotask: (steps) => { queueMicrotask(steps); },
+    performMicrotaskCheckpoint,
   };
 }
 

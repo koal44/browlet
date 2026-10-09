@@ -1,13 +1,9 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
 import { Stamper } from '../../../infra/stamper';
-import type { AttrImpl } from '../../dom/nodes/attribute';
-import type { CommentImpl } from '../../dom/nodes/comment';
-import { DocumentMode, type DocumentImpl } from '../../dom/nodes/document';
-import type { DocumentTypeImpl } from '../../dom/nodes/document-type';
-import type { DocumentFragmentImpl } from '../../dom/nodes/document-fragment';
-import type { ElementImpl } from '../../dom/nodes/element';
-import type { TextImpl } from '../../dom/nodes/text';
-import type { NodeImpl } from '../../dom/nodes/node';
+import {
+  type AttrImpl, type CommentImpl, DocumentMode, type DocumentImpl, type DocumentTypeImpl,
+  type DocumentFragmentImpl, type ElementImpl, type TextImpl, type NodeImpl,
+} from '../../dom/nodes/index';
 import { InternalError } from '../../../infra/internal-error';
 
 /** Connects parse5 tree construction directly to Browlet node implementations. */

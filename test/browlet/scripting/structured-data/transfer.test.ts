@@ -1,3 +1,4 @@
+import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 
 import {
@@ -7,7 +8,7 @@ import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
-import { Realm } from '../../../../src/browlet/scripting/realm';
+import type { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
@@ -209,8 +210,8 @@ describe('HTML structured transfer', () => {
       },
     });
     const bindings = new BindingWorld<ScriptingEnvironment>([transferBoxIDL]);
-    const sourceRealm = new Realm({ globalNames: ['TransferTest'] });
-    const targetRealm = new Realm({ globalNames: ['TransferTest'] });
+    const sourceRealm = createManualRealm({ globalNames: ['TransferTest'] });
+    const targetRealm = createManualRealm({ globalNames: ['TransferTest'] });
     const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
     const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
     const original = source.createPlatformRecord(transferBoxIDL.name)!;
@@ -260,7 +261,7 @@ describe('HTML structured transfer', () => {
       .toBe('transferred');
     expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
-    const hiddenRealm = new Realm();
+    const hiddenRealm = createManualRealm();
     const hiddenTarget = bindings.register(hiddenRealm, (ctx) => ({ realm: ctx.realm }));
     const hiddenOriginal = source.createPlatformRecord(transferBoxIDL.name)!;
     const hiddenSerialized = structuredSerializeWithTransfer(
@@ -282,8 +283,8 @@ function createContexts(): {
   targetRealm: Realm;
 } {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
-  const sourceRealm = new Realm();
-  const targetRealm = new Realm();
+  const sourceRealm = createManualRealm();
+  const targetRealm = createManualRealm();
   const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
   const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
   return {

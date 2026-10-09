@@ -6,7 +6,7 @@ import {
   hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isProxyObject,
 } from '../../js-engine/index';
 import { idlType } from '../../web-idl/index';
-import type { WindowRealm } from '../scripting/realm';
+import type { WindowRealm } from '../scripting/index';
 
 /** One page execution context and its outstanding automation calls from Node. */
 export class PageEvaluation {

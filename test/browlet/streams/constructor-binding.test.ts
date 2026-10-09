@@ -3,10 +3,9 @@ import { createTestDocument } from '../../support/dom';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { WindowProxy } from '../../../src/browlet/platform';
-import {
-  getRelevantRealm, setAssociatedWindow,
-} from '../../../src/browlet/bindings';
-import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
+
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import type { Window } from '../../../src/browlet/platform';
@@ -135,6 +134,6 @@ function createRelatedWindow(first: Window): WindowProxy {
   const document = createTestDocument(relatedEnv);
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
-  setAssociatedWindow(proxy, window);
+  proxy.setAssociatedWindow(window.env.realm.globalObject);
   return proxy.platform;
 }

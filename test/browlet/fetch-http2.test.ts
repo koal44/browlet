@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { constants, createSecureServer, type Http2SecureServer } from 'node:http2';
 import { brotliCompressSync, gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it } from 'vitest';
-import { getBindingContext, getRelevantRealm, project, unwrap } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm, project, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';

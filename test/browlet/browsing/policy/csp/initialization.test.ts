@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { NavigationParams } from '../../../../../src/browlet/browsing/navigation/params';
-import { createAndInitializeDocument } from '../../../../../src/browlet/browsing/document-lifecycle';
+import { createAndInitializeDocument } from '../../../../../src/browlet/browsing/navigation/document-lifecycle';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { FetchResponse } from '../../../../../src/fetch/response';
 import { createOpaqueOrigin } from '../../../../../src/url/origin';

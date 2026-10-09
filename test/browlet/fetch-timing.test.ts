@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Clock } from '../../src/browlet/performance/clock';
+import { Clock } from '../../src/browlet/timing/clock';
 import { ConnectionTimingInfo } from '../../src/fetch/timing';
 import { coarsenTime } from '../../src/infra/time';
 

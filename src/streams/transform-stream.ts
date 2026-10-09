@@ -1,5 +1,5 @@
-import type { JSEnvironment } from '../js-engine/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
+import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, invokeWith,
@@ -13,6 +13,7 @@ import {
 import { ReadableStreamImpl, ReadableStreamDefaultControllerImpl } from './readable-stream';
 import { WritableStreamImpl } from './writable-stream';
 import { InternalError } from '../infra/internal-error';
+import type { StreamsEnvironment } from './environment';
 
 // =============================================================================
 // TransformStream
@@ -34,7 +35,7 @@ export class TransformStreamImpl {
     transformer: TransformerRecord | null = {},
     writableStrategy: QueuingStrategyRecord = {},
     readableStrategy: QueuingStrategyRecord = {},
-    public env: JSEnvironment,
+    public env: StreamsEnvironment,
   ) {
     if (transformer === null) return;
 
@@ -67,7 +68,7 @@ export class TransformStreamImpl {
   }
 
   /** Streams §9.3.1, creating an identity TransformStream. */
-  static createIdentity(env: JSEnvironment): TransformStreamImpl {
+  static createIdentity(env: StreamsEnvironment): TransformStreamImpl {
     const stream = new TransformStreamImpl(null, {}, {}, env);
     stream.setUp((chunk) => stream.enqueue(chunk));
     return stream;
@@ -314,7 +315,7 @@ export type TransformerRecord = {
   writableType?: unknown;
 };
 
-export const transformStreamIDL = defineInterface<JSEnvironment>({
+export const transformStreamIDL = defineInterface<StreamsEnvironment>({
   name: 'TransformStream',
   exposed: '*',
   ...xattr('Transferable'),
@@ -551,8 +552,6 @@ export class GenericTransformStreamMixin {
     return this.#transform.writable;
   }
 
-  // -- Internal methods -------------------------------------------------
-
   getAssociatedTransform(): TransformStreamImpl {
     return this.#transform;
   }
@@ -590,7 +589,7 @@ function requireStateMember<Value>(
 
 /** Streams §9.5, create a proxy for a readable stream. */
 export function createReadableStreamProxy(
-  stream: ReadableStreamImpl, env: JSEnvironment,
+  stream: ReadableStreamImpl, env: StreamsEnvironment,
 ): ReadableStreamImpl {
   return stream.pipeThroughTransform(TransformStreamImpl.createIdentity(env));
 }

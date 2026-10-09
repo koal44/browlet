@@ -1,6 +1,6 @@
-import type { JSMicrotaskQueue } from '../../js-engine/index';
-import type { DocumentImpl } from '../dom/nodes/document';
-import type { UnsafeMoment } from '../performance/clock';
+import { createMicrotaskQueue } from '../../js-engine/index';
+import type { DocumentImpl } from '../dom/nodes/index';
+import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
 import type { BrowletEnvironment } from './environment';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
@@ -10,6 +10,8 @@ import type { TaskCreationOptions } from '../../infra/execution';
 /** Runs an agent's HTML tasks and coordinates its microtask checkpoints. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#event-loops
 export class EventLoop {
+  /** Engine queue shared by this Agent's realms, using the selected backend. */
+  microtaskQueue = createMicrotaskQueue();
   // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
   #backupIncumbentEnvironmentStack: BrowletEnvironment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
@@ -18,29 +20,19 @@ export class EventLoop {
   /** Most recent rendering opportunity reported by the host. */
   lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
-  #schedulingOptions: EventLoopOptions | null = null;
+  #init: EventLoopInit;
   #turnRequested = false;
   #taskQueues = new Set<Set<Task>>();
   #taskQueueBySource = new Map<TaskSource, Set<Task>>();
 
-  constructor(public microtaskQueue: JSMicrotaskQueue) {}
+  /** Retain host scheduling and accounting dependencies for the loop's lifetime. */
+  constructor(init: EventLoopInit) {
+    this.#init = init;
+  }
 
   /** Task executing on this loop, or null outside task execution. */
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
-  }
-
-  get started(): boolean {
-    return this.#schedulingOptions !== null;
-  }
-
-  start(options: EventLoopOptions): void {
-    if (this.#schedulingOptions !== null) {
-      throw new InternalError('An event loop scheduler is already running');
-    }
-
-    this.#schedulingOptions = options;
-    this.#requestTurnIfNeeded();
   }
 
   hasRunnableTasks(): boolean {
@@ -51,7 +43,8 @@ export class EventLoop {
 
   /** Run one eligible task and its checkpoint; return false when none is runnable. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#event-loop-processing-model
-  runTaskTurn(options: EventLoopOptions): boolean {
+  runTaskTurn(): boolean {
+    const init = this.#init;
     if (this.#runningTaskTurn || this.#currentlyRunningTask !== null) {
       throw new InternalError('An event loop cannot run a task reentrantly');
     }
@@ -63,7 +56,7 @@ export class EventLoop {
     if (runnableTaskQueues.length === 0) return false;
 
     const selectedTaskQueueView = (
-      options.selectTaskQueue ?? selectFirstTaskQueue
+      init.selectTaskQueue ?? selectFirstTaskQueue
     )(
       runnableTaskQueues,
     );
@@ -74,7 +67,7 @@ export class EventLoop {
       throw new InternalError('Task queue selector returned an unavailable queue');
     }
 
-    const taskStartTime = options.unsafeSharedCurrentTime();
+    const taskStartTime = unsafeSharedCurrentTime();
     const oldestTask = findFirstRunnableTask(selectedTaskQueue);
     if (oldestTask === undefined) {
       throw new InternalError('Selected task queue has no runnable task');
@@ -82,7 +75,7 @@ export class EventLoop {
 
     selectedTaskQueue.delete(oldestTask);
     if (oldestTask.document !== null) {
-      options.taskTiming?.recordTaskStartTime(
+      init.taskTiming?.recordTaskStartTime(
         taskStartTime,
         oldestTask.document,
       );
@@ -101,14 +94,14 @@ export class EventLoop {
       finally { this.#runningTaskTurn = false; }
     }
 
-    const taskEndTime = options.unsafeSharedCurrentTime();
-    options.longTaskReporter?.reportLongTasks(
+    const taskEndTime = unsafeSharedCurrentTime();
+    init.longTaskReporter?.reportLongTasks(
       taskStartTime,
       taskEndTime,
       oldestTask,
     );
     if (oldestTask.document !== null) {
-      options.taskTiming?.recordTaskEndTime(
+      init.taskTiming?.recordTaskEndTime(
         taskEndTime,
         oldestTask.document,
       );
@@ -305,8 +298,6 @@ export class EventLoop {
     });
   }
 
-  // -- Internal ---------------------------------------------------------
-
   queueTask(
     source: TaskSource,
     document: DocumentImpl | null,
@@ -376,17 +367,15 @@ export class EventLoop {
   }
 
   #requestTurnIfNeeded(): void {
-    const options = this.#schedulingOptions;
     if (
-      options === null ||
       this.#turnRequested ||
       !this.hasRunnableTasks()
     ) return;
 
     this.#turnRequested = true;
-    options.requestEventLoopTurn(() => {
+    this.#init.requestTurn(() => {
       try {
-        this.runTaskTurn(options);
+        this.runTaskTurn();
       } finally {
         this.#turnRequested = false;
         this.#requestTurnIfNeeded();
@@ -395,16 +384,13 @@ export class EventLoop {
   }
 }
 
-export type EventLoopOptions = {
-  createMicrotaskQueue: () => JSMicrotaskQueue;
-  longTaskReporter?: LongTaskReporter;
-  requestEventLoopTurn: (
-    this: void,
-    steps: () => void,
-  ) => void;
+/** Fixed host and specification-subsystem dependencies supplied at construction. */
+export type EventLoopInit = {
+  /** Request a later host turn; never invoke the steps synchronously. */
+  requestTurn: (this: void, steps: () => void) => void;
   selectTaskQueue?: TaskQueueSelector;
+  longTaskReporter?: LongTaskReporter;
   taskTiming?: TaskTimingHooks;
-  unsafeSharedCurrentTime: (this: void) => UnsafeMoment;
 };
 
 export type TaskTimingHooks = {

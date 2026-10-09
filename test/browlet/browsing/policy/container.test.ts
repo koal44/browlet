@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PolicyContainer } from '../../../../src/browlet/browsing/policy/container';
 import { UserAgent } from '../../../../src/browlet/user-agent';
+import { PolicyContainer } from '../../../../src/browlet/browsing/policy/container';
 import { IntegrityPolicy } from '../../../../src/browlet/browsing/policy/integrity-policy';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../../../src/browlet/browsing/policy/csp/policy';

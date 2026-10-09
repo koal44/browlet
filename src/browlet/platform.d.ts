@@ -111,15 +111,6 @@ export interface CustomEventInit<T = any> {
   detail?: T;
 }
 
-export interface ProgressEventInit {
-  bubbles?: boolean;
-  cancelable?: boolean;
-  composed?: boolean;
-  lengthComputable?: boolean;
-  loaded?: number;
-  total?: number;
-}
-
 export interface EventListenerOptions {
   capture?: boolean;
 }
@@ -225,6 +216,15 @@ export interface FilePropertyBag {
   endings?: EndingType;
   type?: string;
   lastModified?: number;
+}
+
+export interface ProgressEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  lengthComputable?: boolean;
+  loaded?: number;
+  total?: number;
 }
 
 export interface RequestInit {
@@ -678,7 +678,6 @@ export interface Window extends EventTarget {
   Window: WindowConstructor;
   Event: EventConstructor;
   CustomEvent: CustomEventConstructor;
-  ProgressEvent: ProgressEventConstructor;
   EventTarget: EventTargetConstructor;
   AbortSignal: AbortSignalConstructor;
   AbortController: AbortControllerConstructor;
@@ -716,6 +715,7 @@ export interface Window extends EventTarget {
   FileList: FileListConstructor;
   FileReader: FileReaderConstructor;
   FormData: FormDataConstructor;
+  ProgressEvent: ProgressEventConstructor;
   URL: URLConstructor;
   webkitURL: URLConstructor;
   URLSearchParams: URLSearchParamsConstructor;
@@ -773,22 +773,6 @@ export interface CustomEventConstructor {
   readonly prototype: CustomEvent<any>;
   [Symbol.hasInstance](value: unknown): value is CustomEvent<any>;
   new <T = any>(type: string, eventInitDict?: CustomEventInit<T>): CustomEvent<T>;
-  readonly NONE: 0;
-  readonly CAPTURING_PHASE: 1;
-  readonly AT_TARGET: 2;
-  readonly BUBBLING_PHASE: 3;
-}
-
-export interface ProgressEvent extends Event {
-  readonly lengthComputable: boolean;
-  readonly loaded: number;
-  readonly total: number;
-}
-
-export interface ProgressEventConstructor {
-  readonly prototype: ProgressEvent;
-  [Symbol.hasInstance](value: unknown): value is ProgressEvent;
-  new (type: string, eventInitDict?: ProgressEventInit): ProgressEvent;
   readonly NONE: 0;
   readonly CAPTURING_PHASE: 1;
   readonly AT_TARGET: 2;
@@ -1345,6 +1329,22 @@ export interface FormDataConstructor {
   readonly prototype: FormData;
   [Symbol.hasInstance](value: unknown): value is FormData;
   new (form?: HTMLFormElement, submitter?: (HTMLElement | null)): FormData;
+}
+
+export interface ProgressEvent extends Event {
+  readonly lengthComputable: boolean;
+  readonly loaded: number;
+  readonly total: number;
+}
+
+export interface ProgressEventConstructor {
+  readonly prototype: ProgressEvent;
+  [Symbol.hasInstance](value: unknown): value is ProgressEvent;
+  new (type: string, eventInitDict?: ProgressEventInit): ProgressEvent;
+  readonly NONE: 0;
+  readonly CAPTURING_PHASE: 1;
+  readonly AT_TARGET: 2;
+  readonly BUBBLING_PHASE: 3;
 }
 
 export interface URL {

@@ -1,3 +1,4 @@
+import type { FileEnvironment } from '../file/index';
 import type { Definition } from '../web-idl/index';
 import {
   formDataEntryValueIDL, formDataIDL,
@@ -8,7 +9,7 @@ export {
   type FormDataEntry, type FormDataEntryValue,
 } from './form-data';
 
-export const xhrIDLDefinitions: Definition[] = [
+export const xhrIDLDefinitions: Definition<FileEnvironment>[] = [
   formDataEntryValueIDL,
   formDataIDL,
 ];

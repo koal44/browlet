@@ -1,4 +1,4 @@
-import type { BrowletEnvironment } from '../scripting/environment';
+import type { BrowletEnvironment } from '../scripting/index';
 import type { UserAgent } from '../user-agent';
 import type { ReportingEndpoint } from './endpoint';
 import type { ReportImpl } from './report';

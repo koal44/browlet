@@ -1,14 +1,12 @@
-import type { EventImpl } from '../events/event';
+import type { EventImpl } from '../events/index';
 import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
-import type { BrowletEnvironment } from '../../scripting/environment';
+import type { BrowletEnvironment } from '../../scripting/index';
 import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 import type { HTMLCollectionImpl } from './collections';
-import {
-  ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver,
-} from '../../style/integration';
+import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
 import {
   arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
   type PrimaryInterfaceDefinition,
@@ -181,8 +179,6 @@ export class ElementImpl extends NodeImpl {
   ): HTMLCollectionImpl {
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
-
-  // -- Internal ---------------------------------------------------------
 
   setAssignedSlot(slot: ElementImpl | null): void {
     this.#slottableMixin.assignedSlot = slot;

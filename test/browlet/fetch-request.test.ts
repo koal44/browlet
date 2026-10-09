@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
+import { UserAgent } from '../../src/browlet/user-agent';
 
-import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { HTMLBaseElement, Request, RequestInit, Window } from '../../src/browlet/platform';
 import { PolicyContainer } from '../../src/browlet/browsing/policy/container';
 import { CSPDirectives, CSPDirectiveValue } from '../../src/browlet/browsing/policy/csp/directives';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
-import { UserAgent } from '../../src/browlet/user-agent';
 import type { FetchBody } from '../../src/fetch/body';
 import { FetchController } from '../../src/fetch/controller';
 import { isOffline } from '../../src/fetch/environment';

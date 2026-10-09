@@ -1,4 +1,4 @@
-import type { ElementImpl } from '../../dom/nodes/element';
+import type { ElementImpl } from '../../dom/nodes/index';
 import type { Origin } from '../../../url/index';
 import { InternalError } from '../../../infra/internal-error';
 

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import { NavigationParams } from '../../../src/browlet/browsing/navigation/params';
 import { loadHTMLDocument } from '../../../src/browlet/loader/document-loader';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
@@ -18,7 +18,7 @@ describe('HTML response loading', () => {
   it('populates about:blank synchronously without a byte parser', () => {
     const browlet = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browlet.window).env;
-    const navigable = env.realm.getAssociatedDocument()!.getNodeNavigable()!;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
     const params = NavigationParams.fromSource(navigable, env.parseURL('about:blank').url!);
     const document = loadHTMLDocument(params, () => {});
     expect(document.documentElement?.localName).toBe('html');
@@ -40,7 +40,7 @@ describe('HTML response loading', () => {
     const browlet = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browlet.window).env;
     cleanup.push(() => env.userAgent.httpTransport.close());
-    const navigable = env.realm.getAssociatedDocument()!.getNodeNavigable()!;
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
     const request = new FetchRequest(env.parseURL(`${origin}/page`).url!, env, env.userAgent);
     request.mode = 'navigate';
     request.destination = 'document';

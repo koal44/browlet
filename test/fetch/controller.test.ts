@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { deserializeAbortReason, FetchController } from '../../src/fetch/controller';
+import { queueFetchTask } from '../../src/fetch/environment';
 import { FetchParams } from '../../src/fetch/params';
 import { FetchTimingInfo } from '../../src/fetch/timing';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
@@ -185,34 +186,34 @@ describe('Fetch networking task destinations', () => {
   it('passes a global and its algorithm to HTML without running it inline', () => {
     const global = {};
     const algorithm = vi.fn();
-    const queueGlobalTask = vi.fn();
+    const queueGlobalFetchTask = vi.fn();
     const env = createClientEnvironment();
-    env.exec.networking.queueGlobalTask = queueGlobalTask;
+    env.exec.queueGlobalFetchTask = queueGlobalFetchTask;
 
-    env.queueNetworkingTask(algorithm, global);
+    queueFetchTask(algorithm, global, env);
 
-    expect(queueGlobalTask).toHaveBeenCalledExactlyOnceWith(global, algorithm);
+    expect(queueGlobalFetchTask).toHaveBeenCalledExactlyOnceWith(global, algorithm);
     expect(algorithm).not.toHaveBeenCalled();
   });
 
   it('uses the parallel destination FIFO without calling the global-task capability', () => {
     const drains: (() => void)[] = [];
     const queue = new ParallelQueue((steps) => drains.push(steps));
-    const queueGlobalTask = vi.fn();
+    const queueGlobalFetchTask = vi.fn();
     const env = createClientEnvironment();
-    env.exec.networking.queueGlobalTask = queueGlobalTask;
+    env.exec.queueGlobalFetchTask = queueGlobalFetchTask;
     const order: number[] = [];
 
-    env.queueNetworkingTask(() => {
+    queueFetchTask(() => {
       order.push(1);
-      env.queueNetworkingTask(() => order.push(3), queue);
-    }, queue);
-    env.queueNetworkingTask(() => order.push(2), queue);
+      queueFetchTask(() => order.push(3), queue, env);
+    }, queue, env);
+    queueFetchTask(() => order.push(2), queue, env);
     expect(order).toEqual([]);
     expect(drains).toHaveLength(1);
     drains.shift()!();
 
     expect(order).toEqual([1, 2, 3]);
-    expect(queueGlobalTask).not.toHaveBeenCalled();
+    expect(queueGlobalFetchTask).not.toHaveBeenCalled();
   });
 });

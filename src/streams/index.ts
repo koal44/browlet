@@ -1,5 +1,5 @@
-import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
+import type { StreamsEnvironment } from './environment';
 import {
   byteLengthQueuingStrategyIDL, countQueuingStrategyIDL, queuingStrategyIDL,
   queuingStrategyInitIDL, queuingStrategySizeIDL,
@@ -27,6 +27,7 @@ import {
   writableStreamDefaultControllerIDL, writableStreamDefaultWriterIDL,
 } from './writable-stream';
 
+export type { StreamsEnvironment, StreamsExecution } from './environment';
 export {
   extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategyRecord,
 } from './queuing-strategy';
@@ -42,7 +43,7 @@ export {
   WritableStreamImpl, type UnderlyingSink, type WritableStreamDefaultControllerImpl,
 } from './writable-stream';
 
-export const streamsIDLDefinitions: Definition<JSEnvironment>[] = [
+export const streamsIDLDefinitions: Definition<StreamsEnvironment>[] = [
   queuingStrategySizeIDL,
   queuingStrategyIDL,
   queuingStrategyInitIDL,

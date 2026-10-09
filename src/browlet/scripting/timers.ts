@@ -1,6 +1,6 @@
 import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/execution';
-import type { DocumentImpl } from '../dom/nodes/document';
-import type { Duration } from '../performance/clock';
+import type { DocumentImpl } from '../dom/nodes/index';
+import type { Duration } from '../timing/index';
 import type { EventLoop, Task } from './event-loop';
 
 /** Timer state owned by a WindowOrWorkerGlobalScope mixin. */

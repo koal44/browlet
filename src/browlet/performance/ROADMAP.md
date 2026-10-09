@@ -1,22 +1,27 @@
 # Performance and timing roadmap
 
-High Resolution Time is an early browser foundation rather than a late
-observability feature.
+[Shared timing](../timing/README.md) supplies the early browser foundation.
+This folder owns the Performance API and its entry families, which consume
+that timing alongside browser events and lifecycle observations.
 
 ## Present
 
-- `clock.ts` owns the wall and monotonic clocks, unsafe and coarsened moments,
+- [`timing/clock.ts`](../timing/clock.ts) owns the wall and monotonic clocks,
+  unsafe and coarsened moments,
   clock-neutral durations, and their arithmetic. Unsafe moments coarsen into
   Moments; arithmetic returns new values and never moves an existing moment.
   High Resolution Time and Fetch's connection timestamps share the stateless
   `coarsenTime()` calculation in Infra. Fetch's transport already supplies
   connection observations; public timing entries remain deferred.
-- `high-resolution-time.ts` owns the estimated monotonic Unix epoch, relative
-  and shared time, and environment-settings time origins. It selects the
-  isolation capability passed to `UnsafeMoment.coarsen()`.
-- `performance.ts` owns the `DOMHighResTimeStamp` and `EpochTimeStamp`
-  declarations, `Performance`, and the `WindowOrWorkerGlobalScope`
-  `performance` contribution (High Resolution Time §§5–8).
+- [`timing/high-resolution-time.ts`](../timing/high-resolution-time.ts) owns the
+  estimated monotonic Unix epoch, relative and shared time, and environment-settings
+  time origins. It selects the
+  isolation capability passed to `UnsafeMoment.coarsen()`, and owns the
+  `DOMHighResTimeStamp` and `EpochTimeStamp` declarations through Web IDL Core.
+- `performance.ts` owns the `Performance` implementation and declaration.
+  The `WindowOrWorkerGlobalScope` mixin in
+  [`scripting/global-scope.ts`](../scripting/global-scope.ts) owns its retained
+  instance and the `performance` declaration contribution (High Resolution Time §§5–8).
 - Realm-created Events, navigation timing records, and Document load timing
   use this shared clock and the relevant Window's time origin. Each new Window
   realm gets one stable, replaceable `Performance` platform object.
@@ -74,10 +79,10 @@ and cross-origin-isolated capability. Base worklet settings deliberately expose
 no time origin. The shared timing contract must preserve that difference rather
 than assuming every realm has a Window-like `performance` surface.
 
-High Resolution Time is not an HTML-owned subsystem and does not belong in
-`html/`. It remains inside Browlet because its time origins and public
-`Performance` objects are properties of environment settings and Window/Worker
-globals. This differs from Fetch, whose records and algorithms form an
+The shared `timing/` foundation remains inside Browlet. It supplies environment
+time origins without importing DOM events or the public `Performance` object;
+`performance/` supplies the Window/Worker-facing API. This differs from Fetch,
+whose records and algorithms form an
 independently reusable platform project. If another package later needs a
 clock, pass the narrow monotonic-clock capability first; extract a host-neutral
 clock package only after a second real owner appears. Stylelet animation code,

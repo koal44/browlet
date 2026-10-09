@@ -3,18 +3,18 @@ import { describe, expect, it, vi } from 'vitest';
 import type { BrowletEnvironment } from '../../src/browlet/scripting/environment';
 import { Browlet } from '../../src/browlet/browlet';
 import type { Window } from '../../src/browlet/platform';
-import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import {
   FileReaderImpl, fileReaderIDL,
 } from '../../src/browlet/integration/file/file-reader';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import type { EventImpl } from '../../src/browlet/dom/events/event';
-import type { ProgressEventImpl } from '../../src/browlet/dom/events/progress-event';
-import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
+import type { ProgressEventImpl } from '../../src/browlet/integration/xhr/progress-event';
+import { monotonicClock, UnsafeMoment } from '../../src/browlet/timing/clock';
 import {
   BlobData, BlobImpl, BlobReadFailure, type BlobByteSource,
 } from '../../src/file/index';
-import { getBufferSourceCopy, queueNetworkingTask } from '../../src/js-engine/index';
+import { getBufferSourceCopy } from '../../src/js-engine/index';
 import { DOMExceptionImpl, serializeDefinition, type BindingContext } from '../../src/web-idl/index';
 import { InternalError } from '../../src/infra/internal-error';
 import { performTestMicrotaskCheckpoint } from './test-runtime';
@@ -384,7 +384,6 @@ describe('File API §6.2: FileReader reads', () => {
       .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
     const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
       realm: env.realm,
-      queueNetworkingTask,
       exec: {
         ...env.exec,
         queueTask(source, steps) {

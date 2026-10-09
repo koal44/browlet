@@ -3,20 +3,14 @@ import {
   emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
 } from '../../web-idl/index';
 import type { JSFunction } from '../../js-engine/index';
-import { PerformanceImpl } from '../performance/performance';
-import { ReportingEndpoint } from '../reporting/endpoint';
-import type { ReportImpl } from '../reporting/report';
-import { sendReports } from '../reporting/delivery';
-import type { ReportingObserverImpl } from '../reporting/observer';
+import { PerformanceImpl } from '../performance/index';
+import { ReportingEndpoint, type ReportImpl, sendReports, type ReportingObserverImpl } from '../reporting/index';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
 import type { InternalPromise } from '../../infra/promises';
-import type { DocumentImpl } from '../dom/nodes/document';
-import { nodeTimerHost } from '../integration/scripting';
+import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment } from './environment';
 import { GlobalTimers, type TimerAction } from './timers';
-import {
-  structuredSerializeOptionsIDL, type StructuredSerializeOptionsRecord,
-} from './structured-data/web-idl';
+import { structuredSerializeOptionsIDL, type StructuredSerializeOptionsRecord } from './structured-data/index';
 
 /** Owns timers, performance, reporting, and resource lifetimes for one global. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
@@ -53,7 +47,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.performance = new PerformanceImpl(env.timing, env);
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
-      host: nodeTimerHost,
+      host: env.userAgent.timerHost,
       queueTask: (steps, options) => env.exec.queueTask('timer', steps, options),
       time: env.timing,
     });
@@ -170,8 +164,6 @@ export class WindowOrWorkerGlobalScopeMixin {
       }
     }
   }
-
-  // -- Internal ---------------------------------------------------------
 
   setAssociatedDocument(document: DocumentImpl): void {
     this.timers.setAssociatedDocument(document);

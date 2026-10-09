@@ -1,6 +1,5 @@
-import { type BlobImpl, FileImpl } from '../file/index';
+import { type BlobImpl, FileImpl, type FileEnvironment } from '../file/index';
 import { toScalarValueString, type ScalarValueString } from '../infra/index';
-import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   reference, sequence, union,
@@ -38,13 +37,13 @@ export type FormDataEntry = [
  */
 export class FormDataImpl {
   #entryList: FormDataEntry[] = [];
-  #env: JSEnvironment;
+  #env: FileEnvironment;
 
   // SPEC_MISMATCH: FormData(form?, submitter = null) -> FormData
   constructor(
     form: object | undefined = undefined,
     _submitter: object | null = null,
-    env: JSEnvironment,
+    env: FileEnvironment,
   ) {
     this.#env = env;
 
@@ -110,10 +109,8 @@ export class FormDataImpl {
     }
   }
 
-  // -- Internal methods -------------------------------------------------
-
   /** Adopt parsed entries without running HTML's entry-creation algorithm again. */
-  static fromEntries(entries: FormDataEntry[], env: JSEnvironment): FormDataImpl {
+  static fromEntries(entries: FormDataEntry[], env: FileEnvironment): FormDataImpl {
     const formData = new FormDataImpl(undefined, null, env);
     formData.#entryList = entries;
     return formData;
@@ -145,7 +142,7 @@ export const formDataEntryValueIDL = defineTypedef({
   type: union(reference('File'), idlType.USVString),
 });
 
-export const formDataIDL = defineInterface({
+export const formDataIDL = defineInterface<FileEnvironment>({
   name: 'FormData',
   exposed: ['Window', 'Worker'],
   implementation: impl(FormDataImpl, {

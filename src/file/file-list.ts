@@ -30,8 +30,6 @@ export class FileListImpl {
     return this.#files[Symbol.iterator]();
   }
 
-  // -- Internal operations ----------------------------------------------
-
   add(file: FileImpl): void {
     this.#files.push(file);
   }

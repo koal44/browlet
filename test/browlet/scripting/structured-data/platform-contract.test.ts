@@ -1,6 +1,5 @@
+import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it, vi } from 'vitest';
-
-import { Realm } from '../../../../src/browlet/scripting/realm';
 import { structuredSerialize } from '../../../../src/browlet/scripting/structured-data/serialize';
 import { structuredSerializeWithTransfer } from '../../../../src/browlet/scripting/structured-data/transfer';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
@@ -19,8 +18,8 @@ import { validateDefinitions } from '../../../../src/web-idl/assembly/index';
 describe('HTML structured-data platform contracts', () => {
   it('runs DOMException steps across realms through exact interface metadata', () => {
     const domain = new BindingWorld([]);
-    const firstRealm = new Realm();
-    const secondRealm = new Realm();
+    const firstRealm = createManualRealm();
+    const secondRealm = createManualRealm();
     const first = domain.register(firstRealm, (ctx) => ({ realm: ctx.realm }));
     const second = domain.register(secondRealm, (ctx) => ({ realm: ctx.realm }));
     first.install(firstRealm.globalObject);
@@ -69,7 +68,7 @@ describe('HTML structured-data platform contracts', () => {
 
   it('gives derived serializable interfaces standalone inherited-state steps', () => {
     const domain = new BindingWorld([]);
-    const realm = new Realm();
+    const realm = createManualRealm();
     const registration = domain.register(realm, (ctx) => ({ realm: ctx.realm }));
     registration.install(realm.globalObject);
     const QuotaExceededError = Reflect.get(
@@ -161,7 +160,7 @@ describe('HTML structured-data platform contracts', () => {
       name: 'Child', inherits: 'Parent', exposed: '*',
       implementation: impl(ChildImpl), members: [],
     });
-    const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
+    const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register(createManualRealm(), (ctx) => ({ realm: ctx.realm }));
     const value = ctx.createPlatformRecord(child.name)!.platformObject;
 
     expect(() => structuredSerialize(value, ctx)).toThrow(expect.objectContaining({ name: 'DataCloneError' }));

@@ -1,12 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
+import { createManualUserAgent } from '../../support/browlet-agent';
 
-import {
-  getRelevantRealm,
-} from '../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import {
   TopLevelTraversable, type Navigable,
-} from '../../../src/browlet/browsing/navigable';
-import { type EventLoopOptions } from '../../../src/browlet/scripting/event-loop';
+} from '../../../src/browlet/browsing/navigation/navigable';
 import {
   type RenderingOpportunityHost, type RenderingUpdateHooks,
   type RenderingUpdatePhase, renderingUpdatePhases, WindowRenderingProducer,
@@ -17,8 +15,7 @@ import {
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import {
   monotonicClock, UnsafeMoment,
-} from '../../../src/browlet/performance/clock';
-import { UserAgent } from '../../../src/browlet/user-agent';
+} from '../../../src/browlet/timing/clock';
 
 describe('Window rendering producer', () => {
   it('queues an ordered rendering update on its event loop', () => {
@@ -55,7 +52,7 @@ describe('Window rendering producer', () => {
       renderingTaskSource,
     ).size).toBe(1);
 
-    agent.eventLoop.runTaskTurn(createEventLoopOptions());
+    agent.eventLoop.runTaskTurn();
 
     expect(phases).toEqual(renderingUpdatePhases);
     expect(contexts.every((context) =>
@@ -87,7 +84,7 @@ describe('Window rendering producer', () => {
     producer.start();
     manualHost.signal([navigable]);
     manualHost.setOpportunities([]);
-    agent.eventLoop.runTaskTurn(createEventLoopOptions());
+    agent.eventLoop.runTaskTurn();
 
     expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
   });
@@ -109,7 +106,7 @@ describe('Window rendering producer', () => {
 
     producer.start();
     manualHost.signal([navigable]);
-    agent.eventLoop.runTaskTurn(createEventLoopOptions());
+    agent.eventLoop.runTaskTurn();
 
     expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
   });
@@ -137,7 +134,7 @@ function createWindowFixture(): {
   navigable: Navigable;
 } {
   const navigable = TopLevelTraversable.create(
-    new UserAgent(),
+    createManualUserAgent(),
     null,
     '',
   );
@@ -183,18 +180,5 @@ function createManualRenderingHost(times: UnsafeMoment[]): {
       setOpportunities(navigables);
       notify?.(navigables);
     },
-  };
-}
-
-function createEventLoopOptions(): EventLoopOptions {
-  return {
-    createMicrotaskQueue: () => ({
-      kind: 'ambient',
-      enqueueMicrotask: (steps) => { queueMicrotask(steps); },
-      performMicrotaskCheckpoint() {},
-    }),
-    requestEventLoopTurn() {},
-    unsafeSharedCurrentTime: () =>
-      new UnsafeMoment(monotonicClock, 0),
   };
 }

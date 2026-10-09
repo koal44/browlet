@@ -1,14 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { UserAgent } from '../../../src/browlet/user-agent';
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { ReportingObserverImpl } from '../../../src/browlet/reporting/observer';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { navigationAndTraversalTaskSource, networkingTaskSource } from '../../../src/browlet/scripting/tasks';
-import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
-import { requestNodeEventLoopTurn } from '../../../src/browlet/integration/scripting';
-import { UserAgent } from '../../../src/browlet/user-agent';
 import { BlobImpl } from '../../../src/file/blob';
-import { createMicrotaskQueue } from '../../../src/js-engine/index';
 import { parseURL } from '../../../src/url/index';
 
 describe('Document destruction', () => {
@@ -57,11 +54,7 @@ describe('Document destruction', () => {
     global.queueReport('coep', 'default', corpBody);
     env.realm.queueGlobalTask(networkingTaskSource, networkingCallback);
 
-    eventLoop.runTaskTurn({
-      createMicrotaskQueue,
-      requestEventLoopTurn: requestNodeEventLoopTurn,
-      unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-    });
+    eventLoop.runTaskTurn();
 
     expect(document.browsingContext).toBeNull();
     expect(traversable.activeDocument).toBeNull();
@@ -91,7 +84,7 @@ describe('Document destruction', () => {
     document.workletGlobalScopes.push({ terminate });
 
     env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
-    env.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+    env.responsibleEventLoop.runTaskTurn();
 
     for (const operation of [disentangle, makeDisappear, cleanup, close, terminate]) {
       expect(operation).toHaveBeenCalledExactlyOnceWith();
@@ -113,7 +106,7 @@ describe('Document destruction', () => {
     expect(store.resolve(secondURL)).not.toBeNull();
 
     first.env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { first.document.destroy(); });
-    first.env.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+    first.env.responsibleEventLoop.runTaskTurn();
 
     expect(store.resolve(firstURL)).toBeNull();
     expect(store.resolve(secondURL)!.obtainObject(second.env)).toBe(blob);
@@ -127,7 +120,7 @@ describe('Document destruction', () => {
     document.duringLoadingNavigationID = 'navigation-1';
 
     env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.abort(); });
-    env.responsibleEventLoop.runTaskTurn(eventLoopOptions);
+    env.responsibleEventLoop.runTaskTurn();
 
     expect(abort).toHaveBeenCalledExactlyOnceWith();
     expect(notifyAborted).toHaveBeenCalledExactlyOnceWith(traversable, {
@@ -151,10 +144,4 @@ function createDocument(userAgent = new UserAgent()) {
 
 const corpBody = {
   type: 'corp', blockedURL: 'https://resource.test/', destination: 'script', disposition: 'enforce',
-};
-
-const eventLoopOptions = {
-  createMicrotaskQueue,
-  requestEventLoopTurn: requestNodeEventLoopTurn,
-  unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
 };

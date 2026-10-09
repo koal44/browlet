@@ -11,7 +11,7 @@ import {
   type HTTPTransportListener, type HTTPTransportRequest, type HTTPUploadSource, type NetworkPartitionKey,
 } from '../../../fetch/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../../url/index';
-import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
+import { unsafeSharedCurrentTime } from '../../timing/index';
 
 /** Node HTTP I/O owned by one UserAgent; Fetch keeps all browser processing. */
 export class NodeHTTPTransport implements HTTPTransport {

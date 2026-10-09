@@ -1,4 +1,4 @@
-import { isValidElementLocalName } from '../../dom/infra/name-validation';
+import { isValidElementLocalName } from '../../dom/infra/index';
 
 /** Recognize custom-element names, excluding names reserved by SVG and MathML. */
 // https://html.spec.whatwg.org/multipage/custom-elements.html#valid-custom-element-name

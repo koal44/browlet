@@ -1,18 +1,17 @@
 import type { URL } from 'node:url';
-import type { DocumentImpl } from '../../dom/nodes/document';
-import { ElementImpl } from '../../dom/nodes/element';
-import type { EventImpl } from '../../dom/events/event';
-import { EventTargetImpl } from '../../dom/events/event-target';
+import { type DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
   impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/index';
 import { LocationImpl } from './location';
 import type { WindowProxyHandle } from './window-proxy';
-import type { PerformanceImpl } from '../../performance/performance';
-import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../scripting/global-scope';
-import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/web-idl';
-import type { BrowletEnvironment } from '../../scripting/environment';
+import type { PerformanceImpl } from '../../performance/index';
+import type {
+  WindowOrWorkerGlobalScopeMixin, TimerHandler, TimerAction, WindowEnvironment,
+} from '../../scripting/index';
+import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 import type { InternalPromise } from '../../../infra/promises';
 import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
@@ -21,19 +20,58 @@ import { InternalError } from '../../../infra/internal-error';
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
 export class WindowImpl extends EventTargetImpl {
+  declare env: WindowEnvironment;
   /** Current associated document, attached by document construction. */
   #document: DocumentImpl | null = null;
   /** Event currently being invoked in this Window, restored after each listener. @deprecated */
   event: EventImpl | undefined = undefined;
-  #location: LocationImpl;
+  /** Stable Location object; Web IDL forwards author assignments to its href. */
+  readonly location: LocationImpl;
   /** Shared global facilities installed during environment composition. */
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 
-  /** Provisional CSSOM entry point until Stylelet's Window partial is bound. */
-  getComputedStyle = (
+  /** Create Window state before composition attaches its document and global facilities. */
+  constructor(url: URL, env: WindowEnvironment) {
+    super(env);
+    this.location = new LocationImpl(url);
+  }
+
+  /** Recognize a Window implementation by its private brand. */
+  // UNUSED
+  static is(value: unknown): value is WindowImpl {
+    return typeof value === 'object' && value !== null && #document in value;
+  }
+
+  /** Handle for this Window's browsing context, preserving proxy identity across navigation. */
+  get window(): WindowProxyHandle {
+    return this.getWindowProxy();
+  }
+
+  /** Alias of window; replacing the public self property does not change this handle. */
+  get self(): WindowProxyHandle {
+    return this.getWindowProxy();
+  }
+
+  /** Current document, available after document construction attaches it. */
+  get document(): DocumentImpl {
+    return this.getAssociatedDocument();
+  }
+
+  /** Whether this Window's environment is a secure context. */
+  get isSecureContext(): boolean {
+    return this.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
+  }
+
+  /** Performance object sharing this Window's environment and time origin. */
+  get performance(): PerformanceImpl {
+    return this.getWindowOrWorkerGlobalScopeMixin().performance;
+  }
+
+  /** Retrieve an element's computed style through the associated document's style engine. */
+  getComputedStyle(
     element: ElementImpl,
     pseudoElement?: string | null,
-  ): CSSStyleDeclarationImpl => {
+  ): CSSStyleDeclarationImpl {
     // PROVISIONAL: move this author operation onto Stylelet's Window
     // partial once CSSStyleDeclaration has a projected interface.
     if (pseudoElement !== null && pseudoElement !== undefined) {
@@ -41,85 +79,55 @@ export class WindowImpl extends EventTargetImpl {
     }
 
     return this.getAssociatedDocument().getCSSEngine().getComputedStyle(element);
-  };
-
-  constructor(url: URL, env: BrowletEnvironment) {
-    super(env);
-    this.#location = new LocationImpl(url);
   }
 
-  static is(value: unknown): value is WindowImpl {
-    return typeof value === 'object' && value !== null && #document in value;
-  }
-
-  get window(): WindowProxyHandle {
-    return this.getWindowProxy();
-  }
-
-  get self(): WindowProxyHandle {
-    return this.getWindowProxy();
-  }
-
-  get document(): DocumentImpl {
-    return this.getAssociatedDocument();
-  }
-
-  get location(): LocationImpl {
-    return this.#location;
-  }
-
-  set location(_href: string) {
-    throw new InternalError('Browlet navigation is not implemented');
-  }
-
-  get isSecureContext(): boolean {
-    return this.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
-  }
-
-  get performance(): PerformanceImpl {
-    return this.getWindowOrWorkerGlobalScopeMixin().performance;
-  }
-
+  /** Schedule a one-shot timer; Web IDL has already converted and defaulted the delay. */
   setTimeout(
     handler: TimerHandler,
-    timeout?: number,
-    ...args: unknown[]
+    timeout: number,
+    ...argumentsList: unknown[]
   ): number {
     return this.getWindowOrWorkerGlobalScopeMixin().setTimeout(
       this.#createTimerAction(handler),
-      timeout ?? 0,
-      args,
+      timeout,
+      argumentsList,
     );
   }
 
-  clearTimeout(id?: number): void {
-    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id ?? 0);
+  /** Cancel an active timeout or interval using its converted timer ID. */
+  clearTimeout(id: number): void {
+    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
   }
 
+  /** Schedule a repeating timer; Web IDL has already converted and defaulted the delay. */
   setInterval(
     handler: TimerHandler,
-    timeout?: number,
-    ...args: unknown[]
+    timeout: number,
+    ...argumentsList: unknown[]
   ): number {
     return this.getWindowOrWorkerGlobalScopeMixin().setInterval(
       this.#createTimerAction(handler),
-      timeout ?? 0,
-      args,
+      timeout,
+      argumentsList,
     );
   }
 
-  clearInterval(id?: number): void {
-    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id ?? 0);
+  /** Cancel an active interval or timeout using its converted timer ID. */
+  clearInterval(id: number): void {
+    this.getWindowOrWorkerGlobalScopeMixin().clearTimer(id);
   }
 
+  /** Queue a converted callback on this Window's event loop. */
   queueMicrotask(callback: VoidFunction): void {
     this.getWindowOrWorkerGlobalScopeMixin().queueMicrotask(callback);
   }
 
+  /** Fetch with this Window's environment and converted request arguments. */
   fetch(input: FetchRequestInfo, init: FetchRequestInit): InternalPromise<ResponseImpl> {
     return this.getWindowOrWorkerGlobalScopeMixin().fetch(input, init);
   }
 
+  /** Clone a value using this Window's execution facilities and transfer options. */
   structuredClone<T>(
     value: T,
     options?: StructuredSerializeOptionsRecord,
@@ -128,8 +136,7 @@ export class WindowImpl extends EventTargetImpl {
       .structuredClone(value, options) as T;
   }
 
-  // -- Internal methods -------------------------------------------------
-
+  /** Return the current associated document, throwing until it has been attached. */
   getAssociatedDocument(): DocumentImpl {
     if (!this.#document) {
       throw new InternalError('Window has no associated Document');
@@ -137,6 +144,7 @@ export class WindowImpl extends EventTargetImpl {
     return this.#document;
   }
 
+  /** Return the global-scope mixin installed during environment composition. */
   getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {
     // Composition creates the environment before the Window, then attaches
     // the global-scope mixin before exposing the Window.
@@ -146,6 +154,7 @@ export class WindowImpl extends EventTargetImpl {
     return this.#globalScopeMixin;
   }
 
+  /** Attach this Window's global-scope mixin exactly once during composition. */
   setWindowOrWorkerGlobalScopeMixin(
     mixin: WindowOrWorkerGlobalScopeMixin,
   ): void {
@@ -155,12 +164,14 @@ export class WindowImpl extends EventTargetImpl {
     this.#globalScopeMixin = mixin;
   }
 
+  /** Retrieve a supported named element, throwing if its ID is no longer present. */
   getNamedProperty(name: string): ElementImpl {
     const element = this.getAssociatedDocument().getElementById(name);
     if (!element) throw new InternalError(`Window named property ${name} disappeared`);
     return element;
   }
 
+  /** Collect element IDs in document order for the provisional named-property binding. */
   getSupportedPropertyNames(): ReadonlySet<string> {
     const names = new Set<string>();
     for (const element of this.getAssociatedDocument()
@@ -171,6 +182,7 @@ export class WindowImpl extends EventTargetImpl {
     return names;
   }
 
+  /** Return the stable proxy handle of the associated document's browsing context. */
   getWindowProxy(): WindowProxyHandle {
     const browsingContext = this.getAssociatedDocument().browsingContext;
     if (!browsingContext) {
@@ -179,6 +191,7 @@ export class WindowImpl extends EventTargetImpl {
     return browsingContext.windowProxy;
   }
 
+  /** Attach the current document and update document-dependent global facilities. */
   setAssociatedDocument(document: DocumentImpl): void {
     // The initial about:blank Document and its replacement can share this
     // Window. Each Document retains its relevant global when the Window's
@@ -190,21 +203,25 @@ export class WindowImpl extends EventTargetImpl {
     }
   }
 
+  /** Identify this event target as a Window for event-dispatch rules. */
   override isWindow(): boolean {
     return true;
   }
 
+  /** Use the associated document for legacy event target overrides. */
   override getLegacyTargetOverride(): DocumentImpl {
     return this.getAssociatedDocument();
   }
 
+  /** Apply the default-passive listener rule for Window targets. */
   protected override isDefaultPassiveTarget(): boolean {
     return true;
   }
 
   // -- Private ----------------------------------------------------------
 
-  #createTimerAction(handler: TimerHandler): (argumentsList: unknown[]) => void {
+  /** Bind a converted callback to this Window's proxy for later timer delivery. */
+  #createTimerAction(handler: TimerHandler): TimerAction {
     if (typeof handler === 'string') {
       return () => {
         throw new InternalError(

@@ -1,9 +1,9 @@
+import { createManualEventLoop } from '../../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { WindowImpl } from '../../../../src/browlet/browsing/window/window';
-import {
-  createDocument, createWindowEnvironment, getRelevantRealm,
-} from '../../../../src/browlet/bindings';
+import { createWindowEnvironment } from '../../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../../support/browlet-binding';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { EnvironmentRecord } from '../../../../src/browlet/scripting/environment';
 import { WindowRealm } from '../../../../src/browlet/scripting/realm';
@@ -194,7 +194,7 @@ describe('Secure Contexts: Window classification', () => {
     userAgent.trustworthyOrigins.length = 0;
 
     const env = createWindowEnvironment({
-      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv,
+      agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin, parent: null, reservedEnv,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
     const { window } = env;
@@ -244,7 +244,7 @@ describe('Secure Contexts: Web IDL exposure', () => {
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
     });
     const realm = new WindowRealm({
-      agent: new WindowAgent(), envRecord: record,
+      agent: new WindowAgent(createManualEventLoop()), envRecord: record,
     });
     const world = new BindingWorld([
       defineInterface({
@@ -267,7 +267,7 @@ describe('Secure Contexts: Web IDL exposure', () => {
     expect(Reflect.has(constructor.prototype, 'secureMember')).toBe(expected);
 
     const env = createWindowEnvironment({
-      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv: record,
+      agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin, parent: null, reservedEnv: record,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
     const installedTarget = env.realm.createOrdinaryObject(null);
@@ -293,11 +293,11 @@ function tupleOriginFor(input: string): TupleOrigin {
 function createWindow(userAgent: UserAgent, origin: Origin, parent: WindowImpl | null = null): WindowImpl {
   const creationURL = parseURL('about:blank').url!;
   const env = createWindowEnvironment({
-    agent: new WindowAgent(), userAgent, creationURL, origin, parent,
+    agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin, parent,
     topLevelCreationURL: creationURL, topLevelOrigin: origin,
   });
   const { window } = env;
-  const document = createDocument(env.realm);
+  const document = env.exec.createDocument();
   document.origin = origin;
   document.url = creationURL;
   window.setAssociatedDocument(document);

@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createDocument, getRelevantRealm, setAssociatedWindow } from '../../../src/browlet/bindings';
+
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { createManualUserAgent } from '../../support/browlet-agent';
 import { Browlet } from '../../../src/browlet/browlet';
-import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
-import { UserAgent } from '../../../src/browlet/user-agent';
+import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { FetchRequest } from '../../../src/fetch/request';
@@ -264,10 +264,10 @@ describe('ReportingObserver', () => {
     });
     const otherRealm = sibling.realm;
     const proxy = otherRealm.windowProxy;
-    const document = createDocument(otherRealm);
+    const document = otherRealm.env.exec.createDocument();
     document.browsingContext = new BrowsingContext(proxy);
     sibling.window.setAssociatedDocument(document);
-    setAssociatedWindow(proxy, sibling.window);
+    proxy.setAssociatedWindow(sibling.window.env.realm.globalObject);
     const otherWindow = otherRealm.globalObject as unknown as ReportingWindow;
     const callback = otherRealm.evaluate(`(function(reports, observer) {
       globalThis.delivered = { reports, observer, receiver: this };
@@ -354,9 +354,9 @@ describe('Reporting policy integration and user control', () => {
   });
 });
 
-// Real Window bindings and an unstarted HTML event loop let scheduling tests choose task turns.
+// Real Window bindings with task turns controlled by the fixture.
 function createWindow() {
-  const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
+  const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const eventLoop = realm.agent.eventLoop;
   return {
@@ -364,11 +364,7 @@ function createWindow() {
     window: realm.globalObject as unknown as ReportingWindow,
     env: realm.env,
     scope: realm.windowImplementation.getWindowOrWorkerGlobalScopeMixin(),
-    runTask: () => eventLoop.runTaskTurn({
-      createMicrotaskQueue: () => eventLoop.microtaskQueue,
-      requestEventLoopTurn: vi.fn(),
-      unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-    }),
+    runTask: () => eventLoop.runTaskTurn(),
   };
 }
 

@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getBindingContext, getRelevantRealm, project, unwrap } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm, project, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { NodeHTTPTransport } from '../../src/browlet/integration/network/node-transport';
 import { FetchBody } from '../../src/fetch/body';

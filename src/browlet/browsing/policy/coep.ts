@@ -1,6 +1,6 @@
 import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue } from '../../../fetch/index';
 import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/index';
-import { ReportBodyImpl } from '../../reporting/report';
+import { ReportBodyImpl } from '../../reporting/index';
 
 /** Cross-origin embedding requirements and their reporting endpoints. */
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy

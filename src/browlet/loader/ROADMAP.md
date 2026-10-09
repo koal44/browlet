@@ -98,7 +98,7 @@ globals, ports, exposure, or termination.
 
 Unloading, destroying, and aborting Documents are browsing-lifecycle
 algorithms even when they cancel loader work. The loader exposes cancellation
-and response/body completion; `browsing/document-lifecycle.ts` orders events,
+and response/body completion; `browsing/navigation/document-lifecycle.ts` orders events,
 realm cleanup, navigable detachment, and history state.
 
 Blink's `core/loader`, `platform/loader`, and `DocumentLoader` provide useful

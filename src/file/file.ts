@@ -1,5 +1,4 @@
 import { parseMIMEType } from '../mime/index';
-import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
@@ -10,6 +9,7 @@ import {
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
 import { InternalError } from '../infra/internal-error';
+import type { FileEnvironment } from './environment';
 
 /*
  * [Exposed=(Window,Worker), Serializable]
@@ -33,7 +33,7 @@ export class FileImpl extends BlobImpl {
     fileBits: Iterable<BlobPart> = [],
     fileName = '',
     options: FilePropertyBag = {},
-    env: JSEnvironment,
+    env: FileEnvironment,
   ) {
     super(fileBits, options, env);
     this.#name = fileName;
@@ -49,13 +49,11 @@ export class FileImpl extends BlobImpl {
     return Date.now();
   }
 
-  // -- Internal operations ----------------------------------------------
-
   /** File API §4, create a File from host-selected storage. */
   static fromHost(
     source: BlobByteSource,
     metadata: HostFileMetadata,
-    env: JSEnvironment,
+    env: FileEnvironment,
   ): FileImpl {
     const type = requireHostFileType(metadata.type);
     const file = new FileImpl(
@@ -157,7 +155,7 @@ export const filePropertyBagIDL = defineDictionary({
   ],
 });
 
-export const fileIDL = defineInterface<JSEnvironment>({
+export const fileIDL = defineInterface<FileEnvironment>({
   name: 'File',
   inherits: 'Blob',
   exposed: ['Window', 'Worker'],

@@ -1,13 +1,12 @@
 import { SandboxEnvironment, type BrowletEnvironment } from '../../src/browlet/scripting/environment';
 import { vi } from 'vitest';
 
-import { createBoundExecution, getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../src/browlet/browsing/navigable';
-import { monotonicClock, UnsafeMoment } from '../../src/browlet/performance/clock';
-import { Realm } from '../../src/browlet/scripting/realm';
+import { createBrowletExecution } from '../../src/browlet/bindings';
+import { createManualUserAgent, createManualRealm } from '../support/browlet-agent';
+import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
+import { TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';
 import { AgentCluster } from '../../src/browlet/scripting/agents';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
-import { UserAgent } from '../../src/browlet/user-agent';
 import { fetch, type FetchOptions } from '../../src/fetch/fetch';
 import type { FetchController } from '../../src/fetch/controller';
 import type { FetchEnvironment } from '../../src/fetch/environment';
@@ -54,8 +53,8 @@ export function nextFetchTaskError(env: JSEnvironment) {
   return failure.promise;
 }
 
-/** Create a Window for task inspection; the default UserAgent leaves its event loop unstarted. */
-export function createFetchWindow(userAgent = new UserAgent()) {
+/** Create a Window whose task delivery stays under fixture control. */
+export function createFetchWindow(userAgent = createManualUserAgent()) {
   const traversable = TopLevelTraversable.create(userAgent, null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const context = getBindingContext(realm);
@@ -71,19 +70,15 @@ export function createFetchWindow(userAgent = new UserAgent()) {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];
     },
     runTask() {
-      return eventLoop.runTaskTurn({
-        createMicrotaskQueue: () => eventLoop.microtaskQueue,
-        requestEventLoopTurn: vi.fn(),
-        unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-      });
+      return eventLoop.runTaskTurn();
     },
   };
 }
 
 export function createIsolatedFetchRealm() {
-  const realm = new Realm({ crossOriginIsolated: true });
+  const realm = createManualRealm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
-  const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) => new SandboxEnvironment(realm, createBoundExecution(context)));
+  const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) => new SandboxEnvironment(realm, createBrowletExecution(context)));
   registration.install(realm.globalObject);
   return createFetchRealmFixture(registration);
 }

@@ -106,8 +106,6 @@ export class TreeScope {
     styleSheet.clearAssociation();
   }
 
-  // Internal operations ----------------------------------------------------
-
   selectStyleSheetSet(name: string): void {
     this.#enableStyleSheetSet(name);
     this.#lastStyleSheetSetName = name;

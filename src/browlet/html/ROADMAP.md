@@ -26,7 +26,7 @@ there is no catch-all `html/infra` module.
 | §2.1.3 XML compatibility | `dom/` for namespace-aware trees; an eventual XML parser boundary, not the HTML parser, owns XML syntax |
 | §2.1.4 DOM trees | `dom/` mutation primitives plus HTML insertion, post-connection, removing, and moving hooks |
 | §2.1.5 scripting | `scripting/` and Web IDL; this subsection otherwise defines terminology rather than a new object |
-| §2.1.6 plugins | `html/elements/embedded/` plus a user-agent content-handler capability |
+| §2.1.6 plugins | `dom/nodes/html/embedded/` plus a user-agent content-handler capability |
 | §2.1.7 character encodings | `html/parser/encoding.ts` over the Encoding Standard |
 | §§2.1.8–2.1.9 conformance and dependencies | Test/documentation policy and project boundaries; no runtime module |
 | §2.1.10 extensibility | Neutral unknown-element handling in the parser/DOM and feature exposure in the host's Web IDL assembly |
@@ -55,8 +55,8 @@ must not become one oversized HTML Document module.
 | §3.1.6 render blocking | `loader/` and `style/`, with the blocking set stored by Document |
 | §3.1.7 DOM tree accessors | `dom/nodes/document.ts`, HTML element implementations, and live collection machinery |
 | §§3.2.1 and 3.2.4–3.2.5 semantics, definitions, and content models | Element metadata, conformance tests, and accessibility; most authoring requirements create no runtime algorithm |
-| §3.2.2 elements in the DOM | `html/elements/` over DOM Element, including unknown-element and namespace behavior |
-| §3.2.3 HTML element constructors | `ctor.ts`, `html/elements/`, custom-element construction stacks, and Web IDL |
+| §3.2.2 elements in the DOM | `dom/nodes/html/` over DOM Element, including unknown-element and namespace behavior |
+| §3.2.3 HTML element constructors | `ctor.ts`, `dom/nodes/html/`, custom-element construction stacks, and Web IDL |
 | §3.2.6 global attributes | `html/global-attributes.ts`, reflection, custom-element reactions, and Stylelet integration |
 | §3.2.7 `innerText` | DOM mutation plus style/layout-derived text collection; it must not be approximated by `textContent` |
 | §3.2.8 bidirectional requirements | Style/layout integration over Unicode bidirectional processing |
@@ -65,16 +65,16 @@ must not become one oversized HTML Document module.
 ## HTML section 4 ownership
 
 Section 4 defines every HTML element, but only a small subset is prerequisite
-to exercising Document loading and navigation. `html/elements/ROADMAP.md`
+to exercising Document loading and navigation. `dom/nodes/html/ROADMAP.md`
 records that early slice and the complete element-family inventory.
 
 | Section | Owner |
 | --- | --- |
-| §§4.1–4.2 document and metadata elements | `html/elements/document/` and `html/elements/metadata/`, with URL state in Document and loading in `loader/` |
-| §§4.3–4.7 semantic, grouping, text, links, and edits | `html/elements/sections/`, `grouping/`, and `text/`; hyperlink activation crosses into `browsing/navigation/` |
-| §4.8 embedded content | `html/elements/embedded/`; `iframe` delegates nested navigables to `browsing/`, while image and media resource work delegates to `loader/` |
-| §§4.9–4.11 tables, forms, and interactive elements | Corresponding `html/elements/` areas, with form infrastructure retained under `forms/` and focus/input under the future `interaction/` domain |
-| §4.12 scripting elements and canvas | `html/elements/scripting/` for script/template/slot; script execution belongs to `scripting/` and loading to `loader/`; canvas is a later graphics subsystem |
+| §§4.1–4.2 document and metadata elements | `dom/nodes/html/document/` and `dom/nodes/html/metadata/`, with URL state in Document and loading in `loader/` |
+| §§4.3–4.7 semantic, grouping, text, links, and edits | `dom/nodes/html/sections/`, `grouping/`, and `text/`; hyperlink activation crosses into `browsing/navigation/` |
+| §4.8 embedded content | `dom/nodes/html/embedded/`; `iframe` delegates nested navigables to `browsing/`, while image and media resource work delegates to `loader/` |
+| §§4.9–4.11 tables, forms, and interactive elements | Corresponding `dom/nodes/html/` areas, with form infrastructure retained under `forms/` and focus/input under the future `interaction/` domain |
+| §4.12 scripting elements and canvas | `dom/nodes/html/scripting/` for script/template/slot; script execution belongs to `scripting/` and loading to `loader/`; canvas is a later graphics subsystem |
 | §4.13 custom elements | `html/custom-elements/`, integrated with DOM mutations and Web IDL `[CEReactions]` |
 
 Element interfaces do not own the subsystems they expose. In particular,
@@ -149,8 +149,9 @@ initial Document lifecycle.
 
 - The HTML partial `Document` interface and its implemented members live with
   `dom/nodes/document.ts`; HTML does not define a second public Document class.
-- `web-idl.ts` assembles HTML element contributions without absorbing SVG or
-  MathML definitions.
+- HTML element implementations live under `dom/nodes/html/`. `web-idl.ts`
+  retains their declaration collection alongside the custom-element registry;
+  SVG and MathML retain their own collectors under `dom/nodes/`.
 
 ## Missing document-level contracts
 

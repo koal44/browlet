@@ -1,8 +1,8 @@
-import { populateWithHTMLHeadBody } from '../browsing/browsing-context';
-import { createAndInitializeDocument } from '../browsing/document-lifecycle';
-import type { NavigationParams } from '../browsing/navigation/params';
-import type { DocumentImpl } from '../dom/nodes/document';
-import { BrowletParser, type ScriptHandler } from '../html/parser/document-parser';
+import {
+  populateWithHTMLHeadBody, createAndInitializeDocument, type NavigationParams,
+} from '../browsing/navigation/index';
+import type { DocumentImpl } from '../dom/nodes/index';
+import { BrowletParser, type ScriptHandler } from '../html/parser/index';
 import type { InternalPromise } from '../../infra/promises';
 
 /** Create an HTML document and start consuming its navigation response. */

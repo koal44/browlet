@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { UserAgent } from '../../../../../src/browlet/user-agent';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { CSPDirectives, CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
-import { UserAgent } from '../../../../../src/browlet/user-agent';
 import type { Destination } from '../../../../../src/fetch/destination';
 import { FetchRequest } from '../../../../../src/fetch/request';
 import { FetchResponse } from '../../../../../src/fetch/response';

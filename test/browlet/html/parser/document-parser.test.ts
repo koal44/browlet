@@ -1,11 +1,9 @@
 import { idlType } from '../../../../src/web-idl/core/index';
 import { describe, expect, it } from 'vitest';
-import { getBindingContext, getRelevantRealm } from '../../../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
-import { unsafeSharedCurrentTime } from '../../../../src/browlet/performance/high-resolution-time';
-import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { UserAgent } from '../../../../src/browlet/user-agent';
-import { createMicrotaskQueue } from '../../../../src/js-engine/index';
+import { getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
+import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../src/fetch/body';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { utf8Encode } from '../../../../src/encoding/codecs/utf-8';
@@ -14,8 +12,8 @@ import { ReadableStreamImpl } from '../../../../src/streams/index';
 import {
   BrowletParser,
 } from '../../../../src/browlet/html/parser/document-parser';
-import { HTMLLinkElementImpl } from '../../../../src/browlet/html/elements/metadata/link';
-import { HTMLStyleElementImpl } from '../../../../src/browlet/html/elements/metadata/style';
+import { HTMLLinkElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/link';
+import { HTMLStyleElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/style';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 
 describe('BrowletParser', () => {
@@ -275,15 +273,10 @@ function createParserDocument() {
   while (document.firstChild) document.firstChild.removeFromTree();
   const realm = getRelevantRealm(document);
   const env = getBindingContext(realm).getEnvironment();
-  const options = {
-    createMicrotaskQueue,
-    requestEventLoopTurn: () => {},
-    unsafeSharedCurrentTime,
-  };
   return {
     document, realm, env,
     drain(this: void) {
-      while (realm.agent.eventLoop.runTaskTurn(options)) { /* Run pending HTML tasks. */ }
+      while (realm.agent.eventLoop.runTaskTurn()) { /* Run pending HTML tasks. */ }
     },
   };
 }

@@ -1,15 +1,14 @@
-import { getRelevantRealm } from '../../../../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../../../../src/browlet/browsing/navigable';
+import { createManualUserAgent } from '../../../../support/browlet-agent';
+import { getRelevantRealm } from '../../../../support/browlet-binding';
+import { TopLevelTraversable } from '../../../../../src/browlet/browsing/navigation/navigable';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy, type CSPDisposition } from '../../../../../src/browlet/browsing/policy/csp/policy';
-import { monotonicClock, UnsafeMoment } from '../../../../../src/browlet/performance/clock';
-import { UserAgent } from '../../../../../src/browlet/user-agent';
 import { FetchRequest } from '../../../../../src/fetch/request';
 import { obtainURLOrigin, parseURL } from '../../../../../src/url/url';
 
-/** Real Window bindings with an unstarted HTML loop, so tests choose task delivery explicitly. */
+/** Real Window bindings with task delivery controlled by the fixture. */
 export function createCSPWindow(serialized = '', disposition: CSPDisposition = 'enforce') {
-  const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
+  const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
   const realm = getRelevantRealm(traversable.activeWindow!);
   const env = realm.env;
   const document = realm.windowImplementation.document;
@@ -28,10 +27,6 @@ export function createCSPWindow(serialized = '', disposition: CSPDisposition = '
     traversable, realm, env, document, policy, request,
     window: realm.globalObject as unknown as Window & typeof globalThis,
     scope: env.getWindowOrWorkerGlobalScopeMixin(),
-    runTask: () => loop.runTaskTurn({
-      createMicrotaskQueue: () => loop.microtaskQueue,
-      requestEventLoopTurn: () => {},
-      unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-    }),
+    runTask: () => loop.runTaskTurn(),
   };
 }

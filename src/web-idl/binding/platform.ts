@@ -142,10 +142,12 @@ export function getImplementationRecord(
   return ImplementationStamper.get(implInst);
 }
 
-// Project helper: retrieve the implementation paired with a platform object.
+/** Read an established platform association; unlike world.unwrap(), this does not select or check a world. */
+export function getImplementationObject(platformObject: StampedPlatformObject): StampedImplInstance;
 export function getImplementationObject(
   platformObject: unknown,
-): StampedImplInstance | undefined {
+): StampedImplInstance | undefined;
+export function getImplementationObject(platformObject: unknown): StampedImplInstance | undefined {
   return getPlatformRecord(platformObject)?.implInst;
 }
 

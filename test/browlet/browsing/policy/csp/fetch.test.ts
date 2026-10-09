@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
 import { Browlet } from '../../../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../../../support/browlet-binding';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { FetchRequest } from '../../../../../src/fetch/request';
 import { FetchResponse } from '../../../../../src/fetch/response';

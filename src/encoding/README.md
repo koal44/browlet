@@ -26,8 +26,8 @@ and UTF-16 names to UTF-8 where the caller's specification requires it;
 replacement and UTF-16 deliberately have no encoders.
 
 Core is independently compiled without Node or Web IDL dependencies. Stylelet
-uses its label lookup directly and consumes `EncodingCapability.decodeText`
-through its existing UserAgent. Browlet supplies `decode`; standalone hosts
+uses its label lookup directly and consumes the `DecodeText` function
+through `userAgent.decodeText`. Browlet supplies `decode`; standalone hosts
 default to `decodeNative`, which captures TextDecoder without requiring it during
 import. Both providers apply BOM override and replacement decoding. The full
 codec implementation retains its existing Node fast paths.
@@ -37,6 +37,9 @@ Their `*Queue` counterparts retain supplied output and return `InternalPromise`
 completion through the trailing JSEnvironment and its exec facilities. `encodeOrFailSync` provides the
 immediate operation used by URL processing; it requires complete input and
 retains the supplied encoder's state across failures.
+
+TextEncoderStream and TextDecoderStream accept `StreamsEnvironment` because they
+construct streams; the codec and queue operations need only `JSEnvironment`.
 
 Codecs themselves run synchronously. Their instance methods combine queue
 processing with the per-item handlers and append to a supplied output queue:

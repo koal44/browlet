@@ -132,8 +132,6 @@ export class DOMExceptionImpl implements DOMException {
     return legacyCodesByName.get(this.#name) ?? 0;
   }
 
-  // -- Internal methods ------------------------------------------------
-
   // Project helper: restore the implementation's name and message.
   setExceptionState(message: string, name: string): void {
     this.#message = message;
@@ -327,8 +325,6 @@ export class QuotaExceededErrorImpl extends DOMExceptionImpl {
   get requested(): number | null {
     return this.#requested;
   }
-
-  // -- Internal methods ------------------------------------------------
 
   // Project helper: restore the implementation's quota and requested values.
   setQuotaState(quota: number | null, requested: number | null): void {

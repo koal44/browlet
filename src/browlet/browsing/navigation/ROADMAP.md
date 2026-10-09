@@ -1,9 +1,17 @@
 # Navigation roadmap
 
+This component owns browsing contexts, navigables, document creation, and
+session history. It shares the `browsing/` family with `window/` and `policy/`;
+outside consumers use its index, while its modules import each other directly.
+
 ## Present
 
-- `session-history.ts` models the history/document-state records needed by the
-  active top-level traversable.
+- `browsing-context.ts` retains context/group relationships and creates the
+  initial Window and about:blank document through the UserAgent's factory.
+- `document-lifecycle.ts` selects the Window/realm and initializes the document
+  for a navigation response.
+- `session-history.ts` models entries and nested histories for the active
+  top-level traversable; `document-state.ts` retains their document/reload state.
 - `params.ts` prepares response, policy, and history-entry inputs.
 - `Navigable` owns the bounded cross-document commit; `Traversable`
   applies its history step and clears forward entries.
@@ -19,7 +27,7 @@
 | `lifecycle-events.ts` | `PopStateEvent`, `HashChangeEvent`, `PageSwapEvent`, `PageRevealEvent`, `PageTransitionEvent`, and `BeforeUnloadEvent` | HTML §7.2.7 |
 | `not-restored-reasons.ts` | `NotRestoredReasonDetails`, recursive `NotRestoredReasons`, and history-entry association | HTML §7.2.8 |
 | `traversal.ts` | Traversal queue, apply history step, back/forward/reload | HTML §§7.4.1, 7.4.3, and 7.4.6 |
-| `document-state.ts` if records outgrow session-history.ts | Complete document/session-history state and persisted user state | HTML §§7.4.1–7.4.2 |
+| `document-state.ts` / `session-history.ts` | Complete document/session-history state and persisted user state | HTML §§7.4.1–7.4.2 |
 
 Existing modules still need fragment navigation, `javascript:` URLs,
 download/POST handling, nested navigables, reload, traversal, unloading,

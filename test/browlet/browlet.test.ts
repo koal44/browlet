@@ -4,7 +4,7 @@ import {
   Browlet,
 } from '../../src/browlet/browlet';
 import type { Element } from '../../src/browlet/platform';
-import { getRelevantRealm, unwrap } from '../../src/browlet/bindings';
+import { getRelevantRealm, unwrap } from '../support/browlet-binding';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,

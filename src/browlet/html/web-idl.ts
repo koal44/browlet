@@ -1,17 +1,12 @@
 import { defineInterface, type Definition } from '../../web-idl/index';
-import { customElementRegistryIDL } from './custom-elements/registry';
+import { customElementRegistryIDL } from './custom-elements/index';
 import {
-  htmlElementIDL, htmlElementIncludesElementCSSInlineStyleIDL,
-} from './elements/html-element';
-import { htmlUnknownElementIDL } from './elements/html-unknown-element';
-import { htmlHeadElementIDL } from './elements/metadata/head';
-import { htmlBaseElementIDL } from './elements/metadata/base';
+  htmlElementIDL, htmlElementIncludesElementCSSInlineStyleIDL, htmlUnknownElementIDL,
+} from '../dom/nodes/html/index';
 import {
-  htmlLinkElementIDL, htmlLinkElementIncludesLinkStyleIDL,
-} from './elements/metadata/link';
-import {
+  htmlHeadElementIDL, htmlBaseElementIDL, htmlLinkElementIDL, htmlLinkElementIncludesLinkStyleIDL,
   htmlStyleElementIDL, htmlStyleElementIncludesLinkStyleIDL,
-} from './elements/metadata/style';
+} from '../dom/nodes/html/metadata/index';
 
 export const htmlIDLDefinitions: Definition[] = [
   customElementRegistryIDL,

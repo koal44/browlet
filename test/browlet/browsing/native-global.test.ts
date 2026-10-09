@@ -1,16 +1,14 @@
+import { createManualEventLoop } from '../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 
-import {
-  createDocument, unwrap,
-  project, setAssociatedWindow,
-} from '../../../src/browlet/bindings';
-import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
+import { unwrap, project } from '../../support/browlet-binding';
+import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { UserAgent } from '../../../src/browlet/user-agent';
 import type { WindowRealm } from '../../../src/browlet/scripting/realm';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
+import { UserAgent } from '../../../src/browlet/user-agent';
 import { parseURL } from '../../../src/url/url';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import type { StampedPlatformObject } from '../../../src/web-idl/index';
@@ -160,7 +158,7 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
 });
 
 function createNativeWindow(previous?: NativeWindow): NativeWindow {
-  const agent = previous?.agent ?? new WindowAgent();
+  const agent = previous?.agent ?? new WindowAgent(createManualEventLoop());
   const creationURL = parseURL('https://example.test/').url!;
   const origin = createOpaqueOrigin();
   const env = createWindowEnvironment({
@@ -172,10 +170,10 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const proxy = realm.windowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
-  const document = createDocument(realm);
+  const document = realm.env.exec.createDocument();
   document.browsingContext = context;
   window.setAssociatedDocument(document);
-  setAssociatedWindow(proxy, window);
+  proxy.setAssociatedWindow(window.env.realm.globalObject);
   return { agent, realm, window, platformWindow, document, context };
 }
 

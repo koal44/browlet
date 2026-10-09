@@ -1,12 +1,13 @@
 import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../src/browlet/bindings';
+import { getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { CSPList } from '../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../src/browlet/browsing/policy/csp/policy';
 import { FetchBody } from '../../src/fetch/body';
 import { fetch } from '../../src/fetch/fetch';
 import type { Destination } from '../../src/fetch/destination';
+import { queueFetchTask } from '../../src/fetch/environment';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, isFilteredResponse } from '../../src/fetch/response';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
@@ -335,10 +336,10 @@ describe('Fetch body completion', () => {
     const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, env);
     reply.response.body = new FetchBody(stream, env);
     if (mode === 'already-closed') stream.close();
-    const run = (steps: () => void) => new Promise<void>((resolve, reject) => env.queueNetworkingTask(() => {
+    const run = (steps: () => void) => new Promise<void>((resolve, reject) => queueFetchTask(() => {
       try { steps(); resolve(); }
       catch (error) { reject(new Error('Body task failed', { cause: error })); }
-    }, env.exec.global));
+    }, env.exec.global, env));
     const events: string[] = [];
     operation.options.processResponse = () => { events.push('response'); };
     operation.options.processResponseEndOfBody = () => { events.push('end'); };
@@ -348,9 +349,9 @@ describe('Fetch body completion', () => {
       await run(() => { stream.enqueueChunk(Uint8Array.of(1, 2, 3)); stream.close(); });
       expect(events).toEqual(['response']);
       expect(request.done).toBe(false);
-      const bytes = await new Promise((resolve, reject) => env.queueNetworkingTask(() => {
+      const bytes = await new Promise((resolve, reject) => queueFetchTask(() => {
         stream.getDefaultReader().readAllBytes(resolve, reject);
-      }, env.exec.global));
+      }, env.exec.global, env));
       expect(bytes).toEqual(Uint8Array.of(1, 2, 3));
     } else if (mode === 'cancel') {
       await run(() => { stream.cancelInternal('stop').observe(() => {}, () => {}); });

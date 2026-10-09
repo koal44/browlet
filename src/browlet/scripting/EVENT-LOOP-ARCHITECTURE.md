@@ -12,6 +12,13 @@ and thread; a loop is not a Window, Document, realm, or browsing context.
 The EventLoop owns task queues, per-source queue associations, the current task,
 the microtask/checkpoint boundary, and Window rendering-opportunity state.
 
+UserAgent constructs Window Agents and their EventLoops; bindings constructs the
+sandbox Agent and its EventLoop. `EventLoopInit` supplies the host-turn callback
+and optional subsystem accounting hooks at construction. The loop creates its
+engine microtask queue and imports the shared clock directly. There is no separate
+start phase, and `runTaskTurn()` needs no configuration. Tests that need manual
+turns supply controlled wake-ups in their fixtures. Realms require an explicit Agent.
+
 A Task retains steps, source, associated Document or null, and the settings used
 by script evaluation. A task with a Document is runnable only while that Document
 is fully active. Task queues are insertion-ordered sets: blocked tasks remain
@@ -48,21 +55,23 @@ The future element wrapper must route through the element's relevant global,
 not its current node document after adoption. Avoid implied-loop/Document calls.
 
 Fetch has an explicit callback destination, which can differ from the body
-stream's owner. `JSEnvironment.queueNetworkingTask()` selects a parallel queue
-or the composed global-task route; it does not move HTML scheduling into JS Engine.
+stream's owner. Fetch's `queueFetchTask()` selects a parallel queue or calls
+`FetchExecution.queueGlobalFetchTask()`, composed in `bindings.ts` to route through
+the destination global's HTML Realm.
 Work performed in parallel re-enters the intended owner's task before touching
 realm-bound state.
 
 The global-scope mixin owns GlobalTimers. Its active-time waits and execution's
 `timer` task delivery serve both AbortSignal.timeout and Window function timers.
 Retaining an old Window's callback retains its owner across navigation.
-The mixin explicitly supplies the Node `TimerHost` from `integration/scripting.ts`.
+UserAgent supplies the Node `TimerHost` from `integration/node.ts`; the mixin
+receives it through `env.userAgent.timerHost` and retains its own timer state.
 Infra owns the shared contract: `scheduleTimeout(milliseconds, steps)` returns a
 `TaskHandle` whose `remove()` cancels the wake-up. Native wake-ups may be bounded;
 GlobalTimers rechecks its active-time deadline before completing the wait.
 
 Browser-owned Reporting tasks instead use later Node host turns and yield to
-runnable work on that UserAgent's started HTML loops. They survive Document task
+runnable work on that UserAgent's HTML loops. They survive Document task
 removal. Delivery bookkeeping uses host Promises; Fetch body processing uses the
 UserAgent's sandbox loop. ReportingObserver callbacks stay on their global's loop.
 

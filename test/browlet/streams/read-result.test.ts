@@ -3,7 +3,7 @@ import { itPassesWith } from '../../test-runtime';
 import { createSiblingWindow } from '../../support/windows';
 import { runInHostTask } from '../../support/tasks';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import type { InternalPromise } from '../../../src/infra/promises';
 import {
   ReadableStreamImpl, ReadableStreamDefaultControllerImpl,
@@ -14,7 +14,7 @@ import {
   arg, defineCallbackFunction, defineInterface, impl, op, promise, reference, BindingWorld,
 } from '../../../src/web-idl/index';
 
-import * as scheduling from '../../../src/browlet/integration/scripting';
+import { mockEventLoopTurns } from '../../support/browlet-agent';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
@@ -126,7 +126,7 @@ describe('stream read Promise boundaries', () => {
 
 function createFixture() {
   // Checkpoints are controlled here; scheduled host turns must not run them early.
-  vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation(() => {});
+  mockEventLoopTurns();
   return { first: createReader(), second: createReader() };
 }
 

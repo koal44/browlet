@@ -1,5 +1,4 @@
-import type { JSEnvironment } from '../js-engine/index';
-import { ReadableStreamImpl } from '../streams/index';
+import { ReadableStreamImpl, type StreamsEnvironment } from '../streams/index';
 import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
 
@@ -89,7 +88,7 @@ export class BlobData {
   /** Stream retained Blob data, including multipart data, without an intermediate Blob object. */
   // File API's get stream algorithm, shared with Fetch's multipart body extraction.
   // https://w3c.github.io/FileAPI/#dfn-get-stream
-  stream(env: JSEnvironment): ReadableStreamImpl {
+  stream(env: StreamsEnvironment): ReadableStreamImpl {
     let canceled = false;
     const stream = ReadableStreamImpl.createWithByteReadingSupport(
       undefined, () => { canceled = true; }, 0, env,

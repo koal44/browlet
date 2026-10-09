@@ -5,7 +5,7 @@ export {
   type StyleletURL, type StyleletURLConstructor,
 } from './environment';
 export type { DOMException, DOMExceptionConstructor, DOMExceptionName } from '../web-idl/core/index';
-export type { Encoding, EncodingCapability } from '../encoding/core/index';
+export type { Encoding, DecodeText } from '../encoding/core/index';
 export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from '../infra/index';
 export { TreeScope } from './engine/tree-scope';
 export { CSSStyleSheetImpl, type CSSStyleSheetInit } from './cssom/css-stylesheet';

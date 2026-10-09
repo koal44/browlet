@@ -24,17 +24,17 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 ## Environments and allocation
 
-`JSEnvironment` supplies `realm: JSRealm`, `exec: RealmExecution`, and
-`queueNetworkingTask(steps, destination)`. The shared method either enqueues on
-an explicit parallel queue or delegates global delivery to `exec.networking`.
-The environment can be HTML settings, sandbox execution, or another host's
-standalone owner; the portable contract requires no browser state.
+`JSEnvironment` supplies `realm: JSRealm` and `exec: RealmExecution`. The environment
+can be HTML settings, sandbox execution, or another host's standalone owner;
+the portable contract requires no browser state. Fetch owns its additional
+contract for task delivery to an explicit global or parallel queue.
 
 Pass the existing `env` to implementations and derived objects. Use `env.exec`
-for Promises, buffers, JSON, microtasks, background work, file/network task
-delivery, abort construction, and structured data. Browser composition supplies
-the HTML/DOM operations; declaring the contract here does not move their
-algorithms into JS Engine. Binding Context and projection stay outside `exec`.
+for Promises, errors, buffers, JSON, microtasks, background work, and task delivery.
+Subsystems add Infra's `AbortExecution` and `StructuredDataExecution` contracts
+where needed; those requirements are absent from `RealmExecution`.
+Browser composition supplies the DOM/HTML operations on the same `env.exec`.
+Binding Context and projection stay outside `exec`.
 Web IDL's `DOMException` constructor belongs to its separate Core execution
 contract; higher layers combine it with `RealmExecution` on the same object.
 JS Engine has no Web IDL dependency.

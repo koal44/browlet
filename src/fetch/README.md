@@ -57,11 +57,16 @@ CSP language and browser policy state remain with their browser owners.
 The execution owner (`env: FetchEnvironment`), initiating client
 (`request.client`), and callback destination are distinct. The client may be
 null; it does not supply every execution facility. The supplied environment
-provides `exec` for promises, Streams, allocation, and abort handling, and queues
-networking tasks to a global or parallel queue. Pass the existing environment;
-do not manufacture a substitute browser settings object. `FetchExecution`
-combines JS Engine's facilities with Web IDL Core's `DOMException` constructor
-contract so abort fallback exceptions retain their destination realm.
+provides `exec` for promises, Streams, allocation, and abort handling.
+`FetchExecution` extends File/Streams execution with exception allocation and
+Fetch task delivery. Abort and structured-data contracts live in Infra's
+`execution.ts`; Browlet supplies their DOM/HTML implementations. Fetch's
+`queueFetchTask()` selects a parallel queue or delegates global delivery to
+`exec.queueGlobalFetchTask()`. Pass the existing environment; do not manufacture
+a substitute browser settings object. Bodies, requests, and responses retain
+the same `FetchEnvironment`. `FetchExecution` combines JS Engine's facilities,
+Web IDL Core's `DOMException` constructor, and the global task-delivery contract.
+Abort fallback exceptions retain their destination realm.
 
 UserAgent owns transport, connections, HTTP/CORS caches, authentication, cookies,
 and HSTS. Its sandbox supplies execution for work that outlives a Window, such

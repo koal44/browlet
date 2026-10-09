@@ -2,7 +2,7 @@ import { ContentSecurityPolicy, type CSPDisposition } from './policy';
 import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 import { InternalError } from '../../../../infra/internal-error';
 import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/index';
-import type { DocumentImpl } from '../../../dom/nodes/document';
+import type { DocumentImpl } from '../../../dom/nodes/index';
 import { SandboxingFlagSet } from '../sandbox';
 import { CSPViolation } from './violation';
 

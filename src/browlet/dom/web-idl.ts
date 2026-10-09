@@ -1,59 +1,26 @@
-import type { BrowletEnvironment } from '../scripting/environment';
+import type { BrowletEnvironment } from '../scripting/index';
 import type { Definition } from '../../web-idl/index';
-import { abortControllerIDL } from './abort/abort-controller';
-import { abortSignalIDL } from './abort/abort-signal';
+import { abortControllerIDL, abortSignalIDL } from './abort/index';
 import {
-  addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL,
-  eventTargetIDL,
-} from './events/event-target';
+  addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL, eventTargetIDL, customEventIDL,
+  customEventInitIDL, eventIDL, eventInitIDL,
+} from './events/index';
 import {
-  customEventIDL, customEventInitIDL, eventIDL, eventInitIDL,
-} from './events/event';
-import {
-  progressEventIDL, progressEventInitIDL,
-} from './events/progress-event';
-import {
-  characterDataIDL, characterDataIncludesChildNodeIDL,
-  characterDataIncludesNonDocumentTypeChildNodeIDL,
-} from './nodes/character-data';
-import { attrIDL } from './nodes/attribute';
-import { namedNodeMapIDL } from './nodes/named-node-map';
-import { htmlCollectionIDL } from './nodes/collections';
-import { commentIDL } from './nodes/comment';
-import {
-  documentFragmentIDL, documentFragmentIncludesParentNodeIDL,
-} from './nodes/document-fragment';
-import {
-  documentIDL, documentIncludesDocumentOrShadowRootIDL,
-  documentIncludesParentNodeIDL, elementCreationOptionsIDL,
-} from './nodes/document';
-import {
-  documentTypeIDL, documentTypeIncludesChildNodeIDL,
-} from './nodes/document-type';
-import {
-  elementIDL, elementIncludesChildNodeIDL,
-  elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesParentNodeIDL,
-} from './nodes/element';
-import {
-  getRootNodeOptionsIDL, nodeIDL,
-} from './nodes/node';
-import { childNodeIDL } from './nodes/child-node';
-import { documentOrShadowRootIDL } from './nodes/document-or-shadow-root';
-import { nonDocumentTypeChildNodeIDL } from './nodes/non-document-type-child-node';
-import { parentNodeIDL } from './nodes/parent-node';
-import {
-  shadowRootIDL, shadowRootIncludesDocumentOrShadowRootIDL,
-  shadowRootModeIDL, slotAssignmentModeIDL,
-} from './nodes/shadow-root';
-import { textIDL } from './nodes/text';
+  characterDataIDL, characterDataIncludesChildNodeIDL, characterDataIncludesNonDocumentTypeChildNodeIDL,
+  attrIDL, namedNodeMapIDL, htmlCollectionIDL, commentIDL, documentFragmentIDL,
+  documentFragmentIncludesParentNodeIDL, documentIDL, documentIncludesDocumentOrShadowRootIDL,
+  documentIncludesParentNodeIDL, elementCreationOptionsIDL, documentTypeIDL,
+  documentTypeIncludesChildNodeIDL, elementIDL, elementIncludesChildNodeIDL,
+  elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesParentNodeIDL, getRootNodeOptionsIDL, nodeIDL,
+  childNodeIDL, documentOrShadowRootIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL, shadowRootIDL,
+  shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL, textIDL,
+} from './nodes/index';
 
 export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   eventIDL,
   eventInitIDL,
   customEventIDL,
   customEventInitIDL,
-  progressEventIDL,
-  progressEventInitIDL,
   eventTargetIDL,
   eventListenerIDL,
   eventListenerOptionsIDL,

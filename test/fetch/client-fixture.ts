@@ -1,8 +1,8 @@
 import { idlType } from '../../src/web-idl/core/index';
 import { internalType } from '../../src/infra/promises';
-import { HostPromise, runInParallel } from '../../src/browlet/integration/scripting';
+import { NodePromise, queueNodeTask } from '../../src/browlet/integration/node';
 import type {
-  FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
+  FetchEnvironment, FetchExecution, FetchPolicyContainer, FetchUserAgent,
 } from '../../src/fetch/environment';
 import { FetchGroup } from '../../src/fetch/group';
 import { HTTPCacheStore } from '../../src/fetch/cache-http';
@@ -18,8 +18,10 @@ export function createClientEnvironment(
   url = 'https://example.test/', env: TestEnvironment = createEnvironment(),
 ): ClientEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
+  const queueGlobalFetchTask: FetchExecution['queueGlobalFetchTask'] = (_global, steps) => { setImmediate(steps); };
   return {
     ...env,
+    exec: Object.assign(env.exec, { queueGlobalFetchTask }),
     isWindow: false,
     isServiceWorker: false,
     isTopLevelWindow: false,
@@ -51,24 +53,25 @@ export function createClientEnvironment(
 // These test clients have known origins; reserved-record derivation is tested in HTML.
 export interface ClientEnvironment extends FetchEnvironment, TestEnvironment {
   realm: TestRealm;
+  exec: FetchExecution;
   topLevelOrigin: Origin;
 }
 
 export function createFetchUserAgent(): FetchUserAgent {
   return {
-    HostPromise,
+    HostPromise: NodePromise,
     httpTransport: {
       dispatch() { throw new Error('This fixture has no network transport'); },
       async close() {},
     },
     supportedContentCodings: new Set(),
     createContentDecoder() { throw new Error('This fixture has no HTTP codecs'); },
-    runInParallel,
+    runInParallel: queueNodeTask,
     unsafeSharedCurrentTime: () => performance.now(),
     determineRequestReferrer: () => null,
     setRequestReferrerPolicyOnRedirect() {},
     potentiallyOverrideResponse: () => null,
-    handleFetch: () => HostPromise.try(() => null, internalType<null>()),
+    handleFetch: () => NodePromise.try(() => null, internalType<null>()),
     determineFetchPriority: () => ({ update() {} }),
     supportsMIMEType: () => false,
     defaultUserAgentValue: 'Browlet',
@@ -89,8 +92,8 @@ export function createFetchUserAgent(): FetchUserAgent {
       find: () => null,
       invalidate() {},
       applyProxyAuthentication() {},
-      prompt: () => HostPromise.fromValue(null, Promise, internalType<null>()),
-      promptProxy: () => HostPromise.resolve(false, idlType.boolean),
+      prompt: () => NodePromise.fromValue(null, Promise, internalType<null>()),
+      promptProxy: () => NodePromise.resolve(false, idlType.boolean),
       store() {},
     },
     httpCache: new HTTPCacheStore(),

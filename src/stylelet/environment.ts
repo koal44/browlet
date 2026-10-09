@@ -1,7 +1,7 @@
 import { standardDOM, type DOMOperations } from '../infra/index';
 import { createAsyncExecution, nativeTimerHost, type AsyncExecution } from '../infra/execution';
 import type { DOMExceptionConstructor, WebIDLExecution } from '../web-idl/core/index';
-import { decodeNative, type EncodingCapability } from '../encoding/core/index';
+import { decodeNative, type DecodeText } from '../encoding/core/index';
 
 /** Existing owner supplying Stylelet's execution, DOM access, URLs, and text decoding. */
 export interface StyleletEnvironment {
@@ -12,11 +12,13 @@ export interface StyleletEnvironment {
 }
 
 /** DOM, URL, and text decoding shared by this host's documents and engines. */
-export interface StyleletUserAgent extends EncodingCapability {
+export interface StyleletUserAgent {
   /** Read and update host nodes through their supplied DOM operations. */
   dom: DOMOperations;
   /** Parse and serialize URLs using this host's selected implementation. */
   URL: StyleletURLConstructor;
+  /** Decode complete input through the host's selected Encoding implementation. */
+  decodeText: DecodeText;
 }
 
 /** Serialized view of a parsed URL retained by Stylelet. */
@@ -45,7 +47,7 @@ export type StyleletOptions = {
   /** Standalone URL implementation; defaults to the captured native constructor. */
   URL?: StyleletURLConstructor;
   /** Complete-input byte decoding; defaults to the native decoder adapter. */
-  decodeText?: EncodingCapability['decodeText'];
+  decodeText?: DecodeText;
   /** Standalone execution facilities; defaults to native promises, timers, and exceptions. */
   exec?: StyleletExecution;
 };

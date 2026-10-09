@@ -2,18 +2,17 @@ import {
   JSRealm, bindAsyncContext, getAssociatedRealm,
   type GlobalObject, type GlobalThis, type JSRealmOptions,
 } from '../../js-engine/index';
-import type { CallbackHooks, SecurityCheckType, WebIDLRealm } from '../../web-idl/index';
+import type { CallbackHooks, SecurityCheckType, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
 import type { Window, WindowProxy } from '../platform';
-import type { DocumentImpl } from '../dom/nodes/document';
-import type { EventImpl } from '../dom/events/event';
-import type { EventRealm, WindowEventRealm } from '../dom/environment';
-import { type Agent, WindowAgent } from './agents';
-import type { EnvironmentRecord, BrowletEnvironment } from './environment';
+import type { DocumentImpl } from '../dom/nodes/index';
+import type { EventImpl } from '../dom/events/index';
+import type { EventRealm, WindowEventRealm } from '../dom/index';
+import type { Agent, WindowAgent } from './agents';
+import type { EnvironmentRecord, BrowletEnvironment, WindowEnvironment } from './environment';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
-import type { WindowImpl } from '../browsing/window/window';
-import type { WindowProxyHandle } from '../browsing/window/window-proxy';
-import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../performance/high-resolution-time';
+import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
+import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
 
@@ -50,8 +49,8 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
   #envRecord: EnvironmentRecord | undefined;
   #hostDefined: BrowletEnvironment | undefined;
 
-  constructor(options: RealmOptions = {}) {
-    const agent = options.agent ?? new WindowAgent();
+  constructor(options: RealmOptions) {
+    const { agent } = options;
     super(agent.eventLoop.microtaskQueue, {
       globalPrototypeChain: options.globalPrototypeChain,
       reuseGlobalProxyFrom: options.reuseGlobalProxyFrom,
@@ -184,8 +183,6 @@ export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
     this.agent.eventLoop.queueMicrotask(steps, this.getAssociatedDocument());
   }
 
-  // -- Internal ---------------------------------------------------------
-
   setGlobalObjects(
     globalObject: GlobalObject,
     globalThis: GlobalThis,
@@ -228,6 +225,16 @@ export class WindowRealm extends Realm implements WindowEventRealm {
 
   constructor(options: WindowRealmOptions) {
     super({ ...options, globalNames: ['Window'], isGlobalPrototypeChainMutable: false });
+  }
+
+  /** Window environment attached during composition. */
+  override get env(): WindowEnvironment {
+    return super.env as WindowEnvironment;
+  }
+
+  /** This realm's projected Window, distinct from its reusable global proxy. */
+  override get globalObject(): StampedPlatformObject<Window> {
+    return super.globalObject as StampedPlatformObject<Window>;
   }
 
   /** This realm's own Window, retained even after navigation replaces the proxy's target. */
@@ -278,7 +285,7 @@ export class WindowRealm extends Realm implements WindowEventRealm {
     // once Browlet has the HTML performance timeline machinery.
   }
 
-  override setGlobalObjects(globalObject: Window, globalThis: WindowProxy): void {
+  override setGlobalObjects(globalObject: StampedPlatformObject<Window>, globalThis: WindowProxy): void {
     super.setGlobalObjects(globalObject, globalThis);
     this.agent.windowObjects.add(this.windowImplementation);
   }
@@ -294,7 +301,7 @@ export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;
 export type RealmOptions = {
   globalPrototypeChain?: JSRealmOptions['globalPrototypeChain'];
   reuseGlobalProxyFrom?: Realm;
-  agent?: Agent;
+  agent: Agent;
   crossOriginIsolated?: boolean;
   globalNames?: string[];
   isGlobalPrototypeChainMutable?: boolean;

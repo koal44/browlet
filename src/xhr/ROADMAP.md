@@ -10,7 +10,7 @@ Fetch now supplies their protocol dependency; it is no longer a missing foundati
 | Owner | Responsibility |
 | --- | --- |
 | [form-data.ts](form-data.ts) | Ordered entry list, Blob/File normalization, mutation, lookup, iteration, and declaration |
-| [Browlet ProgressEvent](../browlet/dom/events/progress-event.ts) | XHR §5 event implementation, declaration, and trusted firing |
+| [Browlet ProgressEvent](../browlet/integration/xhr/progress-event.ts) | XHR §5 event implementation, declaration, and trusted firing |
 | [Fetch](../fetch/README.md) | Requests, responses, headers, bodies, controllers, policy, transport, and multipart processing |
 | [File](../file/ROADMAP.md) | Shared Blob/File data and realm-owned reads |
 | HTML/browser integration | Forms, concrete event targets, settings, Documents, tasks, timers, and lifecycle |
@@ -129,7 +129,7 @@ identity/caching coverage. Additional lifecycle branches enter with their owners
 ## Validation and completion
 
 Existing [FormData](../../test/browlet/form-data.test.ts) and
-[ProgressEvent](../../test/browlet/progress-event.test.ts) tests cover those
+[ProgressEvent](../../test/browlet/integration/xhr/progress-event.test.ts) tests cover those
 completed APIs. They do not establish XMLHttpRequest behavior.
 
 Audit XHR §§3–5 in document order after implementation. Add WPT groups by

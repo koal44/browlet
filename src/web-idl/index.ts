@@ -12,7 +12,7 @@ export type { WebIDLEnvironment, WebIDLRealm };
 export type { CallbackHooks, SecurityCheckType } from './environment';
 export type { GlobalObjectAllocation } from './binding/realm';
 export {
-  isStampedImplInstance, isStampedPlatformObject,
+  isStampedImplInstance, isStampedPlatformObject, getImplementationObject,
   type StampedImplInstance, type StampedPlatformObject, type PlatformRecord,
 } from './binding/platform';
 

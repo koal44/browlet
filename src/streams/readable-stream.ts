@@ -1,9 +1,9 @@
+import type { AbortAlgorithmHandle, AbortSignal } from '../infra/execution';
 import {
-  type AbortAlgorithmHandle, type AbortSignalCapability, type JSEnvironment,
   getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
   getArrayBufferViewByteOffset, getArrayBufferViewElementSize, getBufferSourceCopy,
   getBufferViewTypeName, isArrayBufferView, isBufferSourceDetached, isDetachedArrayBuffer,
-  isUint8Array, writeArrayBuffer, writeArrayBufferView, type JSBufferViewName,
+  isUint8Array, writeArrayBuffer, writeArrayBufferView, type JSBufferViewName, type JSEnvironment,
 } from '../js-engine/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import { endOfIteration, type AsyncIterator } from '../infra/iteration';
@@ -22,6 +22,7 @@ import type { WritableStreamImpl } from './writable-stream';
 import { QueueWithSizes } from './queue-with-sizes';
 import type { TransformStreamImpl } from './transform-stream';
 import { InternalError } from '../infra/internal-error';
+import type { StreamsEnvironment } from './environment';
 
 // =============================================================================
 // ReadableStream
@@ -56,7 +57,7 @@ export class ReadableStreamImpl {
   constructor(
     underlyingSource: UnderlyingSource | null = {},
     strategy: QueuingStrategyRecord = {},
-    public env: JSEnvironment,
+    public env: StreamsEnvironment,
   ) {
     this.#state = { disturbed: false, state: 'readable' };
     if (underlyingSource === null) return;
@@ -93,7 +94,7 @@ export class ReadableStreamImpl {
     cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): ReadableStreamImpl {
     const stream = new ReadableStreamImpl(null, {}, env);
     const controller = new ReadableStreamDefaultControllerImpl();
@@ -111,7 +112,7 @@ export class ReadableStreamImpl {
   /** Streams §4.9.1, ReadableStreamFromIterable; Binding supplies the opened iterator. */
   static from(
     iterator: AsyncIterator<unknown>,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): ReadableStreamImpl {
     const { Promise: P } = env.exec;
     const stream = ReadableStreamImpl.create(
@@ -136,7 +137,7 @@ export class ReadableStreamImpl {
     startAlgorithm: () => unknown,
     pullAlgorithm: () => InternalPromise<void>,
     cancelAlgorithm: (reason: unknown) => InternalPromise<void>,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): ReadableStreamImpl {
     const stream = new ReadableStreamImpl(null, {}, env);
     const controller = new ReadableByteStreamControllerImpl();
@@ -150,7 +151,7 @@ export class ReadableStreamImpl {
     // Fetch needs the cancellation reason omitted by Streams' byte-setup wording.
     cancelAlgorithm: ((reason: unknown) => InternalPromise<void> | void) | undefined,
     highWaterMark = 0,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): ReadableStreamImpl {
     const stream = new ReadableStreamImpl(null, {}, env);
     const controller = new ReadableByteStreamControllerImpl();
@@ -171,7 +172,7 @@ export class ReadableStreamImpl {
     cancelAlgorithm: ((reason: unknown) => InternalPromise<void> | void) | undefined,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): ReadableStreamImpl {
     return ReadableStreamImpl.create(
       () => undefined,
@@ -276,8 +277,6 @@ export class ReadableStreamImpl {
       ? this.teeBytes()
       : this.teeDefault(false);
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   /** RequireDefaultController. */
   get defaultController(): ReadableStreamDefaultControllerImpl {
@@ -424,7 +423,7 @@ export class ReadableStreamImpl {
     preventClose: boolean,
     preventAbort: boolean,
     preventCancel: boolean,
-    signal: AbortSignalCapability | undefined,
+    signal: AbortSignal | undefined,
     env: JSEnvironment,
   ): InternalPromise<void> {
     const reader = this.getDefaultReader();
@@ -1264,7 +1263,7 @@ export type StreamPipeOptions = {
   preventAbort: boolean;
   preventCancel: boolean;
   preventClose: boolean;
-  signal?: AbortSignalCapability;
+  signal?: AbortSignal;
 };
 
 /*
@@ -1296,7 +1295,7 @@ type UnderlyingSourceSteps<Controller> = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const readableStreamIDL = defineInterface<JSEnvironment>({
+export const readableStreamIDL = defineInterface<StreamsEnvironment>({
   name: 'ReadableStream',
   exposed: '*',
   ...xattr('Transferable'),
@@ -1592,8 +1591,6 @@ export class ReadableStreamDefaultControllerImpl {
     this.clearAlgorithms();
     state.stream.errorInternal(error);
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   /** ReadableStreamDefaultControllerHasBackpressure. */
   get hasBackpressure(): boolean {
@@ -1948,8 +1945,6 @@ export class ReadableByteStreamControllerImpl {
     this.clearAlgorithms();
     state.stream.errorInternal(error);
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   /** ShouldCallPull. */
   get shouldCallPull(): boolean {
@@ -2631,8 +2626,6 @@ export class ReadableStreamGenericReaderMixin {
     return this.cancelInternal(reason);
   }
 
-  // -- Internal algorithms ------------------------------------------------
-
   get state(): ReadableStreamGenericReaderState {
     if (!this.#state) {
       throw new InternalError('ReadableStreamGenericReader is not set up');
@@ -2787,8 +2780,6 @@ export class ReadableStreamDefaultReaderImpl {
     if (!generic.state.stream) return;
     this.release(env);
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   get genericReaderMixin(): ReadableStreamGenericReaderMixin {
     return this.#genericReader;
@@ -3070,8 +3061,6 @@ export class ReadableStreamBYOBReaderImpl {
     this.release(env);
   }
 
-  // -- Internal algorithms ------------------------------------------------
-
   get genericReaderMixin(): ReadableStreamGenericReaderMixin {
     return this.#genericReader;
   }
@@ -3237,8 +3226,6 @@ export class ReadableStreamBYOBRequestImpl {
     }
     this.#controller.respondWithNewView(view);
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   initialize(controller: ReadableByteStreamControllerImpl, view: Uint8Array<ArrayBuffer>): void {
     this.#controller = controller;

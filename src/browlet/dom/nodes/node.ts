@@ -1,7 +1,6 @@
-import type { EventTargetImpl } from '../events/event-target';
-import type { EventImpl } from '../events/event';
+import type { EventTargetImpl, EventImpl } from '../events/index';
 import type { DOMEnvironment } from '../environment';
-import { TreeNode } from '../infra/tree';
+import { TreeNode } from '../infra/index';
 import {
   arg, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr,
@@ -118,8 +117,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
       ? DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS
       : DOCUMENT_POSITION_PRECEDING;
   }
-
-  // -- Internal ---------------------------------------------------------
 
   /** Concatenate direct Text children in tree order, excluding nested descendants. */
   // https://dom.spec.whatwg.org/#concept-child-text-content

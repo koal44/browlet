@@ -7,9 +7,9 @@ import { DocumentTypeImpl } from '../../../../src/browlet/dom/nodes/document-typ
 import { NodeType } from '../../../../src/browlet/dom/nodes/node';
 import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import { EventImpl } from '../../../../src/browlet/dom/events/event';
-import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
+import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import type { WindowImpl } from '../../../../src/browlet/browsing/window/window';
-import { unwrap } from '../../../../src/browlet/bindings';
+import { unwrap } from '../../../support/browlet-binding';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
 import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../src/url/url';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';

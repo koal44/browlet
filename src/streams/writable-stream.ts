@@ -1,7 +1,6 @@
-import type {
-  AbortControllerCapability, AbortSignalCapability, JSEnvironment,
-} from '../js-engine/index';
+import type { AbortController, AbortSignal } from '../infra/execution';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
+import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, invokeWith, nullable, op, promise,
@@ -14,6 +13,7 @@ import {
 } from './queuing-strategy';
 import { QueueWithSizes } from './queue-with-sizes';
 import { InternalError } from '../infra/internal-error';
+import type { StreamsEnvironment } from './environment';
 
 // =============================================================================
 // WritableStream
@@ -45,7 +45,7 @@ export class WritableStreamImpl {
   constructor(
     underlyingSink: UnderlyingSink | null = {},
     strategy: QueuingStrategyRecord = {},
-    public env: JSEnvironment,
+    public env: StreamsEnvironment,
   ) {
     if (underlyingSink === null) return;
     if (underlyingSink.type !== undefined) {
@@ -73,7 +73,7 @@ export class WritableStreamImpl {
     abortAlgorithm: (reason: unknown) => InternalPromise<void>,
     highWaterMark: number,
     sizeAlgorithm: QueuingStrategySize,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): WritableStreamImpl {
     const stream = new WritableStreamImpl(null, {}, env);
     const controller = new WritableStreamDefaultControllerImpl();
@@ -97,7 +97,7 @@ export class WritableStreamImpl {
     abortAlgorithm: ((reason: unknown) => InternalPromise<void> | void) | undefined,
     highWaterMark = 1,
     sizeAlgorithm: QueuingStrategySize = () => 1,
-    env: JSEnvironment,
+    env: StreamsEnvironment,
   ): WritableStreamImpl {
     return WritableStreamImpl.create(
       () => undefined,
@@ -145,8 +145,6 @@ export class WritableStreamImpl {
     return new WritableStreamDefaultWriterImpl(this);
   }
 
-  // -- Internal algorithms ------------------------------------------------
-
   /** IsWritableStreamWritable. */
   get isWritable(): boolean {
     return this.state.state === 'writable';
@@ -160,7 +158,7 @@ export class WritableStreamImpl {
   }
 
   /** Streams §9.2, get a specification-created writable stream's signal. */
-  get signal(): AbortSignalCapability {
+  get signal(): AbortSignal {
     return this.controller.signal;
   }
 
@@ -416,7 +414,7 @@ export type UnderlyingSink = {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const writableStreamIDL = defineInterface<JSEnvironment>({
+export const writableStreamIDL = defineInterface<StreamsEnvironment>({
   name: 'WritableStream',
   exposed: '*',
   ...xattr('Transferable'),
@@ -512,7 +510,7 @@ export const underlyingSinkIDL = defineDictionary({
 export class WritableStreamDefaultControllerImpl {
   state!: WritableStreamDefaultControllerState;
 
-  get signal(): AbortSignalCapability {
+  get signal(): AbortSignal {
     return this.state.abortController.signal;
   }
 
@@ -523,8 +521,6 @@ export class WritableStreamDefaultControllerImpl {
       this.errorInternal(error);
     }
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   /** WritableStreamDefaultControllerGetBackpressure. */
   get backpressure(): boolean {
@@ -752,7 +748,7 @@ export class WritableStreamDefaultControllerImpl {
 type WritableStreamDefaultControllerState = {
   queue: QueueWithSizes<unknown>;
   abortAlgorithm?: (reason: unknown) => InternalPromise<void>;
-  abortController: AbortControllerCapability;
+  abortController: AbortController;
   closeAlgorithm?: () => InternalPromise<void>;
   started: boolean;
   strategyHighWaterMark: number;
@@ -858,8 +854,6 @@ export class WritableStreamDefaultWriterImpl {
     }
     return this.writeInternal(chunk, env);
   }
-
-  // -- Internal algorithms ------------------------------------------------
 
   /** RequireWriterStream. */
   get stream(): WritableStreamImpl {
@@ -1027,10 +1021,6 @@ export const writableStreamDefaultWriterIDL = defineInterface<JSEnvironment>({
     ),
   ],
 });
-
-// =============================================================================
-// Internal records
-// =============================================================================
 
 const closeSentinel = Symbol('WritableStream close sentinel');
 

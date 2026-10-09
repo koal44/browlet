@@ -1,4 +1,5 @@
-import type { BrowletEnvironment } from '../../scripting/environment';
+import type { AbortController } from '../../../infra/execution';
+import type { BrowletEnvironment } from '../../scripting/index';
 import {
   arg, atArg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
   impl, invokeWith,
@@ -7,7 +8,7 @@ import { AbortSignalImpl } from './abort-signal';
 
 /** Controls cancellation through an associated signal. */
 // https://dom.spec.whatwg.org/#interface-abortcontroller
-export class AbortControllerImpl {
+export class AbortControllerImpl implements AbortController {
   /** The signal notified when this controller aborts. */
   signal: AbortSignalImpl;
 

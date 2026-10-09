@@ -28,7 +28,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
   it('snapshots a cyclic reason at abort and recreates it in the target realm', () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    const window = source.realm.globalObject as typeof globalThis;
+    const window = source.realm.globalObject as unknown as typeof globalThis;
     const reason = Object.assign(new window.Object(), {
       value: new window.Array('original'),
     }) as { value: string[]; self: unknown; };
@@ -57,7 +57,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
   ])('serializes an AbortError fallback when the reason is $name', ({ create }) => {
     const source = createFetchWindow();
     const target = createFetchWindow();
-    source.abort(create(source.realm.globalObject as typeof globalThis));
+    source.abort(create(source.realm.globalObject as unknown as typeof globalThis));
 
     const restored = target.deserialize(source.controller.serializedAbortReason);
     expectAbortError(restored, target);
@@ -82,7 +82,7 @@ describe('RealmExecution structured serialization', () => {
     const target = createFetchWindow();
     const other = createFetchWindow();
     type Value = { bytes: Uint8Array; alias: Uint8Array; self: Value; };
-    const window = source.realm.globalObject as typeof globalThis;
+    const window = source.realm.globalObject as unknown as typeof globalThis;
     const bytes = new window.Uint8Array([1, 2]);
     const value = Object.assign(new window.Object(), { bytes, alias: bytes }) as Value;
     value.self = value;
@@ -96,7 +96,7 @@ describe('RealmExecution structured serialization', () => {
       expect(restored.self).toBe(restored);
       expect(restored.alias).toBe(restored.bytes);
       expect(Object.getPrototypeOf(restored)).toBe(destination.realm.intrinsics.object.prototype);
-      const destinationWindow = destination.realm.globalObject as typeof globalThis;
+      const destinationWindow = destination.realm.globalObject as unknown as typeof globalThis;
       expect(Object.getPrototypeOf(restored.bytes)).toBe(destinationWindow.Uint8Array.prototype);
       expect(Object.getPrototypeOf(restored.bytes.buffer)).toBe(destinationWindow.ArrayBuffer.prototype);
     }
@@ -129,5 +129,5 @@ describe('Fetch tasks on HTML event loops', () => {
 
 function expectAbortError(reason: unknown, target: ReturnType<typeof createFetchWindow>) {
   expect(reason).toMatchObject({ name: 'AbortError', message: '', code: 20 });
-  expect(Object.getPrototypeOf(reason)).toBe((target.realm.globalObject as typeof globalThis).DOMException.prototype);
+  expect(Object.getPrototypeOf(reason)).toBe((target.realm.globalObject as unknown as typeof globalThis).DOMException.prototype);
 }

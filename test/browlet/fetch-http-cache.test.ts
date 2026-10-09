@@ -1,7 +1,7 @@
 import { createServer, type Server, type ServerResponse } from 'node:http';
 import { gzipSync } from 'node:zlib';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getBindingContext, getRelevantRealm, project } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm, project } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';

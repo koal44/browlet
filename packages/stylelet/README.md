@@ -65,7 +65,7 @@ through `exec.queueTask('dom-manipulation', steps)`. Cancellation uses
 `TaskHandle.remove()`. To choose the Promise continuation queue, subclass the
 exported `InternalPromise`, override `observeNative()`, and supply it as `exec.Promise`.
 `defaultStyleletExecution` supplies the standalone implementation. The package also
-exports `DOMOperations`, `TimerHost`, `TaskHandle`, `Encoding`, `EncodingCapability`,
+exports `DOMOperations`, `TimerHost`, `TaskHandle`, `Encoding`, `DecodeText`,
 and the `DOMException`/`DOMExceptionConstructor` contracts for host providers.
 
 ## CSSOM binding

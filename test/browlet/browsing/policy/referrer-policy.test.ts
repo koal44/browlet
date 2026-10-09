@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
+import { UserAgent } from '../../../../src/browlet/user-agent';
 
 import {
   determineRequestReferrer, parseReferrerPolicyFromHeader,
   setRequestReferrerPolicyOnRedirect, stripURLForReferrer,
 } from '../../../../src/browlet/browsing/policy/referrer-policy';
-import { UserAgent } from '../../../../src/browlet/user-agent';
 import { FetchRequest } from '../../../../src/fetch/request';
 import type { ReferrerPolicy } from '../../../../src/fetch/policy';
 import { FetchResponse } from '../../../../src/fetch/response';

@@ -1,25 +1,15 @@
-import type { DocumentImpl } from './dom/nodes/document';
-import type { ElementImpl } from './dom/nodes/element';
-import { getSourceCodeLocation } from './html/parser/tree-adapter';
+import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
+import { getSourceCodeLocation, BrowletParser, type DocumentWrite } from './html/parser/index';
 import { isHeaderValue } from '../fetch/index';
-import { createMicrotaskQueue } from '../js-engine/index';
 import { internalType, type InternalPromise } from '../infra/promises';
 import type { StampedPlatformObject } from '../web-idl/index';
 import type { Document, WindowProxy } from './platform';
-import { project, getRelevantRealm } from './bindings';
-import { createAndInitializeDocument } from './browsing/document-lifecycle';
-import { TopLevelTraversable } from './browsing/navigable';
-import { NavigationParams } from './browsing/navigation/params';
-import {
-  BrowletParser, type DocumentWrite,
-} from './html/parser/document-parser';
-import type { Realm } from './scripting/realm';
-import { installHostHooks } from './scripting/host-hooks';
+import { browletBindingWorld } from './bindings';
+import { createAndInitializeDocument, NavigationParams, TopLevelTraversable } from './browsing/navigation/index';
+import { type Realm, installHostHooks } from './scripting/index';
 import { UserAgent } from './user-agent';
-import type { AuthenticationPrompt } from './loader/authentication';
-import { requestNodeEventLoopTurn } from './integration/scripting';
-import { PageEvaluation } from './automation/evaluation';
-import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
+import type { AuthenticationPrompt } from './loader/index';
+import { PageEvaluation } from './automation/index';
 import { InternalError } from '../infra/internal-error';
 
 /** Hosts one top-level browsing session with navigation and page evaluation. */
@@ -33,13 +23,7 @@ export class Browlet {
   constructor(config: BrowletConfig) {
     installHostHooks();
     this.#route = config.route;
-    this.#userAgent = new UserAgent(
-      {
-        createMicrotaskQueue,
-        requestEventLoopTurn: requestNodeEventLoopTurn,
-        unsafeSharedCurrentTime,
-      },
-    );
+    this.#userAgent = new UserAgent();
     if (config.userAgent !== undefined) {
       if (!isHeaderValue(config.userAgent)) {
         // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
@@ -60,7 +44,7 @@ export class Browlet {
     ) {
       throw new InternalError('Initial top-level traversable is incomplete');
     }
-    this.#evaluation = new PageEvaluation(getRelevantRealm(this.window));
+    this.#evaluation = new PageEvaluation(this.#traversable.activeWindow.env.realm);
   }
 
   /** Platform Document currently active in this session. */
@@ -69,7 +53,9 @@ export class Browlet {
     if (document === null) {
       throw new InternalError('Top-level traversable has no active Document');
     }
-    return project(document) as StampedPlatformObject<Document>;
+    const platform = browletBindingWorld.project(document);
+    if (!platform) throw new InternalError('Active Document has no binding');
+    return platform as StampedPlatformObject<Document>;
   }
 
   /** Stable WindowProxy for the active browsing context. */
@@ -126,7 +112,7 @@ export class Browlet {
   #navigateDocument(url: string | URL): InternalPromise<WindowProxy> {
     const documentURL = new URL(url);
     const source = this.#getRouteSource(documentURL);
-    const documentURLRecord = getRelevantRealm(this.window).env.parseURL(documentURL.href).url;
+    const documentURLRecord = this.#traversable.activeWindow!.env.parseURL(documentURL.href).url;
     if (documentURLRecord === null) {
       throw new InternalError(`Could not parse validated navigation URL ${documentURL.href}`);
     }
@@ -143,8 +129,9 @@ export class Browlet {
       'text/html',
       navigationParams,
     );
-    const realm = getRelevantRealm(document);
     const env = document.env;
+    // Document initialization has attached the Window selected for this navigation.
+    const realm = document.getRelevantGlobalObject()!.env.realm;
     const historyEntry = navigationParams.createHistoryEntry(document, source);
     this.#traversable.finalizeCrossDocumentNavigation(
       historyHandling,

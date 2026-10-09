@@ -1,8 +1,8 @@
 import { deserialize, serialize } from 'node:v8';
 
-import {
-  queueNetworkingTask, type AbortControllerCapability, type JSEnvironment, type RealmExecution,
-} from '../../src/js-engine/index';
+import type { AbortController } from '../../src/infra/execution';
+import type { JSEnvironment } from '../../src/js-engine/index';
+import type { FileExecution } from '../../src/file/index';
 import { TestRealm } from '../support/web-idl-realm';
 import { BindingWorld, type BindingContext, type WebIDLEnvironment, type WebIDLExecution } from '../../src/web-idl/index';
 import { readableStreamReadResultIDL } from '../../src/streams/index';
@@ -14,7 +14,7 @@ export function createEnvironment(realm = new TestRealm(), binding?: BindingCont
     return new BindingWorld<TestEnvironment>([readableStreamReadResultIDL])
       .register(realm, (ctx) => createEnvironment(realm, ctx)).getEnvironment();
   }
-  return { realm, exec: createExecution(realm, binding), queueNetworkingTask };
+  return { realm, exec: createExecution(realm, binding) };
 }
 
 export interface TestEnvironment extends JSEnvironment, WebIDLEnvironment {
@@ -22,7 +22,7 @@ export interface TestEnvironment extends JSEnvironment, WebIDLEnvironment {
   exec: TestExecution;
 }
 
-export interface TestExecution extends RealmExecution, WebIDLExecution {}
+export interface TestExecution extends FileExecution, WebIDLExecution {}
 
 /** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
 export function createExecution(realm = new TestRealm(), binding?: BindingContext): TestExecution {
@@ -42,9 +42,6 @@ export function createExecution(realm = new TestRealm(), binding?: BindingContex
       const task = setImmediate(steps);
       return { remove: () => { clearImmediate(task); } };
     },
-    networking: {
-      queueGlobalTask: (_global, steps) => { setImmediate(steps); },
-    },
     createAbortController,
     createDependentAbortSignal() {
       throw new Error('Dependent-signal tests require the DOM runtime');
@@ -57,7 +54,7 @@ export function createExecution(realm = new TestRealm(), binding?: BindingContex
   };
 }
 
-function createAbortController(): AbortControllerCapability {
+function createAbortController(): AbortController {
   const algorithms = new Set<() => void>();
   const signal = {
     aborted: false,

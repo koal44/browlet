@@ -84,7 +84,7 @@ disposal and the remaining lifecycle work.
 | `encoding.ts` | Byte-stream decoding, encoding sniffing, `<meta>` extraction, confidence, and navigation restart without a second network fetch | HTML §§2.1.7, 2.5.3, and 13.2 |
 | `script-runner.ts` | Parser-inserted scripts, pause/resume, nesting level, pending parsing-blocking script | HTML §§13.2.2 and 13.2.6.4 |
 | `dynamic-markup.ts` | `document.open()`, `close()`, `write()`, and `writeln()` over the active parser, including reentrancy, destructive-write guards, and script insertion points | HTML §8.4 |
-| Existing `document-parser.ts` plus `browsing/document-lifecycle.ts` | Stop/abort parsing, readiness changes, deferred scripts, `DOMContentLoaded`, load-event delay, and final completion | HTML §13.2, "The end" |
+| Existing `document-parser.ts` plus `browsing/navigation/document-lifecycle.ts` | Stop/abort parsing, readiness changes, deferred scripts, `DOMContentLoaded`, load-event delay, and final completion | HTML §13.2, "The end" |
 | `preload-scanner.ts` only after ordinary loading works | Optional speculative resource discovery without semantic tree mutation | HTML §13.2, "Speculative HTML parsing" |
 
 parse5 continues to own tokenization, tree construction, insertion modes,

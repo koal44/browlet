@@ -1,4 +1,4 @@
-import type { JSEnvironment } from '../js-engine/index';
+import type { StreamsEnvironment } from '../streams/index';
 import type { Definition } from '../web-idl/index';
 import {
   textDecodeOptionsIDL, textDecoderCommonIDL, textDecoderIDL,
@@ -18,7 +18,7 @@ import {
 } from './text-encoder-stream';
 
 export {
-  getEncoding, getOutputEncoding, type Encoding, type OutputEncoding, type EncodingCapability,
+  getEncoding, getOutputEncoding, type Encoding, type OutputEncoding, type DecodeText,
 } from './core/index';
 export {
   bomSniff, decode, decodeQueue, encode, encodeQueue, encodeOrFail, encodeOrFailSync,
@@ -34,7 +34,7 @@ export {
 } from './codecs/utf-8';
 export { TextDecoderStreamImpl } from './text-decoder-stream';
 
-export const encodingIDLDefinitions: Definition<JSEnvironment>[] = [
+export const encodingIDLDefinitions: Definition<StreamsEnvironment>[] = [
   textDecoderCommonIDL,
   textDecoderOptionsIDL,
   textDecodeOptionsIDL,

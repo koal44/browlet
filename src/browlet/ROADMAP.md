@@ -28,7 +28,7 @@ domains; narrower roadmaps carry their actual status and remaining contracts.
 | Workers | HTML §10 plus Storage-backed shared-worker identity | `workers/` |
 | Worklet infrastructure | HTML §11; concrete worklet specifications | `worklets/`, with concrete types in their owning subsystem |
 | Web Storage facade and events | HTML §12 over the Storage Standard | `storage/` |
-| SVG and MathML host elements | HTML foreign-content integration plus SVG 2 and MathML Core | `svg/` and `mathml/` |
+| SVG and MathML host elements | HTML foreign-content integration plus SVG 2 and MathML Core | `dom/nodes/svg/` and `dom/nodes/mathml/` |
 | CSSOM/HTML host integration | CSSOM, CSSOM View, and HTML link/style processing | `style/` |
 
 ## Current boundary

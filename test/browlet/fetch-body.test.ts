@@ -14,8 +14,7 @@ import { createFetchWindow } from './fetch-fixture';
 import { performTestMicrotaskCheckpoint, observeBrowletPromise } from './test-runtime';
 import { ReadableStreamImpl } from '../../src/streams/index';
 import { Browlet } from '../../src/browlet/browlet';
-import { getRelevantRealm } from '../../src/browlet/bindings';
-import { queueGlobalFetchTask } from '../../src/browlet/integration/fetch';
+import { getRelevantRealm } from '../support/browlet-binding';
 import { networkingTaskSource } from '../../src/browlet/scripting/tasks';
 import { createFetchRequest, fetchDefinitions } from '../fetch/fetch-fixture';
 
@@ -94,8 +93,8 @@ describe('Fetch body delivery through HTML', () => {
     const firstTasks = firstRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const secondTasks = secondRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const previousTasks = new Set([...firstTasks, ...secondTasks]);
-    queueGlobalFetchTask(firstRealm.globalObject, vi.fn());
-    queueGlobalFetchTask(proxy, vi.fn());
+    firstRealm.env.exec.queueGlobalFetchTask(firstRealm.globalObject, vi.fn());
+    firstRealm.env.exec.queueGlobalFetchTask(proxy, vi.fn());
 
     const documents = [...new Set([...firstTasks, ...secondTasks])]
       .filter((task) => !previousTasks.has(task))

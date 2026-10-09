@@ -1,3 +1,4 @@
+import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../../test-runtime';
 
@@ -7,7 +8,7 @@ import {
 import {
   DOMExceptionImpl, isDOMException,
 } from '../../../../src/web-idl/core/dom-exception';
-import { Realm } from '../../../../src/browlet/scripting/realm';
+import type { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
@@ -444,8 +445,8 @@ describe('HTML structured deserialization', () => {
       },
     });
     const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
-    const sourceRealm = new Realm();
-    const targetRealm = new Realm();
+    const sourceRealm = createManualRealm();
+    const targetRealm = createManualRealm();
     const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
     const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
     const original = source.createPlatformRecord(containerIDL.name)!;
@@ -483,8 +484,8 @@ function createContexts(options: {
   targetRealm: Realm;
 } {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
-  const sourceRealm = new Realm({ crossOriginIsolated: true });
-  const targetRealm = new Realm({ crossOriginIsolated: true });
+  const sourceRealm = createManualRealm({ crossOriginIsolated: true });
+  const targetRealm = createManualRealm({ crossOriginIsolated: true });
   const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
   const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
   source.install(sourceRealm.globalObject);

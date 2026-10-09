@@ -2,22 +2,20 @@ import { expect, vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
 import type { TaskSourceKey } from '../../src/infra/execution';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
-import { queueNetworkingTask } from '../../src/js-engine/index';
 import { createTestContext } from '../browlet/streams/environment';
 import { ReadableStreamImpl } from '../../src/streams/index';
+import { createClientEnvironment } from './client-fixture';
 
 export function createBodyFixture() {
   const context = createTestContext();
   const tasks: { global: object; steps: () => void; }[] = [];
   const parallelSteps: (() => void)[] = [];
-  const scheduling = {
-    queueGlobalTask: vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); }),
-  };
+  const queueGlobalFetchTask = vi.fn((global: object, steps: () => void) => { tasks.push({ global, steps }); });
+  const client = createClientEnvironment(undefined, context.getEnvironment());
   const env = {
-    realm: context.realm,
-    queueNetworkingTask,
+    ...client,
     exec: {
-      ...context.getEnvironment().exec,
+      ...client.exec,
       runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
       queueTask(source: TaskSourceKey, steps: () => void) {
         expect(source).toBe('network');
@@ -30,13 +28,13 @@ export function createBodyFixture() {
           },
         };
       },
-      networking: scheduling,
+      queueGlobalFetchTask,
     },
   };
   return {
     context,
     env,
-    scheduling,
+    queueGlobalFetchTask,
     tasks,
     parallelSteps,
     global: context.realm.globalObject,

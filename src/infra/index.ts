@@ -14,6 +14,8 @@ export type {
 export { RangeError, SyntaxError, TypeError, ExceptionRequestStamper } from './exceptions';
 export {
   createAsyncExecution, nativeTimerHost,
+  type AbortExecution, type AbortController, type AbortSignal, type AbortAlgorithmHandle,
+  type StructuredDataExecution,
   type AsyncExecution, type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type TimerHost,
 } from './execution';
 export { InternalError } from './internal-error';

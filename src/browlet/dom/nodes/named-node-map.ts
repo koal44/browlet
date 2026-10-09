@@ -71,8 +71,6 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     return names;
   }
 
-  // -- Internal ---------------------------------------------------------
-
   /** Associate the map and any retained attributes with their owning element. */
   associateElement(element: ElementImpl): void {
     this.#element = element;

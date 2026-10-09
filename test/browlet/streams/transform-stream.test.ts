@@ -6,7 +6,7 @@ import { createTestContext } from './environment';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { ReadableStreamDefaultReader } from '../../../src/browlet/platform';
-import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import {
   TransformStreamImpl, type TransformStreamDefaultControllerImpl,
 } from '../../../src/streams/index';

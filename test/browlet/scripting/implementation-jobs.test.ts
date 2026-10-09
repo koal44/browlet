@@ -7,10 +7,9 @@ import { itPassesWith } from '../../test-runtime';
 import { createSiblingWindow } from '../../support/windows';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
-import { runInParallel } from '../../../src/browlet/integration/scripting';
-import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
+import { queueNodeTask } from '../../../src/browlet/integration/node';
 import {
   BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
   promise, reference, roAttr,
@@ -57,7 +56,7 @@ describe('implementation Promise delivery', () => {
     const ready = Promise.withResolvers<void>();
     const unrelated = new AsyncLocalStorage<string>();
     unrelated.run('backend library', () => {
-      runInParallel(() => {
+      queueNodeTask(() => {
         void readFile('package.json').then((bytes) => {
           expect(bytes.length).toBeGreaterThan(0);
           expect(unrelated.getStore()).toBe('backend library');
@@ -75,11 +74,7 @@ describe('implementation Promise delivery', () => {
     await ready.promise;
     void Promise.resolve().then(() => trace.push('unrelated Node'));
     const loop = a.realm.agent.eventLoop;
-    expect(loop.runTaskTurn({
-      createMicrotaskQueue: () => loop.microtaskQueue,
-      requestEventLoopTurn: () => {},
-      unsafeSharedCurrentTime,
-    })).toBe(true);
+    expect(loop.runTaskTurn()).toBe(true);
     expect(trace).toEqual(['completion task', 'A continues', 'A after continuation', 'A done']);
     await Promise.resolve();
     expect(trace.at(-1)).toBe('unrelated Node');

@@ -1,11 +1,10 @@
-import { EventLoop, type EventLoopOptions } from './event-loop';
-import { createMicrotaskQueue } from '../../js-engine/index';
-import type { BrowsingContextGroup } from '../browsing/browsing-context';
+import type { EventLoop } from './event-loop';
+import type { BrowsingContextGroup } from '../browsing/navigation/index';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
   type Origin,
 } from '../../url/index';
-import type { WindowImpl } from '../browsing/window/window';
+import type { WindowImpl } from '../browsing/window/index';
 import { InternalError } from '../../infra/internal-error';
 
 // V8 owns ECMAScript execution contexts and engine-level agent state;
@@ -21,27 +20,15 @@ export abstract class Agent {
   signifier: symbol;
   #agentCluster: AgentCluster | null = null;
 
-  protected constructor(
-    canBlock: boolean,
-    eventLoopOptions: EventLoopOptions | null = null,
-  ) {
+  protected constructor(canBlock: boolean, eventLoop: EventLoop) {
     this.canBlock = canBlock;
-    this.eventLoop = new EventLoop(
-      eventLoopOptions?.createMicrotaskQueue() ??
-      createMicrotaskQueue(),
-    );
+    this.eventLoop = eventLoop;
     this.signifier = Symbol('Agent');
-
-    if (eventLoopOptions !== null) {
-      this.eventLoop.start(eventLoopOptions);
-    }
   }
 
   get agentCluster(): AgentCluster | null {
     return this.#agentCluster;
   }
-
-  // -- Internal ---------------------------------------------------------
 
   associateWithCluster(cluster: AgentCluster): void {
     if (this.#agentCluster !== null && this.#agentCluster !== cluster) {
@@ -58,15 +45,15 @@ export class WindowAgent extends Agent {
   /** Windows served by this agent, including multiple browsing contexts. */
   windowObjects = new Set<WindowImpl>();
 
-  constructor(eventLoopOptions: EventLoopOptions | null = null) {
-    super(false, eventLoopOptions);
+  constructor(eventLoop: EventLoop) {
+    super(false, eventLoop);
   }
 }
 
 /** Execution for browser-owned work whose lifetime is independent of any page. */
 export class SandboxAgent extends Agent {
-  constructor(eventLoopOptions: EventLoopOptions) {
-    super(false, eventLoopOptions);
+  constructor(eventLoop: EventLoop) {
+    super(false, eventLoop);
   }
 }
 
@@ -74,8 +61,8 @@ export class SandboxAgent extends Agent {
 export class DedicatedWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
-  constructor() {
-    super(true);
+  constructor(eventLoop: EventLoop) {
+    super(true, eventLoop);
   }
 }
 
@@ -83,8 +70,8 @@ export class DedicatedWorkerAgent extends Agent {
 export class SharedWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
-  constructor() {
-    super(true);
+  constructor(eventLoop: EventLoop) {
+    super(true, eventLoop);
   }
 }
 
@@ -92,8 +79,8 @@ export class SharedWorkerAgent extends Agent {
 export class ServiceWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
-  constructor() {
-    super(false);
+  constructor(eventLoop: EventLoop) {
+    super(false, eventLoop);
   }
 }
 
@@ -101,8 +88,8 @@ export class ServiceWorkerAgent extends Agent {
 export class WorkletAgent extends Agent {
   globalScope: unknown = undefined;
 
-  constructor() {
-    super(false);
+  constructor(eventLoop: EventLoop) {
+    super(false, eventLoop);
   }
 }
 
@@ -141,9 +128,7 @@ export function obtainSimilarOriginWindowAgent(
       agentCluster.isOriginKeyed = true;
     }
 
-    agentCluster.add(new WindowAgent(
-      group.userAgent.eventLoopOptions,
-    ));
+    agentCluster.add(group.userAgent.createWindowAgent());
     group.agentClusterMap.set(key, agentCluster);
   }
 

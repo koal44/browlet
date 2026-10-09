@@ -597,6 +597,10 @@ discovery. Both forms share the enclosing operation's identity memory.
 belongs to one world and retains one platform identity; another world must
 construct its own implementation. Stamp lookup itself is not an ownership check.
 `StampedImplInstance<T>` and `StampedPlatformObject<T>` retain concrete types.
+`getImplementationObject()` reads an existing platform stamp without selecting a
+world. Use it only when a binding adapter already retains that association, as
+WindowProxy does for its current Window; use `world.unwrap()` to validate a value's
+world membership at an input boundary.
 
 ### Why the world spans realms
 

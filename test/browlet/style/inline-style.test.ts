@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { parseTestDocument } from '../../support/dom';
-import { HTMLElementImpl } from '../../../src/browlet/html/elements/html-element';
-import { SVGElementImpl } from '../../../src/browlet/svg/element';
-import { MathMLElementImpl } from '../../../src/browlet/mathml/element';
+import { HTMLElementImpl } from '../../../src/browlet/dom/nodes/html/html-element';
+import { SVGElementImpl } from '../../../src/browlet/dom/nodes/svg/element';
+import { MathMLElementImpl } from '../../../src/browlet/dom/nodes/mathml/element';
 import {
   MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../src/infra/index';

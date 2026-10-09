@@ -4,7 +4,7 @@ export {
   InternalPromise, Stylelet, StyleletContext, styleletIDLDefinitions, TreeScope,
 } from '../../src/stylelet/index';
 export type {
-  CSSStyleSheetInit, DOMException, DOMExceptionConstructor, DOMExceptionName, Encoding, EncodingCapability,
+  CSSStyleSheetInit, DOMException, DOMExceptionConstructor, DOMExceptionName, Encoding, DecodeText,
   StyleletEnvironment, StyleletExecution, StyleletOptions, StyleletUserAgent,
   StyleletURL, StyleletURLConstructor,
 } from '../../src/stylelet/index';

@@ -10,7 +10,13 @@
   host-created events. Signal-bound listeners use Browlet `AbortSignal`
   implementations and internal abort algorithms, which remove listeners
   before the signal's public `abort` event.
-- `ui-event.ts`: the currently required UI Events specializations.
+- [ui-event.ts](ui-event.ts): UIEvent and MouseEvent identities, defined by
+  UI Events and used by DOM click activation. These extensions share the
+  events component; their platform declarations remain unfinished.
+
+[ProgressEvent](../../integration/xhr/progress-event.ts) belongs to XHR
+integration and is also used by FileReader. It imports DOM's shared event
+machinery; DOM does not collect its declarations.
 
 [`EventRealm` and `WindowEventRealm`](../environment.ts) describe timing and
 Window event state.

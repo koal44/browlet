@@ -1,4 +1,4 @@
-import { getRelevantRealm } from '../../src/browlet/bindings';
+import { getRelevantRealm } from './browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { BrowletEnvironment } from '../../src/browlet/scripting/environment';
 import { DocumentImpl } from '../../src/browlet/dom/nodes/document';

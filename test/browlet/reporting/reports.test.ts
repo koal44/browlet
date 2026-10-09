@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { Window } from '../../../src/browlet/platform';
 import { ReportImpl, ReportBodyImpl } from '../../../src/browlet/reporting/report';

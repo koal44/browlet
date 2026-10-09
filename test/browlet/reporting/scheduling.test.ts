@@ -1,12 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { createTestDocument } from '../../support/dom';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
-import { requestNodeEventLoopTurn } from '../../../src/browlet/integration/scripting';
-import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
-import { createTaskSource } from '../../../src/browlet/scripting/event-loop';
 import { UserAgent } from '../../../src/browlet/user-agent';
-import { createMicrotaskQueue } from '../../../src/js-engine/index';
+import { createTestDocument } from '../../support/dom';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { createTaskSource } from '../../../src/browlet/scripting/event-loop';
 
 describe('Browser-owned Reporting scheduling', () => {
   it('runs on a later turn without requiring a Window or HTML checkpoint', async () => {
@@ -21,9 +18,7 @@ describe('Browser-owned Reporting scheduling', () => {
   });
 
   it('yields to runnable page tasks even when reporting was scheduled first', async () => {
-    const userAgent = new UserAgent({
-      createMicrotaskQueue, requestEventLoopTurn: requestNodeEventLoopTurn, unsafeSharedCurrentTime,
-    });
+    const userAgent = new UserAgent();
     const traversable = TopLevelTraversable.create(userAgent, null, '');
     const realm = getRelevantRealm(traversable.activeWindow!);
     const source = createTaskSource('reporting scheduling test');
@@ -38,9 +33,7 @@ describe('Browser-owned Reporting scheduling', () => {
   });
 
   it('does not wait for tasks whose Document is inactive', async () => {
-    const userAgent = new UserAgent({
-      createMicrotaskQueue, requestEventLoopTurn: requestNodeEventLoopTurn, unsafeSharedCurrentTime,
-    });
+    const userAgent = new UserAgent();
     const traversable = TopLevelTraversable.create(userAgent, null, '');
     const eventLoop = getRelevantRealm(traversable.activeWindow!).agent.eventLoop;
     const source = createTaskSource('inactive reporting scheduling test');

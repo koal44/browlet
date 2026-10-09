@@ -5,6 +5,7 @@ import stylistic from '@stylistic/eslint-plugin';
 import globals from 'globals';
 import webIDLOperationLayout from './scripts/eslint/web-idl-operation-layout.mjs';
 import subsystemImports from './scripts/eslint/subsystem-imports.mjs';
+import noAncestorBarrelImports from './scripts/eslint/no-ancestor-barrel-imports.mjs';
 
 const runtimeGlobals = [
   { name: 'Promise', message: 'Use the supplied InternalPromise constructor for implementation continuations.' },
@@ -38,6 +39,21 @@ export default defineConfig(
   eslint.configs.recommended,
 
   {
+    plugins: {
+      browlet: {
+        rules: {
+          'web-idl-operation-layout': webIDLOperationLayout,
+          'subsystem-imports': subsystemImports,
+          'no-ancestor-barrel-imports': noAncestorBarrelImports,
+        },
+      },
+    },
+    rules: {
+      'browlet/no-ancestor-barrel-imports': 'error',
+    },
+  },
+
+  {
     files: ['**/*.ts'],
     languageOptions: {
       parser: tseslint.parser,
@@ -52,12 +68,6 @@ export default defineConfig(
     plugins: {
       '@typescript-eslint': tseslint.plugin,
       '@stylistic': stylistic,
-      browlet: {
-        rules: {
-          'web-idl-operation-layout': webIDLOperationLayout,
-          'subsystem-imports': subsystemImports,
-        },
-      },
     },
     rules: {
       'no-console': 'off',

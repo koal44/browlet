@@ -1,7 +1,6 @@
-import { getRelevantRealm } from '../bindings';
-import type { DocumentImpl } from '../dom/nodes/document';
-import type { UnsafeMoment } from '../performance/clock';
-import type { Navigable } from '../browsing/navigable';
+import type { DocumentImpl } from '../dom/nodes/index';
+import type { UnsafeMoment } from '../timing/index';
+import type { Navigable } from '../browsing/navigation/index';
 import type { WindowAgent } from './agents';
 import type { Realm } from './realm';
 import { renderingTaskSource } from './tasks';
@@ -49,7 +48,7 @@ export class WindowRenderingProducer {
 
       const window = navigable.activeWindow;
       if (window === null) continue;
-      const realm = getRelevantRealm(window);
+      const realm = window.env.realm;
       if (realm.agent === this.#agent) realms.add(realm);
     }
     if (realms.size === 0) return;

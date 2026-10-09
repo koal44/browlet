@@ -1,19 +1,16 @@
 import { afterEach, describe, expect, vi } from 'vitest';
+import { createManualUserAgent } from '../../support/browlet-agent';
 import { createTestDocument } from '../../support/dom';
 import { itPassesWith } from '../../test-runtime';
-import { createMicrotaskQueue } from '../../../src/js-engine/index';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
-import {
-  createDocumentState, createSessionHistoryEntry,
-} from '../../../src/browlet/browsing/navigation/session-history';
-import { Duration } from '../../../src/browlet/performance/clock';
-import { unsafeSharedCurrentTime } from '../../../src/browlet/performance/high-resolution-time';
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { createSessionHistoryEntry } from '../../../src/browlet/browsing/navigation/session-history';
+import { Duration } from '../../../src/browlet/timing/clock';
 import { type Task } from '../../../src/browlet/scripting/event-loop';
 import {
   installHostHooks, jsEngineTaskSource,
 } from '../../../src/browlet/scripting/host-hooks';
-import { UserAgent } from '../../../src/browlet/user-agent';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -34,7 +31,7 @@ describe('HTML generic and timeout jobs', () => {
     fixture.loop.performMicrotaskCheckpoint();
     expect(fixture.observations).toEqual([]);
 
-    expect(fixture.loop.runTaskTurn(fixture.options)).toBe(true);
+    expect(fixture.loop.runTaskTurn()).toBe(true);
     expect(fixture.observations.map((item) => item.value)).toEqual(['ok']);
     expect(task?.scriptEvaluationEnvironments).toEqual(new Set());
     expect(fixture.observations[0]?.task?.source.name).toBe('microtask');
@@ -77,7 +74,7 @@ describe('HTML generic and timeout jobs', () => {
     expect(task?.document).toBe(fixture.document);
     fixture.loop.performMicrotaskCheckpoint();
     expect(fixture.observations).toEqual([]);
-    expect(fixture.loop.runTaskTurn(fixture.options)).toBe(true);
+    expect(fixture.loop.runTaskTurn()).toBe(true);
     expect(fixture.observations.map((item) => item.value)).toEqual(['timed-out']);
     expect(task?.scriptEvaluationEnvironments).toEqual(new Set());
     expect(fixture.observations[0]?.task?.source.name).toBe('microtask');
@@ -86,12 +83,7 @@ describe('HTML generic and timeout jobs', () => {
 
 function createFixture() {
   installHostHooks();
-  const options = {
-    createMicrotaskQueue,
-    requestEventLoopTurn: vi.fn(),
-    unsafeSharedCurrentTime,
-  };
-  const traversable = TopLevelTraversable.create(new UserAgent(options), null, '');
+  const traversable = TopLevelTraversable.create(createManualUserAgent(), null, '');
   const document = traversable.activeDocument!;
   const realm = getRelevantRealm(document);
   const loop = realm.agent.eventLoop;
@@ -104,7 +96,7 @@ function createFixture() {
     observations.push({ value, task: loop.currentlyRunningTask });
   });
   return {
-    array, document, loop, observations, options, realm, traversable,
+    array, document, loop, observations, realm, traversable,
     jobs: loop.getTaskQueue(jsEngineTaskSource),
   };
 }

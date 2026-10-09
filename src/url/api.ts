@@ -205,8 +205,6 @@ export class URLImpl {
     return serializeURL(this.#url);
   }
 
-  // -- Internal methods -------------------------------------------------
-
   static fromRecord(record: URLRecord): URLImpl {
     return new URLImpl(record);
   }
@@ -392,8 +390,6 @@ export class URLSearchParamsImpl {
   toString(): string {
     return serializeFormUrlEncoded(this.#list);
   }
-
-  // -- Internal methods -------------------------------------------------
 
   associateURL(url: URLImpl): void {
     this.#urlObject = url;

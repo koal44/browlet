@@ -1,3 +1,4 @@
+import type { AbortAlgorithmHandle } from '../../../infra/execution';
 import {
   arg, atArg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,
@@ -5,11 +6,9 @@ import {
 } from '../../../web-idl/index';
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
 import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
-import type { ShadowRootMode } from '../nodes/shadow-root';
+import type { ShadowRootMode } from '../nodes/index';
 import { MouseEventImpl } from './ui-event';
-import {
-  type AbortAlgorithmHandle, type AbortSignalImpl,
-} from '../abort/abort-signal';
+import type { AbortSignalImpl } from '../abort/index';
 import { InternalError } from '../../../infra/internal-error';
 
 /** Owns listener registrations and delivers events through the dispatch path. */
@@ -84,8 +83,6 @@ export class EventTargetImpl {
     event.isTrusted = false;
     return this.#dispatch(event);
   }
-
-  // -- Internal methods -------------------------------------------------
 
   /** Create and dispatch a trusted event, returning false if canceled. */
   // https://dom.spec.whatwg.org/#concept-event-fire

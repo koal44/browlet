@@ -1,5 +1,5 @@
 export { JSRealm, type JSRealmOptions } from './realm';
-export { queueNetworkingTask, type JSEnvironment } from './environment';
+export type { JSEnvironment } from './environment';
 export { addon } from './node-addons';
 export {
   bindAsyncContext, createMicrotaskQueue, getAssociatedRealm,
@@ -13,10 +13,7 @@ export {
   readUTF8, utf8ByteLength, writeUTF8, writeUTF8Into,
 } from './byte-string';
 export { computeHash, randomUUID } from './crypto';
-export type {
-  AbortAlgorithmHandle, AbortControllerCapability, AbortSignalCapability,
-  NetworkingTasks, RealmExecution,
-} from './realm-execution';
+export type { RealmExecution } from './realm-execution';
 export type {
   GlobalAllocation, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSIntrinsics, JSIteratorResult,
   JSMethod, RealmFunctionOptions, RealmFunctionSteps,

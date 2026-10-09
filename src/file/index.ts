@@ -1,5 +1,5 @@
-import type { JSEnvironment } from '../js-engine/index';
 import type { Definition } from '../web-idl/index';
+import type { FileEnvironment } from './environment';
 import {
   blobIDL, blobPartIDL, blobPropertyBagIDL, endingTypeIDL,
 } from './blob';
@@ -20,10 +20,11 @@ export {
   fileIDL, FileImpl, filePropertyBagIDL,
   type FilePropertyBag, type FileSerializationState, type HostFileMetadata,
 } from './file';
+export type { FileEnvironment, FileExecution } from './environment';
 export { fileListIDL, FileListImpl } from './file-list';
 export { packageData, type FileReadType } from './package-data';
 
-export const fileIDLDefinitions: Definition<JSEnvironment>[] = [
+export const fileIDLDefinitions: Definition<FileEnvironment>[] = [
   endingTypeIDL,
   blobPropertyBagIDL,
   blobPartIDL,

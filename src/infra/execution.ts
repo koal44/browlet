@@ -12,6 +12,42 @@ export interface AsyncExecution {
   queueTask(source: TaskSourceKey, steps: () => void): TaskHandle;
 }
 
+/** DOM abort operations supplied for one execution owner. */
+export interface AbortExecution {
+  /** Create a controller and its signal in the owner's realm. */
+  createAbortController(): AbortController;
+  /** Create a signal that follows the supplied signals in the owner's realm. */
+  createDependentAbortSignal(signals: AbortSignal[]): AbortSignal;
+}
+
+/** Implementation-side controller that owns its signal's cancellation. */
+export type AbortController = {
+  readonly signal: AbortSignal;
+  abort(reason?: unknown): void;
+};
+
+/** Implementation-side abort state and algorithm registration, independent of platform event listeners. */
+export type AbortSignal = {
+  readonly aborted: boolean;
+  readonly reason: unknown;
+  addAlgorithm(steps: () => void): AbortAlgorithmHandle | null;
+};
+
+/** Remove an abort algorithm before its signal is aborted. */
+export type AbortAlgorithmHandle = {
+  remove(): void;
+};
+
+/** HTML structured-data operations supplied for one execution owner. */
+export interface StructuredDataExecution {
+  /** Clone into the owner's realm, optionally transferring objects. */
+  clone(value: unknown, transferList?: object[]): unknown;
+  /** Serialize a value; the provider owns the opaque record. */
+  serialize(value: unknown): object;
+  /** Reconstruct a record from the same provider in the owner's realm. */
+  deserialize(record: object): unknown;
+}
+
 /** Compose standalone execution from native Promise reactions and supplied timer wake-ups. */
 export function createAsyncExecution(timerHost: TimerHost): AsyncExecution {
   return {

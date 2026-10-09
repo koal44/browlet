@@ -1,40 +1,33 @@
-import { EOL } from 'node:os';
-
-import type { BrowsingContext } from '../browsing/browsing-context';
-import type { Traversable } from '../browsing/navigable';
+import type { BrowsingContext, Traversable } from '../browsing/navigation/index';
 import type { UserAgent } from '../user-agent';
 import {
   FetchGroup, getEnvironmentDefaultUserAgent,
-  type FetchEnvironment, type FetchEnvironmentRecord, type IntegrityViolationReportBody, type NetworkPartitionKey,
+  type FetchEnvironment, type FetchEnvironmentRecord, type FetchExecution,
+  type IntegrityViolationReportBody, type NetworkPartitionKey,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type RequestCredentials, type ResponseBodyInfo,
 } from '../../fetch/index';
 import type { EventLoop } from './event-loop';
 import type { Realm, WindowRealm } from './realm';
-import type { ModuleMap } from '../dom/nodes/document';
-import type { PolicyContainer } from '../browsing/policy/container';
-import { InsecureRequestsPolicy } from '../browsing/policy/upgrade-insecure-requests';
-import type { WindowImpl } from '../browsing/window/window';
+import type { DocumentImpl, ModuleMap } from '../dom/nodes/index';
+import type { WindowAgent } from './agents';
+import {
+  type PolicyContainer, InsecureRequestsPolicy, IntegrityViolationReportBodyImpl,
+  COEPViolationReportBodyImpl, type COEPViolationReportBody,
+} from '../browsing/policy/index';
+import type { WindowImpl } from '../browsing/window/index';
 import {
   areSameSite, obtainSite, obtainURLOrigin, stripURLForReporting, type Origin, type URLParseResult, type URLRecord,
 } from '../../url/index';
-import { Moment, UnsafeMoment, monotonicClock } from '../performance/clock';
-import { EnvironmentTiming } from '../performance/high-resolution-time';
+import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from '../timing/index';
 import { InternalError } from '../../infra/internal-error';
-import type { TaskCreationOptions } from '../../infra/execution';
-import { queueNetworkingTask, randomUUID, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
+import { randomUUID, type JSEnvironment, type RealmExecution } from '../../js-engine/index';
 import type { WebIDLExecution } from '../../web-idl/core/index';
-import type { DOMEnvironment, EventExecution } from '../dom/environment';
+import type { DOMEnvironment, EventExecution } from '../dom/index';
 import type { StyleletEnvironment, StyleletExecution } from '../../stylelet/index';
 import type { SelectletEnvironment } from '../../selectlet/index';
-import { fetchTaskScheduling } from '../integration/fetch';
-import { runInParallel } from '../integration/scripting';
-import { taskSources } from './tasks';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
-import { ReportImpl, ReportBodyImpl } from '../reporting/report';
-import { TestReportBodyImpl } from '../reporting/test-report';
-import { IntegrityViolationReportBodyImpl } from '../browsing/policy/integrity-policy';
-import { COEPViolationReportBodyImpl, type COEPViolationReportBody } from '../browsing/policy/coep';
+import { ReportImpl, ReportBodyImpl, TestReportBodyImpl } from '../reporting/index';
 
 /** Browser state shared by reserved records and full environments. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#environment
@@ -134,8 +127,11 @@ export interface ScriptingEnvironment {
   realm: Realm;
 }
 
-/** Engine, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
-export interface BrowletExecution extends RealmExecution, WebIDLExecution, EventExecution, StyleletExecution {}
+/** Engine, Fetch, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
+export interface BrowletExecution extends RealmExecution, FetchExecution, WebIDLExecution, EventExecution, StyleletExecution {
+  /** Allocate a Document and its descendant-node factory in this environment's binding. */
+  createDocument(): DocumentImpl;
+}
 
 /** Composed browser settings and execution for one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
@@ -152,7 +148,6 @@ export abstract class BrowletEnvironment extends EnvironmentRecord implements
   realm: Realm;
   /** Allocation, execution, and owner task delivery for this realm. */
   exec: BrowletExecution;
-  queueNetworkingTask = queueNetworkingTask;
 
   constructor(realm: Realm, record: EnvironmentRecord | null, exec: BrowletExecution) {
     super(record);
@@ -454,19 +449,24 @@ export class WindowEnvironment extends BrowletEnvironment {
   }
 }
 
-/** Create realm facilities for composition with Binding-owned allocations. */
-export function createExecution(realm: Realm) {
-  return {
-    nativeLineEnding: EOL === '\r\n' ? '\r\n' : '\n',
-    NativePromise: realm.intrinsics.promise.constructor,
-    TypeError: realm.intrinsics.typeError,
-    RangeError: realm.intrinsics.rangeError,
-    buffers: realm.createRuntimeBuffers(),
-    queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
-    runInParallel,
-    queueTask: (source, steps, options?: TaskCreationOptions) => realm.queueGlobalTask(taskSources[source], steps, options),
-    networking: fetchTaskScheduling,
-    parseJSON: (text) => realm.parseJSON(text),
-    stringifyJSON: (value) => realm.stringifyJSON(value),
-  } satisfies Partial<BrowletExecution>;
-}
+/** Inputs selected by browsing algorithms before Window composition creates its realm. */
+export type WindowEnvironmentInit = {
+  /** Agent whose event loop executes the new Window's work. */
+  agent: WindowAgent;
+  /** Browser owner supplying shared state and integration facilities. */
+  userAgent: UserAgent;
+  /** URL used to initialize the Window's environment. */
+  creationURL: URLRecord;
+  /** Origin selected for the new Document. */
+  origin: Origin;
+  /** Parent Window used for ancestry and secure-context determination. */
+  parent: WindowImpl | null;
+  /** Top-level URL captured for the environment's initial settings. */
+  topLevelCreationURL: URLRecord;
+  /** Top-level origin captured for partitioning and security decisions. */
+  topLevelOrigin: Origin;
+  /** Early environment record whose identity survives navigation setup. */
+  reservedEnv?: EnvironmentRecord | null;
+  /** Previous realm whose WindowProxy identity is reused for navigation. */
+  previousRealm?: WindowRealm;
+};

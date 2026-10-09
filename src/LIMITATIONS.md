@@ -29,7 +29,7 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   native context/allocation path resolves these two mismatches. Remove the
   modeled proxy/descriptor accommodations only when that path is required.
   Sources: [JSRealm](js-engine/realm.ts), [Window binding tests](../test/browlet/dom-binding.test.ts),
-  [navigation tests](../test/browlet/browsing/document-lifecycle.test.ts).
+  [navigation tests](../test/browlet/browsing/navigation/document-lifecycle.test.ts).
 - **Browser origin security remains unfinished on every backend.** A native
   WindowProxy and Node's shared security token provide identity and embedder
   access, not same-/cross-origin policy. The Web IDL security hook is currently

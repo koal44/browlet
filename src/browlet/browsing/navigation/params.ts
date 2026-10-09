@@ -1,24 +1,17 @@
-import type { DocumentImpl } from '../../dom/nodes/document';
-import { PolicyContainer } from '../policy/container';
-import { OpenerPolicy } from '../policy/coop';
-import { SandboxingFlagSet } from '../policy/sandbox';
-import type { BrowsingContext } from '../browsing-context';
-import { PermissionsPolicy } from '../policy/permissions';
+import { InternalError } from '../../../infra/internal-error';
 import { FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
 import { createOpaqueOrigin, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
-import { CSPList } from '../policy/csp/list';
-import { getRelevantRealm } from '../../bindings';
-import type { EnvironmentRecord } from '../../scripting/environment';
-import { TopLevelTraversable, type Navigable, type UserNavigationInvolvement } from '../navigable';
-import type { NavigationTimingType } from '../../performance/navigation';
-import {
-  createDocumentState, createSessionHistoryEntry,
-  type SessionHistoryEntry,
-} from './session-history';
-import {
-  coarsenedSharedCurrentTime, type DOMHighResTimeStamp,
-} from '../../performance/high-resolution-time';
-import { InternalError } from '../../../infra/internal-error';
+
+import type { DocumentImpl } from '../../dom/nodes/index';
+import type { NavigationTimingType } from '../../performance/index';
+import type { EnvironmentRecord } from '../../scripting/index';
+import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
+import { PolicyContainer, OpenerPolicy, SandboxingFlagSet, PermissionsPolicy } from '../policy/index';
+import { CSPList } from '../policy/csp/index';
+import type { BrowsingContext } from './browsing-context';
+import { createDocumentState } from './document-state';
+import { TopLevelTraversable, type Navigable, type UserNavigationInvolvement } from './navigable';
+import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';
 
 // Local routes supply an already-obtained response, leaving the Fetch request
 // and controller slots null on that path.
@@ -66,7 +59,7 @@ export class NavigationParams {
     this.origin = obtainURLOrigin(this.url);
     const context = this.obtainBrowsingContext();
     this.finalSandboxingFlagSet = new SandboxingFlagSet(context.popupSandboxingFlagSet);
-    const env = getRelevantRealm(context.activeWindow).env;
+    const env = context.activeWindow.env;
     this.#startTime = coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds;
   }
 

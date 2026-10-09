@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HSTSPolicy, HSTSStore } from '../../../../src/browlet/browsing/policy/hsts';
 import { UserAgent } from '../../../../src/browlet/user-agent';
+import { HSTSPolicy, HSTSStore } from '../../../../src/browlet/browsing/policy/hsts';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { FetchRequest } from '../../../../src/fetch/request';

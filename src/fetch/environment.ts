@@ -1,7 +1,8 @@
-import type { BlobImpl } from '../file/index';
+import type { BlobImpl, FileEnvironment, FileExecution } from '../file/index';
 import type { CookieStore } from '../http/index';
+import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise } from '../infra/promises';
-import type { JSEnvironment, RealmExecution } from '../js-engine/index';
+import type { GlobalObject } from '../js-engine/index';
 import type { MIMEType } from '../mime/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
@@ -19,6 +20,18 @@ import type { FetchMode, FetchRequest, RequestCredentials, RequestInternalPriori
 import type { CacheUsage, FetchResponse } from './response';
 import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
 
+/** Deliver Fetch steps to the selected global or parallel queue. */
+// https://fetch.spec.whatwg.org/#queue-a-fetch-task
+export function queueFetchTask(
+  steps: () => void, destination: GlobalObject | ParallelQueue, env: FetchEnvironment,
+): void {
+  if (destination instanceof ParallelQueue) {
+    destination.enqueue(steps);
+  } else {
+    env.exec.queueGlobalFetchTask(destination, steps);
+  }
+}
+
 /** Combine browser-wide connectivity state with the client's emulated offline state. */
 // https://fetch.spec.whatwg.org/#is-offline
 export function isOffline(env: FetchEnvironment): boolean {
@@ -27,8 +40,8 @@ export function isOffline(env: FetchEnvironment): boolean {
 }
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
-export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment {
-  /** Engine execution and exception allocation for this environment. */
+export interface FetchEnvironment extends FetchEnvironmentRecord, FileEnvironment {
+  /** Execution, body handling, aborts, and task delivery for this environment. */
   exec: FetchExecution;
   /** Whether this environment belongs to a Window, which can consume Document preloads. */
   isWindow: boolean;
@@ -78,8 +91,11 @@ export interface FetchEnvironment extends FetchEnvironmentRecord, JSEnvironment 
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void;
 }
 
-/** Engine facilities plus construction of abort exceptions in the owner's realm. */
-export interface FetchExecution extends RealmExecution, WebIDLExecution {}
+/** File/stream facilities, abort exceptions, and delivery to Fetch's selected global. */
+export interface FetchExecution extends FileExecution, WebIDLExecution {
+  /** Queue on the destination global's networking task source, which can differ from the body owner's. */
+  queueGlobalFetchTask(global: GlobalObject, steps: () => void): void;
+}
 
 /** An opaque reference to the HTML traversable selected for user prompts. */
 export type FetchPromptTarget = {
@@ -169,7 +185,7 @@ export interface FetchUserAgent extends StorageUserAgent {
   /** Apply a redirect response's Referrer-Policy header before the next main-fetch pass. */
   setRequestReferrerPolicyOnRedirect(request: FetchRequest, response: FetchResponse): void;
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
-  potentiallyOverrideResponse(request: FetchRequest, env: JSEnvironment): FetchResponse | null;
+  potentiallyOverrideResponse(request: FetchRequest, env: FetchEnvironment): FetchResponse | null;
   /** Select interception from request metadata; prepare its copy only when needed. */
   // https://w3c.github.io/ServiceWorker/#on-fetch-request-algorithm
   // Null and timing-only results continue to the network with the original request.

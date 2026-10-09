@@ -1,9 +1,9 @@
-import { EventTargetImpl } from '../dom/events/event-target';
+import { EventTargetImpl } from '../dom/events/index';
 import {
-  defineInterface, defineTypedef, idlType, impl, op, reference, roAttr, xattr,
+  defineInterface, idlType, impl, op, reference, roAttr, xattr,
 } from '../../web-idl/index';
-import type { EnvironmentTiming, DOMHighResTimeStamp } from './high-resolution-time';
-import type { DOMEnvironment } from '../dom/environment';
+import type { EnvironmentTiming, DOMHighResTimeStamp } from '../timing/index';
+import type { DOMEnvironment } from '../dom/index';
 
 /** Exposes coarsened timestamps relative to its environment time origin. */
 // https://w3c.github.io/hr-time/#the-performance-interface
@@ -28,22 +28,6 @@ export class PerformanceImpl extends EventTargetImpl {
     return this.#timing.getTimeOriginTimestamp().toTimestamp();
   }
 }
-
-/*
- * typedef double DOMHighResTimeStamp;
- */
-export const domHighResTimeStampIDL = defineTypedef({
-  name: 'DOMHighResTimeStamp',
-  type: idlType.double,
-});
-
-/*
- * typedef unsigned long long EpochTimeStamp;
- */
-export const epochTimeStampIDL = defineTypedef({
-  name: 'EpochTimeStamp',
-  type: idlType.unsignedLongLong,
-});
 
 /*
  * [Exposed=(Window,Worker)]

@@ -1,11 +1,12 @@
+import { createManualEventLoop } from '../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 
-import { createDocument, getBindingContext, getRelevantRealm, setAssociatedWindow } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { Document, Window } from '../../../src/browlet/platform';
-import { BrowsingContext } from '../../../src/browlet/browsing/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/session-history';
-import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
+import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
+import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -177,7 +178,7 @@ describe('Window environment prompt targets', () => {
     const child = createEnvironment('https://child.test/', top.navigable);
     const realm = child.env.realm;
     const context = getBindingContext(realm);
-    const window = realm.globalObject as Window & typeof globalThis;
+    const window = realm.globalObject as unknown as Window & typeof globalThis;
     const source = new window.Request('https://resource.test/');
     context.unwrap(source, RequestImpl)!.getRequest().populateFromClient();
     top.document.origin = obtainURLOrigin(parseURL('https://changed.test/').url!);
@@ -235,7 +236,7 @@ describe('network partition keys from browser environments', () => {
     expect(key).toEqual([['https', { kind: 'domain', value: 'example.com' }], null]);
 
     const env = createWindowEnvironment({
-      agent: new WindowAgent(), userAgent, creationURL, origin, parent: null, reservedEnv,
+      agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin, parent: null, reservedEnv,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
     request.reservedClient = null;
@@ -298,7 +299,7 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   const origin = obtainURLOrigin(creationURL);
   const parentEnv = parent === null ? null : getRelevantRealm(parent.activeDocument!).env;
   const env = createWindowEnvironment({
-    agent: new WindowAgent(), userAgent: parentEnv?.userAgent ?? new UserAgent(),
+    agent: new WindowAgent(createManualEventLoop()), userAgent: parentEnv?.userAgent ?? new UserAgent(),
     creationURL, origin, parent: parent?.activeWindow ?? null,
     topLevelCreationURL: parentEnv?.topLevelCreationURL ?? creationURL,
     topLevelOrigin: parentEnv?.topLevelOrigin ?? origin,
@@ -306,12 +307,12 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   const { window } = env;
   const realm = env.realm;
   const proxy = realm.windowProxy;
-  const document = createDocument(realm);
+  const document = realm.env.exec.createDocument();
   document.url = creationURL;
   document.origin = origin;
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);
-  setAssociatedWindow(proxy, window);
+  proxy.setAssociatedWindow(window.env.realm.globalObject);
   const documentState = createDocumentState(document);
   const navigable = parent === null
     ? new TopLevelTraversable(documentState)

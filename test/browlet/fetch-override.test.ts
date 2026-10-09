@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../src/browlet/bindings';
-import { Browlet } from '../../src/browlet/browlet';
 import { UserAgent } from '../../src/browlet/user-agent';
+import { getRelevantRealm } from '../support/browlet-binding';
+import { Browlet } from '../../src/browlet/browlet';
 import { utf8Decode, utf8Encode } from '../../src/encoding/codecs/utf-8';
 import { FetchBody } from '../../src/fetch/body';
 import type { FetchEnvironment } from '../../src/fetch/environment';
@@ -166,7 +166,6 @@ async function createWindowFixture() {
   const request = new FetchRequest(parseURL('https://example.test/resource').url!, env, userAgent);
   return { env, userAgent, request };
 }
-
 
 function consume(request: FetchRequest, env: FetchEnvironment) {
   const result = Promise.withResolvers<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>();

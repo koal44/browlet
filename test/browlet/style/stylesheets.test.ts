@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { HTMLElementImpl } from '../../../src/browlet/html/elements/html-element';
-import { HTMLStyleElementImpl } from '../../../src/browlet/html/elements/metadata/style';
-import { SVGStyleElementImpl } from '../../../src/browlet/svg/style-element';
+import { HTMLElementImpl } from '../../../src/browlet/dom/nodes/html/html-element';
+import { HTMLStyleElementImpl } from '../../../src/browlet/dom/nodes/html/metadata/style';
+import { SVGStyleElementImpl } from '../../../src/browlet/dom/nodes/svg/style-element';
 import { CSSStyleRuleImpl } from '../../../src/stylelet/cssom/rules';
 import { parseTestDocument } from '../../support/dom';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';

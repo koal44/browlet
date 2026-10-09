@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getBindingContext, getRelevantRealm } from '../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { Window } from '../../src/browlet/platform';
 import { HeadersImpl } from '../../src/fetch/headers';

@@ -1,5 +1,5 @@
 import type { FetchTimingInfo, ResponseBodyInfo } from '../../fetch/index';
-import type { DocumentLoadTimingInfo } from '../dom/nodes/document';
+import type { DocumentLoadTimingInfo } from '../dom/nodes/index';
 
 /** Live inputs retained until the navigation performance entry can be exposed. */
 // https://w3c.github.io/navigation-timing/#dfn-create-the-navigation-timing-entry

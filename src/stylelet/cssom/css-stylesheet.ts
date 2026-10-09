@@ -210,8 +210,6 @@ export class CSSStyleSheetImpl
     this.#replaceInterpretedStyleSheet(this.#parseRules(text));
   }
 
-  // Internal operations ----------------------------------------------------
-
   get interpretedStyleSheet(): InterpretedStyleSheet {
     return this.#interpretedStyleSheet;
   }

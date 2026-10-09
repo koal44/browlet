@@ -2,7 +2,6 @@ import type { BlobImpl } from '../file/index';
 import { utf8Encode } from '../encoding/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { InternalPromise } from '../infra/promises';
-import type { JSEnvironment } from '../js-engine/index';
 import { RangeError, TypeError } from '../infra/exceptions';
 import type { ReadableStreamImpl } from '../streams/index';
 import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -296,12 +295,12 @@ export class ResponseImpl {
   /** Body operations reading this response's current body and headers. */
   #bodyMixin: BodyMixin;
   /** Owner's execution and allocation facilities, retained by cloned Responses. */
-  #env: JSEnvironment;
+  #env: FetchEnvironment;
 
   // Internal allocation from an existing response and header guard.
   // https://fetch.spec.whatwg.org/#response-create
   constructor(
-    response: FetchResponse, guard: HeadersGuard, env: JSEnvironment,
+    response: FetchResponse, guard: HeadersGuard, env: FetchEnvironment,
   ) {
     this.#response = response;
     this.#headers = new HeadersImpl(response.headerList, guard);
@@ -311,7 +310,7 @@ export class ResponseImpl {
 
   /** Construct a Response from converted author arguments. */
   // https://fetch.spec.whatwg.org/#dom-response
-  static create(body: BodyInitValue | null, init: FetchResponseInit, env: JSEnvironment): ResponseImpl {
+  static create(body: BodyInitValue | null, init: FetchResponseInit, env: FetchEnvironment): ResponseImpl {
     const response = new ResponseImpl(new FetchResponse(), 'response', env);
     const extracted = body === null ? null : FetchBody.extract(body, false, env);
     response.#initialize(init, extracted);
@@ -319,7 +318,7 @@ export class ResponseImpl {
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-error
-  static error(env: JSEnvironment): ResponseImpl {
+  static error(env: FetchEnvironment): ResponseImpl {
     return new ResponseImpl(FetchResponse.networkError(), 'immutable', env);
   }
 
@@ -337,7 +336,7 @@ export class ResponseImpl {
   }
 
   // https://fetch.spec.whatwg.org/#dom-response-json
-  static json(data: unknown, init: FetchResponseInit, env: JSEnvironment): ResponseImpl {
+  static json(data: unknown, init: FetchResponseInit, env: FetchEnvironment): ResponseImpl {
     // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
     const json = env.exec.stringifyJSON(data);
     if (json === undefined) throw new TypeError('Value cannot be serialized as JSON');
@@ -370,8 +369,6 @@ export class ResponseImpl {
   json(): InternalPromise<unknown> { return this.#bodyMixin.json(); }
   text(): InternalPromise<string> { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
-
-  // -- Internal ---------------------------------------------------------
 
   getResponse(): FetchResponse { return this.#response; }
 

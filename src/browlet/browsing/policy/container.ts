@@ -1,6 +1,6 @@
 import { EmbedderPolicy } from './coep';
 import { IntegrityPolicy } from './integrity-policy';
-import type { CSPList } from './csp/list';
+import type { CSPList } from './csp/index';
 import type { FetchPolicyContainer, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
 
 /** Policies associated with a document, worker, or worklet. */

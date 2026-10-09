@@ -1,5 +1,6 @@
 import type { BlobImpl } from '../file/index';
-import { type AbortSignalCapability, type JSEnvironment, isomorphicEncode, randomUUID } from '../js-engine/index';
+import { isomorphicEncode, randomUUID } from '../js-engine/index';
+import type { AbortSignal } from '../infra/execution';
 import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
@@ -401,16 +402,16 @@ export class RequestImpl {
   /** Stable Headers implementation sharing the request's list and enforcing its guard. */
   #headers: HeadersImpl;
   /** Abort signal associated with this Request. */
-  #signal: AbortSignalCapability;
+  #signal: AbortSignal;
   /** Body operations reading this request's current body and headers. */
   #bodyMixin: BodyMixin;
   /** Owner's execution, allocation, and abort-construction facilities. */
-  #env: JSEnvironment;
+  #env: FetchEnvironment;
 
   // Internal allocation from a request, guard, and DOM-owned signal.
   // https://fetch.spec.whatwg.org/#request-create
   constructor(
-    request: FetchRequest, guard: HeadersGuard, signal: AbortSignalCapability, env: JSEnvironment,
+    request: FetchRequest, guard: HeadersGuard, signal: AbortSignal, env: FetchEnvironment,
   ) {
     this.#request = request;
     this.#headers = new HeadersImpl(request.headerList, guard);
@@ -428,7 +429,7 @@ export class RequestImpl {
     const baseURL = env.apiBaseURL;
     let source: FetchRequest;
     let fallbackMode: RequestMode | null = null;
-    let signal: AbortSignalCapability | null = null;
+    let signal: AbortSignal | null = null;
     if (typeof input === 'string') {
       const url = env.parseURL(input, baseURL).url;
       if (url === null) throw new TypeError('Invalid Request URL');
@@ -578,7 +579,7 @@ export class RequestImpl {
   get keepalive(): boolean { return this.#request.keepalive; }
   get isReloadNavigation(): boolean { return this.#request.reloadNavigation; }
   get isHistoryNavigation(): boolean { return this.#request.historyNavigation; }
-  get signal(): AbortSignalCapability { return this.#signal; }
+  get signal(): AbortSignal { return this.#signal; }
   get duplex(): RequestDuplex { return 'half'; }
 
   // https://fetch.spec.whatwg.org/#dom-request-clone
@@ -598,8 +599,6 @@ export class RequestImpl {
   json(): InternalPromise<unknown> { return this.#bodyMixin.json(); }
   text(): InternalPromise<string> { return this.#bodyMixin.text(); }
   textStream(): ReadableStreamImpl { return this.#bodyMixin.textStream(); }
-
-  // -- Internal ---------------------------------------------------------
 
   getRequest(): FetchRequest { return this.#request; }
 }
@@ -656,7 +655,7 @@ export type FetchRequestInit = {
   keepalive?: boolean;
   // A DOM implementation reference, not an ambient or Node AbortSignal.
   /** Signal to follow; null disconnects the new request from an input Request's signal. */
-  signal?: AbortSignalCapability | null;
+  signal?: AbortSignal | null;
   /** Required half-duplex acknowledgement when supplying a ReadableStream body. */
   duplex?: RequestDuplex;
   /** Caller-provided scheduling priority hint. */

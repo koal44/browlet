@@ -378,8 +378,6 @@ export type TypeParameter = {
   default?: string;
 };
 
-// Internal helpers
-
 type SimpleValue<N extends SimpleTypeName> =
   N extends 'any' ? unknown
     : N extends 'undefined' ? void

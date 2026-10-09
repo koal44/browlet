@@ -2,15 +2,15 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
-import * as scheduling from '../../../src/browlet/integration/scripting';
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { mockEventLoopTurns } from '../../support/browlet-agent';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('ReadableStream source reaction delivery', () => {
   it('delivers a Node callback result through the stream\'s HTML task queue', async () => {
     const turns: (() => void)[] = [];
-    vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation((turn) => { turns.push(turn); });
+    mockEventLoopTurns((turn) => { turns.push(turn); });
     const browlet = new Browlet({ route: () => '' });
     const pending = Promise.withResolvers<void>();
     const results: unknown[] = [];
@@ -95,7 +95,7 @@ describe('ReadableStream source reaction delivery', () => {
 
 function createFixtures() {
   // Advance the two HTML queues explicitly, without intervening Node turns.
-  vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation(() => {});
+  mockEventLoopTurns();
   return { first: createSource(), second: createSource() };
 }
 

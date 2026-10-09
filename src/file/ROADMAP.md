@@ -13,15 +13,17 @@ files, workers, MediaSource, and the final conformance audit.
 | [blob-data.ts](blob-data.ts) | Immutable segments, snapshot state, reads, slicing, and source failures |
 | [blob.ts](blob.ts) | Blob construction, metadata, stream/promise reads, serialization steps, and declaration |
 | [file.ts](file.ts), [file-list.ts](file-list.ts) | File metadata/host-source factory, owner-mutable FileList, and serialization steps |
+| [environment.ts](environment.ts) | Streams execution and native line endings required by Blob/File |
 | [package-data.ts](package-data.ts) | FileReader text, Data URL, ArrayBuffer, and binary-string results |
 | [Browlet File integration](../browlet/integration/file/) | Concrete FileReader EventTarget and Blob URL store/URL methods |
 | [Storage](../storage/ROADMAP.md) | Storage-key acquisition and equality |
 | [Fetch](../fetch/README.md) | Blob scheme responses/ranges and multipart body consumption |
 
-Portable File implementations receive the existing `JSEnvironment`; backing
-`BlobData` retains no realm. Browser integration supplies events, file-reading
-tasks, settings, and UserAgent lifetime. Web IDL performs author conversion and
-projection. Import the portable implementation through [index.ts](index.ts).
+Portable File implementations receive the existing owner as `FileEnvironment`.
+Its `exec` combines Streams facilities with host-supplied `nativeLineEnding`;
+backing `BlobData` retains no realm. Browser integration supplies events,
+file-reading tasks, settings, and UserAgent lifetime. Web IDL performs author
+conversion and projection. Import through [index.ts](index.ts).
 
 ### Immutable data and reading
 

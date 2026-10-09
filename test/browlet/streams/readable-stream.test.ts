@@ -6,7 +6,7 @@ import { createWritableStream, observe } from './implementation-fixture';
 import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
-import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import {
   ReadableStreamDefaultControllerImpl, type ReadableByteStreamControllerImpl,
   ReadableStreamImpl,

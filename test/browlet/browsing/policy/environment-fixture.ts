@@ -1,10 +1,11 @@
-import { createDocument, createWindowEnvironment } from '../../../../src/browlet/bindings';
-import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
-import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigable';
-import { createDocumentState } from '../../../../src/browlet/browsing/navigation/session-history';
+import { createManualEventLoop } from '../../../support/browlet-agent';
+import { createWindowEnvironment } from '../../../../src/browlet/bindings';
+import { UserAgent } from '../../../../src/browlet/user-agent';
+import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
+import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
+import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import type { WindowEnvironment } from '../../../../src/browlet/scripting/environment';
-import { UserAgent } from '../../../../src/browlet/user-agent';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 
 /** Compose real Window and navigable state while iframe construction is unfinished. */
@@ -14,12 +15,12 @@ export function createPolicyEnvironment(
   const creationURL = parseURL(url).url!;
   const origin = obtainURLOrigin(creationURL);
   const env = createWindowEnvironment({
-    agent: new WindowAgent(), userAgent, creationURL, origin,
+    agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin,
     parent: parent?.window ?? null,
     topLevelCreationURL: parent?.topLevelCreationURL ?? creationURL,
     topLevelOrigin: parent?.topLevelOrigin ?? origin,
   });
-  const document = createDocument(env.realm);
+  const document = env.exec.createDocument();
   document.url = creationURL;
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);

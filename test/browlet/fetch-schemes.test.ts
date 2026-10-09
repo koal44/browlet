@@ -1,11 +1,11 @@
 import { internalType } from '../../src/infra/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../src/browlet/bindings';
+import { UserAgent } from '../../src/browlet/user-agent';
+import { getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { Window } from '../../src/browlet/platform';
 import { EnvironmentRecord, type WindowEnvironment } from '../../src/browlet/scripting/environment';
 import { navigationAndTraversalTaskSource } from '../../src/browlet/scripting/tasks';
-import { UserAgent } from '../../src/browlet/user-agent';
 import { utf8Decode } from '../../src/encoding/codecs/utf-8';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetch } from '../../src/fetch/fetch';

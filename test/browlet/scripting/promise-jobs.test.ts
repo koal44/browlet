@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import type { Task } from '../../../src/browlet/scripting/event-loop';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 

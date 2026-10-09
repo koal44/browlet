@@ -4,9 +4,9 @@ import {
   type CacheHeaderValues, type CacheFreshness,
 } from '../http/index';
 import { InternalError } from '../infra/internal-error';
-import type { JSEnvironment } from '../js-engine/index';
 import { serializeURL } from '../url/index';
 import { FetchBody } from './body';
+import type { FetchEnvironment } from './environment';
 import { isNullBodyStatus, type FetchHeaders } from './headers';
 import type { FetchRequest } from './request';
 import type { CacheUsage, FetchResponse } from './response';
@@ -242,7 +242,7 @@ export class HTTPCacheEntry {
   }
 
   /** Clone a complete response with its current Age and a stream in the reader's environment. */
-  materialize(request: FetchRequest, usage: CacheUsage, now: number, env: JSEnvironment): FetchResponse {
+  materialize(request: FetchRequest, usage: CacheUsage, now: number, env: FetchEnvironment): FetchResponse {
     if (this.body === undefined) throw new InternalError('Incomplete cache entry cannot supply a response');
     const body = request.method === 'HEAD' || isNullBodyStatus(this.response.status)
       ? null : FetchBody.fromSource(this.body, env);

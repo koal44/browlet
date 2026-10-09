@@ -1,7 +1,7 @@
 import { HTMLCollectionImpl } from './collections';
 import type { ElementImpl } from './element';
 import type { NodeImpl } from './node';
-import { parseOrderedSet } from '../infra/ordered-set';
+import { parseOrderedSet } from '../infra/index';
 
 /** Find the first descendant with the requested ID in tree order. */
 // https://dom.spec.whatwg.org/#get-an-element-by-id

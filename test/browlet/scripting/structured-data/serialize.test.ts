@@ -1,3 +1,4 @@
+import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../../test-runtime';
 import { TypeError as TypeErrorRequest } from '../../../../src/infra/exceptions';
@@ -6,7 +7,6 @@ import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
 import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
-import { Realm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import type {
@@ -533,7 +533,7 @@ describe('HTML structured serialization', () => {
       },
     });
     const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
-    const realm = new Realm();
+    const realm = createManualRealm();
     const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
     const container = ctx.createPlatformRecord(containerIDL.name)!;
     const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
@@ -578,7 +578,7 @@ function createContext(options: {
   crossOriginIsolated?: boolean;
 } = {}): BindingContext<ScriptingEnvironment> {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
-  const realm = new Realm({
+  const realm = createManualRealm({
     crossOriginIsolated: options.crossOriginIsolated,
   });
   const agentCluster = options.agentCluster ?? new AgentCluster(

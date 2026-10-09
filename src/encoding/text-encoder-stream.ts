@@ -1,9 +1,9 @@
-import { toString, type JSEnvironment } from '../js-engine/index';
+import { toString } from '../js-engine/index';
 import { utf8Encode } from './codecs/utf-8';
 import { atArg, ctor, defineIncludes, defineInterface, impl } from '../web-idl/index';
 import {
   GenericTransformStreamMixin, TransformStreamImpl,
-  type ReadableStreamImpl, type WritableStreamImpl,
+  type ReadableStreamImpl, type StreamsEnvironment, type WritableStreamImpl,
 } from '../streams/index';
 
 /*
@@ -16,11 +16,11 @@ import {
  */
 export class TextEncoderStreamImpl {
   #generic: GenericTransformStreamMixin;
-  #env: JSEnvironment;
+  #env: StreamsEnvironment;
   #transform: TransformStreamImpl;
   #leadingSurrogate = '';
 
-  constructor(env: JSEnvironment) {
+  constructor(env: StreamsEnvironment) {
     this.#env = env;
     const transform = this.#transform = new TransformStreamImpl(null, {}, {}, env);
     transform.setUp(
@@ -67,7 +67,7 @@ export class TextEncoderStreamImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const textEncoderStreamIDL = defineInterface<JSEnvironment>({
+export const textEncoderStreamIDL = defineInterface<StreamsEnvironment>({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {

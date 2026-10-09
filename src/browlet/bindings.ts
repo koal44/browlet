@@ -1,70 +1,58 @@
+import { EOL } from 'node:os';
+
 import { InternalError } from '../infra/internal-error';
-import { addon, createMicrotaskQueue } from '../js-engine/index';
+import type { TaskCreationOptions } from '../infra/execution';
+import { addon } from '../js-engine/index';
 import { encodingIDLDefinitions } from '../encoding/index';
 import { fileIDLDefinitions } from '../file/index';
 import { fetchIDLDefinitions } from '../fetch/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 import { streamsIDLDefinitions } from '../streams/index';
-import { urlIDLDefinitions, originIDL, serializeURL, type Origin, type URLRecord } from '../url/index';
+import { urlIDLDefinitions, originIDL, serializeURL } from '../url/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import {
   BindingWorld, type GlobalObjectAllocation,
-  type BindingContext, type StampedImplInstance, type StampedPlatformObject,
+  type BindingContext, type StampedPlatformObject,
 } from '../web-idl/index';
-import type { Node, Window } from './platform';
-import { locationIDL } from './browsing/window/location';
-import { integrityViolationReportBodyIDL } from './browsing/policy/integrity-policy';
-import { coepViolationReportBodyIDL } from './browsing/policy/coep';
+import type { Window } from './platform';
 import {
-  cspViolationReportBodyIDL, securityPolicyViolationEventIDL,
-  securityPolicyViolationEventInitIDL, securityPolicyViolationEventDispositionIDL,
-} from './browsing/policy/csp/violation';
-import { reportIDL, reportBodyIDL } from './reporting/report';
-import { testReportBodyIDL } from './reporting/test-report';
+  locationIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  WindowProxyHandle, windowProxyDefinition,
+} from './browsing/window/index';
+import { integrityViolationReportBodyIDL, coepViolationReportBodyIDL } from './browsing/policy/index';
 import {
-  reportingObserverIDL, reportingObserverCallbackIDL, reportingObserverOptionsIDL, reportListIDL,
-} from './reporting/observer';
+  cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
+  securityPolicyViolationEventDispositionIDL,
+} from './browsing/policy/csp/index';
 import {
-  WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
-} from './browsing/window/window';
-import { WindowProxyHandle, windowProxyDefinition } from './browsing/window/window-proxy';
-import { DocumentImpl, htmlDocumentIDL } from './dom/nodes/document';
-import { ElementImpl } from './dom/nodes/element';
-import type { NodeImpl } from './dom/nodes/node';
-import { domIDLDefinitions } from './dom/web-idl';
-import { AbortControllerImpl } from './dom/abort/abort-controller';
-import { AbortSignalImpl } from './dom/abort/abort-signal';
-import { EventImpl } from './dom/events/event';
-import { htmlIDLDefinitions } from './html/web-idl';
-import { fileReaderIDL } from './integration/file/file-reader';
-import { objectURLIDL } from './integration/file/object-url';
-import { requestNodeEventLoopTurn } from './integration/scripting';
-import { mathMLIDLDefinitions } from './mathml/web-idl';
+  reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
+  reportingObserverOptionsIDL, reportListIDL,
+} from './reporting/index';
+import { DocumentImpl, htmlDocumentIDL, ElementImpl } from './dom/nodes/index';
+import { domIDLDefinitions } from './dom/index';
+import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
+import { EventImpl } from './dom/events/index';
+import { htmlIDLDefinitions } from './html/index';
+import { fileReaderIDL, objectURLIDL } from './integration/file/index';
+import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
+import { queueNodeTask } from './integration/index';
+import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
+import { performanceIDL } from './performance/index';
+import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
-  domHighResTimeStampIDL, epochTimeStampIDL, performanceIDL,
-} from './performance/performance';
-import { unsafeSharedCurrentTime } from './performance/high-resolution-time';
-import { SandboxAgent, type WindowAgent } from './scripting/agents';
-import type { EventLoopOptions } from './scripting/event-loop';
-import {
-  createExecution, EnvironmentRecord, SandboxEnvironment, WindowEnvironment,
-  type BrowletEnvironment, type BrowletExecution,
-} from './scripting/environment';
+  EventLoop, SandboxAgent, type WindowEnvironmentInit, EnvironmentRecord,
+  SandboxEnvironment, WindowEnvironment, type BrowletEnvironment, type BrowletExecution, eventHandlerIDL,
+  eventHandlerNonNullIDL, highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
+  windowOrWorkerGlobalScopeIDL, WindowOrWorkerGlobalScopeMixin, Realm, WindowRealm, taskSources,
+} from './scripting/index';
 import type { UserAgent } from './user-agent';
-import { eventHandlerIDL, eventHandlerNonNullIDL } from './scripting/event-handlers';
 import {
-  highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
-  windowOrWorkerGlobalScopeIDL, WindowOrWorkerGlobalScopeMixin,
-} from './scripting/global-scope';
-import { Realm, WindowRealm } from './scripting/realm';
-import { structuredSerializeOptionsIDL } from './scripting/structured-data/web-idl';
-import { structuredDeserialize } from './scripting/structured-data/deserialize';
-import type { SerializedRecord } from './scripting/structured-data/records';
-import { structuredSerialize } from './scripting/structured-data/serialize';
-import { structuredClone } from './scripting/structured-data/structured-clone';
-import { svgIDLDefinitions } from './svg/web-idl';
+  structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
+  structuredClone,
+} from './scripting/structured-data/index';
+import { svgIDLDefinitions } from './dom/nodes/svg/index';
 
-// The browser environment owns the final Web IDL assembly for its realm.
+// Browlet's composition root owns the final Web IDL assembly.
 // Defining specifications contribute declarations and implementation steps;
 // Browlet decides which contributions coexist and which initial objects are
 // installed on its Window environment. One main binding world spans the realms
@@ -104,10 +92,10 @@ export function createWindowEnvironment(
   });
   // This new realm is registered exactly once; composition runs synchronously.
   let env!: WindowEnvironment;
-  const context = registerRealm(realm, (binding) => {
+  const context = browletBindingWorld.register(realm, (binding) => {
     // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
     // Execution reads the installed global lazily; all consumers retain this environment.
-    env = new WindowEnvironment(realm, envRecord, createBoundExecution(binding));
+    env = new WindowEnvironment(realm, envRecord, createBrowletExecution(binding));
     env.creationURL = creationURL;
     env.topLevelCreationURL = topLevelCreationURL;
     env.topLevelOrigin = topLevelOrigin;
@@ -115,7 +103,7 @@ export function createWindowEnvironment(
   });
   const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
   realm.windowImplementation = window;
-  let globalObject: Window;
+  let globalObject: StampedPlatformObject<Window>;
   if (useAddonGlobals) {
     const { object, prototypeChain } = realm.globalAllocation;
     const [windowPrototype, namedProperties, eventTargetPrototype] = prototypeChain;
@@ -147,113 +135,43 @@ export function createWindowEnvironment(
 }
 
 /** Create browser-owned execution without a Window, Document, or HTML settings object. */
-export function createSandboxEnvironment(eventLoopOptions: EventLoopOptions = {
-  createMicrotaskQueue,
-  requestEventLoopTurn: requestNodeEventLoopTurn,
-  unsafeSharedCurrentTime,
-}, userAgent?: UserAgent): BrowletEnvironment {
-  const realm = new Realm({ agent: new SandboxAgent(eventLoopOptions) });
+export function createSandboxEnvironment(userAgent?: UserAgent): BrowletEnvironment {
+  const agent = new SandboxAgent(new EventLoop({ requestTurn: queueNodeTask }));
+  const realm = new Realm({ agent });
   // Reuse the main binding world for internal allocations without installing
   // author-facing interfaces on the sandbox's global.
-  return registerRealm(realm, (context) => createSandboxEnvironmentFromBinding(context, userAgent)).getEnvironment();
-}
-
-/** Construct and stamp a Document in the realm; HTML initialization remains with the caller. */
-export function createDocument(realm: Realm): StampedImplInstance<DocumentImpl> {
-  return getBindingContext(realm).construct(DocumentImpl);
-}
-
-/** Point a proxy at a Window implementation's existing platform object. */
-export function setAssociatedWindow(
-  windowProxy: WindowProxyHandle,
-  window: WindowImpl,
-): void {
-  // Window composition has already projected this implementation. Projection
-  // retrieves that same platform identity; it does not create another Window.
-  const platform = world.project(window);
-  if (!platform) throw new InternalError('Window has not been projected');
-  windowProxy.setAssociatedWindow(platform as StampedPlatformObject<Window>);
-}
-
-/** Relevant realm of a browser object; Window and DOM-node inputs retain their concrete realm type. */
-export function getRelevantRealm(value: Window | WindowImpl | Node | NodeImpl): WindowRealm;
-export function getRelevantRealm(value: object): Realm;
-export function getRelevantRealm(value: object): Realm {
-  const realm = world.getRealm(value) ?? Realm.getAssociatedRealm(value);
-  if (!(realm instanceof Realm)) throw new InternalError('Object has no relevant Realm');
-  return realm;
-}
-
-/** Retrieve an implementation's platform object, allocating its first projection if needed. */
-export function project(value: object): StampedPlatformObject {
-  const object = world.project(value);
-  if (!object) throw new InternalError('Implementation has not been projected');
-  return object;
-}
-
-/** Retrieve the implementation paired with a platform object in Browlet's binding world. */
-export function unwrap<Value extends object>(value: object): StampedImplInstance<Value> {
-  const implInst = world.unwrap(value);
-  if (!implInst) throw new InternalError('Value is not a platform object');
-  return implInst as StampedImplInstance<Value>;
-}
-
-/** Register a realm once, composing a sandbox environment unless a factory is supplied. */
-export function registerRealm(
-  realm: Realm,
-  createEnvironment: (context: BindingContext<BrowletEnvironment>) => BrowletEnvironment =
-    createSandboxEnvironmentFromBinding,
-): BindingContext<BrowletEnvironment> {
-  return world.register(realm, createEnvironment);
-}
-
-/** Retrieve the realm's context in Browlet's main binding world. */
-export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
-  const context = world.getBindingContext(realm);
-  if (!context) throw new InternalError('Realm has no Browlet binding');
-  return context;
+  return browletBindingWorld.register(realm, (context) =>
+    new SandboxEnvironment(realm, createBrowletExecution(context), userAgent),
+  ).getEnvironment();
 }
 
 // -- Construction helpers -----------------------------------------------
 
-type WindowEnvironmentInit = {
-  /** Agent whose event loop executes the new Window's work. */
-  agent: WindowAgent;
-  /** Browser owner supplying shared state and integration facilities. */
-  userAgent: UserAgent;
-  /** URL used to initialize the Window's environment. */
-  creationURL: URLRecord;
-  /** Origin selected for the new Document. */
-  origin: Origin;
-  /** Parent Window used for ancestry and secure-context determination. */
-  parent: WindowImpl | null;
-  /** Top-level URL captured for the environment's initial settings. */
-  topLevelCreationURL: URLRecord;
-  /** Top-level origin captured for partitioning and security decisions. */
-  topLevelOrigin: Origin;
-  /** Early environment record whose identity survives navigation setup. */
-  reservedEnv?: EnvironmentRecord | null;
-  /** Previous realm whose WindowProxy identity is reused for navigation. */
-  previousRealm?: WindowRealm;
-};
-
-/** Assemble a sandbox's environment once its binding context exists. */
-function createSandboxEnvironmentFromBinding(
-  context: BindingContext<BrowletEnvironment>, userAgent?: UserAgent,
-): BrowletEnvironment {
-  return new SandboxEnvironment(context.realm, createBoundExecution(context), userAgent);
-}
-
-/** Complete realm execution with allocations and structured data owned by this binding. */
-export function createBoundExecution(context: BindingContext<BrowletEnvironment>): BrowletExecution {
+/** Compose Browlet's realm execution, task delivery, and binding-owned allocations. */
+export function createBrowletExecution(context: BindingContext<BrowletEnvironment>): BrowletExecution {
   const { realm } = context;
   return {
-    ...createExecution(realm),
+    nativeLineEnding: EOL as '\n' | '\r\n',
     // Window installation follows binding registration; retain the live global.
     get global() { return realm.globalObject; },
     Promise: context.Promise,
+    NativePromise: realm.intrinsics.promise.constructor,
+    TypeError: realm.intrinsics.typeError,
+    RangeError: realm.intrinsics.rangeError,
     // Interface binding registration finishes after execution is composed.
     get DOMException() { return context.DOMException; },
+    buffers: realm.createRuntimeBuffers(),
+    queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
+    runInParallel: queueNodeTask,
+    queueTask: (source, steps, options?: TaskCreationOptions) => realm.queueGlobalTask(taskSources[source], steps, options),
+    queueGlobalFetchTask: (global, steps) => {
+      const targetRealm = Realm.getAssociatedRealm(global);
+      if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
+      targetRealm.queueGlobalTask(taskSources.network, steps);
+    },
+    parseJSON: (text) => realm.parseJSON(text),
+    stringifyJSON: (value) => realm.stringifyJSON(value),
+    createDocument: () => context.construct(DocumentImpl),
     createEvent: (EventConstructor = EventImpl) => {
       const event = context.construct(EventConstructor, ['', {}]);
       event.isTrusted = true;
@@ -331,9 +249,11 @@ export const browletDefinitions = [
   fileReaderIDL,
   objectURLIDL,
   ...xhrIDLDefinitions,
+  progressEventIDL,
+  progressEventInitIDL,
   ...urlIDLDefinitions,
   ...fetchIDLDefinitions,
 ];
 
-/** Shared implementation/platform identity across Browlet's registered realms. */
-const world = new BindingWorld<BrowletEnvironment>(browletDefinitions);
+/** Main world for composition and host API projection; implementations use their supplied environment. */
+export const browletBindingWorld = new BindingWorld<BrowletEnvironment>(browletDefinitions);

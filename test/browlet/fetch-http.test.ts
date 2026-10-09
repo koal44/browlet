@@ -1,6 +1,6 @@
 import { internalType } from '../../src/infra/promises';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../src/browlet/bindings';
+import { getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { utf8Decode, utf8Encode } from '../../src/encoding/codecs/utf-8';
 import { FetchBody } from '../../src/fetch/body';

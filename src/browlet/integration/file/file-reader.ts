@@ -3,17 +3,16 @@ import {
   reference, union, DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
 import { getBufferSourceCopy } from '../../../js-engine/index';
-import type { BrowletEnvironment } from '../../scripting/environment';
+import {
+  type BrowletEnvironment, EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
+} from '../../scripting/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
 import type { TaskHandle } from '../../../infra/index';
-import { ProgressEventImpl } from '../../dom/events/progress-event';
-import {
-  EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
-} from '../../scripting/event-handlers';
-import { EventTargetImpl } from '../../dom/events/event-target';
-import { unsafeSharedCurrentTime } from '../../performance/high-resolution-time';
+import { EventTargetImpl } from '../../dom/events/index';
+import { ProgressEventImpl } from '../xhr/index';
+import { unsafeSharedCurrentTime } from '../../timing/index';
 import { InternalError } from '../../../infra/internal-error';
 
 /** Reads Blob data asynchronously and dispatches progress and completion events. */

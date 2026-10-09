@@ -1,5 +1,5 @@
 import { createEnvironment } from '../js-engine/execution-fixture';
-import type { AbortSignalCapability } from '../../src/js-engine/index';
+import type { AbortSignal } from '../../src/infra/execution';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetchIDLDefinitions } from '../../src/fetch/index';
 import { fetchGlobalScopeIDL } from '../../src/fetch/fetch-global';
@@ -37,7 +37,7 @@ export function createFetchFixture(world?: BindingWorld<ClientEnvironment>) {
     context,
     env,
     createBody: () => new FetchBody(ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, env), env),
-    createRequest: (record: FetchRequest, signal: AbortSignalCapability, guard: HeadersGuard = 'request') =>
+    createRequest: (record: FetchRequest, signal: AbortSignal, guard: HeadersGuard = 'request') =>
       context.construct(RequestImpl, [record, guard, signal]),
     createResponse: (record = new FetchResponse(), guard: HeadersGuard = 'response') =>
       context.construct(ResponseImpl, [record, guard]),

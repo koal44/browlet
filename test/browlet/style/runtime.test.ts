@@ -1,7 +1,7 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
-import { unwrap, getRelevantRealm } from '../../../src/browlet/bindings';
+import { unwrap, getRelevantRealm } from '../../support/browlet-binding';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
 import { URLImpl } from '../../../src/url/index';

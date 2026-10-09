@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
+import { UserAgent } from '../../src/browlet/user-agent';
 
 import { BlobImpl } from '../../src/file/blob';
 import { BlobData, type BlobByteSource } from '../../src/file/blob-data';
 import type { BlobURLEnvironment } from '../../src/browlet/integration/file/blob-url';
-import { UserAgent } from '../../src/browlet/user-agent';
 import { InternalError } from '../../src/infra/internal-error';
 import type { StorageEnvironment, StorageUserAgent } from '../../src/storage/environment';
 import { createOpaqueOrigin } from '../../src/url/origin';

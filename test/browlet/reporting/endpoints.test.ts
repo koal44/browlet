@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
+import { UserAgent } from '../../../src/browlet/user-agent';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import { Browlet } from '../../../src/browlet/browlet';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { createFetchWindow } from '../fetch-fixture';
-import { UserAgent } from '../../../src/browlet/user-agent';
 import { FetchResponse } from '../../../src/fetch/response';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
 

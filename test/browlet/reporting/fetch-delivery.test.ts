@@ -1,6 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import { Browlet } from '../../../src/browlet/browlet';
 import type { ReportDeliveryResult } from '../../../src/browlet/reporting/delivery';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';

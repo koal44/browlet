@@ -7,7 +7,7 @@ support.
 
 | Planned source or owner | Contract | Specification |
 | --- | --- | --- |
-| `elements.ts` plus `html/elements/legacy/` | Marquee, frame/frameset, directory, font, param, and other obsolete element identities and behavior | HTML §16.3 |
+| `elements.ts` plus `dom/nodes/html/legacy/` | Marquee, frame/frameset, directory, font, param, and other obsolete element identities and behavior | HTML §16.3 |
 | `web-idl.ts` | Legacy element interfaces, partial element members, `Document`/`Window` contributions, and `External` | HTML §16.3 |
 | `collections.ts` | `document.anchors`, empty `document.applets`, and `document.all`/`HTMLAllCollection` integration | HTML §16.3 and Web IDL legacy platform objects |
 | `style/presentational-hints.ts` | Obsolete attributes that still map into the cascade | HTML §§15–16 |

@@ -4,27 +4,23 @@ import {
 import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/promises';
 import type { JSEnvironment } from '../../../js-engine/index';
 import type { HTMLCollectionImpl } from './collections';
-import type { TreeScopeResolver } from '../../style/integration';
-import type { EventTargetImpl } from '../events/event-target';
-import type { EventImpl } from '../events/event';
-import { isValidAttributeLocalName } from '../infra/name-validation';
-import type { BrowsingContext } from '../../browsing/browsing-context';
-import type { Navigable } from '../../browsing/navigable';
-import type { NotRestoredReasonDetails } from '../../browsing/navigation/session-history';
-import type { NavigationParams } from '../../browsing/navigation/params';
-import type { BrowletEnvironment } from '../../scripting/environment';
-import { InsecureRequestsPolicy } from '../../browsing/policy/upgrade-insecure-requests';
-import { CSPList } from '../../browsing/policy/csp/list';
+import type { TreeScopeResolver } from '../../style/index';
+import type { EventTargetImpl, EventImpl } from '../events/index';
+import { isValidAttributeLocalName } from '../infra/index';
+import type {
+  BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
+} from '../../browsing/navigation/index';
+import type { BrowletEnvironment } from '../../scripting/index';
+import {
+  InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
+  type SandboxingFlag,
+} from '../../browsing/policy/index';
+import { CSPList } from '../../browsing/policy/csp/index';
 import type { FetchRequest, FetchResponse } from '../../../fetch/index';
-import type { NavigationTimingRecord } from '../../performance/navigation';
-import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../performance/high-resolution-time';
-import type { WindowImpl } from '../../browsing/window/window';
-import type { WindowProxyHandle } from '../../browsing/window/window-proxy';
-import type { CustomElementRegistryImpl } from '../../html/custom-elements/registry';
-import { PolicyContainer } from '../../browsing/policy/container';
-import { OpenerPolicy } from '../../browsing/policy/coop';
-import { PermissionsPolicy } from '../../browsing/policy/permissions';
-import { SandboxingFlagSet, type SandboxingFlag } from '../../browsing/policy/sandbox';
+import type { NavigationTimingRecord } from '../../performance/index';
+import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
+import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
+import type { CustomElementRegistryImpl } from '../../html/custom-elements/index';
 import { asciiLower } from '../../../infra/ascii';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
@@ -48,10 +44,9 @@ import {
   findElement, findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
-import { resolveElementInterface } from '../../element-interfaces';
-import { HTMLBaseElementImpl } from '../../html/elements/metadata/base';
-import { HTMLElementImpl } from '../../html/elements/html-element';
-import { HTMLHeadElementImpl } from '../../html/elements/metadata/head';
+import { resolveElementInterface } from './element-interfaces';
+import { HTMLBaseElementImpl, HTMLHeadElementImpl } from './html/metadata/index';
+import { HTMLElementImpl } from './html/index';
 import { InternalError } from '../../../infra/internal-error';
 
 /** Create a document in env with optional binding-owned node allocation. */
@@ -612,8 +607,6 @@ export class DocumentImpl extends NodeImpl {
     navigationParams.commitEarlyHints?.(this);
     // TODO(Fetch): potentially free deferred-fetch quota for this document.
   }
-
-  // -- Internal ---------------------------------------------------------
 
   /** The URL used to resolve relative URLs in this document. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-url

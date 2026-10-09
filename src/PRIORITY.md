@@ -65,7 +65,7 @@ path. Implement the named portion of a roadmap, not every future feature in it.
 
 **1: retain one deterministic host.** Extend the existing
 [scripting/event loop](browlet/scripting/ROADMAP.md),
-[performance](browlet/performance/ROADMAP.md),
+[timing](browlet/timing/README.md), [performance](browlet/performance/ROADMAP.md),
 [abort](browlet/dom/abort/ROADMAP.md), and
 [browsing](browlet/browsing/ROADMAP.md) owners. Add element task destinations
 and checkpoint consumers when needed. Worker suspension, timer strings, and
@@ -145,7 +145,7 @@ and inactive Document disposal are an HTML lifecycle task, not a Reporting fix.
 
 ## Later consumer gates
 
-**8: add coherent author API families.** Follow [elements](browlet/html/elements/ROADMAP.md),
+**8: add coherent author API families.** Follow [elements](browlet/dom/nodes/html/ROADMAP.md),
 [collections](browlet/html/collections/ROADMAP.md),
 [DOM parsing](browlet/dom/parsing/ROADMAP.md), [sanitization](browlet/html/sanitization/ROADMAP.md),
 [interaction](browlet/interaction/ROADMAP.md), and [Navigator](browlet/navigator/ROADMAP.md).
@@ -164,7 +164,7 @@ consumer before a generic base. Service Worker integration has its own worker,
 navigation, and offline-storage prerequisites.
 
 **10: qualify XML and foreign engines.** [DOM parsing](browlet/dom/parsing/ROADMAP.md),
-[SVG](browlet/svg/ROADMAP.md), and [MathML](browlet/mathml/ROADMAP.md) own syntax,
+[SVG](browlet/dom/nodes/svg/ROADMAP.md), and [MathML](browlet/dom/nodes/mathml/ROADMAP.md) own syntax,
 namespaces, and initial profiles. [XPath](browlet/dom/xpath/ROADMAP.md) needs
 result typing and mutation invalidation; [XSLT](browlet/dom/xslt/ROADMAP.md) is
 optional and requires a qualified engine and controlled loader. XML navigation

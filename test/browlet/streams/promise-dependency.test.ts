@@ -2,7 +2,7 @@ import { idlType } from '../../../src/web-idl/core/index';
 import { describe, expect } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 import { ReadableStreamImpl, WritableStreamImpl } from '../../../src/streams/index';
 
 describe('Streams Promise dependencies', () => {

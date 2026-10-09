@@ -1,4 +1,5 @@
 import type { ScriptingEnvironment } from '../environment';
+import type { Realm } from '../realm';
 import {
   type JSBufferView, copyMapData, copySetData, getArrayBufferMaxByteLength,
   getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
@@ -18,7 +19,6 @@ import {
 import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext, type ImplementationClass,
 } from '../../../web-idl/index';
-import type { Realm } from '../realm';
 import {
   createStructuredDataRecord, isSerializedErrorName,
   type ArrayBufferSerializedRecord,

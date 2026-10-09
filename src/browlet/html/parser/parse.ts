@@ -1,8 +1,6 @@
-import {
-  createDocument, type DocumentImpl, type DocumentConstructionOptions,
-} from '../../dom/nodes/document';
+import { createDocument, type DocumentImpl, type DocumentConstructionOptions } from '../../dom/nodes/index';
 import { HTMLTreeAdapter } from './tree-adapter';
-import type { BrowletEnvironment } from '../../scripting/environment';
+import type { BrowletEnvironment } from '../../scripting/index';
 
 /** Parse source into a new HTML document owned by env. */
 export function parseHTMLDocument(

@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { Browlet } from '../../../src/browlet/browlet';
-import { getRelevantRealm } from '../../../src/browlet/bindings';
-import * as scheduling from '../../../src/browlet/integration/scripting';
+import { getRelevantRealm } from '../../support/browlet-binding';
+import { mockEventLoopTurns } from '../../support/browlet-agent';
 
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe('writer monitoring Promise lifecycle', () => {
   itPassesWith('explicitQueues').each(['pending', 'writable', 'closed', 'errored'] as const)(
     'preserves or replaces public promises on release from %s', (state) => {
-      vi.spyOn(scheduling, 'requestNodeEventLoopTurn').mockImplementation(() => {});
+      mockEventLoopTurns();
       const owner = createWriter(state === 'pending' ? 0 : 1);
       const foreign = createWriter();
       const failure = new foreign.realm.intrinsics.typeError('sink failed');

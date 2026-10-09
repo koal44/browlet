@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
-import { createDocument, getRelevantRealm, unwrap } from '../../../../src/browlet/bindings';
+
+import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { BrowsingContext } from '../../../../src/browlet/browsing/browsing-context';
+import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/browsing-context';
 import { InsecureRequestsPolicy } from '../../../../src/browlet/browsing/policy/upgrade-insecure-requests';
 import type { Destination } from '../../../../src/fetch/destination';
 import { FetchRequest } from '../../../../src/fetch/request';
@@ -228,7 +229,7 @@ describe('Upgrade Insecure Requests: document initialization', () => {
     const env = createPolicyEnvironment('https://example.test/');
     const previous = env.window.getAssociatedDocument();
     env.insecureRequestsPolicy.enableFor(previous.url);
-    const next = createDocument(env.realm);
+    const next = env.exec.createDocument();
     next.browsingContext = previous.browsingContext;
     env.window.setAssociatedDocument(next);
     next.initializeInsecureRequestsPolicy();

@@ -1,6 +1,6 @@
 import type { FetchHeaders, FetchIntegrityPolicy, IntegrityViolationReportBody } from '../../../fetch/index';
 import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/index';
-import { ReportBodyImpl } from '../../reporting/report';
+import { ReportBodyImpl } from '../../reporting/index';
 
 /** Integrity metadata requirements and reporting endpoints for subresource loads. */
 // https://w3c.github.io/webappsec-subresource-integrity/#integrity-policy-section

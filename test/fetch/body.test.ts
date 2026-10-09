@@ -167,7 +167,7 @@ describe('Fetch full body reading', () => {
     } else {
       expect(fixture.parallelSteps).toHaveLength(1);
       fixture.runParallel();
-      expect(fixture.scheduling.queueGlobalTask).not.toHaveBeenCalled();
+      expect(fixture.queueGlobalFetchTask).not.toHaveBeenCalled();
     }
     expect(process).toHaveBeenCalledExactlyOnceWith(Uint8Array.of(1, 2, 3));
     expect(error).not.toHaveBeenCalled();
@@ -246,7 +246,7 @@ describe('Fetch incremental body reading', () => {
     expect(fixture.parallelSteps).toHaveLength(1);
     fixture.runParallel();
     expect(events).toEqual([[1], [2], 'end']);
-    expect(fixture.scheduling.queueGlobalTask).not.toHaveBeenCalled();
+    expect(fixture.queueGlobalFetchTask).not.toHaveBeenCalled();
   });
 
   it('accepts a Uint8Array from another realm', () => {

@@ -1,4 +1,4 @@
-import { EventTargetImpl } from '../events/event-target';
+import { EventTargetImpl } from '../events/index';
 import { InternalError } from '../../../infra/internal-error';
 
 /** Tree links and raw storage operations. */

@@ -1,9 +1,8 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { utf8Decode } from '../../../src/encoding/codecs/utf-8';
-import { getBindingContext, getRelevantRealm } from '../../../src/browlet/bindings';
-import { TopLevelTraversable } from '../../../src/browlet/browsing/navigable';
+import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
+import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
-import { monotonicClock, UnsafeMoment } from '../../../src/browlet/performance/clock';
 import { sendReports } from '../../../src/browlet/reporting/delivery';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { ReportImpl } from '../../../src/browlet/reporting/report';
@@ -212,11 +211,7 @@ describe('Reporting delivery', () => {
     });
     realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
     const eventLoop = realm.agent.eventLoop;
-    eventLoop.runTaskTurn({
-      createMicrotaskQueue: () => eventLoop.microtaskQueue,
-      requestEventLoopTurn: vi.fn(),
-      unsafeSharedCurrentTime: () => new UnsafeMoment(monotonicClock, 0),
-    });
+    eventLoop.runTaskTurn();
     expect(scope.reports).toEqual([]);
     expect(scope.reportBuffer).toEqual([]);
     expect(scope.reportingEndpoints).toEqual([]);

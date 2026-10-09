@@ -1,23 +1,18 @@
-import type { BrowletEnvironment } from '../../scripting/environment';
+import {
+  type BrowletEnvironment, EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
+} from '../../scripting/index';
 import { Stamper } from '../../../infra/stamper';
 import { WeakOrderedSet } from '../../../infra/collections';
+import type { AbortAlgorithmHandle, AbortSignal } from '../../../infra/execution';
 import {
   arg, atArg, defineInterface, idlType, impl, invokeWith, op, reference, roAttr,
   sequence, staticOp, xattr, DOMExceptionNames,
 } from '../../../web-idl/index';
-import {
-  EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
-} from '../../scripting/event-handlers';
-import { EventTargetImpl } from '../events/event-target';
-
-/** Registration that can be removed before its abort steps run. */
-export type AbortAlgorithmHandle = {
-  remove(): void;
-};
+import { EventTargetImpl } from '../events/index';
 
 /** Tracks cancellation, propagates its reason, and notifies abort listeners. */
 // https://dom.spec.whatwg.org/#interface-AbortSignal
-export class AbortSignalImpl extends EventTargetImpl {
+export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
   #abortAlgorithms = new Set<AbortAlgorithmHandleImpl>();
   /** True once this signal is configured to follow other signals. */
   #dependent = false;
@@ -112,8 +107,6 @@ export class AbortSignalImpl extends EventTargetImpl {
   throwIfAborted(): void {
     if (this.aborted) throw this.#reason;
   }
-
-  // -- Internal methods -------------------------------------------------
 
   /** Register cancellation steps; returns null if already aborted. */
   // https://dom.spec.whatwg.org/#abortsignal-add
