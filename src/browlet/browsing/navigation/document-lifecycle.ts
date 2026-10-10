@@ -73,7 +73,7 @@ export function createAndInitializeDocument(
   document.customElementRegistry = new CustomElementRegistryImpl();
 
   window.setAssociatedDocument(document);
-  document.initializeAncestry(navigationParams);
+  document.initializeAncestry(navigationParams.iframeReferrerPolicy);
   document.initializeInsecureRequestsPolicy();
   document.initializeCSP();
   document.initializeReferrer(navigationParams.request);

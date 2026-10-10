@@ -12,7 +12,7 @@ import {
   Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
 import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord } from '../../../url/index';
-import type { FetchRequest, FetchResponse } from '../../../fetch/index';
+import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName } from '../infra/index';
@@ -406,6 +406,48 @@ export class DocumentImpl extends NodeImpl {
   // HTML document lifecycle
   // ---------------------------------------------------------------------
 
+  /** Initialize both ancestor-origin lists during initial creation or navigation. */
+  // https://html.spec.whatwg.org/multipage/dom.html#internal-ancestor-origin-objects-list-creation-steps
+  // https://html.spec.whatwg.org/multipage/dom.html#ancestor-origins-list-creation-steps
+  initializeAncestry(_referrerPolicy: ReferrerPolicy): void {
+    // The new Document is not active yet, so getNodeNavigable() cannot select
+    // its destination. An initial top-level context has no navigable yet.
+    const navigable = this.browsingContext?.navigable;
+    if (navigable && !navigable.isTopLevelTraversable) {
+      throw new InternalError('Nested Document ancestry is not implemented');
+    }
+    // Store both results together. Top-level Documents have no ancestors;
+    // referrer-policy masking enters with child navigables.
+    this.internalAncestorOriginObjectsList = [];
+    this.ancestorOriginsList = [];
+  }
+
+  /** Populate the synchronously available element tree of an about:blank document. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#populate-with-html/head/body
+  populateWithHTMLHeadBody(): void {
+    const html = this.createElementNode('html', HTML_NAMESPACE);
+    const head = this.createElementNode('head', HTML_NAMESPACE);
+    const body = this.createElementNode('body', HTML_NAMESPACE);
+
+    this.appendChild(html);
+    html.appendChild(head);
+    html.appendChild(body);
+  }
+
+  /** Retarget this document's browsing context to its Window and enable execution. */
+  // https://html.spec.whatwg.org/multipage/browsing-the-web.html#make-active
+  makeActive(): void {
+    const browsingContext = this.browsingContext;
+    const window = this.getRelevantGlobalObject();
+    if (browsingContext === null || window === null) {
+      throw new InternalError('Active Document needs a browsing context and Window');
+    }
+
+    const env = window.env;
+    browsingContext.windowProxy.setAssociatedWindow(env.realm.globalObject);
+    env.markExecutionReady();
+  }
+
   /** Finish the loading milestones and load event for Browlet's local route. */
   finishLoading(): void {
     const browsingContext = this.browsingContext;
@@ -518,16 +560,6 @@ export class DocumentImpl extends NodeImpl {
     }
     env.userAgent.blobURLStore.removeForEnvironment(env);
     // TODO: connect fullscreen, media, service-worker, and lock cleanup as implemented.
-  }
-
-  /** Initialize ancestor origins for the document selected by this navigation. */
-  initializeAncestry(navigationParams: NavigationParams): void {
-    if (!navigationParams.navigable.isTopLevelTraversable) {
-      throw new InternalError('Nested Document ancestry is not implemented');
-    }
-    // A top-level document has no ancestors; its iframe referrer policy is unused.
-    this.internalAncestorOriginObjectsList = [];
-    this.ancestorOriginsList = [];
   }
 
   /** Inherit the browsing context's upgrade policy before applying this document's own directives. */

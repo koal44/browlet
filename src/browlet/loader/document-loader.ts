@@ -2,9 +2,7 @@ import type { InternalPromise } from '../../infra/promises';
 
 import type { DocumentImpl } from '../dom/nodes/index';
 import { BrowletParser, type ScriptHandler } from '../html/parser/index';
-import {
-  populateWithHTMLHeadBody, createAndInitializeDocument, type NavigationParams,
-} from '../browsing/navigation/index';
+import { createAndInitializeDocument, type NavigationParams } from '../browsing/navigation/index';
 
 /** Create an HTML document and start consuming its navigation response. */
 // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html
@@ -12,7 +10,7 @@ import {
 export function loadHTMLDocument(params: NavigationParams, handleScript: ScriptHandler): DocumentImpl {
   const document = createAndInitializeDocument('html', 'text/html', params);
   if (document.URL === 'about:blank') {
-    populateWithHTMLHeadBody(document);
+    document.populateWithHTMLHeadBody();
     return document;
   }
 

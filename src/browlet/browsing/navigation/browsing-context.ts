@@ -1,10 +1,8 @@
-import { HTML_NAMESPACE } from '../../../infra/index';
 import { InternalError } from '../../../infra/internal-error';
 import {
   serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
   type URLRecord,
 } from '../../../url/index';
-import type { ReferrerPolicy } from '../../../fetch/index';
 
 import { unsafeSharedCurrentTime } from '../../timing/index';
 import {
@@ -60,37 +58,37 @@ export class BrowsingContext {
     const browsingContext = new BrowsingContext();
     if (embedder !== null) browsingContext.inheritInsecureRequestsPolicy(embedder);
     const unsafeContextCreationTime = unsafeSharedCurrentTime();
-    let creatorOrigin: Origin | null = null;
-    let creatorBaseURL: URLRecord | null = null;
+    const creatorOrigin = creator?.origin ?? null;
+    const creatorBaseURL = creator?.getBaseURL() ?? null;
 
     if (creator !== null) {
-      creatorOrigin = creator.origin;
-      creatorBaseURL = creator.getBaseURL();
-      inheritCreatorVirtualBrowsingContextGroupID(browsingContext, creator);
+      // https://html.spec.whatwg.org/multipage/document-sequences.html#creator-browsing-context
+      // TODO: inherit the creator's top-level virtual browsing context group ID. The
+      // creator's Document state must also be inherited below before enabling this path.
+      throw new InternalError('Creator browsing-context inheritance is not implemented');
     }
 
-    const sandboxFlags = determineCreationSandboxingFlags(
-      browsingContext,
-      embedder,
-    );
-    const origin = determineAboutBlankOrigin(sandboxFlags, creatorOrigin);
+    const sandboxFlags = browsingContext.determineCreationSandboxingFlags(embedder);
+    // https://html.spec.whatwg.org/multipage/document-sequences.html#about-blank-origin
+    const origin = sandboxFlags.has('sandboxed-origin') || creatorOrigin === null
+      ? createOpaqueOrigin()
+      : creatorOrigin;
     const permissionsPolicy = PermissionsPolicy.create(embedder, origin);
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
     const aboutBlankURL = parseURL('about:blank').url;
     if (aboutBlankURL === null) throw new InternalError('Could not parse about:blank');
-    const topLevelCreationURL = embedder === null
-      ? aboutBlankURL
-      : getEmbedderTopLevelCreationURL(embedder);
-    const topLevelOrigin = embedder === null
-      ? origin
-      : getEmbedderTopLevelOrigin(embedder);
+    if (embedder !== null) {
+      // TODO: inherit top-level creation URL and origin from embedder.env and
+      // select the iframe referrer policy for ancestry initialization below.
+      throw new InternalError('Embedder environment inheritance is not implemented');
+    }
     const env = group.userAgent.createWindowEnvironment({
       agent, userAgent: group.userAgent,
       creationURL: aboutBlankURL,
       origin,
-      parent: embedder?.nodeDocument.getRelevantGlobalObject() ?? null,
-      topLevelCreationURL,
-      topLevelOrigin,
+      parent: null,
+      topLevelCreationURL: aboutBlankURL,
+      topLevelOrigin: origin,
     });
     const { window, realm } = env;
     browsingContext.initializeWindowProxy(realm.windowProxy);
@@ -111,14 +109,13 @@ export class BrowsingContext {
     document.allowDeclarativeShadowRoots = true;
     document.customElementRegistry = new CustomElementRegistryImpl();
 
-    const iframeReferrerPolicy = determineIframeElementReferrerPolicy(embedder);
-    document.internalAncestorOriginObjectsList =
-      createInternalAncestorOriginObjectsList(document, iframeReferrerPolicy, embedder);
-    document.ancestorOriginsList = createAncestorOriginsList(document);
+    // https://html.spec.whatwg.org/multipage/browsers.html#determining-the-iframe-element-referrer-policy
+    // There is no embedding iframe for the supported top-level creation path.
+    document.initializeAncestry('');
 
-    if (creator !== null) {
-      inheritCreatorDocumentState(document, creator);
-    }
+    // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
+    // TODO: for a non-null creator, set the referrer from its URL, clone its policy
+    // container, and inherit its top-level opener policy when origins match.
 
     if (
       document.URL !== 'about:blank' ||
@@ -131,8 +128,8 @@ export class BrowsingContext {
     document.initializeInsecureRequestsPolicy();
     document.initializeCSP();
     document.readyForPostLoadTasks = true;
-    populateWithHTMLHeadBody(document);
-    makeActive(document, window);
+    document.populateWithHTMLHeadBody();
+    document.makeActive();
     document.completelyFinishLoading();
 
     return [browsingContext, document];
@@ -192,6 +189,16 @@ export class BrowsingContext {
     // Adoption changes the node document without changing the element's realm.
     const policy = embedder.nodeDocument.env.insecureRequestsPolicy;
     if (policy.upgrade) this.insecureRequestsPolicy = policy.clone();
+  }
+
+  /** Select the sandbox flags applied when this context's initial Document is created. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#determining-the-creation-sandboxing-flags
+  determineCreationSandboxingFlags(embedder: ElementImpl | null): SandboxingFlagSet {
+    if (embedder !== null) {
+      // TODO: combine the iframe's flags with its node document's active flags.
+      throw new InternalError('Embedded browsing-context sandboxing is not implemented');
+    }
+    return new SandboxingFlagSet(this.popupSandboxingFlagSet);
   }
 
   /** Associate the navigation owner, rejecting a different existing owner. */
@@ -302,103 +309,4 @@ class HistoricalAgentClusterKeyMap {
       ? origin.identity
       : serializeOrigin(origin);
   }
-}
-
-function determineCreationSandboxingFlags(
-  browsingContext: BrowsingContext,
-  embedder: ElementImpl | null,
-): SandboxingFlagSet {
-  if (embedder !== null) {
-    throw new InternalError('Embedded browsing-context sandboxing is not implemented');
-  }
-  return new SandboxingFlagSet(browsingContext.popupSandboxingFlagSet);
-}
-
-function inheritCreatorVirtualBrowsingContextGroupID(
-  _browsingContext: BrowsingContext,
-  _creator: DocumentImpl,
-): void {
-  // HTML obtains this from creator's top-level browsing context. Nested and
-  // auxiliary browsing-context relationships enter with child navigables.
-  throw new InternalError('Creator browsing-context inheritance is not implemented');
-}
-
-function determineAboutBlankOrigin(
-  sandboxFlags: SandboxingFlagSet,
-  creatorOrigin: Origin | null,
-): Origin {
-  if (sandboxFlags.has('sandboxed-origin') || creatorOrigin === null) {
-    return createOpaqueOrigin();
-  }
-  return creatorOrigin;
-}
-
-function getEmbedderTopLevelCreationURL(_embedder: ElementImpl): URLRecord {
-  throw new InternalError('Embedder environment inheritance is not implemented');
-}
-
-function getEmbedderTopLevelOrigin(_embedder: ElementImpl): Origin {
-  throw new InternalError('Embedder environment inheritance is not implemented');
-}
-
-function determineIframeElementReferrerPolicy(
-  embedder: ElementImpl | null,
-): ReferrerPolicy {
-  if (embedder !== null) {
-    throw new InternalError('iframe referrer-policy lookup is not implemented');
-  }
-  return '';
-}
-
-function createInternalAncestorOriginObjectsList(
-  _document: DocumentImpl,
-  _referrerPolicy: ReferrerPolicy,
-  embedder: ElementImpl | null,
-): Origin[] {
-  if (embedder !== null) {
-    throw new InternalError('Nested Document ancestry is not implemented');
-  }
-  return [];
-}
-
-function createAncestorOriginsList(
-  document: DocumentImpl,
-): string[] {
-  const origins = document.internalAncestorOriginObjectsList;
-  if (origins === null) {
-    throw new InternalError('Document has no internal ancestor origin objects list');
-  }
-  return origins.map(serializeOrigin);
-}
-
-function inheritCreatorDocumentState(
-  _document: DocumentImpl,
-  _creator: DocumentImpl,
-): void {
-  throw new InternalError('Creator Document inheritance is not implemented');
-}
-
-/** Populate the synchronously available element tree of an about:blank document. */
-export function populateWithHTMLHeadBody(document: DocumentImpl): void {
-  const html = document.createElementNode('html', HTML_NAMESPACE);
-  const head = document.createElementNode('head', HTML_NAMESPACE);
-  const body = document.createElementNode('body', HTML_NAMESPACE);
-
-  document.appendChild(html);
-  html.appendChild(head);
-  html.appendChild(body);
-}
-
-function makeActive(
-  document: DocumentImpl,
-  window: WindowImpl,
-): void {
-  const browsingContext = document.browsingContext;
-  if (browsingContext === null) {
-    throw new InternalError('Document has no browsing context');
-  }
-
-  const env = window.env;
-  browsingContext.windowProxy.setAssociatedWindow(env.realm.globalObject);
-  env.markExecutionReady();
 }

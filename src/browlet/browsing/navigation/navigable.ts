@@ -220,17 +220,11 @@ export class Traversable extends Navigable implements FetchPromptTarget {
   ): void {
     const document = historyEntry.documentState.document;
     if (document === null) return;
-    const browsingContext = document.browsingContext;
-    const window = document.getRelevantGlobalObject();
-    if (browsingContext === null || window === null) {
-      throw new InternalError('Navigation Document has no browsing context or Window');
-    }
 
     navigable.currentSessionHistoryEntry = historyEntry;
     navigable.activeSessionHistoryEntry = historyEntry;
     this.currentSessionHistoryStep = targetStep;
-    browsingContext.windowProxy.setAssociatedWindow(window.env.realm.globalObject);
-    window.env.markExecutionReady();
+    document.makeActive();
   }
 
   /** Discard entries after this traversable's current history step. */

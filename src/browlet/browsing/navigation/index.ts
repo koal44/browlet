@@ -1,4 +1,4 @@
-export { populateWithHTMLHeadBody, BrowsingContext, BrowsingContextGroup } from './browsing-context';
+export { BrowsingContext, BrowsingContextGroup } from './browsing-context';
 export {
   Navigable, type NavigationHistoryBehavior, type UserNavigationInvolvement, Traversable,
   TopLevelTraversable, SessionHistoryTraversalQueue,

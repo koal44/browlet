@@ -26,9 +26,10 @@ owns the browsing-context and session-history lifecycle.
 | existing `navigation/document-lifecycle.ts`, `NavigationParams`, and `DocumentImpl` | Creation factory selects Window/realm; navigation owns response/destination operations; Document owns initialization, loading completion, destruction, abortion, and unloading cleanup | HTML §7.5 |
 | existing `user-agent.ts` plus the future embedder/automation boundary | Browser-UI navigation, reload, stop, traversal, creation, closing, POST confirmation, and cache-bypass requests routed through the ordinary algorithms with `browser UI` involvement | HTML §7.9 |
 
-Creator-based browsing-context creation still stops at
-`inheritCreatorVirtualBrowsingContextGroupID()` and `inheritCreatorDocumentState()`.
-When implementing them, enable the approved TODO in
+Creator-based browsing-context creation still stops at the explicit guard in
+`BrowsingContext.create()`. It awaits inheritance of the creator's top-level
+virtual browsing context group ID, referrer, policy container, and opener policy.
+When implementing that path, enable the approved TODO in
 `test/browlet/object-url.test.ts`: a new Document must inherit its creator's
 existing base URL record, including a captured Blob entry after revocation.
 Serializing and reparsing the record would lose that entry. The independent
