@@ -37,7 +37,7 @@ that directly requires HTML's timeout and global-task machinery.
 | --- | --- | --- |
 | DOM §4, nodes | Core implementation classes exist, but many public members, collections, shadow/slot behavior, and leaf types are partial or absent | Build one normative mutation spine before treating interface breadth as progress; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Not implemented | Put observer/signal-slot state on the Window agent and deliver it through HTML's microtask checkpoint; DOM owns records and callback semantics |
-| DOM §5, ranges | Not implemented | Establish boundary points and live-range mutation adjustment alongside the mutation spine; see `ranges/ROADMAP.md` |
+| DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural mutation adjustment exist | CharacterData adjustment follows in 4E; remaining Range operations stay in `ranges/ROADMAP.md` |
 
 The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.
 Its first DOM milestone is the mutation spine plus live Range and
@@ -50,7 +50,7 @@ land in bounded consumer-driven slices.
 
 | Section | Current state | Priority and boundary |
 | --- | --- | --- |
-| DOM §6, traversal | `Document` carries type-only factory declarations; the public objects are absent | Reserve NodeIterator pre-remove participation with the mutation spine, then implement the complete API as a bounded post-spine slice; see `traversal/ROADMAP.md` |
+| DOM §6, traversal | NodeFilter and NodeIterator are projected and participate in structural mutation | Implement TreeWalker; see `traversal/ROADMAP.md` |
 | DOM §7, sets | `DOMTokenList` is absent; ordered-set parsing/serialization already exists | Early interface-completion work because `classList` and several HTML token attributes exercise ordinary attribute mutation, CE reactions, observers, and style invalidation |
 | DOM §8, XPath | Absent | Late XML/query subsystem; the current DOM Standard preserves Web IDL but explicitly lacks complete behavioral definitions; see `xpath/ROADMAP.md` |
 | DOM §9, XSLT | Absent | Late optional XML transformation subsystem requiring a qualified XSLT engine and HTML/parser/navigation integration; see `xslt/ROADMAP.md` |

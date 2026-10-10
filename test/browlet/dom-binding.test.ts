@@ -295,6 +295,7 @@ describe('Browlet DOM binding', () => {
       'parentNode',
       'previousSibling',
       'removeChild',
+      'replaceChild',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Document'))).toEqual([
       'adoptedStyleSheets',
@@ -311,6 +312,8 @@ describe('Browlet DOM binding', () => {
       'createComment',
       'createElement',
       'createElementNS',
+      'createNodeIterator',
+      'createRange',
       'createTextNode',
       'customElementRegistry',
       'defaultView',
@@ -325,6 +328,7 @@ describe('Browlet DOM binding', () => {
       'head',
       'inputEncoding',
       'lastElementChild',
+      'moveBefore',
       'styleSheets',
       'URL',
       'write',
@@ -345,6 +349,7 @@ describe('Browlet DOM binding', () => {
       'hasAttributeNS',
       'lastElementChild',
       'localName',
+      'moveBefore',
       'namespaceURI',
       'nextElementSibling',
       'previousElementSibling',
@@ -382,6 +387,7 @@ describe('Browlet DOM binding', () => {
       'constructor',
       'firstElementChild',
       'lastElementChild',
+      'moveBefore',
     ]);
     expect(ownKeys(getPrototype(browlet, 'ShadowRoot'))).toEqual([
       'adoptedStyleSheets',

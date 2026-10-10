@@ -53,6 +53,14 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return this.#firstChild !== null;
   }
 
+  /** Number of preceding siblings in this node's current tree. */
+  // https://dom.spec.whatwg.org/#concept-tree-index
+  getIndex(): number {
+    let index = 0;
+    for (let sibling = this.#previousSibling; sibling; sibling = sibling.#previousSibling) index++;
+    return index;
+  }
+
   // https://dom.spec.whatwg.org/#concept-tree-inclusive-descendant
   contains(other: TNode | null): boolean {
     if (!other) return false;

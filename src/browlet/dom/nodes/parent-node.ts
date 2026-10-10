@@ -1,5 +1,5 @@
 import {
-  defineInterfaceMixin, idlType, nullable, roAttr, reference, xattr,
+  arg, defineInterfaceMixin, idlType, nullable, op, roAttr, reference, xattr,
 } from '../../../web-idl/index';
 
 import { HTMLCollectionImpl } from './collections';
@@ -66,6 +66,12 @@ export class ParentNodeMixin {
 
     return count;
   }
+
+  /** Move an existing node without running removal and insertion lifecycle hooks. */
+  // https://dom.spec.whatwg.org/#dom-parentnode-movebefore
+  moveBefore(node: NodeImpl, child: NodeImpl | null): void {
+    this.#node.move(node, child === node ? node.nextSibling : child);
+  }
 }
 
 /*
@@ -94,6 +100,10 @@ export const parentNodeIDL = defineInterfaceMixin({
     roAttr('firstElementChild', nullable(reference('Element'))),
     roAttr('lastElementChild', nullable(reference('Element'))),
     roAttr('childElementCount', idlType.unsignedLong),
+    op('moveBefore', idlType.undefined,
+      [arg('node', reference('Node')), arg('child', nullable(reference('Node')))],
+      xattr('CEReactions'),
+    ),
   ],
 });
 

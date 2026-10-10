@@ -12,6 +12,7 @@ import { NodeIteratorImpl } from '../traversal/index';
 import type { DOMEnvironment } from '../environment';
 
 import type { CharacterDataImpl } from './character-data';
+import type { AttrImpl } from './attribute';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
 import type { DocumentFragmentImpl } from './document-fragment';
@@ -97,6 +98,29 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
   // https://dom.spec.whatwg.org/#dom-node-appendchild
   appendChild<T extends NodeImpl>(node: T): T {
     return this.insertBefore(node, null);
+  }
+
+  /** Replace a child after checking the complete operation, including document constraints. */
+  // https://dom.spec.whatwg.org/#concept-node-replace
+  replaceChild<T extends NodeImpl>(node: NodeImpl, child: T): T {
+    this.ensurePreInsertValidity(node, child, [child]);
+    const reference = child.nextSibling === node ? node.nextSibling : child.nextSibling;
+    const previous = child.previousSibling;
+    const removed: NodeImpl[] = [];
+    node.adoptInto(this.nodeDocument);
+    if (child.parentNode !== null) {
+      removed.push(child);
+      child.removeNode(true);
+    }
+    const added: NodeImpl[] = [];
+    if (node.isDocumentFragment()) {
+      for (let current = node.firstChild; current; current = current.nextSibling) added.push(current);
+    } else {
+      added.push(node);
+    }
+    this.insert(node, reference, true);
+    this.queueTreeMutationRecord(added, removed, previous, reference);
+    return child;
   }
 
   /** Remove this parent's child, rejecting a foreign child before mutation. */
@@ -190,15 +214,14 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     }
 
     if (child !== null) {
-      let index = 0;
-      for (let previous = child.previousSibling; previous; previous = previous.previousSibling) index++;
-      RangeImpl.adjustForInsertion(this, index, count);
+      RangeImpl.adjustForInsertion(this, child.getIndex(), count);
     }
     const previousSibling = child === null ? this.lastChild : child.previousSibling;
 
     for (const current of nodes) {
       current.adoptInto(this.nodeDocument);
       super.insertTreeChild(current, child);
+      RangeImpl.rootInserted(current);
 
       if (this.isElement() && this.shadowRoot !== null && this.shadowRoot.slotAssignment === 'named' &&
         (current.isElement() || current.isText())) {
@@ -293,6 +316,84 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     }
     if (!suppressObservers) parent.queueTreeMutationRecord([], [this], previousSibling, nextSibling);
     parent.childrenChanged();
+  }
+
+  /** Replace all children; callers must first establish that the resulting tree is valid. */
+  // https://dom.spec.whatwg.org/#concept-node-replace-all
+  replaceAll(node: NodeImpl | null): void {
+    const removed: NodeImpl[] = [];
+    for (let child = this.firstChild; child; child = child.nextSibling) removed.push(child);
+    const added: NodeImpl[] = [];
+    if (node?.isDocumentFragment()) {
+      for (let child = node.firstChild; child; child = child.nextSibling) added.push(child);
+    } else if (node !== null) {
+      added.push(node);
+    }
+    for (const child of removed) child.removeNode(true);
+    if (node !== null) this.insert(node, null, true);
+    if (added.length || removed.length) this.queueTreeMutationRecord(added, removed, null, null);
+  }
+
+  /** Move within the same shadow-including tree, preserving state owned by moving hooks. */
+  // https://dom.spec.whatwg.org/#move
+  move(node: NodeImpl, child: NodeImpl | null): void {
+    if (this.getShadowIncludingRoot() !== node.getShadowIncludingRoot() ||
+      node.isHostIncludingInclusiveAncestor(this)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
+    }
+    if (child !== null && child.parentNode !== this) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
+    }
+    if (!node.isElement() && !node.isCharacterData()) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
+    }
+    this.ensurePreInsertValidity(node, child);
+
+    const oldParent = node.parentNode!;
+    RangeImpl.preRemove(node);
+    NodeIteratorImpl.preRemove(node);
+    const oldPrevious = node.previousSibling;
+    const oldNext = node.nextSibling;
+    (node as NodeImpl).removeTreeNode();
+    if (node.isElement() || node.isText()) node.getAssignedSlot()?.assignSlottables();
+    if (oldParent.getRoot().isShadowRoot() && oldParent.isSlot() && oldParent.assignedNodesList.length === 0) {
+      oldParent.signalSlotChange();
+    }
+    for (let descendant: NodeImpl | null = node; descendant; descendant = descendant.nextDescendant(node)) {
+      if (descendant.isSlot()) {
+        oldParent.getRoot().assignSlottablesForTree();
+        node.assignSlottablesForTree();
+        break;
+      }
+    }
+
+    if (child !== null) RangeImpl.adjustForInsertion(this, child.getIndex(), 1);
+    const newPrevious = child === null ? this.lastChild : child.previousSibling;
+    super.insertTreeChild(node, child);
+    if (this.isElement() && this.shadowRoot !== null && this.shadowRoot.slotAssignment === 'named' &&
+      (node.isElement() || node.isText())) node.assignSlot();
+    if (this.getRoot().isShadowRoot() && this.isSlot() && this.assignedNodesList.length === 0) {
+      this.signalSlotChange();
+    }
+    node.getRoot().assignSlottablesForTree();
+    for (let descendant: NodeImpl | null = node; descendant;
+      descendant = descendant.nextShadowIncludingDescendant(node)) {
+      descendant.movingSteps(descendant === node, oldParent);
+      if (descendant.isElement() && descendant.customElementState === 'custom' && this.isConnected) {
+        descendant.enqueueCustomElementCallbackReaction('connectedMoveCallback', []);
+      }
+    }
+    oldParent.queueTreeMutationRecord([], [node], oldPrevious, oldNext);
+    this.queueTreeMutationRecord([node], [], newPrevious, child);
+  }
+
+  /** DOM node length: UTF-16 units for character data, otherwise child count (zero for Attr/doctype). */
+  // https://dom.spec.whatwg.org/#concept-node-length
+  getLength(): number {
+    if (this.isCharacterData()) return this.data.length;
+    let length = 0;
+    for (let child = this.firstChild; child; child = child.nextSibling) length++;
+    return length;
   }
 
   /** Detach and change document ownership without changing platform identity or realm. */
@@ -424,6 +525,10 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return this.nodeType === NodeType.Element;
   }
 
+  isAttribute(): this is AttrImpl {
+    return this.nodeType === NodeType.Attribute;
+  }
+
   isText(): this is TextImpl {
     return this.nodeType === NodeType.Text || this.nodeType === NodeType.CDATASection;
   }
@@ -526,6 +631,10 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
   /** Run node-specific insertion steps; plain nodes have none. */
   // https://dom.spec.whatwg.org/#concept-node-insert-ext
   protected insertionSteps(): void {}
+
+  /** Specification extensions for a move, without removal or insertion side effects. */
+  // https://dom.spec.whatwg.org/#concept-node-move-ext
+  protected movingSteps(_isSubtreeRoot: boolean, _oldAncestor: NodeImpl): void {}
 
   /** Run node-specific removal steps with the former ancestor and subtree-root flag. */
   // https://dom.spec.whatwg.org/#concept-node-remove-ext
@@ -632,6 +741,10 @@ export const nodeIDL = defineInterface({
     ),
     op('appendChild', reference('Node'),
       [arg('node', reference('Node'))],
+      xattr('CEReactions'),
+    ),
+    op('replaceChild', reference('Node'),
+      [arg('node', reference('Node')), arg('child', reference('Node'))],
       xattr('CEReactions'),
     ),
     op('removeChild', reference('Node'),

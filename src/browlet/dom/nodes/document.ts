@@ -5,7 +5,7 @@ import { InternalError } from '../../../infra/internal-error';
 import type { JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
-  dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
+  dictMember, emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
 } from '../../../web-idl/index';
 import {
@@ -23,6 +23,8 @@ import {
   type SandboxingFlag,
 } from '../../browsing/policy/index';
 import { CSPList } from '../../browsing/policy/csp/index';
+import { RangeImpl } from '../ranges/index';
+import { NodeIteratorImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
@@ -327,6 +329,10 @@ export class DocumentImpl extends NodeImpl {
     return this.#parentNodeMixin.childElementCount;
   }
 
+  moveBefore(node: NodeImpl, child: NodeImpl | null): void {
+    this.#parentNodeMixin.moveBefore(node, child);
+  }
+
   // https://dom.spec.whatwg.org/#dom-document-createelement
   createElement(
     localName: string,
@@ -353,6 +359,18 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createcomment
   createComment(data: string): CommentImpl {
     return this.#nodeFactory.constructNode(CommentImpl, [data, this, this.env]);
+  }
+
+  /** Create a live range collapsed at this document's start. */
+  // https://dom.spec.whatwg.org/#dom-document-createrange
+  createRange(): RangeImpl {
+    return new RangeImpl(this, this.env);
+  }
+
+  /** Create a traversal cursor rooted at the supplied node, even in another document. */
+  // https://dom.spec.whatwg.org/#dom-document-createnodeiterator
+  createNodeIterator(root: NodeImpl, whatToShow: number, filter: NodeFilterCallback | null): NodeIteratorImpl {
+    return new NodeIteratorImpl(root, whatToShow, filter, this.env);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createattribute
@@ -977,6 +995,15 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
     op('adoptNode', reference('Node'),
       [arg('node', reference('Node'))],
       xattr('CEReactions'),
+    ),
+    op('createRange', reference('Range'), [], xattr('NewObject')),
+    op('createNodeIterator', reference('NodeIterator'),
+      [
+        arg('root', reference('Node')),
+        arg('whatToShow', idlType.unsignedLong, { default: integer(SHOW_ALL), optional: true }),
+        arg('filter', nullable(reference('NodeFilter')), { default: null, optional: true }),
+      ],
+      xattr('NewObject'),
     ),
     op('getElementById', nullable(reference('Element')), [
       arg('elementId', idlType.DOMString),

@@ -161,6 +161,17 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 One owning world per implementation and preservation of genuine `object`/`any`
 values are intentional [binding contracts](web-idl/README.md), not missing APIs.
 
+## Live DOM mutation
+
+Live Range boundaries track structural mutations, but CharacterData edits do not
+yet adjust them. Replacing `.data` can leave offsets beyond the new text length;
+the expected failure in [Range tests](../test/browlet/dom/ranges/range.test.ts)
+remains until DOM 4E supplies replace-data and text-splitting adjustment.
+NodeIterator rejects recursive traversal before changing its cursor, matching
+Firefox rather than the written algorithm's later filtering check. The
+[compatibility choice](browlet/dom/traversal/ROADMAP.md#reentrant-filter-compatibility-choice)
+also rejects recursive calls that would otherwise return null before filtering.
+
 ## HTML integration gates
 
 The [loader](browlet/loader/ROADMAP.md) now consumes streamed Fetch responses,

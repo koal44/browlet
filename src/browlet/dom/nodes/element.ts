@@ -97,6 +97,10 @@ export class ElementImpl extends NodeImpl {
     return this.#parentNodeMixin.childElementCount;
   }
 
+  moveBefore(node: NodeImpl, child: NodeImpl | null): void {
+    this.#parentNodeMixin.moveBefore(node, child);
+  }
+
   get previousElementSibling(): ElementImpl | null {
     return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
   }

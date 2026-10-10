@@ -69,6 +69,12 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     super.removingSteps();
     this.nodeDocument.updateBaseElement();
   }
+
+  protected override movingSteps(): void {
+    // Becoming first in tree order updates the frozen base URL even without reinsertion.
+    // https://html.spec.whatwg.org/multipage/semantics.html#frozen-base-url
+    this.nodeDocument.updateBaseElement();
+  }
 }
 
 /*

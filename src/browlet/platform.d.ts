@@ -122,6 +122,13 @@ export interface AddEventListenerOptions {
   signal?: AbortSignal;
 }
 
+export interface StaticRangeInit {
+  endContainer: Node;
+  endOffset: number;
+  startContainer: Node;
+  startOffset: number;
+}
+
 export interface GetRootNodeOptions {
   composed?: boolean;
 }
@@ -286,6 +293,29 @@ export type TransformerCancelCallback = (reason: any) => (void | PromiseLike<voi
 export type EventListener = {
   handleEvent(event: Event): void;
 } | ((event: Event) => void);
+
+export type NodeFilter = {
+  acceptNode(node: Node): number;
+} | ((node: Node) => number);
+
+export interface NodeFilterInterfaceObject {
+  readonly FILTER_ACCEPT: 1;
+  readonly FILTER_REJECT: 2;
+  readonly FILTER_SKIP: 3;
+  readonly SHOW_ALL: 4294967295;
+  readonly SHOW_ELEMENT: 1;
+  readonly SHOW_ATTRIBUTE: 2;
+  readonly SHOW_TEXT: 4;
+  readonly SHOW_CDATA_SECTION: 8;
+  readonly SHOW_ENTITY_REFERENCE: 16;
+  readonly SHOW_ENTITY: 32;
+  readonly SHOW_PROCESSING_INSTRUCTION: 64;
+  readonly SHOW_COMMENT: 128;
+  readonly SHOW_DOCUMENT: 256;
+  readonly SHOW_DOCUMENT_TYPE: 512;
+  readonly SHOW_DOCUMENT_FRAGMENT: 1024;
+  readonly SHOW_NOTATION: 2048;
+}
 
 export interface DOMException {
   readonly name: string;
@@ -691,6 +721,10 @@ export interface Window extends EventTarget {
   EventTarget: EventTargetConstructor;
   AbortSignal: AbortSignalConstructor;
   AbortController: AbortControllerConstructor;
+  AbstractRange: AbstractRangeConstructor;
+  StaticRange: StaticRangeConstructor;
+  Range: RangeConstructor;
+  NodeIterator: NodeIteratorConstructor;
   Node: NodeConstructor;
   HTMLCollection: HTMLCollectionConstructor;
   NamedNodeMap: NamedNodeMapConstructor;
@@ -732,6 +766,7 @@ export interface Window extends EventTarget {
   Headers: HeadersConstructor;
   Request: RequestConstructor;
   Response: ResponseConstructor;
+  NodeFilter: NodeFilterInterfaceObject;
 }
 
 export interface WindowConstructor {
@@ -827,6 +862,65 @@ export interface AbortControllerConstructor {
   new (): AbortController;
 }
 
+export interface AbstractRange {
+  readonly startContainer: Node;
+  readonly startOffset: number;
+  readonly endContainer: Node;
+  readonly endOffset: number;
+  readonly collapsed: boolean;
+}
+
+export interface AbstractRangeConstructor {
+  readonly prototype: AbstractRange;
+  [Symbol.hasInstance](value: unknown): value is AbstractRange;
+}
+
+export interface StaticRange extends AbstractRange {
+
+}
+
+export interface StaticRangeConstructor {
+  readonly prototype: StaticRange;
+  [Symbol.hasInstance](value: unknown): value is StaticRange;
+  new (init: StaticRangeInit): StaticRange;
+}
+
+export interface Range extends AbstractRange {
+  readonly commonAncestorContainer: Node;
+  setStart(node: Node, offset: number): void;
+  setEnd(node: Node, offset: number): void;
+  setStartBefore(node: Node): void;
+  setStartAfter(node: Node): void;
+  setEndBefore(node: Node): void;
+  setEndAfter(node: Node): void;
+  collapse(toStart?: boolean): void;
+  selectNode(node: Node): void;
+  selectNodeContents(node: Node): void;
+  detach(): void;
+}
+
+export interface RangeConstructor {
+  readonly prototype: Range;
+  [Symbol.hasInstance](value: unknown): value is Range;
+  new (): Range;
+}
+
+export interface NodeIterator {
+  readonly root: Node;
+  readonly referenceNode: Node;
+  readonly pointerBeforeReferenceNode: boolean;
+  readonly whatToShow: number;
+  readonly filter: (NodeFilter | null);
+  nextNode(): (Node | null);
+  previousNode(): (Node | null);
+  detach(): void;
+}
+
+export interface NodeIteratorConstructor {
+  readonly prototype: NodeIterator;
+  [Symbol.hasInstance](value: unknown): value is NodeIterator;
+}
+
 export interface Node extends EventTarget {
   readonly nodeType: number;
   readonly baseURI: string;
@@ -841,6 +935,7 @@ export interface Node extends EventTarget {
   getRootNode(options?: GetRootNodeOptions): Node;
   insertBefore(node: Node, child: (Node | null)): Node;
   appendChild(node: Node): Node;
+  replaceChild(node: Node, child: Node): Node;
   removeChild(child: Node): Node;
   contains(other: (Node | null)): boolean;
   compareDocumentPosition(other: Node): number;
@@ -946,6 +1041,7 @@ export interface DocumentFragment extends Node {
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
   readonly childElementCount: number;
+  moveBefore(node: Node, child: (Node | null)): void;
 }
 
 export interface DocumentFragmentConstructor {
@@ -990,6 +1086,8 @@ export interface Document extends Node {
   createComment(data: string): Comment;
   createAttribute(localName: string): Attr;
   adoptNode(node: Node): Node;
+  createRange(): Range;
+  createNodeIterator(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): NodeIterator;
   getElementById(elementId: string): (Element | null);
   readonly head: (HTMLHeadElement | null);
   readonly body: (HTMLElement | null);
@@ -999,6 +1097,7 @@ export interface Document extends Node {
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
   readonly childElementCount: number;
+  moveBefore(node: Node, child: (Node | null)): void;
   readonly customElementRegistry: (CustomElementRegistry | null);
   readonly styleSheets: object;
   adoptedStyleSheets: any;
@@ -1027,6 +1126,7 @@ export interface Element extends Node {
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
   readonly childElementCount: number;
+  moveBefore(node: Node, child: (Node | null)): void;
   remove(): void;
   readonly previousElementSibling: (Element | null);
   readonly nextElementSibling: (Element | null);

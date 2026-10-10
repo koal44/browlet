@@ -9,18 +9,20 @@ affected boundary points as part of that mutation. The mutation spine must
 therefore reserve and exercise the Range participant from its first complete
 implementation.
 
-`range.ts` currently reserves `RangeImpl` and the mutation hooks
-`adjustForInsertion()` and `preRemove()`. Construction is disabled, so those
-hooks have no live ranges to visit. Implement registration and adjustment
-together before enabling construction. The static entry points are provisional.
+DOM 4C implements `AbstractRange`, `StaticRange`, and the live Range selection
+surface: construction, boundary setters, collapse, node/content selection,
+common ancestor, and compatibility `detach()`. `Document.createRange()` uses its
+receiver's document; `new Range()` uses the constructor realm's document.
+Insertion, removal, replacement, and movement adjust real live ranges.
+
 Ranges sit below nodes in the import hierarchy and retain node types without
 loading their implementation classes; use the supplied nodes and document
 factories. Review runtime dependencies for parsing and geometry when those
 extensions are implemented.
 
-| Planned source | Contract | Specification |
+| Source | Contract | Specification |
 | --- | --- | --- |
-| `boundary-point.ts` | Boundary-point ordering and validation algorithms | DOM §5.2, `#boundary-points` |
+| `range.ts` private static helpers | Boundary-point ordering and validation algorithms, using node/offset arguments without temporary point objects | DOM §5.2, `#boundary-points` |
 | `abstract-range.ts` | `AbstractRange` | DOM §5.3, `#interface-abstractrange` |
 | `static-range.ts` | `StaticRange` | DOM §5.4, `#interface-staticrange` |
 | existing `range.ts` | Live `Range`, mutation adjustment, extraction, cloning, insertion, stringification, and HTML `createContextualFragment()` integration | DOM §5.5, `#interface-range`; HTML §8.5.7 |
@@ -31,9 +33,10 @@ extensions are implemented.
   but no live-registration machinery.
 - A live `Range` initially belongs to the current global's associated Document;
   realm/Document lookup must therefore be available to its constructor.
-- Live ranges must register with the document/root that can notify them of
-  mutations and move that registration when their root changes. Do not use a
-  process-wide strong collection which keeps otherwise dead ranges alive.
+- Live ranges register in a weak set indexed by ordinary root. Selection changes
+  and insertion of a detached root relocate that registration. Shadow-root ranges
+  remain separate when the host is removed or adopted. Neither root keys nor range
+  entries keep otherwise unreachable objects alive.
 - `Range` extraction, cloning, deletion, insertion, and surrounding depend on
   complete node cloning, CharacterData replacement, and the normative mutation
   spine in `../nodes/ROADMAP.md`.
@@ -48,15 +51,16 @@ registration with their root. Both are evidence for an explicit mutation
 participant rather than reconstructing boundary changes after raw tree writes;
 Browlet need not copy either engine's native class structure.
 
-## Delivery order
+## Remaining work
 
-1. Implement boundary-point validation/comparison, `AbstractRange`, and
-   `StaticRange` with public behavioral tests.
-2. Add live-range registration and every mutation-adjustment algorithm while
-   completing the DOM §4 mutation spine.
-3. Project the complete `Range` surface and implement its node/CharacterData
-   mutation methods once those shared operations are normative.
-4. Connect contextual fragment parsing, then add CSSOM View geometry only when
+1. Add CharacterData replacement and text-splitting adjustment in DOM 4E. The
+   expected failure in `test/browlet/dom/ranges/range.test.ts` replaces selected
+   text through `.data`: offsets currently remain `[1, 3]` instead of `[0, 0]`.
+2. Complete Range comparison/query methods, cloning, content extraction/deletion,
+   insertion, surrounding, and stringification using the shared mutation spine.
+   The current projected Range interface deliberately contains only the selection
+   surface needed by 4C; its complete Web IDL surface remains unfinished.
+3. Connect contextual fragment parsing, then add CSSOM View geometry only when
    layout supplies it.
 
 Coverage should exercise boundary points through public Range objects, then

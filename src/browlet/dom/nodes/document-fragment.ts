@@ -48,6 +48,10 @@ export class DocumentFragmentImpl extends NodeImpl {
   get childElementCount(): number {
     return this.#parentNodeMixin.childElementCount;
   }
+
+  moveBefore(node: NodeImpl, child: NodeImpl | null): void {
+    this.#parentNodeMixin.moveBefore(node, child);
+  }
 }
 
 /*

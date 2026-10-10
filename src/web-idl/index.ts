@@ -6,7 +6,7 @@ import type { BindingContext } from './binding/world';
 
 export * from './core/index';
 
-export type { BindingContext };
+export type { BindingContext, IDLCallbackInterface };
 export { BindingWorld } from './binding/world';
 export type { WebIDLEnvironment, WebIDLRealm };
 export type { CallbackHooks, SecurityCheckType } from './environment';
