@@ -21,7 +21,7 @@ merely constructing a larger static tree.
 | Generic subresource proof | `img` | Exercise element-driven Fetch, document load-event delay, success/error events, URL reflection, and cancellation without first requiring the media playback or canvas subsystems |
 | Nested lifecycle | `iframe` | Create and destroy child navigables, preserve `contentWindow` WindowProxy identity, expose `contentDocument`, process `src`/`srcdoc`, sandbox/referrer/permissions inputs, and propagate child load completion |
 | Author-driven navigation | `a` | Connect URL reflection and activation behavior to target selection, navigation, downloads, referrer policy, and hyperlink auditing |
-| Parser and shadow structure | `template`, then `slot` | Establish inert template contents, fragment parsing/declarative shadow roots, cloning/adoption, and slot assignment without pulling in canvas or custom-element completion |
+| Parser and shadow structure | `template`; `slot` assignment is implemented in DOM 4H | Establish inert template contents, fragment parsing/declarative shadow roots, and cloning/adoption without pulling in canvas or custom-element completion |
 
 Only the observable specialization should force a dedicated class. Elements
 whose §4 contract is semantic or conformance-only can continue to use the

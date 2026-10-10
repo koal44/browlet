@@ -7,6 +7,7 @@ import type { DOMEnvironment } from '../environment';
 import { type NodeImpl, NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
+import type { ElementImpl } from './element';
 import { SlottableMixin, slottableIDL } from './slottable';
 import type { HTMLSlotElementImpl } from './html/index';
 
@@ -41,6 +42,15 @@ export class TextImpl extends CharacterDataImpl {
     return this.#slottableMixin.findSlot(this, true);
   }
 
+  /** Explicit assignment owner, retained weakly even while this node is detached. */
+  get manualSlotAssignment(): WeakRef<HTMLSlotElementImpl> | null {
+    return this.#slottableMixin.manualSlotAssignment;
+  }
+
+  set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
+    this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
   /** Split at a UTF-16 offset; the new Text belongs to this node's current document. */
   // https://dom.spec.whatwg.org/#concept-text-split
   splitText(offset: number): TextImpl {
@@ -60,7 +70,17 @@ export class TextImpl extends CharacterDataImpl {
     this.#slottableMixin.assignedSlot = slot;
   }
 
-  /** Update named slot assignment through the shared slottable behavior. */
+  /** Stable weak identity used by slots' manual assignment sets. */
+  getManualReference(): WeakRef<ElementImpl | TextImpl> {
+    return this.#slottableMixin.getManualReference(this);
+  }
+
+  /** Find an applicable slot, optionally excluding a closed shadow root. */
+  findSlot(open = false): HTMLSlotElementImpl | null {
+    return this.#slottableMixin.findSlot(this, open);
+  }
+
+  /** Update slot assignment through the shared slottable behavior. */
   assignSlot(): void {
     this.#slottableMixin.assignSlot(this);
   }

@@ -35,8 +35,8 @@ that directly requires HTML's timeout and global-task machinery.
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §4, nodes | Structural/text/attribute mutation, collections, tree mixins, selectors, and mutation observers exist; shadow/slot assignment, leaf types, and remaining members are partial or absent | Continue with shadow trees in 4H; see `nodes/ROADMAP.md` |
-| DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot-change notification is ready for 4H assignment |
+| DOM §4, nodes | Structural/text/attribute mutation, collections, tree mixins, selectors, mutation observers, and shadow/slot assignment exist; leaf types and remaining members are partial or absent | Continue with Node/Document completion in 4I; see `nodes/ROADMAP.md` |
+| DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot assignment uses the same notification checkpoint |
 | DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural/text mutation adjustment exist | Remaining Range operations stay in `ranges/ROADMAP.md` |
 
 The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.

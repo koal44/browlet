@@ -23,7 +23,7 @@ export {
 export {
   defineElementInterface, ElementImpl, elementIDL, elementInterface, elementIncludesParentNodeIDL,
   elementIncludesChildNodeIDL, elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesSlottableIDL,
-  type ElementCreationContext, type ElementInterface,
+  type ElementCreationContext, type ElementInterface, type ShadowRootInit, shadowRootInitIDL,
 } from './element';
 export {
   findElementById, findElement, findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,

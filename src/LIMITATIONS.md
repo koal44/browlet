@@ -171,10 +171,16 @@ are recorded in the [4F scope](browlet/dom/nodes/ROADMAP.md#collections-tree-mix
 Element attribute setters, Attr attachment, and attached `Attr.value`,
 `nodeValue`, and `textContent` writes enforce Trusted Types. Their common change
 path delivers mutation records through the same observer machinery as structural
-and character-data changes. Custom-element reactions and shadow-slot assignment
-remain unfinished; slot-change signaling and checkpoint delivery are implemented. The
+and character-data changes. Shadow attachment, named/manual slot assignment, and
+slot-change delivery are implemented. Custom-element reactions remain unfinished. The
 [attribute slice](browlet/dom/nodes/ROADMAP.md#section-4-slices) records these
 dependencies and the tests for the implemented storage and mutation behavior.
+
+Shadow attachment retains focus, cloning, and serialization flags without
+implementing their later consumers. Declarative parsing, shadow style scopes,
+ElementInternals, and custom-element definition checks remain absent. Browser/spec
+differences in assignment updates and adopted-host root allocation are recorded
+in the [4H scope](browlet/dom/nodes/ROADMAP.md#shadow-trees-4h).
 
 Live Range boundaries track structural and character-data mutations, text splits,
 and normalization. ProcessingInstruction

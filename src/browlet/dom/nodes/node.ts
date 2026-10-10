@@ -512,7 +512,8 @@ export abstract class NodeImpl extends EventTargetImpl {
       this.#insertTreeChild(current, child);
       RangeImpl.rootInserted(current);
 
-      if (this.isElement() && this.shadowRoot !== null && this.shadowRoot.slotAssignment === 'named' &&
+      // SPEC_CLASH(manual-slot-insertion): browsers refresh manual assignments too; DOM limits this step to named roots.
+      if (this.isElement() && this.shadowRoot !== null &&
         (current.isElement() || current.isText())) {
         current.assignSlot();
       }
@@ -663,7 +664,8 @@ export abstract class NodeImpl extends EventTargetImpl {
     if (child !== null) RangeImpl.adjustForInsertion(this, child.getIndex(), 1);
     const newPrevious = child === null ? this.lastChild : child.previousSibling;
     this.#insertTreeChild(node, child);
-    if (this.isElement() && this.shadowRoot !== null && this.shadowRoot.slotAssignment === 'named' &&
+    // SPEC_CLASH(manual-slot-insertion): preserve the same assignment update for state-preserving moves.
+    if (this.isElement() && this.shadowRoot !== null &&
       (node.isElement() || node.isText())) node.assignSlot();
     if (this.getRoot().isShadowRoot() && this.isSlot() && this.assignedNodesList.length === 0) {
       this.signalSlotChange();

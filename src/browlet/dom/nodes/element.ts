@@ -2,7 +2,8 @@ import { HTML_NAMESPACE } from '../../../infra/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import {
-  arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, sequence, union, xattr,
+  arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
+  nullable, op, reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames,
   type PrimaryInterfaceDefinition,
 } from '../../../web-idl/index';
@@ -18,8 +19,11 @@ import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
-import type { ShadowRootImpl } from './shadow-root';
-import type { CustomElementRegistryImpl, CustomElementCallbackArguments } from './html/custom-elements/index';
+import type { TextImpl } from './text';
+import type { ShadowRootImpl, ShadowRootMode, SlotAssignmentMode } from './shadow-root';
+import {
+  isValidCustomElementName, type CustomElementRegistryImpl, type CustomElementCallbackArguments,
+} from './html/custom-elements/index';
 import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
@@ -304,6 +308,63 @@ export class ElementImpl extends NodeImpl {
     this.linkStyleMixin?.attributeChanged(localName);
   }
 
+  /** Reflect the null-namespace slot attribute through the shared mutation path. */
+  get slot(): string {
+    return this.getAttributeNS(null, 'slot') ?? '';
+  }
+
+  set slot(value: string) {
+    this.setAttributeValue('slot', value);
+  }
+
+  /** Attach a shadow tree using the converted options and this node's document registry. */
+  // https://dom.spec.whatwg.org/#dom-element-attachshadow
+  attachShadow(init: ShadowRootInit): ShadowRootImpl {
+    const documentRegistry = this.nodeDocument.customElementRegistry;
+    const registry = init.customElementRegistry === undefined ? documentRegistry : init.customElementRegistry;
+    if (registry !== null && !registry.isScoped && registry !== documentRegistry) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    }
+    this.attachShadowRoot(
+      init.mode, init.delegatesFocus, init.serializable, init.slotAssignment, init.clonable, registry,
+    );
+    return this.shadowRoot!;
+  }
+
+  /** Establish the host/root association, or reuse a compatible declarative root. */
+  // https://dom.spec.whatwg.org/#concept-attach-a-shadow-root
+  attachShadowRoot(
+    mode: ShadowRootMode, delegatesFocus: boolean, serializable: boolean,
+    slotAssignment: SlotAssignmentMode, clonable: boolean, registry: CustomElementRegistryImpl | null,
+  ): void {
+    if (this.namespaceURI !== HTML_NAMESPACE ||
+      (!shadowHostNames.has(this.localName) && !isValidCustomElementName(this.localName))) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    }
+
+    // PROVISIONAL(custom elements): definition lookup cannot yield a definition yet.
+    // The definition's disable-shadow check belongs here when definitions and `is` values exist.
+    const current = this.shadowRoot;
+    if (current !== null) {
+      if (!current.declarative || current.mode !== mode) {
+        throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+      }
+      while (current.firstChild !== null) current.firstChild.removeNode();
+      current.declarative = false;
+      return;
+    }
+
+    const shadow = this.nodeDocument.createShadowRoot(this, mode);
+    shadow.delegatesFocus = delegatesFocus;
+    shadow.availableToElementInternals = this.customElementState === 'precustomized' ||
+      this.customElementState === 'custom';
+    shadow.serializable = serializable;
+    shadow.slotAssignment = slotAssignment;
+    shadow.clonable = clonable;
+    shadow.customElementRegistry = registry;
+    this.shadowRoot = shadow;
+  }
+
   /** Match this element with itself as the selector scoping root. */
   // https://dom.spec.whatwg.org/#dom-element-matches
   matches(selectors: string): boolean {
@@ -405,6 +466,25 @@ export class ElementImpl extends NodeImpl {
     return this.#slottableMixin.findSlot(this, true);
   }
 
+  /** Explicit assignment owner, retained weakly even while this node is detached. */
+  get manualSlotAssignment(): WeakRef<HTMLSlotElementImpl> | null {
+    return this.#slottableMixin.manualSlotAssignment;
+  }
+
+  set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
+    this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
+  /** Stable weak identity used by slots' manual assignment sets. */
+  getManualReference(): WeakRef<ElementImpl | TextImpl> {
+    return this.#slottableMixin.getManualReference(this);
+  }
+
+  /** Find an applicable slot, optionally excluding a closed shadow root. */
+  findSlot(open = false): HTMLSlotElementImpl | null {
+    return this.#slottableMixin.findSlot(this, open);
+  }
+
   override getAssignedSlot(): HTMLSlotElementImpl | null {
     return this.#slottableMixin.assignedSlot;
   }
@@ -413,7 +493,7 @@ export class ElementImpl extends NodeImpl {
     this.#slottableMixin.assignedSlot = slot;
   }
 
-  /** Update named slot assignment through the shared slottable behavior. */
+  /** Update slot assignment through the shared slottable behavior. */
   assignSlot(): void {
     this.#slottableMixin.assignSlot(this);
   }
@@ -536,6 +616,7 @@ export const elementIDL = defineInterface({
     roAttr('namespaceURI', nullable(idlType.DOMString)),
     roAttr('prefix', nullable(idlType.DOMString)),
     roAttr('localName', idlType.DOMString),
+    attr('slot', idlType.DOMString, xattr('CEReactions', 'Unscopable')),
     op('hasAttributes', idlType.boolean, []),
     roAttr('attributes', reference('NamedNodeMap'), xattr('SameObject')),
     op('getAttributeNames', sequence(idlType.DOMString), []),
@@ -582,6 +663,13 @@ export const elementIDL = defineInterface({
     op('removeAttributeNode', reference('Attr'),
       [arg('attr', reference('Attr'))], xattr('CEReactions'),
     ),
+    op('attachShadow', reference('ShadowRoot'), [arg('init', reference('ShadowRootInit'))]),
+    roAttr('shadowRoot', nullable(reference('ShadowRoot')), {
+      get() {
+        const shadow = (this as ElementImpl).shadowRoot;
+        return shadow?.mode === 'open' ? shadow : null;
+      },
+    }),
     op('closest', nullable(reference('Element')), [arg('selectors', idlType.DOMString)]),
     op('matches', idlType.boolean, [arg('selectors', idlType.DOMString)]),
     op('webkitMatchesSelector', idlType.boolean,
@@ -595,6 +683,45 @@ export const elementIDL = defineInterface({
     op('getElementsByClassName', reference('HTMLCollection'), [arg('classNames', idlType.DOMString)]),
   ],
 });
+
+/** Converted shadow attachment options; Web IDL supplies every default. */
+export type ShadowRootInit = {
+  mode: ShadowRootMode;
+  delegatesFocus: boolean;
+  slotAssignment: SlotAssignmentMode;
+  clonable: boolean;
+  serializable: boolean;
+  customElementRegistry?: CustomElementRegistryImpl | null;
+};
+
+/*
+ * dictionary ShadowRootInit {
+ *   required ShadowRootMode mode;
+ *   boolean delegatesFocus = false;
+ *   SlotAssignmentMode slotAssignment = "named";
+ *   boolean clonable = false;
+ *   boolean serializable = false;
+ *   CustomElementRegistry? customElementRegistry;
+ * };
+ */
+export const shadowRootInitIDL = defineDictionary({
+  name: 'ShadowRootInit',
+  members: [
+    dictMember('mode', reference('ShadowRootMode'), { required: true }),
+    dictMember('delegatesFocus', idlType.boolean, { default: false }),
+    dictMember('slotAssignment', reference('SlotAssignmentMode'), { default: 'named' }),
+    dictMember('clonable', idlType.boolean, { default: false }),
+    dictMember('serializable', idlType.boolean, { default: false }),
+    dictMember('customElementRegistry', nullable(reference('CustomElementRegistry'))),
+  ],
+});
+
+/** Built-in shadow hosts, accepted alongside valid custom-element names. */
+// https://dom.spec.whatwg.org/#valid-shadow-host-name
+const shadowHostNames = new Set([
+  'article', 'aside', 'blockquote', 'body', 'div', 'footer', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+  'header', 'main', 'nav', 'p', 'section', 'span',
+]);
 
 /** Associate an element declaration with its constructor and matching names. */
 export function defineElementInterface(

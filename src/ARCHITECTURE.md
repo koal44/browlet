@@ -435,8 +435,9 @@ parsing and geometry integrations must be reviewed against those boundaries.
 A partial interface/dictionary/namespace amends its primary implementation.
 Co-locate its members when practical; an external package can export a declaration
 contribution and use an explicit integration seam. A stateful interface mixin
-gets a `FooMixin` composed into each includer. Declaration-only mixins need no
-runtime class. Binding projects this complete implementation graph.
+gets a `FooMixin` composed into each includer. Includers forward its members through
+their own API; callers do not need access to the composed mixin. Declaration-only
+mixins need no runtime class. Binding projects this complete implementation graph.
 
 Use `Impl` for a projected implementation, `Record` for specification records,
 `Value` for retained converted values, `Steps` for callable algorithms,

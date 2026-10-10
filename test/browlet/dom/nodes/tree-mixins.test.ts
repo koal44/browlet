@@ -105,7 +105,7 @@ describe('tree mixin mutations', () => {
     expect(Array.from(document.childNodes)).toEqual([before, after]);
   });
 
-  it('marks only the specified convenience methods as unscopable', async () => {
+  it('marks only the specified members as unscopable', async () => {
     const browser = new Browlet({ route: () => '' });
     expect(await browser.evaluate(() => {
       return [Element.prototype, Document.prototype, DocumentFragment.prototype, CharacterData.prototype, DocumentType.prototype]
@@ -116,7 +116,7 @@ describe('tree mixin mutations', () => {
             descriptor.enumerable, descriptor.configurable];
         });
     })).toEqual([
-      [true, ['after', 'append', 'before', 'prepend', 'remove', 'replaceChildren', 'replaceWith'], false, false, true],
+      [true, ['after', 'append', 'before', 'prepend', 'remove', 'replaceChildren', 'replaceWith', 'slot'], false, false, true],
       [true, ['append', 'prepend', 'replaceChildren'], false, false, true],
       [true, ['append', 'prepend', 'replaceChildren'], false, false, true],
       [true, ['after', 'before', 'remove', 'replaceWith'], false, false, true],

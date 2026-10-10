@@ -1,6 +1,3 @@
-import { setImmediate } from 'node:timers/promises';
-import { setFlagsFromString } from 'node:v8';
-import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 import { createWindowEnvironment } from '../../../../src/browlet/bindings';
 import { BrowsingContext, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/index';
@@ -8,9 +5,9 @@ import type { WindowRealm } from '../../../../src/browlet/scripting/realm';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 import type { HTMLSlotElementImpl } from '../../../../src/browlet/dom/nodes/html/slot';
 import type { MutationObserverImpl } from '../../../../src/browlet/dom/nodes/mutation-observer';
-import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
 import { createManualUserAgent } from '../../../support/browlet-agent';
-import { getBindingContext, getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';
+import { collectGarbage } from '../../../support/garbage-collection';
 
 describe('Mutation notification ownership', () => {
   it('numbers observers across shared-Agent Windows independently of other Agents', () => {
@@ -69,11 +66,7 @@ describe('Mutation notification ownership', () => {
   it('observes ordinary ancestors without crossing a shadow host', () => {
     const { realm, window } = createWindow();
     const host = window.document.createElement('div');
-    const hostImpl = unwrap<ElementImpl>(host);
-    // attachShadow belongs to 4H; supply only the state it will establish.
-    const root = new ShadowRootImpl(hostImpl, 'open', hostImpl.env);
-    hostImpl.shadowRoot = root;
-    const shadow = getBindingContext(realm).project(ShadowRootImpl, root) as unknown as ShadowRoot;
+    const shadow = host.attachShadow({ mode: 'open' });
     const child = window.document.createElement('span');
     shadow.appendChild(child);
     const outside = new window.MutationObserver(() => {});
@@ -114,15 +107,6 @@ describe('Mutation notification ownership', () => {
   });
 
   it('does not keep unrecorded detached nodes alive while cleanup is pending', async () => {
-    // Expose collection only in a throwaway host context, not in the tested Window.
-    setFlagsFromString('--expose-gc');
-    let collect: () => void;
-    try {
-      collect = runInNewContext('gc') as () => void;
-    } finally {
-      setFlagsFromString('--no-expose-gc');
-    }
-
     const { realm, window } = createWindow();
     const parent = window.document.createElement('div');
     const delivered: MutationRecord[][] = [];
@@ -135,12 +119,7 @@ describe('Mutation notification ownership', () => {
       return new WeakRef(unwrap<ElementImpl>(child));
     })();
     expect(observer.takeRecords()).toEqual([]);
-    for (let attempt = 0; attempt < 10; attempt++) {
-      // WeakRef keeps a dereferenced target alive until the current job ends.
-      await setImmediate();
-      collect();
-      if (detached.deref() === undefined) break;
-    }
+    await collectGarbage([detached]);
     expect(detached.deref() === undefined).toBe(true);
     expect(realm.agent.pendingMutationObservers.has(unwrap<MutationObserverImpl>(observer))).toBe(true);
     realm.agent.eventLoop.performMicrotaskCheckpoint();
@@ -171,7 +150,7 @@ describe('Slot-change notification', () => {
     });
     observer.observe(parent, { attributes: true });
     parent.setAttribute('id', 'changed');
-    // Exercise the notification primitive directly; slot assignment remains 4H work.
+    // Isolate batch snapshot ordering; HTMLSlotElement tests cover assignment-triggered signals.
     firstImpl.signalSlotChange();
     firstImpl.signalSlotChange();
     realm.agent.eventLoop.queueMicrotask(() => { log.push('between-batches'); });

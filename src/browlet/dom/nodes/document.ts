@@ -38,6 +38,7 @@ import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
+import { ShadowRootImpl, type ShadowRootMode } from './shadow-root';
 import type { ElementImpl } from './element';
 import { NodeImpl, NodeType } from './node';
 import {
@@ -877,6 +878,13 @@ export class DocumentImpl extends NodeImpl {
       DocumentFragmentImpl,
       [this, null, this.env],
     );
+  }
+
+  /** Allocate a shadow root in this document's realm, including for an adopted host. */
+  // https://dom.spec.whatwg.org/#concept-node-create
+  // SPEC_CLASH(adopted-shadow-root-realm): follow DOM and Firefox; Chromium/WebKit use the host's original realm.
+  createShadowRoot(host: ElementImpl, mode: ShadowRootMode): ShadowRootImpl {
+    return this.#nodeFactory.constructNode(ShadowRootImpl, [host, mode, this.env]);
   }
 
   /** Allocate an attribute from an already selected name, namespace, and value. */

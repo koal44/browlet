@@ -73,6 +73,10 @@ export interface QuotaExceededErrorOptions {
   requested?: number;
 }
 
+export interface AssignedNodesOptions {
+  flatten?: boolean;
+}
+
 export interface SecurityPolicyViolationEventInit {
   bubbles?: boolean;
   cancelable?: boolean;
@@ -147,6 +151,15 @@ export interface MutationObserverInit {
 
 export interface ElementCreationOptions {
   is?: string;
+}
+
+export interface ShadowRootInit {
+  clonable?: boolean;
+  customElementRegistry?: (CustomElementRegistry | null);
+  delegatesFocus?: boolean;
+  mode: ShadowRootMode;
+  serializable?: boolean;
+  slotAssignment?: SlotAssignmentMode;
 }
 
 export interface QueuingStrategy {
@@ -471,7 +484,10 @@ export interface HTMLUnknownElementConstructor {
 }
 
 export interface HTMLSlotElement extends HTMLElement {
-
+  name: string;
+  assignedNodes(options?: AssignedNodesOptions): Array<Node>;
+  assignedElements(options?: AssignedNodesOptions): Array<Element>;
+  assign(...nodes: Array<(Element | Text)>): void;
 }
 
 export interface HTMLSlotElementConstructor {
@@ -1161,6 +1177,7 @@ export interface ShadowRoot extends DocumentFragment {
   readonly clonable: boolean;
   readonly serializable: boolean;
   readonly host: Element;
+  onslotchange: (EventHandlerNonNull | null);
   readonly customElementRegistry: (CustomElementRegistry | null);
   readonly styleSheets: object;
   adoptedStyleSheets: any;
@@ -1224,6 +1241,7 @@ export interface Element extends Node {
   readonly namespaceURI: (string | null);
   readonly prefix: (string | null);
   readonly localName: string;
+  slot: string;
   hasAttributes(): boolean;
   readonly attributes: NamedNodeMap;
   getAttributeNames(): Array<string>;
@@ -1241,6 +1259,8 @@ export interface Element extends Node {
   setAttributeNode(attr: Attr): (Attr | null);
   setAttributeNodeNS(attr: Attr): (Attr | null);
   removeAttributeNode(attr: Attr): Attr;
+  attachShadow(init: ShadowRootInit): ShadowRoot;
+  readonly shadowRoot: (ShadowRoot | null);
   closest(selectors: string): (Element | null);
   matches(selectors: string): boolean;
   webkitMatchesSelector(selectors: string): boolean;

@@ -4,6 +4,7 @@ import {
 } from '../../../web-idl/index';
 import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
 
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import type { EventImpl, EventTargetImpl } from '../events/index';
 import type { DOMEnvironment } from '../environment';
 
@@ -30,6 +31,10 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   clonable = false;
   /** Whether markup serialization may include this shadow root. */
   serializable = false;
+  /** Whether a custom element can access this root through ElementInternals. */
+  availableToElementInternals = false;
+  /** Whether a parser-created root can be reused by attachShadow(). */
+  declarative = false;
   /** Registry association used by adoption and element creation. */
   customElementRegistry: CustomElementRegistryImpl | null = null;
   /** Whether adoption must preserve an explicitly absent registry. */
@@ -37,6 +42,8 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   /** Registry and style-sheet behavior shared with documents. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
+  /** IDL handler registration shares the ordinary event listener ordering. */
+  #eventHandlers = new EventHandlerMap(this, [{ name: 'onslotchange', type: 'slotchange' }]);
 
   constructor(host: ElementImpl, mode: ShadowRootMode, env: DOMEnvironment) {
     super(host.nodeDocument, host, env);
@@ -51,6 +58,15 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   static is(value: unknown): value is ShadowRootImpl {
     return value instanceof ShadowRootImpl;
+  }
+
+  /** Handler for slot-change events bubbling through this root. */
+  get onslotchange(): EventHandlerCallback | null {
+    return this.#eventHandlers.get('onslotchange');
+  }
+
+  set onslotchange(callback: EventHandlerCallback | null) {
+    this.#eventHandlers.set('onslotchange', callback);
   }
 
   get styleSheets(): StyleSheetListImpl {
@@ -137,7 +153,7 @@ export const shadowRootIDL = defineInterface({
     roAttr('clonable', idlType.boolean),
     roAttr('serializable', idlType.boolean),
     roAttr('host', reference('Element')),
-    // EventHandler binding awaits the HTML event-handler infrastructure.
+    eventHandlerAttr('onslotchange'),
   ],
 });
 

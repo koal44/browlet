@@ -46,7 +46,7 @@ describe('Slottable', () => {
     host.appendChild(text);
     expect(text.assignedSlot).toBeNull();
 
-    // attachShadow is a later slice; this is the implementation state it supplies.
+    // Isolate lookup against each root mode without replacing an attached root through the public API.
     const closed = new ShadowRootImpl(host, 'closed', document.env);
     host.shadowRoot = closed;
     expect(text.assignedSlot).toBeNull();

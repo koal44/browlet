@@ -1,4 +1,3 @@
-import { InternalError } from '../../../infra/internal-error';
 import { defineInterfaceMixin, nullable, reference, roAttr } from '../../../web-idl/index';
 
 import type { ElementImpl } from './element';
@@ -14,6 +13,16 @@ export class SlottableMixin {
   /** Slot receiving this node, or null while unassigned. */
   // https://dom.spec.whatwg.org/#slotable-assigned-slot
   assignedSlot: HTMLSlotElementImpl | null = null;
+  /** Explicit assignment owner, retained weakly even while the node is detached. */
+  // https://dom.spec.whatwg.org/#slottable-manual-slot-assignment
+  manualSlotAssignment: WeakRef<HTMLSlotElementImpl> | null = null;
+  /** Stable weak identity allocated only when an author manually assigns this node. */
+  #manualReference: WeakRef<ElementImpl | TextImpl> | undefined;
+
+  /** Reuse the node's weak identity when transferring it between manual assignment sets. */
+  getManualReference(node: ElementImpl | TextImpl): WeakRef<ElementImpl | TextImpl> {
+    return this.#manualReference ??= new WeakRef(node);
+  }
 
   /** Update the slottable name after a null-namespace slot attribute changes. */
   // https://dom.spec.whatwg.org/#slotable-name
@@ -30,11 +39,12 @@ export class SlottableMixin {
     const parent = node.parentNode;
     const shadow = parent?.isElement() ? parent.shadowRoot : null;
     if (shadow === null || (open && shadow.mode !== 'open')) return null;
+    if (shadow.slotAssignment === 'manual') {
+      const slot = this.manualSlotAssignment?.deref();
+      return slot?.getRoot() === shadow ? slot : null;
+    }
     for (let descendant = shadow.firstChild; descendant; descendant = descendant.nextDescendant(shadow)) {
-      if (descendant.isSlot()) {
-        // PROVISIONAL(DOM shadow trees): naming/manual assignment needs the complete slot algorithms.
-        throw new InternalError('DOM slot lookup is not implemented');
-      }
+      if (descendant.isSlot() && descendant.slotName === this.name) return descendant;
     }
     return null;
   }

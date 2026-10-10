@@ -13,10 +13,10 @@ ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
 `NodeImpl` owns its tree links and mutation ordering. Its private storage
 operations update links after the required mutation participants have run.
-The 4B–4G implementation supports structural and text mutations with live Range,
-NodeIterator, collection, and MutationObserver participants and a shared
-attribute-change path. Slot-change notification is implemented; shadow assignment
-and custom-element reactions still leave the full mutation path incomplete.
+The 4B–4H implementation supports structural and text mutations with live Range,
+NodeIterator, collection, MutationObserver, and slot-assignment participants and
+a shared attribute-change path. Custom-element reactions still leave the full
+mutation path incomplete.
 
 ## Section 4 slices
 
@@ -39,7 +39,8 @@ the interface exists; implementations receive already-converted values.
 the Window policy/CSP dependency and existing attribute checks between 4D and 4E.
 4E is implemented for the available node types; ProcessingInstruction's
 attribute synchronization remains explicitly provisional below. Collections and
-mutation observers are implemented in 4F/4G; shadow trees follow in 4H.
+mutation observers are implemented in 4F/4G; 4H adds shadow attachment and slot
+assignment. Next is 4I's Node/Document and leaf-interface completion.
 Parser options, sanitization, and script/worker enforcement are later branches,
 not additions to the current DOM slice.
 
@@ -89,9 +90,9 @@ Window even when detached, and adoption selects the destination document's
 relevant global without changing existing platform identities.
 4E's Attr node-value/text-content setters reuse the checked value operation.
 Attribute changes queue real records through `NodeImpl.queueMutationRecord()`.
-Slot/slottable name changes enter their assignment hooks, but assignment still
-belongs to 4H; notification is implemented in 4G. Custom
-element reactions remain with their own roadmap.
+Slot/slottable name changes recompute assignments through 4H's shared algorithms;
+notification uses 4G's checkpoint. Custom-element reactions remain with their
+own roadmap.
 
 4E makes `CharacterDataImpl.replaceData()` the shared path for data assignment,
 append/insert/delete, and the character-data `nodeValue`/`textContent` setters.
@@ -120,7 +121,7 @@ Participant status:
 | `../ranges/` | Live ranges register weakly by ordinary root. Structural mutation, CharacterData replacement, text splitting, and normalization adjust boundaries; inserting a detached root relocates registrations |
 | `../traversal/` | Iterators register weakly by their fixed traversal root. Pre-removal visits ancestor-rooted iterators and adjusts both committed and in-flight candidate pointers |
 | Mutation observers | Nodes retain registered observers and queue tree/attribute/character-data records. `MutationObserverImpl` owns weak observation targets, transient cleanup, and record queues. WindowAgent batches notification through its existing EventLoop; Web IDL projects callback arguments and reports exceptions |
-| Slots | Element/Text compose `SlottableMixin` and expose `assignedSlot`. Null-namespace slot/name changes enter assignment hooks. `HTMLSlotElementImpl` owns recognition, assigned-node state, assignment, and signaling. Lookup handles no-slot and closed-root cases; actual assignment still throws, while signaling delivers a trusted bubbling event after observers |
+| Slots | Element/Text compose `SlottableMixin` and expose `assignedSlot`. Null-namespace slot/name changes and structural mutations recompute assignments. `HTMLSlotElementImpl` owns named/manual assignment, fallback flattening, and signaling. Closed-root assignments remain hidden from authors; trusted bubbling change events follow observers |
 | Custom elements | Registry association/state and lookup exist. `ElementImpl.tryToUpgrade()` currently finds no definitions; `enqueueCustomElementCallbackReaction()` throws if called. Definition registration, construction, and reactions remain absent |
 
 Range and traversal are explicit components below nodes in the import hierarchy.
@@ -141,8 +142,8 @@ adoption, and Text/Comment constructor ownership. Structural mutation tests add
 atomic replacement/move failures and live Range/NodeIterator adjustment. The
 replace-all primitive is exercised through public text-content setters and 4F's
 convenience mutations. Observer and slot-change delivery are implemented in 4G,
-shadow assignment belongs to 4H, and `[CEReactions]` to the custom-elements roadmap. Completion
-of the full mutation path requires observable tests with those real participants.
+shadow assignment in 4H, and `[CEReactions]` remains with the custom-elements
+roadmap. Completion of the full mutation path requires that final participant.
 
 Range and traversal state belongs to those owners. Observer and slot delivery
 use HTML's existing checkpoint; custom-element reactions must join that machinery.
@@ -252,8 +253,8 @@ Each observer drains its current records and clears transient registrations just
 before its callback; earlier callbacks can therefore add records to or disconnect
 later observers. Reentrant work queues another microtask. Binding supplies the
 callback's receiver/arguments and reports exceptions without aborting the batch.
-Slot-change events follow observers. Tests invoke slot signaling directly because
-assignment and public `attachShadow()` remain 4H work.
+Slot-change events follow observers. Notification tests isolate signal batching;
+4H's public slot tests exercise assignment-triggered delivery.
 
 Coverage is in `mutation-observer.test.ts`, `mutation-record.test.ts`, and
 `mutation-notification.test.ts`: option conversion, exact record contents and
@@ -283,6 +284,65 @@ algorithms or engines converge.
   Target nodes and the observer retain their existing identities. Broader binding
   changes are deferred for separate review.
 
+## Shadow trees (4H)
+
+`Element.attachShadow()` validates host eligibility and converted options, retains
+open/closed roots, and can reuse a compatible declarative root without replacing
+its flags or identity. The current node document's factory owns root allocation.
+`ShadowRootImpl` retains attachment flags, registry association, and the
+`onslotchange` handler; the handler shares ordinary event-listener ordering.
+
+`SlottableMixin` privately owns Element/Text assignment state; those nodes forward
+the assignment members and slot lookup. `HTMLSlotElementImpl` owns
+named and manual lists, flattened fallback lookup, and notifications. Manual
+assignment uses weak ordered membership and a weak back-reference, so assigning
+a detached node does not retain it. Public sequence conversion returns fresh
+arrays; implementation state stays with its slot. Insertion, removal, moves, and
+null-namespace name changes enter the same assignment algorithms.
+
+Public coverage in `shadow-root.test.ts` and `html/slot.test.ts` includes
+attachment errors/defaults, declarative reuse, adopted-document allocation,
+closed exposure, event retargeting, ordinary-tree query boundaries, named/manual
+assignment, fallback flattening, attribute changes, moves, and observer-before-slot
+delivery. The declarative reuse test supplies parser-owned state directly; it
+does not claim that declarative parsing is implemented.
+Collection regressions retain each side of a manual assignment in turn and
+verify that detached Element/Text nodes and their former slot can be reclaimed
+after pending notifications drain, through both implementation and platform identities.
+
+Stopping points: custom-element definitions, `is` values, and the definition's
+disable-shadow check remain provisional with custom-element construction and
+`[HTMLConstructor]`. Registry definition/initialization, ElementInternals, focus
+delegation, shadow style scopes, declarative parsing, and markup serialization
+belong to their later consumers. Cloning must consume the retained flags in 4I.
+
+### Shadow-tree compatibility
+
+Probes on 2026-10-10 used Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5.
+The approved choices are retained beside the implementation:
+
+- `SPEC_CLASH(manual-slot-insertion)`: DOM's [insertion](https://dom.spec.whatwg.org/#concept-node-insert)
+  and [moving](https://dom.spec.whatwg.org/#move) steps refresh only
+  named assignments. All three engines also refresh a manual assignment when its
+  node enters or returns to the host; Browlet follows them.
+- `SPEC_CLASH(stale-assigned-slot)`: [assign slottables](https://dom.spec.whatwg.org/#assign-slotables)
+  sets new assigned-slot pointers without clearing obsolete ones. Browlet follows
+  all three engines and clears them; renaming or removing an assigned node must
+  not leave its old slot in subsequent event paths.
+- `SPEC_CLASH(adopted-shadow-root-realm)`: [create a node](https://dom.spec.whatwg.org/#concept-node-create)
+  selects the node document's relevant realm. Browlet follows this rule and
+  Firefox for an adopted host's new root. Chromium/WebKit keep the host's original
+  realm. Existing host and shadow-root identities remain unchanged on adoption.
+- `SPEC_CLASH(manual-slot-cross-root)`: HTML's [manual assignment](https://html.spec.whatwg.org/multipage/scripting.html#dom-slot-assign)
+  recomputes only the receiving slot's tree. When it takes a node from a slot in
+  another tree, Chromium leaves the previous slot's list stale. Browlet follows
+  Firefox/WebKit: refresh the previous slot immediately, clear its obsolete
+  event-path pointer, and signal the assignment change. Slots in the receiving
+  tree keep their ordinary tree-order update; previous slots in other trees are
+  refreshed afterward. The regression covers the list, event path, and notification.
+
+The browser probe is retained in `scratch/dom-4h-probe.mjs` for these disagreements.
+
 ## Missing or unprojected objects
 
 | Planned source | Contract | Specification |
@@ -302,8 +362,8 @@ contract instead of defining it.
 | --- | --- | --- |
 | `Node` and tree mixins | Complete cloning, equality, namespace lookup, and remaining declared members; collections and convenience mutations are implemented | DOM §§4.2.4–4.4 |
 | `Document` and `DOMImplementation` | Complete construction, import/adopt, lookup, event, Range, traversal, and document-factory methods | DOM §§4.5–4.5.1 |
-| `Element`, `Attr`, and `NamedNodeMap` | Custom-element reactions, class/token state, shadow attachment, remaining selector host states, and adjacent insertion | DOM §§4.9–4.10 |
-| `ShadowRoot` and `Slottable` | Complete tree-scope, slot-assignment, cloning/serialization flags, and public shadow-root behavior | DOM §§4.2.2, 4.2.7, and 4.8 |
+| `Element`, `Attr`, and `NamedNodeMap` | Custom-element reactions, class/token state, remaining selector host states, and adjacent insertion | DOM §§4.9–4.10 |
+| `ShadowRoot` and `Slottable` | Shadow style scopes, custom-element definition checks, and consumers of the retained cloning/serialization/focus flags | DOM §§4.2.2, 4.2.7, and 4.8 |
 | `CharacterData` and `Text` | Provisional ProcessingInstruction attribute-synchronization hook | DOM §§4.11–4.11.1 |
 | Leaf nodes | Complete `DocumentType`, `DocumentFragment`, `CDATASection`, `ProcessingInstruction`, and `Comment` | DOM §§4.6–4.7 and 4.12–4.14 |
 
@@ -336,7 +396,7 @@ Browlet coverage for:
 1. Implement the mutation spine and its Range/traversal/host participant seams
    before expanding node convenience APIs or parser behavior.
 2. Agent-backed MutationObserver and slot delivery now use HTML's existing
-   microtask checkpoint. Add real slot assignment and custom-element reactions.
+   microtask checkpoint; slot assignment enters that path. Add custom-element reactions.
 3. Complete live collections, attributes, CharacterData/Text, shadow trees,
    and the public node interfaces as consumers demand them.
 4. Add the XML leaf nodes before the XML parser milestone; finish remaining

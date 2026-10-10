@@ -17,7 +17,7 @@ import {
   documentTypeIncludesChildNodeIDL, elementIDL, elementIncludesChildNodeIDL,
   elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesParentNodeIDL, getRootNodeOptionsIDL, nodeIDL,
   childNodeIDL, documentOrShadowRootIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL, shadowRootIDL,
-  shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL,
+  shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL, shadowRootInitIDL,
   slottableIDL, elementIncludesSlottableIDL, textIDL, textIncludesSlottableIDL,
   mutationObserverIDL, mutationCallbackIDL, mutationObserverInitIDL, mutationRecordIDL,
 } from './nodes/index';
@@ -80,6 +80,7 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   documentIncludesNonElementParentNodeIDL,
   documentIncludesDocumentOrShadowRootIDL,
   elementIDL,
+  shadowRootInitIDL,
   elementIncludesParentNodeIDL,
   elementIncludesChildNodeIDL,
   elementIncludesNonDocumentTypeChildNodeIDL,
