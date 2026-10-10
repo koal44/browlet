@@ -1,6 +1,7 @@
-import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl } from '../../../web-idl/index';
+import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr } from '../../../web-idl/index';
 
 import type { EventImpl } from '../events/index';
+import { RangeImpl } from '../ranges/index';
 import type { DOMEnvironment } from '../environment';
 
 import { type NodeImpl, NodeType } from './node';
@@ -23,10 +24,36 @@ export class TextImpl extends CharacterDataImpl {
     return value instanceof TextImpl;
   }
 
+  /** Concatenate this node and adjacent Text nodes, including CDATA sections. */
+  // https://dom.spec.whatwg.org/#dom-text-wholetext
+  get wholeText(): string {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Walk backward from this node to the start of the text run.
+    let first: TextImpl = this;
+    while (first.previousSibling?.isText()) first = first.previousSibling;
+    let content = '';
+    for (let node: NodeImpl | null = first; node?.isText(); node = node.nextSibling) content += node.data;
+    return content;
+  }
+
   /** Author-facing slot lookup excludes closed shadow roots. */
   // https://dom.spec.whatwg.org/#dom-slotable-assignedslot
   get assignedSlot(): HTMLSlotElementImpl | null {
     return this.#slottableMixin.findSlot(this, true);
+  }
+
+  /** Split at a UTF-16 offset; the new Text belongs to this node's current document. */
+  // https://dom.spec.whatwg.org/#concept-text-split
+  splitText(offset: number): TextImpl {
+    const count = this.length - offset;
+    const data = this.substringData(offset, count);
+    const newNode = this.nodeDocument.createTextNode(data);
+    const parent = this.parentNode;
+    if (parent !== null) {
+      parent.insert(newNode, this.nextSibling);
+      RangeImpl.adjustForSplitText(this, newNode, offset);
+    }
+    this.replaceData(offset, count, '');
+    return newNode;
   }
 
   setAssignedSlot(slot: HTMLSlotElementImpl | null): void {
@@ -73,6 +100,8 @@ export const textIDL = defineInterface<DOMEnvironment>({
         ],
       },
     ),
+    op('splitText', reference('Text'), [arg('offset', idlType.unsignedLong)]),
+    roAttr('wholeText', idlType.DOMString),
   ],
 });
 

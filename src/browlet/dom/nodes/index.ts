@@ -32,6 +32,7 @@ export {
 } from './node';
 export { NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL } from './non-document-type-child-node';
 export { ParentNodeMixin, parentNodeIDL } from './parent-node';
+export { ProcessingInstructionImpl } from './processing-instruction';
 export {
   ShadowRootImpl, type ShadowRootMode, shadowRootModeIDL, type SlotAssignmentMode, slotAssignmentModeIDL,
   shadowRootIDL, shadowRootIncludesDocumentOrShadowRootIDL,

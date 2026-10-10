@@ -13,8 +13,8 @@ ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
 `NodeImpl` owns its tree links and mutation ordering. Its private storage
 operations update links after the required mutation participants have run.
-The 4B–4D implementation supports structural mutations with live Range and
-NodeIterator participants and a shared attribute-change path. Observer, slot,
+The 4B–4E implementation supports structural and text mutations with live Range
+and NodeIterator participants and a shared attribute-change path. Observer, slot,
 and custom-element delivery remain provisional; the full mutation path is not
 complete.
 
@@ -37,7 +37,9 @@ the interface exists; implementations receive already-converted values.
 
 [Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) completes
 the Window policy/CSP dependency and existing attribute checks between 4D and 4E.
-Resume this table at 4E.
+4E is implemented for the available node types; ProcessingInstruction's
+attribute synchronization remains explicitly provisional below. Collections and
+tree mixins follow in 4F.
 Parser options, sanitization, and script/worker enforcement are later branches,
 not additions to the current DOM slice.
 
@@ -85,12 +87,30 @@ adoption. Element setters preserve the TrustedType union through Web IDL;
 `Attr.value` remains a string boundary. Documents capture their construction
 Window even when detached, and adoption selects the destination document's
 relevant global without changing existing platform identities.
-4E's Attr node-value/text-content setters must reuse the checked value operation.
+4E's Attr node-value/text-content setters reuse the checked value operation.
 Mutation records retain a provisional `queueAttributeMutationRecord()` call until
 4G. Slot/slottable name changes enter
 their assignment hooks, but assignment/delivery still belongs to 4H. Custom
-element reactions remain with their own roadmap. Inherited `Node.nodeValue` and
-`Node.textContent` attribute behavior joins the node-specific accessors in 4E.
+element reactions remain with their own roadmap.
+
+4E makes `CharacterDataImpl.replaceData()` the shared path for data assignment,
+append/insert/delete, and the character-data `nodeValue`/`textContent` setters.
+It validates UTF-16 offsets, queues the old data, updates live ranges, and then
+notifies the parent. `Text.splitText()` inserts and retargets ranges before
+truncation; `Node.normalize()` merges exclusive Text runs and retargets all
+affected endpoints before removing the old nodes. `wholeText` includes adjacent
+CDATA sections once that node class exists; normalization deliberately excludes
+them. Element/DocumentFragment text-content writes use `stringReplaceAll()` and
+the existing structural mutation path, even for unchanged text.
+
+The current DOM replace-data algorithm also calls ProcessingInstruction's
+`updateAttributesFromData()` unless its optional flag says attributes were
+already updated. `ProcessingInstructionImpl` now supplies target/data storage
+and an approved provisional no-op for this hook. Initialization validation,
+pseudo-attribute algorithms, Web IDL exposure, and document construction remain
+4I work. Character-data record delivery remains provisional alongside
+the existing tree and attribute hooks until 4G; review its specialized
+`queueCharacterDataMutationRecord(oldValue)` signature with those hooks.
 
 Public and parser tests cover topology, document ownership, and existing
 extension behavior. Empty collections still need no work while their public
@@ -99,9 +119,9 @@ Participant status:
 
 | Owner | Required operation or state |
 | --- | --- |
-| `../ranges/` | Live ranges register weakly by ordinary root. Insertion/removal/movement adjust boundaries; inserting a detached root relocates registrations. CharacterData adjustment remains 4E |
+| `../ranges/` | Live ranges register weakly by ordinary root. Structural mutation, CharacterData replacement, text splitting, and normalization adjust boundaries; inserting a detached root relocates registrations |
 | `../traversal/` | Iterators register weakly by their fixed traversal root. Pre-removal visits ancestor-rooted iterators and adjusts both committed and in-flight candidate pointers |
-| Mutation observers | Each node has a typed registered-observer list and owns `queueTreeMutationRecord(added, removed, previous, next)`; elements add `queueAttributeMutationRecord(name, namespace, oldValue)`. Record creation/delivery remains absent; observer construction is disabled |
+| Mutation observers | Each node has a typed registered-observer list and owns `queueTreeMutationRecord(added, removed, previous, next)`; elements add `queueAttributeMutationRecord(name, namespace, oldValue)` and character data adds `queueCharacterDataMutationRecord(oldValue)`. Record creation/delivery remains absent; observer construction is disabled |
 | Slots | Element/Text compose `SlottableMixin` and expose `assignedSlot`. Null-namespace slot/name changes update assignment names and enter slot assignment. `HTMLSlotElementImpl` owns recognition, assigned-node state, `assignSlottables()`, and `signalSlotChange()`. Lookup handles no-slot and closed-root cases; actual assignment and delivery still throw |
 | Custom elements | Registry association/state and lookup exist. `ElementImpl.tryToUpgrade()` currently finds no definitions; `enqueueCustomElementCallbackReaction()` throws if called. Definition registration, construction, and reactions remain absent |
 
@@ -121,8 +141,8 @@ Tree-order and boundary cases are in `node.test.ts`.
 The public and parser tests cover fragment insertion, reinsertion, retained
 adoption, and Text/Comment constructor ownership. Structural mutation tests add
 atomic replacement/move failures and live Range/NodeIterator adjustment. The
-replace-all primitive is tested with real implementation consumers; its author
-convenience APIs follow in 4E/4F. Observer delivery belongs to 4G, shadow assignment
+replace-all primitive is exercised through public text-content setters; further
+convenience APIs follow in 4F. Observer delivery belongs to 4G, shadow assignment
 and signaling to 4H, and `[CEReactions]` to the custom-elements roadmap. Completion
 of the full mutation path requires observable tests with those real participants.
 
@@ -195,7 +215,7 @@ declared complete until that host machinery exists.
 | `dom-implementation.ts` | `DOMImplementation` | DOM §4.5.1, `#interface-domimplementation` |
 | `collections.ts` | Replace the temporary Array-backed collection with projected `NodeList` and `HTMLCollection` objects supporting live/static views and indexed/named access | DOM §4.2.10, `#old-style-collections` |
 | `cdata-section.ts` | `CDATASection` | DOM §4.12, `#interface-cdatasection` |
-| `processing-instruction.ts` | `ProcessingInstruction` | DOM §4.13, `#interface-processinginstruction` |
+| `processing-instruction.ts` | Complete the provisional target/data implementation with validation, pseudo-attributes, document construction, and Web IDL exposure | DOM §4.13, `#interface-processinginstruction` |
 
 `CDATASection` and `ProcessingInstruction` are small, but they are prerequisites
 for a faithful XML parser rather than prerequisites for the browser lifecycle
@@ -206,12 +226,12 @@ contract instead of defining it.
 
 | Family | Remaining contract | Specification |
 | --- | --- | --- |
-| `Node` and tree mixins | Complete tree constraints, cloning, equality, namespace lookup, text content, normalization, convenience mutation methods, selectors, and every declared member | DOM §§4.2.4–4.4 |
+| `Node` and tree mixins | Complete tree constraints, cloning, equality, namespace lookup, convenience mutation methods, selectors, and every declared member | DOM §§4.2.4–4.4 |
 | `Document` and `DOMImplementation` | Complete construction, import/adopt, lookup, event, Range, traversal, and document-factory methods | DOM §§4.5–4.5.1 |
-| `Element`, `Attr`, and `NamedNodeMap` | Trusted Types checks, observer/reaction delivery, inherited Attr node-value/text-content behavior, class/token state, shadow attachment, selectors, and adjacent insertion | DOM §§4.9–4.10 |
+| `Element`, `Attr`, and `NamedNodeMap` | Observer/reaction delivery, class/token state, shadow attachment, selectors, and adjacent insertion | DOM §§4.9–4.10 |
 | `ShadowRoot` and `Slottable` | Complete tree-scope, slot-assignment, cloning/serialization flags, and public shadow-root behavior | DOM §§4.2.2, 4.2.7, and 4.8 |
 | Collections | Implement live, identity-stable `NodeList` and `HTMLCollection` plus projected indexed/named behavior; replace snapshot/Array mechanics | DOM §4.2.10 |
-| `CharacterData` and `Text` | Replace-data, substring/append/insert/delete, `splitText()`, `wholeText`, Range adjustment, and mutation records | DOM §§4.11–4.11.1 |
+| `CharacterData` and `Text` | Mutation-record delivery and the provisional ProcessingInstruction attribute-synchronization hook | DOM §§4.11–4.11.1 |
 | Leaf nodes | Complete `DocumentType`, `DocumentFragment`, `CDATASection`, `ProcessingInstruction`, and `Comment` | DOM §§4.6–4.7 and 4.12–4.14 |
 
 HTML's `HTMLAllCollection`, `HTMLFormControlsCollection`,
@@ -220,11 +240,12 @@ machinery but remain owned by `html/collections/`.
 
 ## Behavioral coverage
 
-`test/browlet/dom/nodes/node.test.ts` retains an approved TODO regression for
-the missing projected `Node.textContent` getter. Navigation testing observed
-undefined for a parsed paragraph's text; its own parser check uses the existing
-`Text.data` contract. Complete text content's node-specific getter and mutation
-behavior with the Node interface work above.
+The former `Node.textContent` TODO and Range `.data` expected failure now pass.
+`character-data.test.ts`, `text.test.ts`, and `text-content.test.ts` cover UTF-16
+operations, conversion ordering, unchanged-value mutation, attached/detached
+splits, adopted-document allocation, normalization, live versus static ranges,
+iterator pre-removal, and ordinary versus shadow-tree boundaries. Trusted Types
+tests cover both inherited Attr setters, including null and reentrant detachment.
 
 The insertion tests cover hierarchy rejection without partial mutation. Existing
 Document, stylesheet, and CSP fixtures now build valid trees. Continue public

@@ -5,7 +5,7 @@ import {
   DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/index';
 
-import type { DocumentImpl, NodeImpl } from '../nodes/index';
+import type { CharacterDataImpl, DocumentImpl, NodeImpl, TextImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';
 
 import { AbstractRangeImpl } from './abstract-range';
@@ -15,6 +15,7 @@ import { AbstractRangeImpl } from './abstract-range';
 export class RangeImpl extends AbstractRangeImpl {
   /** Roots do not keep ranges alive; dead registrations are pruned during notification. */
   static #byRoot = new WeakMap<NodeImpl, WeakOrderedSet<RangeImpl>>();
+  /** Stable registration token, reused when this range moves between root indexes. */
   #reference = new WeakRef(this);
   #root: NodeImpl;
 
@@ -141,6 +142,74 @@ export class RangeImpl extends AbstractRangeImpl {
       } else if (range.endContainer === parent && range.endOffset > index) {
         range.endOffset--;
       }
+    }
+  }
+
+  /** Clamp replaced boundaries and shift later offsets by the replacement's length change. */
+  // https://dom.spec.whatwg.org/#concept-cd-replace
+  static adjustForReplaceData(node: CharacterDataImpl, offset: number, count: number, dataLength: number): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const end = offset + count;
+    for (const range of ranges.values()) {
+      if (range.startContainer === node && range.startOffset > offset) {
+        range.startOffset = range.startOffset <= end ? offset : range.startOffset + dataLength - count;
+      }
+      if (range.endContainer === node && range.endOffset > offset) {
+        range.endOffset = range.endOffset <= end ? offset : range.endOffset + dataLength - count;
+      }
+    }
+  }
+
+  /** After insertion, move split-off boundaries and advance points immediately after the old Text. */
+  // https://dom.spec.whatwg.org/#concept-text-split
+  static adjustForSplitText(node: TextImpl, newNode: TextImpl, offset: number): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const parent = node.parentNode!;
+    const index = node.getIndex() + 1;
+    for (const range of ranges.values()) {
+      if (range.startContainer === node && range.startOffset > offset) {
+        range.startContainer = newNode;
+        range.startOffset -= offset;
+      } else if (range.startContainer === parent && range.startOffset === index) {
+        range.startOffset++;
+      }
+      if (range.endContainer === node && range.endOffset > offset) {
+        range.endContainer = newNode;
+        range.endOffset -= offset;
+      } else if (range.endContainer === parent && range.endOffset === index) {
+        range.endOffset++;
+      }
+    }
+  }
+
+  /** Retarget a merged Text run's boundaries before any of its old nodes are removed. */
+  // https://dom.spec.whatwg.org/#dom-node-normalize
+  static adjustForNormalization(node: TextImpl, length: number): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const parent = node.parentNode!;
+    let index = node.getIndex() + 1;
+    for (let current = node.nextSibling; current?.isExclusiveText(); current = current.nextSibling) {
+      for (const range of ranges.values()) {
+        if (range.startContainer === current) {
+          range.startContainer = node;
+          range.startOffset += length;
+        } else if (range.startContainer === parent && range.startOffset === index) {
+          range.startContainer = node;
+          range.startOffset = length;
+        }
+        if (range.endContainer === current) {
+          range.endContainer = node;
+          range.endOffset += length;
+        } else if (range.endContainer === parent && range.endOffset === index) {
+          range.endContainer = node;
+          range.endOffset = length;
+        }
+      }
+      length += current.length;
+      index++;
     }
   }
 

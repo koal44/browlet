@@ -290,12 +290,15 @@ describe('Browlet DOM binding', () => {
       'lastChild',
       'nextSibling',
       'nodeType',
+      'nodeValue',
+      'normalize',
       'ownerDocument',
       'parentElement',
       'parentNode',
       'previousSibling',
       'removeChild',
       'replaceChild',
+      'textContent',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Document'))).toEqual([
       'adoptedStyleSheets',
@@ -377,13 +380,19 @@ describe('Browlet DOM binding', () => {
       'sheet',
     ]);
     expect(ownKeys(getPrototype(browlet, 'CharacterData'))).toEqual([
+      'appendData',
       'constructor',
       'data',
+      'deleteData',
+      'insertData',
+      'length',
       'nextElementSibling',
       'previousElementSibling',
       'remove',
+      'replaceData',
+      'substringData',
     ]);
-    expect(ownKeys(getPrototype(browlet, 'Text'))).toEqual(['assignedSlot', 'constructor']);
+    expect(ownKeys(getPrototype(browlet, 'Text'))).toEqual(['assignedSlot', 'constructor', 'splitText', 'wholeText']);
     expect(ownKeys(getPrototype(browlet, 'Comment'))).toEqual(['constructor']);
     expect(ownKeys(getPrototype(browlet, 'DocumentType'))).toEqual([
       'constructor',

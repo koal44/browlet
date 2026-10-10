@@ -163,17 +163,20 @@ values are intentional [binding contracts](web-idl/README.md), not missing APIs.
 
 ## Live DOM mutation
 
-Element attribute setters, Attr attachment, and attached `Attr.value` writes
-enforce Trusted Types. Their common change path reaches provisional observer,
+Element attribute setters, Attr attachment, and attached `Attr.value`,
+`nodeValue`, and `textContent` writes enforce Trusted Types. Their common change
+path reaches provisional observer,
 custom-element, and slot hooks; it does not yet deliver mutation records,
 reactions, or slot changes. The
 [attribute slice](browlet/dom/nodes/ROADMAP.md#section-4-slices) records these
 dependencies and the tests for the implemented storage and mutation behavior.
 
-Live Range boundaries track structural mutations, but CharacterData edits do not
-yet adjust them. Replacing `.data` can leave offsets beyond the new text length;
-the expected failure in [Range tests](../test/browlet/dom/ranges/range.test.ts)
-remains until DOM 4E supplies replace-data and text-splitting adjustment.
+Live Range boundaries track structural and character-data mutations, text splits,
+and normalization. Mutation-record delivery remains absent. ProcessingInstruction
+has provisional target/data storage, with a no-op `updateAttributesFromData()` hook.
+Validation, pseudo-attributes, and public construction/exposure remain unfinished.
+Its owner is recorded in the
+[nodes roadmap](browlet/dom/nodes/ROADMAP.md).
 NodeIterator rejects recursive traversal before changing its cursor, matching
 Firefox rather than the written algorithm's later filtering check. The
 [compatibility choice](browlet/dom/traversal/ROADMAP.md#reentrant-filter-compatibility-choice)
@@ -185,10 +188,10 @@ Window exposes trusted string values, policies, factory queries, and CSP
 `trusted-types` policy-creation restrictions with violation reporting. Creating
 a trusted value does not sanitize its contents; that is the policy callback's work.
 Default policies and `require-trusted-types-for` apply to Element attribute setters,
-Attr/NamedNodeMap attachment, and attached `Attr.value` writes, including
-report-only violations and reentrant callbacks. Inherited `Attr.nodeValue` and
-`textContent` behavior remains DOM 4E. Internal/parser attribute storage does not
-run author-setter checks. CSP meta delivery remains an HTML integration gate;
+Attr/NamedNodeMap attachment, and attached `Attr.value`, `nodeValue`, and
+`textContent` writes, including report-only violations and reentrant callbacks.
+Internal/parser attribute storage does not run author-setter checks.
+CSP meta delivery remains an HTML integration gate;
 the existing response-header path supplies enforced policies.
 
 `TrustedHTMLParserOptions`, `createParserOptions`, and its callback are absent,

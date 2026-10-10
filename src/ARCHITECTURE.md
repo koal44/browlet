@@ -416,7 +416,8 @@ HTML's remaining roadmap-only areas keep their provisional locations.
 `NodeImpl` keeps raw link operations private, so subclasses and parser consumers
 use its ordered insertion/removal/adoption path and node-specific extension
 steps. Structural mutations update live Range and NodeIterator participants;
-observer, slot, and custom-element delivery remain provisional.
+CharacterData replacement, text splitting, and normalization also update live ranges.
+Observer, slot, and custom-element delivery remain provisional.
 Their remaining behavior and ownership questions are listed in the
 [nodes roadmap](browlet/dom/nodes/ROADMAP.md).
 

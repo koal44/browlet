@@ -953,6 +953,9 @@ export interface Node extends EventTarget {
   readonly nextSibling: (Node | null);
   readonly isConnected: boolean;
   getRootNode(options?: GetRootNodeOptions): Node;
+  nodeValue: (string | null);
+  textContent: (string | null);
+  normalize(): void;
   insertBefore(node: Node, child: (Node | null)): Node;
   appendChild(node: Node): Node;
   replaceChild(node: Node, child: Node): Node;
@@ -1014,6 +1017,12 @@ export interface AttrConstructor {
 
 export interface CharacterData extends Node {
   data: string;
+  readonly length: number;
+  substringData(offset: number, count: number): string;
+  appendData(data: string): void;
+  insertData(offset: number, data: string): void;
+  deleteData(offset: number, count: number): void;
+  replaceData(offset: number, count: number, data: string): void;
   remove(): void;
   readonly previousElementSibling: (Element | null);
   readonly nextElementSibling: (Element | null);
@@ -1037,6 +1046,8 @@ export interface DocumentTypeConstructor {
 }
 
 export interface Text extends CharacterData {
+  splitText(offset: number): Text;
+  readonly wholeText: string;
   readonly assignedSlot: (HTMLSlotElement | null);
 }
 

@@ -2,7 +2,7 @@
 /* eslint @typescript-eslint/no-this-alias: ["error", { "allowedNames": ["node", "descendant"] }] */
 import { InternalError } from '../../../infra/internal-error';
 import {
-  arg, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
+  arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/index';
 
@@ -19,6 +19,7 @@ import type { DocumentFragmentImpl } from './document-fragment';
 import type { DocumentTypeImpl } from './document-type';
 import type { ElementImpl } from './element';
 import type { TextImpl } from './text';
+import type { ProcessingInstructionImpl } from './processing-instruction';
 import type { ShadowRootImpl } from './shadow-root';
 import type { RegisteredObserver } from './mutation-observer';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
@@ -116,6 +117,59 @@ export abstract class NodeImpl extends EventTargetImpl {
     return this.#nextSibling;
   }
 
+  /** Attribute or character data, and null for node kinds without a node value. */
+  // https://dom.spec.whatwg.org/#dom-node-nodevalue
+  get nodeValue(): string | null {
+    if (this.isAttribute()) return this.value;
+    if (this.isCharacterData()) return this.data;
+    return null;
+  }
+
+  set nodeValue(value: string | null) {
+    value ??= '';
+    if (this.isAttribute()) this.value = value;
+    else if (this.isCharacterData()) this.replaceData(0, this.length, value);
+  }
+
+  /** Descendant text for containers, or the value of an attribute or character-data node. */
+  // https://dom.spec.whatwg.org/#dom-node-textcontent
+  get textContent(): string | null {
+    if (this.isElement() || this.isDocumentFragment()) return this.getDescendantTextContent();
+    return this.nodeValue;
+  }
+
+  set textContent(value: string | null) {
+    if (this.isElement() || this.isDocumentFragment()) this.stringReplaceAll(value ?? '');
+    else this.nodeValue = value;
+  }
+
+  /** Remove empty exclusive Text descendants and merge adjacent ones, preserving live ranges. */
+  // https://dom.spec.whatwg.org/#dom-node-normalize
+  normalize(): void {
+    let node = this.firstChild;
+    while (node !== null) {
+      if (!node.isExclusiveText()) {
+        node = node.nextDescendant(this);
+        continue;
+      }
+      const length = node.length;
+      if (length === 0) {
+        const next = node.nextDescendant(this);
+        node.removeNode();
+        node = next;
+        continue;
+      }
+      let data = '';
+      for (let sibling = node.nextSibling; sibling?.isExclusiveText(); sibling = sibling.nextSibling) {
+        data += sibling.data;
+      }
+      node.replaceData(length, 0, data);
+      RangeImpl.adjustForNormalization(node, length);
+      while (node.nextSibling?.isExclusiveText()) node.nextSibling.removeNode();
+      node = node.nextDescendant(this);
+    }
+  }
+
   hasChildren(): boolean {
     return this.#firstChild !== null;
   }
@@ -166,6 +220,16 @@ export abstract class NodeImpl extends EventTargetImpl {
     let content = '';
     for (let child = this.firstChild; child; child = child.nextSibling) {
       if (child.isText()) content += child.data;
+    }
+    return content;
+  }
+
+  /** Concatenate descendant Text data in ordinary tree order, without crossing shadow roots. */
+  // https://dom.spec.whatwg.org/#concept-descendant-text-content
+  getDescendantTextContent(): string {
+    let content = '';
+    for (let node = this.firstChild; node; node = node.nextDescendant(this)) {
+      if (node.isText()) content += node.data;
     }
     return content;
   }
@@ -549,6 +613,12 @@ export abstract class NodeImpl extends EventTargetImpl {
     if (added.length || removed.length) this.queueTreeMutationRecord(added, removed, null, null);
   }
 
+  /** Replace all children with one Text node, or no children for an empty string. */
+  // https://dom.spec.whatwg.org/#string-replace-all
+  stringReplaceAll(value: string): void {
+    this.replaceAll(value === '' ? null : this.nodeDocument.createTextNode(value));
+  }
+
   /** Move within the same shadow-including tree, preserving state owned by moving hooks. */
   // https://dom.spec.whatwg.org/#move
   move(node: NodeImpl, child: NodeImpl | null): void {
@@ -677,12 +747,20 @@ export abstract class NodeImpl extends EventTargetImpl {
     return this.nodeType === NodeType.Text || this.nodeType === NodeType.CDATASection;
   }
 
+  isExclusiveText(): this is TextImpl {
+    return this.nodeType === NodeType.Text;
+  }
+
   isCharacterData(): this is CharacterDataImpl {
     return this.isText() || this.isComment() || this.nodeType === NodeType.ProcessingInstruction;
   }
 
   isComment(): this is CommentImpl {
     return this.nodeType === NodeType.Comment;
+  }
+
+  isProcessingInstruction(): this is ProcessingInstructionImpl {
+    return this.nodeType === NodeType.ProcessingInstruction;
   }
 
   isDocument(): this is DocumentImpl {
@@ -871,7 +949,7 @@ export abstract class NodeImpl extends EventTargetImpl {
  * };
  */
 // PROVISIONAL: only a subset of the interface above is implemented and bound.
-// Missing members, including textContent and nodeValue, follow ROADMAP.md's section 4 slices.
+// Missing members follow ROADMAP.md's section 4 slices.
 export const nodeIDL = defineInterface({
   name: 'Node',
   inherits: 'EventTarget',
@@ -893,6 +971,9 @@ export const nodeIDL = defineInterface({
         default: emptyDictionary, optional: true,
       }),
     ]),
+    attr('nodeValue', nullable(idlType.DOMString), xattr('CEReactions')),
+    attr('textContent', nullable(idlType.DOMString), xattr('CEReactions')),
+    op('normalize', idlType.undefined, [], xattr('CEReactions')),
     op('insertBefore', reference('Node'),
       [arg('node', reference('Node')), arg('child', nullable(reference('Node')))],
       xattr('CEReactions'),

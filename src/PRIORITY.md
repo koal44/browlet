@@ -34,11 +34,13 @@ preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
 File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
-DOM 4A-4D now provide structural mutation, live Range/NodeIterator participation,
+DOM 4A-4E now provide structural/text mutation, live Range/NodeIterator participation,
 and the shared attribute path. Trusted Types TT-A/TT-B supply Window factories,
 trusted values and policies, default-policy processing, attribute enforcement,
 and CSP checks/reporting through the existing mutation path.
-Next, resume [DOM 4E](browlet/dom/nodes/ROADMAP.md#section-4-slices) (CharacterData).
+[DOM 4E](browlet/dom/nodes/ROADMAP.md#section-4-slices) retains an approved provisional
+ProcessingInstruction attribute-synchronization hook. Collections and tree mixins follow in 4F,
+with TreeWalker available as a bounded prerequisite for the Selectlet adapter.
 Trusted parser options, sanitization, markup
 APIs, script compilation, and workers keep their later consumer gates.
 
@@ -91,8 +93,8 @@ Selectlet adapter. Tests must reject invalid mutations without partial changes.
 
 The completed [Trusted Types TT-A/TT-B pass](browlet/browsing/policy/trusted-types/ROADMAP.md)
 closes 4D's string-only dependency through existing Web IDL and CSP owners.
-Continue with 4E; later Trusted Types consumers retain their own gates without
-requiring parser or sanitizer work now.
+4E extends the checked attribute path to inherited Attr setters. Later Trusted
+Types consumers retain their own gates without requiring parser or sanitizer work now.
 
 **3: join mutation, reactions, and parsing in one vertical slice.**
 The [DOM](browlet/dom/ROADMAP.md) and [custom-element](browlet/dom/nodes/html/custom-elements/ROADMAP.md)

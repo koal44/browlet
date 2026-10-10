@@ -141,16 +141,29 @@ describe('Trusted Types attribute enforcement', () => {
     expect(element.getAttribute('srcdoc')).toBe('checked:next');
   });
 
-  it('stringifies Attr.value before checking it, even when given a trusted value', () => {
+  it.each(['value', 'nodeValue', 'textContent'] as const)('stringifies Attr.%s before checking it, even when given a trusted value', (property) => {
     const { window } = createTrustedTypesWindow();
     const element = window.document.createElement('iframe');
     element.setAttribute('srcdoc', window.trustedTypes.emptyHTML);
     const attribute = element.attributes[0]!;
-    expect(() => { attribute.value = window.trustedTypes.emptyHTML as unknown as string; }).toThrow(window.TypeError);
+    expect(() => { attribute[property] = window.trustedTypes.emptyHTML as unknown as string; }).toThrow(window.TypeError);
     expect(attribute.value).toBe('');
     element.removeAttributeNode(attribute);
-    attribute.value = 'unrestricted while detached';
+    attribute[property] = 'unrestricted while detached';
     expect(attribute.value).toBe('unrestricted while detached');
+  });
+
+  it.each(['nodeValue', 'textContent'] as const)('converts null to an empty string before checking Attr.%s', (property) => {
+    const { window } = createTrustedTypesWindow();
+    const element = window.document.createElement('iframe');
+    element.setAttribute('srcdoc', window.trustedTypes.emptyHTML);
+    const attribute = element.attributes[0]!;
+    expect(() => { attribute[property] = null; }).toThrow(window.TypeError);
+    const calls: string[] = [];
+    window.trustedTypes.createPolicy('default', { createHTML: (value) => { calls.push(value); return 'checked'; } });
+    attribute[property] = null;
+    expect(calls).toEqual(['']);
+    expect(attribute.value).toBe('checked');
   });
 
   it('does not apply setter enforcement to toggles, parser attributes, or internal storage steps', () => {

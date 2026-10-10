@@ -2,7 +2,8 @@
 
 TT-A/TT-B's Window factories, trusted values, policy callbacks, sink metadata,
 default-policy processing, attribute enforcement, and CSP checks are implemented.
-DOM 4D's accepted string-only dependency is closed. Return to DOM 4E's CharacterData;
+DOM 4D's accepted string-only dependency is closed, and 4E reuses its checked
+attribute path for `Attr.nodeValue` and `textContent`;
 the later branches are separate consumer gates.
 [Project priority](../../../../PRIORITY.md) owns that order.
 
@@ -131,9 +132,8 @@ Keep newly found disagreements and missing dependencies visible for discussion.
 Incomplete script/iframe implementations must not silently erase the applicable
 name/namespace classifications.
 
-**Stop after TT-B.** Update the owning limitations and roadmaps, then resume
-DOM 4E. Its `Attr.nodeValue`/`textContent` implementation must reuse the checked
-existing-attribute-value operation. Observer delivery stays in 4G, slot delivery
+**Stop after TT-B.** DOM 4E now reuses the checked existing-attribute-value
+operation for `Attr.nodeValue`/`textContent`. Observer delivery stays in 4G, slot delivery
 in 4H, and custom-element reactions in their owner; Trusted Types does not pull
 those unfinished participants into this pass. The pending attribute mutation
 record `SPEC_MISMATCH` stays for the observer implementation review.
@@ -193,8 +193,8 @@ do not derive it from Browlet's presently incomplete exposed event-handler APIs.
 The selected [WPT suite](../../../../../wpt/suites/trusted-types.json) exercises
 trusted attribute conversion, SVG sink queries, and Window factory exposure.
 Enforcement WPTs still need CSP meta delivery; broader attribute matrices also
-need reflected element properties or DOM 4E's Attr node-value/text-content
-behavior. Keep those dependencies explicit rather than modifying upstream tests.
+need reflected element properties; 4E supplies Attr node-value/text-content
+behavior. Keep the remaining dependencies explicit rather than modifying upstream tests.
 
 Put core tests under `test/browlet/browsing/policy/trusted-types/`; extend existing DOM attribute
 and CSP suites at their actual entry points. Run focused public regressions with

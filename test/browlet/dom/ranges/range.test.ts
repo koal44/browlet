@@ -191,8 +191,7 @@ describe('Live range structural updates', () => {
     })).toEqual([true, 0, 0, 0, 2]);
   });
 
-  // DOM 4E owns replace-data and its range participant; structural mutations are 4C.
-  it.fails('adjusts boundaries when existing CharacterData.data replaces the selected text (4E)', async () => {
+  it('adjusts boundaries when CharacterData.data replaces the selected text', async () => {
     const browlet = new Browlet({ route: () => '' });
     expect(await browlet.evaluate(() => {
       const text = document.createTextNode('text');

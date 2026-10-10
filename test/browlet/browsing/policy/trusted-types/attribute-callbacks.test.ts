@@ -89,7 +89,7 @@ describe('Trusted Types attribute callback ordering', () => {
     expect(attribute.value).toBe('input');
   });
 
-  it('stores the checked Attr.value on the detached Attr when the callback removes it', () => {
+  it.each(['value', 'nodeValue', 'textContent'] as const)('stores the checked Attr.%s on the detached Attr when the callback removes it', (property) => {
     const { window } = createTrustedTypesWindow();
     const element = window.document.createElement('iframe');
     element.setAttribute('srcdoc', window.trustedTypes.emptyHTML);
@@ -100,7 +100,7 @@ describe('Trusted Types attribute callback ordering', () => {
         return `checked:${value}`;
       },
     });
-    attribute.value = 'input';
+    attribute[property] = 'input';
     expect(attribute.value).toBe('checked:input');
     expect(attribute.ownerElement).toBeNull();
     expect(element.hasAttributes()).toBe(false);

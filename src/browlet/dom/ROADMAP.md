@@ -37,7 +37,7 @@ that directly requires HTML's timeout and global-task machinery.
 | --- | --- | --- |
 | DOM §4, nodes | Core implementation classes exist, but many public members, collections, shadow/slot behavior, and leaf types are partial or absent | Build one normative mutation spine before treating interface breadth as progress; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Not implemented | Put observer/signal-slot state on the Window agent and deliver it through HTML's microtask checkpoint; DOM owns records and callback semantics |
-| DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural mutation adjustment exist | CharacterData adjustment follows in 4E; remaining Range operations stay in `ranges/ROADMAP.md` |
+| DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural/text mutation adjustment exist | Remaining Range operations stay in `ranges/ROADMAP.md` |
 
 The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.
 Its first DOM milestone is the mutation spine plus live Range and

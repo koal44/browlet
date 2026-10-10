@@ -13,7 +13,9 @@ DOM 4C implements `AbstractRange`, `StaticRange`, and the live Range selection
 surface: construction, boundary setters, collapse, node/content selection,
 common ancestor, and compatibility `detach()`. `Document.createRange()` uses its
 receiver's document; `new Range()` uses the constructor realm's document.
-Insertion, removal, replacement, and movement adjust real live ranges.
+Insertion, removal, replacement, and movement adjust real live ranges. DOM 4E
+adds CharacterData replacement, text splitting, and normalization adjustment;
+the former `.data` expected failure now passes. StaticRange remains unchanged.
 
 Ranges sit below nodes in the import hierarchy and retain node types without
 loading their implementation classes; use the supplied nodes and document
@@ -53,14 +55,11 @@ Browlet need not copy either engine's native class structure.
 
 ## Remaining work
 
-1. Add CharacterData replacement and text-splitting adjustment in DOM 4E. The
-   expected failure in `test/browlet/dom/ranges/range.test.ts` replaces selected
-   text through `.data`: offsets currently remain `[1, 3]` instead of `[0, 0]`.
-2. Complete Range comparison/query methods, cloning, content extraction/deletion,
+1. Complete Range comparison/query methods, cloning, content extraction/deletion,
    insertion, surrounding, and stringification using the shared mutation spine.
    The current projected Range interface deliberately contains only the selection
    surface needed by 4C; its complete Web IDL surface remains unfinished.
-3. Connect contextual fragment parsing, then add CSSOM View geometry only when
+2. Connect contextual fragment parsing, then add CSSOM View geometry only when
    layout supplies it.
 
 Coverage should exercise boundary points through public Range objects, then
