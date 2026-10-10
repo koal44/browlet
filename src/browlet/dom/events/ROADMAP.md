@@ -23,8 +23,10 @@ Window event state.
 HTML's realms implement these alongside Web IDL's independent realm contract.
 `EventExecution` independently describes event allocation. Browlet composes it
 with `RealmExecution` on `env.exec`; targets share that execution object.
-`DOMEnvironment` ties these realm and execution contracts together for event
-declarations, so their Binding Context retains both types.
+`DOMEnvironment` combines event execution with `DOMRealm`, which adds the global's
+associated-document query for node constructors. Non-Window globals return null;
+Window-exposed node constructors use the Window's document. These are views of
+the existing environment and realm, not additional objects.
 Binding supplies the listener's associated realm, which can differ from the
 event target's realm.
 The listener adapter handles author invocation and exception reporting;

@@ -60,13 +60,13 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     }
   }
 
-  protected override insertedInto(): void {
-    super.insertedInto();
+  protected override insertionSteps(): void {
+    super.insertionSteps();
     this.nodeDocument.updateBaseElement();
   }
 
-  protected override removedFrom(): void {
-    super.removedFrom();
+  protected override removingSteps(): void {
+    super.removingSteps();
     this.nodeDocument.updateBaseElement();
   }
 }

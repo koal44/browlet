@@ -30,6 +30,10 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   clonable = false;
   /** Whether markup serialization may include this shadow root. */
   serializable = false;
+  /** Registry association used by adoption and element creation. */
+  customElementRegistry: CustomElementRegistryImpl | null = null;
+  /** Whether adoption must preserve an explicitly absent registry. */
+  keepCustomElementRegistryNull = false;
 
   /** Registry and style-sheet behavior shared with documents. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
@@ -38,7 +42,7 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
     super(host.nodeDocument, host, env);
     this.mode = mode;
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
-      getCustomElementRegistry: () => null,
+      getCustomElementRegistry: () => this.customElementRegistry,
       getStyleScope() {
         throw new InternalError('Shadow-root style scopes are not implemented');
       },
@@ -47,10 +51,6 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   static is(value: unknown): value is ShadowRootImpl {
     return value instanceof ShadowRootImpl;
-  }
-
-  get customElementRegistry(): CustomElementRegistryImpl | null {
-    return this.#documentOrShadowRootMixin.customElementRegistry;
   }
 
   get styleSheets(): StyleSheetListImpl {

@@ -30,6 +30,8 @@ export const layers = [
   ['browlet/dom/events', 'browlet/reporting'],
   ['browlet/browsing/policy'],
   ['browlet/browsing/policy/csp'],
+  // Mutation participants retain typed nodes without loading their implementation classes.
+  ['browlet/dom/ranges', 'browlet/dom/traversal'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance'],
   ['browlet/reporting/generate'],

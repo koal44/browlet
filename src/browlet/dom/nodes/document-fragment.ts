@@ -3,7 +3,6 @@ import {
 } from '../../../web-idl/index';
 
 import type { DOMEnvironment } from '../environment';
-import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
@@ -57,7 +56,7 @@ export class DocumentFragmentImpl extends NodeImpl {
  *   constructor();
  * };
  */
-export const documentFragmentIDL = defineInterface<BrowletEnvironment>({
+export const documentFragmentIDL = defineInterface<DOMEnvironment>({
   name: 'DocumentFragment',
   inherits: 'Node',
   exposed: 'Window',

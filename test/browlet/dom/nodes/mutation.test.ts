@@ -182,6 +182,240 @@ describe('DOM insertion validity', () => {
   });
 });
 
+describe('DOM insertion and adoption', () => {
+  it('creates Text and Comment with the current document before either is inserted', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const other = new Document();
+      return [
+        new Text('text').ownerDocument === document,
+        new Comment('comment').ownerDocument === document,
+        other.createTextNode('text').ownerDocument === other,
+        other.createComment('comment').ownerDocument === other,
+      ];
+    })).toEqual([true, true, true, true]);
+  });
+
+  it.each(['appendChild', 'insertBefore'] as const)('%s splices a fragment and returns the emptied fragment', async (method) => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate((method) => {
+      const parent = document.createElement('parent');
+      const before = document.createComment('before');
+      const after = document.createComment('after');
+      parent.appendChild(before);
+      if (method === 'insertBefore') parent.appendChild(after);
+      const fragment = new DocumentFragment();
+      const first = document.createElement('first');
+      const last = document.createTextNode('last');
+      fragment.appendChild(first);
+      fragment.appendChild(last);
+      const result = parent[method](fragment, method === 'insertBefore' ? after : null);
+      return [
+        result === fragment,
+        fragment.parentNode === null && fragment.firstChild === null && fragment.lastChild === null,
+        parent.firstChild === before && before.nextSibling === first,
+        first.parentNode === parent && first.previousSibling === before && first.nextSibling === last,
+        last.parentNode === parent && last.previousSibling === first,
+        method === 'insertBefore' ? last.nextSibling === after && after.previousSibling === last :
+          last.nextSibling === null && parent.lastChild === last,
+      ];
+    }, method)).toEqual([true, true, true, true, true, true]);
+  });
+
+  it('leaves an empty fragment in its original document without changing the destination', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const target = new Document();
+      const parent = target.createElement('parent');
+      const child = target.createComment('child');
+      parent.appendChild(child);
+      const fragment = new DocumentFragment();
+      return [
+        parent.insertBefore(fragment, child) === fragment,
+        parent.firstChild === child && parent.lastChild === child,
+        fragment.parentNode === null && fragment.firstChild === null,
+        fragment.ownerDocument === document,
+      ];
+    })).toEqual([true, true, true, true]);
+  });
+
+  it('inserts a valid fragment into a Document while adopting only its children', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const target = new Document();
+      const fragment = new DocumentFragment();
+      const comment = document.createComment('before');
+      const root = document.createElement('root');
+      fragment.appendChild(comment);
+      fragment.appendChild(root);
+      target.appendChild(fragment);
+      return [
+        target.firstChild === comment && target.lastChild === root,
+        root.previousSibling === comment && comment.nextSibling === root,
+        comment.ownerDocument === target && root.ownerDocument === target,
+        comment.isConnected && root.isConnected,
+        fragment.ownerDocument === document && fragment.firstChild === null,
+      ];
+    })).toEqual([true, true, true, true, true]);
+  });
+
+  it('reinserts before itself and adjacent siblings without losing tree links', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const parent = document.createElement('parent');
+      const first = document.createElement('first');
+      const last = document.createElement('last');
+      parent.appendChild(first);
+      parent.appendChild(last);
+      parent.insertBefore(first, first);
+      parent.insertBefore(first, last);
+      parent.appendChild(last);
+      const unchanged = parent.firstChild === first && first.nextSibling === last &&
+        last.previousSibling === first && parent.lastChild === last;
+      parent.insertBefore(last, first);
+      return [
+        unchanged,
+        parent.firstChild === last && last.previousSibling === null,
+        last.nextSibling === first && first.previousSibling === last,
+        parent.lastChild === first && first.nextSibling === null,
+      ];
+    })).toEqual([true, true, true, true]);
+  });
+
+  it('retains the destination document on detached adopted descendants and their attributes', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const target = new Document();
+      const parent = target.createElement('parent');
+      const root = document.createElement('root');
+      const child = document.createElement('child');
+      const text = document.createTextNode('text');
+      child.setAttribute('name', 'value');
+      const attribute = child.attributes.getNamedItem('name')!;
+      root.appendChild(child);
+      child.appendChild(text);
+      parent.appendChild(root);
+      root.remove();
+      return [
+        root.parentNode === null,
+        root.ownerDocument === target,
+        child.ownerDocument === target,
+        text.ownerDocument === target,
+        attribute.ownerDocument === target && attribute.ownerElement === child,
+      ];
+    })).toEqual([true, true, true, true, true]);
+  });
+
+  it('adoptNode returns the same detached subtree, including fragment and attribute ownership', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const target = new Document();
+      const fragment = new DocumentFragment();
+      const child = document.createElement('child');
+      child.setAttribute('name', 'value');
+      const attribute = child.attributes.getNamedItem('name')!;
+      fragment.appendChild(child);
+      const prototype: unknown = Object.getPrototypeOf(child);
+      const result = target.adoptNode(fragment);
+      return [
+        result === fragment && fragment.parentNode === null,
+        fragment.firstChild === child && child.parentNode === fragment,
+        fragment.ownerDocument === target && child.ownerDocument === target,
+        attribute.ownerDocument === target && attribute.ownerElement === child,
+        Object.getPrototypeOf(child) === prototype,
+      ];
+    })).toEqual([true, true, true, true, true]);
+  });
+
+  it('adoptNode detaches even within the same document and rejects Documents', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const parent = document.createElement('parent');
+      const child = document.createElement('child');
+      parent.appendChild(child);
+      const adopted = document.adoptNode(child);
+      let error: unknown;
+      try { document.adoptNode(document); } catch (caught) { error = caught; }
+      return [
+        adopted === child && child.parentNode === null && parent.firstChild === null,
+        child.ownerDocument === document,
+        error instanceof DOMException && error.name,
+      ];
+    })).toEqual([true, true, 'NotSupportedError']);
+  });
+
+  it('adopts an associated shadow tree but rejects adopting the shadow root itself', () => {
+    // attachShadow() is not projected yet; exercise the existing implementation objects.
+    const source = createTestDocument();
+    const target = createTestDocument();
+    const host = source.createElement('host');
+    const shadow = new ShadowRootImpl(host, 'closed', source.env);
+    host.shadowRoot = shadow;
+    const child = source.createElement('child');
+    shadow.appendChild(child);
+
+    expect(() => target.adoptNode(shadow)).toThrow(expect.objectContaining({ name: 'HierarchyRequestError' }));
+    expect(shadow.nodeDocument).toBe(source);
+    expect(target.adoptNode(host)).toBe(host);
+    expect(shadow.nodeDocument).toBe(target);
+    expect(child.nodeDocument).toBe(target);
+    expect(shadow.host).toBe(host);
+    expect(child.parentNode).toBe(shadow);
+  });
+});
+
+describe('DOM removal', () => {
+  it('removeChild returns the child and preserves the remaining sibling links', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const parent = document.createElement('parent');
+      const first = document.createComment('first');
+      const middle = document.createElement('middle');
+      const last = document.createTextNode('last');
+      parent.appendChild(first);
+      parent.appendChild(middle);
+      parent.appendChild(last);
+      const removed = parent.removeChild(middle);
+      return [
+        removed === middle && middle.parentNode === null,
+        middle.previousSibling === null && middle.nextSibling === null,
+        parent.firstChild === first && parent.lastChild === last,
+        first.nextSibling === last && last.previousSibling === first,
+        middle.ownerDocument === document,
+      ];
+    })).toEqual([true, true, true, true, true]);
+  });
+
+  it('rejects removing a foreign child without detaching it', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const parent = document.createElement('parent');
+      const other = document.createElement('other');
+      const child = document.createElement('child');
+      other.appendChild(child);
+      let error: unknown;
+      try { parent.removeChild(child); } catch (caught) { error = caught; }
+      return [
+        error instanceof DOMException && error.name,
+        child.parentNode === other && other.firstChild === child,
+        parent.firstChild === null,
+      ];
+    })).toEqual(['NotFoundError', true, true]);
+  });
+
+  it('ChildNode.remove permits repeated removal and retains document ownership', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const parent = document.createElement('parent');
+      const text = document.createTextNode('text');
+      parent.appendChild(text);
+      text.remove();
+      text.remove();
+      return [parent.firstChild === null, text.parentNode === null, text.ownerDocument === document];
+    })).toEqual([true, true, true]);
+  });
+});
+
 describe('Document type insertion validity', () => {
   // DOMImplementation.createDocumentType is not projected yet.
   it.each(['element', 'fragment'] as const)('rejects a doctype under a parent of kind %s', (kind) => {

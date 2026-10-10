@@ -162,8 +162,6 @@ export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
     if (type === 'abort') this.updateRetention();
   }
 
-  // -- Private ----------------------------------------------------------
-
   // Binding has already allocated the result signal.
   // https://dom.spec.whatwg.org/#create-a-dependent-abort-signal
   #initializeDependent(signals: AbortSignalImpl[]): void {

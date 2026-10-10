@@ -15,6 +15,8 @@ import { NodeImpl, NodeType } from './node';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
+import type { ShadowRootImpl } from './shadow-root';
+import type { CustomElementRegistryImpl, CustomElementCallbackArguments } from './html/custom-elements/index';
 import type { HTMLCollectionImpl } from './collections';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
@@ -26,7 +28,8 @@ import {
   NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL,
 } from './non-document-type-child-node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
-import { SlottableMixin } from './slottable';
+import { SlottableMixin, slottableIDL } from './slottable';
+import type { HTMLSlotElementImpl } from './html/index';
 
 /** Element names, attributes, child navigation, and composed style behavior. */
 // https://dom.spec.whatwg.org/#interface-element
@@ -42,6 +45,15 @@ export class ElementImpl extends NodeImpl {
   localName: string;
   /** Namespace URI selected when the element is created. */
   namespaceURI: string;
+  /** Associated shadow tree, including a closed root; platform exposure is separate. */
+  // https://dom.spec.whatwg.org/#concept-element-shadow-root
+  shadowRoot: ShadowRootImpl | null = null;
+  /** Registry association retained across insertion and adoption. */
+  // https://dom.spec.whatwg.org/#concept-element-custom-element-registry
+  customElementRegistry: CustomElementRegistryImpl | null = null;
+  /** Construction/upgrade state; ordinary elements start uncustomized. */
+  // https://dom.spec.whatwg.org/#concept-element-custom-element-state
+  customElementState: CustomElementState = 'uncustomized';
 
   /** Child-node mutation behavior shared with text and doctype nodes. */
   #childNodeMixin = new ChildNodeMixin(this);
@@ -182,11 +194,22 @@ export class ElementImpl extends NodeImpl {
     return findElementsByTagNameNS(this, namespaceURI, localName);
   }
 
-  setAssignedSlot(slot: ElementImpl | null): void {
+  /** Author-facing slot lookup excludes closed shadow roots. */
+  // https://dom.spec.whatwg.org/#dom-slotable-assignedslot
+  get assignedSlot(): HTMLSlotElementImpl | null {
+    return this.#slottableMixin.findSlot(this, true);
+  }
+
+  setAssignedSlot(slot: HTMLSlotElementImpl | null): void {
     this.#slottableMixin.assignedSlot = slot;
   }
 
-  override getAssignedSlot(): ElementImpl | null {
+  /** Update named slot assignment through the shared slottable behavior. */
+  assignSlot(): void {
+    this.#slottableMixin.assignSlot(this);
+  }
+
+  override getAssignedSlot(): HTMLSlotElementImpl | null {
     return this.#slottableMixin.assignedSlot;
   }
 
@@ -254,19 +277,33 @@ export class ElementImpl extends NodeImpl {
     return this.linkStyleMixin?.sheet ?? null;
   }
 
-  protected override insertedInto(): void {
+  /** Attempt an upgrade using this element's registry and name. */
+  // https://html.spec.whatwg.org/multipage/custom-elements.html#concept-try-upgrade
+  tryToUpgrade(): void {
+    // PROVISIONAL(custom elements): registries cannot define elements yet, so lookup is empty.
+    // Definition registration must supply upgrade reactions before it becomes available.
+  }
+
+  /** Enqueue a lifecycle callback on this custom element's reaction queue. */
+  // https://html.spec.whatwg.org/multipage/custom-elements.html#enqueue-a-custom-element-callback-reaction
+  enqueueCustomElementCallbackReaction<Name extends keyof CustomElementCallbackArguments>(
+    _callbackName: Name, _args: CustomElementCallbackArguments[Name],
+  ): void {
+    // PROVISIONAL(custom elements): construction cannot reach the custom state yet.
+    throw new InternalError('Custom element callback reactions are not implemented');
+  }
+
+  protected override insertionSteps(): void {
     this.linkStyleMixin?.update();
   }
 
-  protected override removedFrom(): void {
+  protected override removingSteps(): void {
     this.linkStyleMixin?.update();
   }
 
   protected override childrenChanged(): void {
     this.linkStyleMixin?.childrenChanged();
   }
-
-  // -- Private ----------------------------------------------------------
 
   #normalizeAttributeName(qualifiedName: string): string {
     return this.namespaceURI === HTML_NAMESPACE
@@ -412,6 +449,13 @@ export const elementIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
   interface: 'Element', mixin: nonDocumentTypeChildNodeIDL.name,
 });
 
+/*
+ * Element includes Slottable;
+ */
+export const elementIncludesSlottableIDL = defineIncludes({
+  interface: 'Element', mixin: slottableIDL.name,
+});
+
 function normalizeNamespace(namespaceURI: string | null): string | null {
   return namespaceURI === '' ? null : namespaceURI;
 }
@@ -427,6 +471,9 @@ export type ElementCreationContext = {
   /** Resolve style ownership after insertion or removal. */
   treeScopeResolver: TreeScopeResolver;
 };
+
+/** DOM's construction and upgrade states for an element. */
+export type CustomElementState = 'undefined' | 'failed' | 'uncustomized' | 'precustomized' | 'custom';
 
 /** Declaration and constructor selected for an element's namespace and name. */
 export type ElementInterface = {

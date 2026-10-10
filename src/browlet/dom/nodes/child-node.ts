@@ -16,7 +16,7 @@ export class ChildNodeMixin {
 
   // https://dom.spec.whatwg.org/#dom-childnode-remove
   remove(): void {
-    this.#node.removeFromTree();
+    if (this.#node.parentNode !== null) this.#node.removeNode();
   }
 }
 

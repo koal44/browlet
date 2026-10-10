@@ -208,8 +208,6 @@ export class EventTargetImpl {
 
   protected eventListenerListChanged(_type: string): void {}
 
-  // -- Private ----------------------------------------------------------
-
   // https://dom.spec.whatwg.org/#concept-event-dispatch
   #dispatch(
     event: EventImpl,

@@ -294,9 +294,11 @@ describe('Browlet DOM binding', () => {
       'parentElement',
       'parentNode',
       'previousSibling',
+      'removeChild',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Document'))).toEqual([
       'adoptedStyleSheets',
+      'adoptNode',
       'body',
       'characterSet',
       'charset',
@@ -328,6 +330,7 @@ describe('Browlet DOM binding', () => {
       'write',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Element'))).toEqual([
+      'assignedSlot',
       'attributes',
       'childElementCount',
       'children',
@@ -364,7 +367,7 @@ describe('Browlet DOM binding', () => {
       'previousElementSibling',
       'remove',
     ]);
-    expect(ownKeys(getPrototype(browlet, 'Text'))).toEqual(['constructor']);
+    expect(ownKeys(getPrototype(browlet, 'Text'))).toEqual(['assignedSlot', 'constructor']);
     expect(ownKeys(getPrototype(browlet, 'Comment'))).toEqual(['constructor']);
     expect(ownKeys(getPrototype(browlet, 'DocumentType'))).toEqual([
       'constructor',
@@ -480,7 +483,7 @@ describe('Browlet DOM binding', () => {
       .toBeInstanceOf(EventTarget_);
     eventTarget.addEventListener('test', () => {});
     expect(internalHookWasCalled).toBe(false);
-    expect(text.ownerDocument).toBeNull();
+    expect(text.ownerDocument).toBe(browlet.document);
     expect(foreignDocument.contentType).toBe('application/xml');
     expect((Reflect.construct(Text_, []) as Text).data).toBe('');
     expect((Reflect.construct(Comment_, []) as Comment).data).toBe('');

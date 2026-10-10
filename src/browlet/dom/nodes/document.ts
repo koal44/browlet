@@ -6,7 +6,7 @@ import type { JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
-  DOMExceptionNames, DOMExceptionImpl, type ImplementationClass,
+  DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
 } from '../../../web-idl/index';
 import {
   Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
@@ -365,6 +365,15 @@ export class DocumentImpl extends NodeImpl {
     }
     if (this.type === 'html') localName = asciiLower(localName);
     return this.createAttributeNode(localName, '', null, null);
+  }
+
+  /** Detach and adopt a non-document node, preserving the node's identity. */
+  // https://dom.spec.whatwg.org/#dom-document-adoptnode
+  adoptNode<T extends NodeImpl>(node: T): T {
+    if (node.isDocument()) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    if (node.isShadowRoot()) throw new DOMExceptionImpl('', DOMExceptionNames.hierarchyRequest);
+    node.adoptInto(this);
+    return node;
   }
 
   /** Feed markup to the currently installed parser writer. */
@@ -965,6 +974,10 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
     op('createAttribute', reference('Attr'), [
       arg('localName', idlType.DOMString),
     ]),
+    op('adoptNode', reference('Node'),
+      [arg('node', reference('Node'))],
+      xattr('CEReactions'),
+    ),
     op('getElementById', nullable(reference('Element')), [
       arg('elementId', idlType.DOMString),
     ]),

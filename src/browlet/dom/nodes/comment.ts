@@ -11,7 +11,7 @@ import type { DocumentImpl } from './document';
 export class CommentImpl extends CharacterDataImpl {
   constructor(
     data: string,
-    ownerDoc: DocumentImpl | null = null,
+    ownerDoc: DocumentImpl,
     env: DOMEnvironment,
   ) {
     super(NodeType.Comment, data, ownerDoc, env);
@@ -35,7 +35,15 @@ export const commentIDL = defineInterface<DOMEnvironment>({
   implementation: impl(CommentImpl, {
     constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
   }),
-  members: [ctor([
-    arg('data', idlType.DOMString, { default: '', optional: true }),
-  ])],
+  members: [
+    ctor(
+      [arg('data', idlType.DOMString, { default: '', optional: true })],
+      {
+        constructWith: [
+          atArg(1, (ctx) => ctx.realm.getAssociatedDocument()),
+          atArg(2, (ctx) => ctx.getEnvironment()),
+        ],
+      },
+    ),
+  ],
 });

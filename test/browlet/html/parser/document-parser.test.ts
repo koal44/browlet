@@ -270,7 +270,7 @@ function createParserDocument() {
   const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active document');
-  while (document.firstChild) document.firstChild.removeFromTree();
+  while (document.firstChild) document.removeChild(document.firstChild);
   const realm = getRelevantRealm(document);
   const env = getBindingContext(realm).getEnvironment();
   return {

@@ -174,13 +174,31 @@ describe('Frozen base URLs', () => {
     root.appendChild(second);
     second.href = 'changed/';
     first.target = 'frame';
-    root.insertBefore(first, second);
     first.attributes.setNamedItem(first.attributes.getNamedItem('href')!);
     expect(document.baseURI).toBe('https://example.test/dir/first/');
 
     first.remove();
     expect(document.baseURI).toBe('https://example.test/new/changed/');
     root.insertBefore(first, second);
+    expect(document.baseURI).toBe('https://example.test/new/first/');
+  });
+
+  it('refreshes the frozen URL when the first base is reinserted at its existing position', () => {
+    const { document, root } = createDocument();
+    const first = createBase(document);
+    first.href = 'first/';
+    const second = createBase(document);
+    second.href = 'second/';
+    root.appendChild(first);
+    root.appendChild(second);
+    document.url = parseURL('https://example.test/new/page').url!;
+    expect(document.baseURI).toBe('https://example.test/dir/first/');
+
+    // Pre-insertion still adopts/removes and inserts; unchanged final order is not a no-op.
+    const previousSibling = first.previousSibling;
+    root.insertBefore(first, second);
+    expect(first.previousSibling).toBe(previousSibling);
+    expect(first.nextSibling).toBe(second);
     expect(document.baseURI).toBe('https://example.test/new/first/');
   });
 

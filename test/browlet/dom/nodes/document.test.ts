@@ -171,6 +171,7 @@ describe('Document', () => {
     const document = createTestDocument();
     const parent = document.createElementNode('main', HTML_NAMESPACE);
     const slot = document.createElementNode('slot', HTML_NAMESPACE);
+    if (!slot.isSlot()) throw new Error('Expected an HTML slot implementation');
     const element = document.createElementNode('span', HTML_NAMESPACE);
     const text = document.createTextNode('content');
     parent.appendChild(element);

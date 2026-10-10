@@ -4,7 +4,7 @@ import {
 import { InternalError } from '../../../infra/internal-error';
 
 import { elementInterface, type ElementInterface } from './element';
-import { htmlElementInterface, htmlUnknownElementInterface } from './html/index';
+import { htmlElementInterface, htmlUnknownElementInterface, htmlSlotElementInterface } from './html/index';
 import { isValidCustomElementName } from './html/custom-elements/index';
 import {
   htmlHeadElementInterface, htmlBaseElementInterface, htmlLinkElementInterface, htmlStyleElementInterface,
@@ -38,6 +38,7 @@ export function resolveElementInterface(
 }
 
 const elementInterfaces = compileElementInterfaces([
+  htmlSlotElementInterface,
   htmlHeadElementInterface,
   htmlBaseElementInterface,
   htmlLinkElementInterface,

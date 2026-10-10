@@ -7,8 +7,7 @@ import { EventTargetImpl } from '../events/index';
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl
 {
-  // Mutations update both ends of each link and notify affected nodes together.
-  // Keep storage private so individual assignments cannot bypass those steps.
+  // DOM algorithms own adoption and notifications; these primitives only update links.
   // Preserve node-link types when checking the emitted JavaScript.
   /** @type {TreeNode | null} */
   #parent: TNode | null = null;
@@ -43,7 +42,7 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
 
   // https://dom.spec.whatwg.org/#concept-tree-root
   getRoot(): TNode {
-    if (!this.#parent) return this.#asNode();
+    if (!this.#parent) return this as unknown as TNode;
 
     let root = this.#parent;
     while (root.#parent) root = root.#parent;
@@ -57,10 +56,10 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
   // https://dom.spec.whatwg.org/#concept-tree-inclusive-descendant
   contains(other: TNode | null): boolean {
     if (!other) return false;
-    if (other === this.#asNode()) return true;
+    if (other === (this as unknown as TNode)) return true;
 
     for (let ancestor = other.#parent; ancestor; ancestor = ancestor.#parent) {
-      if (ancestor === this.#asNode()) return true;
+      if (ancestor === (this as unknown as TNode)) return true;
     }
 
     return false;
@@ -68,9 +67,9 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
 
   // https://dom.spec.whatwg.org/#concept-tree-order
   comparePosition(other: TNode): -1 | 0 | 1 | null {
-    if (other === this.#asNode()) return 0;
+    if (other === (this as unknown as TNode)) return 0;
 
-    const thisChain: TNode[] = [this.#asNode()];
+    const thisChain: TNode[] = [this as unknown as TNode];
     for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
       thisChain.push(ancestor);
     }
@@ -110,31 +109,10 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     return 1;
   }
 
-  insertTreeSiblingBefore(node: TNode): void {
+  /** Unlink an attached node after the DOM's pre-removal steps have run. */
+  protected removeTreeNode(): void {
     const parent = this.#parent;
-    if (!parent) throw new InternalError('Cannot insert before a detached node');
-
-    parent.#insertChild(node, this.#asNode());
-  }
-
-  insertTreeSiblingAfter(node: TNode): void {
-    const parent = this.#parent;
-    if (!parent) throw new InternalError('Cannot insert after a detached node');
-
-    parent.#insertChild(node, this.#nextSibling);
-  }
-
-  prependChild(node: TNode): void {
-    this.#insertChild(node, this.#firstChild);
-  }
-
-  appendTreeChild(node: TNode): void {
-    this.#insertChild(node, null);
-  }
-
-  removeFromTree(): void {
-    const parent = this.#parent;
-    if (!parent) return;
+    if (!parent) throw new InternalError('Tree removal requires an attached node');
 
     const previous = this.#previousSibling;
     const next = this.#nextSibling;
@@ -154,47 +132,20 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     this.#parent = null;
     this.#previousSibling = null;
     this.#nextSibling = null;
-
-    this.#notifyRemovedSubtree(parent);
-    parent.childrenChanged();
   }
 
-  notifyParentChildrenChanged(): void {
-    const parent = this.#parent;
-    parent?.childrenChanged();
-  }
-
-  protected insertedInto(_parent: TNode): void {}
-
-  protected removedFrom(_parent: TNode): void {}
-
-  protected childrenChanged(): void {}
-
-  // -- Private ----------------------------------------------------------
-
-  #insertChild(node: TNode, reference: TNode | null): void {
-    if (node === this.#asNode()) {
-      throw new InternalError('Cannot insert a node into itself or its descendant');
+  /** Link an already-adopted, detached node without running DOM participants. */
+  protected insertTreeChild(node: TNode, reference: TNode | null): void {
+    if (node.#parent !== null) {
+      throw new InternalError('Tree insertion requires a detached node');
     }
-
-    for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
-      if (ancestor === node) {
-        throw new InternalError('Cannot insert a node into itself or its descendant');
-      }
+    if (reference !== null && reference.#parent !== (this as unknown as TNode)) {
+      throw new InternalError('Tree insertion reference must belong to the parent');
     }
-
-    if (
-      reference === node ||
-      (node.#parent === this.#asNode() && node.#nextSibling === reference)
-    ) {
-      return;
-    }
-
-    node.removeFromTree();
 
     const previous = reference ? reference.#previousSibling : this.#lastChild;
 
-    node.#parent = this.#asNode();
+    node.#parent = this as unknown as TNode;
     node.#previousSibling = previous;
     node.#nextSibling = reference;
 
@@ -209,29 +160,5 @@ export abstract class TreeNode<TNode extends TreeNode<TNode>>
     } else {
       this.#lastChild = node;
     }
-
-    node.#notifyInsertedSubtree(this.#asNode());
-    this.childrenChanged();
-  }
-
-  #notifyInsertedSubtree(parent: TNode): void {
-    this.insertedInto(parent);
-
-    for (let child = this.#firstChild; child; child = child.#nextSibling) {
-      child.#notifyInsertedSubtree(this.#asNode());
-    }
-  }
-
-  #notifyRemovedSubtree(parent: TNode): void {
-    this.removedFrom(parent);
-
-    for (let child = this.#firstChild; child; child = child.#nextSibling) {
-      child.#notifyRemovedSubtree(this.#asNode());
-    }
-  }
-
-  // TypeScript cannot express that an F-bounded base instance is its node type.
-  #asNode(): TNode {
-    return this as unknown as TNode;
   }
 }

@@ -8,10 +8,17 @@ Only `NodeIterator`'s pre-remove adjustment is an early dependency of the DOM
 §4 mutation spine; the public traversal interfaces can otherwise follow that
 spine as a bounded feature.
 
+`node-iterator.ts` currently reserves `NodeIteratorImpl` and its `preRemove()`
+hook. Construction is disabled, so the hook has no iterators to visit. Implement
+registration and adjustment together before enabling construction. The static
+entry point is provisional. Traversal sits below nodes in the import hierarchy,
+retaining concrete node types and using supplied nodes without loading their
+implementation classes.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `node-filter.ts` | `NodeFilter`, all current and legacy constants, `whatToShow`, callback invocation, and reentrancy protection | DOM §6.4, `#interface-nodefilter` |
-| `node-iterator.ts` | `NodeIterator`, iterator collection, reference/candidate pointers, forward/backward traversal, no-op `detach()`, and pre-removing steps | DOM §6.2, `#interface-nodeiterator` |
+| existing `node-iterator.ts` | `NodeIterator`, iterator collection, reference/candidate pointers, forward/backward traversal, no-op `detach()`, and pre-removing steps | DOM §6.2, `#interface-nodeiterator` |
 | `tree-walker.ts` | `TreeWalker`, mutable current node, and parent/child/sibling/tree-order traversal with accept/skip/reject semantics | DOM §6.3, `#interface-treewalker` |
 | existing `../nodes/document.ts` | Project and implement `createNodeIterator()` and `createTreeWalker()` | DOM §4.5 and §6 |
 

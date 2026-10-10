@@ -251,8 +251,6 @@ export class EventImpl {
     }
   }
 
-  // -- Private ----------------------------------------------------------
-
   // https://dom.spec.whatwg.org/#concept-event-initialize
   #initialize(
     type: string,

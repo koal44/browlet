@@ -5,6 +5,10 @@
 - `parse.ts` is the synchronous parse convenience over an existing or newly
   constructed Browlet Document.
 - `tree-adapter.ts` maps parse5 tree operations to Browlet DOM algorithms.
+  Structural callbacks enter the tested 4B Node insertion/removal path, with
+  provisional mutation participants tracked in the
+  [nodes roadmap](../../dom/nodes/ROADMAP.md). Text merging still awaits the
+  complete CharacterData path in 4E.
   Its private source-location stamp keeps optional parser metadata on each
   `NodeImpl`, with parse5 types confined to the parser module. The streaming
   parser enables these locations; Browlet reads script start-tag positions

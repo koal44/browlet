@@ -10,7 +10,7 @@ import type { Window, WindowProxy } from '../platform';
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
-import type { EventRealm, WindowEventRealm } from '../dom/index';
+import type { DOMRealm, WindowEventRealm } from '../dom/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../environment';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
 
@@ -38,7 +38,7 @@ export function createRealm(
 
 /** Adds HTML ownership, callback lifecycle, and task routing to an engine realm. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#realms-settings-objects-global-objects
-export class Realm extends JSRealm implements WebIDLRealm, EventRealm {
+export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
   /** Agent whose event loop serves this realm. */
   agent: Agent;
   /** Binding hooks for HTML script and callback entry and cleanup. */

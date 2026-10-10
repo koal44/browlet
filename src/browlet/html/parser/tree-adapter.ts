@@ -82,7 +82,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
 
   appendChild(parentNode: NodeImpl, newNode: NodeImpl): void {
     this.#finishPendingUnpushedElement();
-    parentNode.appendTreeChild(newNode);
+    parentNode.insert(newNode, null);
     if (newNode.isElement()) this.#pendingUnpushedElement = newNode;
   }
 
@@ -92,12 +92,12 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     referenceNode: NodeImpl,
   ): void {
     this.#finishPendingUnpushedElement();
-    referenceNode.insertTreeSiblingBefore(newNode);
+    parentNode.insert(newNode, referenceNode);
     if (newNode.isElement()) this.#pendingUnpushedElement = newNode;
   }
 
   detachNode(node: NodeImpl): void {
-    node.removeFromTree();
+    if (node.parentNode !== null) node.removeNode();
   }
 
   insertText(parentNode: NodeImpl, text: string): void {
@@ -107,7 +107,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     if (lastChild?.isText()) {
       lastChild.data += text;
     } else {
-      parentNode.appendTreeChild(this.#document.createTextNode(text));
+      parentNode.insert(this.#document.createTextNode(text), null);
     }
   }
 
@@ -205,11 +205,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     const newDoctype = document.createDocumentType(name, publicId, systemId);
     const documentElement = document.documentElement;
 
-    if (documentElement) {
-      documentElement.insertTreeSiblingBefore(newDoctype);
-    } else {
-      document.appendTreeChild(newDoctype);
-    }
+    document.insert(newDoctype, documentElement);
   }
 
   setDocumentMode(document: DocumentImpl, mode: html.DOCUMENT_MODE): void {

@@ -1,10 +1,17 @@
 import type { DOMHighResTimeStamp } from '../timing/index';
 import type { EventImpl } from './events/index';
+import type { DocumentImpl } from './nodes/index';
 
-/** Environment supplying the realm and allocation facilities used by DOM events. */
+/** Environment supplying the realm and allocation facilities used by DOM algorithms. */
 export interface DOMEnvironment {
-  realm: EventRealm;
+  realm: DOMRealm;
   exec: EventExecution;
+}
+
+/** Realm facilities used by DOM constructors as well as event dispatch. */
+export interface DOMRealm extends EventRealm {
+  /** The global's associated document; non-Window globals have none. */
+  getAssociatedDocument(): DocumentImpl | null;
 }
 
 /** Allocation facilities needed to create events for a target. */

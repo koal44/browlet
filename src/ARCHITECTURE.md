@@ -74,7 +74,7 @@ views of existing owners, not a new environment object for each subsystem.
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm` and `exec: RealmExecution` for a JavaScript execution owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort and HTML structured-data execution contracts on `exec` |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
-| [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: EventRealm` and `exec: EventExecution` for event timing and allocation |
+| [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; `exec: EventExecution` for event allocation |
 | [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
 | [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
@@ -406,6 +406,20 @@ names and registry machinery live under `dom/nodes/html/custom-elements` with
 that same family. Parsing remains a separate consumer under `browlet/html/parser`;
 HTML's remaining roadmap-only areas keep their provisional locations.
 
+`TreeNode` exposes protected link operations to Node, without running DOM
+notifications or detaching nodes implicitly. `NodeImpl` owns the ordered
+insertion/removal/adoption path and node-specific extension steps; parser
+structural callbacks use that same path. The current mutation path uses explicit
+provisional Range, traversal, observer, slot, and custom-element participants
+so ordinary tree mutations can be exercised before those features exist.
+Their remaining behavior and ownership questions are listed in the
+[nodes roadmap](browlet/dom/nodes/ROADMAP.md).
+
+Ranges and traversal occupy explicit layers below nodes. Their mutation
+participants retain concrete node types and operate on supplied instances;
+type-only dependencies do not load node implementation classes. Future Range
+parsing and geometry integrations must be reviewed against those boundaries.
+
 A partial interface/dictionary/namespace amends its primary implementation.
 Co-locate its members when practical; an external package can export a declaration
 contribution and use an explicit integration seam. A stateful interface mixin
@@ -435,7 +449,7 @@ a boundary, not automatic reasons to add another abstraction.
 
 | Marker | Meaning and disposition |
 | --- | --- |
-| `SPEC_MISMATCH: <original signature>` | Unreviewed callable/record shape; remove after acceptance. An owning environment alone needs no marker. |
+| `SPEC_MISMATCH: <original signature>` | Non-obvious, unreviewed callable/record changes; remove after acceptance. An owning environment or a straightforward conversion to an instance method needs no marker. |
 | `SPEC_CLASH(identifier)` | Competing spec passages or browser behavior; retain the chosen rule and evidence until the conflict resolves. |
 | `SPEC_GAP(identifier)` | The specifications leave a behavior unanswered; retain the question, evidence, and chosen/pending rule. |
 | `TODO` / `PROVISIONAL` | Missing implementation or temporary integration, owned by the relevant roadmap. |

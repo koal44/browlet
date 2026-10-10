@@ -6,13 +6,21 @@
 - `registry.ts` reserves the `CustomElementRegistry` identity required by
   Document and realm setup. Its declaration supports projection from the existing
   Document getter; registry members and Window exposure remain absent.
+- Registry association, scoped-registry fields, and element construction state
+  are retained by their owners. `NodeImpl.lookupCustomElementRegistry()` selects
+  the association for Document, Element, or ShadowRoot.
+- `ElementImpl.tryToUpgrade()` is provisional: there are no definitions yet.
+  `enqueueCustomElementCallbackReaction()` is also an Element method, and throws
+  if reached before custom-element construction and reaction delivery exist.
+- `reactions.ts` owns the lifecycle callback argument types; reaction queues and
+  delivery remain unimplemented.
 
 ## Missing
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `definition.ts` | Custom-element definitions and constructor lookup | HTML §4.13.3 |
-| `reactions.ts` | Reaction stacks, queues, backup queue, `[CEReactions]` entry/exit | HTML §4.13.6 |
+| existing `reactions.ts` | Reaction stacks, queues, backup queue, `[CEReactions]` entry/exit | HTML §4.13.6 |
 | `upgrade.ts` | Upgrade candidates and upgrade algorithm | HTML §4.13.5 |
 | `construction-stack.ts` | HTMLElement constructor and construction-stack rules | HTML §4.13.3 |
 | `element-internals.ts` | `ElementInternals`, shadow-root access, form-associated state/validation, and accessibility reflection | HTML §4.13.7 |

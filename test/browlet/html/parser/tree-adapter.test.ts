@@ -35,6 +35,33 @@ describe('Parser tree adapter', () => {
     expect(quirks.mode).toBe(DocumentMode.Quirks);
   });
 
+  it('adopts inserted subtrees and retains their document when detached', () => {
+    const adapter = createParser();
+    const target = adapter.createDocument();
+    const source = createTestDocument();
+    const parent = target.createElement('parent');
+    const reference = target.createComment('reference');
+    const child = source.createElement('child');
+    const text = source.createTextNode('text');
+    child.setAttribute('name', 'value');
+    const attribute = child.attributes.getNamedItem('name')!;
+    child.appendChild(text);
+    adapter.appendChild(parent, reference);
+    adapter.insertBefore(parent, child, reference);
+
+    expect(parent.firstChild).toBe(child);
+    expect(child.nextSibling).toBe(reference);
+    expect(child.nodeDocument).toBe(target);
+    expect(text.nodeDocument).toBe(target);
+    expect(attribute.nodeDocument).toBe(target);
+
+    adapter.detachNode(child);
+    expect(parent.firstChild).toBe(reference);
+    expect(child.parentNode).toBeNull();
+    expect(child.ownerDocument).toBe(target);
+    expect(text.ownerDocument).toBe(target);
+  });
+
   it('parses comments as comment nodes', () => {
     const document = createParser().parse('<!--note--><main></main>');
     const comment = document.firstChild;

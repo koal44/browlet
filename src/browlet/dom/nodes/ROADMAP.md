@@ -11,8 +11,10 @@ Those familiar interfaces are not the difficult dependency in DOM §4. The
 early prerequisite is one normative mutation path shared by script, parsers,
 ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
-The existing `tree.ts` is useful pointer storage, but direct writes
-through it do not yet provide that contract.
+`tree.ts` supplies protected pointer-storage primitives. `NodeImpl` owns the
+mutation ordering and calls those primitives after its participants have run.
+The 4B implementation supports ordinary tree mutations with explicitly
+provisional participants; the full mutation path remains incomplete.
 
 ## Section 4 slices
 
@@ -31,10 +33,55 @@ the interface exists; implementations receive already-converted values.
 | 4H. Shadow trees | ShadowRoot, attachment, slottables, assignment, and slotchange delivery | Shadow topology and slot changes use the same mutation and checkpoint machinery |
 | 4I. Node and Document completion | Clone/import, equality, namespace lookup, document factories, DOMImplementation, XML leaf nodes, and remaining declared members | Public interface coverage followed by an ordered §4 audit |
 
-4A is complete: `mutation.ts` validates both public insertion entry points,
+4A is complete: `NodeImpl.ensurePreInsertValidity()` validates both public insertion entry points,
 including host-including cycles and Document hierarchy. The regressions are in
 [`mutation.test.ts`](../../../../test/browlet/dom/nodes/mutation.test.ts).
-Fragment splicing, adoption, and mutation participants remain 4B/4C work.
+4B is implemented in `NodeImpl.insert()`, `removeNode()`, and `adoptInto()`. Public
+insertion/removal, `Document.adoptNode()`, ChildNode removal, and parse5's existing
+structural callbacks now enter these algorithms. This includes fragment
+splicing, attribute/descendant document updates, shadow-including traversal,
+and ordered insertion/removal/adoption/post-connection extension points.
+`ownerDocument` reads retained ownership rather than inferring it from the tree.
+Text/Comment author constructors select the current document through DOM's own
+`DOMRealm` contract; document factories retain their supplied document. DOM's
+environment view does not require the complete browser environment for these
+constructors. Non-Window realms can have no associated document; the constructors
+are exposed only on Window.
+
+**4B's structural slice is complete with provisional participants.** Public
+and parser tests cover topology, document ownership, and existing extension
+behavior. This does not complete the full mutation path: empty collections need
+no work while their public construction or registration is unavailable, and
+hooks which actually require missing behavior still throw. The remaining
+participant contracts are:
+
+| Owner | Required operation or state |
+| --- | --- |
+| `../ranges/` | `RangeImpl.adjustForInsertion(parent, index, count)` and `preRemove(node)` are empty hooks while construction is disabled. Implement live registrations and boundary-point adjustment together |
+| `../traversal/` | `NodeIteratorImpl.preRemove(node)` is empty while construction is disabled. Implement iterator registration and pre-removal adjustment together |
+| Mutation observers | Each node has a typed registered-observer list and owns `queueTreeMutationRecord(added, removed, previous, next)`. Record creation/delivery remains absent; observer construction is disabled |
+| Slots | Element/Text compose `SlottableMixin` and expose `assignedSlot`. `HTMLSlotElementImpl` owns recognition, assigned-node state, `assignSlottables()`, and `signalSlotChange()`. Lookup handles no-slot and closed-root cases; actual assignment and delivery still throw |
+| Custom elements | Registry association/state and lookup exist. `ElementImpl.tryToUpgrade()` currently finds no definitions; `enqueueCustomElementCallbackReaction()` throws if called. Definition registration, construction, and reactions remain absent |
+
+Range and traversal are explicit components below nodes in the import hierarchy.
+They retain concrete node types without loading node implementation classes;
+operations can use the supplied nodes and their document factories. Review any
+future runtime dependency in its own right, including Range's parsing and geometry
+extensions. The static participant calls remain provisional, not a decision to
+use global registries.
+
+Mutation traversals use bounded pointer walks. Ordinary walks do not cross shadow
+roots; shadow-including walks visit a host's shadow tree before its light children.
+Post-connection steps retain a collected snapshot because they can run script.
+Tree-order and boundary cases are in `node.test.ts`.
+
+The passing public and parser tests cover fragment insertion, reinsertion,
+retained adoption, and Text/Comment constructor ownership. Replace, replace-all,
+move, and live Range/NodeIterator participation remain 4C work. Observer delivery
+belongs to 4G, shadow assignment and signaling to 4H, and `[CEReactions]` to the
+custom-elements roadmap. Completion of the full mutation path requires observable
+tests with those real participants.
+
 Range and traversal state belongs to those owners. Observer, slot, and
 custom-element delivery must join HTML's existing checkpoint, not a new scheduler.
 
@@ -42,8 +89,8 @@ custom-element delivery must join HTML's existing checkpoint, not a new schedule
 
 | Source | Contract | Specification |
 | --- | --- | --- |
-| `mutation.ts` | Ensure pre-insert validity, pre-insert, insert, append, move, replace, replace-all, pre-remove, remove, adoption, and their specified extension points | DOM §4.2.3, `#mutation-algorithms` |
-| `slots.ts` if the algorithms outgrow `slottable.ts` | Finding, assigning, and signaling slots and slottables; the concrete `HTMLSlotElement` remains owned by HTML | DOM §4.2.2, `#shadow-trees` |
+| `node.ts` | Pre-insert validity, insert, append, pre-remove, remove, adoption, and their specified extension points; move, replace, and replace-all follow in 4C | DOM §4.2.3, `#mutation-algorithms`; §4.5, `#concept-node-adopt` |
+| `slottable.ts` and `html/slot.ts` | Slottable state and finding/assigning its slot; the slot owns its assigned-node list and change signaling | DOM §4.2.2, `#shadow-trees` |
 
 Public node methods and HTML/XML parser adapters must enter through this
 spine. Raw tree operations remain private storage primitives; they must not
@@ -87,7 +134,7 @@ Range and traversal APIs arrive in later slices.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `mutation-observer.ts` | `MutationObserver`, registered and transient observers, record queues, and callback delivery | DOM §4.3, `#mutation-observers` and `#interface-mutationobserver` |
+| existing `mutation-observer.ts` | Complete the provisional observer identity and registered-observer types with observation, record queues, and callback delivery | DOM §4.3, `#mutation-observers` and `#interface-mutationobserver` |
 | `mutation-record.ts` | `MutationRecord` | DOM §4.3.3, `#interface-mutationrecord` |
 
 Each `WindowAgent` needs the specified mutation-observer-microtask flag,

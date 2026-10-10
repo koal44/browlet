@@ -414,6 +414,15 @@ export interface HTMLUnknownElementConstructor {
   [Symbol.hasInstance](value: unknown): value is HTMLUnknownElement;
 }
 
+export interface HTMLSlotElement extends HTMLElement {
+
+}
+
+export interface HTMLSlotElementConstructor {
+  readonly prototype: HTMLSlotElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLSlotElement;
+}
+
 export interface HTMLHeadElement extends HTMLElement {
 
 }
@@ -659,6 +668,7 @@ export interface Window extends EventTarget {
   CustomElementRegistry: CustomElementRegistryConstructor;
   HTMLElement: HTMLElementConstructor;
   HTMLUnknownElement: HTMLUnknownElementConstructor;
+  HTMLSlotElement: HTMLSlotElementConstructor;
   HTMLHeadElement: HTMLHeadElementConstructor;
   HTMLBaseElement: HTMLBaseElementConstructor;
   HTMLStyleElement: HTMLStyleElementConstructor;
@@ -829,8 +839,9 @@ export interface Node extends EventTarget {
   readonly nextSibling: (Node | null);
   readonly isConnected: boolean;
   getRootNode(options?: GetRootNodeOptions): Node;
-  appendChild(node: Node): Node;
   insertBefore(node: Node, child: (Node | null)): Node;
+  appendChild(node: Node): Node;
+  removeChild(child: Node): Node;
   contains(other: (Node | null)): boolean;
   compareDocumentPosition(other: Node): number;
 }
@@ -911,7 +922,7 @@ export interface DocumentTypeConstructor {
 }
 
 export interface Text extends CharacterData {
-
+  readonly assignedSlot: (HTMLSlotElement | null);
 }
 
 export interface TextConstructor {
@@ -978,6 +989,7 @@ export interface Document extends Node {
   createTextNode(data: string): Text;
   createComment(data: string): Comment;
   createAttribute(localName: string): Attr;
+  adoptNode(node: Node): Node;
   getElementById(elementId: string): (Element | null);
   readonly head: (HTMLHeadElement | null);
   readonly body: (HTMLElement | null);
@@ -1018,6 +1030,7 @@ export interface Element extends Node {
   remove(): void;
   readonly previousElementSibling: (Element | null);
   readonly nextElementSibling: (Element | null);
+  readonly assignedSlot: (HTMLSlotElement | null);
 }
 
 export interface ElementConstructor {

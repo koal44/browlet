@@ -13,7 +13,8 @@ import {
   documentTypeIncludesChildNodeIDL, elementIDL, elementIncludesChildNodeIDL,
   elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesParentNodeIDL, getRootNodeOptionsIDL, nodeIDL,
   childNodeIDL, documentOrShadowRootIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL, shadowRootIDL,
-  shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL, textIDL,
+  shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL,
+  slottableIDL, elementIncludesSlottableIDL, textIDL, textIncludesSlottableIDL,
 } from './nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -33,6 +34,7 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   documentOrShadowRootIDL,
   childNodeIDL,
   nonDocumentTypeChildNodeIDL,
+  slottableIDL,
   nodeIDL,
   getRootNodeOptionsIDL,
   htmlCollectionIDL,
@@ -44,6 +46,7 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   documentTypeIDL,
   documentTypeIncludesChildNodeIDL,
   textIDL,
+  textIncludesSlottableIDL,
   commentIDL,
   documentFragmentIDL,
   documentFragmentIncludesParentNodeIDL,
@@ -60,4 +63,5 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   elementIncludesParentNodeIDL,
   elementIncludesChildNodeIDL,
   elementIncludesNonDocumentTypeChildNodeIDL,
+  elementIncludesSlottableIDL,
 ];

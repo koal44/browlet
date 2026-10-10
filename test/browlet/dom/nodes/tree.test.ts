@@ -7,6 +7,14 @@ class TestNode extends TreeNode<TestNode> {
   constructor(public name: string) {
     super(createSandboxEnvironment());
   }
+
+  insert(node: TestNode, reference: TestNode | null = null): void {
+    super.insertTreeChild(node, reference);
+  }
+
+  detach(): void {
+    super.removeTreeNode();
+  }
 }
 
 describe('TreeNode', () => {
@@ -26,9 +34,9 @@ describe('TreeNode', () => {
     const middle = new TestNode('middle');
     const last = new TestNode('last');
 
-    parent.appendTreeChild(first);
-    parent.appendTreeChild(last);
-    last.insertTreeSiblingBefore(middle);
+    parent.insert(first);
+    parent.insert(last);
+    parent.insert(middle, last);
 
     expect(parent.firstChild).toBe(first);
     expect(parent.lastChild).toBe(last);
@@ -49,9 +57,10 @@ describe('TreeNode', () => {
     const before = new TestNode('before');
     const moved = new TestNode('moved');
 
-    firstParent.appendTreeChild(moved);
-    secondParent.appendTreeChild(before);
-    before.insertTreeSiblingBefore(moved);
+    firstParent.insert(moved);
+    secondParent.insert(before);
+    moved.detach();
+    secondParent.insert(moved, before);
 
     expect(firstParent.firstChild).toBeNull();
     expect(firstParent.lastChild).toBeNull();
@@ -60,7 +69,8 @@ describe('TreeNode', () => {
     expect(moved.nextSibling).toBe(before);
     expect(before.previousSibling).toBe(moved);
 
-    moved.insertTreeSiblingBefore(before);
+    before.detach();
+    secondParent.insert(before, moved);
 
     expect(secondParent.firstChild).toBe(before);
     expect(secondParent.lastChild).toBe(moved);
@@ -69,7 +79,7 @@ describe('TreeNode', () => {
     expect(moved.previousSibling).toBe(before);
     expect(moved.nextSibling).toBeNull();
 
-    moved.removeFromTree();
+    moved.detach();
 
     expect(moved.parent).toBeNull();
     expect(moved.previousSibling).toBeNull();
@@ -78,17 +88,19 @@ describe('TreeNode', () => {
     expect(before.previousSibling).toBeNull();
   });
 
-  it('rejects detached references and cycles', () => {
+  it('rejects attached insertions and foreign reference children without changing links', () => {
     const root = new TestNode('root');
     const child = new TestNode('child');
     const other = new TestNode('other');
 
-    root.appendTreeChild(child);
+    root.insert(child);
 
-    expect(() => other.insertTreeSiblingBefore(new TestNode('new')))
-      .toThrow('Cannot insert before a detached node');
-    expect(() => child.appendTreeChild(root))
-      .toThrow('Cannot insert a node into itself or its descendant');
+    expect(() => other.insert(child)).toThrow('Tree insertion requires a detached node');
+    expect(() => other.insert(new TestNode('new'), child))
+      .toThrow('Tree insertion reference must belong to the parent');
+    expect(child.parent).toBe(root);
+    expect(root.firstChild).toBe(child);
+    expect(other.firstChild).toBeNull();
   });
 
   it('finds roots and tests inclusive containment', () => {
@@ -97,8 +109,8 @@ describe('TreeNode', () => {
     const child = new TestNode('child');
     const other = new TestNode('other');
 
-    root.appendTreeChild(parent);
-    parent.appendTreeChild(child);
+    root.insert(parent);
+    parent.insert(child);
 
     expect(root.getRoot()).toBe(root);
     expect(child.getRoot()).toBe(root);
@@ -117,9 +129,9 @@ describe('TreeNode', () => {
     const descendant = new TestNode('descendant');
     const last = new TestNode('last');
 
-    root.appendTreeChild(first);
-    root.appendTreeChild(last);
-    first.appendTreeChild(descendant);
+    root.insert(first);
+    root.insert(last);
+    first.insert(descendant);
 
     expect(first.comparePosition(first)).toBe(0);
     expect(first.comparePosition(last)).toBe(-1);

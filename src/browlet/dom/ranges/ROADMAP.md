@@ -9,12 +9,21 @@ affected boundary points as part of that mutation. The mutation spine must
 therefore reserve and exercise the Range participant from its first complete
 implementation.
 
+`range.ts` currently reserves `RangeImpl` and the mutation hooks
+`adjustForInsertion()` and `preRemove()`. Construction is disabled, so those
+hooks have no live ranges to visit. Implement registration and adjustment
+together before enabling construction. The static entry points are provisional.
+Ranges sit below nodes in the import hierarchy and retain node types without
+loading their implementation classes; use the supplied nodes and document
+factories. Review runtime dependencies for parsing and geometry when those
+extensions are implemented.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `boundary-point.ts` | Boundary-point ordering and validation algorithms | DOM §5.2, `#boundary-points` |
 | `abstract-range.ts` | `AbstractRange` | DOM §5.3, `#interface-abstractrange` |
 | `static-range.ts` | `StaticRange` | DOM §5.4, `#interface-staticrange` |
-| `range.ts` | Live `Range`, mutation adjustment, extraction, cloning, insertion, stringification, and HTML `createContextualFragment()` integration | DOM §5.5, `#interface-range`; HTML §8.5.7 |
+| existing `range.ts` | Live `Range`, mutation adjustment, extraction, cloning, insertion, stringification, and HTML `createContextualFragment()` integration | DOM §5.5, `#interface-range`; HTML §8.5.7 |
 
 ## Dependency and ownership rules
 

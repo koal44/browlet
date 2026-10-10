@@ -25,7 +25,7 @@ export class CharacterDataImpl extends NodeImpl {
   constructor(
     nodeType: NodeType,
     data: string,
-    ownerDoc: DocumentImpl | null,
+    ownerDoc: DocumentImpl,
     env: DOMEnvironment,
   ) {
     super(nodeType, ownerDoc, env);

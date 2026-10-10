@@ -80,8 +80,6 @@ export class NamedNodeMapImpl extends Array<AttrImpl> {
     }
   }
 
-  // -- Private ----------------------------------------------------------
-
   #remove(matches: (attribute: AttrImpl) => boolean): AttrImpl {
     const index = this.findIndex(matches);
     if (index < 0) throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
