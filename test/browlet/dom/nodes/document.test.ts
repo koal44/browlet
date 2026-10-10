@@ -115,6 +115,14 @@ describe('Document', () => {
     }
   });
 
+  it('retains its construction Window even before becoming an associated document', () => {
+    const document = createTestDocument();
+    const window = unwrap<WindowImpl>(document.env.global);
+    expect(document.getRelevantGlobalObject()).toBe(window);
+    expect(window.getAssociatedDocument()).not.toBe(document);
+    expect(document.browsingContext).toBeNull();
+  });
+
   it('uses its relevant Window as its event parent while it has a browsing context', () => {
     const document = createTestDocument();
     const env = document.env;

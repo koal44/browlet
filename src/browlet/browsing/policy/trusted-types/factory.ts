@@ -7,7 +7,9 @@ import {
 
 import type { BrowletEnvironment } from '../../../environment';
 
-import { TrustedHTMLImpl, TrustedScriptImpl, TrustedScriptURLImpl, type TrustedTypeName } from './value';
+import {
+  TrustedHTMLImpl, TrustedScriptImpl, TrustedScriptURLImpl, type TrustedTypeName, type TrustedTypeValue,
+} from './value';
 import { TrustedTypePolicyImpl, type TrustedTypePolicyOptions } from './policy';
 import { getTrustedTypeDataForAttribute } from './sinks';
 
@@ -68,7 +70,34 @@ export class TrustedTypePolicyFactoryImpl {
     if (property === 'innerHTML' || property === 'outerHTML') return 'TrustedHTML';
     return null;
   }
+
+  /** Accept a matching trusted value, or apply this global's default policy and CSP requirements. */
+  // https://w3c.github.io/trusted-types/dist/spec/#get-trusted-type-compliant-string-algorithm
+  // This global's factory retains its environment; expectedType names select implementation brands.
+  getCompliantString(expectedType: TrustedTypeName, input: TrustedTypeValue | string, sink: string, sinkGroup: string): string {
+    if (input instanceof trustedTypeImplementations[expectedType]) return input.data;
+    const value = typeof input === 'string' ? input : input.data;
+    const env = this.#env;
+    const initialPolicies = env.policyContainer.cspList;
+    if (!initialPolicies?.doesSinkTypeRequireTrustedTypes(sinkGroup, true)) return value;
+
+    // https://w3c.github.io/trusted-types/dist/spec/#process-value-with-a-default-policy-algorithm
+    // Keep the callback's converted string directly: the specification's temporary trusted
+    // value would immediately be unwrapped here and is never exposed to author code.
+    const converted = this.defaultPolicy?.getPolicyValue(expectedType, value, [expectedType, sink], false) ?? null;
+    if (converted !== null) return converted;
+
+    // The callback can change policy state. Consult the selected global again after it returns.
+    if (env.policyContainer.cspList?.isTrustedTypeSinkMismatchBlocked(sink, sinkGroup, value, env)) {
+      throw new TypeError(`${sink} requires ${expectedType}`);
+    }
+    return value;
+  }
 }
+
+const trustedTypeImplementations = {
+  TrustedHTML: TrustedHTMLImpl, TrustedScript: TrustedScriptImpl, TrustedScriptURL: TrustedScriptURLImpl,
+};
 
 /*
  * [Exposed=(Window,Worker)] interface TrustedTypePolicyFactory {

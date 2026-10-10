@@ -1,8 +1,8 @@
 # Trusted Types roadmap
 
-TT-A's Window factories, trusted values, policy callbacks, sink metadata, and CSP
-policy-creation checks are implemented. Complete TT-B below, between DOM 4D and
-4E, to close 4D's accepted string-only dependency. Then return to CharacterData;
+TT-A/TT-B's Window factories, trusted values, policy callbacks, sink metadata,
+default-policy processing, attribute enforcement, and CSP checks are implemented.
+DOM 4D's accepted string-only dependency is closed. Return to DOM 4E's CharacterData;
 the later branches are separate consumer gates.
 [Project priority](../../../../PRIORITY.md) owns that order.
 
@@ -77,6 +77,19 @@ exist; record the partial API in LIMITATIONS and generated-declaration coverage.
 Do not register unresolved references to Sanitizer or substitute an empty type.
 
 ### TT-B: default policies and DOM attribute enforcement
+
+Implemented through the existing attribute mutation path. The factory owns
+compliant-string processing; Element selects it from its node document's
+retained relevant Window. Documents capture that Window at construction, including
+`new Document()`, without becoming the Window's associated active document.
+Default callbacks return converted strings directly; the algorithm's temporary
+trusted object need not be allocated just to read its data immediately.
+
+Projected regressions cover [attribute checks](../../../../../test/browlet/browsing/policy/trusted-types/attributes.test.ts),
+[default policies](../../../../../test/browlet/browsing/policy/trusted-types/default-policy.test.ts),
+[callback ordering](../../../../../test/browlet/browsing/policy/trusted-types/attribute-callbacks.test.ts),
+[ownership](../../../../../test/browlet/browsing/policy/trusted-types/attribute-ownership.test.ts),
+and [CSP reporting](../../../../../test/browlet/browsing/policy/csp/trusted-types-sinks.test.ts).
 
 - Implement compliant-string and compliant-attribute-value checks, including
   expected-type handling, default-policy calls, `require-trusted-types-for`, and
@@ -176,6 +189,12 @@ Keep [sinks.ts](sinks.ts)'s list in sync when the relevant standards add handler
 do not derive it from Browlet's presently incomplete exposed event-handler APIs.
 
 ### Checks
+
+The selected [WPT suite](../../../../../wpt/suites/trusted-types.json) exercises
+trusted attribute conversion, SVG sink queries, and Window factory exposure.
+Enforcement WPTs still need CSP meta delivery; broader attribute matrices also
+need reflected element properties or DOM 4E's Attr node-value/text-content
+behavior. Keep those dependencies explicit rather than modifying upstream tests.
 
 Put core tests under `test/browlet/browsing/policy/trusted-types/`; extend existing DOM attribute
 and CSP suites at their actual entry points. Run focused public regressions with

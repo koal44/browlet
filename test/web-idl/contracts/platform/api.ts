@@ -73,6 +73,12 @@ const trustedPolicy: Platform.TrustedTypePolicy = window.trustedTypes.createPoli
   createScriptURL: (input) => input,
 });
 const trustedValue: Platform.TrustedType = trustedPolicy.createHTML('<b>text</b>');
+element.setAttribute('srcdoc', trustedValue);
+element.setAttributeNS(null, 'srcdoc', trustedValue);
+element.setAttribute('title', 'ordinary');
+const attribute = window.document.createAttribute('srcdoc');
+// @ts-expect-error Attr.value remains DOMString, rather than the Element setters' trusted union
+attribute.value = trustedValue;
 const trustedJSON: string = trustedValue.toJSON();
 const defaultPolicy: Platform.TrustedTypePolicy | null = window.trustedTypes.defaultPolicy;
 const sinkType: string | null = window.trustedTypes.getAttributeType('script', 'src', null);

@@ -155,7 +155,7 @@ export class DocumentImpl extends NodeImpl {
   /** Whether tasks that depend on loading completion may proceed. */
   readyForPostLoadTasks = false;
 
-  /** Relevant Window, associated once when the document enters a realm. */
+  /** Relevant Window of the construction realm, retained independently of document activity. */
   #relevantGlobalObject: WindowImpl | null = null;
   /** First base element with an href attribute, whose frozen URL supplies the base. */
   #firstBaseElement: HTMLBaseElementImpl | null = null;
@@ -186,6 +186,7 @@ export class DocumentImpl extends NodeImpl {
   ) {
     super(NodeType.Document, null, env);
     this.nodeDocument = this;
+    if (env.realm.isWindow()) this.#relevantGlobalObject = env.realm.windowImplementation;
     this.#nodeFactory = nodeFactory;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({

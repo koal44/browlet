@@ -7,9 +7,10 @@ import {
 } from './policy';
 import { trustedTypePolicyFactoryIDL } from './factory';
 
-export { TrustedHTMLImpl, TrustedScriptImpl, TrustedScriptURLImpl, type TrustedTypeName } from './value';
+export { TrustedHTMLImpl, TrustedScriptImpl, TrustedScriptURLImpl, type TrustedTypeName, type TrustedTypeValue } from './value';
 export { TrustedTypePolicyImpl, type TrustedTypePolicyOptions } from './policy';
 export { TrustedTypePolicyFactoryImpl } from './factory';
+export { getTrustedTypeDataForAttribute } from './sinks';
 
 export const trustedTypesIDLDefinitions: Definition[] = [
   trustedHTMLIDL, trustedScriptIDL, trustedScriptURLIDL, trustedTypeIDL,

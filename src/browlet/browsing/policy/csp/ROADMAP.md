@@ -109,10 +109,10 @@ documentation cleanup does not refresh those observations.
 
 ## Dependency review and later consumers
 
-- **Trusted Types:** [TT-A](../trusted-types/ROADMAP.md#tt-a-trusted-values-policies-and-the-window-factory)
-  implements policy-name restrictions and both dispositions through existing
-  Window policy state and violation delivery. TT-B's default-policy/attribute
-  enforcement and `require-trusted-types-for` checks are next.
+- **Trusted Types:** [TT-A/TT-B](../trusted-types/ROADMAP.md#next-slices)
+  implement policy-name restrictions, attribute default-policy/enforcement checks,
+  and both dispositions through existing Window policy state and violation
+  delivery. `require-trusted-types-for` reports each unsatisfied policy independently.
   Parser options, sanitization, script compilation, and workers remain separate
   consumer gates in that roadmap.
 - **HTML delivery:** meta policies and their directive restrictions; full

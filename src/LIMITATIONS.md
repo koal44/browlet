@@ -163,9 +163,10 @@ values are intentional [binding contracts](web-idl/README.md), not missing APIs.
 
 ## Live DOM mutation
 
-Attribute setters remain string-only and do not enforce Trusted Types. Their
-common change path reaches provisional observer, custom-element, and slot hooks;
-it does not yet deliver mutation records, reactions, or slot changes. The
+Element attribute setters, Attr attachment, and attached `Attr.value` writes
+enforce Trusted Types. Their common change path reaches provisional observer,
+custom-element, and slot hooks; it does not yet deliver mutation records,
+reactions, or slot changes. The
 [attribute slice](browlet/dom/nodes/ROADMAP.md#section-4-slices) records these
 dependencies and the tests for the implemented storage and mutation behavior.
 
@@ -183,8 +184,12 @@ also rejects recursive calls that would otherwise return null before filtering.
 Window exposes trusted string values, policies, factory queries, and CSP
 `trusted-types` policy-creation restrictions with violation reporting. Creating
 a trusted value does not sanitize its contents; that is the policy callback's work.
-Default policies are retained, but sink enforcement and default-policy invocation
-remain TT-B. Attribute setters therefore retain their provisional string-only path.
+Default policies and `require-trusted-types-for` apply to Element attribute setters,
+Attr/NamedNodeMap attachment, and attached `Attr.value` writes, including
+report-only violations and reentrant callbacks. Inherited `Attr.nodeValue` and
+`textContent` behavior remains DOM 4E. Internal/parser attribute storage does not
+run author-setter checks. CSP meta delivery remains an HTML integration gate;
+the existing response-header path supplies enforced policies.
 
 `TrustedHTMLParserOptions`, `createParserOptions`, and its callback are absent,
 including from generated declarations, until the real Sanitizer dependencies

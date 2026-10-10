@@ -46,9 +46,9 @@ loading, and much of the public DOM remain unfinished. Follow the
 [loader](loader/ROADMAP.md), and [scripting](scripting/ROADMAP.md) plans rather
 than interpreting implemented Fetch as complete HTML loading.
 
-Trusted Types TT-A supplies Window factories, policies, sink metadata, and CSP
-policy-creation checks. [TT-B](browsing/policy/trusted-types/ROADMAP.md#tt-b-default-policies-and-dom-attribute-enforcement)
-is next for DOM 4D's attributes, before returning to DOM 4E. Parsing/sanitizer and
+Trusted Types TT-A/TT-B supply Window factories, policies, sink metadata,
+default-policy processing, attribute enforcement, and CSP reporting.
+Return to DOM 4E. Parsing/sanitizer and
 script/worker integrations remain gated.
 
 ## Later external consumers

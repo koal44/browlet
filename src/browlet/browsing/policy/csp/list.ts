@@ -132,6 +132,33 @@ export class CSPList implements FetchCSPList {
     return false;
   }
 
+  /** Whether any applicable policy requires a trusted value for this sink group. */
+  // https://w3c.github.io/trusted-types/dist/spec/#does-sink-require-trusted-types
+  doesSinkTypeRequireTrustedTypes(sinkGroup: string, includeReportOnlyPolicies: boolean): boolean {
+    if (sinkGroup !== 'script') return false;
+    return this.policies.some((policy) =>
+      (includeReportOnlyPolicies || policy.disposition === 'enforce') &&
+      policy.directives.get('require-trusted-types-for')?.tokens.some((token) => asciiLower(token) === "'script'"),
+    );
+  }
+
+  /** Report every failed sink requirement; any enforcing violation blocks the assignment. */
+  // https://w3c.github.io/trusted-types/dist/spec/#should-block-sink-type-mismatch
+  isTrustedTypeSinkMismatchBlocked(sink: string, sinkGroup: string, source: string, env: BrowletEnvironment): boolean {
+    if (sinkGroup !== 'script') return false;
+    const sample = sink === 'Function' ? source.replace(/^(?:async )?function\*? anonymous/, '') : source;
+    let blocked = false;
+    for (const policy of this.policies) {
+      const tokens = policy.directives.get('require-trusted-types-for')?.tokens;
+      if (!tokens?.some((token) => asciiLower(token) === "'script'")) continue;
+      const violation = new CSPViolation(policy, 'require-trusted-types-for', 'trusted-types-sink', env);
+      violation.sample = `${sink}|${sample.slice(0, 40)}`;
+      violation.report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    return blocked;
+  }
+
   /** Report policy-creation violations for both dispositions; any enforcing violation blocks. */
   // https://w3c.github.io/trusted-types/dist/spec/#should-block-create-policy
   // The owning environment supplies the global's violation-reporting context.

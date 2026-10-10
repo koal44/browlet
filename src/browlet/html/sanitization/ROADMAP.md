@@ -8,7 +8,7 @@ validation/copying can be a separate earlier slice when a consumer needs it.
 [Trusted Types TT-C](../../browsing/policy/trusted-types/ROADMAP.md#later-slices-and-dependency-gates)
 is such a consumer: parser-option policies require real Sanitizer construction,
 presets, configuration invariants, and independent copies. Those contracts remain
-owned here. They are deferred beyond the next TT-A/TT-B policy/attribute pass;
+owned here. They remain deferred after the completed TT-A/TT-B policy/attribute pass;
 do not supply an empty Sanitizer or permissive placeholder to remove the dependency.
 
 | Planned source | Contract | Specification |

@@ -48,8 +48,11 @@ export class AttrImpl extends NodeImpl {
   }
 
   set value(value: string) {
-    // PROVISIONAL(Trusted Types): attached writes need the compliant-value check and
-    // must recheck ownership afterward, since a default policy can detach the Attr.
+    // https://dom.spec.whatwg.org/#set-an-existing-attribute-value
+    if (this.ownerElement !== null) {
+      value = this.ownerElement.getTrustedTypeCompliantAttributeValue(this.localName, this.namespaceURI, value);
+    }
+    // change() reads the current owner after the callback, including null if it detached us.
     this.change(value);
   }
 

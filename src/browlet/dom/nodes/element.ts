@@ -2,7 +2,7 @@ import { HTML_NAMESPACE } from '../../../infra/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import {
-  arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, sequence, xattr,
+  arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames,
   type PrimaryInterfaceDefinition,
 } from '../../../web-idl/index';
@@ -11,6 +11,7 @@ import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylel
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
 import type { EventImpl } from '../events/index';
+import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
@@ -112,27 +113,27 @@ export class ElementImpl extends NodeImpl {
   }
 
   // https://dom.spec.whatwg.org/#dom-element-setattribute
-  setAttribute(qualifiedName: string, value: string): void {
+  setAttribute(qualifiedName: string, value: TrustedTypeValue | string): void {
     if (!isValidAttributeLocalName(qualifiedName)) {
       throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
     }
     qualifiedName = this.#normalizeAttributeName(qualifiedName);
-    // PROVISIONAL(Trusted Types): accept converted strings until compliant-value checks exist.
+    const verifiedValue = this.getTrustedTypeCompliantAttributeValue(qualifiedName, null, value);
     const attribute = this.#attributeList.find(
       (candidate) => candidate.name === qualifiedName,
     );
     if (attribute) {
-      attribute.change(value);
+      attribute.change(verifiedValue);
     } else {
-      this.appendAttribute(this.nodeDocument.createAttributeNode(qualifiedName, value, null, null));
+      this.appendAttribute(this.nodeDocument.createAttributeNode(qualifiedName, verifiedValue, null, null));
     }
   }
 
   // https://dom.spec.whatwg.org/#dom-element-setattributens
-  setAttributeNS(namespace: string | null, qualifiedName: string, value: string): void {
+  setAttributeNS(namespace: string | null, qualifiedName: string, value: TrustedTypeValue | string): void {
     const [namespaceURI, prefix, localName] = validateAndExtract(namespace, qualifiedName, 'attribute');
-    // PROVISIONAL(Trusted Types): accept converted strings until compliant-value checks exist.
-    this.setAttributeValue(localName, value, prefix, namespaceURI);
+    const verifiedValue = this.getTrustedTypeCompliantAttributeValue(localName, namespaceURI, value);
+    this.setAttributeValue(localName, verifiedValue, prefix, namespaceURI);
   }
 
   // https://dom.spec.whatwg.org/#dom-element-removeattribute
@@ -192,12 +193,13 @@ export class ElementImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#concept-element-attributes-set
   // https://dom.spec.whatwg.org/#dom-element-setattributenode
   setAttributeNode(attribute: AttrImpl): AttrImpl | null {
-    // PROVISIONAL(Trusted Types): the compliant-value check precedes even InUseAttributeError.
+    const verifiedValue = this.getTrustedTypeCompliantAttributeValue(attribute.localName, attribute.namespaceURI, attribute.value);
     if (attribute.ownerElement !== null && attribute.ownerElement !== this) {
       throw new DOMExceptionImpl('', DOMExceptionNames.inUseAttribute);
     }
     const previous = this.getAttributeNodeNS(attribute.namespaceURI, attribute.localName);
     if (previous === attribute) return attribute;
+    attribute.change(verifiedValue);
     if (previous !== null) this.replaceAttribute(previous, attribute);
     else this.appendAttribute(attribute);
     return previous;
@@ -219,6 +221,16 @@ export class ElementImpl extends NodeImpl {
     attribute.ownerElement = null;
     this.handleAttributeChanges(attribute, attribute.value, null);
     return attribute;
+  }
+
+  /** Check an author assignment using this element's node document's relevant global. */
+  // https://w3c.github.io/trusted-types/dist/spec/#validate-attribute-mutation
+  getTrustedTypeCompliantAttributeValue(attributeName: string, attributeNs: string | null, value: TrustedTypeValue | string): string {
+    const data = getTrustedTypeDataForAttribute(this.localName, this.namespaceURI, attributeName, attributeNs || null);
+    if (data === null) return typeof value === 'string' ? value : value.data;
+    const global = this.nodeDocument.getRelevantGlobalObject();
+    if (global === null) throw new InternalError('A Trusted Types attribute sink needs a document with a relevant Window');
+    return global.trustedTypes.getCompliantString(data.type, value, data.sink, 'script');
   }
 
   /** Set an attribute by namespace and local name, creating it when absent. */
@@ -485,15 +497,14 @@ export const elementIDL = defineInterface({
     op('getAttributeNS', nullable(idlType.DOMString), [
       arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString),
     ]),
-    // PROVISIONAL(Trusted Types): restore the TrustedType union with its compliant-value checks.
     op('setAttribute', idlType.undefined,
-      [arg('qualifiedName', idlType.DOMString), arg('value', idlType.DOMString)],
+      [arg('qualifiedName', idlType.DOMString), arg('value', union(reference('TrustedType'), idlType.DOMString))],
       xattr('CEReactions'),
     ),
     op('setAttributeNS', idlType.undefined,
       [
         arg('namespace', nullable(idlType.DOMString)), arg('qualifiedName', idlType.DOMString),
-        arg('value', idlType.DOMString),
+        arg('value', union(reference('TrustedType'), idlType.DOMString)),
       ],
       xattr('CEReactions'),
     ),

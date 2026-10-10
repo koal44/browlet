@@ -1,0 +1,13 @@
+{
+  "$schema": "../suite.schema.json",
+  "directory": "/trusted-types/",
+  "include": [
+    "Element-setAttributeNS.html",
+    "TrustedTypePolicyFactory-getAttributeType-svg.html",
+    "Window-TrustedTypes.html"
+  ],
+  "support": [
+    "support/helper.sub.js",
+    "support/namespaces.js"
+  ]
+}

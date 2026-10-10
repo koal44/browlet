@@ -35,9 +35,9 @@ the interface exists; implementations receive already-converted values.
 | 4H. Shadow trees | ShadowRoot, attachment, slottables, assignment, and slotchange delivery | Shadow topology and slot changes use the same mutation and checkpoint machinery |
 | 4I. Node and Document completion | Clone/import, equality, namespace lookup, document factories, DOMImplementation, XML leaf nodes, and remaining declared members | Public interface coverage followed by an ordered §4 audit |
 
-[Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) is the next
-cross-specification dependency, between 4D and 4E. Complete Window policy/CSP
-behavior and the existing attribute checks, then resume this table at 4E.
+[Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) completes
+the Window policy/CSP dependency and existing attribute checks between 4D and 4E.
+Resume this table at 4E.
 Parser options, sanitization, and script/worker enforcement are later branches,
 not additions to the current DOM slice.
 
@@ -79,9 +79,12 @@ cover live indices, supported names, collisions, and mutation errors. CSSOM read
 and writes the null-namespace style attribute through the shared DOM operations;
 namespaced attributes with the same qualified name stay independent.
 
-Trusted Types remains an explicitly accepted provisional dependency until the
-scheduled TT-A/TT-B pass supplies compliant-attribute-value checks and their
-reentrant ownership handling. Setters currently retain string-only conversion.
+Trusted Types checks now precede Element setters, Attr attachment, and attached
+`Attr.value` changes, including callback-driven replacement, detachment, and
+adoption. Element setters preserve the TrustedType union through Web IDL;
+`Attr.value` remains a string boundary. Documents capture their construction
+Window even when detached, and adoption selects the destination document's
+relevant global without changing existing platform identities.
 4E's Attr node-value/text-content setters must reuse the checked value operation.
 Mutation records retain a provisional `queueAttributeMutationRecord()` call until
 4G. Slot/slottable name changes enter

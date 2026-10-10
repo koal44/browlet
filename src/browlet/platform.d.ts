@@ -1138,8 +1138,8 @@ export interface Element extends Node {
   getAttributeNames(): Array<string>;
   getAttribute(qualifiedName: string): (string | null);
   getAttributeNS(namespace: (string | null), localName: string): (string | null);
-  setAttribute(qualifiedName: string, value: string): void;
-  setAttributeNS(namespace: (string | null), qualifiedName: string, value: string): void;
+  setAttribute(qualifiedName: string, value: ((TrustedHTML | TrustedScript | TrustedScriptURL) | string)): void;
+  setAttributeNS(namespace: (string | null), qualifiedName: string, value: ((TrustedHTML | TrustedScript | TrustedScriptURL) | string)): void;
   removeAttribute(qualifiedName: string): void;
   removeAttributeNS(namespace: (string | null), localName: string): void;
   toggleAttribute(qualifiedName: string, force?: boolean): boolean;

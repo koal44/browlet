@@ -53,6 +53,9 @@ export class TrustedScriptURLImpl {
 /** String-bearing Trusted Types supported before the parser-options integration. */
 export type TrustedTypeName = 'TrustedHTML' | 'TrustedScript' | 'TrustedScriptURL';
 
+/** Concrete values supplied by the TrustedType union's Web IDL conversion. */
+export type TrustedTypeValue = TrustedHTMLImpl | TrustedScriptImpl | TrustedScriptURLImpl;
+
 /*
  * [Exposed=(Window,Worker)] interface TrustedHTML {
  *   stringifier;
