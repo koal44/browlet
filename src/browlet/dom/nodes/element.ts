@@ -81,38 +81,6 @@ export class ElementImpl extends NodeImpl {
     return value instanceof ElementImpl;
   }
 
-  get children(): HTMLCollectionImpl<ElementImpl> {
-    return this.#parentNodeMixin.children;
-  }
-
-  get firstElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.firstElementChild;
-  }
-
-  get lastElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.lastElementChild;
-  }
-
-  get childElementCount(): number {
-    return this.#parentNodeMixin.childElementCount;
-  }
-
-  moveBefore(node: NodeImpl, child: NodeImpl | null): void {
-    this.#parentNodeMixin.moveBefore(node, child);
-  }
-
-  get previousElementSibling(): ElementImpl | null {
-    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
-  }
-
-  get nextElementSibling(): ElementImpl | null {
-    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
-  }
-
-  remove(): void {
-    this.#childNodeMixin.remove();
-  }
-
   /** Return the attribute value, or null when the name is absent. */
   // https://dom.spec.whatwg.org/#dom-element-getattribute
   getAttribute(qualifiedName: string): string | null {
@@ -132,26 +100,6 @@ export class ElementImpl extends NodeImpl {
         attribute.namespaceURI === namespaceURI &&
         attribute.localName === localName,
     )?.value ?? null;
-  }
-
-  // https://dom.spec.whatwg.org/#dom-element-hasattribute
-  hasAttribute(qualifiedName: string): boolean {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    return this.attributes.some(
-      (attribute) => attribute.name === qualifiedName,
-    );
-  }
-
-  // https://dom.spec.whatwg.org/#dom-element-hasattributens
-  hasAttributeNS(namespaceURI: string | null, localName: string): boolean {
-    namespaceURI = normalizeNamespace(namespaceURI);
-
-    return this.attributes.some(
-      (attribute) =>
-        attribute.namespaceURI === namespaceURI &&
-        attribute.localName === localName,
-    );
   }
 
   // https://dom.spec.whatwg.org/#dom-element-setattribute
@@ -179,56 +127,24 @@ export class ElementImpl extends NodeImpl {
     }
   }
 
-  /** Live collection of descendants containing every requested class. */
-  // https://dom.spec.whatwg.org/#dom-element-getelementsbyclassname
-  getElementsByClassName(classNames: string): HTMLCollectionImpl {
-    return findElementsByClassName(this, classNames);
+  // https://dom.spec.whatwg.org/#dom-element-hasattribute
+  hasAttribute(qualifiedName: string): boolean {
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+
+    return this.attributes.some(
+      (attribute) => attribute.name === qualifiedName,
+    );
   }
 
-  // https://dom.spec.whatwg.org/#dom-element-getelementsbytagname
-  getElementsByTagName(qualifiedName: string): HTMLCollectionImpl {
-    return findElementsByTagName(this, qualifiedName);
-  }
+  // https://dom.spec.whatwg.org/#dom-element-hasattributens
+  hasAttributeNS(namespaceURI: string | null, localName: string): boolean {
+    namespaceURI = normalizeNamespace(namespaceURI);
 
-  // https://dom.spec.whatwg.org/#dom-element-getelementsbytagnamens
-  getElementsByTagNameNS(
-    namespaceURI: string | null,
-    localName: string,
-  ): HTMLCollectionImpl {
-    return findElementsByTagNameNS(this, namespaceURI, localName);
-  }
-
-  /** Author-facing slot lookup excludes closed shadow roots. */
-  // https://dom.spec.whatwg.org/#dom-slotable-assignedslot
-  get assignedSlot(): HTMLSlotElementImpl | null {
-    return this.#slottableMixin.findSlot(this, true);
-  }
-
-  setAssignedSlot(slot: HTMLSlotElementImpl | null): void {
-    this.#slottableMixin.assignedSlot = slot;
-  }
-
-  /** Update named slot assignment through the shared slottable behavior. */
-  assignSlot(): void {
-    this.#slottableMixin.assignSlot(this);
-  }
-
-  override getAssignedSlot(): HTMLSlotElementImpl | null {
-    return this.#slottableMixin.assignedSlot;
-  }
-
-  override getEventParent(_event: EventImpl): NodeImpl | null {
-    return this.#slottableMixin.assignedSlot ?? this.parentNode;
-  }
-
-  /** Defer child-dependent style processing while the parser populates this element. */
-  beginParsingChildren(): void {
-    this.linkStyleMixin?.beginParsingChildren();
-  }
-
-  /** Resume style processing once the parser has supplied the element's children. */
-  finishParsingChildren(): void {
-    this.linkStyleMixin?.finishParsingChildren();
+    return this.attributes.some(
+      (attribute) =>
+        attribute.namespaceURI === namespaceURI &&
+        attribute.localName === localName,
+    );
   }
 
   /** Set an attribute by namespace and local name, creating it when absent. */
@@ -270,6 +186,80 @@ export class ElementImpl extends NodeImpl {
     this.linkStyleMixin?.attributeChanged(localName);
   }
 
+  // https://dom.spec.whatwg.org/#dom-element-getelementsbytagname
+  getElementsByTagName(qualifiedName: string): HTMLCollectionImpl {
+    return findElementsByTagName(this, qualifiedName);
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-getelementsbytagnamens
+  getElementsByTagNameNS(
+    namespaceURI: string | null,
+    localName: string,
+  ): HTMLCollectionImpl {
+    return findElementsByTagNameNS(this, namespaceURI, localName);
+  }
+
+  /** Live collection of descendants containing every requested class. */
+  // https://dom.spec.whatwg.org/#dom-element-getelementsbyclassname
+  getElementsByClassName(classNames: string): HTMLCollectionImpl {
+    return findElementsByClassName(this, classNames);
+  }
+
+  get children(): HTMLCollectionImpl<ElementImpl> {
+    return this.#parentNodeMixin.children;
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
+  }
+
+  moveBefore(node: NodeImpl, child: NodeImpl | null): void {
+    this.#parentNodeMixin.moveBefore(node, child);
+  }
+
+  get previousElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
+  }
+
+  get nextElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
+  }
+
+  remove(): void {
+    this.#childNodeMixin.remove();
+  }
+
+  /** Author-facing slot lookup excludes closed shadow roots. */
+  // https://dom.spec.whatwg.org/#dom-slotable-assignedslot
+  get assignedSlot(): HTMLSlotElementImpl | null {
+    return this.#slottableMixin.findSlot(this, true);
+  }
+
+  override getAssignedSlot(): HTMLSlotElementImpl | null {
+    return this.#slottableMixin.assignedSlot;
+  }
+
+  setAssignedSlot(slot: HTMLSlotElementImpl | null): void {
+    this.#slottableMixin.assignedSlot = slot;
+  }
+
+  /** Update named slot assignment through the shared slottable behavior. */
+  assignSlot(): void {
+    this.#slottableMixin.assignSlot(this);
+  }
+
+  override getEventParent(_event: EventImpl): NodeImpl | null {
+    return this.#slottableMixin.assignedSlot ?? this.parentNode;
+  }
+
   /** Return the lazily created declaration reflected by the style attribute. */
   getInlineStyle(): CSSStyleDeclarationImpl {
     return (this.#inlineStyleMixin ??=
@@ -279,6 +269,16 @@ export class ElementImpl extends NodeImpl {
   /** Style sheet supplied by this element, if its style behavior has one. */
   getStyleSheet(): CSSStyleSheetImpl | null {
     return this.linkStyleMixin?.sheet ?? null;
+  }
+
+  /** Defer child-dependent style processing while the parser populates this element. */
+  beginParsingChildren(): void {
+    this.linkStyleMixin?.beginParsingChildren();
+  }
+
+  /** Resume style processing once the parser has supplied the element's children. */
+  finishParsingChildren(): void {
+    this.linkStyleMixin?.finishParsingChildren();
   }
 
   /** Attempt an upgrade using this element's registry and name. */

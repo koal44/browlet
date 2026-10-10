@@ -38,4 +38,3 @@ export {
 } from './shadow-root';
 export { SlottableMixin, slottableIDL } from './slottable';
 export { TextImpl, textIDL, textIncludesSlottableIDL } from './text';
-export { TreeNode } from './tree';

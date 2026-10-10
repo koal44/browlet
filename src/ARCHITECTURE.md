@@ -399,19 +399,18 @@ compose these mixins; the mixins do not construct browser environments or nodes.
 
 Document, Element, and the HTML, SVG, and MathML element implementations live
 under `browlet/dom/nodes`, alongside their element-selection table. Namespace
-directories retain their indexes and declaration collections. `TreeNode` belongs
-beside Node: its event-aware tree storage is part of the node implementation
-family, not DOM's independent name and ordered-set helpers. HTML custom-element
-names and registry machinery live under `dom/nodes/html/custom-elements` with
-that same family. Parsing remains a separate consumer under `browlet/html/parser`;
+directories retain their indexes and declaration collections. `NodeImpl` owns
+its tree links directly and extends `EventTargetImpl`; tree storage is part of
+the node implementation, not DOM's independent name and ordered-set helpers.
+HTML custom-element names and registry machinery live under
+`dom/nodes/html/custom-elements` with that same family. Parsing remains a separate
+consumer under `browlet/html/parser`;
 HTML's remaining roadmap-only areas keep their provisional locations.
 
-`TreeNode` exposes protected link operations to Node, without running DOM
-notifications or detaching nodes implicitly. `NodeImpl` owns the ordered
-insertion/removal/adoption path and node-specific extension steps; parser
-structural callbacks use that same path. The current mutation path uses explicit
-provisional Range, traversal, observer, slot, and custom-element participants
-so ordinary tree mutations can be exercised before those features exist.
+`NodeImpl` keeps raw link operations private, so subclasses and parser consumers
+use its ordered insertion/removal/adoption path and node-specific extension
+steps. Structural mutations update live Range and NodeIterator participants;
+observer, slot, and custom-element delivery remain provisional.
 Their remaining behavior and ownership questions are listed in the
 [nodes roadmap](browlet/dom/nodes/ROADMAP.md).
 

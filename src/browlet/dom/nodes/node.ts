@@ -6,7 +6,7 @@ import {
   op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/index';
 
-import type { EventTargetImpl, EventImpl } from '../events/index';
+import { EventTargetImpl, type EventImpl } from '../events/index';
 import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl } from '../traversal/index';
 import type { DOMEnvironment } from '../environment';
@@ -23,11 +23,10 @@ import type { ShadowRootImpl } from './shadow-root';
 import type { RegisteredObserver } from './mutation-observer';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 import type { HTMLSlotElementImpl } from './html/index';
-import { TreeNode } from './tree';
 
-/** Base tree node with document ownership, navigation, and event ancestry. */
+/** DOM node ownership, tree links, traversal, mutation, and event ancestry. */
 // https://dom.spec.whatwg.org/#interface-node
-export abstract class NodeImpl extends TreeNode<NodeImpl> {
+export abstract class NodeImpl extends EventTargetImpl {
   /** Node kind used by the DOM's type-specific algorithms. */
   nodeType: NodeType;
   /** Associated document; a document node refers to itself. */
@@ -36,6 +35,19 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
   /** Observer associations, initially empty; observation is not implemented yet. */
   // https://dom.spec.whatwg.org/#registered-observer-list
   registeredObserverList: RegisteredObserver[] = [];
+
+  // Only the private storage operations below write these tree links.
+  // Preserve node-link types when checking the emitted JavaScript.
+  /** @type {NodeImpl | null} */
+  #parent: NodeImpl | null = null;
+  /** @type {NodeImpl | null} */
+  #firstChild: NodeImpl | null = null;
+  /** @type {NodeImpl | null} */
+  #lastChild: NodeImpl | null = null;
+  /** @type {NodeImpl | null} */
+  #previousSibling: NodeImpl | null = null;
+  /** @type {NodeImpl | null} */
+  #nextSibling: NodeImpl | null = null;
 
   constructor(
     nodeType: NodeType,
@@ -58,34 +70,237 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return this.nodeDocument.baseURI;
   }
 
-  /** Owning document exposed to JavaScript; null for document nodes. */
-  // https://dom.spec.whatwg.org/#dom-node-ownerdocument
-  get ownerDocument(): DocumentImpl | null {
-    return this.isDocument() ? null : this.nodeDocument;
-  }
-
-  // https://dom.spec.whatwg.org/#dom-node-parentnode
-  get parentNode(): NodeImpl | null {
-    return super.parent;
-  }
-
-  /** Immediate parent when it is an element; does not search ancestors. */
-  // https://dom.spec.whatwg.org/#dom-node-parentelement
-  get parentElement(): ElementImpl | null {
-    const parent = super.parent;
-    return parent?.isElement() ? parent : null;
-  }
-
   /** Whether the node belongs to a document, including through shadow hosts. */
   // https://dom.spec.whatwg.org/#dom-node-isconnected
   get isConnected(): boolean {
     return this.getShadowIncludingRoot().isDocument();
   }
 
+  /** Owning document exposed to JavaScript; null for document nodes. */
+  // https://dom.spec.whatwg.org/#dom-node-ownerdocument
+  get ownerDocument(): DocumentImpl | null {
+    return this.isDocument() ? null : this.nodeDocument;
+  }
+
   /** Return the tree root, crossing shadow hosts when composed is true. */
   // https://dom.spec.whatwg.org/#dom-node-getrootnode
   getRootNode(options?: GetRootNodeOptionsRecord): NodeImpl {
-    return options?.composed ? this.getShadowIncludingRoot() : super.getRoot();
+    return options?.composed ? this.getShadowIncludingRoot() : this.getRoot();
+  }
+
+  // https://dom.spec.whatwg.org/#dom-node-parentnode
+  get parentNode(): NodeImpl | null {
+    return this.#parent;
+  }
+
+  /** Immediate parent when it is an element; does not search ancestors. */
+  // https://dom.spec.whatwg.org/#dom-node-parentelement
+  get parentElement(): ElementImpl | null {
+    const parent = this.#parent;
+    return parent?.isElement() ? parent : null;
+  }
+
+  get firstChild(): NodeImpl | null {
+    return this.#firstChild;
+  }
+
+  get lastChild(): NodeImpl | null {
+    return this.#lastChild;
+  }
+
+  get previousSibling(): NodeImpl | null {
+    return this.#previousSibling;
+  }
+
+  get nextSibling(): NodeImpl | null {
+    return this.#nextSibling;
+  }
+
+  hasChildren(): boolean {
+    return this.#firstChild !== null;
+  }
+
+  // https://dom.spec.whatwg.org/#concept-tree-root
+  getRoot(): NodeImpl {
+    if (!this.#parent) return this;
+
+    let root = this.#parent;
+    while (root.#parent) root = root.#parent;
+    return root;
+  }
+
+  /** Find the outermost tree root by following shadow hosts. */
+  // https://dom.spec.whatwg.org/#concept-shadow-including-root
+  getShadowIncludingRoot(): NodeImpl {
+    let root = this.getRoot();
+    let host = root.getShadowRootHost();
+
+    while (NodeImpl.is(host)) {
+      root = host.getRoot();
+      host = root.getShadowRootHost();
+    }
+
+    return root;
+  }
+
+  /** Number of preceding siblings in this node's current tree. */
+  // https://dom.spec.whatwg.org/#concept-tree-index
+  getIndex(): number {
+    let index = 0;
+    for (let sibling = this.#previousSibling; sibling; sibling = sibling.#previousSibling) index++;
+    return index;
+  }
+
+  /** DOM node length: UTF-16 units for character data, otherwise child count (zero for Attr/doctype). */
+  // https://dom.spec.whatwg.org/#concept-node-length
+  getLength(): number {
+    if (this.isCharacterData()) return this.data.length;
+    let length = 0;
+    for (let child = this.firstChild; child; child = child.nextSibling) length++;
+    return length;
+  }
+
+  /** Concatenate direct Text children in tree order, excluding nested descendants. */
+  // https://dom.spec.whatwg.org/#concept-child-text-content
+  getChildTextContent(): string {
+    let content = '';
+    for (let child = this.firstChild; child; child = child.nextSibling) {
+      if (child.isText()) content += child.data;
+    }
+    return content;
+  }
+
+  // https://dom.spec.whatwg.org/#concept-tree-inclusive-descendant
+  contains(other: NodeImpl | null): boolean {
+    if (!other) return false;
+    if (other === this) return true;
+
+    for (let ancestor = other.#parent; ancestor; ancestor = ancestor.#parent) {
+      if (ancestor === this) return true;
+    }
+
+    return false;
+  }
+
+  // https://dom.spec.whatwg.org/#concept-tree-order
+  comparePosition(other: NodeImpl): -1 | 0 | 1 | null {
+    if (other === this) return 0;
+
+    const thisChain: NodeImpl[] = [this];
+    for (let ancestor = this.#parent; ancestor; ancestor = ancestor.#parent) {
+      thisChain.push(ancestor);
+    }
+
+    const otherChain = [other];
+    for (let ancestor = other.#parent; ancestor; ancestor = ancestor.#parent) {
+      otherChain.push(ancestor);
+    }
+
+    if (thisChain.at(-1) !== otherChain.at(-1)) {
+      return null;
+    }
+
+    let thisIndex = thisChain.length - 1;
+    let otherIndex = otherChain.length - 1;
+
+    while (thisChain[thisIndex] === otherChain[otherIndex]) {
+      thisIndex--;
+      otherIndex--;
+    }
+
+    if (thisIndex < 0) {
+      return -1;
+    }
+
+    if (otherIndex < 0) {
+      return 1;
+    }
+
+    const thisChild = thisChain[thisIndex]!;
+    const otherChild = otherChain[otherIndex]!;
+
+    for (let sibling = thisChild.#nextSibling; sibling; sibling = sibling.#nextSibling) {
+      if (sibling === otherChild) return -1;
+    }
+
+    return 1;
+  }
+
+  /** Describe the other node's position relative to this node as DOM flags. */
+  // https://dom.spec.whatwg.org/#dom-node-comparedocumentposition
+  compareDocumentPosition(other: NodeImpl): number {
+    const position = this.comparePosition(other);
+
+    if (position === null) {
+      return DOCUMENT_POSITION_DISCONNECTED |
+        DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
+    }
+
+    if (position === 0) return 0;
+
+    if (position < 0) {
+      return this.contains(other)
+        ? DOCUMENT_POSITION_FOLLOWING | DOCUMENT_POSITION_CONTAINED_BY
+        : DOCUMENT_POSITION_FOLLOWING;
+    }
+
+    return other.contains(this)
+      ? DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS
+      : DOCUMENT_POSITION_PRECEDING;
+  }
+
+  /** Test ancestry including this node and any intervening shadow hosts. */
+  // https://dom.spec.whatwg.org/#concept-shadow-including-inclusive-ancestor
+  isShadowIncludingInclusiveAncestor(node: NodeImpl): boolean {
+    let current = node;
+
+    while (true) {
+      if (this.contains(current)) return true;
+
+      const host = current.getRoot().getShadowRootHost();
+      if (!NodeImpl.is(host)) return false;
+      current = host;
+    }
+  }
+
+  /** Test ancestry through tree parents and both shadow-root and template-content hosts. */
+  // https://dom.spec.whatwg.org/#concept-tree-host-including-inclusive-ancestor
+  isHostIncludingInclusiveAncestor(node: NodeImpl): boolean {
+    let current: NodeImpl | null = node;
+    while (current !== null) {
+      if (current === this) return true;
+      current = current.parentNode ?? (current.isDocumentFragment() ? current.host : null);
+    }
+    return false;
+  }
+
+  /** Advance in tree order within root's subtree; this node must be root or its descendant. */
+  nextDescendant(root: NodeImpl): NodeImpl | null {
+    if (this.firstChild !== null) return this.firstChild;
+    for (let node: NodeImpl = this; node !== root; node = node.parentNode!) {
+      if (node.nextSibling !== null) return node.nextSibling;
+    }
+    return null;
+  }
+
+  /** Advance within root, visiting each host's shadow tree before its light children. */
+  // This node must be root or its shadow-including descendant.
+  // https://dom.spec.whatwg.org/#concept-shadow-including-tree-order
+  nextShadowIncludingDescendant(root: NodeImpl): NodeImpl | null {
+    if (this.isElement() && this.shadowRoot !== null) return this.shadowRoot;
+    if (this.firstChild !== null) return this.firstChild;
+    let node: NodeImpl = this;
+    while (node !== root) {
+      if (node.nextSibling !== null) return node.nextSibling;
+      if (node.isShadowRoot()) {
+        const host = node.host;
+        if (host.firstChild !== null) return host.firstChild;
+        node = host;
+      } else {
+        node = node.parentNode!;
+      }
+    }
+    return null;
   }
 
   // https://dom.spec.whatwg.org/#dom-node-insertbefore
@@ -220,7 +435,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
 
     for (const current of nodes) {
       current.adoptInto(this.nodeDocument);
-      super.insertTreeChild(current, child);
+      this.#insertTreeChild(current, child);
       RangeImpl.rootInserted(current);
 
       if (this.isElement() && this.shadowRoot !== null && this.shadowRoot.slotAssignment === 'named' &&
@@ -276,7 +491,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     NodeIteratorImpl.preRemove(this);
     const previousSibling = this.previousSibling;
     const nextSibling = this.nextSibling;
-    super.removeTreeNode();
+    this.#removeTreeNode();
 
     const slottable: ElementImpl | TextImpl | null = this.isElement() || this.isText() ? this : null;
     const slot = slottable?.getAssignedSlot() ?? null;
@@ -354,7 +569,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     NodeIteratorImpl.preRemove(node);
     const oldPrevious = node.previousSibling;
     const oldNext = node.nextSibling;
-    (node as NodeImpl).removeTreeNode();
+    node.#removeTreeNode();
     if (node.isElement() || node.isText()) node.getAssignedSlot()?.assignSlottables();
     if (oldParent.getRoot().isShadowRoot() && oldParent.isSlot() && oldParent.assignedNodesList.length === 0) {
       oldParent.signalSlotChange();
@@ -369,7 +584,7 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
 
     if (child !== null) RangeImpl.adjustForInsertion(this, child.getIndex(), 1);
     const newPrevious = child === null ? this.lastChild : child.previousSibling;
-    super.insertTreeChild(node, child);
+    this.#insertTreeChild(node, child);
     if (this.isElement() && this.shadowRoot !== null && this.shadowRoot.slotAssignment === 'named' &&
       (node.isElement() || node.isText())) node.assignSlot();
     if (this.getRoot().isShadowRoot() && this.isSlot() && this.assignedNodesList.length === 0) {
@@ -385,15 +600,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     }
     oldParent.queueTreeMutationRecord([], [node], oldPrevious, oldNext);
     this.queueTreeMutationRecord([node], [], newPrevious, child);
-  }
-
-  /** DOM node length: UTF-16 units for character data, otherwise child count (zero for Attr/doctype). */
-  // https://dom.spec.whatwg.org/#concept-node-length
-  getLength(): number {
-    if (this.isCharacterData()) return this.data.length;
-    let length = 0;
-    for (let child = this.firstChild; child; child = child.nextSibling) length++;
-    return length;
   }
 
   /** Detach and change document ownership without changing platform identity or realm. */
@@ -429,35 +635,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     }
   }
 
-  /** Advance in tree order within root's subtree; this node must be root or its descendant. */
-  nextDescendant(root: NodeImpl): NodeImpl | null {
-    if (this.firstChild !== null) return this.firstChild;
-    for (let node: NodeImpl = this; node !== root; node = node.parentNode!) {
-      if (node.nextSibling !== null) return node.nextSibling;
-    }
-    return null;
-  }
-
-  /** Advance within root, visiting each host's shadow tree before its light children. */
-  // This node must be root or its shadow-including descendant.
-  // https://dom.spec.whatwg.org/#concept-shadow-including-tree-order
-  nextShadowIncludingDescendant(root: NodeImpl): NodeImpl | null {
-    if (this.isElement() && this.shadowRoot !== null) return this.shadowRoot;
-    if (this.firstChild !== null) return this.firstChild;
-    let node: NodeImpl = this;
-    while (node !== root) {
-      if (node.nextSibling !== null) return node.nextSibling;
-      if (node.isShadowRoot()) {
-        const host = node.host;
-        if (host.firstChild !== null) return host.firstChild;
-        node = host;
-      } else {
-        node = node.parentNode!;
-      }
-    }
-    return null;
-  }
-
   /** Reassign each slot in this subtree in ordinary tree order. */
   // https://dom.spec.whatwg.org/#assign-slotables-for-a-tree
   assignSlottablesForTree(): void {
@@ -485,39 +662,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
   /** Notify the parent's children-changed steps after a character-data change. */
   notifyParentChildrenChanged(): void {
     this.parentNode?.childrenChanged();
-  }
-
-  /** Describe the other node's position relative to this node as DOM flags. */
-  // https://dom.spec.whatwg.org/#dom-node-comparedocumentposition
-  compareDocumentPosition(other: NodeImpl): number {
-    const position = super.comparePosition(other);
-
-    if (position === null) {
-      return DOCUMENT_POSITION_DISCONNECTED |
-        DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
-    }
-
-    if (position === 0) return 0;
-
-    if (position < 0) {
-      return this.contains(other)
-        ? DOCUMENT_POSITION_FOLLOWING | DOCUMENT_POSITION_CONTAINED_BY
-        : DOCUMENT_POSITION_FOLLOWING;
-    }
-
-    return other.contains(this)
-      ? DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS
-      : DOCUMENT_POSITION_PRECEDING;
-  }
-
-  /** Concatenate direct Text children in tree order, excluding nested descendants. */
-  // https://dom.spec.whatwg.org/#concept-child-text-content
-  getChildTextContent(): string {
-    let content = '';
-    for (let child = this.firstChild; child; child = child.nextSibling) {
-      if (child.isText()) content += child.data;
-    }
-    return content;
   }
 
   // Tag checks keep the base node module independent of its subclasses.
@@ -562,17 +706,6 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return this.nodeType === NodeType.DocumentType;
   }
 
-  protected override isDefaultPassiveTarget(this: NodeImpl): boolean {
-    const root = this.getRoot();
-    const document = root.isDocument() ? root : this.nodeDocument;
-
-    return (
-      this === document ||
-      this === document.documentElement ||
-      this === document.body
-    );
-  }
-
   override getEventParent(_event: EventImpl): EventTargetImpl | null {
     return this.parentNode;
   }
@@ -589,43 +722,15 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
     return NodeImpl.is(ancestor) && ancestor.isShadowIncludingInclusiveAncestor(this);
   }
 
-  /** Find the outermost tree root by following shadow hosts. */
-  // https://dom.spec.whatwg.org/#concept-shadow-including-root
-  getShadowIncludingRoot(): NodeImpl {
-    let root = this.getRoot();
-    let host = root.getShadowRootHost();
+  protected override isDefaultPassiveTarget(this: NodeImpl): boolean {
+    const root = this.getRoot();
+    const document = root.isDocument() ? root : this.nodeDocument;
 
-    while (NodeImpl.is(host)) {
-      root = host.getRoot();
-      host = root.getShadowRootHost();
-    }
-
-    return root;
-  }
-
-  /** Test ancestry including this node and any intervening shadow hosts. */
-  // https://dom.spec.whatwg.org/#concept-shadow-including-inclusive-ancestor
-  isShadowIncludingInclusiveAncestor(node: NodeImpl): boolean {
-    let current = node;
-
-    while (true) {
-      if (this.contains(current)) return true;
-
-      const host = current.getRoot().getShadowRootHost();
-      if (!NodeImpl.is(host)) return false;
-      current = host;
-    }
-  }
-
-  /** Test ancestry through tree parents and both shadow-root and template-content hosts. */
-  // https://dom.spec.whatwg.org/#concept-tree-host-including-inclusive-ancestor
-  isHostIncludingInclusiveAncestor(node: NodeImpl): boolean {
-    let current: NodeImpl | null = node;
-    while (current !== null) {
-      if (current === this) return true;
-      current = current.parentNode ?? (current.isDocumentFragment() ? current.host : null);
-    }
-    return false;
+    return (
+      this === document ||
+      this === document.documentElement ||
+      this === document.body
+    );
   }
 
   /** Run node-specific insertion steps; plain nodes have none. */
@@ -651,6 +756,59 @@ export abstract class NodeImpl extends TreeNode<NodeImpl> {
   /** Run node-specific steps after child insertion, removal, or text changes. */
   // https://dom.spec.whatwg.org/#concept-node-children-changed-ext
   protected childrenChanged(): void {}
+
+  /** Unlink an attached node after the DOM's pre-removal steps have run. */
+  #removeTreeNode(): void {
+    const parent = this.#parent;
+    if (!parent) throw new InternalError('Tree removal requires an attached node');
+
+    const previous = this.#previousSibling;
+    const next = this.#nextSibling;
+
+    if (previous) {
+      previous.#nextSibling = next;
+    } else {
+      parent.#firstChild = next;
+    }
+
+    if (next) {
+      next.#previousSibling = previous;
+    } else {
+      parent.#lastChild = previous;
+    }
+
+    this.#parent = null;
+    this.#previousSibling = null;
+    this.#nextSibling = null;
+  }
+
+  /** Link an already-adopted, detached node without running DOM participants. */
+  #insertTreeChild(node: NodeImpl, reference: NodeImpl | null): void {
+    if (node.#parent !== null) {
+      throw new InternalError('Tree insertion requires a detached node');
+    }
+    if (reference !== null && reference.#parent !== this) {
+      throw new InternalError('Tree insertion reference must belong to the parent');
+    }
+
+    const previous = reference ? reference.#previousSibling : this.#lastChild;
+
+    node.#parent = this;
+    node.#previousSibling = previous;
+    node.#nextSibling = reference;
+
+    if (previous) {
+      previous.#nextSibling = node;
+    } else {
+      this.#firstChild = node;
+    }
+
+    if (reference) {
+      reference.#previousSibling = node;
+    } else {
+      this.#lastChild = node;
+    }
+  }
 }
 
 /*

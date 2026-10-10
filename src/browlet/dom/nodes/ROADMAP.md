@@ -11,8 +11,8 @@ Those familiar interfaces are not the difficult dependency in DOM §4. The
 early prerequisite is one normative mutation path shared by script, parsers,
 ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
-`tree.ts` supplies protected pointer-storage primitives. `NodeImpl` owns the
-mutation ordering and calls those primitives after its participants have run.
+`NodeImpl` owns its tree links and mutation ordering. Its private storage
+operations update links after the required mutation participants have run.
 The 4B–4C implementation supports structural mutations with live Range and
 NodeIterator participants. Observer, slot, and custom-element delivery remain
 provisional; the full mutation path is not complete.
@@ -74,8 +74,9 @@ Range and traversal are explicit components below nodes in the import hierarchy.
 They retain concrete node types without loading node implementation classes;
 operations can use the supplied nodes and their document factories. Review any
 future runtime dependency in its own right, including Range's parsing and geometry
-extensions. Each participant owns its weak index; the tree store has no Range or
-iterator state, and roots do not keep otherwise unreachable participants alive.
+extensions. Each participant owns its weak index; the private link operations
+have no Range or iterator state, and roots do not keep otherwise unreachable
+participants alive.
 
 Mutation traversals use bounded pointer walks. Ordinary walks do not cross shadow
 roots; shadow-including walks visit a host's shadow tree before its light children.
