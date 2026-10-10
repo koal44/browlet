@@ -8,6 +8,7 @@ import {
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
 } from '../../../web-idl/index';
+import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import {
   Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
@@ -32,7 +33,7 @@ import type {
   BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
 } from '../../browsing/navigation/index';
 
-import type { HTMLCollectionImpl } from './collections';
+import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';
@@ -43,6 +44,7 @@ import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
 } from './document-or-shadow-root';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
+import { nonElementParentNodeIDL } from './non-element-parent-node';
 import { TextImpl } from './text';
 import {
   findElement, findElementById, findElementsByClassName, findElementsByTagName,
@@ -81,6 +83,8 @@ export class DocumentImpl extends NodeImpl {
   type: DocumentType = 'xml';
   /** Compatibility mode selected by the parser. */
   mode = DocumentMode.NoQuirks;
+  /** Invalidates live collections after any tree or attribute mutation in this document. */
+  collectionVersion = 0;
   /** MIME type of the document's content. */
   contentType = 'application/xml';
   /** Encoding name exposed by characterSet and its legacy aliases. */
@@ -163,6 +167,8 @@ export class DocumentImpl extends NodeImpl {
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   /** Lazily created style engine for this document. */
   #stylelet: Stylelet | undefined;
+  /** Selector parsing and compilation caches shared by queries in this document. */
+  #selectlet: Selectlet<NodeImpl, ElementImpl, DocumentImpl, DocumentFragmentImpl> | undefined;
   /** Registry and style-sheet access shared with shadow roots. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   /** Live child collection and element-child navigation. */
@@ -314,7 +320,7 @@ export class DocumentImpl extends NodeImpl {
     this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
-  get children(): HTMLCollectionImpl<ElementImpl> {
+  get children(): HTMLCollectionImpl {
     return this.#parentNodeMixin.children;
   }
 
@@ -330,8 +336,28 @@ export class DocumentImpl extends NodeImpl {
     return this.#parentNodeMixin.childElementCount;
   }
 
+  prepend(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.prepend(...nodes);
+  }
+
+  append(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.append(...nodes);
+  }
+
+  replaceChildren(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.replaceChildren(...nodes);
+  }
+
   moveBefore(node: NodeImpl, child: NodeImpl | null): void {
     this.#parentNodeMixin.moveBefore(node, child);
+  }
+
+  querySelector(selectors: string): ElementImpl | null {
+    return this.#parentNodeMixin.querySelector(selectors);
+  }
+
+  querySelectorAll(selectors: string): NodeListImpl {
+    return this.#parentNodeMixin.querySelectorAll(selectors);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createelement
@@ -349,7 +375,8 @@ export class DocumentImpl extends NodeImpl {
     qualifiedName: string,
     _options?: string | ElementCreationOptionsRecord,
   ): ElementImpl {
-    return this.createElementNode(qualifiedName, namespaceURI ?? '');
+    const [namespace, prefix, localName] = validateAndExtract(namespaceURI, qualifiedName, 'element');
+    return this.createElementNode(localName, namespace ?? '', prefix);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createtextnode
@@ -416,6 +443,28 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-nonelementparentnode-getelementbyid
   getElementById(id: string): ElementImpl | null {
     return findElementById(this, id);
+  }
+
+  /** Lazily bind Selectlet to this document's DOM adapter and selector exception policy. */
+  getSelectorEngine(): Selectlet<NodeImpl, ElementImpl, DocumentImpl, DocumentFragmentImpl> {
+    return this.#selectlet ??= createSelectlet(this, {
+      env: this.env,
+      errors: {
+        syntax(error) {
+          throw new DOMExceptionImpl(error.message, DOMExceptionNames.syntax);
+        },
+      },
+    });
+  }
+
+  /** Convert all strings first, then assemble multiple arguments through ordinary insertion. */
+  // https://dom.spec.whatwg.org/#convert-nodes-into-a-node
+  convertNodesIntoNode(nodes: (NodeImpl | string)[]): NodeImpl {
+    const converted = nodes.map((node) => typeof node === 'string' ? this.createTextNode(node) : node);
+    if (converted.length === 1) return converted[0]!;
+    const fragment = this.createDocumentFragment();
+    for (const node of converted) fragment.appendChild(node);
+    return fragment;
   }
 
   // https://dom.spec.whatwg.org/#dom-document-getelementsbyclassname
@@ -808,7 +857,7 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Allocate the registered element implementation for a namespace and local name. */
-  createElementNode(localName: string, namespaceURI: string): ElementImpl {
+  createElementNode(localName: string, namespaceURI: string, prefix: string | null = null): ElementImpl {
     const elementInterface = resolveElementInterface(namespaceURI, localName);
     return this.#nodeFactory.constructNode<ElementImpl>(
       elementInterface.implementation,
@@ -816,6 +865,7 @@ export class DocumentImpl extends NodeImpl {
         document: this,
         localName,
         namespaceURI,
+        prefix,
         treeScopeResolver: this.#treeScopeResolver,
       }, this.env],
     );
@@ -990,6 +1040,7 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
         },
       ),
     ]),
+    op('createDocumentFragment', reference('DocumentFragment'), [], xattr('NewObject')),
     op('createTextNode', reference('Text'), [
       arg('data', idlType.DOMString),
     ]),
@@ -1016,9 +1067,6 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
       ],
       xattr('NewObject'),
     ),
-    op('getElementById', nullable(reference('Element')), [
-      arg('elementId', idlType.DOMString),
-    ]),
   ],
 });
 
@@ -1116,6 +1164,13 @@ export const elementCreationOptionsIDL = defineDictionary({
  */
 export const documentIncludesParentNodeIDL = defineIncludes({
   interface: 'Document', mixin: parentNodeIDL.name,
+});
+
+/*
+ * Document includes NonElementParentNode;
+ */
+export const documentIncludesNonElementParentNodeIDL = defineIncludes({
+  interface: 'Document', mixin: nonElementParentNodeIDL.name,
 });
 
 /*

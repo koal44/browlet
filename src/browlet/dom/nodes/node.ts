@@ -12,6 +12,7 @@ import { NodeIteratorImpl } from '../traversal/index';
 import type { DOMEnvironment } from '../environment';
 
 import type { CharacterDataImpl } from './character-data';
+import { NodeListImpl } from './collections';
 import type { AttrImpl } from './attribute';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
@@ -36,6 +37,9 @@ export abstract class NodeImpl extends EventTargetImpl {
   /** Observer associations, initially empty; observation is not implemented yet. */
   // https://dom.spec.whatwg.org/#registered-observer-list
   registeredObserverList: RegisteredObserver[] = [];
+
+  /** Stable live view, allocated only when childNodes is requested. */
+  #childNodes: NodeListImpl | undefined;
 
   // Only the private storage operations below write these tree links.
   // Preserve node-link types when checking the emitted JavaScript.
@@ -99,6 +103,11 @@ export abstract class NodeImpl extends EventTargetImpl {
   get parentElement(): ElementImpl | null {
     const parent = this.#parent;
     return parent?.isElement() ? parent : null;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-node-childnodes
+  get childNodes(): NodeListImpl {
+    return this.#childNodes ??= new NodeListImpl(this);
   }
 
   get firstChild(): NodeImpl | null {
@@ -858,6 +867,7 @@ export abstract class NodeImpl extends EventTargetImpl {
     this.#parent = null;
     this.#previousSibling = null;
     this.#nextSibling = null;
+    this.nodeDocument.collectionVersion++;
   }
 
   /** Link an already-adopted, detached node without running DOM participants. */
@@ -886,6 +896,7 @@ export abstract class NodeImpl extends EventTargetImpl {
     } else {
       this.#lastChild = node;
     }
+    this.nodeDocument.collectionVersion++;
   }
 }
 
@@ -961,6 +972,7 @@ export const nodeIDL = defineInterface({
     roAttr('ownerDocument', nullable(reference('Document'))),
     roAttr('parentNode', nullable(reference('Node'))),
     roAttr('parentElement', nullable(reference('Element'))),
+    roAttr('childNodes', reference('NodeList'), xattr('SameObject')),
     roAttr('firstChild', nullable(reference('Node'))),
     roAttr('lastChild', nullable(reference('Node'))),
     roAttr('previousSibling', nullable(reference('Node'))),

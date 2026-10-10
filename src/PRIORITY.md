@@ -34,13 +34,15 @@ preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
 File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
-DOM 4A-4E now provide structural/text mutation, live Range/NodeIterator participation,
-and the shared attribute path. Trusted Types TT-A/TT-B supply Window factories,
+DOM 4A-4F now provide structural/text mutation, live Range/NodeIterator participation,
+the shared attribute path, live/static collections, convenience mutations, and
+Selectlet-backed selector APIs. Trusted Types TT-A/TT-B supply Window factories,
 trusted values and policies, default-policy processing, attribute enforcement,
 and CSP checks/reporting through the existing mutation path.
 [DOM 4E](browlet/dom/nodes/ROADMAP.md#section-4-slices) retains an approved provisional
-ProcessingInstruction attribute-synchronization hook. Collections and tree mixins follow in 4F,
-with TreeWalker available as a bounded prerequisite for the Selectlet adapter.
+ProcessingInstruction attribute-synchronization hook. Mutation observers follow
+in 4G. Selectlet uses the existing pointer traversal; TreeWalker remains separate
+traversal work rather than a prerequisite for selector APIs.
 Trusted parser options, sanitization, markup
 APIs, script compilation, and workers keep their later consumer gates.
 
@@ -87,9 +89,9 @@ only the [microsyntaxes](browlet/html/microsyntaxes/ROADMAP.md) needed by reflec
 [ranges](browlet/dom/ranges/ROADMAP.md), and [traversal](browlet/dom/traversal/ROADMAP.md)
 must share validity checks, adoption, insert/move/replace/remove/clone, attributes,
 and CharacterData. Include live Range adjustment and NodeIterator pre-removal.
-TreeWalker has an existing Selectlet consumer. Replace snapshot/Array shortcuts
-with proper live/static collections and expose selector APIs through one
-Selectlet adapter. Tests must reject invalid mutations without partial changes.
+Live/static collections and selector APIs use the existing Selectlet adapter.
+TreeWalker can later supply its optional traversal hook. Tests must reject
+invalid mutations without partial changes.
 
 The completed [Trusted Types TT-A/TT-B pass](browlet/browsing/policy/trusted-types/ROADMAP.md)
 closes 4D's string-only dependency through existing Web IDL and CSP owners.

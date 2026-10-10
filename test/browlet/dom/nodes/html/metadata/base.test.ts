@@ -83,7 +83,7 @@ describe('HTMLBaseElement', () => {
     const browlet = new Browlet({ route: () => '<base href="/first/">' });
     await browlet.navigate('https://example.test/page');
     const document = browlet.window.document;
-    const base = document.getElementsByTagName('base')[0]!;
+    const base = document.getElementsByTagName('base').item(0)!;
     const original = base.attributes.getNamedItem('href')!;
     original.value = '/changed/';
     expect(document.baseURI).toBe('https://example.test/changed/');

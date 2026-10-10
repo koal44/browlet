@@ -20,16 +20,17 @@ DOM §1.3 (`#selectors`) supplies one integration algorithm: parse a selectors
 string, throw a realm-correct `SyntaxError` `DOMException` on failure, and
 match against the node's tree root using the node as the scoping root.
 
-Selectlet already parses and matches against Browlet nodes, but the current
-test calls Selectlet directly. Browlet does not yet expose `querySelector()`,
-`querySelectorAll()`, `closest()`, `matches()`, or
-`webkitMatchesSelector()`. Add one narrow scope-match adapter rather than a
-second selector implementation. The DOM §4 callers then own first-result,
-static-`NodeList`, and inclusive-ancestor behavior.
-This integration is deferred to those §4 API slices, not blocked on Selectlet.
-First narrow Selectlet's full `lib.dom` input types to the host operations it
-consumes, moving tree contracts shared with Stylelet into Infra. The current
-direct integration test still exposes that typing gap.
+DOM 4F exposes `querySelector()`, `querySelectorAll()`, `closest()`, `matches()`,
+and `webkitMatchesSelector()` through the document's lazy Selectlet instance.
+The existing DOMOperations adapter preserves implementation identities and
+supplies pointer traversal without TreeWalker. ParentNode supplies the query
+scope and static NodeList results; Element supplies matching and closest.
+The public tests cover detached trees, outside ancestors, selector-list ordering,
+fresh snapshots, and realm SyntaxError identity.
+
+Focus/editing, form, media, and custom-element selector states still depend on
+their HTML owners. Keep those explicit adapter dependencies until their actual
+implementations exist; do not substitute false/default state to complete selectors.
 
 Behavioral coverage must include the scoping root, matching from the tree
 root, a detached subtree, selector-list ordering where observable, and the

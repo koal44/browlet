@@ -97,6 +97,18 @@ export class CharacterDataImpl extends NodeImpl {
     this.notifyParentChildrenChanged();
   }
 
+  before(...nodes: (NodeImpl | string)[]): void {
+    this.#childNodeMixin.before(...nodes);
+  }
+
+  after(...nodes: (NodeImpl | string)[]): void {
+    this.#childNodeMixin.after(...nodes);
+  }
+
+  replaceWith(...nodes: (NodeImpl | string)[]): void {
+    this.#childNodeMixin.replaceWith(...nodes);
+  }
+
   remove(): void {
     this.#childNodeMixin.remove();
   }

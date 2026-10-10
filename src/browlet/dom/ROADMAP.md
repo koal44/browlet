@@ -12,7 +12,7 @@ current Window implementation. Continue at §4; the integration work below remai
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §1, infrastructure | Tree topology, ordered sets, and name validation exist | DOM §1.3 scope matching is not yet exposed through the DOM selector APIs; see `infra/ROADMAP.md` |
+| DOM §1, infrastructure | Tree topology, ordered sets, name validation, and Selectlet-backed public scope matching exist | Selector host states follow the owning HTML features; see `infra/ROADMAP.md` |
 | DOM §2, events | Event/CustomEvent, EventTarget, dispatch/firing, timestamps, callback lifecycle, and Browlet signal-bound listeners exist | Complete the concrete HTML element, error-reporting, timing, and worker consumers in `events/ROADMAP.md` |
 | DOM §3, aborting | Controller/signal projection, composition, retention, EventTarget integration, onabort, and active-time timeout delivery exist | Worker lifecycle and retention-evidence limits remain in `abort/ROADMAP.md` |
 
@@ -24,8 +24,8 @@ that directly requires HTML's timeout and global-task machinery.
 
 ## Near-term order from sections 1-3
 
-1. Add the DOM §1.3 scope-match adapter over Selectlet and exercise it through
-   the public DOM selector methods when their DOM §4 members are projected.
+1. Preserve DOM §1.3 scope matching through the public selector methods; extend
+   their host states alongside the owning HTML implementations.
 2. Extend event hooks with real HTML activation, error-reporting, and worker
    consumers. Keep synchronous DOM dispatch separate from producer-owned tasks.
 3. Carry the implemented abort/timer contracts into worker lifecycle when it
@@ -35,7 +35,7 @@ that directly requires HTML's timeout and global-task machinery.
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §4, nodes | Core implementation classes exist, but many public members, collections, shadow/slot behavior, and leaf types are partial or absent | Build one normative mutation spine before treating interface breadth as progress; see `nodes/ROADMAP.md` |
+| DOM §4, nodes | Structural/text/attribute mutation, collections, tree mixins, and selectors exist; shadow/slot behavior, leaf types, and remaining members are partial or absent | Extend the shared mutation path with observers and remaining participants; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Not implemented | Put observer/signal-slot state on the Window agent and deliver it through HTML's microtask checkpoint; DOM owns records and callback semantics |
 | DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural/text mutation adjustment exist | Remaining Range operations stay in `ranges/ROADMAP.md` |
 

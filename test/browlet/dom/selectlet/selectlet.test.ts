@@ -18,7 +18,7 @@ describe('Selectlet with a Browlet DOM host', () => {
     expect(selectlet.context.env).toBe(document.env);
     expect(selectlet.context.dom).toBe(document.env.userAgent.dom);
     expect(selectlet.select('main.page > span.item'))
-      .toEqual(document.getElementsByTagName('span'));
+      .toEqual(Array.from(document.getElementsByTagName('span')));
     expect(selectlet.first('#content > .selected'))
       .toBe(document.getElementById('second'));
     expect(selectlet.matches(

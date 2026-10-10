@@ -18,7 +18,7 @@ describe('DOM node traversal', () => {
 
     expect(parent.firstElementChild).toBe(first);
     expect(parent.lastElementChild).toBe(last);
-    expect(parent.children).toEqual([first, last]);
+    expect(Array.from(parent.children)).toEqual([first, last]);
     expect(parent.childElementCount).toBe(2);
     expect(first.nextElementSibling).toBe(last);
     expect(last.previousElementSibling).toBe(first);

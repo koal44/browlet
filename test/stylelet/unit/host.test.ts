@@ -126,18 +126,18 @@ describe('Stylelet DOM hosts', () => {
     `);
     const context = document.getCSSEngine().context;
     const getNamespaceURI = vi.spyOn(context.dom, 'getNamespaceURI');
-    const main = document.getElementsByTagName('main')[0]!;
+    const main = document.getElementsByTagName('main').item(0)!;
 
     for (const tag of ['main', 'x-example', 'unknown']) {
-      expect(context.dom.isHTMLElement(document.getElementsByTagName(tag)[0]!)).toBe(true);
+      expect(context.dom.isHTMLElement(document.getElementsByTagName(tag).item(0)!)).toBe(true);
     }
     for (const tag of ['svg', 'circle', 'math', 'mi']) {
-      expect(context.dom.isHTMLElement(document.getElementsByTagName(tag)[0]!)).toBe(false);
+      expect(context.dom.isHTMLElement(document.getElementsByTagName(tag).item(0)!)).toBe(false);
     }
     expect(context.dom.isHTMLElement(document.createElementNS('urn:test', 'main'))).toBe(false);
 
     expect(matchSelectorList(parseSelectorList('MAIN')!, main, context)).not.toBeNull();
-    const circle = document.getElementsByTagName('circle')[0]!;
+    const circle = document.getElementsByTagName('circle').item(0)!;
     expect(matchSelectorList(parseSelectorList('CIRCLE')!, circle, context)).toBeNull();
     expect(matchSelectorList(parseSelectorList('circle')!, circle, context)).not.toBeNull();
     expect(getNamespaceURI).not.toHaveBeenCalled();

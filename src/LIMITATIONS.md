@@ -163,6 +163,11 @@ values are intentional [binding contracts](web-idl/README.md), not missing APIs.
 
 ## Live DOM mutation
 
+Public tree collections and selector APIs are available. Selectors requiring
+unimplemented HTML state (focus/editing, form controls, media, or custom-element
+state) still reach explicit missing host operations in the DOM adapter. These
+are recorded in the [4F scope](browlet/dom/nodes/ROADMAP.md#collections-tree-mixins-and-selectors-4f).
+
 Element attribute setters, Attr attachment, and attached `Attr.value`,
 `nodeValue`, and `textContent` writes enforce Trusted Types. Their common change
 path reaches provisional observer,

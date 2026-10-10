@@ -13,8 +13,8 @@ ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
 `NodeImpl` owns its tree links and mutation ordering. Its private storage
 operations update links after the required mutation participants have run.
-The 4B–4E implementation supports structural and text mutations with live Range
-and NodeIterator participants and a shared attribute-change path. Observer, slot,
+The 4B–4F implementation supports structural and text mutations with live Range,
+NodeIterator, and collection participants and a shared attribute-change path. Observer, slot,
 and custom-element delivery remain provisional; the full mutation path is not
 complete.
 
@@ -38,8 +38,8 @@ the interface exists; implementations receive already-converted values.
 [Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) completes
 the Window policy/CSP dependency and existing attribute checks between 4D and 4E.
 4E is implemented for the available node types; ProcessingInstruction's
-attribute synchronization remains explicitly provisional below. Collections and
-tree mixins follow in 4F.
+attribute synchronization remains explicitly provisional below. 4F is implemented;
+mutation observers follow in 4G.
 Parser options, sanitization, and script/worker enforcement are later branches,
 not additions to the current DOM slice.
 
@@ -141,13 +141,50 @@ Tree-order and boundary cases are in `node.test.ts`.
 The public and parser tests cover fragment insertion, reinsertion, retained
 adoption, and Text/Comment constructor ownership. Structural mutation tests add
 atomic replacement/move failures and live Range/NodeIterator adjustment. The
-replace-all primitive is exercised through public text-content setters; further
-convenience APIs follow in 4F. Observer delivery belongs to 4G, shadow assignment
+replace-all primitive is exercised through public text-content setters and 4F's
+convenience mutations. Observer delivery belongs to 4G, shadow assignment
 and signaling to 4H, and `[CEReactions]` to the custom-elements roadmap. Completion
 of the full mutation path requires observable tests with those real participants.
 
 Range and traversal state belongs to those owners. Observer, slot, and
 custom-element delivery must join HTML's existing checkpoint, not a new scheduler.
+
+## Collections, tree mixins, and selectors (4F)
+
+`Node.childNodes` and `ParentNode.children` retain stable collection objects.
+`NodeListImpl` owns either a static result array or a live child view;
+`HTMLCollectionImpl` owns a live filtered element view. Web IDL supplies their
+indexed/named properties and iteration. Implementations use `item()` and
+iteration, rather than pretending to be platform arrays.
+
+Live views collect lazily and reuse their contents until the owning document's
+collection revision changes. Private tree link operations and the common
+attribute-change path advance that revision before lifecycle hooks can observe
+the mutation. Adoption also checks document identity. This deliberately coarse
+invalidation adds constant work to mutations; a change elsewhere in the document
+can require recollecting a previously read view on its next access.
+
+ParentNode and ChildNode convenience methods convert strings into Text nodes and
+enter the existing mutation algorithms. Sibling methods retain a viable anchor
+while argument assembly can move the receiver itself. Document replacement
+validates while excluding its old children. NonElementParentNode is a declaration
+shared by Document and DocumentFragment, including ShadowRoot through inheritance.
+
+Each document lazily owns one Selectlet instance using its existing DOM adapter.
+Public queries provide the scoping root and project fresh static NodeLists;
+matching/closest share that engine, and parser failures become realm DOMExceptions.
+TreeWalker is unnecessary because Selectlet already supports pointer traversal.
+HTML states absent from the adapter (focus, editing, controls, media, and custom
+elements) remain explicit dependencies for selectors that inspect those states.
+
+Collection lookup regressions cover empty IDs, HTML/foreign tag-name case,
+quirks-mode class matching, null-namespace ID/name/class attributes, and namespace prefixes. The existing
+namespace validator and a retained element prefix supply the bounded construction
+prerequisite; broader factory completion remains in 4I.
+
+Public coverage is in `collections.test.ts`, `tree-mixins.test.ts`, and
+`selectors.test.ts`; implementation lookup tests exercise the same collection
+storage. MutationObserver, custom-element, and slot delivery remain outside 4F.
 
 ## Foundational mutation spine
 
@@ -213,7 +250,6 @@ declared complete until that host machinery exists.
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `dom-implementation.ts` | `DOMImplementation` | DOM §4.5.1, `#interface-domimplementation` |
-| `collections.ts` | Replace the temporary Array-backed collection with projected `NodeList` and `HTMLCollection` objects supporting live/static views and indexed/named access | DOM §4.2.10, `#old-style-collections` |
 | `cdata-section.ts` | `CDATASection` | DOM §4.12, `#interface-cdatasection` |
 | `processing-instruction.ts` | Complete the provisional target/data implementation with validation, pseudo-attributes, document construction, and Web IDL exposure | DOM §4.13, `#interface-processinginstruction` |
 
@@ -226,9 +262,9 @@ contract instead of defining it.
 
 | Family | Remaining contract | Specification |
 | --- | --- | --- |
-| `Node` and tree mixins | Complete tree constraints, cloning, equality, namespace lookup, convenience mutation methods, selectors, and every declared member | DOM §§4.2.4–4.4 |
+| `Node` and tree mixins | Complete cloning, equality, namespace lookup, and remaining declared members; collections and convenience mutations are implemented | DOM §§4.2.4–4.4 |
 | `Document` and `DOMImplementation` | Complete construction, import/adopt, lookup, event, Range, traversal, and document-factory methods | DOM §§4.5–4.5.1 |
-| `Element`, `Attr`, and `NamedNodeMap` | Observer/reaction delivery, class/token state, shadow attachment, selectors, and adjacent insertion | DOM §§4.9–4.10 |
+| `Element`, `Attr`, and `NamedNodeMap` | Observer/reaction delivery, class/token state, shadow attachment, remaining selector host states, and adjacent insertion | DOM §§4.9–4.10 |
 | `ShadowRoot` and `Slottable` | Complete tree-scope, slot-assignment, cloning/serialization flags, and public shadow-root behavior | DOM §§4.2.2, 4.2.7, and 4.8 |
 | Collections | Implement live, identity-stable `NodeList` and `HTMLCollection` plus projected indexed/named behavior; replace snapshot/Array mechanics | DOM §4.2.10 |
 | `CharacterData` and `Text` | Mutation-record delivery and the provisional ProcessingInstruction attribute-synchronization hook | DOM §§4.11–4.11.1 |

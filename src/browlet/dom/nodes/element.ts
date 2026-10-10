@@ -20,7 +20,7 @@ import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
 import type { ShadowRootImpl } from './shadow-root';
 import type { CustomElementRegistryImpl, CustomElementCallbackArguments } from './html/custom-elements/index';
-import type { HTMLCollectionImpl } from './collections';
+import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
@@ -47,6 +47,8 @@ export class ElementImpl extends NodeImpl {
   localName: string;
   /** Namespace URI selected when the element is created. */
   namespaceURI: string;
+  /** Namespace prefix selected by createElementNS(), or null for an unprefixed name. */
+  prefix: string | null;
   /** Associated shadow tree, including a closed root; platform exposure is separate. */
   // https://dom.spec.whatwg.org/#concept-element-shadow-root
   shadowRoot: ShadowRootImpl | null = null;
@@ -79,10 +81,16 @@ export class ElementImpl extends NodeImpl {
     this.attributes = new NamedNodeMapImpl(this);
     this.localName = context.localName;
     this.namespaceURI = context.namespaceURI;
+    this.prefix = context.prefix ?? null;
   }
 
   static is(value: unknown): value is ElementImpl {
     return value instanceof ElementImpl;
+  }
+
+  /** Namespace-qualified name, preserving the element's original case. */
+  get qualifiedName(): string {
+    return this.prefix === null ? this.localName : `${this.prefix}:${this.localName}`;
   }
 
   /** Read the live list without bypassing attribute mutation steps. */
@@ -275,6 +283,7 @@ export class ElementImpl extends NodeImpl {
   /** Notify observers, custom-element reactions, and element-specific steps in that order. */
   // https://dom.spec.whatwg.org/#handle-attribute-changes
   handleAttributeChanges(attribute: AttrImpl, oldValue: string | null, value: string | null): void {
+    this.nodeDocument.collectionVersion++;
     const { localName, namespaceURI } = attribute;
     this.queueAttributeMutationRecord(localName, namespaceURI, oldValue);
     if (this.customElementState === 'custom') {
@@ -303,6 +312,18 @@ export class ElementImpl extends NodeImpl {
     this.linkStyleMixin?.attributeChanged(localName);
   }
 
+  /** Match this element with itself as the selector scoping root. */
+  // https://dom.spec.whatwg.org/#dom-element-matches
+  matches(selectors: string): boolean {
+    return this.nodeDocument.getSelectorEngine().matches(selectors, this);
+  }
+
+  /** First matching inclusive ancestor; matching remains scoped to this element. */
+  // https://dom.spec.whatwg.org/#dom-element-closest
+  closest(selectors: string): ElementImpl | null {
+    return this.nodeDocument.getSelectorEngine().closest(selectors, this);
+  }
+
   // https://dom.spec.whatwg.org/#dom-element-getelementsbytagname
   getElementsByTagName(qualifiedName: string): HTMLCollectionImpl {
     return findElementsByTagName(this, qualifiedName);
@@ -322,7 +343,7 @@ export class ElementImpl extends NodeImpl {
     return findElementsByClassName(this, classNames);
   }
 
-  get children(): HTMLCollectionImpl<ElementImpl> {
+  get children(): HTMLCollectionImpl {
     return this.#parentNodeMixin.children;
   }
 
@@ -338,8 +359,28 @@ export class ElementImpl extends NodeImpl {
     return this.#parentNodeMixin.childElementCount;
   }
 
+  prepend(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.prepend(...nodes);
+  }
+
+  append(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.append(...nodes);
+  }
+
+  replaceChildren(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.replaceChildren(...nodes);
+  }
+
   moveBefore(node: NodeImpl, child: NodeImpl | null): void {
     this.#parentNodeMixin.moveBefore(node, child);
+  }
+
+  querySelector(selectors: string): ElementImpl | null {
+    return this.#parentNodeMixin.querySelector(selectors);
+  }
+
+  querySelectorAll(selectors: string): NodeListImpl {
+    return this.#parentNodeMixin.querySelectorAll(selectors);
   }
 
   get previousElementSibling(): ElementImpl | null {
@@ -348,6 +389,18 @@ export class ElementImpl extends NodeImpl {
 
   get nextElementSibling(): ElementImpl | null {
     return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
+  }
+
+  before(...nodes: (NodeImpl | string)[]): void {
+    this.#childNodeMixin.before(...nodes);
+  }
+
+  after(...nodes: (NodeImpl | string)[]): void {
+    this.#childNodeMixin.after(...nodes);
+  }
+
+  replaceWith(...nodes: (NodeImpl | string)[]): void {
+    this.#childNodeMixin.replaceWith(...nodes);
   }
 
   remove(): void {
@@ -489,6 +542,7 @@ export const elementIDL = defineInterface({
   implementation: impl(ElementImpl),
   members: [
     roAttr('namespaceURI', nullable(idlType.DOMString)),
+    roAttr('prefix', nullable(idlType.DOMString)),
     roAttr('localName', idlType.DOMString),
     op('hasAttributes', idlType.boolean, []),
     roAttr('attributes', reference('NamedNodeMap'), xattr('SameObject')),
@@ -535,6 +589,12 @@ export const elementIDL = defineInterface({
     ),
     op('removeAttributeNode', reference('Attr'),
       [arg('attr', reference('Attr'))], xattr('CEReactions'),
+    ),
+    op('closest', nullable(reference('Element')), [arg('selectors', idlType.DOMString)]),
+    op('matches', idlType.boolean, [arg('selectors', idlType.DOMString)]),
+    op('webkitMatchesSelector', idlType.boolean,
+      [arg('selectors', idlType.DOMString)],
+      { invoke(_context, selectors) { return (this as ElementImpl).matches(selectors); } },
     ),
     op('getElementsByTagName', reference('HTMLCollection'), [arg('qualifiedName', idlType.DOMString)]),
     op('getElementsByTagNameNS', reference('HTMLCollection'), [
@@ -604,6 +664,8 @@ export type ElementCreationContext = {
   localName: string;
   /** Namespace used to select the element interface. */
   namespaceURI: string;
+  /** Prefix retained by namespace-aware document factories. */
+  prefix?: string | null;
   /** Resolve style ownership after insertion or removal. */
   treeScopeResolver: TreeScopeResolver;
 };

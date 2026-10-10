@@ -1,76 +1,146 @@
 import { HTML_NAMESPACE } from '../../../infra/index';
 import {
-  arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
-  roAttr, xattr,
+  arg, defineInterface, idlType, impl, indexedGetter, iter, namedGetter, nullable, op,
+  reference, roAttr, xattr,
 } from '../../../web-idl/index';
 
+import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
+import type { NodeImpl } from './node';
 
-/** Element collection refreshed from its source before DOM collection operations. */
-// https://dom.spec.whatwg.org/#interface-htmlcollection
-export class HTMLCollectionImpl<T extends ElementImpl = ElementImpl> extends Array<T> {
-  /** Recollect current elements for live collections; absent for fixed contents. */
-  #collect: (() => Iterable<T>) | undefined;
-  /** Prevent a collector from recursively rebuilding the collection. */
-  #refreshing = false;
+/** Shared storage for snapshots and lazily refreshed live collections. */
+abstract class NodeCollection<T extends NodeImpl> implements Iterable<T> {
+  /** Numeric properties belong to the platform object; implementations use item(). */
+  [index: number]: undefined;
 
-  constructor(collect?: () => Iterable<T>) {
-    super();
-    this.#collect = collect;
-    this.refresh();
+  #source: { root: NodeImpl; collect(): T[]; } | null;
+  #items: T[];
+  #document: DocumentImpl | null = null;
+  #version = -1;
+
+  constructor(source: T[] | { root: NodeImpl; collect(): T[]; }) {
+    this.#source = Array.isArray(source) ? null : source;
+    this.#items = Array.isArray(source) ? source : [];
   }
 
-  // Array operations must not pass their result length to the collector constructor.
-  static get [Symbol.species](): ArrayConstructor {
-    return Array;
+  /** Number of nodes currently represented by the collection. */
+  get length(): number {
+    return this.items.length;
   }
 
-  // https://dom.spec.whatwg.org/#dom-htmlcollection-item
+  /** Current contents; one document revision covers both tree and attribute changes. */
+  protected get items(): readonly T[] {
+    const source = this.#source;
+    if (source !== null) {
+      const document = source.root.nodeDocument;
+      if (document !== this.#document || document.collectionVersion !== this.#version) {
+        this.#items = source.collect();
+        this.#document = document;
+        this.#version = document.collectionVersion;
+      }
+    }
+    return this.#items;
+  }
+
+  /** Return the indexed node, or null outside the current collection. */
   item(index: number): T | null {
-    this.refresh();
-    return this[index] ?? null;
+    return this.items[index] ?? null;
   }
 
-  /** Unique IDs and eligible HTML names exposed as named properties, in tree order. */
+  /** Indices exposed by Web IDL, independent of implementation storage. */
+  getSupportedPropertyIndices(): Iterable<number> {
+    return this.items.keys();
+  }
+
+  /** Recheck live contents at each iteration step, including after intervening mutations. */
+  *[Symbol.iterator](): IterableIterator<T> {
+    for (let index = 0; index < this.length; index++) yield this.item(index)!;
+  }
+}
+
+/** Live children of a node, or a static result whose supplied array this list owns. */
+// https://dom.spec.whatwg.org/#interface-nodelist
+export class NodeListImpl extends NodeCollection<NodeImpl> {
+  constructor(source: NodeImpl | NodeImpl[]) {
+    super(Array.isArray(source) ? source : {
+      root: source,
+      collect() {
+        const nodes: NodeImpl[] = [];
+        for (let child = source.firstChild; child; child = child.nextSibling) nodes.push(child);
+        return nodes;
+      },
+    });
+  }
+}
+
+/*
+ * [Exposed=Window]
+ * interface NodeList {
+ *   getter Node? item(unsigned long index);
+ *   readonly attribute unsigned long length;
+ *   iterable<Node>;
+ * };
+ */
+export const nodeListIDL = defineInterface({
+  name: 'NodeList',
+  exposed: 'Window',
+  implementation: impl(NodeListImpl),
+  members: [
+    op('item', nullable(reference('Node')),
+      [arg('index', idlType.unsignedLong)],
+      indexedGetter(
+        (list: NodeListImpl) => list.getSupportedPropertyIndices(),
+        { unsupportedValue: null },
+      ),
+    ),
+    roAttr('length', idlType.unsignedLong),
+    iter(reference('Node')),
+  ],
+});
+
+/** Live element view, rooted in an ordinary tree and filtered in tree order. */
+// https://dom.spec.whatwg.org/#interface-htmlcollection
+export class HTMLCollectionImpl extends NodeCollection<ElementImpl> {
+  constructor(root: NodeImpl, matches: (element: ElementImpl) => boolean, childrenOnly = false) {
+    super({
+      root,
+      collect() {
+        const elements: ElementImpl[] = [];
+        for (
+          let node = root.firstChild;
+          node;
+          node = childrenOnly ? node.nextSibling : node.nextDescendant(root)
+        ) {
+          if (node.isElement() && matches(node)) elements.push(node);
+        }
+        return elements;
+      },
+    });
+  }
+
+  /** Unique nonempty IDs and HTML names, in tree order with each element's ID first. */
   getSupportedPropertyNames(): ReadonlySet<string> {
     const names = new Set<string>();
-    this.refresh();
-    for (const element of this) {
-      const id = element.getAttribute('id');
-      const name = element.getAttribute('name');
+    for (const element of this.items) {
+      const id = element.getAttributeNS(null, 'id');
+      const name = element.namespaceURI === HTML_NAMESPACE ? element.getAttributeNS(null, 'name') : null;
       if (id) names.add(id);
-      if (name && isNamedByName(element, name)) names.add(name);
+      if (name) names.add(name);
     }
     return names;
   }
 
   /** First element matching a nonempty ID or eligible HTML name. */
   // https://dom.spec.whatwg.org/#dom-htmlcollection-nameditem
-  namedItem(name: string): T | null {
+  namedItem(name: string): ElementImpl | null {
     if (name === '') return null;
-    this.refresh();
-    return this.find((element) =>
-      element.getAttribute('id') === name ||
-      isNamedByName(element, name)
-    ) ?? null;
-  }
-
-  override [Symbol.iterator](): ArrayIterator<T> {
-    this.refresh();
-    return super[Symbol.iterator]();
-  }
-
-  /** Rebuild live contents without replacing the collection object. */
-  refresh(): void {
-    if (!this.#collect || this.#refreshing) return;
-
-    this.#refreshing = true;
-    try {
-      this.length = 0;
-      for (const element of this.#collect()) super.push(element);
-    } finally {
-      this.#refreshing = false;
+    for (const element of this.items) {
+      if (
+        element.getAttributeNS(null, 'id') === name ||
+        (element.namespaceURI === HTML_NAMESPACE && element.getAttributeNS(null, 'name') === name)
+      ) return element;
     }
+    return null;
   }
 }
 
@@ -88,20 +158,11 @@ export const htmlCollectionIDL = defineInterface({
   ...xattr('LegacyUnenumerableNamedProperties'),
   implementation: impl(HTMLCollectionImpl),
   members: [
-    roAttr('length', idlType.unsignedLong, {
-      get() {
-        const collection = this as HTMLCollectionImpl;
-        collection.refresh();
-        return collection.length;
-      },
-    }),
+    roAttr('length', idlType.unsignedLong),
     op('item', nullable(reference('Element')),
       [arg('index', idlType.unsignedLong)],
       indexedGetter(
-        (collection: HTMLCollectionImpl) => {
-          collection.refresh();
-          return collection.keys();
-        },
+        (collection: HTMLCollectionImpl) => collection.getSupportedPropertyIndices(),
         { unsupportedValue: null },
       ),
     ),
@@ -113,8 +174,3 @@ export const htmlCollectionIDL = defineInterface({
     ),
   ],
 });
-
-function isNamedByName(element: ElementImpl, name: string): boolean {
-  return element.namespaceURI === HTML_NAMESPACE &&
-    element.getAttribute('name') === name;
-}

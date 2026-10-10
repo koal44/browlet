@@ -742,6 +742,7 @@ export interface Window extends EventTarget {
   NodeIterator: NodeIteratorConstructor;
   Node: NodeConstructor;
   HTMLCollection: HTMLCollectionConstructor;
+  NodeList: NodeListConstructor;
   NamedNodeMap: NamedNodeMapConstructor;
   Attr: AttrConstructor;
   CharacterData: CharacterDataConstructor;
@@ -947,6 +948,7 @@ export interface Node extends EventTarget {
   readonly ownerDocument: (Document | null);
   readonly parentNode: (Node | null);
   readonly parentElement: (Element | null);
+  readonly childNodes: NodeList;
   readonly firstChild: (Node | null);
   readonly lastChild: (Node | null);
   readonly previousSibling: (Node | null);
@@ -980,6 +982,22 @@ export interface HTMLCollection {
 export interface HTMLCollectionConstructor {
   readonly prototype: HTMLCollection;
   [Symbol.hasInstance](value: unknown): value is HTMLCollection;
+}
+
+export interface NodeList {
+  item(index: number): (Node | null);
+  readonly length: number;
+  readonly [index: number]: (Node | null) | undefined;
+  [Symbol.iterator](): IterableIterator<Node>;
+  values(): IterableIterator<Node>;
+  keys(): IterableIterator<number>;
+  entries(): IterableIterator<[number, Node]>;
+  forEach(callback: (value: Node, key: number, parent: this) => void, thisArg?: unknown): void;
+}
+
+export interface NodeListConstructor {
+  readonly prototype: NodeList;
+  [Symbol.hasInstance](value: unknown): value is NodeList;
 }
 
 export interface NamedNodeMap {
@@ -1023,6 +1041,9 @@ export interface CharacterData extends Node {
   insertData(offset: number, data: string): void;
   deleteData(offset: number, count: number): void;
   replaceData(offset: number, count: number, data: string): void;
+  before(...nodes: Array<(Node | string)>): void;
+  after(...nodes: Array<(Node | string)>): void;
+  replaceWith(...nodes: Array<(Node | string)>): void;
   remove(): void;
   readonly previousElementSibling: (Element | null);
   readonly nextElementSibling: (Element | null);
@@ -1037,6 +1058,9 @@ export interface DocumentType extends Node {
   readonly name: string;
   readonly publicId: string;
   readonly systemId: string;
+  before(...nodes: Array<(Node | string)>): void;
+  after(...nodes: Array<(Node | string)>): void;
+  replaceWith(...nodes: Array<(Node | string)>): void;
   remove(): void;
 }
 
@@ -1072,7 +1096,13 @@ export interface DocumentFragment extends Node {
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
   readonly childElementCount: number;
+  prepend(...nodes: Array<(Node | string)>): void;
+  append(...nodes: Array<(Node | string)>): void;
+  replaceChildren(...nodes: Array<(Node | string)>): void;
   moveBefore(node: Node, child: (Node | null)): void;
+  querySelector(selectors: string): (Element | null);
+  querySelectorAll(selectors: string): NodeList;
+  getElementById(elementId: string): (Element | null);
 }
 
 export interface DocumentFragmentConstructor {
@@ -1113,6 +1143,7 @@ export interface Document extends Node {
   getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
   createElement(localName: string, options?: (string | ElementCreationOptions)): Element;
   createElementNS(namespace: (string | null), qualifiedName: string, options?: (string | ElementCreationOptions)): Element;
+  createDocumentFragment(): DocumentFragment;
   createTextNode(data: string): Text;
   createComment(data: string): Comment;
   createAttribute(localName: string): Attr;
@@ -1120,7 +1151,6 @@ export interface Document extends Node {
   adoptNode(node: Node): Node;
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): NodeIterator;
-  getElementById(elementId: string): (Element | null);
   readonly head: (HTMLHeadElement | null);
   readonly body: (HTMLElement | null);
   write(...text: Array<string>): void;
@@ -1129,7 +1159,13 @@ export interface Document extends Node {
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
   readonly childElementCount: number;
+  prepend(...nodes: Array<(Node | string)>): void;
+  append(...nodes: Array<(Node | string)>): void;
+  replaceChildren(...nodes: Array<(Node | string)>): void;
   moveBefore(node: Node, child: (Node | null)): void;
+  querySelector(selectors: string): (Element | null);
+  querySelectorAll(selectors: string): NodeList;
+  getElementById(elementId: string): (Element | null);
   readonly customElementRegistry: (CustomElementRegistry | null);
   readonly styleSheets: object;
   adoptedStyleSheets: any;
@@ -1143,6 +1179,7 @@ export interface DocumentConstructor {
 
 export interface Element extends Node {
   readonly namespaceURI: (string | null);
+  readonly prefix: (string | null);
   readonly localName: string;
   hasAttributes(): boolean;
   readonly attributes: NamedNodeMap;
@@ -1161,6 +1198,9 @@ export interface Element extends Node {
   setAttributeNode(attr: Attr): (Attr | null);
   setAttributeNodeNS(attr: Attr): (Attr | null);
   removeAttributeNode(attr: Attr): Attr;
+  closest(selectors: string): (Element | null);
+  matches(selectors: string): boolean;
+  webkitMatchesSelector(selectors: string): boolean;
   getElementsByTagName(qualifiedName: string): HTMLCollection;
   getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
   getElementsByClassName(classNames: string): HTMLCollection;
@@ -1168,7 +1208,15 @@ export interface Element extends Node {
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
   readonly childElementCount: number;
+  prepend(...nodes: Array<(Node | string)>): void;
+  append(...nodes: Array<(Node | string)>): void;
+  replaceChildren(...nodes: Array<(Node | string)>): void;
   moveBefore(node: Node, child: (Node | null)): void;
+  querySelector(selectors: string): (Element | null);
+  querySelectorAll(selectors: string): NodeList;
+  before(...nodes: Array<(Node | string)>): void;
+  after(...nodes: Array<(Node | string)>): void;
+  replaceWith(...nodes: Array<(Node | string)>): void;
   remove(): void;
   readonly previousElementSibling: (Element | null);
   readonly nextElementSibling: (Element | null);

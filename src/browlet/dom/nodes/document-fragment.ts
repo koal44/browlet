@@ -6,9 +6,11 @@ import type { DOMEnvironment } from '../environment';
 
 import { NodeImpl, NodeType } from './node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
+import { nonElementParentNodeIDL } from './non-element-parent-node';
+import { findElementById } from './lookups';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
-import type { HTMLCollectionImpl } from './collections';
+import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 
 /** A parent node for a detached subtree, optionally associated with a host element. */
 // https://dom.spec.whatwg.org/#interface-documentfragment
@@ -33,7 +35,12 @@ export class DocumentFragmentImpl extends NodeImpl {
     return value instanceof DocumentFragmentImpl;
   }
 
-  get children(): HTMLCollectionImpl<ElementImpl> {
+  // https://dom.spec.whatwg.org/#dom-nonelementparentnode-getelementbyid
+  getElementById(id: string): ElementImpl | null {
+    return findElementById(this, id);
+  }
+
+  get children(): HTMLCollectionImpl {
     return this.#parentNodeMixin.children;
   }
 
@@ -49,8 +56,28 @@ export class DocumentFragmentImpl extends NodeImpl {
     return this.#parentNodeMixin.childElementCount;
   }
 
+  prepend(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.prepend(...nodes);
+  }
+
+  append(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.append(...nodes);
+  }
+
+  replaceChildren(...nodes: (NodeImpl | string)[]): void {
+    this.#parentNodeMixin.replaceChildren(...nodes);
+  }
+
   moveBefore(node: NodeImpl, child: NodeImpl | null): void {
     this.#parentNodeMixin.moveBefore(node, child);
+  }
+
+  querySelector(selectors: string): ElementImpl | null {
+    return this.#parentNodeMixin.querySelector(selectors);
+  }
+
+  querySelectorAll(selectors: string): NodeListImpl {
+    return this.#parentNodeMixin.querySelectorAll(selectors);
   }
 }
 
@@ -84,4 +111,12 @@ export const documentFragmentIDL = defineInterface<DOMEnvironment>({
 export const documentFragmentIncludesParentNodeIDL = defineIncludes({
   interface: 'DocumentFragment',
   mixin: parentNodeIDL.name,
+});
+
+/*
+ * DocumentFragment includes NonElementParentNode;
+ */
+export const documentFragmentIncludesNonElementParentNodeIDL = defineIncludes({
+  interface: 'DocumentFragment',
+  mixin: nonElementParentNodeIDL.name,
 });
