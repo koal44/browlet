@@ -34,6 +34,14 @@ preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
 File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
+DOM 4A-4D now provide structural mutation, live Range/NodeIterator participation,
+and the shared attribute path. Trusted Types TT-A supplies Window factories,
+trusted values and policies, sink metadata, and CSP policy-creation checks/reporting.
+Next, complete [TT-B](browlet/browsing/policy/trusted-types/ROADMAP.md#tt-b-default-policies-and-dom-attribute-enforcement):
+default-policy processing and enforcement at those existing attribute entry points.
+Then resume DOM 4E (CharacterData). Trusted parser options, sanitization, markup
+APIs, script compilation, and workers keep their later consumer gates.
+
 The [WPT roadmap](../wpt/ROADMAP.md) accompanies these stages. The selected suite's
 unexpected failures are resolved, and CI runs the selection and publishes its
 results and progress graphic. WPT-compatible report interchange and server
@@ -80,6 +88,12 @@ and CharacterData. Include live Range adjustment and NodeIterator pre-removal.
 TreeWalker has an existing Selectlet consumer. Replace snapshot/Array shortcuts
 with proper live/static collections and expose selector APIs through one
 Selectlet adapter. Tests must reject invalid mutations without partial changes.
+
+The immediate [Trusted Types pass](browlet/browsing/policy/trusted-types/ROADMAP.md) closes 4D's
+accepted string-only dependency before 4E. Reuse existing Web IDL and CSP owners;
+include policy creation restrictions before exposing the factory. Stop once
+default policies and attribute enforcement work through real Window bindings.
+This does not require changing parse5 or completing HTML sanitization.
 
 **3: join mutation, reactions, and parsing in one vertical slice.**
 The [DOM](browlet/dom/ROADMAP.md) and [custom-element](browlet/dom/nodes/html/custom-elements/ROADMAP.md)

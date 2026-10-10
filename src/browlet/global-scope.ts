@@ -8,6 +8,7 @@ import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type Fetc
 
 import { GlobalTimers, type TimerAction } from './scripting/index';
 import { ReportingEndpoint, type ReportImpl, type ReportingObserverImpl } from './reporting/index';
+import { TrustedTypePolicyFactoryImpl } from './browsing/policy/trusted-types/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import { PerformanceImpl } from './performance/index';
 import type { BrowletEnvironment } from './environment';
@@ -42,10 +43,13 @@ export class WindowOrWorkerGlobalScopeMixin {
   env: BrowletEnvironment;
   /** Stable Performance implementation sharing this environment's time origin. */
   performance: PerformanceImpl;
+  /** Policy state and empty trusted values belonging exclusively to this global. */
+  trustedTypes: TrustedTypePolicyFactoryImpl;
 
   constructor(env: BrowletEnvironment) {
     this.env = env;
     this.performance = new PerformanceImpl(env.timing, env);
+    this.trustedTypes = new TrustedTypePolicyFactoryImpl(env);
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
       host: env.userAgent.timerHost,
@@ -261,3 +265,14 @@ export const highResolutionTimeWindowOrWorkerGlobalScopeIDL =
     name: windowOrWorkerGlobalScopeIDL.name,
     members: [roAttr('performance', reference('Performance'), xattr('Replaceable'))],
   });
+
+// Trusted Types: https://w3c.github.io/trusted-types/dist/spec/#extensions-to-the-windoworworkerglobalscope-interface
+/*
+ * partial interface mixin WindowOrWorkerGlobalScope {
+ *   readonly attribute TrustedTypePolicyFactory trustedTypes;
+ * };
+ */
+export const trustedTypesWindowOrWorkerGlobalScopeIDL = definePartialInterfaceMixin({
+  name: windowOrWorkerGlobalScopeIDL.name,
+  members: [roAttr('trustedTypes', reference(TrustedTypePolicyFactoryImpl))],
+});

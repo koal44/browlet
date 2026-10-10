@@ -1,9 +1,11 @@
 import { InternalError } from '../../../../infra/internal-error';
+import { asciiLower } from '../../../../infra/ascii';
 import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/index';
 import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 
 import { SandboxingFlagSet } from '../sandbox';
 import type { DocumentImpl } from '../../../dom/nodes/index';
+import type { BrowletEnvironment } from '../../../environment';
 
 import { ContentSecurityPolicy, type CSPDisposition } from './policy';
 import { CSPViolation } from './violation';
@@ -130,6 +132,32 @@ export class CSPList implements FetchCSPList {
     return false;
   }
 
+  /** Report policy-creation violations for both dispositions; any enforcing violation blocks. */
+  // https://w3c.github.io/trusted-types/dist/spec/#should-block-create-policy
+  // The owning environment supplies the global's violation-reporting context.
+  isTrustedTypePolicyCreationBlocked(
+    policyName: string, createdPolicyNames: ReadonlySet<string>, env: BrowletEnvironment,
+  ): boolean {
+    let blocked = false;
+    for (const policy of this.policies) {
+      const tokens = policy.directives.get('trusted-types')?.tokens;
+      if (tokens === undefined) continue;
+      const allowsDuplicates = tokens.some((token) => asciiLower(token) === "'allow-duplicates'");
+      const allowsName = tokens.includes('*') ||
+        tokens.some((token) => trustedTypePolicyNamePattern.test(token) && token === policyName);
+      // 'none' cannot match a policy name; alongside other expressions it adds no restriction.
+      // SPEC_CLASH(trusted-types-policy-creation): Follow the spec and Firefox's CSP checks.
+      // Chromium/WebKit also reject unusual wildcard names and duplicate "default" through CSP.
+      // The factory separately rejects a second default policy after these checks.
+      if (allowsName && (!createdPolicyNames.has(policyName) || allowsDuplicates)) continue;
+      const violation = new CSPViolation(policy, 'trusted-types', 'trusted-types-policy', env);
+      violation.sample = policyName.slice(0, 40);
+      violation.report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    return blocked;
+  }
+
   /** Copy policy data while preserving the origin used by inherited 'self' checks. */
   clone(): CSPList {
     const copy = new CSPList(this.selfOrigin);
@@ -143,3 +171,6 @@ export class CSPList implements FetchCSPList {
     client.exec.reportCSPViolation(policy, request);
   }
 }
+
+// https://w3c.github.io/trusted-types/dist/spec/#trusted-types-csp-directive
+const trustedTypePolicyNamePattern = /^[a-zA-Z0-9\-#=_/@.%]+$/;

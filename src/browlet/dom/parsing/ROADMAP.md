@@ -19,6 +19,12 @@ algorithms.
 setters additionally consume `html/sanitization/`; unsafe setters must remain a
 distinct contract rather than silently sanitizing.
 
+[Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) supplies
+policies and attribute enforcement before this work. Markup sinks later consume
+its compliant-input algorithms and, where specified, TT-C's trusted parser
+options. That boundary includes sanitizer configuration and HTML/XML distinctions;
+the core Trusted Types pass neither changes parse5 nor completes these APIs.
+
 Blink's `DOMParser` lives with XML/DOM parsing rather than its HTML document
 parser, while its sanitizer has a separate core domain. That split supports
 these owners without requiring Browlet to mirror Blink's file granularity.

@@ -31,6 +31,7 @@ import {
   ContentSecurityPolicy, cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
   securityPolicyViolationEventDispositionIDL,
 } from './browsing/policy/csp/index';
+import { trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import { DocumentImpl, htmlDocumentIDL, ElementImpl } from './dom/nodes/index';
 import { htmlIDLDefinitions } from './dom/nodes/html/index';
@@ -44,7 +45,7 @@ import {
 } from './environment';
 import {
   WindowOrWorkerGlobalScopeMixin, highResolutionTimeWindowOrWorkerGlobalScopeIDL,
-  timerHandlerIDL, windowOrWorkerGlobalScopeIDL,
+  timerHandlerIDL, windowOrWorkerGlobalScopeIDL, trustedTypesWindowOrWorkerGlobalScopeIDL,
 } from './global-scope';
 import {
   structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
@@ -248,6 +249,7 @@ export const browletDefinitions = [
   timerHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
   highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  trustedTypesWindowOrWorkerGlobalScopeIDL,
   windowIDL,
   windowProxyDefinition,
   windowEventIDL,
@@ -264,6 +266,7 @@ export const browletDefinitions = [
   progressEventInitIDL,
   ...urlIDLDefinitions,
   ...fetchIDLDefinitions,
+  ...trustedTypesIDLDefinitions,
 ];
 
 /** Main world for composition and host API projection; implementations use their supplied environment. */

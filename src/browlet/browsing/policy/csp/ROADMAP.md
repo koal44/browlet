@@ -109,6 +109,12 @@ documentation cleanup does not refresh those observations.
 
 ## Dependency review and later consumers
 
+- **Trusted Types:** [TT-A](../trusted-types/ROADMAP.md#tt-a-trusted-values-policies-and-the-window-factory)
+  implements policy-name restrictions and both dispositions through existing
+  Window policy state and violation delivery. TT-B's default-policy/attribute
+  enforcement and `require-trusted-types-for` checks are next.
+  Parser options, sanitization, script compilation, and workers remain separate
+  consumer gates in that roadmap.
 - **HTML delivery:** meta policies and their directive restrictions; full
   response/local-URL/history inheritance and policy-container selection.
 - **Elements:** inline script/style checks, nonce/hash inputs, script preparation,
@@ -121,7 +127,7 @@ documentation cleanup does not refresh those observations.
   Console Printer/output sink while retaining attribution; do not call the
   author's overridable console or substitute Node console output.
 - **Compilation:** classic/module scripts and string-compilation host hooks,
-  Trusted Types compliant strings, Wasm compilation, and WebRTC integrations.
+  Trusted Types script-sink checks, Wasm compilation, and WebRTC integrations.
   Their owning specifications provide these dependencies.
 
 Mixed Content and Upgrade Insecure Requests remain parent-policy algorithms;

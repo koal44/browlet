@@ -67,3 +67,19 @@ if (element instanceof window.HTMLElement) {
 }
 // @ts-expect-error a type export does not create an exported runtime constructor
 new Platform.URL('https://example.test/');
+
+const trustedPolicy: Platform.TrustedTypePolicy = window.trustedTypes.createPolicy('app', {
+  createHTML: (input, ...args) => args.length ? input : null,
+  createScriptURL: (input) => input,
+});
+const trustedValue: Platform.TrustedType = trustedPolicy.createHTML('<b>text</b>');
+const trustedJSON: string = trustedValue.toJSON();
+const defaultPolicy: Platform.TrustedTypePolicy | null = window.trustedTypes.defaultPolicy;
+const sinkType: string | null = window.trustedTypes.getAttributeType('script', 'src', null);
+void [trustedJSON, defaultPolicy, sinkType];
+// @ts-expect-error trusted values are made by policies, not public constructors
+new window.TrustedHTML();
+// @ts-expect-error parser options await the Sanitizer integration
+trustedPolicy.createParserOptions({});
+// @ts-expect-error factory identity is read-only on the global
+window.trustedTypes = {} as Platform.TrustedTypePolicyFactory;

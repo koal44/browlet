@@ -11,6 +11,7 @@ import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../
 
 import type { TimerAction } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
+import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import { type DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
 import type { WindowEnvironment } from '../../environment';
@@ -68,6 +69,11 @@ export class WindowImpl extends EventTargetImpl {
   /** Performance object sharing this Window's environment and time origin. */
   get performance(): PerformanceImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().performance;
+  }
+
+  /** Policy factory owned by this Window's global-scope mixin. */
+  get trustedTypes(): TrustedTypePolicyFactoryImpl {
+    return this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
   }
 
   /** Retrieve an element's computed style through the associated document's style engine. */

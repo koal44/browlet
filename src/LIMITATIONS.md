@@ -178,6 +178,21 @@ Firefox rather than the written algorithm's later filtering check. The
 [compatibility choice](browlet/dom/traversal/ROADMAP.md#reentrant-filter-compatibility-choice)
 also rejects recursive calls that would otherwise return null before filtering.
 
+## Trusted Types
+
+Window exposes trusted string values, policies, factory queries, and CSP
+`trusted-types` policy-creation restrictions with violation reporting. Creating
+a trusted value does not sanitize its contents; that is the policy callback's work.
+Default policies are retained, but sink enforcement and default-policy invocation
+remain TT-B. Attribute setters therefore retain their provisional string-only path.
+
+`TrustedHTMLParserOptions`, `createParserOptions`, and its callback are absent,
+including from generated declarations, until the real Sanitizer dependencies
+exist. Markup parsing, script compilation, string timers, navigation, and Worker
+integrations retain the separate gates in the [Trusted Types roadmap](browlet/browsing/policy/trusted-types/ROADMAP.md).
+That roadmap also records the approved CSP policy-creation difference and the
+explicit standard content-handler list used for sink metadata.
+
 ## HTML integration gates
 
 The [loader](browlet/loader/ROADMAP.md) now consumes streamed Fetch responses,

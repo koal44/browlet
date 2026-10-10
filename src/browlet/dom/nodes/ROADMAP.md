@@ -35,6 +35,12 @@ the interface exists; implementations receive already-converted values.
 | 4H. Shadow trees | ShadowRoot, attachment, slottables, assignment, and slotchange delivery | Shadow topology and slot changes use the same mutation and checkpoint machinery |
 | 4I. Node and Document completion | Clone/import, equality, namespace lookup, document factories, DOMImplementation, XML leaf nodes, and remaining declared members | Public interface coverage followed by an ordered §4 audit |
 
+[Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) is the next
+cross-specification dependency, between 4D and 4E. Complete Window policy/CSP
+behavior and the existing attribute checks, then resume this table at 4E.
+Parser options, sanitization, and script/worker enforcement are later branches,
+not additions to the current DOM slice.
+
 4A is complete: `NodeImpl.ensurePreInsertValidity()` validates both public insertion entry points,
 including host-including cycles and Document hierarchy. The regressions are in
 [`mutation.test.ts`](../../../../test/browlet/dom/nodes/mutation.test.ts).
@@ -73,10 +79,12 @@ cover live indices, supported names, collisions, and mutation errors. CSSOM read
 and writes the null-namespace style attribute through the shared DOM operations;
 namespaced attributes with the same qualified name stay independent.
 
-Trusted Types is an explicitly accepted provisional dependency: setters retain
-string-only conversion until compliant-attribute-value checks and their
-reentrant ownership handling exist. Mutation records remain a provisional
-`queueAttributeMutationRecord()` call until 4G. Slot/slottable name changes enter
+Trusted Types remains an explicitly accepted provisional dependency until the
+scheduled TT-A/TT-B pass supplies compliant-attribute-value checks and their
+reentrant ownership handling. Setters currently retain string-only conversion.
+4E's Attr node-value/text-content setters must reuse the checked value operation.
+Mutation records retain a provisional `queueAttributeMutationRecord()` call until
+4G. Slot/slottable name changes enter
 their assignment hooks, but assignment/delivery still belongs to 4H. Custom
 element reactions remain with their own roadmap. Inherited `Node.nodeValue` and
 `Node.textContent` attribute behavior joins the node-specific accessors in 4E.

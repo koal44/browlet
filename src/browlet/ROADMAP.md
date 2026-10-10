@@ -15,6 +15,7 @@ domains; narrower roadmaps carry their actual status and remaining contracts.
 | XML parsing and serialization | HTML §14; XML and Namespaces in XML; DOM Parsing and Serialization | `dom/parsing/`, using a dedicated XML syntax engine rather than the HTML parser |
 | HTML suggested rendering and legacy compatibility | HTML §§15–16 plus CSS layout specifications | `rendering/` for boxes/output, `style/` for UA rules and presentational hints, and `html/legacy/` for retained APIs |
 | Origins, policies, windows, and navigation | HTML §7 | `browsing/` |
+| Trusted values, policies, and injection-sink checks | Trusted Types, with DOM/HTML and CSP integrations | [browsing/policy/trusted-types/](browsing/policy/trusted-types/ROADMAP.md) |
 | Agents, realms, scripts, scheduling, global utilities, timers, and frames | HTML §§8.1–8.3, 8.7–8.8, and 8.12 | `scripting/` |
 | Dynamic markup, DOM parsing/serialization, and sanitization | HTML §§8.4–8.6 | `html/parser/`, `dom/parsing/`, and `html/sanitization/` |
 | Window prompts, printing, and system capabilities | HTML §§8.9–8.10 | `browsing/window/` plus an embedder capability, and `navigator/` |
@@ -45,6 +46,11 @@ loading, and much of the public DOM remain unfinished. Follow the
 [loader](loader/ROADMAP.md), and [scripting](scripting/ROADMAP.md) plans rather
 than interpreting implemented Fetch as complete HTML loading.
 
+Trusted Types TT-A supplies Window factories, policies, sink metadata, and CSP
+policy-creation checks. [TT-B](browsing/policy/trusted-types/ROADMAP.md#tt-b-default-policies-and-dom-attribute-enforcement)
+is next for DOM 4D's attributes, before returning to DOM 4E. Parsing/sanitizer and
+script/worker integrations remain gated.
+
 ## Later external consumers
 
 HTML's dependency inventory is not a prerequisite list. Introduce an external
@@ -54,8 +60,9 @@ standard with its first real consumer and retain its own ownership:
   integration; an HTML parser is not an XML parser.
 - Performance Timeline/Navigation/Resource Timing build on existing clocks and
   Fetch records. Paint/long-frame APIs also need rendering/scheduler consumers.
-- Permissions Policy, Trusted Types, and remaining CSP enforcement enter with
-  the relevant navigation, element, worker, and compilation lifecycles.
+- Permissions Policy and remaining CSP enforcement enter with the relevant
+  navigation, element, worker, and compilation lifecycles. Trusted Types' later
+  branches follow the [same owner gates](browsing/policy/trusted-types/ROADMAP.md#later-slices-and-dependency-gates).
 - IndexedDB, Web Locks, manifest, background APIs, and public Web Storage remain
   future application work. XHR can now use Fetch; SharedWorker/BroadcastChannel
   can use existing storage keys. URL Pattern and No-Vary-Search need their actual

@@ -1,8 +1,15 @@
 # HTML sanitization roadmap
 
 HTML §8.6 defines a security-sensitive DOM transformation API. It is not an
-event-loop prerequisite and should be implemented only after fragment parsing
-and custom-element reaction integration are stable.
+event-loop prerequisite. Tree sanitization and safe markup setters follow stable
+fragment parsing and custom-element reaction integration. Configuration
+validation/copying can be a separate earlier slice when a consumer needs it.
+
+[Trusted Types TT-C](../../browsing/policy/trusted-types/ROADMAP.md#later-slices-and-dependency-gates)
+is such a consumer: parser-option policies require real Sanitizer construction,
+presets, configuration invariants, and independent copies. Those contracts remain
+owned here. They are deferred beyond the next TT-A/TT-B policy/attribute pass;
+do not supply an empty Sanitizer or permissive placeholder to remove the dependency.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |

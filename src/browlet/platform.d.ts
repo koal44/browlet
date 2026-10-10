@@ -64,6 +64,8 @@ export type BodyInit = (ReadableStream | (Blob | ((Int8Array<ArrayBuffer> | Int1
 
 export type RequestInfo = (Request | string);
 
+export type TrustedType = (TrustedHTML | TrustedScript | TrustedScriptURL);
+
 export type WindowProxy = Window;
 
 export interface QuotaExceededErrorOptions {
@@ -258,6 +260,12 @@ export interface ResponseInit {
   statusText?: string;
 }
 
+export interface TrustedTypePolicyOptions {
+  createHTML?: CreateHTMLCallback;
+  createScript?: CreateScriptCallback;
+  createScriptURL?: CreateScriptURLCallback;
+}
+
 export type Function = (...arguments_: Array<any>) => any;
 
 export type VoidFunction = () => void;
@@ -289,6 +297,12 @@ export type TransformerFlushCallback = (controller: TransformStreamDefaultContro
 export type TransformerTransformCallback = (chunk: any, controller: TransformStreamDefaultController) => (void | PromiseLike<void>);
 
 export type TransformerCancelCallback = (reason: any) => (void | PromiseLike<void>);
+
+export type CreateHTMLCallback = (input: string, ...arguments_: Array<any>) => (string | null);
+
+export type CreateScriptCallback = (input: string, ...arguments_: Array<any>) => (string | null);
+
+export type CreateScriptURLCallback = (input: string, ...arguments_: Array<any>) => (string | null);
 
 export type EventListener = {
   handleEvent(event: Event): void;
@@ -692,6 +706,7 @@ export interface Window extends EventTarget {
   structuredClone<T = any>(value: T, options?: StructuredSerializeOptions): T;
   get performance(): Performance;
   set performance(value: unknown);
+  readonly trustedTypes: TrustedTypePolicyFactory;
   fetch(input: (Request | string), init?: RequestInit): Promise<Response>;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
@@ -766,6 +781,11 @@ export interface Window extends EventTarget {
   Headers: HeadersConstructor;
   Request: RequestConstructor;
   Response: ResponseConstructor;
+  TrustedHTML: TrustedHTMLConstructor;
+  TrustedScript: TrustedScriptConstructor;
+  TrustedScriptURL: TrustedScriptURLConstructor;
+  TrustedTypePolicy: TrustedTypePolicyConstructor;
+  TrustedTypePolicyFactory: TrustedTypePolicyFactoryConstructor;
   NodeFilter: NodeFilterInterfaceObject;
 }
 
@@ -1603,6 +1623,65 @@ export interface ResponseConstructor {
   error(): Response;
   redirect(url: string, status?: number): Response;
   json(data: any, init?: ResponseInit): Response;
+}
+
+export interface TrustedHTML {
+  toString(): string;
+  toJSON(): string;
+}
+
+export interface TrustedHTMLConstructor {
+  readonly prototype: TrustedHTML;
+  [Symbol.hasInstance](value: unknown): value is TrustedHTML;
+}
+
+export interface TrustedScript {
+  toString(): string;
+  toJSON(): string;
+}
+
+export interface TrustedScriptConstructor {
+  readonly prototype: TrustedScript;
+  [Symbol.hasInstance](value: unknown): value is TrustedScript;
+}
+
+export interface TrustedScriptURL {
+  toString(): string;
+  toJSON(): string;
+}
+
+export interface TrustedScriptURLConstructor {
+  readonly prototype: TrustedScriptURL;
+  [Symbol.hasInstance](value: unknown): value is TrustedScriptURL;
+}
+
+export interface TrustedTypePolicy {
+  readonly name: string;
+  createHTML(input: string, ...arguments_: Array<any>): TrustedHTML;
+  createScript(input: string, ...arguments_: Array<any>): TrustedScript;
+  createScriptURL(input: string, ...arguments_: Array<any>): TrustedScriptURL;
+}
+
+export interface TrustedTypePolicyConstructor {
+  readonly prototype: TrustedTypePolicy;
+  [Symbol.hasInstance](value: unknown): value is TrustedTypePolicy;
+}
+
+export interface TrustedTypePolicyFactory {
+  createPolicy(policyName: string, policyOptions?: TrustedTypePolicyOptions): TrustedTypePolicy;
+  isHTML(value: any): boolean;
+  isScript(value: any): boolean;
+  isScriptURL(value: any): boolean;
+  readonly emptyHTML: TrustedHTML;
+  readonly emptyScript: TrustedScript;
+  getAttributeType(tagName: string, attribute: string, elementNs?: (string | null), attrNs?: (string | null)): (string | null);
+  getPropertyType(tagName: string, property: string, elementNs?: (string | null)): (string | null);
+  readonly defaultPolicy: (TrustedTypePolicy | null);
+}
+
+export interface TrustedTypePolicyFactoryConstructor {
+  readonly prototype: TrustedTypePolicyFactory;
+  [Symbol.hasInstance](value: unknown): value is TrustedTypePolicyFactory;
 }
 
 export interface ReadableStreamReadResultResult {
