@@ -1,8 +1,9 @@
 import { types as nodeTypes } from 'node:util';
 
+import { InternalError } from '../infra/internal-error';
+
 import { addon } from './node-addons';
 import type { JSRealm } from './realm';
-import { InternalError } from '../infra/internal-error';
 
 /* eslint-disable @typescript-eslint/no-wrapper-object-types -- These operations inspect boxed primitive objects. */
 

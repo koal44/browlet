@@ -1,8 +1,10 @@
 import { Buffer, isAscii } from 'node:buffer';
+
+import { nonASCIIPattern } from '../../infra/patterns';
 import { codeUnitsToString } from '../../js-engine/index';
+
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
-import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §§10.1.1, 10.2.1 — GBK and gb18030 share this decoder. */
 export class GB18030Decoder {

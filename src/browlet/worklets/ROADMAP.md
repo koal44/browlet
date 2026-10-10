@@ -54,7 +54,7 @@ the collection of agents/scopes.
 | `processing-model.ts` | Scope creation/termination, environment settings, module replay, task coordination, and Document association | HTML §§11.3.1.1–11.3.1.3 and 11.3.3 |
 | `web-idl.ts` | Base Worklet interfaces, dictionary, exposure, and global names | HTML §11.3 |
 
-`scripting/environment.ts`, `scripting/agents.ts`, the module loader, Fetch,
+`browlet/environment.ts`, `scripting/agents.ts`, the module loader, Fetch,
 and the event loop provide the shared machinery. This directory coordinates
 those facilities but does not duplicate them.
 

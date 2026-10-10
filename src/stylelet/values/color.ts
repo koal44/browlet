@@ -1,5 +1,7 @@
 import { asciiLower } from '../../infra/ascii';
 import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../infra/util';
+import { InternalError } from '../../infra/internal-error';
+
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
   createFunctionalNotationConsumer, consumeComma, consumeDimensionToken,
@@ -29,7 +31,6 @@ import {
   type PercentageValue,
 } from './percentage';
 import type { ValueDefinition } from '../value-processing/definition';
-import { InternalError } from '../../infra/internal-error';
 
 // Resolved representation of a color in an identified coordinate space. It
 // has an intrinsic colorimetric interpretation when its space is predefined;

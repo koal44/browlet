@@ -1,5 +1,7 @@
 import { Buffer, isAscii } from 'node:buffer';
+
 import { codeUnitsToString } from '../../js-engine/index';
+
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
 

@@ -1,8 +1,9 @@
-import type { ElementImpl, NodeImpl } from '../dom/nodes/index';
 import {
   CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
   type StyleletEnvironment,
 } from '../../stylelet/index';
+
+import type { ElementImpl, NodeImpl } from '../dom/nodes/index';
 
 /** Owns an element's inline declaration and synchronizes its style attribute. */
 // https://drafts.csswg.org/cssom/#elementcssinlinestyle

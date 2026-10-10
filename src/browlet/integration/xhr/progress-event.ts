@@ -2,9 +2,10 @@ import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, roAttr, reference,
 } from '../../../web-idl/index';
+
 import type { DOMHighResTimeStamp } from '../../timing/index';
-import type { DOMEnvironment } from '../../dom/index';
 import { EventImpl, type EventInitRecord, type EventTargetImpl } from '../../dom/events/index';
+import type { DOMEnvironment } from '../../dom/index';
 
 /** Reports completed work and, when known, its total amount. */
 // https://xhr.spec.whatwg.org/#interface-progressevent

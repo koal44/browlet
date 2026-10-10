@@ -2,7 +2,10 @@ import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
 } from '../../web-idl/index';
-import type { BrowletEnvironment, WindowOrWorkerGlobalScopeMixin } from '../scripting/index';
+
+import type { BrowletEnvironment } from '../environment';
+import type { WindowOrWorkerGlobalScopeMixin } from '../global-scope';
+
 import type { ReportImpl } from './report';
 
 /** An observer's registration, type filter, and pending callback batch. */

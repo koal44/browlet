@@ -1,16 +1,17 @@
+import type { InternalPromise } from '../infra/promises';
+import type { JSFunction } from '../js-engine/index';
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
   emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
-} from '../../web-idl/index';
-import type { JSFunction } from '../../js-engine/index';
-import { PerformanceImpl } from '../performance/index';
-import { ReportingEndpoint, type ReportImpl, sendReports, type ReportingObserverImpl } from '../reporting/index';
-import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../../fetch/index';
-import type { InternalPromise } from '../../infra/promises';
-import type { DocumentImpl } from '../dom/nodes/index';
+} from '../web-idl/index';
+import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../fetch/index';
+
+import { GlobalTimers, type TimerAction } from './scripting/index';
+import { ReportingEndpoint, type ReportImpl, type ReportingObserverImpl } from './reporting/index';
+import type { DocumentImpl } from './dom/nodes/index';
+import { PerformanceImpl } from './performance/index';
 import type { BrowletEnvironment } from './environment';
-import { GlobalTimers, type TimerAction } from './timers';
-import { structuredSerializeOptionsIDL, type StructuredSerializeOptionsRecord } from './structured-data/index';
+import type { StructuredSerializeOptionsRecord } from './scripting/structured-data/index';
 
 /** Owns timers, performance, reporting, and resource lifetimes for one global. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
@@ -146,7 +147,7 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** Transfer outbound data to the browser before this global releases its local state. */
   handoffReports(): void {
     this.retireReports();
-    sendReports(this.reports, this.env);
+    this.env.userAgent.sendReports(this.reports, this.reportingEndpoints);
     this.reports.length = 0;
   }
 
@@ -239,7 +240,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
     op('structuredClone', tsType(idlType.any, 'T'),
       [
         arg('value', tsType(idlType.any, 'T')),
-        arg('options', reference(structuredSerializeOptionsIDL.name), {
+        arg('options', reference('StructuredSerializeOptions'), {
           default: emptyDictionary,
           optional: true,
         }),

@@ -2,6 +2,7 @@ import { TypeError, InternalError } from '../../infra/index';
 import * as JSEngine from '../../js-engine/index';
 
 import type { IDLBufferType } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Validate buffer identity and the sharing/resizing rules of one declared use. */

@@ -1,4 +1,5 @@
 import type { Definition } from '../web-idl/index';
+
 import type { FileEnvironment } from './environment';
 import {
   blobIDL, blobPartIDL, blobPropertyBagIDL, endingTypeIDL,

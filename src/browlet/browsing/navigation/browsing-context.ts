@@ -1,20 +1,21 @@
 import { HTML_NAMESPACE } from '../../../infra/index';
 import { InternalError } from '../../../infra/internal-error';
-import type { ReferrerPolicy } from '../../../fetch/index';
 import {
   serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
   type URLRecord,
 } from '../../../url/index';
+import type { ReferrerPolicy } from '../../../fetch/index';
 
-import { DocumentMode, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
-import { CustomElementRegistryImpl } from '../../html/custom-elements/index';
+import { unsafeSharedCurrentTime } from '../../timing/index';
 import {
   type AgentCluster, type AgentClusterKey, type CrossOriginIsolationMode, obtainSimilarOriginWindowAgent,
 } from '../../scripting/index';
-import { unsafeSharedCurrentTime } from '../../timing/index';
-import type { UserAgent } from '../../user-agent';
 import { PermissionsPolicy, SandboxingFlagSet, InsecureRequestsPolicy } from '../policy/index';
+import { DocumentMode, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
+import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowProxyHandle, WindowImpl } from '../window/index';
+import type { UserAgent } from '../../user-agent';
+
 import type { Navigable } from './navigable';
 
 /** Retains a WindowProxy and the sequence of documents presented through it. */

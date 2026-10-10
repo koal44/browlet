@@ -1,8 +1,10 @@
 import { arg, atArg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
+
+import type { DOMEnvironment } from '../environment';
+
 import { NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
-import type { DOMEnvironment } from '../environment';
 
 /** Comment text retained as a character-data node in the document tree. */
 // https://dom.spec.whatwg.org/#interface-comment

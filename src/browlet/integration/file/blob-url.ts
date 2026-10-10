@@ -1,7 +1,8 @@
 import { InternalError } from '../../../infra/internal-error';
-import { StorageKey, type StorageEnvironment } from '../../../storage/index';
 import { serializeOrigin, serializeURL, type Origin, type URLRecord } from '../../../url/index';
+import { StorageKey, type StorageEnvironment } from '../../../storage/index';
 import type { BlobImpl } from '../../../file/index';
+
 import type { UserAgent } from '../../user-agent';
 
 /** User-agent-owned registrations that retain their objects and creating environments. */

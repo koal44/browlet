@@ -1,8 +1,10 @@
 import { Buffer, isAscii } from 'node:buffer';
+
+import { nonASCIIPattern } from '../../infra/patterns';
 import { codeUnitsToString } from '../../js-engine/index';
+
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
-import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §11.1.1 — Big5 decoder, including its four two-scalar mappings. */
 export class Big5Decoder {

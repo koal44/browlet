@@ -1,5 +1,5 @@
-import type { EventImpl } from './events/index';
 import type { DOMHighResTimeStamp } from '../timing/index';
+import type { EventImpl } from './events/index';
 
 /** Environment supplying the realm and allocation facilities used by DOM events. */
 export interface DOMEnvironment {

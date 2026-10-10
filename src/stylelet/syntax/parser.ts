@@ -1,5 +1,6 @@
-import type { StyleletURL } from '../environment';
 import { asciiLower } from '../../infra/ascii';
+
+import type { StyleletURL } from '../environment';
 import {
   isBraceBlock, isComponentValue, isDelimToken, isIdentToken, isTokenKind,
   isWhitespaceToken,

@@ -1,11 +1,12 @@
+import { InternalError } from '../../infra/internal-error';
+import { internalType, type InternalPromise } from '../../infra/promises';
 import { idlType } from '../../web-idl/index';
+import { obtainURLOrigin, serializeOrigin, serializeURLPath, stripURLForReporting, type URLRecord } from '../../url/index';
+import { encodeBasicCredentials } from '../../http/index';
 import type {
   AuthenticationCredentials, AuthenticationEntry, HTTPAuthentication, FetchController, FetchPromptTarget, FetchRequest,
 } from '../../fetch/index';
-import { obtainURLOrigin, serializeOrigin, serializeURLPath, stripURLForReporting, type URLRecord } from '../../url/index';
-import { encodeBasicCredentials } from '../../http/index';
-import { InternalError } from '../../infra/internal-error';
-import { internalType, type InternalPromise } from '../../infra/promises';
+
 import type { UserAgent } from '../user-agent';
 
 /** Session credentials and authentication prompts owned by one user agent. */

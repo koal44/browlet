@@ -1,11 +1,13 @@
-import type { EventImpl } from '../events/index';
 import { arg, atArg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
+
+import type { EventImpl } from '../events/index';
+import type { DOMEnvironment } from '../environment';
+
 import { type NodeImpl, NodeType } from './node';
 import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { SlottableMixin } from './slottable';
-import type { DOMEnvironment } from '../environment';
 
 /** Text content in a document tree, with slot assignment for shadow trees. */
 // https://dom.spec.whatwg.org/#interface-text

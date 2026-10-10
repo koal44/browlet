@@ -5,9 +5,8 @@ import type { WebIDLRealm } from '../environment';
 import type {
   IDLCallbackFunctionType, IDLCallbackInterfaceType, AssembledCallbackFunction,
 } from '../assembly/index';
-import { IDLCallbackFunction, IDLCallbackInterface } from '../values/index';
 import { getPlatformRecord } from '../binding/platform';
-import { CallbackFunctionStamper } from '../binding/realm/callback';
+import { IDLCallbackFunction, IDLCallbackInterface, CallbackFunctionStamper } from '../values/index';
 
 import { Converter, type ConversionSteps } from './converter';
 

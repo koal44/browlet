@@ -1,6 +1,7 @@
 import { toNumber } from '../../js-engine/index';
 
 import type { IDLFloatType } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare float or double conversion with the declared restrictions on non-finite values. */

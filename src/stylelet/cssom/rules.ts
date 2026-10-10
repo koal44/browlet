@@ -1,10 +1,11 @@
+import { InternalError } from '../../infra/internal-error';
+
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
 import type { StyleletEnvironment } from '../environment';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 import { CSSRuleImpl } from './rule';
 import type { StylePropertyMapImpl } from './style-property-map';
-import { InternalError } from '../../infra/internal-error';
 
 export class CSSStyleRuleImpl extends CSSRuleImpl {
   selectorText = '';

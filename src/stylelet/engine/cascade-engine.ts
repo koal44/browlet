@@ -1,5 +1,6 @@
-import type { StyleletURL } from '../environment';
 import type { DOMElement as Element } from '../../infra/index';
+
+import type { StyleletURL } from '../environment';
 import type {
   CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry,
   PropertyContext, PropertyDeclaration,

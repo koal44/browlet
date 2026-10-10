@@ -4,15 +4,15 @@ import {
   hasExtendedAttribute, type AttributeFunctionSteps, type StringifierMember, type ExtendedAttribute,
 } from '../../core/index';
 
+import { compileSteps } from '../../compiler';
 import {
   AssembledInterface, type IDLType, type IDLAttribute, type IDLOperation,
   type AssembledNamespace, type AssembledOverloads,
 } from '../../assembly/index';
+import type { PlatformRecord, StampedImplInstance } from '../platform';
 import { IDLPromise } from '../../values/index';
 import { CallbackFunctionConverter, type Converter, type ConversionSteps } from '../../converters/index';
-import { compileSteps } from '../../compiler';
 
-import type { PlatformRecord, StampedImplInstance } from '../platform';
 import type { AsyncIteratorSteps } from './async-iterable';
 import type { ImplementationBinding, BoundConstruct } from './implementation';
 import type { ValuePairsSteps } from './iterable';

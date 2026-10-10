@@ -1,4 +1,6 @@
 import { assertNever, mapTuple } from '../../infra/util';
+import { InternalError } from '../../infra/internal-error';
+
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import { createFunctionalNotationConsumer, consumeComma } from '../syntax/component-consumers';
 import {
@@ -34,7 +36,6 @@ import {
 } from './position';
 import { serializeNumber } from './number';
 import { consumeZero, type ZeroValue } from './numeric-literal/zero';
-import { InternalError } from '../../infra/internal-error';
 
 /*
  * <gradient> =

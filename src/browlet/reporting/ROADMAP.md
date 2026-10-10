@@ -11,10 +11,11 @@ Automatic collection, periodic retirement, and other global lifecycles remain be
 | Owner | Responsibility |
 | --- | --- |
 | `ReportImpl` | Observer-visible fields, producer data, original origin, delivery bookkeeping, copying, and serialization |
-| `WindowOrWorkerGlobalScopeMixin` | Endpoint configuration, outbound queue, observer registrations, replay buffer, and cleanup |
-| `BrowletEnvironment` | Report generation, current reporting URL, identification, and access to the actual global |
+| [`generateReport()`](generate.ts) | Construct a report and its concrete body using the source environment's live settings |
+| [`WindowOrWorkerGlobalScopeMixin`](../global-scope.ts) | Endpoint configuration, outbound queue, observer registrations, replay buffer, and cleanup |
+| [`BrowletEnvironment`](../environment.ts) | Source settings, current reporting URL, and report submission through the actual global |
 | `ReportingObserverImpl` | Registration options, pending callback batch, and projected observer operations |
-| `UserAgent` | Delivery preferences, age/failure limits, host scheduling, sandbox execution, and Fetch attempts |
+| [`UserAgent`](../user-agent.ts) | Delivery preferences, grouping and copying outbound reports, endpoint bookkeeping, host scheduling, sandbox execution, and Fetch attempts |
 
 Document creation initializes endpoints from its actual Fetch response.
 `Reporting-Endpoints` parsing uses [Structured Fields](../../http/README.md#structured-fields),
@@ -36,7 +37,9 @@ on HTML tasks with the callback's realm and exception handling.
 
 ## Delivery and lifetime
 
-`sendReports(reports, env)` groups by endpoint identity and original report origin.
+`UserAgent.sendReports(reports, endpoints)` groups by endpoint identity and original
+report origin. The global supplies its endpoint list directly; delivery does not
+look up the global through its environment.
 `cloneForDelivery()` copies JSON data and metadata into an unbound `ReportImpl`,
 omitting the observer body and references to the generating environment.
 Sanitized non-HTTP URLs cannot reconstruct the original origin, so the report
@@ -55,7 +58,7 @@ CORS, same-origin credentials, report destination, low priority, no prompt targe
 and no Service Worker interception. Response handling classifies success, endpoint
 removal, or failure and disposes the unused body.
 
-Body streams still need an execution owner. The UserAgent lazily retains a
+Body streams still need an execution owner. The UserAgent retains a
 sandbox environment with a real Realm, SandboxAgent, and running loop; it creates
 no Window or Document and installs no author interfaces. The upload retains its
 original origin/network state. The sandbox supplies execution without becoming

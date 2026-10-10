@@ -1,11 +1,13 @@
-import type { DOMEnvironment } from '../environment';
+import { InternalError } from '../../../infra/internal-error';
 import {
   arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, tsType, xattr,
 } from '../../../web-idl/index';
+
 import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
+import type { DOMEnvironment } from '../environment';
+
 import type { EventTargetImpl } from './event-target';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Carries event data and the state used by dispatch and cancellation. */
 // https://dom.spec.whatwg.org/#interface-event

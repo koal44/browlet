@@ -1,5 +1,5 @@
-import { encodeOrFailSync, getEncoder, getEncoding, IOQueue, utf8Encode } from '../encoding/index';
 import { RangeError } from '../infra/exceptions';
+import { encodeOrFailSync, getEncoder, getEncoding, IOQueue, utf8Encode } from '../encoding/index';
 
 /*
  * Percent-encoded bytes.

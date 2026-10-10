@@ -1,23 +1,23 @@
-import { createManualEventLoop } from '../../support/browlet-agent';
+import { createManualEventLoop } from '../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 
-import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
-import { Browlet } from '../../../src/browlet/browlet';
-import type { Document, Window } from '../../../src/browlet/platform';
-import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
-import { createDocumentState } from '../../../src/browlet/browsing/navigation/document-state';
-import { Navigable, TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
-import { WindowAgent } from '../../../src/browlet/scripting/agents';
-import { createWindowEnvironment } from '../../../src/browlet/bindings';
-import { UserAgent } from '../../../src/browlet/user-agent';
-import { EnvironmentRecord } from '../../../src/browlet/scripting/environment';
-import { StorageKey } from '../../../src/storage/keys';
-import { createOpaqueOrigin } from '../../../src/url/origin';
-import { determineRequestReferrer } from '../../../src/browlet/browsing/policy/referrer-policy';
-import { FetchRequest, RequestImpl } from '../../../src/fetch/request';
-import { FetchResponse } from '../../../src/fetch/response';
-import { networkPartitionKeysEqual } from '../../../src/fetch/transport';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
+import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
+import { Browlet } from '../../src/browlet/browlet';
+import type { Document, Window } from '../../src/browlet/platform';
+import { BrowsingContext } from '../../src/browlet/browsing/navigation/browsing-context';
+import { createDocumentState } from '../../src/browlet/browsing/navigation/document-state';
+import { Navigable, TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';
+import { WindowAgent } from '../../src/browlet/scripting/agents';
+import { createWindowEnvironment } from '../../src/browlet/bindings';
+import { UserAgent } from '../../src/browlet/user-agent';
+import { EnvironmentRecord } from '../../src/browlet/scripting/environment';
+import { StorageKey } from '../../src/storage/keys';
+import { createOpaqueOrigin } from '../../src/url/origin';
+import { determineRequestReferrer } from '../../src/browlet/browsing/policy/referrer-policy';
+import { FetchRequest, RequestImpl } from '../../src/fetch/request';
+import { FetchResponse } from '../../src/fetch/response';
+import { networkPartitionKeysEqual } from '../../src/fetch/transport';
+import { obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
 
 describe('Window environment cross-site ancestry', () => {
   it('has no cross-site ancestor in a top-level window', () => {

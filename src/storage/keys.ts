@@ -1,5 +1,6 @@
-import type { StorageEnvironment } from './environment';
 import { areSameOrigin, obtainURLOrigin, type Origin } from '../url/index';
+
+import type { StorageEnvironment } from './environment';
 
 /** Identifies the storage partition selected for an environment. */
 // https://storage.spec.whatwg.org/#storage-keys

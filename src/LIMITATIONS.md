@@ -70,7 +70,7 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   global-scope queries throw explicitly. They remain suitable for internal
   allocations and clientless work such as Reporting uploads. Public APIs that
   need those settings require a Window or another complete environment.
-  Sources: [environments](browlet/scripting/environment.ts),
+  Sources: [environments](browlet/environment.ts),
   [sandbox tests](../test/browlet/scripting/sandbox.test.ts).
 
 ## Promise observation
@@ -174,5 +174,5 @@ helpers. Policy inheritance, child navigation, history disposal, and storage-she
 cloning remain with [browsing](browlet/browsing/ROADMAP.md) and
 [navigation](browlet/browsing/navigation/ROADMAP.md). Custom-element registry
 identity is present; reactions and upgrade behavior remain with
-[custom elements](browlet/html/custom-elements/ROADMAP.md). Fetch's remaining
+[custom elements](browlet/dom/nodes/html/custom-elements/ROADMAP.md). Fetch's remaining
 work and provisional consumer hooks stay in its [single roadmap](fetch/ROADMAP.md).

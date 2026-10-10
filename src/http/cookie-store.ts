@@ -1,4 +1,5 @@
 import { hostsEqual, type URLPath } from '../url/index';
+
 import { HTTPCookie, type CookieHost, type CookieSameSite, type StoredHTTPCookie } from './cookie';
 
 /** Stores cookie records, applies caller-supplied access policy, and manages eviction. */

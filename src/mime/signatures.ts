@@ -1,5 +1,6 @@
-import { createMIMEType, type MIMEType } from './mime-type';
 import { InternalError } from '../infra/internal-error';
+
+import { createMIMEType, type MIMEType } from './mime-type';
 
 /*
  * MIME Sniffing §6 pattern matching algorithm.

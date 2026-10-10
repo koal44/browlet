@@ -1,6 +1,7 @@
 import {
   standardDOM, type DOMOperations, type DOMNode, type DOMElement, type DOMDocument, type DOMDocumentFragment,
 } from '../infra/index';
+
 import type { SelectletOptions } from './selectlet';
 
 /** Existing owner supplying the host DOM used by selector queries. */

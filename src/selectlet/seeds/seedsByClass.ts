@@ -1,6 +1,7 @@
 import type {
   DOMQueryRoot as QuerySource, DOMOperations, DOMElement as Element, DOMDocumentFragment as DocumentFragment,
 } from '../../infra/index';
+
 import { LOOKUP_COPY, type LookupMode } from '../constants';
 import { concatCollection, htmlCollectionSource } from '../collections';
 import type { SelectletContext } from '../context';

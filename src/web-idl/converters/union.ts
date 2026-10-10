@@ -4,9 +4,10 @@ import {
 } from '../../js-engine/index';
 
 import type { IDLUnionType, UnionInterfaceCandidate } from '../assembly/index';
-import { IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary } from '../values/index';
 import { getPlatformRecord } from '../binding/platform';
-import { CallbackFunctionStamper } from '../binding/realm/callback';
+import {
+  IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary, CallbackFunctionStamper,
+} from '../values/index';
 
 import { Converter, type ConversionSteps } from './converter';
 import { isMap } from './record';

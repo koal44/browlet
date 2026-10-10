@@ -1,12 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getBindingContext, getRelevantRealm } from '../../../../support/browlet-binding';
+import { createClientEnvironment } from '../../../../fetch/client-fixture';
 import { Browlet } from '../../../../../src/browlet/browlet';
 import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { ReportImpl } from '../../../../../src/browlet/reporting/report';
-import type { BrowletEnvironment } from '../../../../../src/browlet/scripting/environment';
 import { networkingTaskSource } from '../../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../../src/fetch/body';
+import type { FetchEnvironment } from '../../../../../src/fetch/environment';
 import { FetchRequest } from '../../../../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../../../../src/fetch/response';
 import { utf8Encode } from '../../../../../src/encoding/index';
@@ -62,6 +63,33 @@ describe('CSP hash reports', () => {
     const { request, response, scope } = createHashResponse();
     response.isBlockedByCSP(request);
     expect(scope.reports[0]!.data).toMatchObject({ hash: 'sha256-47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=' });
+  });
+
+  it('reports through a Fetch client contract using its current reporting URL', async () => {
+    const env = createClientEnvironment('https://protected.test/creation');
+    env.isWindow = true;
+    env.getReportingSource = () => parseURL('https://protected.test/current#section').url!;
+    const policies = new CSPList(env.origin);
+    policies.policies.push(ContentSecurityPolicy.parse(
+      "script-src https: 'report-sha256'; report-to hashes", 'header', 'enforce',
+    ));
+    env.policyContainer.cspList = policies;
+    const queueReport = vi.fn<FetchEnvironment['queueReport']>();
+    const reported = new Promise<void>((resolve) => {
+      env.queueReport = queueReport.mockImplementation(() => resolve());
+    });
+    const request = new FetchRequest(parseURL('https://resource.test/file').url!, env, env.userAgent);
+    request.destination = 'script';
+    request.populateFromClient();
+    const response = new FetchResponse();
+    response.urlList = [request.url];
+    response.body = FetchBody.fromBytes(utf8Encode('abc'), env);
+    expect(response.isBlockedByCSP(request)).toBe(false);
+    await reported;
+    expect(queueReport).toHaveBeenCalledExactlyOnceWith('csp-hash', 'hashes', {
+      documentURL: 'https://protected.test/current', subresourceURL: 'https://resource.test/file',
+      hash: sha256ABC, destination: 'script', type: 'subresource',
+    });
   });
 
   it('waits for the whole stream rather than hashing an initial chunk', async () => {
@@ -184,7 +212,10 @@ describe('CSP hash disclosure and read failures', () => {
     expect(response.body.stream.isErrored).toBe(true);
   });
 
-  it.each(['no algorithm', 'no report-to', 'empty report-to', 'opt out', 'no client', 'not script', 'network error'])(
+  it.each([
+    'no algorithm', 'no report-to', 'empty report-to', 'opt out', 'no client', 'non-Window client',
+    'no reporting source', 'not script', 'network error',
+  ])(
     'does not touch the body when there is %s', (reason) => {
       const policy = reason === 'no algorithm' ? 'script-src https:; report-to hashes' :
         reason === 'no report-to' ? "script-src https: 'report-sha256'; report-uri /reports" :
@@ -192,6 +223,8 @@ describe('CSP hash disclosure and read failures', () => {
       const { env, request, response, scope } = createHashResponse(policy);
       if (reason === 'opt out') env.userAgent.reportDeliveryEnabled = false;
       if (reason === 'no client') request.client = null;
+      if (reason === 'non-Window client') vi.spyOn(env, 'isWindow', 'get').mockReturnValue(false);
+      if (reason === 'no reporting source') vi.spyOn(request.client!, 'getReportingSource').mockReturnValue(null);
       if (reason === 'not script') request.destination = 'image';
       if (reason === 'network error') response.type = 'error';
       const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
@@ -261,7 +294,7 @@ function createHashResponse(
 }
 
 /** Observe submission without replacing generation, queues, or the browser scheduler. */
-function waitForHashReports(env: BrowletEnvironment, count = 1): Promise<void> {
+function waitForHashReports(env: FetchEnvironment, count = 1): Promise<void> {
   const submitReport = env.queueReport.bind(env);
   return new Promise((resolve) => {
     vi.spyOn(env, 'queueReport').mockImplementation((type, endpoint, body) => {

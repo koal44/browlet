@@ -82,7 +82,7 @@ with proper live/static collections and expose selector APIs through one
 Selectlet adapter. Tests must reject invalid mutations without partial changes.
 
 **3: join mutation, reactions, and parsing in one vertical slice.**
-The [DOM](browlet/dom/ROADMAP.md) and [custom-element](browlet/html/custom-elements/ROADMAP.md)
+The [DOM](browlet/dom/ROADMAP.md) and [custom-element](browlet/dom/nodes/html/custom-elements/ROADMAP.md)
 owners supply MutationObserver delivery, reaction stacks/`[CEReactions]`, and
 slot assignment/signaling at the same checkpoint. The [parse5 adapter](browlet/html/parser/ROADMAP.md)
 must use that mutation path, including foster-parented text, templates, intended

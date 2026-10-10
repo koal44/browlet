@@ -1,10 +1,11 @@
-import type { EventTargetImpl, EventImpl } from '../events/index';
-import type { DOMEnvironment } from '../environment';
-import { TreeNode } from '../infra/index';
 import {
   arg, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr,
 } from '../../../web-idl/index';
+
+import type { EventTargetImpl, EventImpl } from '../events/index';
+import type { DOMEnvironment } from '../environment';
+
 import type { CharacterDataImpl } from './character-data';
 import type { CommentImpl } from './comment';
 import type { DocumentImpl } from './document';
@@ -13,6 +14,7 @@ import type { DocumentTypeImpl } from './document-type';
 import type { ElementImpl } from './element';
 import type { TextImpl } from './text';
 import { ensurePreInsertValidity } from './mutation';
+import { TreeNode } from './tree';
 
 /** Base tree node with document ownership, navigation, and event ancestry. */
 // https://dom.spec.whatwg.org/#interface-node

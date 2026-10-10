@@ -1,5 +1,6 @@
 import { InternalError } from '../infra/internal-error';
 import { DOMExceptionImpl } from '../web-idl/core/index';
+
 import type { FetchTimingInfo } from './timing';
 import type { FetchEnvironment } from './environment';
 

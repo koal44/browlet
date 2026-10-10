@@ -1,4 +1,5 @@
 import type { DOMElement as Element } from '../../infra/index';
+
 import {
   propertyRegistry,
   resolveBuiltInPropertyDeclaration,

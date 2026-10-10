@@ -1,5 +1,6 @@
 import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { TextCursor } from '../infra/text-cursor';
+
 import { parseHTTPDate } from './headers';
 import { isHTTPToken } from './syntax';
 

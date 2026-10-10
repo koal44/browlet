@@ -1,10 +1,12 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
+
 import { Stamper } from '../../../infra/stamper';
+import { InternalError } from '../../../infra/internal-error';
+
 import {
   type AttrImpl, type CommentImpl, DocumentMode, type DocumentImpl, type DocumentTypeImpl,
   type DocumentFragmentImpl, type ElementImpl, type TextImpl, type NodeImpl,
 } from '../../dom/nodes/index';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Connects parse5 tree construction directly to Browlet node implementations. */
 // https://html.spec.whatwg.org/multipage/parsing.html#tree-construction

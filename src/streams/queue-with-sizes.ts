@@ -1,5 +1,5 @@
-import type { JSEnvironment } from '../js-engine/index';
 import { InternalError } from '../infra/internal-error';
+import type { JSEnvironment } from '../js-engine/index';
 
 /** Streams §8.1, a queue that tracks the total size of its values. */
 export class QueueWithSizes<Value> {

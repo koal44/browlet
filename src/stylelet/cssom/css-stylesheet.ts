@@ -1,5 +1,6 @@
 import type { DOMDocument as Document } from '../../infra/index';
 import { internalType } from '../../infra/promises';
+
 import {
   interpretStylesheet, parseStylesheet,
   type InterpretedRule, type InterpretedStyleSheet,

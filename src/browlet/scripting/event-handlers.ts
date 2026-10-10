@@ -1,9 +1,10 @@
+import { InternalError } from '../../infra/internal-error';
 import {
   arg, attr, onError, defineCallbackFunction, defineTypedef, idlType,
   nullable, reference, type AttributeMember, xattr,
 } from '../../web-idl/index';
+
 import type { EventTargetImpl, EventImpl } from '../dom/events/index';
-import { InternalError } from '../../infra/internal-error';
 
 // Content attributes, special error/beforeunload handlers, and body/frameset
 // Window-target rules await their HTML integrations.

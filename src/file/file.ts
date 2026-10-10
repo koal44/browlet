@@ -1,14 +1,15 @@
-import { parseMIMEType } from '../mime/index';
+import { InternalError } from '../infra/internal-error';
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
   type SerialSteps,
 } from '../web-idl/index';
+import { parseMIMEType } from '../mime/index';
+
 import {
   BlobImpl, blobSerialSteps, type BlobPart, type BlobPropertyBag, type BlobSerializedFields,
 } from './blob';
 import { BlobData, type BlobByteSource } from './blob-data';
-import { InternalError } from '../infra/internal-error';
 import type { FileEnvironment } from './environment';
 
 /*

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
 import { Browlet } from '../../../../../src/browlet/browlet';
 import { getRelevantRealm } from '../../../../support/browlet-binding';
@@ -6,6 +6,7 @@ import { CSPList } from '../../../../../src/browlet/browsing/policy/csp/list';
 import { FetchRequest } from '../../../../../src/fetch/request';
 import { FetchResponse } from '../../../../../src/fetch/response';
 import { parseURL } from '../../../../../src/url/url';
+import { createClientEnvironment } from '../../../../fetch/client-fixture';
 
 describe('Fetch CSP integration', () => {
   it('requires populated request policies while allowing an absent or empty CSP list', () => {
@@ -32,6 +33,28 @@ describe('Fetch CSP integration', () => {
     expect(request.isBlockedByCSP()).toBe(false);
     expect(responseAt('https://resource.test/image').isBlockedByCSP(request)).toBe(false);
   });
+
+  it.each(['monitored request', 'enforced request', 'response'] as const)(
+    'delegates %s violations to the client without requiring a browser environment', (phase) => {
+      const env = createClientEnvironment();
+      const reportCSPViolation = vi.fn();
+      env.exec.reportCSPViolation = reportCSPViolation;
+      const response = responseAt('https://resource.test/page');
+      const header = phase === 'monitored request' ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy';
+      response.headerList.append(header, "img-src 'none'");
+      const list = CSPList.parse(response);
+      env.policyContainer.cspList = list;
+      const request = new FetchRequest(parseURL('https://resource.test/image').url!, env, env.userAgent);
+      request.destination = 'image';
+      request.populateFromClient();
+
+      if (phase === 'monitored request') request.reportCSPViolations();
+      else if (phase === 'enforced request') expect(request.isBlockedByCSP()).toBe(true);
+      else expect(responseAt('https://resource.test/image').isBlockedByCSP(request)).toBe(true);
+
+      expect(reportCSPViolation).toHaveBeenCalledExactlyOnceWith(list.policies[0], request);
+    },
+  );
 
   it('does not enforce a monitored policy in the request-blocking pass', () => {
     const { request } = requestWithPolicy("img-src 'none'", true);

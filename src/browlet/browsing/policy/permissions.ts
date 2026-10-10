@@ -1,6 +1,7 @@
-import type { ElementImpl } from '../../dom/nodes/index';
-import type { Origin } from '../../../url/index';
 import { InternalError } from '../../../infra/internal-error';
+import type { Origin } from '../../../url/index';
+
+import type { ElementImpl } from '../../dom/nodes/index';
 
 /** Placeholder state for a document's policy-controlled feature permissions. */
 // https://w3c.github.io/webappsec-permissions-policy/#permissions-policy

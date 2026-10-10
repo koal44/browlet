@@ -1,12 +1,13 @@
 import type { DOMElement as Element } from '../../infra/index';
+import { asciiLower } from '../../infra/ascii';
+import { assertNever } from '../../infra/util';
+import { asciiWhitespacePattern } from '../../infra/patterns';
+
 import {
   type AttributeSelector, type CandidateElementPredicate, type CandidateTest, type CandidateSubjectPredicate, type CompoundSelector, type RelativeSelectorList, type SelectorList,
 } from '../parser/parser';
 import type { NthArgs } from '../parser/nth';
-import { asciiLower } from '../../infra/ascii';
 import { cssIdentUnescape } from '../parser/escape';
-import { assertNever } from '../../infra/util';
-import { asciiWhitespacePattern } from '../../infra/patterns';
 import {
   hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,

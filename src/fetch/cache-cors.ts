@@ -1,4 +1,5 @@
 import { serializeURL } from '../url/index';
+
 import { isCORSNonWildcardRequestHeaderName } from './headers';
 import type { FetchRequest } from './request';
 import { networkPartitionKeysEqual, type NetworkPartitionKey } from './transport';

@@ -1,4 +1,5 @@
 import { asciiLower } from '../../infra/ascii';
+
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,
 } from '../syntax/token-cursor';

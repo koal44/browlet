@@ -1,10 +1,11 @@
 import { toString } from '../js-engine/index';
-import { utf8Encode } from './codecs/utf-8';
 import { atArg, ctor, defineIncludes, defineInterface, impl } from '../web-idl/index';
 import {
   GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type StreamsEnvironment, type WritableStreamImpl,
 } from '../streams/index';
+
+import { utf8Encode } from './codecs/utf-8';
 
 /*
  * [Exposed=*]

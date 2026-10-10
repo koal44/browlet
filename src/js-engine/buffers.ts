@@ -1,7 +1,9 @@
 import { types as nodeTypes } from 'node:util';
-import { getNativeArrayBufferViewLengthTracking } from './runtime';
+
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
+
+import { getNativeArrayBufferViewLengthTracking } from './runtime';
 
 export type RuntimeBuffers = {
   /** Allocate zero-initialized final storage directly in the owning realm. */

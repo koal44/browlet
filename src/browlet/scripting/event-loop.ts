@@ -1,9 +1,10 @@
-import { createMicrotaskQueue } from '../../js-engine/index';
-import type { DocumentImpl } from '../dom/nodes/index';
-import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
-import type { BrowletEnvironment } from './environment';
 import { InternalError } from '../../infra/internal-error';
 import type { TaskCreationOptions } from '../../infra/execution';
+import { createMicrotaskQueue } from '../../js-engine/index';
+
+import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
+import type { DocumentImpl } from '../dom/nodes/index';
+import type { BrowletEnvironment } from '../environment';
 
 // Task-source/queue associations stay private so scheduling can coalesce
 // sources without changing callers.

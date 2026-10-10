@@ -1,3 +1,5 @@
+import { InternalError } from '../infra/internal-error';
+
 import {
   domainToUnicode, obtainRegistrableDomain, parseHost, serializeHost, type Host,
 } from './host';
@@ -5,7 +7,6 @@ import { utf8PercentEncode, percentEncodeAfterEncoding } from './percent-encodin
 import { CodePointCursor, isURLCodePoint } from './cp-cursor';
 import { createOpaqueOrigin, type Origin } from './origin';
 import type { URLValidationError } from './validation-error';
-import { InternalError } from '../infra/internal-error';
 
 /*
  * A URL record.

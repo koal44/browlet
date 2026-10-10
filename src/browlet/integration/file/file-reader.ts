@@ -1,19 +1,19 @@
+import type { TaskHandle } from '../../../infra/index';
+import { InternalError } from '../../../infra/internal-error';
+import { getBufferSourceCopy } from '../../../js-engine/index';
 import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
   reference, union, DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
-import { getBufferSourceCopy } from '../../../js-engine/index';
-import {
-  type BrowletEnvironment, EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
-} from '../../scripting/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
-import type { TaskHandle } from '../../../infra/index';
-import { EventTargetImpl } from '../../dom/events/index';
-import { ProgressEventImpl } from '../xhr/index';
+
 import { unsafeSharedCurrentTime } from '../../timing/index';
-import { InternalError } from '../../../infra/internal-error';
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
+import { EventTargetImpl } from '../../dom/events/index';
+import { type BrowletEnvironment } from '../../environment';
+import { ProgressEventImpl } from '../xhr/index';
 
 /** Reads Blob data asynchronously and dispatches progress and completion events. */
 // https://w3c.github.io/FileAPI/#APIASynch

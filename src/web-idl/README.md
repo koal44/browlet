@@ -39,13 +39,14 @@ Web IDL runtime modules import Core through its index; Core modules import their
 | `binding/realm.ts` | Retain the environment, supply typed implementation Promises, and own allocation, conversion caches, identity, and invocation services |
 | `binding/realm/implementation.ts`, `binding/realm/member.ts` | Registered implementation steps and the platform objects and functions that invoke them |
 | `binding/register.ts` | Connect assembled declarations to implementation factories, members, and explicit bindings |
-| `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, captured-context restoration, and implementation-callable identity |
+| `binding/realm/callback.ts` | Shared callback invocation, prepared conversions, and captured-context restoration |
 | `binding/realm/overload.ts` | Select a callable and convert its arguments for invocation |
 | `converters/factory.ts` | Select the converter subclass for an assembled type |
 | `compiler.ts` | Compile internal binding and conversion steps with explicit dependencies and separate optimization feedback |
 | `converters/converter.ts` | Base Converter, shared rules and ownership, defaults, and conversion error boundaries |
 | `converters/` | Type-specific Converter subclasses and IDL-to-implementation conversion |
 | `values/` | Runtime IDL dictionaries, callbacks, promises, and iterable/iterator state |
+| `values/callback.ts` | Callback values and their private association with implementation callables |
 | `values/value.ts` | IDL and author value typings, including plain record, sequence, and collection containers |
 | `binding/platform.ts` | The identity record shared by an implementation and its platform object |
 | `binding/realm/global.ts`, `binding/realm/legacy.ts` | Global and legacy platform-object behavior |
@@ -156,7 +157,7 @@ preserve runtime conversion, implementation argument typing, and IDL serializati
 Only the development-time generator follows these refinements and checks their
 expressions and scopes using TypeScript without DOM or Node globals; compiled
 runtime types carry no TypeScript refinements. See `structuredClone` in
-[`global-scope.ts`](../browlet/scripting/global-scope.ts) and `CustomEvent` in
+[`global-scope.ts`](../browlet/global-scope.ts) and `CustomEvent` in
 [`event.ts`](../browlet/dom/events/event.ts) for operation and instance examples.
 
 The [TextEncoder declaration](../encoding/text-encoder.ts) uses `JSEnvironment`.
@@ -210,7 +211,8 @@ in Core. The `IDL…` prefix identifies these values without boxing every value.
 
 Callback values expose invocation methods that delegate to `CallbackBinding`.
 That realm component owns shared `CallbackInvoker` plans, dynamic operation
-lookup, context restoration, and callback stamps. A callback interface's
+lookup, and context restoration. `values/callback.ts` owns the stamp associating
+an implementation callable with its IDL callback value. A callback interface's
 `toImpl(ctx, cbValue)` hook still receives the value and can invoke its operations.
 The value captures its own callback context; sharing a plan never shares that
 context or the original author object.
@@ -772,7 +774,7 @@ declaration generation does not certify that unfinished bindings are implemented
 
 CSSOM projection and restoring `ObservableArray<CSSStyleSheet>` remain with
 [style integration](../browlet/style/ROADMAP.md#next-boundary-change).
-`[CEReactions]` belongs to [HTML custom elements](../browlet/html/custom-elements/ROADMAP.md),
+`[CEReactions]` belongs to [HTML custom elements](../browlet/dom/nodes/html/custom-elements/ROADMAP.md),
 security policy to [Window](../browlet/browsing/window/ROADMAP.md), and new platform
 transfer types to [structured data](../browlet/scripting/structured-data/ROADMAP.md).
 Declarations or provisional hooks alone do not establish those behaviors.

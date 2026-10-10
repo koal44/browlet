@@ -1,12 +1,13 @@
-import type { BlobImpl, FileEnvironment, FileExecution } from '../file/index';
-import type { CookieStore } from '../http/index';
 import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
-import type { MIMEType } from '../mime/index';
-import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
-import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
+import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
+import type { CookieStore } from '../http/index';
+import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+import type { MIMEType } from '../mime/index';
+import type { BlobImpl, FileEnvironment, FileExecution } from '../file/index';
+
 import type { FetchController } from './controller';
 import type { Destination } from './destination';
 import type { FetchGroup } from './group';
@@ -43,7 +44,7 @@ export function isOffline(env: FetchEnvironment): boolean {
 export interface FetchEnvironment extends FetchEnvironmentRecord, FileEnvironment {
   /** Execution, body handling, aborts, and task delivery for this environment. */
   exec: FetchExecution;
-  /** Whether this environment belongs to a Window, which can consume Document preloads. */
+  /** Whether this environment's global is a Window. */
   isWindow: boolean;
   /** Whether this global is a ServiceWorkerGlobalScope, which cannot intercept its own fetches. */
   isServiceWorker: boolean;
@@ -91,10 +92,12 @@ export interface FetchEnvironment extends FetchEnvironmentRecord, FileEnvironmen
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void;
 }
 
-/** File/stream facilities, abort exceptions, and delivery to Fetch's selected global. */
+/** File/stream facilities, abort exceptions, policy reporting, and global task delivery. */
 export interface FetchExecution extends FileExecution, WebIDLExecution {
   /** Queue on the destination global's networking task source, which can differ from the body owner's. */
   queueGlobalFetchTask(global: GlobalObject, steps: () => void): void;
+  /** Report for this client; the composed CSP implementation validates the opaque policy. */
+  reportCSPViolation(policy: unknown, request: FetchRequest): void;
 }
 
 /** An opaque reference to the HTML traversable selected for user prompts. */
@@ -233,6 +236,8 @@ export interface FetchUserAgent extends StorageUserAgent {
   cookieStore: CookieStore;
   /** Enables sending and accepting cookies without deleting the store when disabled. */
   cookiesEnabled: boolean;
+  /** Allows outbound reports, including body reads needed to generate CSP hashes. */
+  reportDeliveryEnabled: boolean;
   /** Browser-owned transport-security state shared by this user agent's requests. */
   hstsStore: {
     /** Whether a URL host has an unexpired exact or inherited HTTPS requirement. */

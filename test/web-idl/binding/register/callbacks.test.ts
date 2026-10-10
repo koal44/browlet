@@ -5,10 +5,10 @@ import {
   defineTypedef, dictMember, idlType, impl, op, roAttr, record, reference, sequence, union,
   invokeWith,
 } from '../../../../src/web-idl/core/index';
-import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import {
   CallbackFunctionStamper, type StampedCallbackFunction,
-} from '../../../../src/web-idl/binding/realm/callback';
+} from '../../../../src/web-idl/values/index';
+import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import type { WebIDLRealm } from '../../../../src/web-idl/index';
 
 import { installTestBindings } from '../../../support/web-idl-binding';

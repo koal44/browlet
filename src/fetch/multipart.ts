@@ -1,12 +1,12 @@
-import { encode, utf8DecodeWithoutBOM, type Encoding } from '../encoding/index';
-import { BlobData, FileImpl, type FileEnvironment } from '../file/index';
 import { TypeError } from '../infra/exceptions';
 import { toScalarValueString } from '../infra/index';
 import { lineEndingPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { TextCursor } from '../infra/text-cursor';
 import { isomorphicDecode, isomorphicEncode, randomUUID } from '../js-engine/index';
-import type { MIMEType } from '../mime/index';
+import { encode, utf8DecodeWithoutBOM, type Encoding } from '../encoding/index';
 import { percentEncodeByte } from '../url/index';
+import type { MIMEType } from '../mime/index';
+import { BlobData, FileImpl, type FileEnvironment } from '../file/index';
 import type { FormDataEntry } from '../xhr/index';
 
 /** Encode headers and text, retaining File data and leaving the entry list unchanged. */

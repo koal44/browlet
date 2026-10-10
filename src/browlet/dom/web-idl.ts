@@ -1,10 +1,10 @@
-import type { BrowletEnvironment } from '../scripting/index';
 import type { Definition } from '../../web-idl/index';
-import { abortControllerIDL, abortSignalIDL } from './abort/index';
+
 import {
   addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL, eventTargetIDL, customEventIDL,
   customEventInitIDL, eventIDL, eventInitIDL,
 } from './events/index';
+import { abortControllerIDL, abortSignalIDL } from './abort/index';
 import {
   characterDataIDL, characterDataIncludesChildNodeIDL, characterDataIncludesNonDocumentTypeChildNodeIDL,
   attrIDL, namedNodeMapIDL, htmlCollectionIDL, commentIDL, documentFragmentIDL,
@@ -15,6 +15,7 @@ import {
   childNodeIDL, documentOrShadowRootIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL, shadowRootIDL,
   shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL, textIDL,
 } from './nodes/index';
+import type { BrowletEnvironment } from '../environment';
 
 export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   eventIDL,

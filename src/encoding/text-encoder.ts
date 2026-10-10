@@ -1,10 +1,11 @@
 import { getBufferSourceView, type JSEnvironment } from '../js-engine/index';
-import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, idlType, impl, op,
   roAttr, reference, xattr,
 } from '../web-idl/index';
+
+import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 
 /*
  * dictionary TextEncoderEncodeIntoResult {

@@ -1,9 +1,11 @@
 import type { AbortController } from '../../../infra/execution';
-import type { BrowletEnvironment } from '../../scripting/index';
 import {
   arg, atArg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
   impl, invokeWith,
 } from '../../../web-idl/index';
+
+import type { BrowletEnvironment } from '../../environment';
+
 import { AbortSignalImpl } from './abort-signal';
 
 /** Controls cancellation through an associated signal. */

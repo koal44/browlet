@@ -20,7 +20,7 @@ describe('CSP violation construction and serialization', () => {
     document.referrer = 'https://name:secret@referrer.test/path#fragment';
     request.destination = 'script';
     request.urlList.push(parseURL('https://redirected.test/private').url!);
-    const violation = policy.createViolationForRequest(request);
+    const violation = policy.createViolationForRequest(request, env);
     expect(violation.env).toBe(env);
     expect(violation.status).toBe(201);
     expect(violation.effectiveDirective).toBe('script-src-elem');
@@ -38,8 +38,8 @@ describe('CSP violation construction and serialization', () => {
   });
 
   it('serializes the legacy payload with conditional source-location fields', () => {
-    const { policy, request } = createCSPWindow("img-src 'none'");
-    const violation = policy.createViolationForRequest(request);
+    const { env, policy, request } = createCSPWindow("img-src 'none'");
+    const violation = policy.createViolationForRequest(request, env);
     const serialize = () => JSON.parse(new TextDecoder().decode(violation.serialize())) as { 'csp-report': Record<string, unknown>; };
     const original = serialize()['csp-report'];
     expect(original).toEqual({

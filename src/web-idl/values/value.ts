@@ -4,6 +4,7 @@ import type {
   IDLType, IDLNullableType, IDLUnionType, IDLSequenceType, IDLRecordType, IDLFrozenArrayType,
   IDLPromiseType, IDLAsyncSequenceType,
 } from '../assembly/index';
+
 import type { IDLAsyncSequence } from './async-sequence';
 import type { IDLCallbackFunction, IDLCallbackInterface } from './callback';
 import type { IDLDictionary } from './dictionary';

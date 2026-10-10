@@ -1,21 +1,24 @@
 import type { URL } from 'node:url';
-import { type DocumentImpl, ElementImpl } from '../../dom/nodes/index';
-import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
+
+import type { InternalPromise } from '../../../infra/promises';
+import { InternalError } from '../../../infra/internal-error';
 import {
   arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
   impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/index';
+import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
+import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
+
+import type { TimerAction } from '../../scripting/index';
+import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
+import { type DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+import type { PerformanceImpl } from '../../performance/index';
+import type { WindowEnvironment } from '../../environment';
+import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
+import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/index';
+
 import { LocationImpl } from './location';
 import type { WindowProxyHandle } from './window-proxy';
-import type { PerformanceImpl } from '../../performance/index';
-import type {
-  WindowOrWorkerGlobalScopeMixin, TimerHandler, TimerAction, WindowEnvironment,
-} from '../../scripting/index';
-import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/index';
-import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
-import type { InternalPromise } from '../../../infra/promises';
-import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object

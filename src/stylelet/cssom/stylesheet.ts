@@ -1,9 +1,10 @@
-import { MediaListImpl } from './media-list';
 import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
+import { TypeError } from '../../infra/exceptions';
+
+import { MediaListImpl } from './media-list';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 import type { CSSOMString } from './string';
 import type { StyleletEnvironment } from '../environment';
-import { TypeError } from '../../infra/exceptions';
 
 /*
  * [Exposed=Window]

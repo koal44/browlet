@@ -1,6 +1,7 @@
-import type { BrowletEnvironment } from '../../scripting/index';
-import { BlobImpl } from '../../../file/index';
 import { arg, definePartialInterface, idlType, reference, staticOp } from '../../../web-idl/index';
+import { BlobImpl } from '../../../file/index';
+
+import type { BrowletEnvironment } from '../../environment';
 
 /*
  * File API §8.4:

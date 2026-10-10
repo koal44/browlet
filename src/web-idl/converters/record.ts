@@ -3,6 +3,7 @@ import { defineDataProperty, hasMapData, isObject } from '../../js-engine/index'
 
 import type { IDLRecordType } from '../assembly/index';
 import type { IDLRecord, IDLValue } from '../values/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Convert own enumerable properties to IDL entries and project them as author data properties. */

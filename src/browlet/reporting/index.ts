@@ -1,4 +1,5 @@
-export { sendReports, type ReportDeliveryResult } from './delivery';
+// Shared Reporting implementations. The higher-level generate.ts entry also
+// consumes policy report bodies, which depend on this barrel's base classes.
 export { ReportingEndpoint } from './endpoint';
 export {
   ReportingObserverImpl, type ReportingObserverOptions, type ReportingObserverCallback,

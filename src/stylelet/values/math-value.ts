@@ -1,5 +1,7 @@
 import { asciiLower } from '../../infra/ascii';
 import { assertNever } from '../../infra/util';
+import { InternalError } from '../../infra/internal-error';
+
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
   consumeWhitespace, createFunctionalNotationConsumer, consumeAsteriskDelim,
@@ -35,7 +37,6 @@ import { RESOLUTION_UNITS, canonicalizeResolution, type ResolutionLiteral } from
 import {
   TIME_UNITS, canonicalizeTime, type CanonicalTimeLiteral, type TimeLiteral,
 } from './numeric-literal/time';
-import { InternalError } from '../../infra/internal-error';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';

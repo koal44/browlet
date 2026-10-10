@@ -3,6 +3,7 @@ import { defineDataProperty, getMethod, isObject, type JSMethod } from '../../js
 
 import type { IDLSequenceType, IDLFrozenArrayType } from '../assembly/index';
 import type { IDLSequence, IDLValue } from '../values/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Convert iterable elements and allocate author arrays in the selected realm. */

@@ -3,6 +3,7 @@ import { isObject } from '../../js-engine/index';
 
 import type { IDLInterfaceType, IDLProxyType } from '../assembly/index';
 import { getPlatformRecord } from '../binding/platform';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Unwrap and project values of one assembled interface. */

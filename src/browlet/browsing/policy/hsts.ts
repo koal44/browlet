@@ -1,8 +1,8 @@
-import type { FetchResponse } from '../../../fetch/index';
-import { isHTTPToken, isHTTPTabOrSpace } from '../../../http/index';
 import { TextCursor } from '../../../infra/text-cursor';
 import { nonASCIIDigitPattern } from '../../../infra/patterns';
 import type { Host } from '../../../url/index';
+import { isHTTPToken, isHTTPTabOrSpace } from '../../../http/index';
+import type { FetchResponse } from '../../../fetch/index';
 
 /** Transport-security policies remembered across this user agent's documents. */
 // https://www.rfc-editor.org/rfc/rfc6797.html#section-8.1

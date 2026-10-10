@@ -2,8 +2,9 @@ import type {
   DOMQueryRoot as QuerySource, DOMOperations, DOMCollection, DOMElement as Element, DOMDocument as Document,
   DOMDocumentFragment as DocumentFragment,
 } from '../../infra/index';
-import type { LookupMode } from '../constants';
 import { iterableToArray } from '../../infra/collections';
+
+import type { LookupMode } from '../constants';
 import type { SelectletContext } from '../context';
 
 export type SeedIdFn = (id: string, source: QuerySource, lookupMode: LookupMode) => Element[];

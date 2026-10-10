@@ -1,7 +1,8 @@
-import { detectBOM, type BOMEncoding, type Encoding } from './core/index';
 import { RangeError } from '../infra/exceptions';
 import { internalType, type InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
+import { detectBOM, type BOMEncoding, type Encoding } from './core/index';
+
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
 import { GB18030Decoder, GB18030Encoder } from './codecs/gb18030';
 import { Big5Decoder, Big5Encoder } from './codecs/big5';

@@ -1,13 +1,14 @@
 import { InternalError } from '../../../infra/internal-error';
-import { FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
 import { createOpaqueOrigin, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
+import { FetchResponse, type FetchRequest, type FetchController, type ReferrerPolicy } from '../../../fetch/index';
 
-import type { DocumentImpl } from '../../dom/nodes/index';
-import type { NavigationTimingType } from '../../performance/index';
-import type { EnvironmentRecord } from '../../scripting/index';
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
+import type { EnvironmentRecord } from '../../scripting/index';
 import { PolicyContainer, OpenerPolicy, SandboxingFlagSet, PermissionsPolicy } from '../policy/index';
 import { CSPList } from '../policy/csp/index';
+import type { DocumentImpl } from '../../dom/nodes/index';
+import type { NavigationTimingType } from '../../performance/index';
+
 import type { BrowsingContext } from './browsing-context';
 import { createDocumentState } from './document-state';
 import { TopLevelTraversable, type Navigable, type UserNavigationInvolvement } from './navigable';

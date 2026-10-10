@@ -1,15 +1,18 @@
-import { idlType } from '../../../web-idl/index';
 import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
-import { bindAsyncContext, getBufferSourceCopy, isUint8Array, type JSEnvironment } from '../../../js-engine/index';
-import { bomSniff, endOfQueue, getDecoder, getEncoding, IOQueue, type Decoder } from '../../../encoding/index';
-import type { FetchBody, FetchHeaders } from '../../../fetch/index';
-import type { ReadableStreamDefaultReaderImpl } from '../../../streams/index';
+
 import { InternalError } from '../../../infra/internal-error';
 import type { InternalPromise } from '../../../infra/promises';
-import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+import { bindAsyncContext, getBufferSourceCopy, isUint8Array, type JSEnvironment } from '../../../js-engine/index';
+import { idlType } from '../../../web-idl/index';
+import type { ReadableStreamDefaultReaderImpl } from '../../../streams/index';
+import { bomSniff, endOfQueue, getDecoder, getEncoding, IOQueue, type Decoder } from '../../../encoding/index';
+import type { FetchBody, FetchHeaders } from '../../../fetch/index';
+
 import { type EventLoop, networkingTaskSource } from '../../scripting/index';
+import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+
 import {
   HTMLTreeAdapter, type HTMLTreeAdapterMap,
 } from './tree-adapter';

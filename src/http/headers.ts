@@ -1,5 +1,6 @@
 import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
 import { TextCursor } from '../infra/text-cursor';
+
 import { isHTTPTabOrSpace } from './syntax';
 
 /** An entity tag's opaque value and explicit weakness indicator. */

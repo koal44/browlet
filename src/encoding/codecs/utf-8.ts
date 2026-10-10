@@ -1,7 +1,8 @@
+import { internalType, type InternalPromise } from '../../infra/promises';
 import {
   codeUnitsToString, decodeValidUTF8, readUTF8, utf8ByteLength, writeUTF8, type JSEnvironment,
 } from '../../js-engine/index';
-import { internalType, type InternalPromise } from '../../infra/promises';
+
 import { endOfQueue, IOQueue, processQueue, type QueueResult } from '../io-queue';
 
 /** Complete-input convenience for Encoding §6 — UTF-8 decode. */

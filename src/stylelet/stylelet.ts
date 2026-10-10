@@ -1,7 +1,8 @@
-import type { CSSStyleDeclarationImpl } from './cssom/declaration';
 import type {
   DOMDocument as Document, DOMElement as Element,
 } from '../infra/index';
+
+import type { CSSStyleDeclarationImpl } from './cssom/declaration';
 import type { CSSStyleSheetImpl, CSSStyleSheetInit } from './cssom/css-stylesheet';
 import { CascadeEngine } from './engine/cascade-engine';
 import { TreeScope } from './engine/tree-scope';

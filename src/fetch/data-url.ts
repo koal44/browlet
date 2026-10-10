@@ -2,8 +2,8 @@ import { forgivingBase64Decode } from '../infra/base64';
 import { InternalError } from '../infra/internal-error';
 import { surroundingASCIIWhitespacePattern } from '../infra/patterns';
 import { isomorphicDecode } from '../js-engine/index';
-import { type MIMEType, parseMIMEType } from '../mime/index';
 import { type URLRecord, percentDecodeString, serializeURL } from '../url/index';
+import { type MIMEType, parseMIMEType } from '../mime/index';
 
 /** Process a data: URL into its MIME type and bytes, or return null on failure. */
 // https://fetch.spec.whatwg.org/#data-url-processor

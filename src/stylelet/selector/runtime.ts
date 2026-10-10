@@ -7,11 +7,12 @@ import {
   isFormStateElementName,
 } from '../../infra/selector-matching';
 import { asciiLower, hasWhitespaceToken } from '../../infra/ascii';
+import { InternalError } from '../../infra/internal-error';
+
 import type { StyleletContext } from '../context';
 import type {
   NthElementIndexMap, NthOfTypeParentMap, RuntimeCache,
 } from './runtimeCache';
-import { InternalError } from '../../infra/internal-error';
 
 export function nextDescendant(root: Element, node: Element, dom: DOMOperations): Element | null {
   const child = dom.firstElementChild(node);

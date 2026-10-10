@@ -1,11 +1,12 @@
-import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
 import { InternalError } from '../infra/internal-error';
-import { getMIMETypeEssence, isJavaScriptMIMEType } from '../mime/index';
+import { defineEnumeration } from '../web-idl/index';
 import {
   areSameOrigin, areSameSite, areSchemelesslySameSite, obtainPublicSuffix, obtainURLOrigin,
   serializeOrigin, serializeURLPath, stripURLForReporting, type Origin, type URLRecord,
 } from '../url/index';
-import { defineEnumeration } from '../web-idl/index';
+import { HTTPCookie, type CookieSameSiteMode } from '../http/index';
+import { getMIMETypeEssence, isJavaScriptMIMEType } from '../mime/index';
+
 import { isScriptLikeDestination } from './destination';
 import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchEnvironment } from './environment';
 import { parseIntegrityMetadata } from './integrity';

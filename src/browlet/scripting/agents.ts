@@ -1,11 +1,13 @@
-import type { EventLoop } from './event-loop';
-import type { BrowsingContextGroup } from '../browsing/navigation/index';
+import { InternalError } from '../../infra/internal-error';
 import {
   areSameOrigin, isOrigin, obtainSite, type Site,
   type Origin,
 } from '../../url/index';
+
 import type { WindowImpl } from '../browsing/window/index';
-import { InternalError } from '../../infra/internal-error';
+import type { BrowsingContextGroup } from '../browsing/navigation/index';
+
+import type { EventLoop } from './event-loop';
 
 // V8 owns ECMAScript execution contexts and engine-level agent state;
 // Browlet owns the HTML event loop and host state shared by the agent's realms.

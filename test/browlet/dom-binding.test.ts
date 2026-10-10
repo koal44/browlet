@@ -10,7 +10,7 @@ import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
-import { SandboxEnvironment } from '../../src/browlet/scripting/environment';
+import { SandboxEnvironment } from '../../src/browlet/environment';
 import { itPassesWith } from '../test-runtime';
 
 afterEach(() => vi.restoreAllMocks());

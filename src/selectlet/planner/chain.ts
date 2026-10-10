@@ -1,4 +1,6 @@
 import type { DOMOperations, DOMElement as Element, DOMShadowRoot as ShadowRoot } from '../../infra/index';
+import { assertNever } from '../../infra/util';
+
 import { collectCompoundTests } from '../compile/emit-seedable';
 import { nextDescendant } from '../compile/runtime';
 import type { RuntimeCache } from '../compile/runtimeCache';
@@ -6,7 +8,6 @@ import type {
   CandidateElementPredicate, CandidateTest, CandidateSubjectPredicate, Combinator, ComplexPart, ComplexSelector, CompoundSelector, RelativeSelectorList, SelectorList,
   TriMatch,
 } from '../parser/parser';
-import { assertNever } from '../../infra/util';
 import { SubjectKind } from '../constants';
 import type { SelectletContext } from '../context';
 

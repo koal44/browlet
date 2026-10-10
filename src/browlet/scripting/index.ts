@@ -3,10 +3,7 @@ export {
   SharedWorkerAgent, ServiceWorkerAgent, WorkletAgent, AgentCluster, type AgentClusterKey,
   type CrossOriginIsolationMode,
 } from './agents';
-export {
-  EnvironmentRecord, type EnvironmentInit, type ScriptingEnvironment,
-  type BrowletExecution, BrowletEnvironment, SandboxEnvironment, WindowEnvironment, type WindowEnvironmentInit,
-} from './environment';
+export { EnvironmentRecord, type EnvironmentInit, type ScriptingEnvironment } from './environment';
 export {
   eventHandlerAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL, type EventHandlerCallback,
 } from './event-handlers';
@@ -14,10 +11,6 @@ export {
   createTaskSource, EventLoop, type EventLoopInit, type TaskTimingHooks, type LongTaskReporter,
   type TaskQueueSelector, Task, type TaskSource,
 } from './event-loop';
-export {
-  WindowOrWorkerGlobalScopeMixin, type TimerHandler, timerHandlerIDL, windowOrWorkerGlobalScopeIDL,
-  highResolutionTimeWindowOrWorkerGlobalScopeIDL,
-} from './global-scope';
 export { installHostHooks, jsEngineTaskSource } from './host-hooks';
 export {
   createRealm, Realm, WindowRealm, type RealmCustomizations, type RealmCreationOptions, type RealmOptions,

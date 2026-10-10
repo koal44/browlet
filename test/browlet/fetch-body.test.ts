@@ -1,6 +1,6 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { describe, expect, it, vi } from 'vitest';
-import type { BrowletEnvironment } from '../../src/browlet/scripting/environment';
+import type { BrowletEnvironment } from '../../src/browlet/environment';
 import { itPassesWith } from '../test-runtime';
 import { FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';

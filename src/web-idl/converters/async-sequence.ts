@@ -3,6 +3,7 @@ import { getMethod, isObject } from '../../js-engine/index';
 
 import type { IDLAsyncSequenceType } from '../assembly/index';
 import { IDLAsyncSequence } from '../values/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Capture the selected iteration method without opening or advancing the iterator. */

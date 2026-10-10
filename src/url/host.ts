@@ -1,5 +1,6 @@
 import { getDomain, getPublicSuffix } from 'tldts';
 import { toASCII, toUnicode } from 'tr46';
+
 import { utf8Decode } from '../encoding/index';
 
 import { CodePointCursor, isURLCodePoint } from './cp-cursor';

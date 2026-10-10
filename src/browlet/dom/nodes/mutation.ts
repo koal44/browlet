@@ -1,4 +1,5 @@
 import { DOMExceptionNames, DOMExceptionImpl } from '../../../web-idl/index';
+
 import type { NodeImpl } from './node';
 
 /** Rejects an invalid insertion before either tree changes. */

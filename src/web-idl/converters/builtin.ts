@@ -3,6 +3,7 @@ import { isObject, toBigInt } from '../../js-engine/index';
 import type {
   IDLAnyType, IDLUndefinedType, IDLBooleanType, IDLBigIntType, IDLObjectType, IDLSymbolType,
 } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Preserve any author value without coercion. */

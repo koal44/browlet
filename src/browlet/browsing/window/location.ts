@@ -1,8 +1,9 @@
 import { URL } from 'node:url';
+
+import { InternalError } from '../../../infra/internal-error';
 import {
   arg, attr, defineInterface, idlType, impl, op, roAttr, xattr,
 } from '../../../web-idl/index';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Exposes URL components for a Window; navigation operations remain unimplemented. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-location-interface

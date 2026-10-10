@@ -1,6 +1,7 @@
 import { TextCursor } from '../../infra/text-cursor';
 import { asciiLower } from '../../infra/ascii';
 import { getEncoding, type Encoding } from '../../encoding/core/index';
+
 import type { StyleletEnvironment } from '../environment';
 
 export enum TokenKind {

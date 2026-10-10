@@ -1,8 +1,10 @@
 import { defineIncludes, defineInterface, idlType, impl, roAttr } from '../../../web-idl/index';
+
+import type { DOMEnvironment } from '../environment';
+
 import { NodeImpl, NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
 import type { DocumentImpl } from './document';
-import type { DOMEnvironment } from '../environment';
 
 /** Document type declaration retaining its name and external identifiers. */
 // https://dom.spec.whatwg.org/#interface-documenttype

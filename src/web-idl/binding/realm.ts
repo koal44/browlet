@@ -13,15 +13,15 @@ import {
   AssembledInterface, type IDLType, type IDLDictionaryType, type IDLAttribute,
   type AssembledDictionary, type DefinitionAssembly,
 } from '../assembly/index';
+import {
+  getImplementationRecord, getPlatformRecord, isStampedImplInstance, isStampedPlatformObject, PlatformRecord,
+  stampImplementation, type StampedImplInstance, type StampedPlatformObject,
+} from './platform';
 import { IDLPromise, type IDLMapEntries, type IDLSetEntries } from '../values/index';
 import {
   createConverter, DictionaryConverter, ImplementationConverter, type Converter, type ConverterFor,
 } from '../converters/index';
 
-import {
-  getImplementationRecord, getPlatformRecord, isStampedImplInstance, isStampedPlatformObject, PlatformRecord,
-  stampImplementation, type StampedImplInstance, type StampedPlatformObject,
-} from './platform';
 import {
   AsyncIterableBinding, CallbackBinding, MaplikeBinding, SetlikeBinding, GlobalPlatformObjectBinding,
   ImplementationBinding, SynchronousIterableBinding, LegacyPlatformObjectBinding, ObservableArrayBinding,

@@ -1,20 +1,23 @@
+import { InternalError } from '../../infra/internal-error';
+import type { TaskCreationOptions } from '../../infra/execution';
 import {
   JSRealm, bindAsyncContext, getAssociatedRealm,
   type GlobalObject, type GlobalThis, type JSRealmOptions,
 } from '../../js-engine/index';
 import type { CallbackHooks, SecurityCheckType, StampedPlatformObject, WebIDLRealm } from '../../web-idl/index';
+
 import type { Window, WindowProxy } from '../platform';
-import type { DocumentImpl } from '../dom/nodes/index';
+import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
 import type { EventImpl } from '../dom/events/index';
+import type { DocumentImpl } from '../dom/nodes/index';
 import type { EventRealm, WindowEventRealm } from '../dom/index';
+import type { BrowletEnvironment, WindowEnvironment } from '../environment';
+import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
+
 import type { Agent, WindowAgent } from './agents';
-import type { EnvironmentRecord, BrowletEnvironment, WindowEnvironment } from './environment';
+import type { EnvironmentRecord } from './environment';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
-import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
-import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
-import { InternalError } from '../../infra/internal-error';
-import type { TaskCreationOptions } from '../../infra/execution';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm

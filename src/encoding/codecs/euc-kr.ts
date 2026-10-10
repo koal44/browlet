@@ -1,8 +1,10 @@
 import { Buffer, isAscii } from 'node:buffer';
+
+import { nonASCIIPattern } from '../../infra/patterns';
 import { codeUnitsToString } from '../../js-engine/index';
+
 import { indexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
-import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding §13.1.1 — EUC-KR decoder, including the Windows-949 repertoire. */
 export class EUCKRDecoder {

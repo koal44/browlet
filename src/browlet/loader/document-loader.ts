@@ -1,9 +1,10 @@
+import type { InternalPromise } from '../../infra/promises';
+
+import type { DocumentImpl } from '../dom/nodes/index';
+import { BrowletParser, type ScriptHandler } from '../html/parser/index';
 import {
   populateWithHTMLHeadBody, createAndInitializeDocument, type NavigationParams,
 } from '../browsing/navigation/index';
-import type { DocumentImpl } from '../dom/nodes/index';
-import { BrowletParser, type ScriptHandler } from '../html/parser/index';
-import type { InternalPromise } from '../../infra/promises';
 
 /** Create an HTML document and start consuming its navigation response. */
 // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html

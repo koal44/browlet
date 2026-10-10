@@ -1,7 +1,8 @@
+import { InternalError } from '../../infra/internal-error';
+
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { isWhitespaceToken } from './component-value';
 import { TokenKind } from './tokens';
-import { InternalError } from '../../infra/internal-error';
 
 // =============================================================================
 // Consumer and multiplier types

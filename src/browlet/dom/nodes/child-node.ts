@@ -1,6 +1,7 @@
 import {
   defineInterfaceMixin, idlType, op,
 } from '../../../web-idl/index';
+
 import type { NodeImpl } from './node';
 
 /** Tree mutations shared by nodes that can occur as children. */

@@ -20,7 +20,7 @@ that timing alongside browser events and lifecycle observations.
   `DOMHighResTimeStamp` and `EpochTimeStamp` declarations through Web IDL Core.
 - `performance.ts` owns the `Performance` implementation and declaration.
   The `WindowOrWorkerGlobalScope` mixin in
-  [`scripting/global-scope.ts`](../scripting/global-scope.ts) owns its retained
+  [`global-scope.ts`](../global-scope.ts) owns its retained
   instance and the `performance` declaration contribution (High Resolution Time §§5–8).
 - Realm-created Events, navigation timing records, and Document load timing
   use this shared clock and the relevant Window's time origin. Each new Window

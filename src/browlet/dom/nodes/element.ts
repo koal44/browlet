@@ -1,18 +1,21 @@
-import type { EventImpl } from '../events/index';
-import { NodeImpl, NodeType } from './node';
-import type { AttrImpl } from './attribute';
-import { NamedNodeMapImpl } from './named-node-map';
-import type { DocumentImpl } from './document';
-import type { BrowletEnvironment } from '../../scripting/index';
-import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
-import type { HTMLCollectionImpl } from './collections';
-import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
+import { HTML_NAMESPACE } from '../../../infra/index';
+import { asciiLower } from '../../../infra/ascii';
+import { InternalError } from '../../../infra/internal-error';
 import {
   arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
   type PrimaryInterfaceDefinition,
 } from '../../../web-idl/index';
-import { HTML_NAMESPACE } from '../../../infra/index';
-import { asciiLower } from '../../../infra/ascii';
+import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
+
+import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
+import type { EventImpl } from '../events/index';
+import type { BrowletEnvironment } from '../../environment';
+
+import { NodeImpl, NodeType } from './node';
+import type { AttrImpl } from './attribute';
+import { NamedNodeMapImpl } from './named-node-map';
+import type { DocumentImpl } from './document';
+import type { HTMLCollectionImpl } from './collections';
 import {
   findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';
@@ -24,7 +27,6 @@ import {
 } from './non-document-type-child-node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { SlottableMixin } from './slottable';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Element names, attributes, child navigation, and composed style behavior. */
 // https://dom.spec.whatwg.org/#interface-element

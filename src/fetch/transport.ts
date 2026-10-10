@@ -1,5 +1,6 @@
 import type { InternalPromise } from '../infra/promises';
 import { sitesAreSameSite, type Origin, type Site, type URLRecord } from '../url/index';
+
 import type { FetchHeaders } from './headers';
 import type { ConnectionTimingInfo } from './timing';
 

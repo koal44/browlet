@@ -1,6 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineElementInterface } from '../../element';
 import { defineInterface, impl } from '../../../../../web-idl/index';
+
+import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Contains document metadata before the body. */

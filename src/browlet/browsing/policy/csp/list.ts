@@ -1,9 +1,11 @@
-import { ContentSecurityPolicy, type CSPDisposition } from './policy';
-import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 import { InternalError } from '../../../../infra/internal-error';
 import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/index';
-import type { DocumentImpl } from '../../../dom/nodes/index';
+import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
+
 import { SandboxingFlagSet } from '../sandbox';
+import type { DocumentImpl } from '../../../dom/nodes/index';
+
+import { ContentSecurityPolicy, type CSPDisposition } from './policy';
 import { CSPViolation } from './violation';
 
 const policyHeaders: [name: string, disposition: CSPDisposition][] = [
@@ -54,7 +56,7 @@ export class CSPList implements FetchCSPList {
     for (const policy of this.policies) {
       if (policy.disposition !== 'report') continue;
       if (policy.getViolatedRequestDirective(request, this.selfOrigin) !== undefined) {
-        policy.createViolationForRequest(request).report();
+        this.#reportRequestViolation(policy, request);
       }
     }
   }
@@ -66,7 +68,7 @@ export class CSPList implements FetchCSPList {
     for (const policy of this.policies) {
       if (policy.disposition !== 'enforce') continue;
       if (policy.getViolatedRequestDirective(request, this.selfOrigin) !== undefined) {
-        policy.createViolationForRequest(request).report();
+        this.#reportRequestViolation(policy, request);
         blocked = true;
       }
     }
@@ -79,7 +81,7 @@ export class CSPList implements FetchCSPList {
     let blocked = false;
     for (const policy of this.policies) {
       if (policy.getViolatedResponseDirective(request, response, this.selfOrigin) !== undefined) {
-        policy.createViolationForRequest(request).report();
+        this.#reportRequestViolation(policy, request);
         if (policy.disposition === 'enforce') blocked = true;
       }
     }
@@ -133,5 +135,11 @@ export class CSPList implements FetchCSPList {
     const copy = new CSPList(this.selfOrigin);
     copy.policies = this.policies.map((policy) => policy.clone());
     return copy;
+  }
+
+  #reportRequestViolation(policy: ContentSecurityPolicy, request: FetchRequest): void {
+    const client = request.client;
+    if (client === null) throw new InternalError('CSP violation reporting requires a client');
+    client.exec.reportCSPViolation(policy, request);
   }
 }

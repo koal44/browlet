@@ -1,4 +1,5 @@
 import type { DOMElement as Element } from '../../infra/index';
+
 import type { RuntimeCache } from '../compile/runtimeCache';
 import type { SelectletContext } from '../context';
 import { getStrictMatchResolver } from './match';

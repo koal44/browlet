@@ -4,6 +4,7 @@ import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/pro
 import {
   arg, definePartialInterfaceMixin, emptyDictionary, op, promise, reference, xattr,
 } from '../web-idl/index';
+
 import { FetchBody } from './body';
 import { deserializeAbortReason, type FetchController } from './controller';
 import type { FetchEnvironment } from './environment';

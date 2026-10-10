@@ -1,10 +1,12 @@
-import { defineElementInterface, type ElementCreationContext } from '../../element';
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../../web-idl/index';
-import { HTMLElementImpl } from '../html-element';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
-import type { BrowletEnvironment } from '../../../../scripting/index';
+
 import { LinkStyleMixin } from '../../../../style/index';
+import type { BrowletEnvironment } from '../../../../environment';
+
+import { defineElementInterface, type ElementCreationContext } from '../../element';
+import { HTMLElementImpl } from '../html-element';
 
 /** Associates inline HTML stylesheet text with its tree scope. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-style-element

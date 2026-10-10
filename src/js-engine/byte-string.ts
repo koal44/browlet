@@ -1,8 +1,10 @@
 import { Buffer, isUtf8 } from 'node:buffer';
 import { endianness } from 'node:os';
 import { TextEncoder } from 'node:util';
-import { getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset } from './buffers';
+
 import { InternalError } from '../infra/internal-error';
+
+import { getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset } from './buffers';
 
 /** Infra — Isomorphic decode maps each byte to the code point with the same value. */
 export function isomorphicDecode(input: Uint8Array): string {

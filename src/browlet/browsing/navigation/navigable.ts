@@ -1,10 +1,11 @@
 import { InternalError } from '../../../infra/internal-error';
-import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../../fetch/index';
 import { areSameOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
+import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../../fetch/index';
 
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
-import type { UserAgent } from '../../user-agent';
 import type { WindowImpl } from '../window/index';
+import type { UserAgent } from '../../user-agent';
+
 import { BrowsingContext } from './browsing-context';
 import { createDocumentState, type DocumentBackedState } from './document-state';
 import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';

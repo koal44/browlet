@@ -2,7 +2,8 @@ import {
   defineInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/index';
 import type { TreeScope, CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
-import type { CustomElementRegistryImpl } from '../../html/custom-elements/index';
+
+import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 
 /** Registry access and style-sheet ownership shared by documents and shadow roots. */
 // https://dom.spec.whatwg.org/#mixin-documentorshadowroot

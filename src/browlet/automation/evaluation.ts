@@ -1,11 +1,13 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
+
 import type { TaskHandle } from '../../infra/execution';
 import {
   type JSRealm, copyMapData, copySetData, getDateValue, getRegExpData,
   hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isProxyObject,
 } from '../../js-engine/index';
 import { idlType } from '../../web-idl/index';
+
 import type { WindowRealm } from '../scripting/index';
 
 /** One page execution context and its outstanding automation calls from Node. */

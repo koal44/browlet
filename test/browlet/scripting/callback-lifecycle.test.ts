@@ -21,9 +21,9 @@ import { PolicyContainer } from '../../../src/browlet/browsing/policy/container'
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
-import { BrowletEnvironment, EnvironmentRecord } from
-  '../../../src/browlet/scripting/environment';
-import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/scripting/global-scope';
+import { EnvironmentRecord } from '../../../src/browlet/scripting/environment';
+import { BrowletEnvironment } from '../../../src/browlet/environment';
+import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/global-scope';
 import type { Task } from
   '../../../src/browlet/scripting/event-loop';
 import { Moment, monotonicClock } from '../../../src/browlet/timing/clock';
@@ -309,7 +309,9 @@ function createTestRealm(
     topLevelCreationURL: null,
     topLevelOrigin: null,
   });
-  const context = browletBindingWorld.register(realm, (binding) => new TestEnvironment(realm, record, createBrowletExecution(binding)));
+  const context = browletBindingWorld.register(realm, (binding) =>
+    new TestEnvironment(realm, record, createBrowletExecution(binding)),
+  );
   const env = realm.env;
   return { realm, env, context };
 }

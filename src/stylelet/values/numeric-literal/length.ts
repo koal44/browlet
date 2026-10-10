@@ -1,5 +1,7 @@
 import { asciiLower } from '../../../infra/ascii';
 import { assertNever } from '../../../infra/util';
+import { InternalError } from '../../../infra/internal-error';
+
 import { consumeDimensionToken, consumeNumberToken } from '../../syntax/component-consumers';
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,
@@ -7,7 +9,6 @@ import {
 import { one, oneOf, adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
-import { InternalError } from '../../../infra/internal-error';
 
 /*
  * <length> = <dimension-token with a length unit> | <zero>

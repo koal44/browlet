@@ -2,10 +2,11 @@ import {
   idlType, nullable, record, reference, sequence, union, type CallbackExceptionBehavior,
 } from '../../../../src/web-idl/core/index';
 import type { IDLDictionaryType, IDLCallbackFunctionType, IDLCallbackInterfaceType } from '../../../../src/web-idl/assembly/index';
+import type {
+  IDLDictionary, IDLCallbackFunction, IDLCallbackInterface, StampedCallbackFunction,
+} from '../../../../src/web-idl/values/index';
 import type { BindingContext } from '../../../../src/web-idl/binding/world';
 import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
-import type { StampedCallbackFunction } from '../../../../src/web-idl/binding/realm/callback';
-import type { IDLDictionary, IDLCallbackFunction, IDLCallbackInterface } from '../../../../src/web-idl/values/index';
 
 declare const binding: RealmBinding;
 declare const context: BindingContext;

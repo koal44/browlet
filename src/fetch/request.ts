@@ -1,19 +1,21 @@
-import type { BlobImpl } from '../file/index';
-import { isomorphicEncode, randomUUID } from '../js-engine/index';
 import type { AbortSignal } from '../infra/execution';
 import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
-import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
-import {
-  areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
-  serializeURL, type URLRecord,
-} from '../url/index';
+import { InternalError } from '../infra/internal-error';
+import { isomorphicEncode, randomUUID } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/index';
+import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
+import {
+  areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
+  serializeURL, type URLRecord,
+} from '../url/index';
+import type { BlobImpl } from '../file/index';
 import type { FormDataImpl } from '../xhr/index';
+
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
 import {
   isNavigationDestination, isNonSubresourceDestination, isSubresourceDestination, type Destination,
@@ -33,7 +35,6 @@ import {
   isRequestBlockedByMixedContent, upgradeForHSTS, upgradeInsecureRequest, upgradeMixedContent,
   type ReferrerPolicy,
 } from './policy';
-import { InternalError } from '../infra/internal-error';
 
 /** Request state initialized with a URL, nullable client, and shared networking owner. */
 // https://fetch.spec.whatwg.org/#concept-request

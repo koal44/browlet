@@ -1,16 +1,17 @@
+import { internalType, type InternalPromise } from '../infra/promises';
+import { InternalError } from '../infra/internal-error';
+import type { StampedPlatformObject } from '../web-idl/index';
+import { isHeaderValue } from '../fetch/index';
+
+import type { Document, WindowProxy } from './platform';
+import { type Realm, installHostHooks } from './scripting/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import { getSourceCodeLocation, BrowletParser, type DocumentWrite } from './html/parser/index';
-import { isHeaderValue } from '../fetch/index';
-import { internalType, type InternalPromise } from '../infra/promises';
-import type { StampedPlatformObject } from '../web-idl/index';
-import type { Document, WindowProxy } from './platform';
-import { browletBindingWorld } from './bindings';
-import { createAndInitializeDocument, NavigationParams, TopLevelTraversable } from './browsing/navigation/index';
-import { type Realm, installHostHooks } from './scripting/index';
-import { UserAgent } from './user-agent';
-import type { AuthenticationPrompt } from './loader/index';
 import { PageEvaluation } from './automation/index';
-import { InternalError } from '../infra/internal-error';
+import { createAndInitializeDocument, NavigationParams, TopLevelTraversable } from './browsing/navigation/index';
+import type { AuthenticationPrompt } from './loader/index';
+import { browletBindingWorld } from './bindings';
+import { UserAgent } from './user-agent';
 
 /** Hosts one top-level browsing session with navigation and page evaluation. */
 export class Browlet {

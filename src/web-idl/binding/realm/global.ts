@@ -3,6 +3,7 @@ import { isDataDescriptor, ordinarySetWithOwnDescriptor } from '../../../js-engi
 
 import type { IDLOperation, AssembledInterface } from '../../assembly/index';
 import { getPlatformRecord } from '../platform';
+
 import type { RealmBinding } from '../realm';
 import type { NamedPropertySteps } from './legacy';
 

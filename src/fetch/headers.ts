@@ -1,17 +1,18 @@
-import { isomorphicEncode } from '../js-engine/index';
-import { getEncoding, type Encoding } from '../encoding/index';
 import { TypeError } from '../infra/exceptions';
-import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
-import {
-  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseStructuredField, serializeStructuredField,
-  type StructuredField,
-} from '../http/index';
 import { TextCursor } from '../infra/text-cursor';
 import { nonASCIIDigitPattern, surroundingTabOrSpacePattern } from '../infra/patterns';
+import { isomorphicEncode } from '../js-engine/index';
 import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,
 } from '../web-idl/index';
+import { getEncoding, type Encoding } from '../encoding/index';
+import {
+  collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseStructuredField, serializeStructuredField,
+  type StructuredField,
+} from '../http/index';
+import { getMIMETypeEssence, parseMIMEType, type MIMEType, type MIMETypeEssence } from '../mime/index';
+
 import type { FetchEnvironment } from './environment';
 
 /** An ordered header list shared by Fetch algorithms and guarded Headers implementations. */

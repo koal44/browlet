@@ -1,6 +1,6 @@
-import { ReadableStreamImpl, type StreamsEnvironment } from '../streams/index';
-import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/index';
 import { InternalError } from '../infra/internal-error';
+import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/index';
+import { ReadableStreamImpl, type StreamsEnvironment } from '../streams/index';
 
 /*
  * Immutable backing data for File API Blob objects.

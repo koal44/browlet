@@ -1,8 +1,9 @@
+import { HTML_NAMESPACE } from '../../../infra/index';
 import {
   arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
   roAttr, xattr,
 } from '../../../web-idl/index';
-import { HTML_NAMESPACE } from '../../../infra/index';
+
 import type { ElementImpl } from './element';
 
 /** Element collection refreshed from its source before DOM collection operations. */

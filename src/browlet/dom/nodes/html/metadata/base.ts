@@ -1,6 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { serializeURL, type URLRecord } from '../../../../../url/index';
 import { attr, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
+import { serializeURL, type URLRecord } from '../../../../../url/index';
+
 import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 

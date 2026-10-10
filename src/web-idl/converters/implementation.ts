@@ -3,20 +3,18 @@ import {
 } from '../../infra/index';
 import type { CallbackExceptionBehavior, ImplementationClass } from '../core/index';
 
+import { compileSteps } from '../compiler';
 import type {
   IDLType, IDLNullableType, IDLUnionType, IDLSequenceType, IDLRecordType, IDLDictionaryType,
   IDLPromiseType, IDLAsyncSequenceType, AssembledCallable, AssembledDictionary,
 } from '../assembly/index';
 import {
   IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary, IDLPromise,
-  type IDLSequence, type IDLRecord, type IDLValue,
+  CallbackFunctionStamper, type StampedCallbackFunction, type IDLSequence, type IDLRecord, type IDLValue,
 } from '../values/index';
 import type { BindingContext } from '../binding/world';
 import type { RealmBinding } from '../binding/realm';
-import {
-  CallbackFunctionStamper, type StampedCallbackFunction, type CallbackInvoker,
-} from '../binding/realm/callback';
-import { compileSteps } from '../compiler';
+import type { CallbackInvoker } from '../binding/realm/callback';
 
 /** Prepare and perform IDL-to-implementation conversion using one realm's binding machinery. */
 export class ImplementationConverter {

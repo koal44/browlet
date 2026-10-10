@@ -1,3 +1,9 @@
+import { TypeError } from '../infra/exceptions';
+import {
+  arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
+  sequence, staticOp, stringifier, union, xattr, type Definition,
+} from '../web-idl/index';
+
 import { serializeHost } from './host';
 import { serializeOrigin, type Origin } from './origin';
 import {
@@ -7,11 +13,6 @@ import {
   parseBasicURL, obtainURLOrigin, serializeURL, serializeURLPath,
   setURLPassword, setURLUsername, type URLRecord,
 } from './url';
-import {
-  arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
-  sequence, staticOp, stringifier, union, xattr, type Definition,
-} from '../web-idl/index';
-import { TypeError } from '../infra/exceptions';
 
 /*
  * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this

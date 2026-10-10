@@ -1,11 +1,13 @@
 import { Stamper } from '../infra/stamper';
+import { InternalPromise } from '../infra/promises';
+import { InternalError } from '../infra/internal-error';
+
 import {
   bufferViewNames, getArrayBufferViewElementSize,
   isDetachedArrayBuffer, writeArrayBuffer,
   type ByteSequence, type JSBufferView, type JSBufferViewName,
   type RuntimeBuffers,
 } from './buffers';
-import { InternalPromise } from '../infra/promises';
 import { isObject } from './abstract-operations';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm,
@@ -14,7 +16,6 @@ import {
   makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
   setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
 } from './runtime';
-import { InternalError } from '../infra/internal-error';
 
 /**
  * Owns an engine context, its captured intrinsics, and realm-specific allocation.

@@ -1,3 +1,5 @@
+import { InternalError } from '../../../infra/internal-error';
+
 import { one, oneOf } from '../../syntax/component-grammar';
 import { type TryConsumer } from '../../syntax/token-cursor';
 import {
@@ -7,7 +9,6 @@ import {
   addPercentages, interpolatePercentages, serializePercentage, consumePercentage,
   type PercentageLiteral,
 } from './percentage';
-import { InternalError } from '../../../infra/internal-error';
 
 /*
  * Shared mechanics for the mixed dimension-percentage productions. This is

@@ -77,7 +77,7 @@ views of existing owners, not a new environment object for each subsystem.
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: EventRealm` and `exec: EventExecution` for event timing and allocation |
 | [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
-| [`BrowletEnvironment`](browlet/scripting/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
+| [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
@@ -128,6 +128,9 @@ delivery; HTML supplies the global route. Fetch receives the existing environmen
 as its execution owner; the request's optional client remains a separate selection.
 The same `FetchEnvironment` contract supplies base URL, origin, policies, and
 UserAgent when used as client settings. BrowletEnvironment implements it directly.
+Request CSP violations use the client's `exec.reportCSPViolation(policy, request)`.
+Fetch treats the policy as opaque; Browlet's composition validates it and supplies
+the concrete environment to CSP's violation construction and reporting.
 
 Implementations use `env.exec`. It exposes no Binding Context, realm object,
 callback adapter, conversion API, or projection registry. Supply lifetime
@@ -233,6 +236,17 @@ contract their constructor requires, without adding another field or owner looku
 Global projection and global-scope mixin setup finish before consumers receive the Window environment.
 Document creation retains its own HTML initialization steps.
 
+The complete browser environment lives in [`browlet/environment.ts`](browlet/environment.ts),
+above the early record, realms, and event loops in Scripting. It constructs its
+own `InsecureRequestsPolicy` and calls Reporting's
+[`generateReport()`](browlet/reporting/generate.ts) with its live settings.
+These are owned state and a browser algorithm, not additional constructor dependencies.
+Reporting selects concrete report bodies; UserAgent owns outbound delivery.
+Generation remains a separate, higher-level Reporting entry because policy report
+bodies depend on the base classes exported by Reporting's shared barrel.
+Scripting's barrel exports the early record, not the complete browser environment;
+its realms and event loops retain only type references to that environment.
+
 `Realm.hostDefined` permits the absence of HTML settings; `Realm.env` requires
 them and throws if they are unattached. UserAgent composition creates its sandbox
 eagerly, with a real Realm, Agent, event loop, and SandboxEnvironment, but no
@@ -252,9 +266,11 @@ selects a global or parallel queue. A null client does not imply missing
 execution. Early records, full settings, and sandbox environments must not be
 substituted for one another just because an algorithm can reach a UserAgent.
 
-The global-scope mixin owns each global's timers, Reporting state, and resource
-associations. BrowletEnvironment supplies settings, execution, and browser context.
-UserAgent owns shared transport, caches, credentials, stores, and BiDi hooks;
+The [global-scope mixin](browlet/global-scope.ts) composes each global's timers,
+Performance object, Reporting state, and resource associations. It sits above
+the scripting foundations and is not re-exported by their barrel.
+BrowletEnvironment supplies settings, execution, and browser context.
+UserAgent owns outbound report delivery, shared transport, caches, credentials, stores, and BiDi hooks;
 that state can outlive one Window. Follow those existing associations instead
 of adding reverse lookups or duplicate lifetime flags.
 
@@ -344,6 +360,25 @@ WindowProxy, and Location. Their consumers use the corresponding component's
 index; cooperating modules within navigation import each other directly.
 There is no umbrella browsing barrel.
 
+[`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
+component order for import layout and dependency review. Imports put external
+packages first, then other subsystems and foundations (Infra before JS Engine and
+Web IDL), then sibling components, then the current component's collaborators.
+Use one blank line between those groups and keep type and runtime imports with
+their owner. `browlet/import-order` enforces this layout without sorting imported
+names or moving comments automatically.
+
+`browlet/dependency-direction` checks runtime imports and re-exports against the
+same map. Explicitly type-only references are allowed across dependency levels;
+they still follow import ordering and the prohibition on self/ancestor barrels.
+Separate components on the same layer are independent, not automatically permitted
+to depend on each other at runtime.
+An upward import can reveal misplaced code or an incorrect layer; review the
+ownership before changing the map. `npm run lint:imports` groups outstanding
+findings and fails while they remain; `npm run lint:imports -- --fix` fixes layout
+only. Do not erase concrete types or merge components merely to silence those
+findings.
+
 Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
 precision, and time origins without importing DOM or Performance. The Performance
 API consumes timing and DOM events. Event, EventTarget, and the UI Events
@@ -351,10 +386,25 @@ specializations form one component in `browlet/dom/events`; its implementation
 modules import each other directly. XHR's ProgressEvent lives in browser
 integration and reuses that event machinery.
 
+Policy and CSP sit below the node implementations that construct and retain their
+state. Their event and report implementations depend on DOM events and shared
+Reporting, which sit below policy. CSP keeps type references to supplied Documents
+and environments without loading their concrete classes. Document retains policy
+initialization; Reporting's separate generator and the complete browser environment
+remain higher consumers.
+
+Browlet's style mixins sit among its lowest foundations: they load Stylelet and
+retain type references to supplied DOM nodes. Element and style/link elements
+compose these mixins; the mixins do not construct browser environments or nodes.
+
 Document, Element, and the HTML, SVG, and MathML element implementations live
 under `browlet/dom/nodes`, alongside their element-selection table. Namespace
-directories retain their indexes. Parsing and custom-element machinery remain
-under `browlet/html`; dependencies between these entries are still under review.
+directories retain their indexes and declaration collections. `TreeNode` belongs
+beside Node: its event-aware tree storage is part of the node implementation
+family, not DOM's independent name and ordered-set helpers. HTML custom-element
+names and registry machinery live under `dom/nodes/html/custom-elements` with
+that same family. Parsing remains a separate consumer under `browlet/html/parser`;
+HTML's remaining roadmap-only areas keep their provisional locations.
 
 A partial interface/dictionary/namespace amends its primary implementation.
 Co-locate its members when practical; an external package can export a declaration

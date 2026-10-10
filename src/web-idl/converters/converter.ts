@@ -8,6 +8,7 @@ import type { WebIDLRealm } from '../environment';
 import type { IDLType } from '../assembly/index';
 import type { IDLValue, JSValue } from '../values/index';
 import type { RealmBinding } from '../binding/realm';
+
 import type { ConverterFor } from './factory';
 
 /** Convert one IDL type using its projection binding and allocation realm. */

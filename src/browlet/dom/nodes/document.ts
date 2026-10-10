@@ -1,39 +1,41 @@
-import {
-  Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
-} from '../../../stylelet/index';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/promises';
-import type { JSEnvironment } from '../../../js-engine/index';
-import type { HTMLCollectionImpl } from './collections';
-import type { TreeScopeResolver } from '../../style/index';
-import type { EventTargetImpl, EventImpl } from '../events/index';
-import { isValidAttributeLocalName } from '../infra/index';
-import type {
-  BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
-} from '../../browsing/navigation/index';
-import type { BrowletEnvironment } from '../../scripting/index';
-import {
-  InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
-  type SandboxingFlag,
-} from '../../browsing/policy/index';
-import { CSPList } from '../../browsing/policy/csp/index';
-import type { FetchRequest, FetchResponse } from '../../../fetch/index';
-import type { NavigationTimingRecord } from '../../performance/index';
-import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
-import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
-import type { CustomElementRegistryImpl } from '../../html/custom-elements/index';
 import { asciiLower } from '../../../infra/ascii';
+import { HTML_NAMESPACE } from '../../../infra/index';
+import { InternalError } from '../../../infra/internal-error';
+import type { JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, type ImplementationClass,
 } from '../../../web-idl/index';
+import {
+  Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
+} from '../../../stylelet/index';
 import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord } from '../../../url/index';
+import type { FetchRequest, FetchResponse } from '../../../fetch/index';
+
+import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
+import { isValidAttributeLocalName } from '../infra/index';
+import type { TreeScopeResolver } from '../../style/index';
+import type { EventTargetImpl, EventImpl } from '../events/index';
+import {
+  InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
+  type SandboxingFlag,
+} from '../../browsing/policy/index';
+import { CSPList } from '../../browsing/policy/csp/index';
+import type { NavigationTimingRecord } from '../../performance/index';
+import type { BrowletEnvironment } from '../../environment';
+import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
+import type {
+  BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
+} from '../../browsing/navigation/index';
+
+import type { HTMLCollectionImpl } from './collections';
 import { AttrImpl } from './attribute';
 import { CommentImpl } from './comment';
 import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
 import type { ElementImpl } from './element';
-import { HTML_NAMESPACE } from '../../../infra/index';
 import { NodeImpl, NodeType } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
@@ -47,7 +49,7 @@ import {
 import { resolveElementInterface } from './element-interfaces';
 import { HTMLBaseElementImpl, HTMLHeadElementImpl } from './html/metadata/index';
 import { HTMLElementImpl } from './html/index';
-import { InternalError } from '../../../infra/internal-error';
+import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 
 /** Create a document in env with optional binding-owned node allocation. */
 export function createDocument(

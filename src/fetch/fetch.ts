@@ -1,21 +1,22 @@
-import { utf8DecodeWithoutBOM } from '../encoding/index';
-import {
-  CacheControl, encodeBasicCredentials, evaluateCacheRequest, isHTTPToken, parseAuthenticationChallenges,
-  parseDeltaSeconds, selectBasicChallenge, shouldInvalidateCache,
-} from '../http/index';
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import { type PromiseResultType, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../infra/promises';
 import { coarsenTime } from '../infra/time';
 import { getBufferSourceCopy, isUint8Array } from '../js-engine/index';
-import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
+import { idlType, isDOMException } from '../web-idl/index';
 import { ReadableStreamImpl, TransformStreamImpl, type ReadableStreamDefaultReaderImpl } from '../streams/index';
+import { utf8DecodeWithoutBOM } from '../encoding/index';
 import {
   areSameOrigin, copyURL, obtainURLOrigin, percentDecodeString, serializeURL, setURLPassword, setURLUsername,
   urlsEqual, type URLRecord,
 } from '../url/index';
-import { idlType, isDOMException } from '../web-idl/index';
+import {
+  CacheControl, encodeBasicCredentials, evaluateCacheRequest, isHTTPToken, parseAuthenticationChallenges,
+  parseDeltaSeconds, selectBasicChallenge, shouldInvalidateCache,
+} from '../http/index';
+import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
+
 import { FetchBody } from './body';
 import type { HTTPCacheEntry, HTTPCachePartition } from './cache-http';
 import { deserializeAbortReason, type FetchController } from './controller';

@@ -5,7 +5,7 @@ import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/bro
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import type { WindowEnvironment } from '../../../../src/browlet/scripting/environment';
+import type { WindowEnvironment } from '../../../../src/browlet/environment';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 
 /** Compose real Window and navigable state while iframe construction is unfinished. */

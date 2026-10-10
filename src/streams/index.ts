@@ -1,4 +1,5 @@
 import type { Definition } from '../web-idl/index';
+
 import type { StreamsEnvironment } from './environment';
 import {
   byteLengthQueuingStrategyIDL, countQueuingStrategyIDL, queuingStrategyIDL,

@@ -1,11 +1,13 @@
 import * as vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { isAbsolute } from 'node:path';
+
+import { InternalError } from '../infra/internal-error';
+
 import type {
   CollectionIteratorKind, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
 } from './realm';
 import type { JSJobCallback, NodeContext } from './runtime';
-import { InternalError } from '../infra/internal-error';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {

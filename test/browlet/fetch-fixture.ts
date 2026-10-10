@@ -1,4 +1,4 @@
-import { SandboxEnvironment, type BrowletEnvironment } from '../../src/browlet/scripting/environment';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../src/browlet/environment';
 import { vi } from 'vitest';
 
 import { createBrowletExecution } from '../../src/browlet/bindings';
@@ -78,7 +78,9 @@ export function createFetchWindow(userAgent = createManualUserAgent()) {
 export function createIsolatedFetchRealm() {
   const realm = createManualRealm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
-  const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) => new SandboxEnvironment(realm, createBrowletExecution(context)));
+  const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) =>
+    new SandboxEnvironment(realm, createBrowletExecution(context)),
+  );
   registration.install(realm.globalObject);
   return createFetchRealmFixture(registration);
 }

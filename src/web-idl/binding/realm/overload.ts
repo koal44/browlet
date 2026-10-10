@@ -1,10 +1,11 @@
 import { InternalError } from '../../../infra/index';
 import { getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod } from '../../../js-engine/index';
 
-import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads, OverloadGroup } from '../../assembly/index';
-import { IDLAsyncSequence } from '../../values/index';
 import { compileSteps } from '../../compiler';
+import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads, OverloadGroup } from '../../assembly/index';
 import { getPlatformRecord, type PlatformRecord } from '../platform';
+import { IDLAsyncSequence } from '../../values/index';
+
 import type { RealmBinding } from '../realm';
 
 /** Prepare invocation conversion once when installing a callable group in a realm. */

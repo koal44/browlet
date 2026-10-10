@@ -1,5 +1,6 @@
-import type { FileEnvironment } from '../file/index';
 import type { Definition } from '../web-idl/index';
+import type { FileEnvironment } from '../file/index';
+
 import {
   formDataEntryValueIDL, formDataIDL,
 } from './form-data';

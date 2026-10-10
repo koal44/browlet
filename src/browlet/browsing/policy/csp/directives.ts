@@ -1,10 +1,10 @@
 import { asciiLower } from '../../../../infra/ascii';
 import { forgivingBase64Decode } from '../../../../infra/base64';
-import { parseIntegrityMetadata, type FetchRequest } from '../../../../fetch/index';
 import {
   areSameOrigin, getDefaultPort, hostsEqual, obtainURLOrigin, percentDecodeString, serializeHost, serializeURLPath,
   type Host, type Origin, type URLRecord,
 } from '../../../../url/index';
+import { parseIntegrityMetadata, type FetchRequest } from '../../../../fetch/index';
 
 /** One policy's directive names and token lists, interpreted by each directive's algorithm. */
 // https://w3c.github.io/webappsec-csp/#framework-policy

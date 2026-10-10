@@ -1,9 +1,8 @@
+import { forgivingBase64Encode } from '../infra/index';
 import { isomorphicDecode, type JSEnvironment } from '../js-engine/index';
-
+import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
 import { decode, getEncoding } from '../encoding/index';
 import { parseMIMEType } from '../mime/index';
-import { forgivingBase64Encode } from '../infra/index';
-import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
 
 /** Package Blob bytes in the requested FileReader result format. */
 // https://w3c.github.io/FileAPI/#package-data

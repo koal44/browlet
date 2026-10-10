@@ -1,6 +1,7 @@
 import { InternalError } from '../../infra/index';
 
 import type { IDLObservableArrayType } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Observable arrays use attribute bindings instead of ordinary value conversion. */

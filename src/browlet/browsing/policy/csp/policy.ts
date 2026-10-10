@@ -3,10 +3,12 @@ import { forgivingBase64Encode } from '../../../../infra/base64';
 import { InternalError } from '../../../../infra/internal-error';
 import { surroundingASCIIWhitespacePattern, asciiWhitespaceRunPattern } from '../../../../infra/patterns';
 import { isomorphicDecode } from '../../../../js-engine/index';
-import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
 import { stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
+import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';
+
+import type { BrowletEnvironment } from '../../../environment';
+
 import { CSPDirectives, CSPDirectiveValue, type CSPFetchDirectiveName } from './directives';
-import { BrowletEnvironment, WindowEnvironment } from '../../../scripting/index';
 import { CSPViolation } from './violation';
 
 const directiveNamePattern = /^[A-Za-z0-9-]+$/;
@@ -86,13 +88,10 @@ export class ContentSecurityPolicy {
       ? undefined : policyDirective;
   }
 
-  /** Capture the requesting client's violation, without exposing redirected resource URLs. */
+  /** Capture a violation in the supplied client's environment, retaining the original request URL. */
   // https://w3c.github.io/webappsec-csp/#create-violation-for-request
-  createViolationForRequest(request: FetchRequest): CSPViolation {
-    const env = request.client;
+  createViolationForRequest(request: FetchRequest, env: BrowletEnvironment): CSPViolation {
     const requestDirective = CSPDirectives.getRequestDirective(request);
-    // Fetch accepts other hosts' environments; this CSP implementation belongs to HTML.
-    if (!(env instanceof BrowletEnvironment)) throw new InternalError('CSP violation reporting requires a browser client');
     if (requestDirective === null) throw new InternalError('CSP violation requires a request directive');
     return new CSPViolation(this, requestDirective, request.url, env);
   }
@@ -140,14 +139,16 @@ export class ContentSecurityPolicy {
     if (algorithm === undefined) return;
     const env = request.client;
     const reportTo = this.directives.get('report-to')?.tokens;
-    if (!(env instanceof WindowEnvironment) || !env.userAgent.reportDeliveryEnabled ||
+    if (env === null || !env.isWindow || !env.userAgent.reportDeliveryEnabled ||
       reportTo === undefined || reportTo.length === 0 || response.type === 'error') return;
+    const source = env.getReportingSource();
+    if (source === null) return;
 
     // Capture attribution before the asynchronous read, retaining the original URL.
     // SPEC_CLASH(csp-hash-resource-url): The draft serializes request.url unchanged;
     // sanitize credentials and fragments as Blink and WebKit do.
     const body = {
-      documentURL: stripURLForReporting(env.window.document.url),
+      documentURL: stripURLForReporting(source),
       subresourceURL: stripURLForReporting(request.url),
       hash: '', destination: request.destination, type: 'subresource',
     };
@@ -175,7 +176,7 @@ export class ContentSecurityPolicy {
     // byte algorithm without defining a completed-body read. Hash a separate
     // branch after completion, preserving the consumer's body and skipping errors.
     // TODO: Reuse loader/SRI completed bytes or digests when those consumers exist.
-    response.body.clone().readAll(reportBytes, () => {}, env.global);
+    response.body.clone().readAll(reportBytes, () => {}, env.exec.global);
   }
 
   /** Copy directive data without sharing mutable maps or value lists. */

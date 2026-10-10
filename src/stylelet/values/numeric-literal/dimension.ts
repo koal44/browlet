@@ -1,3 +1,5 @@
+import { InternalError } from '../../../infra/internal-error';
+
 import { consumeDimensionToken } from '../../syntax/component-consumers';
 import { serializeCssDimensionUnit } from '../../syntax/component-value';
 import {
@@ -6,7 +8,6 @@ import {
 import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import { createComponentParser, type ParserInput } from '../../syntax/parser';
 import { serializeCssNumber } from './number';
-import { InternalError } from '../../../infra/internal-error';
 
 /*
  * <dimension> = <dimension-token>

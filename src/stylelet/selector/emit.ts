@@ -1,11 +1,14 @@
 import type { DOMOperations, DOMElement as Element } from '../../infra/index';
+import { asciiLower } from '../../infra/ascii';
+import { assertNever } from '../../infra/util';
+import { InternalError } from '../../infra/internal-error';
+import { asciiWhitespacePattern } from '../../infra/patterns';
+
 import {
   PseudoArgumentKind, SelectorKind,
   type AttributeSelector, type ClassSelector, type IdSelector,
   type PseudoClassSelector, type SimpleSelector, type TypeSelector,
 } from '../syntax/selector';
-import { asciiLower } from '../../infra/ascii';
-import { assertNever } from '../../infra/util';
 import type { StyleletContext } from '../context';
 import {
   checkClass, checkId, checkTag, hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
@@ -19,8 +22,6 @@ import {
   asSubjectPredicate, SubjectKind,
   type CandidateElementPredicate, type CompiledMatcher,
 } from './candidate';
-import { InternalError } from '../../infra/internal-error';
-import { asciiWhitespacePattern } from '../../infra/patterns';
 
 type NthArgs = { step: number; offset: number; };
 

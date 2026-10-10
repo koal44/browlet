@@ -1,36 +1,38 @@
-import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
-import { EventLoop, WindowAgent, type BrowletEnvironment } from './scripting/index';
+import { InternalError } from '../infra/internal-error';
+import { internalType, type InternalPromise } from '../infra/promises';
+import type { TimerHost } from '../infra/execution';
+import { randomUUID } from '../js-engine/index';
+import type { SelectletUserAgent } from '../selectlet/index';
+import type { StyleletUserAgent } from '../stylelet/index';
+import { decode } from '../encoding/index';
 import {
-  PolicyContainer, HSTSStore, determineRequestReferrer, setRequestReferrerPolicyOnRedirect,
-} from './browsing/policy/index';
-import {
-  NodePromise, queueNodeTask, nodeTimerHost, browletDOM,
-} from './integration/index';
-import { unsafeSharedCurrentTime } from './timing/index';
-import { BlobURLEntry, BlobURLStore } from './integration/file/index';
-import { type ReportingEndpoint, ReportImpl, type ReportDeliveryResult } from './reporting/index';
-import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
-import { HTTPAuthenticationStore } from './loader/index';
+  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
+  type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
+} from '../url/index';
+import { CookieStore } from '../http/index';
+import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+import type { MIMEType } from '../mime/index';
+import type { BlobImpl } from '../file/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
   type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
-import { CookieStore } from '../http/index';
-import type { BlobImpl } from '../file/index';
-import type { MIMEType } from '../mime/index';
-import { randomUUID } from '../js-engine/index';
-import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
+
+import { unsafeSharedCurrentTime } from './timing/index';
+import { EventLoop, WindowAgent } from './scripting/index';
+import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import {
-  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
-  type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
-} from '../url/index';
-import { InternalError } from '../infra/internal-error';
-import type { StyleletUserAgent } from '../stylelet/index';
-import { decode } from '../encoding/index';
-import type { SelectletUserAgent } from '../selectlet/index';
-import { internalType, type InternalPromise } from '../infra/promises';
-import type { TimerHost } from '../infra/execution';
+  PolicyContainer, HSTSStore, determineRequestReferrer, setRequestReferrerPolicyOnRedirect,
+} from './browsing/policy/index';
+import { type BrowletEnvironment } from './environment';
+import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
+import { HTTPAuthenticationStore } from './loader/index';
+import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
+import { BlobURLEntry, BlobURLStore } from './integration/file/index';
+import {
+  NodePromise, queueNodeTask, nodeTimerHost, browletDOM,
+} from './integration/index';
 import { createSandboxEnvironment, createWindowEnvironment } from './bindings';
 
 /** Owns browsing contexts and shared browser services that outlive individual documents. */
@@ -203,6 +205,36 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     return false;
   }
 
+  /** Group and queue copied reports using the generating global's endpoint configuration. */
+  // https://w3c.github.io/reporting/#send-reports
+  // Accept the endpoint list directly so delivery does not retain the generating environment.
+  sendReports(reports: ReportImpl[], configuration: ReportingEndpoint[]): void {
+    if (!this.reportDeliveryEnabled) return;
+    const cutoff = Date.now() - this.maxReportAge;
+    const endpointMap = new Map<ReportingEndpoint, ReportImpl[]>();
+    for (const report of reports) {
+      if (report.timestamp < cutoff) continue;
+      const endpoint = configuration.find((candidate) => candidate.name === report.destination);
+      if (endpoint === undefined || endpoint.failures > this.maxReportingEndpointFailures) continue;
+      const group = endpointMap.get(endpoint);
+      const copy = report.cloneForDelivery();
+      if (group === undefined) endpointMap.set(endpoint, [copy]);
+      else group.push(copy);
+    }
+
+    for (const [endpoint, group] of endpointMap) {
+      const originGroups: [ReportImpl, ...ReportImpl[]][] = [];
+      for (const report of group) {
+        const originGroup = originGroups.find((candidate) => areSameOrigin(candidate[0].origin, report.origin));
+        if (originGroup === undefined) originGroups.push([report]);
+        else originGroup.push(report);
+      }
+      for (const originGroup of originGroups) {
+        this.#queueReportDelivery(endpoint, originGroup[0].origin, originGroup, configuration);
+      }
+    }
+  }
+
   /** Run browser-owned reporting work on a later host turn, yielding to runnable page tasks. */
   queueReportingTask(steps: () => void): void {
     queueNodeTask(() => {
@@ -258,6 +290,36 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
       useParallelQueue: true,
     }, this.sandbox);
     return result.promise;
+  }
+
+  /** Retain copied reports and their original endpoint configuration until delivery finishes. */
+  #queueReportDelivery(
+    endpoint: ReportingEndpoint, origin: Origin, reports: ReportImpl[],
+    configuration: ReportingEndpoint[],
+  ): void {
+    this.queueReportingTask(() => {
+      if (!this.reportDeliveryEnabled) return;
+      if (endpoint.failures > this.maxReportingEndpointFailures) {
+        const index = configuration.indexOf(endpoint);
+        if (index !== -1) configuration.splice(index, 1);
+      }
+      if (!configuration.includes(endpoint)) return;
+      const cutoff = Date.now() - this.maxReportAge;
+      const currentReports = reports.filter((report) => report.timestamp >= cutoff);
+      if (currentReports.length === 0) return;
+      this.attemptReportDelivery(endpoint, origin, currentReports).observe((result) => {
+        if (result === 'success') {
+          endpoint.failures = 0;
+        } else if (result === 'remove-endpoint') {
+          const index = configuration.indexOf(endpoint);
+          if (index !== -1) configuration.splice(index, 1);
+        } else {
+          endpoint.failures++;
+        }
+        // The draft leaves retries unresolved. Finishing this callback releases
+        // the attempt; later reports may still use a surviving endpoint.
+      }, (error) => { throw error; });
+    });
   }
 
   /** Whether automation emulates an offline network for the given environment. */
@@ -353,3 +415,6 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     return this.isOriginPotentiallyTrustworthy(obtainURLOrigin(url));
   }
 }
+
+/** Outcome of one delivery attempt; the caller applies endpoint bookkeeping. */
+export type ReportDeliveryResult = 'success' | 'remove-endpoint' | 'failure';

@@ -1,3 +1,5 @@
+import { InternalError } from '../../infra/internal-error';
+
 import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
 import { createComponentParser, type ParserInput } from '../syntax/parser';
@@ -18,7 +20,6 @@ import {
   consumeResolution, resolveResolution, serializeResolution, type ResolutionValue,
 } from './resolution';
 import { consumeTime, resolveTime, serializeTime, type TimeValue } from './time';
-import { InternalError } from '../../infra/internal-error';
 
 /*
  * <dimension> = <dimension-token>

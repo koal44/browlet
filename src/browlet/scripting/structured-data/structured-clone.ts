@@ -1,5 +1,7 @@
-import type { ScriptingEnvironment } from '../environment';
 import type { BindingContext } from '../../../web-idl/index';
+
+import type { ScriptingEnvironment } from '../environment';
+
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from './transfer';

@@ -1,7 +1,8 @@
 import type { DOMElement as Element } from '../../infra/index';
+import { TextCursor } from '../../infra/text-cursor';
+
 import type { CustomPseudoPredicate } from '../selectlet';
 import { cssIdentUnescape } from './escape';
-import { TextCursor } from '../../infra/text-cursor';
 import {
   emitActivePseudoTest, emitAnyLinkPseudoTest, emitAttributeTest, emitBufferingPseudoTest,
   emitCheckedPseudoTest, emitDefaultPseudoTest, emitDefinedPseudoTest, emitDirPseudoTest,

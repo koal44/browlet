@@ -1,8 +1,8 @@
-import { isLocalURL, referrerPolicyIDL, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import { surroundingTabOrSpacePattern } from '../../../infra/patterns';
 import { areSameOrigin, copyURL, obtainURLOrigin, serializeURL, type URLRecord } from '../../../url/index';
+import { isLocalURL, referrerPolicyIDL, type FetchRequest, type FetchResponse, type ReferrerPolicy } from '../../../fetch/index';
 
 /** Returns the last recognized policy, or an empty string for an absent or malformed header. */
 // https://w3c.github.io/webappsec-referrer-policy/#parse-referrer-policy-from-header

@@ -1,7 +1,9 @@
-import type { ReferrerPolicy } from '../../../fetch/index';
 import type { Origin, URLRecord } from '../../../url/index';
-import type { DocumentImpl } from '../../dom/nodes/index';
+import type { ReferrerPolicy } from '../../../fetch/index';
+
 import type { PolicyContainer } from '../policy/index';
+import type { DocumentImpl } from '../../dom/nodes/index';
+
 import type { NestedHistory } from './session-history';
 
 /** Retains the document or the inputs needed to recreate it during history traversal. */

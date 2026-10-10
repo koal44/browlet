@@ -1,12 +1,13 @@
-import { InternalError, Stamper } from '../../../infra/index';
+import { InternalError } from '../../../infra/index';
 import { isCallable, isConstructor, isObject } from '../../../js-engine/index';
 import type { CallbackExceptionBehavior } from '../../core/index';
 
 import type { WebIDLRealm } from '../../environment';
 import type { IDLOperation, AssembledCallbackFunction } from '../../assembly/index';
+import { getImplementationRecord } from '../platform';
 import { IDLPromise, type IDLCallbackFunction, type IDLCallbackInterface } from '../../values/index';
 import type { ConversionSteps } from '../../converters/index';
-import { getImplementationRecord } from '../platform';
+
 import type { RealmBinding } from '../realm';
 
 /** Share callback invocation contracts without retaining individual author callback objects. */
@@ -203,37 +204,6 @@ export class CallbackInvoker {
 }
 
 export type CallbackCallable = AssembledCallbackFunction | IDLOperation;
-
-/** An implementation callable retaining its original callback's conversion and realm. */
-export type StampedCallbackFunction = ((...args: unknown[]) => unknown) & CallbackFunctionStamper;
-
-/** Retain a converted callback on its implementation callable without public properties. */
-export class CallbackFunctionStamper extends Stamper {
-  /** Original author object, callback realm, captured context, and declared conversions. */
-  #callback: IDLCallbackFunction;
-
-  private constructor(boundCallback: CallableFunction, cbValue: IDLCallbackFunction) {
-    super(boundCallback);
-    this.#callback = cbValue;
-  }
-
-  /** Stamp a newly created implementation callable. */
-  static stamp(boundCallback: CallableFunction, cbValue: IDLCallbackFunction): StampedCallbackFunction {
-    new CallbackFunctionStamper(boundCallback, cbValue);
-    return boundCallback as StampedCallbackFunction;
-  }
-
-  /** Read the callback value when an implementation requests construction. */
-  static get(boundCallback: StampedCallbackFunction): IDLCallbackFunction {
-    return boundCallback.#callback;
-  }
-
-  /** Project a stamped callable to its author object; ordinary author functions keep their identity. */
-  static getObject(callback: CallableFunction): object {
-    // Private-brand checks do not invoke author Proxy traps.
-    return #callback in callback ? callback.#callback.object : callback;
-  }
-}
 
 // Project the receiver before calling author code.
 function projectCallbackReceiver(

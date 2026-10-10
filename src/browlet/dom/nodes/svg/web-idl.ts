@@ -1,4 +1,5 @@
 import type { Definition } from '../../../../web-idl/index';
+
 import {
   svgElementIDL, svgElementIncludesElementCSSInlineStyleIDL,
 } from './element';

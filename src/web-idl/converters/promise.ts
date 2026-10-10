@@ -2,6 +2,7 @@ import { InternalError, InternalPromise } from '../../infra/index';
 
 import type { IDLType, IDLPromiseType } from '../assembly/index';
 import { IDLPromise, waitForAll } from '../values/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Adopt author promises and expose promises with the declared fulfillment conversion. */

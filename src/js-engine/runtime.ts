@@ -1,6 +1,10 @@
 import * as vm from 'node:vm';
 import { AsyncLocalStorage } from 'node:async_hooks';
+
 import { Stamper } from '../infra/stamper';
+import { TypeError } from '../infra/exceptions';
+import { InternalError } from '../infra/internal-error';
+
 import { isObject } from './abstract-operations';
 import {
   addon, isAddonContextHandle, isAddonMicrotaskQueueHandle,
@@ -10,8 +14,6 @@ import type {
   CollectionIteratorKind, GlobalAllocation, GlobalPrototypeKind, GlobalProxy,
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
-import { TypeError } from '../infra/exceptions';
-import { InternalError } from '../infra/internal-error';
 
 const getNativeRealm = addon.getMethod('getRealm');
 

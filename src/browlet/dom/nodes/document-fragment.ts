@@ -1,13 +1,15 @@
-import type { BrowletEnvironment } from '../../scripting/index';
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
 } from '../../../web-idl/index';
+
+import type { DOMEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../../environment';
+
 import { NodeImpl, NodeType } from './node';
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import type { HTMLCollectionImpl } from './collections';
-import type { DOMEnvironment } from '../environment';
 
 /** A parent node for a detached subtree, optionally associated with a host element. */
 // https://dom.spec.whatwg.org/#interface-documentfragment

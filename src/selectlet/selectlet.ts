@@ -1,10 +1,11 @@
-import { SelectletContext } from './context';
-import { createSelectletEnvironment, type SelectletEnvironment } from './environment';
-import { toNodeList, type IndexedNodeList } from './node-list';
 import type {
   DOMOperations, DOMNode, DOMElement, DOMDocument, DOMDocumentFragment, DOMQueryRoot,
   StandardNode, StandardElement, StandardDocument, StandardDocumentFragment, StandardAttribute,
 } from '../infra/index';
+
+import { SelectletContext } from './context';
+import { createSelectletEnvironment, type SelectletEnvironment } from './environment';
+import { toNodeList, type IndexedNodeList } from './node-list';
 
 export const DEFAULT_CONFIG = {
   /**

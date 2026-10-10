@@ -1,5 +1,6 @@
 import { asciiLower } from '../../../infra/ascii';
 import { assertNever } from '../../../infra/util';
+
 import { consumeDimensionToken } from '../../syntax/component-consumers';
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,

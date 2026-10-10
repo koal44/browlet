@@ -1,8 +1,9 @@
 import type { DOMQueryRoot as QuerySource, DOMOperations, DOMCollection, DOMElement as Element } from '../../infra/index';
+import { asciiLower } from '../../infra/ascii';
+
 import { sameId } from '../seeds/seedsById';
 import { sameSelectorTag } from '../seeds/seedsByTag';
 import { collectionToArray, concatCollection } from '../collections';
-import { asciiLower } from '../../infra/ascii';
 import type { SelectletContext } from '../context';
 
 // scoped getElementById for Document, DocumentFragment, and Element sources

@@ -1,10 +1,12 @@
 import {
   attr, defineInterface, idlType, impl, nullable, reference, roAttr, xattr,
 } from '../../../web-idl/index';
+
+import type { DOMEnvironment } from '../environment';
+
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { NodeImpl, NodeType } from './node';
-import type { DOMEnvironment } from '../environment';
 
 /** An attribute's name, namespace, value, and association with an element. */
 // https://dom.spec.whatwg.org/#interface-attr

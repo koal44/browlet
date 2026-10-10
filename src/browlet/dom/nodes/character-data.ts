@@ -1,6 +1,9 @@
 import {
   annotated, attr, defineIncludes, defineInterface, idlType, impl, xattr,
 } from '../../../web-idl/index';
+
+import type { DOMEnvironment } from '../environment';
+
 import { NodeImpl, type NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
 import {
@@ -8,7 +11,6 @@ import {
 } from './non-document-type-child-node';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
-import type { DOMEnvironment } from '../environment';
 
 /** Text storage and mutation behavior shared by character-data nodes. */
 // https://dom.spec.whatwg.org/#interface-characterdata

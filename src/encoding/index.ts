@@ -1,5 +1,6 @@
-import type { StreamsEnvironment } from '../streams/index';
 import type { Definition } from '../web-idl/index';
+import type { StreamsEnvironment } from '../streams/index';
+
 import {
   textDecodeOptionsIDL, textDecoderCommonIDL, textDecoderIDL,
   textDecoderIncludesCommonIDL, textDecoderOptionsIDL,

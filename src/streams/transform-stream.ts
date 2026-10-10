@@ -1,18 +1,19 @@
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
+import { RangeError, TypeError } from '../infra/exceptions';
+import { InternalError } from '../infra/internal-error';
 import type { JSEnvironment } from '../js-engine/index';
 import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, invokeWith,
   nullable, op, promise, roAttr, reference, xattr,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../infra/exceptions';
+
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
 } from './queuing-strategy';
 import { ReadableStreamImpl, ReadableStreamDefaultControllerImpl } from './readable-stream';
 import { WritableStreamImpl } from './writable-stream';
-import { InternalError } from '../infra/internal-error';
 import type { StreamsEnvironment } from './environment';
 
 // =============================================================================

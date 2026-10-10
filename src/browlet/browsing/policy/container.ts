@@ -1,7 +1,9 @@
+import type { FetchPolicyContainer, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
+
+import type { CSPList } from './csp/index';
+
 import { EmbedderPolicy } from './coep';
 import { IntegrityPolicy } from './integrity-policy';
-import type { CSPList } from './csp/index';
-import type { FetchPolicyContainer, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
 
 /** Policies associated with a document, worker, or worklet. */
 // https://html.spec.whatwg.org/multipage/browsers.html#policy-container

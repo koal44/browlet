@@ -1,5 +1,6 @@
 import type { DOMElement as Element } from '../../infra/index';
 import { asciiLower } from '../../infra/ascii';
+
 import {
   interpretPropertyDeclaration, propertyRegistry,
   serializePropertyDeclaration, type PropertyDeclaration,

@@ -1,4 +1,5 @@
 import type { TaskSourceKey } from '../../infra/execution';
+
 import { createTaskSource, type TaskSource } from './event-loop';
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#generic-task-sources

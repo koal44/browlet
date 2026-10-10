@@ -1,4 +1,5 @@
 import type { DOMParentNode as ParentNode } from '../../infra/index';
+
 import type { NthElementIndexMap, NthOfTypeParentMap } from './runtime';
 
 export class RuntimeCache {

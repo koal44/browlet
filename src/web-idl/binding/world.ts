@@ -7,6 +7,7 @@ import { DefinitionAssembly } from '../assembly/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance, type StampedPlatformObject,
 } from './platform';
+
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
 

@@ -1,4 +1,5 @@
 import type { Definition } from '../web-idl/index';
+
 import type { FetchEnvironment } from './environment';
 import { headersIDL, headersInitIDL } from './headers';
 import { bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from './body';

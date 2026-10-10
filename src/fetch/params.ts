@@ -1,6 +1,7 @@
 import type { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
+
 import { FetchController } from './controller';
 import type { FetchEnvironment } from './environment';
 import type { FetchRequest } from './request';

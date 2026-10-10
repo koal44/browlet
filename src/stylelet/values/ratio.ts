@@ -1,3 +1,5 @@
+import { InternalError } from '../../infra/internal-error';
+
 import { consumeSlashDelim } from '../syntax/component-consumers';
 import {
   adaptConsumer, one, oneOf, opt, sequenceOf, withTrivia,
@@ -15,7 +17,6 @@ import {
   createNumberConsumer, numberLiteral, serializeCssNumber,
 } from './numeric-literal/number';
 import { type MathContext } from './math-value';
-import { InternalError } from '../../infra/internal-error';
 
 /*
  * <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?

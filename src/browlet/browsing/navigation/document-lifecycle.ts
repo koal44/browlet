@@ -1,10 +1,11 @@
 import { InternalError } from '../../../infra/internal-error';
 import { areSameOriginDomain } from '../../../url/index';
 
-import type { DocumentImpl } from '../../dom/nodes/index';
-import { CustomElementRegistryImpl } from '../../html/custom-elements/index';
 import { obtainSimilarOriginWindowAgent } from '../../scripting/index';
+import type { DocumentImpl } from '../../dom/nodes/index';
+import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowImpl } from '../window/index';
+
 import type { NavigationParams } from './params';
 
 /** Select the Window and realm, then create the document for a navigation response. */

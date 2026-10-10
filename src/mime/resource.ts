@@ -1,6 +1,6 @@
-import { isomorphicDecode } from '../js-engine/index';
 import { internalType, type InternalPromise } from '../infra/promises';
 import { RangeError } from '../infra/exceptions';
+import { isomorphicDecode } from '../js-engine/index';
 
 import { parseMIMEType, type MIMEType } from './mime-type';
 

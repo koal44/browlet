@@ -1,17 +1,19 @@
-import type { EventImpl, EventTargetImpl } from '../events/index';
+import { InternalError } from '../../../infra/internal-error';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType, impl, reference, roAttr,
 } from '../../../web-idl/index';
+import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
+
+import type { EventImpl, EventTargetImpl } from '../events/index';
+import type { DOMEnvironment } from '../environment';
+
 import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
-import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
-import type { CustomElementRegistryImpl } from '../../html/custom-elements/index';
 import { NodeImpl } from './node';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
 } from './document-or-shadow-root';
-import { InternalError } from '../../../infra/internal-error';
-import type { DOMEnvironment } from '../environment';
+import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 
 /** Root of an element's shadow tree and its event propagation boundary. */
 // https://dom.spec.whatwg.org/#interface-shadowroot

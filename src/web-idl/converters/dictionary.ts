@@ -2,10 +2,11 @@ import { InternalError } from '../../infra/index';
 import { defineDataProperty, isObject } from '../../js-engine/index';
 
 import type { WebIDLRealm } from '../environment';
+import { compileSteps } from '../compiler';
 import type { IDLDictionaryType } from '../assembly/index';
 import { IDLDictionary } from '../values/index';
-import { compileSteps } from '../compiler';
 import type { RealmBinding } from '../binding/realm';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare dictionary members once, sharing their plan across references in the same binding and realm. */

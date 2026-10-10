@@ -1,15 +1,17 @@
 import type { AbortAlgorithmHandle } from '../../../infra/execution';
+import { InternalError } from '../../../infra/internal-error';
 import {
   arg, atArg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,
   DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
-import { EventPhase, type EventImpl, type EventPathItem } from './event';
-import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
-import type { ShadowRootMode } from '../nodes/index';
-import { MouseEventImpl } from './ui-event';
+
 import type { AbortSignalImpl } from '../abort/index';
-import { InternalError } from '../../../infra/internal-error';
+import type { ShadowRootMode } from '../nodes/index';
+import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
+
+import { EventPhase, type EventImpl, type EventPathItem } from './event';
+import { MouseEventImpl } from './ui-event';
 
 /** Owns listener registrations and delivers events through the dispatch path. */
 // https://dom.spec.whatwg.org/#interface-eventtarget

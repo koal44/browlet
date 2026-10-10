@@ -17,17 +17,19 @@ Do not restart the completed task/timer foundation when adding these consumers.
 | Source | Current responsibility |
 | --- | --- |
 | `agents.ts` | Agent/cluster records, Window inventory, and one EventLoop per Agent |
-| `environment.ts`, `realm.ts` | Early EnvironmentRecord state, full settings, relevant/incumbent ownership, and controlled script/callback entry |
+| `environment.ts`, `realm.ts` | Early EnvironmentRecord state, relevant/incumbent ownership, and controlled script/callback entry; full browser settings live in [`../environment.ts`](../environment.ts) |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
-| `global-scope.ts`, `timers.ts` | Composed global state, reached utilities, microtasks, active-time waits, and Window function timers |
+| [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
 | `rendering-opportunity.ts` | Independent opportunity producer and ordered rendering pipeline seams |
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
 
 `createWindowEnvironment()` composes the same Window/realm/execution boundary
 for initial browsing and navigation. EnvironmentRecord supplies security,
 navigation state, network partitioning, and the UserAgent before a realm exists.
-Full environments inherit that state and add the actual realm, exec, and global.
+Full environments in `browlet/environment.ts` inherit that state and add the actual
+realm, exec, global, and browser policy/reporting operations. They sit above the
+scripting foundations and are not re-exported by Scripting's barrel.
 SandboxEnvironment supplies internal execution through the same binding
 contract without attaching HTML settings. Browser client fields that have no
 sandbox meaning currently throw; add them only with an actual consumer and

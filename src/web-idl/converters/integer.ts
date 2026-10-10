@@ -1,6 +1,7 @@
 import { toNumber } from '../../js-engine/index';
 
 import type { IDLIntegerType } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare the declared integer width, signedness, and overflow behavior. */

@@ -1,4 +1,4 @@
-import type { ScriptingEnvironment } from '../environment';
+import { InternalError } from '../../../infra/internal-error';
 import {
   getArrayBufferMaxByteLength, getArrayBufferByteLength, isArrayBuffer,
   isArrayBufferView, isSharedArrayBuffer, isDetachedArrayBuffer, isObject,
@@ -7,6 +7,9 @@ import {
   DOMExceptionImpl, DOMExceptionNames,
   type BindingContext, type StampedImplInstance, type TransferSteps,
 } from '../../../web-idl/index';
+
+import type { ScriptingEnvironment } from '../environment';
+
 import {
   createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
   type StructuredDeserializeMemory, type StructuredSerializeMemory,
@@ -16,7 +19,6 @@ import {
 import { structuredDeserialize } from './deserialize';
 import { structuredSerializeInternal } from './serialize';
 import { DetachedTransferableStamper } from './transferable';
-import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.7, StructuredSerializeWithTransfer. */
 export function structuredSerializeWithTransfer(

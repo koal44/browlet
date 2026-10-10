@@ -1,5 +1,7 @@
 import type { DOMOperations, DOMElement as Element, DOMShadowRoot as ShadowRoot } from '../../infra/index';
 import { assertNever } from '../../infra/util';
+import { InternalError } from '../../infra/internal-error';
+
 import type { Combinator } from '../syntax/selector';
 import {
   asSubjectPredicate, SubjectKind, triAnd, triOr,
@@ -8,7 +10,6 @@ import {
 } from './candidate';
 import { nextDescendant } from './runtime';
 import type { RuntimeCache } from './runtimeCache';
-import { InternalError } from '../../infra/internal-error';
 
 export type CompiledPart = {
   combinator: Combinator | null;

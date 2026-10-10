@@ -1,13 +1,14 @@
+import { TypeError } from '../infra/exceptions';
 import { isFixedBufferSource } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
   reference,
 } from '../web-idl/index';
-import { TypeError } from '../infra/exceptions';
 import {
   GenericTransformStreamMixin, TransformStreamImpl, type ReadableStreamImpl,
   type StreamsEnvironment, type WritableStreamImpl,
 } from '../streams/index';
+
 import { TextDecoderCommonMixin, type TextDecoderOptions } from './text-decoder';
 
 /*

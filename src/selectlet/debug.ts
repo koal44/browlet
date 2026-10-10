@@ -1,4 +1,5 @@
 import type { DOMQueryRoot as QuerySource, DOMOperations, DOMElement as Element } from '../infra/index';
+
 import type { CandidateTest, ComplexSelector, CompoundSelector, TagSelector } from './parser/parser';
 import { cssIdentUnescape } from './parser/escape';
 

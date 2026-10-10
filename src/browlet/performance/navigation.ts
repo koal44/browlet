@@ -1,4 +1,5 @@
 import type { FetchTimingInfo, ResponseBodyInfo } from '../../fetch/index';
+
 import type { DocumentLoadTimingInfo } from '../dom/nodes/index';
 
 /** Live inputs retained until the navigation performance entry can be exposed. */

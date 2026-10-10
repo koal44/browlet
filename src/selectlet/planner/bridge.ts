@@ -1,4 +1,6 @@
 import type { DOMQueryRoot as QuerySource, DOMOperations, DOMElement as Element } from '../../infra/index';
+import { asciiWhitespacePattern } from '../../infra/patterns';
+
 import type { CompoundSelector } from '../parser/parser';
 import type { Chain, ElementProofFn } from './chain';
 import { seedsByTag } from '../seeds/seedsByTag';
@@ -8,7 +10,6 @@ import type { RuntimeCache } from '../compile/runtimeCache';
 import { precedesByDocPosition } from '../collections';
 import { type LookupMode } from '../constants';
 import type { SelectletContext } from '../context';
-import { asciiWhitespacePattern } from '../../infra/patterns';
 
 export type BridgeMove = {
   from: number;

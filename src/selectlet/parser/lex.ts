@@ -1,4 +1,5 @@
 import type { TextCursor } from '../../infra/text-cursor';
+
 import type { Combinator } from './parser';
 
 export function consumeTrivia(c: TextCursor): boolean {

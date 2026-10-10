@@ -1,6 +1,7 @@
+import { InternalError } from '../infra/internal-error';
+
 import type { FetchController } from './controller';
 import type { FetchRequest } from './request';
-import { InternalError } from '../infra/internal-error';
 
 /** Requests and deferred invocations associated with one environment's lifetime. */
 // https://fetch.spec.whatwg.org/#concept-fetch-group

@@ -2,6 +2,7 @@ import { createObservableArray, type ObservableArrayHandle } from '../../../infr
 
 import type { IDLType, IDLAttribute } from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
+
 import type { RealmBinding } from '../realm';
 
 export class ObservableArrayBinding {

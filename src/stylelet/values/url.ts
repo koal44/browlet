@@ -1,5 +1,6 @@
-import type { StyleletURL, StyleletURLConstructor } from '../environment';
 import { InternalError } from '../../infra/internal-error';
+
+import type { StyleletURL, StyleletURLConstructor } from '../environment';
 import {
   type TokenCursor, type TryConsumer, type TryConsumerResult,
 } from '../syntax/token-cursor';

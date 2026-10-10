@@ -6,6 +6,8 @@ import globals from 'globals';
 import webIDLOperationLayout from './scripts/eslint/web-idl-operation-layout.mjs';
 import subsystemImports from './scripts/eslint/subsystem-imports.mjs';
 import noAncestorBarrelImports from './scripts/eslint/no-ancestor-barrel-imports.mjs';
+import importOrder from './scripts/eslint/import-order.mjs';
+import dependencyDirection from './scripts/eslint/dependency-direction.mjs';
 
 const runtimeGlobals = [
   { name: 'Promise', message: 'Use the supplied InternalPromise constructor for implementation continuations.' },
@@ -45,6 +47,8 @@ export default defineConfig(
           'web-idl-operation-layout': webIDLOperationLayout,
           'subsystem-imports': subsystemImports,
           'no-ancestor-barrel-imports': noAncestorBarrelImports,
+          'import-order': importOrder,
+          'dependency-direction': dependencyDirection,
         },
       },
     },
@@ -237,6 +241,16 @@ export default defineConfig(
         unrestrictedSubsystems: ['infra'],
         entryPoints: { 'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'] },
       }],
+    },
+  },
+
+  {
+    files: ['src/**/*.ts'],
+    ignores: ['src/**/*.d.ts', 'src/**/scripts/**'],
+    rules: {
+      'browlet/import-order': 'error',
+      // Deliberately strict while the proposed component layers are under review.
+      'browlet/dependency-direction': 'error',
     },
   },
 

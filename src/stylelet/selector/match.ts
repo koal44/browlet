@@ -1,6 +1,7 @@
 import type { DOMElement as Element } from '../../infra/index';
-import type { StyleletContext } from '../context';
 import { assertNever } from '../../infra/util';
+
+import type { StyleletContext } from '../context';
 import {
   PseudoArgumentKind, SelectorKind,
   type Combinator, type ComplexRealSelector, type ComplexRealSelectorList,

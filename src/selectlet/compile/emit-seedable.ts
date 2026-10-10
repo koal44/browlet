@@ -1,9 +1,10 @@
+import { asciiLower } from '../../infra/ascii';
+import { asciiWhitespacePattern } from '../../infra/patterns';
+
 import type {
   CandidateTest, IdSelector, ClassSelector, TagSelector, CandidateElementPredicate, CompoundSelector,
   BuildElementPredicate,
 } from '../parser/parser';
-import { asciiLower } from '../../infra/ascii';
-import { asciiWhitespacePattern } from '../../infra/patterns';
 import { cssIdentUnescape } from '../parser/escape';
 import { checkClass, checkId, checkTag } from './runtime';
 

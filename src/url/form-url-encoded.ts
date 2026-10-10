@@ -1,5 +1,5 @@
-import { getEncoding, getOutputEncoding, utf8DecodeWithoutBOM, utf8Encode } from '../encoding/index';
 import { RangeError } from '../infra/exceptions';
+import { getEncoding, getOutputEncoding, utf8DecodeWithoutBOM, utf8Encode } from '../encoding/index';
 
 import {
   percentDecodeBytes, percentEncodeAfterEncoding,

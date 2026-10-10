@@ -2,7 +2,7 @@ import { createServer, type ServerResponse } from 'node:http';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { Browlet } from '../../../src/browlet/browlet';
-import type { ReportDeliveryResult } from '../../../src/browlet/reporting/delivery';
+import type { ReportDeliveryResult } from '../../../src/browlet/user-agent';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { ReportImpl } from '../../../src/browlet/reporting/report';
 import { Realm } from '../../../src/browlet/scripting/realm';

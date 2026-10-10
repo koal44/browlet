@@ -6,6 +6,7 @@ import type {
   AssembledNamespace, DefaultToJSONAttribute, MemberPlacement,
 } from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
+
 import type { RealmBinding } from '../realm';
 import type { LegacyPropertyMetadata } from './legacy';
 import { MemberBinding, type MemberOwner } from './member';

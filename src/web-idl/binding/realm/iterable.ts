@@ -2,10 +2,11 @@ import { InternalError, Stamper } from '../../../infra/index';
 import { defineDataProperty, defineMethod, isObject, type JSFunction, type JSIteratorResult } from '../../../js-engine/index';
 
 import type { IDLIterable, AssembledInterface } from '../../assembly/index';
-import { IDLCallbackFunction } from '../../values/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance,
 } from '../platform';
+import { IDLCallbackFunction } from '../../values/index';
+
 import type { RealmBinding } from '../realm';
 
 // Value pairs use the implementation's existing entry tuples.

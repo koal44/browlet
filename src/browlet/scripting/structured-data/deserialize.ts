@@ -1,16 +1,18 @@
-import type { ScriptingEnvironment } from '../environment';
-import type { Realm } from '../realm';
+import { InternalError } from '../../../infra/internal-error';
 import {
   appendMapData, appendSetData, isAnyArrayBuffer, isObject, writeErrorStack,
 } from '../../../js-engine/index';
 import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext, type PlatformRecord,
 } from '../../../web-idl/index';
+
+import type { ScriptingEnvironment } from '../environment';
+import type { Realm } from '../realm';
+
 import type {
   ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
   StructuredDeserializeMemory,
 } from './records';
-import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.6, StructuredDeserialize. */
 // BINDING_INTEGRATION: reconstruct platform objects in the destination realm.

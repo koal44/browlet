@@ -1,3 +1,5 @@
+import { InternalError } from '../../infra/internal-error';
+
 import {
   consumeAsteriskDelim, consumeGreaterDelim, consumeHashDelim,
   consumeIdentToken, consumeLessDelim, consumePipeDelim,
@@ -30,7 +32,6 @@ import {
   type DeclarationComponent,
 } from '../syntax/declaration-value';
 import { type PropertyContext } from '../css/property';
-import { InternalError } from '../../infra/internal-error';
 
 export type SyntaxValue =
   | UniversalSyntaxValue

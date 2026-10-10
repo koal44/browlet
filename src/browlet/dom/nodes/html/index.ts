@@ -4,3 +4,4 @@ export {
 export {
   HTMLUnknownElementImpl, htmlUnknownElementIDL, htmlUnknownElementInterface,
 } from './html-unknown-element';
+export { htmlIDLDefinitions } from './web-idl';

@@ -1,8 +1,9 @@
-import { EventTargetImpl } from '../dom/events/index';
 import {
   defineInterface, idlType, impl, op, reference, roAttr, xattr,
 } from '../../web-idl/index';
+
 import type { EnvironmentTiming, DOMHighResTimeStamp } from '../timing/index';
+import { EventTargetImpl } from '../dom/events/index';
 import type { DOMEnvironment } from '../dom/index';
 
 /** Exposes coarsened timestamps relative to its environment time origin. */

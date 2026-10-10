@@ -1,10 +1,12 @@
-import { defineElementInterface, type ElementCreationContext } from '../element';
 import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
-import { SVGElementImpl } from './element';
 import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
-import type { BrowletEnvironment } from '../../../scripting/index';
+
 import { LinkStyleMixin } from '../../../style/index';
+import type { BrowletEnvironment } from '../../../environment';
+
+import { defineElementInterface, type ElementCreationContext } from '../element';
+import { SVGElementImpl } from './element';
 
 /** Associates inline SVG stylesheet text with its tree scope. */
 // https://svgwg.org/svg2-draft/styling.html#InterfaceSVGStyleElement

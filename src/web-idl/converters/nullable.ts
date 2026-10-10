@@ -1,4 +1,5 @@
 import type { IDLNullableType } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Handle null and undefined before applying the nullable branch's own annotated rules. */

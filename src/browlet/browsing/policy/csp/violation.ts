@@ -1,17 +1,19 @@
-import { utf8Encode } from '../../../../encoding/index';
 import { InternalError } from '../../../../infra/internal-error';
-import { FetchRequest, fetch } from '../../../../fetch/index';
-import { copyURL, stripURLForReporting, type URLRecord } from '../../../../url/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,
 } from '../../../../web-idl/index';
-import { EventImpl, type EventInitRecord } from '../../../dom/events/index';
-import type { DOMEnvironment } from '../../../dom/index';
+import { utf8Encode } from '../../../../encoding/index';
+import { copyURL, stripURLForReporting, type URLRecord } from '../../../../url/index';
+import { FetchRequest, fetch } from '../../../../fetch/index';
+
 import type { DOMHighResTimeStamp } from '../../../timing/index';
-import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
+import { EventImpl, type EventInitRecord } from '../../../dom/events/index';
 import { ReportBodyImpl } from '../../../reporting/index';
-import type { BrowletEnvironment } from '../../../scripting/index';
+import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
+import type { DOMEnvironment } from '../../../dom/index';
+import type { BrowletEnvironment } from '../../../environment';
+
 import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 
 /** A policy violation captured before its asynchronous event and report delivery. */

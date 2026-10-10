@@ -1,10 +1,12 @@
-import type { DocumentImpl } from '../dom/nodes/index';
+import { InternalError } from '../../infra/internal-error';
+
 import type { UnsafeMoment } from '../timing/index';
+import type { DocumentImpl } from '../dom/nodes/index';
 import type { Navigable } from '../browsing/navigation/index';
+
 import type { WindowAgent } from './agents';
 import type { Realm } from './realm';
 import { renderingTaskSource } from './tasks';
-import { InternalError } from '../../infra/internal-error';
 
 // The host reports refresh opportunities; rendering steps run later as HTML tasks.
 /** Turns host rendering opportunities into tasks for a Window agent. */

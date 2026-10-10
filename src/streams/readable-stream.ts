@@ -1,19 +1,21 @@
 import type { AbortAlgorithmHandle, AbortSignal } from '../infra/execution';
+import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
+import { endOfIteration, type AsyncIterator } from '../infra/iteration';
+import { RangeError, TypeError } from '../infra/exceptions';
+import { InternalError } from '../infra/internal-error';
 import {
   getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
   getArrayBufferViewByteOffset, getArrayBufferViewElementSize, getBufferSourceCopy,
   getBufferViewTypeName, isArrayBufferView, isBufferSourceDetached, isDetachedArrayBuffer,
   isUint8Array, writeArrayBuffer, writeArrayBufferView, type JSBufferViewName, type JSEnvironment,
 } from '../js-engine/index';
-import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
-import { endOfIteration, type AsyncIterator } from '../infra/iteration';
 import {
   arg, atArg, asyncIter, asyncSequence, onError, cbDict, ctor,
   defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, implementationType, invokeWith, op, promise, roAttr, reference,
   sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
 } from '../web-idl/index';
-import { RangeError, TypeError } from '../infra/exceptions';
+
 import {
   extractHighWaterMark, extractSizeAlgorithm,
   type QueuingStrategyRecord, type QueuingStrategySize,
@@ -21,7 +23,6 @@ import {
 import type { WritableStreamImpl } from './writable-stream';
 import { QueueWithSizes } from './queue-with-sizes';
 import type { TransformStreamImpl } from './transform-stream';
-import { InternalError } from '../infra/internal-error';
 import type { StreamsEnvironment } from './environment';
 
 // =============================================================================

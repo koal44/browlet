@@ -1,16 +1,18 @@
-import type { BlobImpl } from '../file/index';
-import { utf8Encode } from '../encoding/index';
-import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { InternalPromise } from '../infra/promises';
 import { RangeError, TypeError } from '../infra/exceptions';
-import type { ReadableStreamImpl } from '../streams/index';
-import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
+import { InternalError } from '../infra/internal-error';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
   roAttr, staticOp, invokeWith, xattr,
 } from '../web-idl/index';
+import type { ReadableStreamImpl } from '../streams/index';
+import { utf8Encode } from '../encoding/index';
+import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
+import { calculateCacheFreshness, type CacheTiming } from '../http/index';
+import type { BlobImpl } from '../file/index';
 import type { FormDataImpl } from '../xhr/index';
+
 import { BodyMixin, FetchBody, type BodyInitValue, type BodyWithType } from './body';
 import {
   FetchHeaders, HeadersImpl, isCORSSafelistedResponseHeaderName,
@@ -24,7 +26,6 @@ import {
   isResponseBlockedByMixedContent, isTimingBlocked, parseAndStoreCookies,
 } from './policy';
 import { ResponseBodyInfo, type ServiceWorkerTimingInfo } from './timing';
-import { InternalError } from '../infra/internal-error';
 
 /** Response state that can continue changing after headers are delivered. */
 // https://fetch.spec.whatwg.org/#concept-response

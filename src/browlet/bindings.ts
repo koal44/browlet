@@ -3,54 +3,61 @@ import { EOL } from 'node:os';
 import { InternalError } from '../infra/internal-error';
 import type { TaskCreationOptions } from '../infra/execution';
 import { addon } from '../js-engine/index';
-import { encodingIDLDefinitions } from '../encoding/index';
-import { fileIDLDefinitions } from '../file/index';
-import { fetchIDLDefinitions } from '../fetch/index';
-import { styleletIDLDefinitions } from '../stylelet/index';
-import { streamsIDLDefinitions } from '../streams/index';
-import { urlIDLDefinitions, originIDL, serializeURL } from '../url/index';
-import { xhrIDLDefinitions } from '../xhr/index';
 import {
   BindingWorld, type GlobalObjectAllocation,
   type BindingContext, type StampedPlatformObject,
 } from '../web-idl/index';
+import { streamsIDLDefinitions } from '../streams/index';
+import { styleletIDLDefinitions } from '../stylelet/index';
+import { encodingIDLDefinitions } from '../encoding/index';
+import { urlIDLDefinitions, originIDL, serializeURL } from '../url/index';
+import { fileIDLDefinitions } from '../file/index';
+import { xhrIDLDefinitions } from '../xhr/index';
+import { fetchIDLDefinitions } from '../fetch/index';
+
 import type { Window } from './platform';
+import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
-  locationIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
-  WindowProxyHandle, windowProxyDefinition,
-} from './browsing/window/index';
-import { integrityViolationReportBodyIDL, coepViolationReportBodyIDL } from './browsing/policy/index';
-import {
-  cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
-  securityPolicyViolationEventDispositionIDL,
-} from './browsing/policy/csp/index';
+  EventLoop, SandboxAgent, EnvironmentRecord, eventHandlerIDL, eventHandlerNonNullIDL,
+  Realm, WindowRealm, taskSources,
+} from './scripting/index';
+import { EventImpl } from './dom/events/index';
 import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
   reportingObserverOptionsIDL, reportListIDL,
 } from './reporting/index';
-import { DocumentImpl, htmlDocumentIDL, ElementImpl } from './dom/nodes/index';
-import { domIDLDefinitions } from './dom/index';
-import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
-import { EventImpl } from './dom/events/index';
-import { htmlIDLDefinitions } from './html/index';
-import { fileReaderIDL, objectURLIDL } from './integration/file/index';
-import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
-import { queueNodeTask } from './integration/index';
-import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
-import { performanceIDL } from './performance/index';
-import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
+import { integrityViolationReportBodyIDL, coepViolationReportBodyIDL } from './browsing/policy/index';
 import {
-  EventLoop, SandboxAgent, type WindowEnvironmentInit, EnvironmentRecord,
-  SandboxEnvironment, WindowEnvironment, type BrowletEnvironment, type BrowletExecution, eventHandlerIDL,
-  eventHandlerNonNullIDL, highResolutionTimeWindowOrWorkerGlobalScopeIDL, timerHandlerIDL,
-  windowOrWorkerGlobalScopeIDL, WindowOrWorkerGlobalScopeMixin, Realm, WindowRealm, taskSources,
-} from './scripting/index';
-import type { UserAgent } from './user-agent';
+  ContentSecurityPolicy, cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
+  securityPolicyViolationEventDispositionIDL,
+} from './browsing/policy/csp/index';
+import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
+import { DocumentImpl, htmlDocumentIDL, ElementImpl } from './dom/nodes/index';
+import { htmlIDLDefinitions } from './dom/nodes/html/index';
+import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
+import { svgIDLDefinitions } from './dom/nodes/svg/index';
+import { domIDLDefinitions } from './dom/index';
+import { performanceIDL } from './performance/index';
+import {
+  type WindowEnvironmentInit, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
+  type BrowletExecution,
+} from './environment';
+import {
+  WindowOrWorkerGlobalScopeMixin, highResolutionTimeWindowOrWorkerGlobalScopeIDL,
+  timerHandlerIDL, windowOrWorkerGlobalScopeIDL,
+} from './global-scope';
 import {
   structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
   structuredClone,
 } from './scripting/structured-data/index';
-import { svgIDLDefinitions } from './dom/nodes/svg/index';
+import {
+  locationIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  WindowProxyHandle, windowProxyDefinition,
+} from './browsing/window/index';
+import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
+import { fileReaderIDL, objectURLIDL } from './integration/file/index';
+import { queueNodeTask } from './integration/index';
+import type { UserAgent } from './user-agent';
 
 // Browlet's composition root owns the final Web IDL assembly.
 // Defining specifications contribute declarations and implementation steps;
@@ -168,6 +175,10 @@ export function createBrowletExecution(context: BindingContext<BrowletEnvironmen
       const targetRealm = Realm.getAssociatedRealm(global);
       if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
       targetRealm.queueGlobalTask(taskSources.network, steps);
+    },
+    reportCSPViolation: (policy, request) => {
+      if (!(policy instanceof ContentSecurityPolicy)) throw new InternalError('Expected a Content Security Policy');
+      policy.createViolationForRequest(request, context.getEnvironment()).report();
     },
     parseJSON: (text) => realm.parseJSON(text),
     stringifyJSON: (value) => realm.stringifyJSON(value),

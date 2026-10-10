@@ -2,16 +2,15 @@
 
 ## Present
 
-- `tree.ts`: the parent/child/sibling topology and tree-order queries needed
-  to represent DOM §1.1 (`#trees`). Its insertion methods are storage
-  primitives, not substitutes for the full DOM §4 mutation algorithms.
 - `ordered-set.ts`: ordered-set parsing and serialization (DOM §1.2,
   `#ordered-sets`).
 - `name-validation.ts`: namespace/name validation (DOM §1.4,
   `#namespaces`).
 
-The remaining tree vocabulary in §1.1 is mostly terminology over these
-relationships. Add a named helper only when a normative consumer makes it
+The DOM §1.1 tree store lives beside Node in [`../nodes/tree.ts`](../nodes/tree.ts).
+Its insertion methods are storage primitives, not substitutes for the full DOM
+§4 mutation algorithms. The remaining tree vocabulary is mostly terminology
+over its relationships. Add a named helper only when a normative consumer makes it
 useful; do not mirror every defined term with an otherwise unused function.
 
 ## Selector integration
@@ -45,7 +44,7 @@ realm of the `SyntaxError`. Do not assert Selectlet parser internals.
 - Trusted Types applies at the later DOM APIs accepting trusted strings; it is
   not a prerequisite for the §1 tree and name primitives.
 
-Revisit `tree.ts` only as DOM §4.2.3 mutation algorithms add MutationObserver,
+Revisit that tree store only as DOM §4.2.3 mutation algorithms add MutationObserver,
 range, slotting, custom-element reaction, and HTML
 insertion/post-connection/removing/moving hooks (HTML §2.1.4).
 

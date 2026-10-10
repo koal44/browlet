@@ -1,15 +1,16 @@
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../infra/index';
+import { InternalError } from '../../../infra/internal-error';
+
 import { elementInterface, type ElementInterface } from './element';
-import { isValidCustomElementName } from '../../html/custom-elements/index';
 import { htmlElementInterface, htmlUnknownElementInterface } from './html/index';
+import { isValidCustomElementName } from './html/custom-elements/index';
 import {
   htmlHeadElementInterface, htmlBaseElementInterface, htmlLinkElementInterface, htmlStyleElementInterface,
 } from './html/metadata/index';
 import { mathMLElementInterface } from './mathml/index';
 import { svgElementInterface, svgStyleElementInterface } from './svg/index';
-import { InternalError } from '../../../infra/internal-error';
 
 /** Select an element's implementation, including namespace and unknown-name fallbacks. */
 export function resolveElementInterface(

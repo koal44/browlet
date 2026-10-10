@@ -1,10 +1,10 @@
-import { type BlobImpl, FileImpl, type FileEnvironment } from '../file/index';
 import { toScalarValueString, type ScalarValueString } from '../infra/index';
+import { InternalError } from '../infra/internal-error';
 import {
   arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   reference, sequence, union,
 } from '../web-idl/index';
-import { InternalError } from '../infra/internal-error';
+import { type BlobImpl, FileImpl, type FileEnvironment } from '../file/index';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
 export type FormDataEntry = [

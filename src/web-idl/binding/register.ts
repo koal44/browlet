@@ -4,6 +4,7 @@ import { hasExtendedAttribute, type ImplementationClass, type InjectedArgument }
 import type {
   IDLAttribute, IDLOperation, IDLAsyncIterable, IDLConstructor, AssembledCallable, AssembledInterface,
 } from '../assembly/index';
+
 import type {
   AsyncIteratorSteps, ValuePairsSteps, AttributeSteps, ConstructorSteps, ImplementationConstructorSteps,
   MemberBinding, OperationSteps, StringificationBehavior,

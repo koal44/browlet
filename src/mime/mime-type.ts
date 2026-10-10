@@ -1,7 +1,6 @@
-import { isomorphicDecode, isomorphicEncode } from '../js-engine/index';
-
-import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/index';
 import { TextCursor } from '../infra/text-cursor';
+import { isomorphicDecode, isomorphicEncode } from '../js-engine/index';
+import { collectHTTPQuotedString, isHTTPToken, isHTTPWhitespace } from '../http/index';
 
 /*
  * A MIME type record.

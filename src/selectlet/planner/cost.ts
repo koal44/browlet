@@ -1,5 +1,6 @@
-import type { Combinator, ComplexSelector, CompoundSelector } from '../parser/parser';
 import { assertNever } from '../../infra/util';
+
+import type { Combinator, ComplexSelector, CompoundSelector } from '../parser/parser';
 
 export function costComplex(parts: ComplexSelector['parts']): number {
   let cost = 0;

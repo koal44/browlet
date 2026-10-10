@@ -1,9 +1,10 @@
 import type {
   DOMQueryRoot as QuerySource, DOMElement as Element, DOMDocument as Document, DOMDocumentFragment as DocumentFragment,
 } from '../../infra/index';
+import { asciiLower } from '../../infra/ascii';
+
 import { LOOKUP_COPY, type LookupMode } from '../constants';
 import { concatCollection, htmlCollectionSource, mergeDocumentOrder } from '../collections';
-import { asciiLower } from '../../infra/ascii';
 import type { SelectletContext } from '../context';
 
 export function seedsByTag(tag: string, source: QuerySource, lookupMode: LookupMode, ctx: SelectletContext): Iterable<Element> {

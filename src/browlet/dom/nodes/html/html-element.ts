@@ -1,7 +1,8 @@
-import { defineElementInterface, ElementImpl } from '../element';
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
+
+import { defineElementInterface, ElementImpl } from '../element';
 
 /** Base implementation for elements in the HTML namespace. */
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement

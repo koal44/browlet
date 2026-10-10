@@ -2,6 +2,7 @@
 
 ## Present
 
+- `names.ts` validates custom-element names for HTML element-interface selection.
 - `registry.ts` reserves the `CustomElementRegistry` identity required by
   Document and realm setup. Its declaration supports projection from the existing
   Document getter; registry members and Window exposure remain absent.
@@ -11,7 +12,6 @@
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `definition.ts` | Custom-element definitions and constructor lookup | HTML §4.13.3 |
-| `names.ts` | Valid custom-element names | HTML §4.13.3 |
 | `reactions.ts` | Reaction stacks, queues, backup queue, `[CEReactions]` entry/exit | HTML §4.13.6 |
 | `upgrade.ts` | Upgrade candidates and upgrade algorithm | HTML §4.13.5 |
 | `construction-stack.ts` | HTMLElement constructor and construction-stack rules | HTML §4.13.3 |

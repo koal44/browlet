@@ -1,6 +1,7 @@
-import { utf8Encode } from '../encoding/index';
 import { forgivingBase64Encode } from '../infra/base64';
 import { TextCursor } from '../infra/text-cursor';
+import { utf8Encode } from '../encoding/index';
+
 import { isHTTPTabOrSpace, isHTTPToken } from './syntax';
 
 /** Parse challenges in received order; return null for malformed syntax. */

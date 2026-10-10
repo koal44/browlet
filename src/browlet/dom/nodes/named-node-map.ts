@@ -1,9 +1,10 @@
+import { asciiLower } from '../../../infra/ascii';
+import { HTML_NAMESPACE } from '../../../infra/index';
 import {
   arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
   roAttr, xattr, DOMExceptionNames, DOMExceptionImpl,
 } from '../../../web-idl/index';
-import { asciiLower } from '../../../infra/ascii';
-import { HTML_NAMESPACE } from '../../../infra/index';
+
 import type { AttrImpl } from './attribute';
 import type { ElementImpl } from './element';
 

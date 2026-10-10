@@ -1,5 +1,5 @@
-import type { FetchInsecureRequestsPolicy } from '../../../fetch/index';
 import { hostsEqual, type Host, type URLRecord } from '../../../url/index';
+import type { FetchInsecureRequestsPolicy } from '../../../fetch/index';
 
 /** Upgrade Insecure Requests' policy flag and navigation targets for one environment or browsing context. */
 // https://w3c.github.io/webappsec-upgrade-insecure-requests/#insecure-requests-policy

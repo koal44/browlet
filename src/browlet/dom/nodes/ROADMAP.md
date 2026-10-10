@@ -11,7 +11,7 @@ Those familiar interfaces are not the difficult dependency in DOM §4. The
 early prerequisite is one normative mutation path shared by script, parsers,
 ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
-The existing `dom/infra/tree.ts` is useful pointer storage, but direct writes
+The existing `tree.ts` is useful pointer storage, but direct writes
 through it do not yet provide that contract.
 
 ## Section 4 slices
@@ -74,7 +74,7 @@ Range implementations into the low-level tree store.
 | Live ranges | Boundary points are adjusted during insert, remove, move, character-data replacement, and text splitting | `../ranges/ROADMAP.md`, DOM §5 |
 | Traversal | NodeIterator pre-removing steps run before removal; traversal owns iterator state | `../traversal/ROADMAP.md`, DOM §6.2 |
 | MutationObserver and slots | Observer queues and signal slots live on the similar-origin Window agent and are delivered at its event loop's microtask checkpoint | `../../scripting/ROADMAP.md`, DOM §§4.2.2 and 4.3 |
-| Custom elements | Attribute, insertion, removal, adoption, and upgrade reactions use the same operations as script and parsing | `../../html/custom-elements/ROADMAP.md`, HTML §4.13 |
+| Custom elements | Attribute, insertion, removal, adoption, and upgrade reactions use the same operations as script and parsing | `html/custom-elements/ROADMAP.md`, HTML §4.13 |
 | DOMTokenList | Every token update and external attribute change uses the same attribute-value and attribute-change paths | `../ROADMAP.md`, DOM §7 |
 | Parsing | Tree builders call the same mutation and element-creation contracts, with only the explicitly specified parser suppressions | `../../html/parser/ROADMAP.md`, HTML §§13–14 |
 | Selectors and style | Scope matching, tree scopes, connection state, and invalidation observe completed DOM mutations | `../infra/ROADMAP.md` and `../../style/ROADMAP.md` |

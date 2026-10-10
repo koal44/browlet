@@ -1,6 +1,3 @@
-import {
-  type BrowletEnvironment, EventHandlerMap, eventHandlerAttr, type EventHandlerCallback,
-} from '../../scripting/index';
 import { Stamper } from '../../../infra/stamper';
 import { WeakOrderedSet } from '../../../infra/collections';
 import type { AbortAlgorithmHandle, AbortSignal } from '../../../infra/execution';
@@ -8,7 +5,10 @@ import {
   arg, atArg, defineInterface, idlType, impl, invokeWith, op, reference, roAttr,
   sequence, staticOp, xattr, DOMExceptionNames,
 } from '../../../web-idl/index';
+
+import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../events/index';
+import { type BrowletEnvironment } from '../../environment';
 
 /** Tracks cancellation, propagates its reason, and notifies abort listeners. */
 // https://dom.spec.whatwg.org/#interface-AbortSignal

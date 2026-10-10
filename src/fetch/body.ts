@@ -1,17 +1,18 @@
-import { TextDecoderStreamImpl, utf8Decode, utf8Encode } from '../encoding/index';
-import { BlobData, BlobImpl } from '../file/index';
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
 import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise, PromiseResultType } from '../infra/promises';
 import { getBufferSourceCopy, isUint8Array, type GlobalObject } from '../js-engine/index';
-import { serializeMIMEType } from '../mime/index';
-import { ReadableStreamImpl } from '../streams/index';
-import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../web-idl/index';
+import { ReadableStreamImpl } from '../streams/index';
+import { TextDecoderStreamImpl, utf8Decode, utf8Encode } from '../encoding/index';
+import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
+import { serializeMIMEType } from '../mime/index';
+import { BlobData, BlobImpl } from '../file/index';
 import { FormDataImpl, type FormDataEntry } from '../xhr/index';
+
 import { queueFetchTask, type FetchEnvironment } from './environment';
 import { encodeMultipartFormData, parseMultipartFormData } from './multipart';
 import type { FetchRequest } from './request';

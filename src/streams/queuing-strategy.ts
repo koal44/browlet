@@ -1,9 +1,9 @@
+import { RangeError } from '../infra/exceptions';
+import { getV } from '../js-engine/index';
 import {
   arg, attrFn, onError, ctor, defineCallbackFunction, defineDictionary, defineInterface,
   dictMember, idlType, impl, roAttr, reference,
 } from '../web-idl/index';
-import { getV } from '../js-engine/index';
-import { RangeError } from '../infra/exceptions';
 
 /*
  * dictionary QueuingStrategy {

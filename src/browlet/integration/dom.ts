@@ -1,9 +1,10 @@
+import type { DOMOperations } from '../../infra/index';
+import { InternalError } from '../../infra/index';
+
 import {
   findElementById, NodeImpl, type ElementImpl, type AttrImpl, type DocumentImpl, type DocumentFragmentImpl,
   ShadowRootImpl, type TextImpl,
 } from '../dom/nodes/index';
-import type { DOMOperations } from '../../infra/index';
-import { InternalError } from '../../infra/index';
 import { HTMLElementImpl } from '../dom/nodes/html/index';
 
 /** Selector and style access to Browlet implementations, preserving their identities. */

@@ -1,4 +1,5 @@
 import type { URLRecord } from '../../../url/index';
+
 import type { DocumentBackedState, DocumentState } from './document-state';
 
 /** One URL and document state at a joint session-history step. */

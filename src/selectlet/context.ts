@@ -1,6 +1,9 @@
 import type {
   DOMQueryRoot as QuerySource, DOMElement as Element, DOMDocument as Document, DOMOperations,
 } from '../infra/index';
+import { escapeRegExp } from '../infra/strings';
+import { TextCursorError } from '../infra/text-cursor';
+
 import { byClass, byId, byTag, byTagNs } from './api/lookup';
 import { queryFirst, type DebugFirst, type FirstResolver } from './api/first';
 import { buildSeedsByClass, type SeedClassFn } from './seeds/seedsByClass';
@@ -8,14 +11,11 @@ import { buildSeedsById, type SeedIdFn } from './seeds/seedsById';
 import type {
   CustomPseudoPredicate, ElementList, SelectletConfig, SelectletErrorOptions,
 } from './selectlet';
-import { escapeRegExp } from '../infra/strings';
-import { TextCursorError } from '../infra/text-cursor';
 import { queryMatches, type DebugMatch, type MatchResolver } from './api/match';
 import { queryClosest } from './api/closest';
 import { describeQuerySource, describeElement } from './debug';
 import { toNodeList } from './node-list';
 import { RuntimeCache } from './compile/runtimeCache';
-
 import { querySelect, type SelectResolver, type DebugSelect } from './api/select';
 import type { SelectletEnvironment } from './environment';
 

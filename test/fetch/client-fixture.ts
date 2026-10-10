@@ -19,9 +19,12 @@ export function createClientEnvironment(
 ): ClientEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
   const queueGlobalFetchTask: FetchExecution['queueGlobalFetchTask'] = (_global, steps) => { setImmediate(steps); };
+  const reportCSPViolation: FetchExecution['reportCSPViolation'] = () => {
+    throw new Error('This fixture has no CSP reporting implementation');
+  };
   return {
     ...env,
-    exec: Object.assign(env.exec, { queueGlobalFetchTask }),
+    exec: Object.assign(env.exec, { queueGlobalFetchTask, reportCSPViolation }),
     isWindow: false,
     isServiceWorker: false,
     isTopLevelWindow: false,
@@ -100,6 +103,7 @@ export function createFetchUserAgent(): FetchUserAgent {
     corsPreflightCache: new CORSPreflightCache(),
     cookieStore: new CookieStore(),
     cookiesEnabled: true,
+    reportDeliveryEnabled: true,
     storageEnabled: true,
     generateUUID: () => crypto.randomUUID(),
     parseURL,

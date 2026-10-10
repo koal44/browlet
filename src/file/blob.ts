@@ -1,14 +1,15 @@
-import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 import type { InternalPromise } from '../infra/promises';
 import { lineEndingPattern } from '../infra/patterns';
 import { getBufferSourceCopy } from '../js-engine/index';
-import type { ReadableStreamImpl } from '../streams/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
   reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames, type BufferSource, type SerialSteps,
 } from '../web-idl/index';
+import type { ReadableStreamImpl } from '../streams/index';
+import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
+
 import { BlobData, type BlobSnapshotState } from './blob-data';
 import type { FileEnvironment } from './environment';
 

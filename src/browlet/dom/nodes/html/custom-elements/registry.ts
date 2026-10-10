@@ -1,4 +1,4 @@
-import { defineInterface, impl } from '../../../web-idl/index';
+import { defineInterface, impl } from '../../../../../web-idl/index';
 
 /** Preserves custom-element registry identity until definition and upgrade are implemented. */
 // https://html.spec.whatwg.org/multipage/custom-elements.html#customelementregistry

@@ -4,7 +4,7 @@
 Create the remaining files only as their behavior is implemented; do not add
 empty classes merely to complete this list.
 
-`html/web-idl.ts` retains a declaration-only `HTMLFormElement` type for FormData's
+`web-idl.ts` retains a declaration-only `HTMLFormElement` type for FormData's
 constructor signature. It has no implementation or Window exposure; move that
 declaration into the form module when its behavior is implemented.
 
@@ -89,7 +89,7 @@ They belong with their consuming subsystem rather than in one miscellaneous
 | `forms/` | `ValidityState`, `SelectionMode`, `SubmitEvent`, `FormDataEvent`, and their dictionaries; consume rather than redefine the external `FormData` API | Add with form association, validation, and submission |
 | `scripting/slot.ts` | `AssignedNodesOptions` | Add as a declaration beside slot behavior; it does not require a runtime class |
 | `canvas/` | Canvas and offscreen rendering contexts, state/path/style mixins, gradients, patterns, text metrics, `Path2D`, callbacks, dictionaries, and enums | Separate later graphics slice; do not bury it in `canvas.ts` |
-| `html/custom-elements/` | `ElementInternals`, `CustomStateSet`, validity flags, definitions, registry, and constructor callback | Add through the custom-elements roadmap and `[CEReactions]` work |
+| `dom/nodes/html/custom-elements/` | `ElementInternals`, `CustomStateSet`, validity flags, definitions, registry, and constructor callback | Add through the custom-elements roadmap and `[CEReactions]` work |
 
 `LinkStyle` comes from CSSOM, iframe permissions objects come from Permissions
 Policy, and several canvas/media input types come from their own standards.

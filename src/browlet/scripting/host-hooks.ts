@@ -1,12 +1,14 @@
+import { InternalError } from '../../infra/internal-error';
 import { setHostHooks } from '../../js-engine/index';
 import type {
   JSJobCallback, JSJobRegistration, JSFunction,
   JSRealm,
 } from '../../js-engine/index';
-import type { BrowletEnvironment } from './environment';
+
+import type { BrowletEnvironment } from '../environment';
+
 import { createTaskSource } from './event-loop';
 import { Realm } from './realm';
-import { InternalError } from '../../infra/internal-error';
 
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 

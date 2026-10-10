@@ -5,6 +5,7 @@ import {
 } from '../../../web-idl/index';
 
 import type { Window, WindowProxy } from '../../platform';
+
 import type { WindowImpl } from './window';
 
 /** Retains a WindowProxy's platform identity and current Window association. */

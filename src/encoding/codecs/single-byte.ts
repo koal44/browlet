@@ -1,12 +1,13 @@
 import { Buffer, isAscii } from 'node:buffer';
 import { TextDecoder } from 'node:util';
+
+import { nonASCIIPattern } from '../../infra/patterns';
 import { codeUnitsToString } from '../../js-engine/index';
 
 import type { Encoding } from '../encodings';
 import type { EncodingIndex } from '../indexes';
 import { singleByteIndexes } from '../gen/indexes';
 import { endOfQueue, type IOQueue, type QueueResult } from '../io-queue';
-import { nonASCIIPattern } from '../../infra/patterns';
 
 /** Encoding Standard §9 — Stateless single-byte handlers, processed in chunks. */
 export class SingleByteCodec {

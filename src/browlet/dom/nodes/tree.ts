@@ -1,7 +1,8 @@
-import { EventTargetImpl } from '../events/index';
 import { InternalError } from '../../../infra/internal-error';
 
-/** Tree links and raw storage operations. */
+import { EventTargetImpl } from '../events/index';
+
+/** Tree links and raw storage operations shared by DOM nodes. */
 // https://dom.spec.whatwg.org/#trees
 export abstract class TreeNode<TNode extends TreeNode<TNode>>
   extends EventTargetImpl

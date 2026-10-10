@@ -2,6 +2,7 @@ import { toScalarValueString } from '../../infra/index';
 import { toString } from '../../js-engine/index';
 
 import type { IDLStringType, IDLEnumerationType } from '../assembly/index';
+
 import { Converter, type ConversionSteps } from './converter';
 
 /** Prepare the declared string conversion and null-to-empty-string behavior. */

@@ -1,10 +1,11 @@
-import { BlobData } from '../file/index';
+import { InternalError } from '../infra/internal-error';
+import { serializeURL } from '../url/index';
 import {
   calculateCacheFreshness, canStoreResponse, EntityTag, parseHTTPDate, parseVary, serializeHTTPDate,
   type CacheHeaderValues, type CacheFreshness,
 } from '../http/index';
-import { InternalError } from '../infra/internal-error';
-import { serializeURL } from '../url/index';
+import { BlobData } from '../file/index';
+
 import { FetchBody } from './body';
 import type { FetchEnvironment } from './environment';
 import { isNullBodyStatus, type FetchHeaders } from './headers';

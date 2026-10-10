@@ -1,5 +1,4 @@
-import type { ScriptingEnvironment } from '../environment';
-import type { Realm } from '../realm';
+import { InternalError } from '../../../infra/internal-error';
 import {
   type JSBufferView, copyMapData, copySetData, getArrayBufferMaxByteLength,
   getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,
@@ -19,6 +18,10 @@ import {
 import {
   DOMExceptionImpl, DOMExceptionNames, type BindingContext, type ImplementationClass,
 } from '../../../web-idl/index';
+
+import type { ScriptingEnvironment } from '../environment';
+import type { Realm } from '../realm';
+
 import {
   createStructuredDataRecord, isSerializedErrorName,
   type ArrayBufferSerializedRecord,
@@ -30,7 +33,6 @@ import {
   type StructuredSerializeMemory,
 } from './records';
 import { DetachedTransferableStamper } from './transferable';
-import { InternalError } from '../../../infra/internal-error';
 
 /** HTML §2.7.4, StructuredSerialize. */
 export function structuredSerialize(

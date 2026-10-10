@@ -1,5 +1,9 @@
 # HTML roadmap
 
+HTML node implementations, custom elements, and their declaration collection
+live under `dom/nodes/html/`. This folder retains the parser and provisional
+roadmaps for supporting HTML algorithms; it is not an umbrella runtime barrel.
+
 ## HTML section 1 and generated-index ownership
 
 Section 1 explains the standard's scope, conformance model, design constraints,
@@ -75,7 +79,7 @@ records that early slice and the complete element-family inventory.
 | §4.8 embedded content | `dom/nodes/html/embedded/`; `iframe` delegates nested navigables to `browsing/`, while image and media resource work delegates to `loader/` |
 | §§4.9–4.11 tables, forms, and interactive elements | Corresponding `dom/nodes/html/` areas, with form infrastructure retained under `forms/` and focus/input under the future `interaction/` domain |
 | §4.12 scripting elements and canvas | `dom/nodes/html/scripting/` for script/template/slot; script execution belongs to `scripting/` and loading to `loader/`; canvas is a later graphics subsystem |
-| §4.13 custom elements | `html/custom-elements/`, integrated with DOM mutations and Web IDL `[CEReactions]` |
+| §4.13 custom elements | `dom/nodes/html/custom-elements/`, integrated with DOM mutations and Web IDL `[CEReactions]` |
 
 Element interfaces do not own the subsystems they expose. In particular,
 `HTMLIFrameElement` does not own WindowProxy or navigation, `HTMLScriptElement`
@@ -98,7 +102,7 @@ collected under one HTML application module.
 | Section | Owner |
 | --- | --- |
 | §8.1 scripting, host hooks, and event loops | `scripting/` |
-| §§8.2–8.3 global-scope and base64 utilities | `scripting/global-scope.ts` |
+| §§8.2–8.3 global-scope and base64 utilities | [`global-scope.ts`](../global-scope.ts) |
 | §8.4 dynamic markup insertion | `html/parser/dynamic-markup.ts` |
 | §8.5 DOM parsing and serialization | `dom/parsing/`, consuming `html/parser/fragment.ts` |
 | §8.6 sanitization | `html/sanitization/` |

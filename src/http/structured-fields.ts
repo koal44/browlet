@@ -1,7 +1,7 @@
-import { utf8DecodeWithoutBOMOrFail, utf8Encode } from '../encoding/index';
 import { forgivingBase64Decode, forgivingBase64Encode } from '../infra/base64';
 import { TextCursor } from '../infra/text-cursor';
 import { isomorphicDecode } from '../js-engine/index';
+import { utf8DecodeWithoutBOMOrFail, utf8Encode } from '../encoding/index';
 
 /** Parse a combined field value; discard the whole field on malformed syntax. */
 // https://www.rfc-editor.org/rfc/rfc9651.html#section-4.2
