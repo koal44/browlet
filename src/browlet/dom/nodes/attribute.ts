@@ -48,9 +48,9 @@ export class AttrImpl extends NodeImpl {
   }
 
   set value(value: string) {
-    const oldValue = this.#value;
-    this.#value = value;
-    this.ownerElement?.attributeChanged(this.localName, oldValue, value, this.namespaceURI);
+    // PROVISIONAL(Trusted Types): attached writes need the compliant-value check and
+    // must recheck ownership afterward, since a default policy can detach the Attr.
+    this.change(value);
   }
 
   /** Qualified name, including the prefix when present. */
@@ -63,6 +63,14 @@ export class AttrImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-attr-specified
   get specified(): boolean {
     return true;
+  }
+
+  /** Store an already accepted value and notify the owning element, even if it is unchanged. */
+  // https://dom.spec.whatwg.org/#concept-element-attributes-change
+  change(value: string): void {
+    const oldValue = this.#value;
+    this.#value = value;
+    this.ownerElement?.handleAttributeChanges(this, oldValue, value);
   }
 }
 

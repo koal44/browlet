@@ -21,7 +21,7 @@ export function computeStyle(
   const style = dom.inlineStyle?.(element);
   const declarations = style instanceof CSSStyleDeclarationImpl
     ? style.declarations
-    : parseDeclarationBlock(dom.getAttribute(element, 'style') ?? '');
+    : parseDeclarationBlock(dom.getAttributeNS(element, null, 'style') ?? '');
   const computed: PropertyDeclaration[] = [];
 
   for (const name of Object.keys(propertyRegistry) as PropertyName[]) {

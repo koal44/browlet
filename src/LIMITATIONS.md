@@ -163,6 +163,12 @@ values are intentional [binding contracts](web-idl/README.md), not missing APIs.
 
 ## Live DOM mutation
 
+Attribute setters remain string-only and do not enforce Trusted Types. Their
+common change path reaches provisional observer, custom-element, and slot hooks;
+it does not yet deliver mutation records, reactions, or slot changes. The
+[attribute slice](browlet/dom/nodes/ROADMAP.md#section-4-slices) records these
+dependencies and the tests for the implemented storage and mutation behavior.
+
 Live Range boundaries track structural mutations, but CharacterData edits do not
 yet adjust them. Replacing `.data` can leave offsets beyond the new text length;
 the expected failure in [Range tests](../test/browlet/dom/ranges/range.test.ts)

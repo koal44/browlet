@@ -47,6 +47,7 @@ export const standardDOM: DOMOperations<
   hasAttribute: (element, name) => element.hasAttribute(name),
   hasAttributeNS: (element, namespace, name) => element.hasAttributeNS(namespace, name),
   setAttribute: (element, name, value) => element.setAttribute(name, value),
+  setAttributeNS: (element, namespace, name, value) => element.setAttributeNS(namespace, name, value),
   removeAttribute: (element, name) => element.removeAttribute(name),
   attributes: (element) => element.attributes,
   attributeLocalName: (attribute) => attribute.localName,
@@ -128,6 +129,7 @@ export interface StandardElement extends StandardNode, StandardParentNode {
   hasAttribute(name: string): boolean;
   hasAttributeNS(namespace: string | null, name: string): boolean;
   setAttribute(name: string, value: string): void;
+  setAttributeNS(namespace: string | null, qualifiedName: string, value: string): void;
   removeAttribute(name: string): void;
   getElementsByTagName(name: string): DOMCollection<StandardElement>;
   getElementsByTagNameNS(namespace: string | null, name: string): DOMCollection<StandardElement>;

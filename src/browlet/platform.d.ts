@@ -960,14 +960,14 @@ export interface HTMLCollectionConstructor {
 }
 
 export interface NamedNodeMap {
-  getNamedItem(qualifiedName: string): (Attr | null);
-  setNamedItem(attr: Attr): (Attr | null);
-  removeNamedItem(qualifiedName: string): Attr;
-  item(index: number): (Attr | null);
-  getNamedItemNS(namespace: (string | null), localName: string): (Attr | null);
-  setNamedItemNS(attr: Attr): (Attr | null);
-  removeNamedItemNS(namespace: (string | null), localName: string): Attr;
   readonly length: number;
+  item(index: number): (Attr | null);
+  getNamedItem(qualifiedName: string): (Attr | null);
+  getNamedItemNS(namespace: (string | null), localName: string): (Attr | null);
+  setNamedItem(attr: Attr): (Attr | null);
+  setNamedItemNS(attr: Attr): (Attr | null);
+  removeNamedItem(qualifiedName: string): Attr;
+  removeNamedItemNS(namespace: (string | null), localName: string): Attr;
   readonly [index: number]: (Attr | null) | undefined;
   [Symbol.iterator](): IterableIterator<(Attr | null)>;
 }
@@ -1085,6 +1085,7 @@ export interface Document extends Node {
   createTextNode(data: string): Text;
   createComment(data: string): Comment;
   createAttribute(localName: string): Attr;
+  createAttributeNS(namespace: (string | null), qualifiedName: string): Attr;
   adoptNode(node: Node): Node;
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): NodeIterator;
@@ -1112,16 +1113,26 @@ export interface DocumentConstructor {
 export interface Element extends Node {
   readonly namespaceURI: (string | null);
   readonly localName: string;
+  hasAttributes(): boolean;
   readonly attributes: NamedNodeMap;
+  getAttributeNames(): Array<string>;
   getAttribute(qualifiedName: string): (string | null);
   getAttributeNS(namespace: (string | null), localName: string): (string | null);
-  getElementsByClassName(classNames: string): HTMLCollection;
-  getElementsByTagName(qualifiedName: string): HTMLCollection;
-  getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
+  setAttribute(qualifiedName: string, value: string): void;
+  setAttributeNS(namespace: (string | null), qualifiedName: string, value: string): void;
+  removeAttribute(qualifiedName: string): void;
+  removeAttributeNS(namespace: (string | null), localName: string): void;
+  toggleAttribute(qualifiedName: string, force?: boolean): boolean;
   hasAttribute(qualifiedName: string): boolean;
   hasAttributeNS(namespace: (string | null), localName: string): boolean;
-  setAttribute(qualifiedName: string, value: string): void;
-  removeAttribute(qualifiedName: string): void;
+  getAttributeNode(qualifiedName: string): (Attr | null);
+  getAttributeNodeNS(namespace: (string | null), localName: string): (Attr | null);
+  setAttributeNode(attr: Attr): (Attr | null);
+  setAttributeNodeNS(attr: Attr): (Attr | null);
+  removeAttributeNode(attr: Attr): Attr;
+  getElementsByTagName(qualifiedName: string): HTMLCollection;
+  getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
+  getElementsByClassName(classNames: string): HTMLCollection;
   readonly children: HTMLCollection;
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);

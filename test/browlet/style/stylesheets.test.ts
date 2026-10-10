@@ -13,15 +13,15 @@ describe('stylesheet integration', () => {
     const element = document.createElement('div');
     const getCSSEngine = vi.spyOn(document, 'getCSSEngine');
     const { userAgent } = document.env;
-    const setAttribute = vi.fn(userAgent.dom.setAttribute.bind(userAgent.dom));
-    userAgent.dom = { ...userAgent.dom, setAttribute };
+    const setAttributeNS = vi.fn(userAgent.dom.setAttributeNS.bind(userAgent.dom));
+    userAgent.dom = { ...userAgent.dom, setAttributeNS };
 
     element.getInlineStyle().setProperty('opacity', '0.25');
 
     expect(element.nodeDocument).toBe(document);
     expect(element.parentNode).toBeNull();
-    expect(element.getAttribute('style')).toBe('opacity: 0.25;');
-    expect(setAttribute).toHaveBeenCalledWith(element, 'style', 'opacity: 0.25;');
+    expect(element.getAttributeNS(null, 'style')).toBe('opacity: 0.25;');
+    expect(setAttributeNS).toHaveBeenCalledWith(element, null, 'style', 'opacity: 0.25;');
     expect(getCSSEngine).not.toHaveBeenCalled();
   });
 

@@ -15,7 +15,7 @@ import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord
 import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
-import { isValidAttributeLocalName } from '../infra/index';
+import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import type { TreeScopeResolver } from '../../style/index';
 import type { EventTargetImpl, EventImpl } from '../events/index';
 import {
@@ -383,6 +383,12 @@ export class DocumentImpl extends NodeImpl {
     }
     if (this.type === 'html') localName = asciiLower(localName);
     return this.createAttributeNode(localName, '', null, null);
+  }
+
+  // https://dom.spec.whatwg.org/#dom-document-createattributens
+  createAttributeNS(namespace: string | null, qualifiedName: string): AttrImpl {
+    const [namespaceURI, prefix, localName] = validateAndExtract(namespace, qualifiedName, 'attribute');
+    return this.createAttributeNode(localName, '', namespaceURI, prefix);
   }
 
   /** Detach and adopt a non-document node, preserving the node's identity. */
@@ -992,6 +998,10 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
     op('createAttribute', reference('Attr'), [
       arg('localName', idlType.DOMString),
     ]),
+    op('createAttributeNS', reference('Attr'),
+      [arg('namespace', nullable(idlType.DOMString)), arg('qualifiedName', idlType.DOMString)],
+      xattr('NewObject'),
+    ),
     op('adoptNode', reference('Node'),
       [arg('node', reference('Node'))],
       xattr('CEReactions'),

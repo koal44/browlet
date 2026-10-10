@@ -145,7 +145,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   getAttrList(element: ElementImpl): Token.Attribute[] {
-    return element.attributes.map(toParserAttribute);
+    return element.attributeList.map(toParserAttribute);
   }
 
   getTagName(element: ElementImpl): string {

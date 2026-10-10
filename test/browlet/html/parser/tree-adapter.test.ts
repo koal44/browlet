@@ -134,7 +134,7 @@ describe('Parser tree adapter', () => {
     const main = document.getElementById('content');
 
     expect(main?.getAttribute('class')).toBe('one two');
-    expect(main?.attributes[0]).toMatchObject({
+    expect(main?.attributeList[0]).toMatchObject({
       localName: 'id',
       namespaceURI: null,
       prefix: null,

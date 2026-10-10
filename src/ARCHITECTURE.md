@@ -191,6 +191,9 @@ attributes, and live HTML state only through those operations. The standard
 provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts)
 uses implementations, including class checks for HTML elements. There are no
 per-node adapters or required fields on host nodes.
+Attribute operations distinguish qualified-name access from namespace/local-name
+access. CSSOM reads and writes the null-namespace `style` attribute through these
+operations so another namespace's `style` attribute cannot receive those writes.
 
 `DOMOperations` distinguishes the host's node, element, attribute, document,
 document-fragment, and shadow-root types. Its predicates narrow those roles, and each lookup

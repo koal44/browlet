@@ -619,7 +619,7 @@ export abstract class NodeImpl extends EventTargetImpl {
           descendant.customElementRegistry = registry === null || registry.isScoped ? null : registry;
         }
       } else if (descendant.isElement()) {
-        for (const attribute of descendant.attributes) attribute.nodeDocument = document;
+        for (const attribute of descendant.attributeList) attribute.nodeDocument = document;
         if (descendant.customElementRegistry === null || !descendant.customElementRegistry.isScoped) {
           const parent = descendant.parentNode;
           const registry = descendant.customElementRegistry !== null || parent === null ||

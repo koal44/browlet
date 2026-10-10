@@ -68,6 +68,7 @@ export interface DOMOperations<
   hasAttribute(element: E, name: string): boolean;
   hasAttributeNS(element: E, namespace: string | null, name: string): boolean;
   setAttribute(element: E, name: string, value: string): void;
+  setAttributeNS(element: E, namespace: string | null, qualifiedName: string, value: string): void;
   removeAttribute(element: E, name: string): void;
   attributes(element: E): Iterable<A>;
   attributeLocalName(attribute: A): string;

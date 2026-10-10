@@ -9,12 +9,24 @@ import { HTMLElementImpl } from './html-element';
 /** Slot identity and retained assignment state; shadow assignment is unfinished. */
 // https://html.spec.whatwg.org/multipage/scripting.html#the-slot-element
 export class HTMLSlotElementImpl extends HTMLElementImpl {
+  /** Name matched against slottables; distinct from this element's own slot assignment name. */
+  // https://dom.spec.whatwg.org/#slot-name
+  slotName = '';
   /** Slottables assigned by the DOM's assignment algorithm, initially empty. */
   // https://dom.spec.whatwg.org/#slot-assigned-nodes
   assignedNodesList: (ElementImpl | TextImpl)[] = [];
 
   override isSlot(): this is HTMLSlotElementImpl {
     return true;
+  }
+
+  override attributeChanged(
+    localName: string, oldValue: string | null, value: string | null, namespace: string | null,
+  ): void {
+    super.attributeChanged(localName, oldValue, value, namespace);
+    if (localName !== 'name' || namespace !== null || (oldValue ?? '') === (value ?? '')) return;
+    this.slotName = value ?? '';
+    this.getRoot().assignSlottablesForTree();
   }
 
   /** Recompute this slot's assignments and notify changes. */

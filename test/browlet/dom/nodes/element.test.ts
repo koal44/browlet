@@ -34,7 +34,9 @@ describe('Element attributes', () => {
   });
 
   it('adds, changes, and removes attributes', () => {
-    const element = createTestDocument().createElement('main');
+    const document = createTestDocument();
+    document.type = 'html';
+    const element = document.createElement('main');
 
     element.setAttribute('DATA-STATE', 'first');
     expect(element.getAttribute('data-state')).toBe('first');

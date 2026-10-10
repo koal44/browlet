@@ -8,9 +8,21 @@ import type { HTMLSlotElementImpl } from './html/index';
 /** Slot assignment state shared by element and text nodes. */
 // https://dom.spec.whatwg.org/#concept-slotable
 export class SlottableMixin {
+  /** Name selected by an element's slot attribute; Text always keeps the empty name. */
+  // https://dom.spec.whatwg.org/#slotable-name
+  name = '';
   /** Slot receiving this node, or null while unassigned. */
   // https://dom.spec.whatwg.org/#slotable-assigned-slot
   assignedSlot: HTMLSlotElementImpl | null = null;
+
+  /** Update the slottable name after a null-namespace slot attribute changes. */
+  // https://dom.spec.whatwg.org/#slotable-name
+  attributeChanged(node: ElementImpl, oldValue: string | null, value: string | null): void {
+    if ((oldValue ?? '') === (value ?? '')) return;
+    this.name = value ?? '';
+    this.assignedSlot?.assignSlottables();
+    this.assignSlot(node);
+  }
 
   /** Find an applicable slot, optionally excluding a closed shadow root. */
   // https://dom.spec.whatwg.org/#find-a-slot

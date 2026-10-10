@@ -3,7 +3,7 @@ import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 import {
-  defaultStyleletExecution, Stylelet, type InternalPromise, type StyleletExecution,
+  CSSStyleDeclarationImpl, defaultStyleletExecution, Stylelet, type InternalPromise, type StyleletExecution,
 } from '../../../src/stylelet/index';
 import {
   standardDOM, type DOMOperations, type DOMNode, type DOMDocument, type DOMElement, type DOMDocumentFragment,
@@ -95,6 +95,24 @@ describe('Stylelet DOM hosts', () => {
         expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('0.25');
         dom.setAttribute(main, 'style', 'opacity: 0.75');
         expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('0.75');
+      } finally {
+        close();
+      }
+    });
+
+    it(`reads and writes only the null-namespace style attribute on ${host.name}`, () => {
+      const { document, dom, close } = host.create('<main></main>');
+      try {
+        const main = dom.firstElementChild(dom.body(document)!)!;
+        const styles = new Stylelet(document, { dom });
+        dom.setAttributeNS(main, 'urn:other', 'style', 'color: purple');
+        const declaration = new CSSStyleDeclarationImpl({ ownerNode: main }, styles.context.env);
+
+        expect(declaration.getPropertyValue('color')).toBe('');
+        expect(styles.getComputedStyle(main).getPropertyValue('color')).toBe('');
+        declaration.setProperty('color', 'red');
+        expect(dom.getAttributeNS(main, 'urn:other', 'style')).toBe('color: purple');
+        expect(dom.getAttributeNS(main, null, 'style')).toBe('color: red;');
       } finally {
         close();
       }

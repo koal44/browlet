@@ -62,7 +62,7 @@ export class CSSStyleDeclarationImpl {
     this.#replaceDeclarations(declarations);
 
     if (!computed && ownerNode !== null) {
-      const value = env.userAgent.dom.getAttribute(ownerNode, 'style');
+      const value = env.userAgent.dom.getAttributeNS(ownerNode, null, 'style');
       if (value !== null) {
         this.#replaceDeclarations(parseDeclarationBlock(value));
       }
@@ -240,7 +240,7 @@ export class CSSStyleDeclarationImpl {
 
     this.#updating = true;
     try {
-      this.#env.userAgent.dom.setAttribute(this.#ownerNode, 'style', this.cssText);
+      this.#env.userAgent.dom.setAttributeNS(this.#ownerNode, null, 'style', this.cssText);
     } finally {
       this.#updating = false;
     }

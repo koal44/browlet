@@ -2,11 +2,13 @@ import { HTML_NAMESPACE } from '../../../infra/index';
 import { asciiLower } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import {
-  arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
+  arg, defineIncludes, defineInterface, idlType, impl, nullable, op, reference, roAttr, sequence, xattr,
+  DOMExceptionImpl, DOMExceptionNames,
   type PrimaryInterfaceDefinition,
 } from '../../../web-idl/index';
 import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 
+import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
 import type { EventImpl } from '../events/index';
 import type { BrowletEnvironment } from '../../environment';
@@ -38,8 +40,7 @@ export class ElementImpl extends NodeImpl {
   declare env: BrowletEnvironment;
   /** Document supplied at construction, including while this element is detached. */
   declare nodeDocument: DocumentImpl;
-  /** Ordered attributes owned by this element. */
-  // https://dom.spec.whatwg.org/#concept-element-attribute
+  /** Stable live view of this element's attribute list. */
   attributes: NamedNodeMapImpl;
   /** Element name without a namespace prefix. */
   localName: string;
@@ -55,6 +56,9 @@ export class ElementImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#concept-element-custom-element-state
   customElementState: CustomElementState = 'uncustomized';
 
+  /** Ordered attribute storage; only this element's mutation algorithms modify it. */
+  // https://dom.spec.whatwg.org/#concept-element-attribute
+  #attributeList: AttrImpl[] = [];
   /** Child-node mutation behavior shared with text and doctype nodes. */
   #childNodeMixin = new ChildNodeMixin(this);
   /** Lazily created inline style declaration. */
@@ -71,8 +75,7 @@ export class ElementImpl extends NodeImpl {
 
   constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(NodeType.Element, context.document, env);
-    this.attributes = new NamedNodeMapImpl();
-    this.attributes.associateElement(this);
+    this.attributes = new NamedNodeMapImpl(this);
     this.localName = context.localName;
     this.namespaceURI = context.namespaceURI;
   }
@@ -81,70 +84,141 @@ export class ElementImpl extends NodeImpl {
     return value instanceof ElementImpl;
   }
 
+  /** Read the live list without bypassing attribute mutation steps. */
+  get attributeList(): readonly AttrImpl[] {
+    return this.#attributeList;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-hasattributes
+  hasAttributes(): boolean {
+    return this.#attributeList.length !== 0;
+  }
+
+  /** Return qualified names in list order, including duplicates across namespaces. */
+  // https://dom.spec.whatwg.org/#dom-element-getattributenames
+  getAttributeNames(): string[] {
+    return this.#attributeList.map((attribute) => attribute.name);
+  }
+
   /** Return the attribute value, or null when the name is absent. */
   // https://dom.spec.whatwg.org/#dom-element-getattribute
   getAttribute(qualifiedName: string): string | null {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    return this.attributes.find(
-      (attribute) => attribute.name === qualifiedName,
-    )?.value ?? null;
+    return this.getAttributeNode(qualifiedName)?.value ?? null;
   }
 
   // https://dom.spec.whatwg.org/#dom-element-getattributens
   getAttributeNS(namespaceURI: string | null, localName: string): string | null {
-    namespaceURI = normalizeNamespace(namespaceURI);
-
-    return this.attributes.find(
-      (attribute) =>
-        attribute.namespaceURI === namespaceURI &&
-        attribute.localName === localName,
-    )?.value ?? null;
+    return this.getAttributeNodeNS(namespaceURI, localName)?.value ?? null;
   }
 
   // https://dom.spec.whatwg.org/#dom-element-setattribute
   setAttribute(qualifiedName: string, value: string): void {
+    if (!isValidAttributeLocalName(qualifiedName)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
+    }
     qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    const attribute = this.attributes.find(
+    // PROVISIONAL(Trusted Types): accept converted strings until compliant-value checks exist.
+    const attribute = this.#attributeList.find(
       (candidate) => candidate.name === qualifiedName,
     );
     if (attribute) {
-      attribute.value = value;
+      attribute.change(value);
     } else {
-      const created = this.nodeDocument.createAttribute(qualifiedName);
-      created.value = value;
-      this.appendAttribute(created);
+      this.appendAttribute(this.nodeDocument.createAttributeNode(qualifiedName, value, null, null));
     }
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-setattributens
+  setAttributeNS(namespace: string | null, qualifiedName: string, value: string): void {
+    const [namespaceURI, prefix, localName] = validateAndExtract(namespace, qualifiedName, 'attribute');
+    // PROVISIONAL(Trusted Types): accept converted strings until compliant-value checks exist.
+    this.setAttributeValue(localName, value, prefix, namespaceURI);
   }
 
   // https://dom.spec.whatwg.org/#dom-element-removeattribute
   removeAttribute(qualifiedName: string): void {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+    const attribute = this.getAttributeNode(qualifiedName);
+    if (attribute !== null) this.removeAttributeNode(attribute);
+  }
 
-    if (this.attributes.getNamedItem(qualifiedName)) {
-      this.attributes.removeNamedItem(qualifiedName);
+  // https://dom.spec.whatwg.org/#dom-element-removeattributens
+  removeAttributeNS(namespace: string | null, localName: string): void {
+    const attribute = this.getAttributeNodeNS(namespace, localName);
+    if (attribute !== null) this.removeAttributeNode(attribute);
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-toggleattribute
+  toggleAttribute(qualifiedName: string, force?: boolean): boolean {
+    if (!isValidAttributeLocalName(qualifiedName)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
     }
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+    const attribute = this.#attributeList.find((candidate) => candidate.name === qualifiedName);
+    if (attribute === undefined) {
+      if (force === false) return false;
+      this.appendAttribute(this.nodeDocument.createAttributeNode(qualifiedName, '', null, null));
+      return true;
+    }
+    if (force === true) return true;
+    this.removeAttributeNode(attribute);
+    return false;
   }
 
   // https://dom.spec.whatwg.org/#dom-element-hasattribute
   hasAttribute(qualifiedName: string): boolean {
-    qualifiedName = this.#normalizeAttributeName(qualifiedName);
-
-    return this.attributes.some(
-      (attribute) => attribute.name === qualifiedName,
-    );
+    return this.getAttributeNode(qualifiedName) !== null;
   }
 
   // https://dom.spec.whatwg.org/#dom-element-hasattributens
   hasAttributeNS(namespaceURI: string | null, localName: string): boolean {
-    namespaceURI = normalizeNamespace(namespaceURI);
+    return this.getAttributeNodeNS(namespaceURI, localName) !== null;
+  }
 
-    return this.attributes.some(
-      (attribute) =>
-        attribute.namespaceURI === namespaceURI &&
-        attribute.localName === localName,
-    );
+  // https://dom.spec.whatwg.org/#dom-element-getattributenode
+  getAttributeNode(qualifiedName: string): AttrImpl | null {
+    qualifiedName = this.#normalizeAttributeName(qualifiedName);
+    return this.#attributeList.find((attribute) => attribute.name === qualifiedName) ?? null;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-getattributenodens
+  getAttributeNodeNS(namespace: string | null, localName: string): AttrImpl | null {
+    if (namespace === '') namespace = null;
+    return this.#attributeList.find((attribute) =>
+      attribute.namespaceURI === namespace && attribute.localName === localName,
+    ) ?? null;
+  }
+
+  /** Attach or replace by namespace and local name, retaining list position and identity. */
+  // https://dom.spec.whatwg.org/#concept-element-attributes-set
+  // https://dom.spec.whatwg.org/#dom-element-setattributenode
+  setAttributeNode(attribute: AttrImpl): AttrImpl | null {
+    // PROVISIONAL(Trusted Types): the compliant-value check precedes even InUseAttributeError.
+    if (attribute.ownerElement !== null && attribute.ownerElement !== this) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.inUseAttribute);
+    }
+    const previous = this.getAttributeNodeNS(attribute.namespaceURI, attribute.localName);
+    if (previous === attribute) return attribute;
+    if (previous !== null) this.replaceAttribute(previous, attribute);
+    else this.appendAttribute(attribute);
+    return previous;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-element-setattributenodens
+  setAttributeNodeNS(attribute: AttrImpl): AttrImpl | null {
+    return this.setAttributeNode(attribute);
+  }
+
+  /** Detach this exact attribute, retaining its value and node document. */
+  // https://dom.spec.whatwg.org/#dom-element-removeattributenode
+  // https://dom.spec.whatwg.org/#concept-element-attributes-remove
+  removeAttributeNode(attribute: AttrImpl): AttrImpl {
+    if (attribute.ownerElement !== this) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.notFound);
+    }
+    this.#attributeList.splice(this.#attributeList.indexOf(attribute), 1);
+    attribute.ownerElement = null;
+    this.handleAttributeChanges(attribute, attribute.value, null);
+    return attribute;
   }
 
   /** Set an attribute by namespace and local name, creating it when absent. */
@@ -153,9 +227,9 @@ export class ElementImpl extends NodeImpl {
     localName: string, value: string,
     prefix: string | null = null, namespace: string | null = null,
   ): void {
-    const attribute = this.attributes.getNamedItemNS(namespace, localName);
+    const attribute = this.getAttributeNodeNS(namespace, localName);
     if (attribute) {
-      attribute.value = value;
+      attribute.change(value);
     } else {
       this.appendAttribute(this.nodeDocument.createAttributeNode(
         localName, value, namespace, prefix,
@@ -170,18 +244,49 @@ export class ElementImpl extends NodeImpl {
       throw new InternalError('Cannot append an attribute owned by another element');
     }
 
-    this.attributes.push(attribute);
+    this.#attributeList.push(attribute);
     attribute.ownerElement = this;
-    this.attributeChanged(attribute.localName, null, attribute.value, attribute.namespaceURI);
+    attribute.nodeDocument = this.nodeDocument;
+    this.handleAttributeChanges(attribute, null, attribute.value);
+  }
+
+  /** Replace in place after the caller has checked that the incoming Attr can be attached. */
+  // https://dom.spec.whatwg.org/#concept-element-attributes-replace
+  replaceAttribute(previous: AttrImpl, attribute: AttrImpl): void {
+    this.#attributeList[this.#attributeList.indexOf(previous)] = attribute;
+    attribute.ownerElement = this;
+    attribute.nodeDocument = this.nodeDocument;
+    previous.ownerElement = null;
+    this.handleAttributeChanges(previous, previous.value, attribute.value);
+  }
+
+  /** Notify observers, custom-element reactions, and element-specific steps in that order. */
+  // https://dom.spec.whatwg.org/#handle-attribute-changes
+  handleAttributeChanges(attribute: AttrImpl, oldValue: string | null, value: string | null): void {
+    const { localName, namespaceURI } = attribute;
+    this.queueAttributeMutationRecord(localName, namespaceURI, oldValue);
+    if (this.customElementState === 'custom') {
+      this.enqueueCustomElementCallbackReaction('attributeChangedCallback', [localName, oldValue, value, namespaceURI]);
+    }
+    this.attributeChanged(localName, oldValue, value, namespaceURI);
+  }
+
+  /** Queue an attribute record for observers interested in this target. */
+  // https://dom.spec.whatwg.org/#queue-a-mutation-record
+  // SPEC_MISMATCH: queue a mutation record(type, target, name, namespace, oldValue, addedNodes, removedNodes, previousSibling, nextSibling)
+  queueAttributeMutationRecord(_localName: string, _namespace: string | null, _oldValue: string | null): void {
+    // PROVISIONAL(DOM mutation observers): no observer can be constructed or registered yet.
+    // Record construction and delivery join the tree/character-data path in 4G.
   }
 
   /** Apply element-specific reactions to an attribute change. */
   // https://dom.spec.whatwg.org/#concept-element-attributes-change-ext
   attributeChanged(
-    localName: string, _oldValue: string | null, newValue: string | null,
+    localName: string, oldValue: string | null, newValue: string | null,
     namespace: string | null,
   ): void {
     if (namespace !== null) return;
+    if (localName === 'slot') this.#slottableMixin.attributeChanged(this, oldValue, newValue);
     if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
     this.linkStyleMixin?.attributeChanged(localName);
   }
@@ -310,7 +415,7 @@ export class ElementImpl extends NodeImpl {
   }
 
   #normalizeAttributeName(qualifiedName: string): string {
-    return this.namespaceURI === HTML_NAMESPACE
+    return this.namespaceURI === HTML_NAMESPACE && this.nodeDocument.type === 'html'
       ? asciiLower(qualifiedName)
       : qualifiedName;
   }
@@ -373,38 +478,58 @@ export const elementIDL = defineInterface({
   members: [
     roAttr('namespaceURI', nullable(idlType.DOMString)),
     roAttr('localName', idlType.DOMString),
+    op('hasAttributes', idlType.boolean, []),
     roAttr('attributes', reference('NamedNodeMap'), xattr('SameObject')),
-    op('getAttribute', nullable(idlType.DOMString), [
-      arg('qualifiedName', idlType.DOMString),
-    ]),
+    op('getAttributeNames', sequence(idlType.DOMString), []),
+    op('getAttribute', nullable(idlType.DOMString), [arg('qualifiedName', idlType.DOMString)]),
     op('getAttributeNS', nullable(idlType.DOMString), [
-      arg('namespace', nullable(idlType.DOMString)),
-      arg('localName', idlType.DOMString),
+      arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString),
     ]),
-    op('getElementsByClassName', reference('HTMLCollection'), [
-      arg('classNames', idlType.DOMString),
-    ]),
-    op('getElementsByTagName', reference('HTMLCollection'), [
-      arg('qualifiedName', idlType.DOMString),
-    ]),
-    op('getElementsByTagNameNS', reference('HTMLCollection'), [
-      arg('namespace', nullable(idlType.DOMString)),
-      arg('localName', idlType.DOMString),
-    ]),
-    op('hasAttribute', idlType.boolean, [
-      arg('qualifiedName', idlType.DOMString),
-    ]),
+    // PROVISIONAL(Trusted Types): restore the TrustedType union with its compliant-value checks.
+    op('setAttribute', idlType.undefined,
+      [arg('qualifiedName', idlType.DOMString), arg('value', idlType.DOMString)],
+      xattr('CEReactions'),
+    ),
+    op('setAttributeNS', idlType.undefined,
+      [
+        arg('namespace', nullable(idlType.DOMString)), arg('qualifiedName', idlType.DOMString),
+        arg('value', idlType.DOMString),
+      ],
+      xattr('CEReactions'),
+    ),
+    op('removeAttribute', idlType.undefined,
+      [arg('qualifiedName', idlType.DOMString)], xattr('CEReactions'),
+    ),
+    op('removeAttributeNS', idlType.undefined,
+      [arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString)],
+      xattr('CEReactions'),
+    ),
+    op('toggleAttribute', idlType.boolean,
+      [arg('qualifiedName', idlType.DOMString), arg('force', idlType.boolean, { optional: true })],
+      xattr('CEReactions'),
+    ),
+    op('hasAttribute', idlType.boolean, [arg('qualifiedName', idlType.DOMString)]),
     op('hasAttributeNS', idlType.boolean, [
-      arg('namespace', nullable(idlType.DOMString)),
-      arg('localName', idlType.DOMString),
+      arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString),
     ]),
-    op('setAttribute', idlType.undefined, [
-      arg('qualifiedName', idlType.DOMString),
-      arg('value', idlType.DOMString),
+    op('getAttributeNode', nullable(reference('Attr')), [arg('qualifiedName', idlType.DOMString)]),
+    op('getAttributeNodeNS', nullable(reference('Attr')), [
+      arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString),
     ]),
-    op('removeAttribute', idlType.undefined, [
-      arg('qualifiedName', idlType.DOMString),
+    op('setAttributeNode', nullable(reference('Attr')),
+      [arg('attr', reference('Attr'))], xattr('CEReactions'),
+    ),
+    op('setAttributeNodeNS', nullable(reference('Attr')),
+      [arg('attr', reference('Attr'))], xattr('CEReactions'),
+    ),
+    op('removeAttributeNode', reference('Attr'),
+      [arg('attr', reference('Attr'))], xattr('CEReactions'),
+    ),
+    op('getElementsByTagName', reference('HTMLCollection'), [arg('qualifiedName', idlType.DOMString)]),
+    op('getElementsByTagNameNS', reference('HTMLCollection'), [
+      arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString),
     ]),
+    op('getElementsByClassName', reference('HTMLCollection'), [arg('classNames', idlType.DOMString)]),
   ],
 });
 
@@ -459,10 +584,6 @@ export const elementIncludesNonDocumentTypeChildNodeIDL = defineIncludes({
 export const elementIncludesSlottableIDL = defineIncludes({
   interface: 'Element', mixin: slottableIDL.name,
 });
-
-function normalizeNamespace(namespaceURI: string | null): string | null {
-  return namespaceURI === '' ? null : namespaceURI;
-}
 
 /** Inputs shared by document element factories and element constructors. */
 export type ElementCreationContext = {
