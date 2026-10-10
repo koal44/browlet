@@ -21,12 +21,12 @@ import type { QueuedTaskHandle } from './tasks';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm
-export function createRealm(
+export function createBrowletRealm(
   agent: Agent,
-  customizations: RealmCustomizations,
-  options: RealmCreationOptions = {},
-): Realm {
-  const realm = new Realm({ ...options, agent });
+  customizations: BrowletRealmCustomizations,
+  options: BrowletRealmCreationOptions = {},
+): BrowletRealm {
+  const realm = new BrowletRealm({ ...options, agent });
   const globalObject = customizations.createGlobalObject(realm);
   const globalThis = customizations.createGlobalThisValue
     ? customizations.createGlobalThisValue(realm, globalObject)
@@ -38,7 +38,7 @@ export function createRealm(
 
 /** Adds HTML ownership, callback lifecycle, and task routing to an engine realm. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#realms-settings-objects-global-objects
-export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
+export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   /** Agent whose event loop serves this realm. */
   agent: Agent;
   /** Binding hooks for HTML script and callback entry and cleanup. */
@@ -52,7 +52,7 @@ export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
   #envRecord: EnvironmentRecord | undefined;
   #hostDefined: BrowletEnvironment | undefined;
 
-  constructor(options: RealmOptions) {
+  constructor(options: BrowletRealmOptions) {
     const { agent } = options;
     super(agent.eventLoop.microtaskQueue, {
       globalPrototypeChain: options.globalPrototypeChain,
@@ -84,7 +84,7 @@ export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
         }
       },
       getAssociatedRealm: (value) =>
-        Realm.getAssociatedRealm(value) ?? this,
+        BrowletRealm.getAssociatedRealm(value) ?? this,
       prepareToRunCallback: (context) => {
         const env = this.#getCallbackEnvironment(context);
         if (env !== undefined) {
@@ -100,9 +100,9 @@ export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
     };
   }
 
-  static getAssociatedRealm(value: object): Realm | undefined {
+  static getAssociatedRealm(value: object): BrowletRealm | undefined {
     const realm = getAssociatedRealm(value);
-    return realm instanceof Realm ? realm : undefined;
+    return realm instanceof BrowletRealm ? realm : undefined;
   }
 
   /** Attached browser environment; internal sandbox realms have none. */
@@ -211,7 +211,7 @@ export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
   #getCallbackEnvironment(
     context: object,
   ): BrowletEnvironment | undefined {
-    if (this.#hostDefined === undefined && context instanceof Realm) return undefined;
+    if (this.#hostDefined === undefined && context instanceof BrowletRealm) return undefined;
     const env = context as BrowletEnvironment;
     if (env.realm.hostDefined === env) {
       return env;
@@ -221,7 +221,7 @@ export class Realm extends JSRealm implements WebIDLRealm, DOMRealm {
 }
 
 /** HTML realm whose Window is linked during composition, before global installation. */
-export class WindowRealm extends Realm implements WindowEventRealm {
+export class WindowRealm extends BrowletRealm implements WindowEventRealm {
   declare agent: WindowAgent;
   #windowImplementation: WindowImpl | undefined;
   #windowProxy: WindowProxyHandle | undefined;
@@ -294,16 +294,16 @@ export class WindowRealm extends Realm implements WindowEventRealm {
   }
 }
 
-export type RealmCustomizations = {
-  createGlobalObject(realm: Realm): GlobalObject;
-  createGlobalThisValue?(realm: Realm, globalObject: GlobalObject): GlobalThis;
+export type BrowletRealmCustomizations = {
+  createGlobalObject(realm: BrowletRealm): GlobalObject;
+  createGlobalThisValue?(realm: BrowletRealm, globalObject: GlobalObject): GlobalThis;
 };
 
-export type RealmCreationOptions = Omit<RealmOptions, 'agent'>;
+export type BrowletRealmCreationOptions = Omit<BrowletRealmOptions, 'agent'>;
 
-export type RealmOptions = {
+export type BrowletRealmOptions = {
   globalPrototypeChain?: JSRealmOptions['globalPrototypeChain'];
-  reuseGlobalProxyFrom?: Realm;
+  reuseGlobalProxyFrom?: BrowletRealm;
   agent: Agent;
   crossOriginIsolated?: boolean;
   globalNames?: string[];
@@ -311,7 +311,7 @@ export type RealmOptions = {
   envRecord?: EnvironmentRecord;
 };
 
-export type WindowRealmOptions = Omit<RealmOptions, 'globalNames' | 'isGlobalPrototypeChainMutable'> & {
+export type WindowRealmOptions = Omit<BrowletRealmOptions, 'globalNames' | 'isGlobalPrototypeChainMutable'> & {
   agent: WindowAgent;
   envRecord: EnvironmentRecord;
 };

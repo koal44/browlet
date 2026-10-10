@@ -28,7 +28,7 @@ import type { Task } from
   '../../../src/browlet/scripting/event-loop';
 import { Moment, monotonicClock } from '../../../src/browlet/timing/clock';
 import {
-  createRealm,
+  createBrowletRealm,
 } from '../../../src/browlet/scripting/realm';
 
 describe('HTML callback and script-entry lifecycle', () => {
@@ -298,7 +298,7 @@ function createTestRealm(
   agent: Agent,
   name: string,
 ) {
-  const realm = createRealm(agent, {
+  const realm = createBrowletRealm(agent, {
     createGlobalObject: () => ({}),
   }, { globalNames: ['Worker'] });
   const record = new EnvironmentRecord({

@@ -7,7 +7,7 @@ import {
 } from '../../../web-idl/index';
 
 import type { ScriptingEnvironment } from '../environment';
-import type { Realm } from '../realm';
+import type { BrowletRealm } from '../realm';
 
 import type {
   ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
@@ -187,7 +187,7 @@ export function structuredDeserialize(
 /** HTML §2.7.6, SharedArrayBuffer and GrowableSharedArrayBuffer branches. */
 function deserializeSharedArrayBuffer(
   buffer: SharedArrayBuffer,
-  realm: Realm,
+  realm: BrowletRealm,
 ): SharedArrayBuffer {
   const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
   const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
@@ -205,7 +205,7 @@ function deserializeArrayBuffer(
   serialized: Extract<SerializedRecord, {
     type: 'ArrayBuffer' | 'ResizableArrayBuffer';
   }>,
-  realm: Realm,
+  realm: BrowletRealm,
 ): ArrayBuffer {
   try {
     return realm.createArrayBuffer(
@@ -240,7 +240,7 @@ function deserializeProperties(
 /** HTML §2.7.6, the [[ErrorData]] branch. */
 function deserializeError(
   serialized: ErrorSerializedRecord,
-  realm: Realm,
+  realm: BrowletRealm,
 ): Error {
   const constructor = getErrorConstructor(serialized.name, realm);
   const value = new constructor(serialized.message);
@@ -267,7 +267,7 @@ function deserializeErrorCause(
 
 function getErrorConstructor(
   name: SerializedErrorName,
-  realm: Realm,
+  realm: BrowletRealm,
 ): ErrorConstructor {
   switch (name) {
     case 'EvalError': return realm.intrinsics.evalError;

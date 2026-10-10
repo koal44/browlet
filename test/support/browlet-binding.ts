@@ -1,5 +1,5 @@
 import { browletBindingWorld } from '../../src/browlet/bindings';
-import { Realm, type WindowRealm } from '../../src/browlet/scripting/index';
+import { BrowletRealm, type WindowRealm } from '../../src/browlet/scripting/index';
 import { type BrowletEnvironment } from '../../src/browlet/environment';
 import type { NodeImpl } from '../../src/browlet/dom/nodes/index';
 import type { WindowImpl } from '../../src/browlet/browsing/window/index';
@@ -10,7 +10,7 @@ import type { BindingContext, StampedImplInstance, StampedPlatformObject } from 
 // Implementation algorithms instead retain their environment and typed objects.
 
 /** Retrieve the main-world binding for a fixture's already composed realm. */
-export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironment> {
+export function getBindingContext(realm: BrowletRealm): BindingContext<BrowletEnvironment> {
   const context = browletBindingWorld.getBindingContext(realm);
   if (!context) throw new Error('Fixture realm has no Browlet binding');
   return context;
@@ -18,10 +18,10 @@ export function getBindingContext(realm: Realm): BindingContext<BrowletEnvironme
 
 /** Inspect the relevant realm of a fixture's implementation or author-visible object. */
 export function getRelevantRealm(value: Window | WindowImpl | Node | NodeImpl): WindowRealm;
-export function getRelevantRealm(value: object): Realm;
-export function getRelevantRealm(value: object): Realm {
-  const realm = browletBindingWorld.getRealm(value) ?? Realm.getAssociatedRealm(value);
-  if (!(realm instanceof Realm)) throw new Error('Fixture object has no relevant Realm');
+export function getRelevantRealm(value: object): BrowletRealm;
+export function getRelevantRealm(value: object): BrowletRealm {
+  const realm = browletBindingWorld.getRealm(value) ?? BrowletRealm.getAssociatedRealm(value);
+  if (!(realm instanceof BrowletRealm)) throw new Error('Fixture object has no relevant Realm');
   return realm;
 }
 

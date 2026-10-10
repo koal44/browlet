@@ -14,10 +14,10 @@ execution facilities before constructing Window and installing its platform glob
 `createBrowletExecution()` in `bindings.ts` composes realm facilities, the bound
 Promise constructor, DOM document/event/abort allocation, Fetch task delivery,
 and structured data. Fetch delivery resolves the supplied destination global's
-Realm, which can differ from the execution owner's, and queues on HTML's networking
+BrowletRealm, which can differ from the execution owner's, and queues on HTML's networking
 task source. The live global and DOMException accessors remain at that composition
 boundary because global installation and interface registration finish later.
-The Realm initially reads security from an `EnvironmentRecord` instance.
+The BrowletRealm initially reads security from an `EnvironmentRecord` instance.
 Registration constructs the complete `WindowEnvironment` before global projection;
 it inherits the record state and adds `realm` and `exec`. The composition root
 then constructs Window with that environment, links it to the realm, and installs

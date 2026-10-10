@@ -19,7 +19,7 @@ import type { Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
   EventLoop, SandboxAgent, EnvironmentRecord, eventHandlerIDL, eventHandlerNonNullIDL,
-  Realm, WindowRealm, taskSources,
+  BrowletRealm, WindowRealm, taskSources,
 } from './scripting/index';
 import { EventImpl } from './dom/events/index';
 import {
@@ -145,7 +145,7 @@ export function createWindowEnvironment(
 /** Create browser-owned execution without a Window, Document, or HTML settings object. */
 export function createSandboxEnvironment(userAgent?: UserAgent): BrowletEnvironment {
   const agent = new SandboxAgent(new EventLoop({ requestTurn: queueNodeTask }));
-  const realm = new Realm({ agent });
+  const realm = new BrowletRealm({ agent });
   // Reuse the main binding world for internal allocations without installing
   // author-facing interfaces on the sandbox's global.
   return browletBindingWorld.register(realm, (context) =>
@@ -173,7 +173,7 @@ export function createBrowletExecution(context: BindingContext<BrowletEnvironmen
     runInParallel: queueNodeTask,
     queueTask: (source, steps, options?: TaskCreationOptions) => realm.queueGlobalTask(taskSources[source], steps, options),
     queueGlobalFetchTask: (global, steps) => {
-      const targetRealm = Realm.getAssociatedRealm(global);
+      const targetRealm = BrowletRealm.getAssociatedRealm(global);
       if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
       targetRealm.queueGlobalTask(taskSources.network, steps);
     },

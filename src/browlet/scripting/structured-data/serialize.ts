@@ -20,7 +20,7 @@ import {
 } from '../../../web-idl/index';
 
 import type { ScriptingEnvironment } from '../environment';
-import type { Realm } from '../realm';
+import type { BrowletRealm } from '../realm';
 
 import {
   createStructuredDataRecord, isSerializedErrorName,
@@ -335,7 +335,7 @@ function serializeProperties(
 /** HTML §2.7.3, the [[ErrorData]] branch. */
 function serializeError(
   value: Error,
-  realm: Realm,
+  realm: BrowletRealm,
 ): ErrorSerializedRecord {
   const candidateName = Reflect.get(value, 'name', value) as unknown;
   const name = isSerializedErrorName(candidateName)

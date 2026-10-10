@@ -8,7 +8,7 @@ import {
 import {
   DOMExceptionImpl, isDOMException,
 } from '../../../../src/web-idl/core/dom-exception';
-import type { Realm } from '../../../../src/browlet/scripting/realm';
+import type { BrowletRealm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
@@ -479,9 +479,9 @@ function createContexts(options: {
   agentCluster?: AgentCluster;
 } = {}): {
   source: BindingContext<ScriptingEnvironment>;
-  sourceRealm: Realm;
+  sourceRealm: BrowletRealm;
   target: BindingContext<ScriptingEnvironment>;
-  targetRealm: Realm;
+  targetRealm: BrowletRealm;
 } {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const sourceRealm = createManualRealm({ crossOriginIsolated: true });

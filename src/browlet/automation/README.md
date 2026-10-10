@@ -27,5 +27,5 @@ Playwright wire protocol remain separate work.
 This follows Playwright's [page callback controller](https://github.com/microsoft/playwright/blob/9ae53771fb320832c9b149be0bad26bf22361689/packages/injected/src/bindingsController.ts)
 and [host completion delivery](https://github.com/microsoft/playwright/blob/9ae53771fb320832c9b149be0bad26bf22361689/packages/playwright-core/src/server/page.ts#L1078-L1093).
 The [evaluation regression tests](../../../test/browlet/evaluation.test.ts)
-exercise this boundary on stock and add-on runtimes. Direct `Realm.evaluate()`
+exercise this boundary on stock and add-on runtimes. Direct `BrowletRealm.evaluate()`
 serves the script runner and tests of exact realm identities or individual checkpoints.

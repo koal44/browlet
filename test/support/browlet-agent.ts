@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { WindowAgent, type Agent } from '../../src/browlet/scripting/agents';
 import { EventLoop, type EventLoopInit } from '../../src/browlet/scripting/event-loop';
-import { Realm, type RealmCreationOptions } from '../../src/browlet/scripting/realm';
+import { BrowletRealm, type BrowletRealmCreationOptions } from '../../src/browlet/scripting/realm';
 import * as node from '../../src/browlet/integration/node';
 import { UserAgent } from '../../src/browlet/user-agent';
 
@@ -23,7 +23,7 @@ export function createManualEventLoop(init: Partial<EventLoopInit> = {}): EventL
 }
 
 /** Retain explicit Agent ownership without making every realm test assemble a scheduler. */
-export function createManualRealm(options: RealmCreationOptions & { agent?: Agent; } = {}): Realm {
+export function createManualRealm(options: BrowletRealmCreationOptions & { agent?: Agent; } = {}): BrowletRealm {
   const agent = options.agent ?? new WindowAgent(createManualEventLoop());
-  return new Realm({ ...options, agent });
+  return new BrowletRealm({ ...options, agent });
 }

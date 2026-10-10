@@ -8,7 +8,7 @@ import type {
 import type { BrowletEnvironment } from '../environment';
 
 import { createTaskSource } from './event-loop';
-import { Realm } from './realm';
+import { BrowletRealm } from './realm';
 
 export const jsEngineTaskSource = createTaskSource('JavaScript engine');
 
@@ -37,11 +37,11 @@ function makeJobCallback(
 ): JobCallback {
   const incumbent = registration.incumbent;
   // TODO(HTML §8.1.4.1): Capture an active-script execution context when the
-  // classic-script pipeline supplies HTML Script records. Realm.evaluate()
+  // classic-script pipeline supplies HTML Script records. BrowletRealm.evaluate()
   // currently supplies only a controlled realm/settings entry.
   return {
     callback,
-    hostDefined: incumbent instanceof Realm ? incumbent.hostDefined ?? null : null,
+    hostDefined: incumbent instanceof BrowletRealm ? incumbent.hostDefined ?? null : null,
   };
 }
 
@@ -72,8 +72,8 @@ function enqueuePromiseJob(
 ): false | void {
   // Node and unrelated vm jobs retain the engine-selected queue.
   const destination = queueRealm;
-  if (!(destination instanceof Realm) || destination.hostDefined === undefined) return false;
-  const env = realm instanceof Realm ? realm.hostDefined : undefined;
+  if (!(destination instanceof BrowletRealm) || destination.hostDefined === undefined) return false;
+  const env = realm instanceof BrowletRealm ? realm.hostDefined : undefined;
   destination.queueMicrotask(() => {
     try {
       if (env !== undefined) env.responsibleEventLoop.prepareToRunScript(env);
@@ -90,7 +90,7 @@ function enqueuePromiseJob(
 
 // https://html.spec.whatwg.org/multipage/webappapis.html#hostenqueuegenericjob
 function enqueueGenericJob(job: () => void, realm: JSRealm | null): void {
-  if (!(realm instanceof Realm) || realm.hostDefined === undefined) {
+  if (!(realm instanceof BrowletRealm) || realm.hostDefined === undefined) {
     throw new InternalError('HTML generic jobs require an HTML realm');
   }
   realm.queueGlobalTask(jsEngineTaskSource, job);
@@ -102,7 +102,7 @@ function enqueueTimeoutJob(
   realm: JSRealm | null,
   milliseconds: number,
 ): void {
-  if (!(realm instanceof Realm) || realm.hostDefined === undefined) {
+  if (!(realm instanceof BrowletRealm) || realm.hostDefined === undefined) {
     throw new InternalError('HTML timeout jobs require an HTML realm');
   }
   const timers = realm.env.getWindowOrWorkerGlobalScopeMixin().timers;

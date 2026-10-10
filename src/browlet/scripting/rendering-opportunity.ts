@@ -5,7 +5,7 @@ import type { DocumentImpl } from '../dom/nodes/index';
 import type { Navigable } from '../browsing/navigation/index';
 
 import type { WindowAgent } from './agents';
-import type { Realm } from './realm';
+import type { BrowletRealm } from './realm';
 import { renderingTaskSource } from './tasks';
 
 // The host reports refresh opportunities; rendering steps run later as HTML tasks.
@@ -44,7 +44,7 @@ export class WindowRenderingProducer {
   }
 
   #produceRenderingTasks(navigables: Navigable[]): void {
-    const realms = new Set<Realm>();
+    const realms = new Set<BrowletRealm>();
     for (const navigable of navigables) {
       if (!this.#host.hasRenderingOpportunity(navigable)) continue;
 

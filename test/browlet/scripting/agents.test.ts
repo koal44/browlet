@@ -6,7 +6,7 @@ import {
   Agent, DedicatedWorkerAgent, obtainSimilarOriginWindowAgent,
   ServiceWorkerAgent, SharedWorkerAgent, WindowAgent, WorkletAgent,
 } from '../../../src/browlet/scripting/agents';
-import { Realm } from '../../../src/browlet/scripting/realm';
+import { BrowletRealm } from '../../../src/browlet/scripting/realm';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import type { Domain, Host } from '../../../src/url/host';
 import type { TupleOrigin } from '../../../src/url/origin';
@@ -199,17 +199,17 @@ describe('obtainSimilarOriginWindowAgent', () => {
   });
 });
 
-describe('Realm agent', () => {
+describe('BrowletRealm agent', () => {
   it('retains the agent in which it was created', () => {
     const agent = new WindowAgent(createManualEventLoop());
-    const realm = new Realm({ agent });
+    const realm = new BrowletRealm({ agent });
 
     expect(realm.agent).toBe(agent);
   });
 
   it('queues microtasks through its agent', () => {
     const agent = new TestAgent();
-    const realm = new Realm({ agent });
+    const realm = new BrowletRealm({ agent });
     const steps = vi.fn();
     const queueMicrotask = vi.spyOn(agent.eventLoop, 'queueMicrotask')
       .mockImplementation(() => {});
@@ -224,9 +224,9 @@ describe('Realm agent', () => {
     () => {
       const firstAgent = new WindowAgent(createManualEventLoop());
       const secondAgent = new WindowAgent(createManualEventLoop());
-      const firstRealm = new Realm({ agent: firstAgent });
-      const secondRealm = new Realm({ agent: firstAgent });
-      const isolatedRealm = new Realm({ agent: secondAgent });
+      const firstRealm = new BrowletRealm({ agent: firstAgent });
+      const secondRealm = new BrowletRealm({ agent: firstAgent });
+      const isolatedRealm = new BrowletRealm({ agent: secondAgent });
       const order: string[] = [];
 
       for (const realm of [firstRealm, secondRealm, isolatedRealm]) {

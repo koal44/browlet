@@ -10,7 +10,7 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import type { Window } from '../../../../src/browlet/platform';
 import { createAndInitializeDocument } from '../../../../src/browlet/browsing/navigation/document-lifecycle';
 import { NavigationParams } from '../../../../src/browlet/browsing/navigation/params';
-import { Realm, WindowRealm } from '../../../../src/browlet/scripting/realm';
+import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/realm';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
 } from '../../../../src/browlet/scripting/agents';
@@ -164,7 +164,7 @@ describe('browsing context groups', () => {
     const realm = createManualRealm();
     const object = realm.evaluate('({})', 'unattached-object.js') as object;
 
-    expect(Realm.getAssociatedRealm(object)).toBe(realm);
+    expect(BrowletRealm.getAssociatedRealm(object)).toBe(realm);
     expect(getRelevantRealm(object)).toBe(realm);
     expect(() => getRelevantRealm(object).env).toThrow('Realm has no environment');
   });

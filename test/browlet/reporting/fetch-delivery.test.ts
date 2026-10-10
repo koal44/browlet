@@ -5,7 +5,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import type { ReportDeliveryResult } from '../../../src/browlet/user-agent';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { ReportImpl } from '../../../src/browlet/reporting/report';
-import { Realm } from '../../../src/browlet/scripting/realm';
+import { BrowletRealm } from '../../../src/browlet/scripting/realm';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
 import { utf8Decode } from '../../../src/encoding/codecs/utf-8';
 import { FetchBody } from '../../../src/fetch/body';
@@ -174,7 +174,7 @@ describe('Reporting through Fetch', () => {
       const body = request.body as FetchBody;
       expect(body.stream.env).toBe(userAgent.sandbox);
       expect(body.stream.env).not.toBe(env);
-      const sandboxRealm = Realm.getAssociatedRealm(body.stream.env.exec.global)!;
+      const sandboxRealm = BrowletRealm.getAssociatedRealm(body.stream.env.exec.global)!;
       expect(sandboxRealm.agent).not.toBe(realm.agent);
       expect(sandboxRealm.getAssociatedDocument()).toBeNull();
       expect(request.client).toBeNull();

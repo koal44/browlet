@@ -13,8 +13,8 @@ export {
 } from './event-loop';
 export { installHostHooks, jsEngineTaskSource } from './host-hooks';
 export {
-  createRealm, Realm, WindowRealm, type RealmCustomizations, type RealmCreationOptions, type RealmOptions,
-  type WindowRealmOptions,
+  createBrowletRealm, BrowletRealm, WindowRealm,
+  type BrowletRealmCustomizations, type BrowletRealmCreationOptions, type BrowletRealmOptions, type WindowRealmOptions,
 } from './realm';
 export {
   WindowRenderingProducer, type RenderingOpportunityHost, type RenderingUpdateHooks,

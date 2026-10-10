@@ -81,6 +81,9 @@ views of existing owners, not a new environment object for each subsystem.
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
+[`BrowletRealm`](browlet/scripting/realm.ts) extends `JSRealm` with HTML ownership,
+callback lifecycle, and task routing; `WindowRealm` specializes it for a Window global.
+
 The early HTML record intentionally has no realm or `exec`. It is not an
 ECMAScript lexical Environment Record. A reserved navigation client can use it
 for partitioning and security before full settings exist. BrowletEnvironment
@@ -229,7 +232,7 @@ that type supplies the realm type too. The factory returns the actual environmen
 declarations subsequently obtain it through `ctx.getEnvironment()`. A standalone
 binding needing only a realm can return `{ realm }` from its environment factory.
 Event construction captures the binding in an execution facility, without
-attaching it to Realm. Event targets require that facility through their constructor's
+attaching it to BrowletRealm. Event targets require that facility through their constructor's
 environment; document factories pass their environment explicitly to node constructors,
 which forward it through the inheritance chain. Standalone
 EventTarget implementation tests can supply a real sandbox environment; Document
@@ -250,9 +253,9 @@ bodies depend on the base classes exported by Reporting's shared barrel.
 Scripting's barrel exports the early record, not the complete browser environment;
 its realms and event loops retain only type references to that environment.
 
-`Realm.hostDefined` permits the absence of HTML settings; `Realm.env` requires
+`BrowletRealm.hostDefined` permits the absence of HTML settings; `BrowletRealm.env` requires
 them and throws if they are unattached. UserAgent composition creates its sandbox
-eagerly, with a real Realm, Agent, event loop, and SandboxEnvironment, but no
+eagerly, with a real BrowletRealm, Agent, event loop, and SandboxEnvironment, but no
 Window, Document, or attached HTML settings object. It supplies execution for
 retained browser work such as Reporting uploads and retains that UserAgent explicitly.
 SandboxEnvironment extends BrowletEnvironment so binding declarations retain

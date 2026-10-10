@@ -59,7 +59,7 @@ and no Service Worker interception. Response handling classifies success, endpoi
 removal, or failure and disposes the unused body.
 
 Body streams still need an execution owner. The UserAgent retains a
-sandbox environment with a real Realm, SandboxAgent, and running loop; it creates
+sandbox environment with a real BrowletRealm, SandboxAgent, and running loop; it creates
 no Window or Document and installs no author interfaces. The upload retains its
 original origin/network state. The sandbox supplies execution without becoming
 the request's client or initiating security identity.

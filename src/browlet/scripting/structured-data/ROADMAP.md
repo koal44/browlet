@@ -66,7 +66,7 @@ serialization-before-detachedness checks without establishing full-list atomicit
 
 Cross-specification consumers call the internal operations. An asynchronous
 caller serializing arbitrary objects must prepare to run script and a callback:
-serialization can invoke author getters. The existing Realm lifecycle supplies
+serialization can invoke author getters. The existing BrowletRealm lifecycle supplies
 that boundary. Streams' ordinary tee-with-cloning and Fetch body/abort handling
 already use the shared implementation.
 

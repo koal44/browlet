@@ -8,7 +8,7 @@ import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
 import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
-import type { Realm } from '../../../../src/browlet/scripting/realm';
+import type { BrowletRealm } from '../../../../src/browlet/scripting/realm';
 import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
@@ -278,9 +278,9 @@ describe('HTML structured transfer', () => {
 
 function createContexts(): {
   source: BindingContext<ScriptingEnvironment>;
-  sourceRealm: Realm;
+  sourceRealm: BrowletRealm;
   target: BindingContext<ScriptingEnvironment>;
-  targetRealm: Realm;
+  targetRealm: BrowletRealm;
 } {
   const bindings = new BindingWorld<ScriptingEnvironment>([]);
   const sourceRealm = createManualRealm();

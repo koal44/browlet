@@ -12,7 +12,7 @@ import {
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
 import {
-  EnvironmentRecord, type ScriptingEnvironment, type EventLoop, type Realm, type WindowRealm,
+  EnvironmentRecord, type ScriptingEnvironment, type EventLoop, type BrowletRealm, type WindowRealm,
   type WindowAgent,
 } from './scripting/index';
 import type { ReportImpl } from './reporting/index';
@@ -43,11 +43,11 @@ export abstract class BrowletEnvironment extends EnvironmentRecord implements
   /** Browser timing relative to this environment's time origin. */
   timing: EnvironmentTiming;
   /** JavaScript realm associated with this browser environment. */
-  realm: Realm;
+  realm: BrowletRealm;
   /** Allocation, execution, and owner task delivery for this realm. */
   exec: BrowletExecution;
 
-  constructor(realm: Realm, record: EnvironmentRecord | null, exec: BrowletExecution) {
+  constructor(realm: BrowletRealm, record: EnvironmentRecord | null, exec: BrowletExecution) {
     super(record);
     this.exec = exec;
     this.timing = new EnvironmentTiming(this);
@@ -165,7 +165,7 @@ export abstract class BrowletEnvironment extends EnvironmentRecord implements
 
 /** Internal execution with explicit failures for unsupported browser client settings. */
 export class SandboxEnvironment extends BrowletEnvironment {
-  constructor(realm: Realm, exec: BrowletExecution, userAgent?: UserAgent) {
+  constructor(realm: BrowletRealm, exec: BrowletExecution, userAgent?: UserAgent) {
     super(realm, null, exec);
     if (userAgent !== undefined) this.userAgent = userAgent;
   }

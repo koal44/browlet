@@ -4,7 +4,7 @@ import type { StampedPlatformObject } from '../web-idl/index';
 import { isHeaderValue } from '../fetch/index';
 
 import type { Document, WindowProxy } from './platform';
-import { type Realm, installHostHooks } from './scripting/index';
+import { type BrowletRealm, installHostHooks } from './scripting/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
 import { getSourceCodeLocation, BrowletParser, type DocumentWrite } from './html/parser/index';
 import { PageEvaluation } from './automation/index';
@@ -171,7 +171,7 @@ export class Browlet {
     documentURL: URL,
     write: DocumentWrite,
     document: DocumentImpl,
-    realm: Realm,
+    realm: BrowletRealm,
   ): void {
     const sourceURL = element.getAttribute('src');
     const scriptURL = sourceURL === null

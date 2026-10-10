@@ -6,7 +6,7 @@ import type { FetchEnvironmentRecord, NetworkPartitionKey } from '../../fetch/in
 import type { BrowsingContext } from '../browsing/navigation/index';
 import type { UserAgent } from '../user-agent';
 
-import type { Realm } from './realm';
+import type { BrowletRealm } from './realm';
 
 /** Browser state shared by reserved records and full environments. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#environment
@@ -103,5 +103,5 @@ export interface EnvironmentInit {
 
 /** Environment view for algorithms requiring an HTML realm. */
 export interface ScriptingEnvironment {
-  realm: Realm;
+  realm: BrowletRealm;
 }

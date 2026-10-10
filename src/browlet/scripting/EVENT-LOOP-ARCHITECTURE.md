@@ -48,7 +48,7 @@ update pipeline; the host refresh source does not run author callbacks directly.
 
 `env.exec.queueTask(source, steps, options?)` queues work for the execution owner
 using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to HTML
-source identities. `Realm.queueGlobalTask()` captures the global's associated
+source identities. `BrowletRealm.queueGlobalTask()` captures the global's associated
 Document and routes through its Agent. Options carry timer nesting metadata.
 Low-level queueing can instead select an explicit loop and Document.
 The future element wrapper must route through the element's relevant global,
@@ -57,7 +57,7 @@ not its current node document after adoption. Avoid implied-loop/Document calls.
 Fetch has an explicit callback destination, which can differ from the body
 stream's owner. Fetch's `queueFetchTask()` selects a parallel queue or calls
 `FetchExecution.queueGlobalFetchTask()`, composed in `bindings.ts` to route through
-the destination global's HTML Realm.
+the destination global's BrowletRealm.
 Work performed in parallel re-enters the intended owner's task before touching
 realm-bound state.
 
@@ -81,7 +81,7 @@ The backup incumbent settings stack belongs to the EventLoop. Web IDL brackets
 callbacks with HTML script/callback preparation and cleanup using the callback's
 relevant and stored incumbent settings respectively.
 
-Browlet mirrors entries it controls. Direct Realm.evaluate supplies a temporary
+Browlet mirrors entries it controls. Direct `BrowletRealm.evaluate()` supplies a temporary
 task when necessary, records its settings on that task, and checkpoints after
 the last mirrored entry exits. Custom engine hooks capture callback registration,
 bracket invocation, and place Promise jobs in HTML microtask tasks. Handlerless
@@ -107,7 +107,7 @@ the boundary and returns a native Node Promise to the host.
 
 Host callback work stays on Node's queue. Completion queues an HTML task, waking
 an idle page normally. Navigation removes pending bridge tasks, rejects outstanding
-evaluations, and discards late results. Parser/low-level Realm.evaluate calls do
+evaluations, and discards late results. Parser/low-level `BrowletRealm.evaluate()` calls do
 not replace this host-command boundary.
 
 ## Runtime integration and accommodations
