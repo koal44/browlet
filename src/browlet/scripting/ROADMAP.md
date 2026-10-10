@@ -16,7 +16,7 @@ Do not restart the completed task/timer foundation when adding these consumers.
 
 | Source | Current responsibility |
 | --- | --- |
-| `agents.ts` | Agent/cluster records, Window inventory, and one EventLoop per Agent |
+| `agents.ts` | Agent/cluster records, Window inventory, one EventLoop per Agent, observer creation counters, and batched MutationObserver/slot-change notification |
 | `environment.ts`, `realm.ts` | Early EnvironmentRecord state, relevant/incumbent ownership, and controlled script/callback entry; full browser settings live in [`../environment.ts`](../environment.ts) |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
@@ -50,7 +50,7 @@ with explicit scoped inputs and provisional no-session results.
 | Module scripts/maps | Parse/link/evaluate, graph fetching, import maps/attributes, dynamic import, and host hooks |
 | Error reporting | ErrorEvent, PromiseRejectionEvent, muted-error handling, source locations, and rejection tracking |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
-| DOM checkpoint consumers | WindowAgent's mutation-observer flag/set, signal slots, custom-element reactions, and owner-defined delivery |
+| DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Element-task wrapper using the relevant global, worker restrictions, and complete loop teardown |
 | Global utilities/timers | Origin/base64/reportError/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
 | Rendering/idle | AnimationFrameProvider, real rendering hooks, idle callbacks, deadlines, and lifecycle cleanup |

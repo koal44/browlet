@@ -4,6 +4,8 @@ import {
   type Origin,
 } from '../../url/index';
 
+import type { MutationObserverImpl } from '../dom/nodes/index';
+import type { HTMLSlotElementImpl } from '../dom/nodes/html/index';
 import type { WindowImpl } from '../browsing/window/index';
 import type { BrowsingContextGroup } from '../browsing/navigation/index';
 
@@ -46,9 +48,38 @@ export abstract class Agent {
 export class WindowAgent extends Agent {
   /** Windows served by this agent, including multiple browsing contexts. */
   windowObjects = new Set<WindowImpl>();
+  /** Next observer creation position shared by this Agent's Windows. */
+  mutationObserverCounter = 0;
+  /** Observers awaiting delivery or transient-registration cleanup. */
+  pendingMutationObservers = new Set<MutationObserverImpl>();
+  /** Slots signaled since the previous mutation notification. */
+  signalSlots = new Set<HTMLSlotElementImpl>();
+  /** Coalesce notification requests until their microtask begins delivery. */
+  #mutationObserverMicrotaskQueued = false;
 
   constructor(eventLoop: EventLoop) {
     super(false, eventLoop);
+  }
+
+  /** Schedule one notification microtask for all of this Agent's Windows. */
+  // https://dom.spec.whatwg.org/#queue-a-mutation-observer-compound-microtask
+  queueMutationObserverMicrotask(): void {
+    if (this.#mutationObserverMicrotaskQueued) return;
+    this.#mutationObserverMicrotaskQueued = true;
+    this.eventLoop.queueMicrotask(() => this.#notifyMutationObservers());
+  }
+
+  /** Deliver the pending batch, leaving reentrant signals for the next microtask. */
+  // https://dom.spec.whatwg.org/#notify-mutation-observers
+  #notifyMutationObservers(): void {
+    this.#mutationObserverMicrotaskQueued = false;
+    const observers = Array.from(this.pendingMutationObservers);
+    this.pendingMutationObservers.clear();
+    const slots = Array.from(this.signalSlots);
+    this.signalSlots.clear();
+    observers.sort((a, b) => a.creationOrder - b.creationOrder);
+    for (const observer of observers) observer.notify();
+    for (const slot of slots) slot.fireEvent('slotchange', undefined, (event) => { event.bubbles = true; });
   }
 }
 

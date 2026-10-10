@@ -19,6 +19,7 @@ import {
   childNodeIDL, documentOrShadowRootIDL, nonDocumentTypeChildNodeIDL, parentNodeIDL, shadowRootIDL,
   shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL,
   slottableIDL, elementIncludesSlottableIDL, textIDL, textIncludesSlottableIDL,
+  mutationObserverIDL, mutationCallbackIDL, mutationObserverInitIDL, mutationRecordIDL,
 } from './nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -51,6 +52,10 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   getRootNodeOptionsIDL,
   htmlCollectionIDL,
   nodeListIDL,
+  mutationObserverIDL,
+  mutationCallbackIDL,
+  mutationObserverInitIDL,
+  mutationRecordIDL,
   namedNodeMapIDL,
   attrIDL,
   characterDataIDL,

@@ -285,19 +285,11 @@ export class ElementImpl extends NodeImpl {
   handleAttributeChanges(attribute: AttrImpl, oldValue: string | null, value: string | null): void {
     this.nodeDocument.collectionVersion++;
     const { localName, namespaceURI } = attribute;
-    this.queueAttributeMutationRecord(localName, namespaceURI, oldValue);
+    this.queueMutationRecord('attributes', localName, namespaceURI, oldValue, [], [], null, null);
     if (this.customElementState === 'custom') {
       this.enqueueCustomElementCallbackReaction('attributeChangedCallback', [localName, oldValue, value, namespaceURI]);
     }
     this.attributeChanged(localName, oldValue, value, namespaceURI);
-  }
-
-  /** Queue an attribute record for observers interested in this target. */
-  // https://dom.spec.whatwg.org/#queue-a-mutation-record
-  // SPEC_MISMATCH: queue a mutation record(type, target, name, namespace, oldValue, addedNodes, removedNodes, previousSibling, nextSibling)
-  queueAttributeMutationRecord(_localName: string, _namespace: string | null, _oldValue: string | null): void {
-    // PROVISIONAL(DOM mutation observers): no observer can be constructed or registered yet.
-    // Record construction and delivery join the tree/character-data path in 4G.
   }
 
   /** Apply element-specific reactions to an attribute change. */

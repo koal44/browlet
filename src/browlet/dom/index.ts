@@ -1,4 +1,4 @@
 export type {
-  DOMEnvironment, DOMRealm, EventExecution, EventRealm, WindowEventRealm, EventImplConstructor,
+  DOMEnvironment, DOMRealm, DOMExecution, WindowDOMRealm, WindowDOMAgent, EventImplConstructor,
 } from './environment';
 export { domIDLDefinitions } from './web-idl';

@@ -35,14 +35,14 @@ that directly requires HTML's timeout and global-task machinery.
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §4, nodes | Structural/text/attribute mutation, collections, tree mixins, and selectors exist; shadow/slot behavior, leaf types, and remaining members are partial or absent | Extend the shared mutation path with observers and remaining participants; see `nodes/ROADMAP.md` |
-| DOM §4.3, mutation observers | Not implemented | Put observer/signal-slot state on the Window agent and deliver it through HTML's microtask checkpoint; DOM owns records and callback semantics |
+| DOM §4, nodes | Structural/text/attribute mutation, collections, tree mixins, selectors, and mutation observers exist; shadow/slot assignment, leaf types, and remaining members are partial or absent | Continue with shadow trees in 4H; see `nodes/ROADMAP.md` |
+| DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot-change notification is ready for 4H assignment |
 | DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural/text mutation adjustment exist | Remaining Range operations stay in `ranges/ROADMAP.md` |
 
 The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.
 Its first DOM milestone is the mutation spine plus live Range and
-NodeIterator participant points. MutationObserver, slot signaling, and custom
-element reactions form the next lifecycle milestone with the HTML event loop.
+NodeIterator participant points. MutationObserver and slot signaling now use the
+HTML event loop; shadow assignment and custom-element reactions remain separate work.
 Public interface breadth, convenience methods, and XML-only leaf nodes can then
 land in bounded consumer-driven slices.
 

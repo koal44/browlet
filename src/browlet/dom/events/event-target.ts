@@ -8,7 +8,7 @@ import {
 
 import type { AbortSignalImpl } from '../abort/index';
 import type { ShadowRootMode } from '../nodes/index';
-import type { DOMEnvironment, EventImplConstructor, EventRealm } from '../environment';
+import type { DOMEnvironment, DOMRealm, EventImplConstructor } from '../environment';
 
 import { EventPhase, type EventImpl, type EventPathItem } from './event';
 import { MouseEventImpl } from './ui-event';
@@ -686,7 +686,7 @@ export class EventListenerValue {
   /** Original callback object used to match registrations and removals. */
   readonly object: object;
   /** Callback realm, absent for direct implementation listeners. */
-  readonly realm: EventRealm | undefined;
+  readonly realm: DOMRealm | undefined;
   #invoke: (
     event: EventImpl,
     currentTarget: EventTargetImpl,
@@ -694,7 +694,7 @@ export class EventListenerValue {
 
   constructor(
     object: object,
-    realm: EventRealm | undefined,
+    realm: DOMRealm | undefined,
     invoke: (event: EventImpl, currentTarget: EventTargetImpl) => void,
   ) {
     this.object = object;

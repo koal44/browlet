@@ -32,17 +32,20 @@ export class HTMLSlotElementImpl extends HTMLElementImpl {
   /** Recompute this slot's assignments and notify changes. */
   // https://dom.spec.whatwg.org/#assign-slotables
   assignSlottables(): void {
-    // PROVISIONAL(DOM shadow trees): outside a shadow tree, an empty slot stays empty.
+    // PROVISIONAL(DOM shadow trees): assignment supports only an empty slot outside a shadow tree.
     if (this.getRoot().isShadowRoot() || this.assignedNodesList.length !== 0) {
       throw new InternalError('DOM slot assignment is not implemented');
     }
   }
 
-  /** Add this slot to its agent's pending slot-change set. */
+  /** Queue this slot's change event for delivery after the Agent's mutation observers. */
   // https://dom.spec.whatwg.org/#signal-a-slot-change
   signalSlotChange(): void {
-    // PROVISIONAL(DOM shadow trees): delivery must join mutation-observer notification.
-    throw new InternalError('DOM slot-change delivery is not implemented');
+    const realm = this.env.realm;
+    if (realm.isWindow()) {
+      realm.agent.signalSlots.add(this);
+      realm.agent.queueMutationObserverMicrotask();
+    }
   }
 }
 

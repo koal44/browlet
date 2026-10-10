@@ -90,7 +90,7 @@ export class CharacterDataImpl extends NodeImpl {
     const length = this.#data.length;
     if (offset > length) throw new DOMExceptionImpl('', DOMExceptionNames.indexSize);
     count = Math.min(count, length - offset);
-    this.queueCharacterDataMutationRecord(this.#data);
+    this.queueMutationRecord('characterData', null, null, this.#data, [], [], null, null);
     this.#data = this.#data.slice(0, offset) + data + this.#data.slice(offset + count);
     RangeImpl.adjustForReplaceData(this, offset, count, data.length);
     if (this.isProcessingInstruction() && !piAttributesAlreadyUpdated) this.updateAttributesFromData();
@@ -111,14 +111,6 @@ export class CharacterDataImpl extends NodeImpl {
 
   remove(): void {
     this.#childNodeMixin.remove();
-  }
-
-  /** Queue the old data for observers interested in this character-data node. */
-  // https://dom.spec.whatwg.org/#queue-a-mutation-record
-  // SPEC_MISMATCH: queue a mutation record(type, target, name, namespace, oldValue, addedNodes, removedNodes, previousSibling, nextSibling)
-  queueCharacterDataMutationRecord(_oldValue: string): void {
-    // PROVISIONAL(DOM mutation observers): no observer can be constructed or registered yet.
-    // The interested-observer collection is empty; implement delivery before enabling observe().
   }
 }
 

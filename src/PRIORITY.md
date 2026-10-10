@@ -34,14 +34,16 @@ preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
 File/XHR consumers can use the completed Fetch contract when their own
 prerequisites are ready.
 
-DOM 4A-4F now provide structural/text mutation, live Range/NodeIterator participation,
+DOM 4A-4G now provide structural/text mutation, live Range/NodeIterator participation,
 the shared attribute path, live/static collections, convenience mutations, and
-Selectlet-backed selector APIs. Trusted Types TT-A/TT-B supply Window factories,
+Selectlet-backed selector APIs, with MutationObserver records and Agent-backed
+notification. Trusted Types TT-A/TT-B supply Window factories,
 trusted values and policies, default-policy processing, attribute enforcement,
 and CSP checks/reporting through the existing mutation path.
 [DOM 4E](browlet/dom/nodes/ROADMAP.md#section-4-slices) retains an approved provisional
-ProcessingInstruction attribute-synchronization hook. Mutation observers follow
-in 4G. Selectlet uses the existing pointer traversal; TreeWalker remains separate
+ProcessingInstruction attribute-synchronization hook. Shadow attachment and slot
+assignment follow in 4H; slot-change notification already shares the observer
+checkpoint. Selectlet uses the existing pointer traversal; TreeWalker remains separate
 traversal work rather than a prerequisite for selector APIs.
 Trusted parser options, sanitization, markup
 APIs, script compilation, and workers keep their later consumer gates.

@@ -18,7 +18,7 @@ import {
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { DocumentImpl, ModuleMap } from './dom/nodes/index';
-import type { DOMEnvironment, EventExecution } from './dom/index';
+import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import type { WindowImpl } from './browsing/window/index';
@@ -26,7 +26,7 @@ import type { Traversable } from './browsing/navigation/index';
 import type { UserAgent } from './user-agent';
 
 /** Engine, Fetch, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
-export interface BrowletExecution extends RealmExecution, FetchExecution, WebIDLExecution, EventExecution, StyleletExecution {
+export interface BrowletExecution extends RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, StyleletExecution {
   /** Allocate a Document and its descendant-node factory in this environment's binding. */
   createDocument(): DocumentImpl;
 }

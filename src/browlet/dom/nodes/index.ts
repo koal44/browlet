@@ -30,6 +30,11 @@ export {
 } from './lookups';
 export { NamedNodeMapImpl, namedNodeMapIDL } from './named-node-map';
 export {
+  MutationObserverImpl, type MutationCallback, type MutationObserverInitRecord, type RegisteredObserver,
+  mutationObserverIDL, mutationCallbackIDL, mutationObserverInitIDL,
+} from './mutation-observer';
+export { MutationRecordImpl, type MutationType, mutationRecordIDL } from './mutation-record';
+export {
   NodeImpl, nodeIDL, type InsertionParent, type GetRootNodeOptionsRecord, getRootNodeOptionsIDL, NodeType,
 } from './node';
 export { NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL } from './non-document-type-child-node';

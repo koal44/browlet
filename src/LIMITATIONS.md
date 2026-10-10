@@ -170,18 +170,22 @@ are recorded in the [4F scope](browlet/dom/nodes/ROADMAP.md#collections-tree-mix
 
 Element attribute setters, Attr attachment, and attached `Attr.value`,
 `nodeValue`, and `textContent` writes enforce Trusted Types. Their common change
-path reaches provisional observer,
-custom-element, and slot hooks; it does not yet deliver mutation records,
-reactions, or slot changes. The
+path delivers mutation records through the same observer machinery as structural
+and character-data changes. Custom-element reactions and shadow-slot assignment
+remain unfinished; slot-change signaling and checkpoint delivery are implemented. The
 [attribute slice](browlet/dom/nodes/ROADMAP.md#section-4-slices) records these
 dependencies and the tests for the implemented storage and mutation behavior.
 
 Live Range boundaries track structural and character-data mutations, text splits,
-and normalization. Mutation-record delivery remains absent. ProcessingInstruction
+and normalization. ProcessingInstruction
 has provisional target/data storage, with a no-op `updateAttributesFromData()` hook.
 Validation, pseudo-attributes, and public construction/exposure remain unfinished.
 Its owner is recorded in the
 [nodes roadmap](browlet/dom/nodes/ROADMAP.md).
+MutationObserver's existing Web IDL contract gives callback arrays the callback's
+realm and retains the observer's binding ownership for records; browser behavior
+differs. This choice is recorded in the
+[observer compatibility notes](browlet/dom/nodes/ROADMAP.md#mutation-observer-compatibility).
 NodeIterator rejects recursive traversal before changing its cursor, matching
 Firefox rather than the written algorithm's later filtering check. The
 [compatibility choice](browlet/dom/traversal/ROADMAP.md#reentrant-filter-compatibility-choice)

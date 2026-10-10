@@ -13,10 +13,10 @@ ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
 `NodeImpl` owns its tree links and mutation ordering. Its private storage
 operations update links after the required mutation participants have run.
-The 4B–4F implementation supports structural and text mutations with live Range,
-NodeIterator, and collection participants and a shared attribute-change path. Observer, slot,
-and custom-element delivery remain provisional; the full mutation path is not
-complete.
+The 4B–4G implementation supports structural and text mutations with live Range,
+NodeIterator, collection, and MutationObserver participants and a shared
+attribute-change path. Slot-change notification is implemented; shadow assignment
+and custom-element reactions still leave the full mutation path incomplete.
 
 ## Section 4 slices
 
@@ -38,8 +38,8 @@ the interface exists; implementations receive already-converted values.
 [Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) completes
 the Window policy/CSP dependency and existing attribute checks between 4D and 4E.
 4E is implemented for the available node types; ProcessingInstruction's
-attribute synchronization remains explicitly provisional below. 4F is implemented;
-mutation observers follow in 4G.
+attribute synchronization remains explicitly provisional below. Collections and
+mutation observers are implemented in 4F/4G; shadow trees follow in 4H.
 Parser options, sanitization, and script/worker enforcement are later branches,
 not additions to the current DOM slice.
 
@@ -88,9 +88,9 @@ adoption. Element setters preserve the TrustedType union through Web IDL;
 Window even when detached, and adoption selects the destination document's
 relevant global without changing existing platform identities.
 4E's Attr node-value/text-content setters reuse the checked value operation.
-Mutation records retain a provisional `queueAttributeMutationRecord()` call until
-4G. Slot/slottable name changes enter
-their assignment hooks, but assignment/delivery still belongs to 4H. Custom
+Attribute changes queue real records through `NodeImpl.queueMutationRecord()`.
+Slot/slottable name changes enter their assignment hooks, but assignment still
+belongs to 4H; notification is implemented in 4G. Custom
 element reactions remain with their own roadmap.
 
 4E makes `CharacterDataImpl.replaceData()` the shared path for data assignment,
@@ -108,21 +108,19 @@ The current DOM replace-data algorithm also calls ProcessingInstruction's
 already updated. `ProcessingInstructionImpl` now supplies target/data storage
 and an approved provisional no-op for this hook. Initialization validation,
 pseudo-attribute algorithms, Web IDL exposure, and document construction remain
-4I work. Character-data record delivery remains provisional alongside
-the existing tree and attribute hooks until 4G; review its specialized
-`queueCharacterDataMutationRecord(oldValue)` signature with those hooks.
+4I work. Character-data changes now use the shared mutation-record operation and
+4G's observer delivery, as do tree and attribute changes.
 
 Public and parser tests cover topology, document ownership, and existing
-extension behavior. Empty collections still need no work while their public
-registration is unavailable; hooks requiring missing behavior still throw.
+extension behavior. Hooks requiring unfinished behavior still throw.
 Participant status:
 
 | Owner | Required operation or state |
 | --- | --- |
 | `../ranges/` | Live ranges register weakly by ordinary root. Structural mutation, CharacterData replacement, text splitting, and normalization adjust boundaries; inserting a detached root relocates registrations |
 | `../traversal/` | Iterators register weakly by their fixed traversal root. Pre-removal visits ancestor-rooted iterators and adjusts both committed and in-flight candidate pointers |
-| Mutation observers | Each node has a typed registered-observer list and owns `queueTreeMutationRecord(added, removed, previous, next)`; elements add `queueAttributeMutationRecord(name, namespace, oldValue)` and character data adds `queueCharacterDataMutationRecord(oldValue)`. Record creation/delivery remains absent; observer construction is disabled |
-| Slots | Element/Text compose `SlottableMixin` and expose `assignedSlot`. Null-namespace slot/name changes update assignment names and enter slot assignment. `HTMLSlotElementImpl` owns recognition, assigned-node state, `assignSlottables()`, and `signalSlotChange()`. Lookup handles no-slot and closed-root cases; actual assignment and delivery still throw |
+| Mutation observers | Nodes retain registered observers and queue tree/attribute/character-data records. `MutationObserverImpl` owns weak observation targets, transient cleanup, and record queues. WindowAgent batches notification through its existing EventLoop; Web IDL projects callback arguments and reports exceptions |
+| Slots | Element/Text compose `SlottableMixin` and expose `assignedSlot`. Null-namespace slot/name changes enter assignment hooks. `HTMLSlotElementImpl` owns recognition, assigned-node state, assignment, and signaling. Lookup handles no-slot and closed-root cases; actual assignment still throws, while signaling delivers a trusted bubbling event after observers |
 | Custom elements | Registry association/state and lookup exist. `ElementImpl.tryToUpgrade()` currently finds no definitions; `enqueueCustomElementCallbackReaction()` throws if called. Definition registration, construction, and reactions remain absent |
 
 Range and traversal are explicit components below nodes in the import hierarchy.
@@ -142,12 +140,12 @@ The public and parser tests cover fragment insertion, reinsertion, retained
 adoption, and Text/Comment constructor ownership. Structural mutation tests add
 atomic replacement/move failures and live Range/NodeIterator adjustment. The
 replace-all primitive is exercised through public text-content setters and 4F's
-convenience mutations. Observer delivery belongs to 4G, shadow assignment
-and signaling to 4H, and `[CEReactions]` to the custom-elements roadmap. Completion
+convenience mutations. Observer and slot-change delivery are implemented in 4G,
+shadow assignment belongs to 4H, and `[CEReactions]` to the custom-elements roadmap. Completion
 of the full mutation path requires observable tests with those real participants.
 
-Range and traversal state belongs to those owners. Observer, slot, and
-custom-element delivery must join HTML's existing checkpoint, not a new scheduler.
+Range and traversal state belongs to those owners. Observer and slot delivery
+use HTML's existing checkpoint; custom-element reactions must join that machinery.
 
 ## Collections, tree mixins, and selectors (4F)
 
@@ -231,19 +229,59 @@ The participant seams for Range and NodeIterator must exist before the
 mutation algorithms are considered complete, even if the complete public
 Range and traversal APIs arrive in later slices.
 
-## Mutation observers
+## Mutation observers (4G)
 
-| Planned source | Contract | Specification |
+| Source | Contract | Specification |
 | --- | --- | --- |
-| existing `mutation-observer.ts` | Complete the provisional observer identity and registered-observer types with observation, record queues, and callback delivery | DOM §4.3, `#mutation-observers` and `#interface-mutationobserver` |
-| `mutation-record.ts` | `MutationRecord` | DOM §4.3.3, `#interface-mutationrecord` |
+| `mutation-observer.ts` | Observation options, weak observed and transient targets, record queues, and converted callback invocation | DOM §4.3, `#mutation-observers` and `#interface-mutationobserver` |
+| `mutation-record.ts` | Retained mutation data and static `NodeList` objects | DOM §4.3.3, `#interface-mutationrecord` |
+| `../../scripting/agents.ts` | WindowAgent creation counter, notification flag, pending observers, and signal slots | DOM §4.3 and HTML's existing microtask checkpoint |
 
-Each `WindowAgent` needs the specified mutation-observer-microtask flag,
-pending-observer set, and signal-slot set. The DOM layer owns record creation
-and delivery semantics; HTML's event loop owns the microtask checkpoint and
-wake-up. Synchronous mutation algorithms can be implemented before the full
-checkpoint, but observable observer and `slotchange` delivery cannot be
-declared complete until that host machinery exists.
+Tree, attribute, and character-data mutation enter `NodeImpl.queueMutationRecord()`.
+An ordinary-ancestor walk filters registrations and combines old-value requests,
+queuing one record per interested observer. It does not cross a shadow host.
+The observer tracks explicit and detached transient targets weakly. Records retain
+the nodes they describe. Transient registrations are deduplicated by their original
+source and removed at notification, re-observation, or disconnect. `takeRecords()`
+drains records without ending transient observation.
+
+The constructor takes its creation position from its environment's Window Agent.
+Notification sorts pending observers by that position and snapshots slots before
+calling authors.
+Each observer drains its current records and clears transient registrations just
+before its callback; earlier callbacks can therefore add records to or disconnect
+later observers. Reentrant work queues another microtask. Binding supplies the
+callback's receiver/arguments and reports exceptions without aborting the batch.
+Slot-change events follow observers. Tests invoke slot signaling directly because
+assignment and public `attachShadow()` remain 4H work.
+
+Coverage is in `mutation-observer.test.ts`, `mutation-record.test.ts`, and
+`mutation-notification.test.ts`: option conversion, exact record contents and
+identities, subtree cleanup, batching/reentrancy, callback exceptions, separate
+Agents and shared-Agent realms, independent creation counters, collection of
+unrecorded detached nodes, projection, and slot notification.
+
+Checked against the published DOM Standard on 2026-10-10:
+[notification](https://dom.spec.whatwg.org/#notify-mutation-observers) specifies
+creation order, [record queuing](https://dom.spec.whatwg.org/#queue-a-mutation-record)
+returns when no observers are interested, and
+[transient registration](https://dom.spec.whatwg.org/#add-transient-registered-observers)
+tracks detached nodes weakly and schedules cleanup even without records. These
+behaviors are now specified; their former conflict and gap markers have been removed.
+
+### Mutation-observer compatibility
+
+Browser probes on 2026-10-10 used Chromium 149.0.7827.55, Firefox 151.0, and WebKit
+26.5. The remaining callback-realm choice is explicit; revisit it when the
+algorithms or engines converge.
+
+- `SPEC_CLASH(mutation-observer-callback-realm)`: with an observer from one realm
+  and its callback from another, Chromium allocates the array and records in the
+  callback realm; Firefox/WebKit use the observer realm for both. Browlet retains
+  its existing Web IDL contract, as approved: callback arrays use the callback
+  realm, while records and their node lists retain the observer's binding owner.
+  Target nodes and the observer retain their existing identities. Broader binding
+  changes are deferred for separate review.
 
 ## Missing or unprojected objects
 
@@ -264,10 +302,9 @@ contract instead of defining it.
 | --- | --- | --- |
 | `Node` and tree mixins | Complete cloning, equality, namespace lookup, and remaining declared members; collections and convenience mutations are implemented | DOM §§4.2.4–4.4 |
 | `Document` and `DOMImplementation` | Complete construction, import/adopt, lookup, event, Range, traversal, and document-factory methods | DOM §§4.5–4.5.1 |
-| `Element`, `Attr`, and `NamedNodeMap` | Observer/reaction delivery, class/token state, shadow attachment, remaining selector host states, and adjacent insertion | DOM §§4.9–4.10 |
+| `Element`, `Attr`, and `NamedNodeMap` | Custom-element reactions, class/token state, shadow attachment, remaining selector host states, and adjacent insertion | DOM §§4.9–4.10 |
 | `ShadowRoot` and `Slottable` | Complete tree-scope, slot-assignment, cloning/serialization flags, and public shadow-root behavior | DOM §§4.2.2, 4.2.7, and 4.8 |
-| Collections | Implement live, identity-stable `NodeList` and `HTMLCollection` plus projected indexed/named behavior; replace snapshot/Array mechanics | DOM §4.2.10 |
-| `CharacterData` and `Text` | Mutation-record delivery and the provisional ProcessingInstruction attribute-synchronization hook | DOM §§4.11–4.11.1 |
+| `CharacterData` and `Text` | Provisional ProcessingInstruction attribute-synchronization hook | DOM §§4.11–4.11.1 |
 | Leaf nodes | Complete `DocumentType`, `DocumentFragment`, `CDATASection`, `ProcessingInstruction`, and `Comment` | DOM §§4.6–4.7 and 4.12–4.14 |
 
 HTML's `HTMLAllCollection`, `HTMLFormControlsCollection`,
@@ -298,8 +335,8 @@ Browlet coverage for:
 
 1. Implement the mutation spine and its Range/traversal/host participant seams
    before expanding node convenience APIs or parser behavior.
-2. Add agent-backed MutationObserver and slot delivery with the first real
-   HTML microtask checkpoint and custom-element reactions.
+2. Agent-backed MutationObserver and slot delivery now use HTML's existing
+   microtask checkpoint. Add real slot assignment and custom-element reactions.
 3. Complete live collections, attributes, CharacterData/Text, shadow trees,
    and the public node interfaces as consumers demand them.
 4. Add the XML leaf nodes before the XML parser milestone; finish remaining

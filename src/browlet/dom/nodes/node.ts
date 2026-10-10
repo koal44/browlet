@@ -22,7 +22,8 @@ import type { ElementImpl } from './element';
 import type { TextImpl } from './text';
 import type { ProcessingInstructionImpl } from './processing-instruction';
 import type { ShadowRootImpl } from './shadow-root';
-import type { RegisteredObserver } from './mutation-observer';
+import type { MutationObserverImpl, RegisteredObserver } from './mutation-observer';
+import { MutationRecordImpl, type MutationType } from './mutation-record';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 import type { HTMLSlotElementImpl } from './html/index';
 
@@ -34,7 +35,7 @@ export abstract class NodeImpl extends EventTargetImpl {
   /** Associated document; a document node refers to itself. */
   // https://dom.spec.whatwg.org/#concept-node-document
   nodeDocument!: DocumentImpl;
-  /** Observer associations, initially empty; observation is not implemented yet. */
+  /** Persistent and transient observer associations for this node. */
   // https://dom.spec.whatwg.org/#registered-observer-list
   registeredObserverList: RegisteredObserver[] = [];
 
@@ -596,9 +597,7 @@ export abstract class NodeImpl extends EventTargetImpl {
     for (let ancestor: NodeImpl | null = parent; ancestor; ancestor = ancestor.parentNode) {
       for (const registered of ancestor.registeredObserverList) {
         if (registered.options.subtree) {
-          this.registeredObserverList.push({
-            observer: registered.observer, options: registered.options, source: registered,
-          });
+          registered.observer.addTransientRegistration(this, registered);
         }
       }
     }
@@ -725,11 +724,54 @@ export abstract class NodeImpl extends EventTargetImpl {
   /** Queue a child-list record for observers interested in this target. */
   // https://dom.spec.whatwg.org/#queue-a-tree-mutation-record
   queueTreeMutationRecord(
-    _addedNodes: NodeImpl[], _removedNodes: NodeImpl[],
-    _previousSibling: NodeImpl | null, _nextSibling: NodeImpl | null,
+    addedNodes: NodeImpl[], removedNodes: NodeImpl[],
+    previousSibling: NodeImpl | null, nextSibling: NodeImpl | null,
   ): void {
-    // PROVISIONAL(DOM mutation observers): no observer can be constructed or registered yet.
-    // The interested-observer collection is empty; implement delivery before enabling observe().
+    this.queueMutationRecord('childList', null, null, null, addedNodes, removedNodes, previousSibling, nextSibling);
+  }
+
+  /** Queue one record per interested observer, combining registrations' old-value requests. */
+  // https://dom.spec.whatwg.org/#queue-a-mutation-record
+  queueMutationRecord(
+    type: MutationType, name: string | null, namespace: string | null, oldValue: string | null,
+    addedNodes: NodeImpl[], removedNodes: NodeImpl[], previousSibling: NodeImpl | null, nextSibling: NodeImpl | null,
+  ): void {
+    const isAttributeMutation = type === 'attributes';
+    const isCharacterDataMutation = type === 'characterData';
+    const interestedObservers = new Map<MutationObserverImpl, string | null>();
+    for (let node: NodeImpl | null = this; node; node = node.parentNode) {
+      for (const { observer, options } of node.registeredObserverList) {
+        if (node !== this && !options.subtree) continue;
+        if (isAttributeMutation) {
+          if (!options.attributes) continue;
+          if (options.attributeFilter !== undefined &&
+            (namespace !== null || !options.attributeFilter.includes(name!))) {
+            continue;
+          }
+        } else if (isCharacterDataMutation) {
+          if (!options.characterData) continue;
+        } else if (!options.childList) {
+          continue;
+        }
+
+        if (!interestedObservers.has(observer)) interestedObservers.set(observer, null);
+        if ((isAttributeMutation && options.attributeOldValue) ||
+          (isCharacterDataMutation && options.characterDataOldValue)) {
+          interestedObservers.set(observer, oldValue);
+        }
+      }
+    }
+
+    if (interestedObservers.size === 0) return;
+
+    const realm = this.env.realm;
+    for (const [observer, mappedOldValue] of interestedObservers) {
+      observer.enqueueRecord(new MutationRecordImpl(
+        type, this, name, namespace, mappedOldValue, addedNodes, removedNodes, previousSibling, nextSibling,
+      ));
+      if (realm.isWindow()) realm.agent.pendingMutationObservers.add(observer);
+    }
+    if (realm.isWindow()) realm.agent.queueMutationObserverMicrotask();
   }
 
   /** Return the registry associated with this node, when its kind carries one. */

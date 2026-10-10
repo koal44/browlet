@@ -10,7 +10,7 @@ import type { Window, WindowProxy } from '../platform';
 import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/index';
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
-import type { DOMRealm, WindowEventRealm } from '../dom/index';
+import type { DOMRealm, WindowDOMRealm } from '../dom/index';
 import type { BrowletEnvironment, WindowEnvironment } from '../environment';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
 
@@ -221,7 +221,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 }
 
 /** HTML realm whose Window is linked during composition, before global installation. */
-export class WindowRealm extends BrowletRealm implements WindowEventRealm {
+export class WindowRealm extends BrowletRealm implements WindowDOMRealm {
   declare agent: WindowAgent;
   #windowImplementation: WindowImpl | undefined;
   #windowProxy: WindowProxyHandle | undefined;
@@ -272,14 +272,17 @@ export class WindowRealm extends BrowletRealm implements WindowEventRealm {
     return true;
   }
 
+  /** Read the legacy Window.event value used during listener dispatch. */
   getCurrentEvent(): EventImpl | undefined {
     return this.windowImplementation.event;
   }
 
+  /** Set or restore the Window's current event around a listener invocation. */
   setCurrentEvent(event: EventImpl | undefined): void {
     this.windowImplementation.event = event;
   }
 
+  /** Performance-reporting hook for a listener invoked in this Window. */
   recordEventListenerTiming(
     _event: EventImpl,
     _callback: object,

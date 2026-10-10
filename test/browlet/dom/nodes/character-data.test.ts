@@ -101,7 +101,7 @@ describe('CharacterData', () => {
     const range = document.createRange();
     range.selectNodeContents(text);
     const observed: unknown[] = [];
-    vi.spyOn(text, 'queueCharacterDataMutationRecord').mockImplementation((oldValue) => {
+    vi.spyOn(text, 'queueMutationRecord').mockImplementation((_type, _name, _namespace, oldValue) => {
       observed.push(['record', oldValue, text.data, range.endOffset]);
     });
     vi.spyOn(text, 'notifyParentChildrenChanged').mockImplementation(() => {

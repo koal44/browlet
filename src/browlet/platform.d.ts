@@ -135,6 +135,16 @@ export interface GetRootNodeOptions {
   composed?: boolean;
 }
 
+export interface MutationObserverInit {
+  attributeFilter?: Iterable<string>;
+  attributeOldValue?: boolean;
+  attributes?: boolean;
+  characterData?: boolean;
+  characterDataOldValue?: boolean;
+  childList?: boolean;
+  subtree?: boolean;
+}
+
 export interface ElementCreationOptions {
   is?: string;
 }
@@ -273,6 +283,8 @@ export type VoidFunction = () => void;
 export type ReportingObserverCallback = (reports: Array<Report>, observer: ReportingObserver) => void;
 
 export type EventHandlerNonNull = (event: Event) => any;
+
+export type MutationCallback = (mutations: Array<MutationRecord>, observer: MutationObserver) => void;
 
 export type QueuingStrategySize = (chunk: any) => number;
 
@@ -743,6 +755,8 @@ export interface Window extends EventTarget {
   Node: NodeConstructor;
   HTMLCollection: HTMLCollectionConstructor;
   NodeList: NodeListConstructor;
+  MutationObserver: MutationObserverConstructor;
+  MutationRecord: MutationRecordConstructor;
   NamedNodeMap: NamedNodeMapConstructor;
   Attr: AttrConstructor;
   CharacterData: CharacterDataConstructor;
@@ -998,6 +1012,35 @@ export interface NodeList {
 export interface NodeListConstructor {
   readonly prototype: NodeList;
   [Symbol.hasInstance](value: unknown): value is NodeList;
+}
+
+export interface MutationObserver {
+  observe(target: Node, options?: MutationObserverInit): void;
+  disconnect(): void;
+  takeRecords(): Array<MutationRecord>;
+}
+
+export interface MutationObserverConstructor {
+  readonly prototype: MutationObserver;
+  [Symbol.hasInstance](value: unknown): value is MutationObserver;
+  new (callback: MutationCallback): MutationObserver;
+}
+
+export interface MutationRecord {
+  readonly type: string;
+  readonly target: Node;
+  readonly addedNodes: NodeList;
+  readonly removedNodes: NodeList;
+  readonly previousSibling: (Node | null);
+  readonly nextSibling: (Node | null);
+  readonly attributeName: (string | null);
+  readonly attributeNamespace: (string | null);
+  readonly oldValue: (string | null);
+}
+
+export interface MutationRecordConstructor {
+  readonly prototype: MutationRecord;
+  [Symbol.hasInstance](value: unknown): value is MutationRecord;
 }
 
 export interface NamedNodeMap {

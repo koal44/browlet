@@ -74,7 +74,7 @@ views of existing owners, not a new environment object for each subsystem.
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm` and `exec: RealmExecution` for a JavaScript execution owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort and HTML structured-data execution contracts on `exec` |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
-| [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; `exec: EventExecution` for event allocation |
+| [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `exec: DOMExecution` for event allocation |
 | [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
 | [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
@@ -118,7 +118,7 @@ abort or structured-data facilities.
 Subsystems declare independent execution contracts. Web IDL Core's
 [`WebIDLExecution`](web-idl/core/execution.ts) supplies `DOMException` through
 its `DOMExceptionConstructor` contract, and DOM's
-[`EventExecution`](browlet/dom/environment.ts) supplies event allocation.
+[`DOMExecution`](browlet/dom/environment.ts) supplies event allocation.
 `BrowletExecution` combines these with `RealmExecution`, `FetchExecution`, and `StyleletExecution`
 on the same `env.exec` object. JS Engine does not depend on Web IDL; Core does
 not depend on JS Engine. Web IDL's realm and callback environment contracts
@@ -417,8 +417,14 @@ HTML's remaining roadmap-only areas keep their provisional locations.
 use its ordered insertion/removal/adoption path and node-specific extension
 steps. Structural mutations update live Range and NodeIterator participants;
 CharacterData replacement, text splitting, and normalization also update live ranges.
-Observer, slot, and custom-element delivery remain provisional.
-Their remaining behavior and ownership questions are listed in the
+Nodes create mutation records through one ordinary-ancestor walk. Observers own
+registrations, transient detached-subtree cleanup, record queues, and converted
+callbacks. `WindowAgent` owns the pending-observer and signal-slot sets and queues
+one notification through its existing EventLoop. DOM's structural Agent view
+does not add an owner or scheduler. Notification snapshots both sets, drains each
+observer immediately before its callback, and then dispatches slot-change events.
+Shadow assignment and custom-element reactions remain unfinished. Their
+remaining behavior and the recorded compatibility choices are listed in the
 [nodes roadmap](browlet/dom/nodes/ROADMAP.md).
 
 Ranges and traversal occupy explicit layers below nodes. Their mutation
