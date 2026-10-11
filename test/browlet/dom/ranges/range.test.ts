@@ -1,7 +1,5 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
-import { ShadowRootImpl } from '../../../../src/browlet/dom/nodes/shadow-root';
-import { createTestDocument } from '../../../support/dom';
 
 describe('Range selection', () => {
   it('uses the constructor realm document and the factory receiver document', async () => {
@@ -154,24 +152,21 @@ describe('Live range structural updates', () => {
     })).toEqual([true, true, 0, 0]);
   });
 
-  it('keeps shadow-tree ranges registered while the host is removed and adopted', () => {
-    const document = createTestDocument();
-    const host = document.appendChild(document.createElement('host'));
-    // attachShadow is a later slice; establish its implementation association directly.
-    const shadow = new ShadowRootImpl(host, 'closed', document.env);
-    host.shadowRoot = shadow;
-    const text = shadow.appendChild(document.createTextNode('text'));
-    const range = document.createRange();
-    range.selectNodeContents(text);
-    const other = createTestDocument();
-    other.adoptNode(host);
-    expect(text.nodeDocument).toBe(other);
-    expect(range.startContainer).toBe(text);
-    expect(range.endOffset).toBe(4);
-    shadow.removeChild(text);
-    expect(range.startContainer).toBe(shadow);
-    expect(range.endContainer).toBe(shadow);
-    expect([range.startOffset, range.endOffset]).toEqual([0, 0]);
+  it('keeps shadow-tree ranges registered while the host is removed and adopted', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const host = document.createElement('div');
+      document.documentElement.appendChild(host);
+      const shadow = host.attachShadow({ mode: 'closed' });
+      const text = shadow.appendChild(document.createTextNode('text'));
+      const range = document.createRange();
+      range.selectNodeContents(text);
+      const other = new Document();
+      other.adoptNode(host);
+      const retained = [text.ownerDocument === other, range.startContainer === text, range.endOffset];
+      shadow.removeChild(text);
+      return [retained, range.startContainer === shadow, range.endContainer === shadow, range.startOffset, range.endOffset];
+    })).toEqual([[true, true, 4], true, true, 0, 0]);
   });
 
   it('adjusts both removal and insertion boundaries for a state-preserving move', async () => {

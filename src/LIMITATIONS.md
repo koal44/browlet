@@ -183,8 +183,11 @@ ElementInternals, and custom-element definition checks remain absent. Browser/sp
 differences in assignment updates and adopted-host root allocation are recorded
 in the [4H scope](browlet/dom/nodes/ROADMAP.md#shadow-trees-4h).
 
-Live Range boundaries track structural and character-data mutations, text splits,
-and normalization. TreeWalker and DOMTokenList/classList remain absent. Generic
+The core DOM Range surface is implemented. HTML contextual fragment parsing and
+CSSOM View geometry remain absent; the
+[Range roadmap](browlet/dom/ranges/ROADMAP.md#processinginstruction-collapse)
+records the WebKit ProcessingInstruction collapse discrepancy. TreeWalker and
+DOMTokenList/classList remain absent. Generic
 cloning does not yet copy HTML-specific template, script, or form-control state.
 ProcessingInstruction validation, pseudo-attributes, and public construction are
 implemented. Its attribute-map cloning gap and the Document/XMLDocument equality

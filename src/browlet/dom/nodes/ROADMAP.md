@@ -443,8 +443,8 @@ Browlet coverage for:
 2. Agent-backed MutationObserver and slot delivery now use HTML's existing
    microtask checkpoint; slot assignment enters that path. Add custom-element reactions.
 3. Live collections, attributes, CharacterData/Text, shadow trees, XML leaf nodes,
-   and document factories are implemented. Continue with Range operations,
-   TreeWalker, and DOMTokenList in their owning roadmaps.
+   and document factories are implemented, as is the core DOM §5 Range surface.
+   Continue with §6 traversal and §7 sets in their owning roadmaps.
 4. Revisit the remaining node hooks alongside custom elements, parsing, and
    concrete HTML element behavior rather than hiding these missing dependencies.
 

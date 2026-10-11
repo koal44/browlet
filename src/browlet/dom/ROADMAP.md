@@ -37,7 +37,7 @@ that directly requires HTML's timeout and global-task machinery.
 | --- | --- | --- |
 | DOM §4, nodes | Slices 4A–4I implement mutation, collections/mixins, selectors, observers, shadow/slots, clone/import, namespace/equality queries, document factories, and XML leaf nodes | TreeWalker, DOMTokenList, custom elements, and HTML extension hooks retain their owner gates; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot assignment uses the same notification checkpoint |
-| DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural/text mutation adjustment exist | Remaining Range operations stay in `ranges/ROADMAP.md` |
+| DOM §5, ranges | AbstractRange, StaticRange validity, and the complete DOM Range surface use the shared structural/text mutation path | HTML contextual fragments, CSSOM View geometry, and a WebKit collapse discrepancy stay in `ranges/ROADMAP.md` |
 
 The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.
 Its first DOM milestone is the mutation spine plus live Range and

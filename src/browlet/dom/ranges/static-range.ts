@@ -20,6 +20,17 @@ export class StaticRangeImpl extends AbstractRangeImpl {
     // Construction deliberately permits reversed, disconnected, and out-of-bounds points.
     super(startContainer, startOffset, endContainer, endOffset, env);
   }
+
+  /** Check this snapshot against the current tree without repairing or moving its endpoints. */
+  // https://dom.spec.whatwg.org/#staticrange-valid
+  isValid(): boolean {
+    return this.startContainer.getRoot() === this.endContainer.getRoot() &&
+      this.startOffset >= 0 && this.startOffset <= this.startContainer.getLength() &&
+      this.endOffset >= 0 && this.endOffset <= this.endContainer.getLength() &&
+      AbstractRangeImpl.compareBoundaryPoints(
+        this.startContainer, this.startOffset, this.endContainer, this.endOffset,
+      ) !== 1;
+  }
 }
 
 export type StaticRangeInitRecord = {
@@ -29,6 +40,14 @@ export type StaticRangeInitRecord = {
   endOffset: number;
 };
 
+/*
+ * dictionary StaticRangeInit {
+ *   required Node startContainer;
+ *   required unsigned long startOffset;
+ *   required Node endContainer;
+ *   required unsigned long endOffset;
+ * };
+ */
 export const staticRangeInitIDL = defineDictionary({
   name: 'StaticRangeInit',
   members: [
@@ -39,6 +58,12 @@ export const staticRangeInitIDL = defineDictionary({
   ],
 });
 
+/*
+ * [Exposed=Window]
+ * interface StaticRange : AbstractRange {
+ *   constructor(StaticRangeInit init);
+ * };
+ */
 export const staticRangeIDL = defineInterface<DOMEnvironment>({
   name: 'StaticRange', inherits: 'AbstractRange', exposed: 'Window',
   implementation: impl(StaticRangeImpl, { constructWith: [atArg(1, (ctx) => ctx.getEnvironment())] }),

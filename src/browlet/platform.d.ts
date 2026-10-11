@@ -927,13 +927,32 @@ export interface Range extends AbstractRange {
   collapse(toStart?: boolean): void;
   selectNode(node: Node): void;
   selectNodeContents(node: Node): void;
+  readonly START_TO_START: 0;
+  readonly START_TO_END: 1;
+  readonly END_TO_END: 2;
+  readonly END_TO_START: 3;
+  compareBoundaryPoints(how: number, sourceRange: Range): number;
+  deleteContents(): void;
+  extractContents(): DocumentFragment;
+  cloneContents(): DocumentFragment;
+  insertNode(node: Node): void;
+  surroundContents(newParent: Node): void;
+  cloneRange(): Range;
   detach(): void;
+  isPointInRange(node: Node, offset: number): boolean;
+  comparePoint(node: Node, offset: number): number;
+  intersectsNode(node: Node): boolean;
+  toString(): string;
 }
 
 export interface RangeConstructor extends Ctor<AbstractRangeConstructor> {
   readonly prototype: Range;
   [Symbol.hasInstance](value: unknown): value is Range;
   new (): Range;
+  readonly START_TO_START: 0;
+  readonly START_TO_END: 1;
+  readonly END_TO_END: 2;
+  readonly END_TO_START: 3;
 }
 
 export interface NodeIterator {
