@@ -20,6 +20,7 @@ import {
   shadowRootIncludesDocumentOrShadowRootIDL, shadowRootModeIDL, slotAssignmentModeIDL, shadowRootInitIDL,
   slottableIDL, elementIncludesSlottableIDL, textIDL, textIncludesSlottableIDL,
   mutationObserverIDL, mutationCallbackIDL, mutationObserverInitIDL, mutationRecordIDL,
+  cdataSectionIDL, domImplementationIDL, xmlDocumentIDL, importNodeOptionsIDL, processingInstructionIDL,
 } from './nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -64,6 +65,8 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   documentTypeIDL,
   documentTypeIncludesChildNodeIDL,
   textIDL,
+  cdataSectionIDL,
+  processingInstructionIDL,
   textIncludesSlottableIDL,
   commentIDL,
   documentFragmentIDL,
@@ -75,6 +78,9 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   shadowRootIncludesDocumentOrShadowRootIDL,
 
   documentIDL,
+  xmlDocumentIDL,
+  domImplementationIDL,
+  importNodeOptionsIDL,
   elementCreationOptionsIDL,
   documentIncludesParentNodeIDL,
   documentIncludesNonElementParentNodeIDL,

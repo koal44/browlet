@@ -35,16 +35,16 @@ that directly requires HTML's timeout and global-task machinery.
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §4, nodes | Structural/text/attribute mutation, collections, tree mixins, selectors, mutation observers, and shadow/slot assignment exist; leaf types and remaining members are partial or absent | Continue with Node/Document completion in 4I; see `nodes/ROADMAP.md` |
+| DOM §4, nodes | Slices 4A–4I implement mutation, collections/mixins, selectors, observers, shadow/slots, clone/import, namespace/equality queries, document factories, and XML leaf nodes | TreeWalker, DOMTokenList, custom elements, and HTML extension hooks retain their owner gates; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot assignment uses the same notification checkpoint |
 | DOM §5, ranges | AbstractRange, StaticRange, live Range selection, and structural/text mutation adjustment exist | Remaining Range operations stay in `ranges/ROADMAP.md` |
 
 The [project priority](../../PRIORITY.md) divides DOM §4 into bounded work.
 Its first DOM milestone is the mutation spine plus live Range and
 NodeIterator participant points. MutationObserver and slot signaling now use the
-HTML event loop; shadow assignment and custom-element reactions remain separate work.
-Public interface breadth, convenience methods, and XML-only leaf nodes can then
-land in bounded consumer-driven slices.
+HTML event loop; shadow assignment is implemented and custom-element reactions
+remain separate work. The 4I interface audit records the outstanding cross-owner
+dependencies without projecting placeholders for missing APIs.
 
 ## Sections 6-11 audit
 

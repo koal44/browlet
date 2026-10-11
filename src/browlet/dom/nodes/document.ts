@@ -16,9 +16,9 @@ import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord
 import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
-import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
+import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import type { TreeScopeResolver } from '../../style/index';
-import type { EventTargetImpl, EventImpl } from '../events/index';
+import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
   type SandboxingFlag,
@@ -35,7 +35,10 @@ import type {
 
 import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import { AttrImpl } from './attribute';
+import { CDATASectionImpl } from './cdata-section';
 import { CommentImpl } from './comment';
+import { DOMImplementationImpl } from './dom-implementation';
+import { ProcessingInstructionImpl } from './processing-instruction';
 import { DocumentFragmentImpl } from './document-fragment';
 import { DocumentTypeImpl } from './document-type';
 import { ShadowRootImpl, type ShadowRootMode } from './shadow-root';
@@ -184,6 +187,8 @@ export class DocumentImpl extends NodeImpl {
   #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
   /** Node allocator selected when the document is created. */
   #nodeFactory: DOMNodeFactory;
+  /** Stable factory object associated with this document. */
+  #implementation: DOMImplementationImpl | undefined;
   /** Parser input callback installed while document.write() is permitted. */
   #writer: DocumentWriter | undefined;
 
@@ -364,20 +369,97 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createelement
   createElement(
     localName: string,
-    _options?: string | ElementCreationOptionsRecord,
+    options: string | ElementCreationOptionsRecord = {},
   ): ElementImpl {
+    if (!isValidElementLocalName(localName)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
+    }
     if (this.type === 'html') localName = asciiLower(localName);
-    return this.createElementNode(localName, HTML_NAMESPACE);
+    const namespace = this.type === 'html' || this.contentType === 'application/xhtml+xml' ? HTML_NAMESPACE : '';
+    const [registry, isValue] = this.#extractElementCreationOptions(options);
+    return this.createElementNode(localName, namespace, null, isValue, registry);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createelementns
   createElementNS(
     namespaceURI: string | null,
     qualifiedName: string,
-    _options?: string | ElementCreationOptionsRecord,
+    options: string | ElementCreationOptionsRecord = {},
   ): ElementImpl {
     const [namespace, prefix, localName] = validateAndExtract(namespaceURI, qualifiedName, 'element');
-    return this.createElementNode(localName, namespace ?? '', prefix);
+    const [registry, isValue] = this.#extractElementCreationOptions(options);
+    return this.createElementNode(localName, namespace ?? '', prefix, isValue, registry);
+  }
+
+  /** Stable DOM factory object; the associated document selects origin and allocation realm. */
+  // https://dom.spec.whatwg.org/#dom-document-implementation
+  get implementation(): DOMImplementationImpl {
+    return this.#implementation ??= new DOMImplementationImpl(this, this.env);
+  }
+
+  /** Create a detached Document or XMLDocument through this document's allocator. */
+  createDocumentNode(xml = false): DocumentImpl {
+    return this.#nodeFactory.constructNode(xml ? XMLDocumentImpl : DocumentImpl, [this.#nodeFactory, this.env]);
+  }
+
+  /** Copy document metadata without copying its browsing context or runtime services. */
+  // https://dom.spec.whatwg.org/#concept-node-clone-single
+  cloneDocument(document: DocumentImpl): DocumentImpl {
+    const copy = document.createDocumentNode(this instanceof XMLDocumentImpl);
+    copy.encoding = this.encoding;
+    copy.contentType = this.contentType;
+    copy.url = this.url;
+    copy.origin = this.origin;
+    copy.type = this.type;
+    copy.mode = this.mode;
+    copy.allowDeclarativeShadowRoots = this.allowDeclarativeShadowRoots;
+    if (this.customElementRegistry?.isScoped) copy.customElementRegistry = this.customElementRegistry;
+    return copy;
+  }
+
+  /** Validate XML-only CDATA construction; later data mutations need not preserve XML syntax. */
+  // https://dom.spec.whatwg.org/#dom-document-createcdatasection
+  createCDATASection(data: string): CDATASectionImpl {
+    if (this.type === 'html') throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    if (data.includes(']]>')) throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
+    return this.createCDATASectionNode(data);
+  }
+
+  /** Allocate existing CDATA data, including data that became non-XML after mutation. */
+  createCDATASectionNode(data: string): CDATASectionImpl {
+    return this.#nodeFactory.constructNode(CDATASectionImpl, [data, this, this.env]);
+  }
+
+  /** Create and initialize a processing instruction in this document. */
+  // https://dom.spec.whatwg.org/#dom-document-createprocessinginstruction
+  createProcessingInstruction(target: string, data: string): ProcessingInstructionImpl {
+    return this.#nodeFactory.constructNode(ProcessingInstructionImpl, [target, data, this, this.env]);
+  }
+
+  /** Copy retained instruction data without repeating public creation validation. */
+  createProcessingInstructionNode(target: string, data: string): ProcessingInstructionImpl {
+    // SPEC_GAP(processing-instruction-clone-attributes): Cloning copies data without specifying
+    // how to initialize the pseudo-attribute map. Reparse the copied data through the shared setter.
+    const copy = this.createProcessingInstruction(target, '');
+    copy.data = data;
+    return copy;
+  }
+
+  /** Copy a foreign node into this document, selecting the destination's registry and realm. */
+  // https://dom.spec.whatwg.org/#dom-document-importnode
+  importNode(node: NodeImpl, options: boolean | ImportNodeOptions): NodeImpl {
+    if (node.isDocument() || node.isShadowRoot()) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    let registry: CustomElementRegistryImpl | null = null;
+    let subtree: boolean;
+    if (typeof options === 'boolean') {
+      subtree = options;
+    } else {
+      subtree = !options.selfOnly;
+      registry = options.customElementRegistry ?? null;
+      this.#validateRegistry(registry);
+    }
+    registry ??= this.lookupCustomElementRegistry();
+    return node.clone(this, subtree, null, registry);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createtextnode
@@ -394,6 +476,20 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createrange
   createRange(): RangeImpl {
     return new RangeImpl(this, this.env);
+  }
+
+  /** Legacy author event construction; the result must be initialized before dispatch. */
+  // https://dom.spec.whatwg.org/#dom-document-createevent
+  createEvent(name: string): EventImpl {
+    const normalized = asciiLower(name);
+    const constructor = normalized === 'customevent' ? CustomEventImpl
+      : normalized === 'event' || normalized === 'events' || normalized === 'htmlevents' ? EventImpl : null;
+    // Other entries in DOM's legacy table are not exposed by Browlet yet.
+    if (constructor === null) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    const event = this.env.exec.createEvent(constructor);
+    event.isTrusted = false;
+    event.initialized = false;
+    return event;
   }
 
   /** Create a traversal cursor rooted at the supplied node, even in another document. */
@@ -858,9 +954,12 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Allocate the registered element implementation for a namespace and local name. */
-  createElementNode(localName: string, namespaceURI: string, prefix: string | null = null): ElementImpl {
+  createElementNode(
+    localName: string, namespaceURI: string, prefix: string | null = null,
+    isValue: string | null = null, registry: CustomElementRegistryImpl | null = this.customElementRegistry,
+  ): ElementImpl {
     const elementInterface = resolveElementInterface(namespaceURI, localName);
-    return this.#nodeFactory.constructNode<ElementImpl>(
+    const element = this.#nodeFactory.constructNode<ElementImpl>(
       elementInterface.implementation,
       [{
         document: this,
@@ -870,6 +969,10 @@ export class DocumentImpl extends NodeImpl {
         treeScopeResolver: this.#treeScopeResolver,
       }, this.env],
     );
+    element.isValue = isValue;
+    element.customElementRegistry = registry;
+    // PROVISIONAL(custom elements): definition lookup and construction reactions remain with that subsystem.
+    return element;
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createdocumentfragment
@@ -946,6 +1049,25 @@ export class DocumentImpl extends NodeImpl {
       );
     }, idlType.undefined);
   }
+
+  #extractElementCreationOptions(
+    options: string | ElementCreationOptionsRecord,
+  ): [CustomElementRegistryImpl | null, string | null] {
+    let registry = this.customElementRegistry;
+    let isValue: string | null = null;
+    if (typeof options !== 'string') {
+      if (options.customElementRegistry !== undefined) registry = options.customElementRegistry;
+      isValue = options.is ?? null;
+      this.#validateRegistry(registry);
+    }
+    return [registry, isValue];
+  }
+
+  #validateRegistry(registry: CustomElementRegistryImpl | null): void {
+    if (registry !== null && !registry.isScoped && registry !== this.customElementRegistry) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    }
+  }
 }
 
 /*
@@ -1010,18 +1132,16 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
   }),
   members: [
     ctor(),
+    roAttr('implementation', reference('DOMImplementation'), xattr('SameObject')),
     roAttr('URL', idlType.USVString),
     roAttr('documentURI', idlType.USVString),
+    roAttr('compatMode', idlType.DOMString),
     roAttr('characterSet', idlType.DOMString),
     roAttr('charset', idlType.DOMString),
     roAttr('inputEncoding', idlType.DOMString),
+    roAttr('contentType', idlType.DOMString),
     roAttr('doctype', nullable(reference('DocumentType'))),
     roAttr('documentElement', nullable(reference('Element'))),
-    roAttr('contentType', idlType.DOMString),
-    roAttr('compatMode', idlType.DOMString),
-    op('getElementsByClassName', reference('HTMLCollection'), [
-      arg('classNames', idlType.DOMString),
-    ]),
     op('getElementsByTagName', reference('HTMLCollection'), [
       arg('qualifiedName', idlType.DOMString),
     ]),
@@ -1029,43 +1149,50 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),
     ]),
-    op('createElement', reference('Element'), [
-      arg('localName', idlType.DOMString),
-      arg('options', union(idlType.DOMString, reference('ElementCreationOptions')),
-        {
-          default: emptyDictionary,
-          optional: true,
-        },
-      ),
+    op('getElementsByClassName', reference('HTMLCollection'), [
+      arg('classNames', idlType.DOMString),
     ]),
-    op('createElementNS', reference('Element'), [
-      arg('namespace', nullable(idlType.DOMString)),
-      arg('qualifiedName', idlType.DOMString),
-      arg('options', union(idlType.DOMString, reference('ElementCreationOptions')),
-        {
-          default: emptyDictionary,
-          optional: true,
-        },
-      ),
-    ]),
+    op('createElement', reference('Element'),
+      [
+        arg('localName', idlType.DOMString),
+        arg('options', union(idlType.DOMString, reference('ElementCreationOptions')),
+          { default: emptyDictionary, optional: true },
+        ),
+      ],
+      xattr('CEReactions', 'NewObject'),
+    ),
+    op('createElementNS', reference('Element'),
+      [
+        arg('namespace', nullable(idlType.DOMString)), arg('qualifiedName', idlType.DOMString),
+        arg('options', union(idlType.DOMString, reference('ElementCreationOptions')),
+          { default: emptyDictionary, optional: true },
+        ),
+      ],
+      xattr('CEReactions', 'NewObject'),
+    ),
     op('createDocumentFragment', reference('DocumentFragment'), [], xattr('NewObject')),
-    op('createTextNode', reference('Text'), [
-      arg('data', idlType.DOMString),
-    ]),
-    op('createComment', reference('Comment'), [
-      arg('data', idlType.DOMString),
-    ]),
-    op('createAttribute', reference('Attr'), [
-      arg('localName', idlType.DOMString),
-    ]),
+    op('createTextNode', reference('Text'), [arg('data', idlType.DOMString)], xattr('NewObject')),
+    op('createCDATASection', reference('CDATASection'),
+      [arg('data', idlType.DOMString)], xattr('NewObject'),
+    ),
+    op('createComment', reference('Comment'), [arg('data', idlType.DOMString)], xattr('NewObject')),
+    op('createProcessingInstruction', reference('ProcessingInstruction'),
+      [arg('target', idlType.DOMString), arg('data', idlType.DOMString)], xattr('NewObject'),
+    ),
+    op('importNode', reference('Node'),
+      [
+        arg('node', reference('Node')),
+        arg('options', union(idlType.boolean, reference('ImportNodeOptions')), { default: false, optional: true }),
+      ],
+      xattr('CEReactions', 'NewObject'),
+    ),
+    op('adoptNode', reference('Node'), [arg('node', reference('Node'))], xattr('CEReactions')),
+    op('createAttribute', reference('Attr'), [arg('localName', idlType.DOMString)], xattr('NewObject')),
     op('createAttributeNS', reference('Attr'),
       [arg('namespace', nullable(idlType.DOMString)), arg('qualifiedName', idlType.DOMString)],
       xattr('NewObject'),
     ),
-    op('adoptNode', reference('Node'),
-      [arg('node', reference('Node'))],
-      xattr('CEReactions'),
-    ),
+    op('createEvent', reference('Event'), [arg('interface', idlType.DOMString)], xattr('NewObject')),
     op('createRange', reference('Range'), [], xattr('NewObject')),
     op('createNodeIterator', reference('NodeIterator'),
       [
@@ -1153,6 +1280,7 @@ export const htmlDocumentIDL = definePartialInterface({
 
 /** Converted element-creation options supported by the current declaration. */
 export type ElementCreationOptionsRecord = {
+  customElementRegistry?: CustomElementRegistryImpl | null;
   is?: string;
 };
 
@@ -1164,7 +1292,43 @@ export type ElementCreationOptionsRecord = {
  */
 export const elementCreationOptionsIDL = defineDictionary({
   name: 'ElementCreationOptions',
-  members: [dictMember('is', idlType.DOMString)],
+  members: [
+    dictMember('customElementRegistry', nullable(reference('CustomElementRegistry'))),
+    dictMember('is', idlType.DOMString),
+  ],
+});
+
+/** Converted import options; the dictionary overload copies descendants by default. */
+export type ImportNodeOptions = {
+  customElementRegistry?: CustomElementRegistryImpl;
+  selfOnly: boolean;
+};
+
+/*
+ * dictionary ImportNodeOptions {
+ *   CustomElementRegistry customElementRegistry;
+ *   boolean selfOnly = false;
+ * };
+ */
+export const importNodeOptionsIDL = defineDictionary({
+  name: 'ImportNodeOptions',
+  members: [
+    dictMember('customElementRegistry', reference('CustomElementRegistry')),
+    dictMember('selfOnly', idlType.boolean, { default: false }),
+  ],
+});
+
+/** XMLDocument adds a platform interface identity to Document's existing XML behavior. */
+// https://dom.spec.whatwg.org/#xmldocument
+export class XMLDocumentImpl extends DocumentImpl {}
+
+/*
+ * [Exposed=Window]
+ * interface XMLDocument : Document {};
+ */
+export const xmlDocumentIDL = defineInterface({
+  name: 'XMLDocument', inherits: 'Document', exposed: 'Window',
+  implementation: impl(XMLDocumentImpl), members: [],
 });
 
 /*

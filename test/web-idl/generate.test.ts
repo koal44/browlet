@@ -298,6 +298,73 @@ describe('platform declaration generation', () => {
     expect(generatePlatformTypes(assembly, { proxyInterfaces: { StoreProxy: 'Store' } })).toBe(declarations);
   });
 
+  it('shares constructor properties without inheriting construction or overridden static overloads', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'Base', members: [
+          ctor([arg('value', idlType.long)]),
+          constant('ACTIVE', idlType.unsignedShort, { kind: 'integer', value: '1' }),
+          staticOp('read', idlType.long, [arg('value', idlType.long)]),
+          staticOp('baseOnly', idlType.boolean),
+        ],
+      }),
+      defineInterface({
+        name: 'Child', inherits: 'Base',
+        members: [
+          roAttr('childValue', idlType.boolean),
+          staticOp('read', idlType.DOMString, [arg('value', idlType.boolean)]),
+          staticOp('childOnly', idlType.long),
+        ],
+      }),
+      defineInterface({ name: 'Grandchild', inherits: 'Child', members: [] }),
+      defineInterface({
+        name: 'Constructible', inherits: 'Child', members: [ctor([arg('value', idlType.DOMString)])],
+      }),
+      defineInterface({
+        name: 'Hidden', ...xattr('LegacyNoInterfaceObject'),
+        members: [constant('LIMIT', idlType.unsignedShort, { kind: 'integer', value: '2' })],
+      }),
+      defineInterface({ name: 'Visible', inherits: 'Hidden', members: [] }),
+      // A platform interface keeps its name when it collides with the generated helper.
+      defineInterface({ name: 'Ctor', members: [roAttr('value', idlType.boolean)] }),
+    ]);
+    const declarations = generatePlatformTypes(assembly);
+    // Once on Base's instances and once on its constructor, with no copies on descendants.
+    expect(declarations.match(/readonly ACTIVE: 1;/g)).toHaveLength(2);
+    expect(compile(declarations, `
+      import type { BaseConstructor, ChildConstructor, GrandchildConstructor, ConstructibleConstructor, VisibleConstructor, Ctor } from './platform';
+      declare const Base: BaseConstructor;
+      declare const Child: ChildConstructor;
+      declare const Grandchild: GrandchildConstructor;
+      declare const Constructible: ConstructibleConstructor;
+      declare const Visible: VisibleConstructor;
+      const active: 1 = Grandchild.ACTIVE;
+      const inherited: boolean = Grandchild.baseOnly();
+      const overridden: string = Grandchild.read(true);
+      const childOnly: number = Grandchild.childOnly();
+      const limit: 2 = Visible.LIMIT;
+      const childPrototype: boolean = Child.prototype.childValue;
+      declare const value: unknown;
+      if (value instanceof Child) {
+        const childInstance: boolean = value.childValue;
+      }
+      declare const collision: Ctor;
+      const collisionValue: boolean = collision.value;
+      new Base(1);
+      new Constructible('value');
+      // @ts-expect-error inherited constants remain read-only
+      Child.ACTIVE = 1;
+      // @ts-expect-error Child has no author constructor
+      new Child(1);
+      // @ts-expect-error construction cannot leak through another inheritance step
+      new Grandchild(1);
+      // @ts-expect-error Constructible does not inherit Base's constructor signature
+      new Constructible(1);
+      // @ts-expect-error the child's static method replaces the parent's overloads
+      Child.read(1);
+    `)).toEqual([]);
+  });
+
   it('emits collection and iterator surfaces while respecting explicit methods', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({ name: 'MapView', members: [maplike(idlType.DOMString, idlType.long)] }),

@@ -2,6 +2,9 @@
 
 // Platform types only; importing this module does not install or export runtime objects.
 
+/** Inherit constructor properties without inheriting construction signatures. */
+type Ctor<T> = { [K in keyof T]: T[K] };
+
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
 export type ShadowRootMode = "open" | "closed";
@@ -149,7 +152,13 @@ export interface MutationObserverInit {
   subtree?: boolean;
 }
 
+export interface ImportNodeOptions {
+  customElementRegistry?: CustomElementRegistry;
+  selfOnly?: boolean;
+}
+
 export interface ElementCreationOptions {
+  customElementRegistry?: (CustomElementRegistry | null);
   is?: string;
 }
 
@@ -423,35 +432,10 @@ export interface QuotaExceededError extends DOMException {
   readonly requested: (number | null);
 }
 
-export interface QuotaExceededErrorConstructor {
+export interface QuotaExceededErrorConstructor extends Ctor<DOMExceptionConstructor> {
   readonly prototype: QuotaExceededError;
   [Symbol.hasInstance](value: unknown): value is QuotaExceededError;
   new (message?: string, options?: QuotaExceededErrorOptions): QuotaExceededError;
-  readonly INDEX_SIZE_ERR: 1;
-  readonly DOMSTRING_SIZE_ERR: 2;
-  readonly HIERARCHY_REQUEST_ERR: 3;
-  readonly WRONG_DOCUMENT_ERR: 4;
-  readonly INVALID_CHARACTER_ERR: 5;
-  readonly NO_DATA_ALLOWED_ERR: 6;
-  readonly NO_MODIFICATION_ALLOWED_ERR: 7;
-  readonly NOT_FOUND_ERR: 8;
-  readonly NOT_SUPPORTED_ERR: 9;
-  readonly INUSE_ATTRIBUTE_ERR: 10;
-  readonly INVALID_STATE_ERR: 11;
-  readonly SYNTAX_ERR: 12;
-  readonly INVALID_MODIFICATION_ERR: 13;
-  readonly NAMESPACE_ERR: 14;
-  readonly INVALID_ACCESS_ERR: 15;
-  readonly VALIDATION_ERR: 16;
-  readonly TYPE_MISMATCH_ERR: 17;
-  readonly SECURITY_ERR: 18;
-  readonly NETWORK_ERR: 19;
-  readonly ABORT_ERR: 20;
-  readonly URL_MISMATCH_ERR: 21;
-  readonly QUOTA_EXCEEDED_ERR: 22;
-  readonly TIMEOUT_ERR: 23;
-  readonly INVALID_NODE_TYPE_ERR: 24;
-  readonly DATA_CLONE_ERR: 25;
 }
 
 export interface CustomElementRegistry {
@@ -469,7 +453,7 @@ export interface HTMLElement extends Element {
   set style(value: unknown);
 }
 
-export interface HTMLElementConstructor {
+export interface HTMLElementConstructor extends Ctor<ElementConstructor> {
   readonly prototype: HTMLElement;
   [Symbol.hasInstance](value: unknown): value is HTMLElement;
 }
@@ -478,7 +462,7 @@ export interface HTMLUnknownElement extends HTMLElement {
 
 }
 
-export interface HTMLUnknownElementConstructor {
+export interface HTMLUnknownElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLUnknownElement;
   [Symbol.hasInstance](value: unknown): value is HTMLUnknownElement;
 }
@@ -490,7 +474,7 @@ export interface HTMLSlotElement extends HTMLElement {
   assign(...nodes: Array<(Element | Text)>): void;
 }
 
-export interface HTMLSlotElementConstructor {
+export interface HTMLSlotElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLSlotElement;
   [Symbol.hasInstance](value: unknown): value is HTMLSlotElement;
 }
@@ -499,7 +483,7 @@ export interface HTMLHeadElement extends HTMLElement {
 
 }
 
-export interface HTMLHeadElementConstructor {
+export interface HTMLHeadElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLHeadElement;
   [Symbol.hasInstance](value: unknown): value is HTMLHeadElement;
 }
@@ -509,7 +493,7 @@ export interface HTMLBaseElement extends HTMLElement {
   target: string;
 }
 
-export interface HTMLBaseElementConstructor {
+export interface HTMLBaseElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLBaseElement;
   [Symbol.hasInstance](value: unknown): value is HTMLBaseElement;
 }
@@ -518,7 +502,7 @@ export interface HTMLStyleElement extends HTMLElement {
   readonly sheet: (object | null);
 }
 
-export interface HTMLStyleElementConstructor {
+export interface HTMLStyleElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLStyleElement;
   [Symbol.hasInstance](value: unknown): value is HTMLStyleElement;
 }
@@ -527,7 +511,7 @@ export interface HTMLLinkElement extends HTMLElement {
   readonly sheet: (object | null);
 }
 
-export interface HTMLLinkElementConstructor {
+export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLLinkElement;
   [Symbol.hasInstance](value: unknown): value is HTMLLinkElement;
 }
@@ -536,7 +520,7 @@ export interface HTMLFormElement extends HTMLElement {
 
 }
 
-export interface HTMLFormElementConstructor {
+export interface HTMLFormElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLFormElement;
   [Symbol.hasInstance](value: unknown): value is HTMLFormElement;
 }
@@ -547,7 +531,7 @@ export interface SVGElement extends Element {
   set style(value: unknown);
 }
 
-export interface SVGElementConstructor {
+export interface SVGElementConstructor extends Ctor<ElementConstructor> {
   readonly prototype: SVGElement;
   [Symbol.hasInstance](value: unknown): value is SVGElement;
 }
@@ -556,7 +540,7 @@ export interface SVGStyleElement extends SVGElement {
   readonly sheet: (object | null);
 }
 
-export interface SVGStyleElementConstructor {
+export interface SVGStyleElementConstructor extends Ctor<SVGElementConstructor> {
   readonly prototype: SVGStyleElement;
   [Symbol.hasInstance](value: unknown): value is SVGStyleElement;
 }
@@ -567,7 +551,7 @@ export interface MathMLElement extends Element {
   set style(value: unknown);
 }
 
-export interface MathMLElementConstructor {
+export interface MathMLElementConstructor extends Ctor<ElementConstructor> {
   readonly prototype: MathMLElement;
   [Symbol.hasInstance](value: unknown): value is MathMLElement;
 }
@@ -630,7 +614,7 @@ export interface IntegrityViolationReportBody extends ReportBody {
   toJSON(): object;
 }
 
-export interface IntegrityViolationReportBodyConstructor {
+export interface IntegrityViolationReportBodyConstructor extends Ctor<ReportBodyConstructor> {
   readonly prototype: IntegrityViolationReportBody;
   [Symbol.hasInstance](value: unknown): value is IntegrityViolationReportBody;
 }
@@ -663,7 +647,7 @@ export interface CSPViolationReportBody extends ReportBody {
   toJSON(): object;
 }
 
-export interface CSPViolationReportBodyConstructor {
+export interface CSPViolationReportBodyConstructor extends Ctor<ReportBodyConstructor> {
   readonly prototype: CSPViolationReportBody;
   [Symbol.hasInstance](value: unknown): value is CSPViolationReportBody;
 }
@@ -683,14 +667,10 @@ export interface SecurityPolicyViolationEvent extends Event {
   readonly columnNumber: number;
 }
 
-export interface SecurityPolicyViolationEventConstructor {
+export interface SecurityPolicyViolationEventConstructor extends Ctor<EventConstructor> {
   readonly prototype: SecurityPolicyViolationEvent;
   [Symbol.hasInstance](value: unknown): value is SecurityPolicyViolationEvent;
   new (type: string, eventInitDict?: SecurityPolicyViolationEventInit): SecurityPolicyViolationEvent;
-  readonly NONE: 0;
-  readonly CAPTURING_PHASE: 1;
-  readonly AT_TARGET: 2;
-  readonly BUBBLING_PHASE: 3;
 }
 
 export interface ReportingObserver {
@@ -711,7 +691,7 @@ export interface Performance extends EventTarget {
   toJSON(): object;
 }
 
-export interface PerformanceConstructor {
+export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: Performance;
   [Symbol.hasInstance](value: unknown): value is Performance;
 }
@@ -778,10 +758,14 @@ export interface Window extends EventTarget {
   CharacterData: CharacterDataConstructor;
   DocumentType: DocumentTypeConstructor;
   Text: TextConstructor;
+  CDATASection: CDATASectionConstructor;
+  ProcessingInstruction: ProcessingInstructionConstructor;
   Comment: CommentConstructor;
   DocumentFragment: DocumentFragmentConstructor;
   ShadowRoot: ShadowRootConstructor;
   Document: DocumentConstructor;
+  XMLDocument: XMLDocumentConstructor;
+  DOMImplementation: DOMImplementationConstructor;
   Element: ElementConstructor;
   ByteLengthQueuingStrategy: ByteLengthQueuingStrategyConstructor;
   CountQueuingStrategy: CountQueuingStrategyConstructor;
@@ -820,7 +804,7 @@ export interface Window extends EventTarget {
   NodeFilter: NodeFilterInterfaceObject;
 }
 
-export interface WindowConstructor {
+export interface WindowConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: Window;
   [Symbol.hasInstance](value: unknown): value is Window;
 }
@@ -865,14 +849,10 @@ export interface CustomEvent<T = any> extends Event {
   initCustomEvent(type: string, bubbles?: boolean, cancelable?: boolean, detail?: T): void;
 }
 
-export interface CustomEventConstructor {
+export interface CustomEventConstructor extends Ctor<EventConstructor> {
   readonly prototype: CustomEvent<any>;
   [Symbol.hasInstance](value: unknown): value is CustomEvent<any>;
   new <T = any>(type: string, eventInitDict?: CustomEventInit<T>): CustomEvent<T>;
-  readonly NONE: 0;
-  readonly CAPTURING_PHASE: 1;
-  readonly AT_TARGET: 2;
-  readonly BUBBLING_PHASE: 3;
 }
 
 export interface EventTarget {
@@ -894,7 +874,7 @@ export interface AbortSignal extends EventTarget {
   onabort: (EventHandlerNonNull | null);
 }
 
-export interface AbortSignalConstructor {
+export interface AbortSignalConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: AbortSignal;
   [Symbol.hasInstance](value: unknown): value is AbortSignal;
   abort(reason?: any): AbortSignal;
@@ -930,7 +910,7 @@ export interface StaticRange extends AbstractRange {
 
 }
 
-export interface StaticRangeConstructor {
+export interface StaticRangeConstructor extends Ctor<AbstractRangeConstructor> {
   readonly prototype: StaticRange;
   [Symbol.hasInstance](value: unknown): value is StaticRange;
   new (init: StaticRangeInit): StaticRange;
@@ -950,7 +930,7 @@ export interface Range extends AbstractRange {
   detach(): void;
 }
 
-export interface RangeConstructor {
+export interface RangeConstructor extends Ctor<AbstractRangeConstructor> {
   readonly prototype: Range;
   [Symbol.hasInstance](value: unknown): value is Range;
   new (): Range;
@@ -973,32 +953,76 @@ export interface NodeIteratorConstructor {
 }
 
 export interface Node extends EventTarget {
+  readonly ELEMENT_NODE: 1;
+  readonly ATTRIBUTE_NODE: 2;
+  readonly TEXT_NODE: 3;
+  readonly CDATA_SECTION_NODE: 4;
+  readonly ENTITY_REFERENCE_NODE: 5;
+  readonly ENTITY_NODE: 6;
+  readonly PROCESSING_INSTRUCTION_NODE: 7;
+  readonly COMMENT_NODE: 8;
+  readonly DOCUMENT_NODE: 9;
+  readonly DOCUMENT_TYPE_NODE: 10;
+  readonly DOCUMENT_FRAGMENT_NODE: 11;
+  readonly NOTATION_NODE: 12;
   readonly nodeType: number;
+  readonly nodeName: string;
   readonly baseURI: string;
+  readonly isConnected: boolean;
   readonly ownerDocument: (Document | null);
+  getRootNode(options?: GetRootNodeOptions): Node;
   readonly parentNode: (Node | null);
   readonly parentElement: (Element | null);
+  hasChildNodes(): boolean;
   readonly childNodes: NodeList;
   readonly firstChild: (Node | null);
   readonly lastChild: (Node | null);
   readonly previousSibling: (Node | null);
   readonly nextSibling: (Node | null);
-  readonly isConnected: boolean;
-  getRootNode(options?: GetRootNodeOptions): Node;
   nodeValue: (string | null);
   textContent: (string | null);
   normalize(): void;
+  cloneNode(subtree?: boolean): Node;
+  isEqualNode(otherNode: (Node | null)): boolean;
+  isSameNode(otherNode: (Node | null)): boolean;
+  readonly DOCUMENT_POSITION_DISCONNECTED: 1;
+  readonly DOCUMENT_POSITION_PRECEDING: 2;
+  readonly DOCUMENT_POSITION_FOLLOWING: 4;
+  readonly DOCUMENT_POSITION_CONTAINS: 8;
+  readonly DOCUMENT_POSITION_CONTAINED_BY: 16;
+  readonly DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: 32;
+  compareDocumentPosition(other: Node): number;
+  contains(other: (Node | null)): boolean;
+  lookupPrefix(namespace: (string | null)): (string | null);
+  lookupNamespaceURI(prefix: (string | null)): (string | null);
+  isDefaultNamespace(namespace: (string | null)): boolean;
   insertBefore(node: Node, child: (Node | null)): Node;
   appendChild(node: Node): Node;
   replaceChild(node: Node, child: Node): Node;
   removeChild(child: Node): Node;
-  contains(other: (Node | null)): boolean;
-  compareDocumentPosition(other: Node): number;
 }
 
-export interface NodeConstructor {
+export interface NodeConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: Node;
   [Symbol.hasInstance](value: unknown): value is Node;
+  readonly ELEMENT_NODE: 1;
+  readonly ATTRIBUTE_NODE: 2;
+  readonly TEXT_NODE: 3;
+  readonly CDATA_SECTION_NODE: 4;
+  readonly ENTITY_REFERENCE_NODE: 5;
+  readonly ENTITY_NODE: 6;
+  readonly PROCESSING_INSTRUCTION_NODE: 7;
+  readonly COMMENT_NODE: 8;
+  readonly DOCUMENT_NODE: 9;
+  readonly DOCUMENT_TYPE_NODE: 10;
+  readonly DOCUMENT_FRAGMENT_NODE: 11;
+  readonly NOTATION_NODE: 12;
+  readonly DOCUMENT_POSITION_DISCONNECTED: 1;
+  readonly DOCUMENT_POSITION_PRECEDING: 2;
+  readonly DOCUMENT_POSITION_FOLLOWING: 4;
+  readonly DOCUMENT_POSITION_CONTAINS: 8;
+  readonly DOCUMENT_POSITION_CONTAINED_BY: 16;
+  readonly DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: 32;
 }
 
 export interface HTMLCollection {
@@ -1087,7 +1111,7 @@ export interface Attr extends Node {
   readonly specified: boolean;
 }
 
-export interface AttrConstructor {
+export interface AttrConstructor extends Ctor<NodeConstructor> {
   readonly prototype: Attr;
   [Symbol.hasInstance](value: unknown): value is Attr;
 }
@@ -1108,7 +1132,7 @@ export interface CharacterData extends Node {
   readonly nextElementSibling: (Element | null);
 }
 
-export interface CharacterDataConstructor {
+export interface CharacterDataConstructor extends Ctor<NodeConstructor> {
   readonly prototype: CharacterData;
   [Symbol.hasInstance](value: unknown): value is CharacterData;
 }
@@ -1123,7 +1147,7 @@ export interface DocumentType extends Node {
   remove(): void;
 }
 
-export interface DocumentTypeConstructor {
+export interface DocumentTypeConstructor extends Ctor<NodeConstructor> {
   readonly prototype: DocumentType;
   [Symbol.hasInstance](value: unknown): value is DocumentType;
 }
@@ -1134,17 +1158,43 @@ export interface Text extends CharacterData {
   readonly assignedSlot: (HTMLSlotElement | null);
 }
 
-export interface TextConstructor {
+export interface TextConstructor extends Ctor<CharacterDataConstructor> {
   readonly prototype: Text;
   [Symbol.hasInstance](value: unknown): value is Text;
   new (data?: string): Text;
+}
+
+export interface CDATASection extends Text {
+
+}
+
+export interface CDATASectionConstructor extends Ctor<TextConstructor> {
+  readonly prototype: CDATASection;
+  [Symbol.hasInstance](value: unknown): value is CDATASection;
+}
+
+export interface ProcessingInstruction extends CharacterData {
+  readonly target: string;
+  hasAttributes(): boolean;
+  getAttributeNames(): Array<string>;
+  getAttribute(name: string): (string | null);
+  setAttribute(name: string, value: string): void;
+  removeAttribute(name: string): void;
+  toggleAttribute(name: string, force?: boolean): boolean;
+  hasAttribute(name: string): boolean;
+}
+
+export interface ProcessingInstructionConstructor extends Ctor<CharacterDataConstructor> {
+  readonly prototype: ProcessingInstruction;
+  [Symbol.hasInstance](value: unknown): value is ProcessingInstruction;
+  new (target: string, data?: string): ProcessingInstruction;
 }
 
 export interface Comment extends CharacterData {
 
 }
 
-export interface CommentConstructor {
+export interface CommentConstructor extends Ctor<CharacterDataConstructor> {
   readonly prototype: Comment;
   [Symbol.hasInstance](value: unknown): value is Comment;
   new (data?: string): Comment;
@@ -1164,7 +1214,7 @@ export interface DocumentFragment extends Node {
   getElementById(elementId: string): (Element | null);
 }
 
-export interface DocumentFragmentConstructor {
+export interface DocumentFragmentConstructor extends Ctor<NodeConstructor> {
   readonly prototype: DocumentFragment;
   [Symbol.hasInstance](value: unknown): value is DocumentFragment;
   new (): DocumentFragment;
@@ -1183,32 +1233,37 @@ export interface ShadowRoot extends DocumentFragment {
   adoptedStyleSheets: any;
 }
 
-export interface ShadowRootConstructor {
+export interface ShadowRootConstructor extends Ctor<DocumentFragmentConstructor> {
   readonly prototype: ShadowRoot;
   [Symbol.hasInstance](value: unknown): value is ShadowRoot;
 }
 
 export interface Document extends Node {
+  readonly implementation: DOMImplementation;
   readonly URL: string;
   readonly documentURI: string;
+  readonly compatMode: string;
   readonly characterSet: string;
   readonly charset: string;
   readonly inputEncoding: string;
+  readonly contentType: string;
   readonly doctype: (DocumentType | null);
   readonly documentElement: (Element | null);
-  readonly contentType: string;
-  readonly compatMode: string;
-  getElementsByClassName(classNames: string): HTMLCollection;
   getElementsByTagName(qualifiedName: string): HTMLCollection;
   getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
+  getElementsByClassName(classNames: string): HTMLCollection;
   createElement(localName: string, options?: (string | ElementCreationOptions)): Element;
   createElementNS(namespace: (string | null), qualifiedName: string, options?: (string | ElementCreationOptions)): Element;
   createDocumentFragment(): DocumentFragment;
   createTextNode(data: string): Text;
+  createCDATASection(data: string): CDATASection;
   createComment(data: string): Comment;
+  createProcessingInstruction(target: string, data: string): ProcessingInstruction;
+  importNode(node: Node, options?: (boolean | ImportNodeOptions)): Node;
+  adoptNode(node: Node): Node;
   createAttribute(localName: string): Attr;
   createAttributeNS(namespace: (string | null), qualifiedName: string): Attr;
-  adoptNode(node: Node): Node;
+  createEvent(interface_: string): Event;
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): NodeIterator;
   readonly head: (HTMLHeadElement | null);
@@ -1231,16 +1286,40 @@ export interface Document extends Node {
   adoptedStyleSheets: any;
 }
 
-export interface DocumentConstructor {
+export interface DocumentConstructor extends Ctor<NodeConstructor> {
   readonly prototype: Document;
   [Symbol.hasInstance](value: unknown): value is Document;
   new (): Document;
+}
+
+export interface XMLDocument extends Document {
+
+}
+
+export interface XMLDocumentConstructor extends Ctor<DocumentConstructor> {
+  readonly prototype: XMLDocument;
+  [Symbol.hasInstance](value: unknown): value is XMLDocument;
+}
+
+export interface DOMImplementation {
+  createDocumentType(name: string, publicId: string, systemId: string): DocumentType;
+  createDocument(namespace: (string | null), qualifiedName: string, doctype?: (DocumentType | null)): XMLDocument;
+  createHTMLDocument(title?: string): Document;
+  hasFeature(): boolean;
+}
+
+export interface DOMImplementationConstructor {
+  readonly prototype: DOMImplementation;
+  [Symbol.hasInstance](value: unknown): value is DOMImplementation;
 }
 
 export interface Element extends Node {
   readonly namespaceURI: (string | null);
   readonly prefix: (string | null);
   readonly localName: string;
+  readonly tagName: string;
+  id: string;
+  className: string;
   slot: string;
   hasAttributes(): boolean;
   readonly attributes: NamedNodeMap;
@@ -1267,6 +1346,8 @@ export interface Element extends Node {
   getElementsByTagName(qualifiedName: string): HTMLCollection;
   getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
   getElementsByClassName(classNames: string): HTMLCollection;
+  insertAdjacentElement(where: string, element: Element): (Element | null);
+  insertAdjacentText(where: string, data: string): void;
   readonly children: HTMLCollection;
   readonly firstElementChild: (Element | null);
   readonly lastElementChild: (Element | null);
@@ -1286,7 +1367,7 @@ export interface Element extends Node {
   readonly assignedSlot: (HTMLSlotElement | null);
 }
 
-export interface ElementConstructor {
+export interface ElementConstructor extends Ctor<NodeConstructor> {
   readonly prototype: Element;
   [Symbol.hasInstance](value: unknown): value is Element;
 }
@@ -1528,7 +1609,7 @@ export interface File extends Blob {
   readonly lastModified: number;
 }
 
-export interface FileConstructor {
+export interface FileConstructor extends Ctor<BlobConstructor> {
   readonly prototype: File;
   [Symbol.hasInstance](value: unknown): value is File;
   new (fileBits: Iterable<(((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | Blob | string)>, fileName: string, options?: FilePropertyBag): File;
@@ -1566,7 +1647,7 @@ export interface FileReader extends EventTarget {
   onloadend: (EventHandlerNonNull | null);
 }
 
-export interface FileReaderConstructor {
+export interface FileReaderConstructor extends Ctor<EventTargetConstructor> {
   readonly prototype: FileReader;
   [Symbol.hasInstance](value: unknown): value is FileReader;
   new (): FileReader;
@@ -1603,14 +1684,10 @@ export interface ProgressEvent extends Event {
   readonly total: number;
 }
 
-export interface ProgressEventConstructor {
+export interface ProgressEventConstructor extends Ctor<EventConstructor> {
   readonly prototype: ProgressEvent;
   [Symbol.hasInstance](value: unknown): value is ProgressEvent;
   new (type: string, eventInitDict?: ProgressEventInit): ProgressEvent;
-  readonly NONE: 0;
-  readonly CAPTURING_PHASE: 1;
-  readonly AT_TARGET: 2;
-  readonly BUBBLING_PHASE: 3;
 }
 
 export interface URL {

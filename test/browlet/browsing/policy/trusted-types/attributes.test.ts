@@ -184,7 +184,7 @@ describe('Trusted Types attribute enforcement', () => {
   it('uses the construction Window for a detached Document', () => {
     const { window } = createTrustedTypesWindow();
     const document = new window.Document();
-    const element = document.createElement('iframe');
+    const element = document.createElementNS(HTML_NAMESPACE, 'iframe');
     expect(() => element.setAttribute('srcdoc', 'untrusted')).toThrow(window.TypeError);
     expect(document.defaultView).toBeNull();
     window.trustedTypes.createPolicy('default', { createHTML: (value) => `checked:${value}` });

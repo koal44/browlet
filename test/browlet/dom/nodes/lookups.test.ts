@@ -101,6 +101,7 @@ describe('element lookups', () => {
 
 function createFixture() {
   const document = createTestDocument();
+  document.type = 'html';
   const root = document.createElement('root');
   const first = document.createElement('item');
   const nested = document.createElement('item');

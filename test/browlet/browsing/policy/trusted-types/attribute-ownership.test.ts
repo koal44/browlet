@@ -75,7 +75,7 @@ describe('Trusted Types attribute ownership', () => {
   it('uses the relevant Window\'s current CSP, not a detached Document\'s own policy container', () => {
     const { window, env, document, runTask } = createTrustedTypesWindow();
     const detached = new window.Document();
-    const element = detached.createElement('iframe');
+    const element = detached.createElementNS('http://www.w3.org/1999/xhtml', 'iframe');
     expect(() => element.setAttribute('srcdoc', 'blocked')).toThrow(window.TypeError);
     expect(runTask()).toBe(true);
     // Reuse the Window for a replacement Document, as initial about:blank navigation can do.

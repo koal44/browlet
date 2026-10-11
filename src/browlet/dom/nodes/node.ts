@@ -1,9 +1,10 @@
 // Mutable tree cursors start at this node and then advance; they do not capture this for callbacks.
 /* eslint @typescript-eslint/no-this-alias: ["error", { "allowedNames": ["node", "descendant"] }] */
 import { InternalError } from '../../../infra/internal-error';
+import { XML_NAMESPACE, XMLNS_NAMESPACE } from '../../../infra/index';
 import {
   arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
-  op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
+  constant, integer, op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/index';
 
 import { EventTargetImpl, type EventImpl } from '../events/index';
@@ -30,6 +31,10 @@ import type { HTMLSlotElementImpl } from './html/index';
 /** DOM node ownership, tree links, traversal, mutation, and event ancestry. */
 // https://dom.spec.whatwg.org/#interface-node
 export abstract class NodeImpl extends EventTargetImpl {
+  /** Assign a stable ordering only to nodes used in disconnected comparisons. */
+  static #nextDisconnectedOrder = 0;
+  /** Lazily assigned implementation-specific position among disconnected nodes. */
+  #disconnectedOrder: number | undefined;
   /** Node kind used by the DOM's type-specific algorithms. */
   nodeType: NodeType;
   /** Associated document; a document node refers to itself. */
@@ -68,6 +73,23 @@ export abstract class NodeImpl extends EventTargetImpl {
 
   static is(value: unknown): value is NodeImpl {
     return value instanceof NodeImpl;
+  }
+
+  /** Node-kind name, with HTML casing applied only to HTML elements in HTML documents. */
+  // https://dom.spec.whatwg.org/#dom-node-nodename
+  get nodeName(): string {
+    if (this.isElement()) return this.tagName;
+    if (this.isAttribute()) return this.name;
+    if (this.isProcessingInstruction()) return this.target;
+    if (this.isDocumentType()) return this.name;
+    switch (this.nodeType) {
+      case NodeType.Text: return '#text';
+      case NodeType.CDATASection: return '#cdata-section';
+      case NodeType.Comment: return '#comment';
+      case NodeType.Document: return '#document';
+      case NodeType.DocumentFragment: return '#document-fragment';
+      default: throw new InternalError('Unknown node kind');
+    }
   }
 
   /** Serialized base URL used to resolve relative URLs for this node. */
@@ -182,6 +204,162 @@ export abstract class NodeImpl extends EventTargetImpl {
 
   hasChildren(): boolean {
     return this.#firstChild !== null;
+  }
+
+  /** Whether the ordinary tree contains any immediate children. */
+  // https://dom.spec.whatwg.org/#dom-node-haschildnodes
+  hasChildNodes(): boolean {
+    return this.hasChildren();
+  }
+
+  /** Clone this node and optionally its descendants, rejecting standalone shadow roots. */
+  // https://dom.spec.whatwg.org/#dom-node-clonenode
+  cloneNode(subtree: boolean): NodeImpl {
+    if (this.isShadowRoot()) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    return this.clone(this.nodeDocument, subtree);
+  }
+
+  /** Copy into a document, with an optional parent and fallback custom-element registry. */
+  // https://dom.spec.whatwg.org/#concept-node-clone
+  clone(
+    document: DocumentImpl = this.nodeDocument,
+    subtree = false,
+    parent: NodeImpl | null = null,
+    fallbackRegistry: CustomElementRegistryImpl | null = null,
+  ): NodeImpl {
+    const copy = this.cloneSingleNode(document, fallbackRegistry);
+    this.cloningSteps(copy, subtree);
+    if (parent !== null) parent.appendChild(copy);
+    if (subtree) {
+      for (let child = this.firstChild; child !== null; child = child.nextSibling) {
+        child.clone(document, true, copy, fallbackRegistry);
+      }
+    }
+    if (this.isElement() && copy.isElement() && this.shadowRoot?.clonable) {
+      const shadow = this.shadowRoot;
+      let registry = shadow.customElementRegistry;
+      if (registry !== null && !registry.isScoped) registry = document.customElementRegistry;
+      copy.attachShadowRoot(
+        shadow.mode, shadow.delegatesFocus, shadow.serializable, shadow.slotAssignment, true, registry,
+      );
+      const shadowCopy = copy.shadowRoot!;
+      shadowCopy.declarative = shadow.declarative;
+      shadowCopy.keepCustomElementRegistryNull = shadow.keepCustomElementRegistryNull;
+      for (let child = shadow.firstChild; child !== null; child = child.nextSibling) {
+        child.clone(document, true, shadowCopy);
+      }
+    }
+    return copy;
+  }
+
+  /** Copy this node's own data; tree copying and specification extension hooks run separately. */
+  // https://dom.spec.whatwg.org/#concept-node-clone-single
+  cloneSingleNode(document: DocumentImpl, fallbackRegistry: CustomElementRegistryImpl | null): NodeImpl {
+    if (this.isElement()) {
+      let registry = this.customElementRegistry ?? fallbackRegistry;
+      if (registry !== null && !registry.isScoped) registry = document.customElementRegistry;
+      const copy = document.createElementNode(this.localName, this.namespaceURI, this.prefix, this.isValue, registry);
+      for (const attribute of this.attributeList) {
+        copy.appendAttribute(document.createAttributeNode(
+          attribute.localName, attribute.value, attribute.namespaceURI, attribute.prefix,
+        ));
+      }
+      return copy;
+    }
+    if (this.isDocument()) return this.cloneDocument(document);
+    if (this.isDocumentType()) return document.createDocumentType(this.name, this.publicId, this.systemId);
+    if (this.isAttribute()) {
+      return document.createAttributeNode(this.localName, this.value, this.namespaceURI, this.prefix);
+    }
+    if (this.isExclusiveText()) return document.createTextNode(this.data);
+    if (this.isText()) return document.createCDATASectionNode(this.data);
+    if (this.isComment()) return document.createComment(this.data);
+    if (this.isProcessingInstruction()) return document.createProcessingInstructionNode(this.target, this.data);
+    if (this.isDocumentFragment()) return document.createDocumentFragment();
+    throw new InternalError('Unknown node kind');
+  }
+
+  /** Compare node data and ordinary descendants; listeners and shadow trees do not participate. */
+  // https://dom.spec.whatwg.org/#concept-node-equals
+  isEqualNode(other: NodeImpl | null): boolean {
+    if (other === this) return true;
+    if (other === null || this.nodeType !== other.nodeType) return false;
+    // SPEC_CLASH(document-xml-document-equality): Browsers compare Document and XMLDocument alike,
+    // although DOM requires the same interfaces. Preserve the interface check for other node kinds.
+    if (!this.isDocument() && this.constructor !== other.constructor) return false;
+    if (this.isDocumentType() && other.isDocumentType()) {
+      if (this.name !== other.name || this.publicId !== other.publicId || this.systemId !== other.systemId) return false;
+    } else if (this.isElement() && other.isElement()) {
+      if (this.namespaceURI !== other.namespaceURI || this.prefix !== other.prefix ||
+        this.localName !== other.localName || this.attributeList.length !== other.attributeList.length) return false;
+      for (const attribute of this.attributeList) {
+        if (!attribute.isEqualNode(other.getAttributeNodeNS(attribute.namespaceURI, attribute.localName))) return false;
+      }
+    } else if (this.isAttribute() && other.isAttribute()) {
+      if (this.namespaceURI !== other.namespaceURI || this.localName !== other.localName ||
+        this.value !== other.value) return false;
+    } else if (this.isCharacterData() && other.isCharacterData()) {
+      if (this.data !== other.data) return false;
+      if (this.isProcessingInstruction() && other.isProcessingInstruction() && this.target !== other.target) return false;
+    }
+    let child = this.firstChild;
+    let otherChild = other.firstChild;
+    while (child !== null && otherChild !== null) {
+      if (!child.isEqualNode(otherChild)) return false;
+      child = child.nextSibling;
+      otherChild = otherChild.nextSibling;
+    }
+    return child === null && otherChild === null;
+  }
+
+  /** Legacy identity test, equivalent to comparing the two platform objects. */
+  // https://dom.spec.whatwg.org/#dom-node-issamenode
+  isSameNode(other: NodeImpl | null): boolean {
+    return this === other;
+  }
+
+  /** Locate a non-default prefix through this node's element context. */
+  // https://dom.spec.whatwg.org/#dom-node-lookupprefix
+  lookupPrefix(namespace: string | null): string | null {
+    if (namespace === null || namespace === '') return null;
+    if (this.isElement()) {
+      if (this.namespaceURI === namespace && this.prefix !== null) return this.prefix;
+      for (const attribute of this.attributeList) {
+        if (attribute.prefix === 'xmlns' && attribute.value === namespace) return attribute.localName;
+      }
+      return this.parentElement?.lookupPrefix(namespace) ?? null;
+    }
+    if (this.isDocument()) return this.documentElement?.lookupPrefix(namespace) ?? null;
+    if (this.isAttribute()) return this.ownerElement?.lookupPrefix(namespace) ?? null;
+    return this.parentElement?.lookupPrefix(namespace) ?? null;
+  }
+
+  /** Resolve a prefix from element names and namespace declarations, without crossing shadow roots. */
+  // https://dom.spec.whatwg.org/#locate-a-namespace
+  lookupNamespaceURI(prefix: string | null): string | null {
+    if (prefix === '') prefix = null;
+    if (this.isElement()) {
+      if (prefix === 'xml') return XML_NAMESPACE;
+      if (prefix === 'xmlns') return XMLNS_NAMESPACE;
+      if (this.namespaceURI !== '' && this.prefix === prefix) return this.namespaceURI;
+      for (const attribute of this.attributeList) {
+        if (attribute.namespaceURI === XMLNS_NAMESPACE &&
+          ((attribute.prefix === 'xmlns' && attribute.localName === prefix) ||
+            (attribute.prefix === null && attribute.localName === 'xmlns' && prefix === null))) {
+          return attribute.value || null;
+        }
+      }
+      return this.parentElement?.lookupNamespaceURI(prefix) ?? null;
+    }
+    if (this.isDocument()) return this.documentElement?.lookupNamespaceURI(prefix) ?? null;
+    if (this.isAttribute()) return this.ownerElement?.lookupNamespaceURI(prefix) ?? null;
+    return this.parentElement?.lookupNamespaceURI(prefix) ?? null;
+  }
+
+  /** Whether namespace is the default namespace in this node's element context. */
+  // https://dom.spec.whatwg.org/#dom-node-isdefaultnamespace
+  isDefaultNamespace(namespace: string | null): boolean {
+    return this.lookupNamespaceURI(null) === (namespace || null);
   }
 
   // https://dom.spec.whatwg.org/#concept-tree-root
@@ -303,24 +481,30 @@ export abstract class NodeImpl extends EventTargetImpl {
   /** Describe the other node's position relative to this node as DOM flags. */
   // https://dom.spec.whatwg.org/#dom-node-comparedocumentposition
   compareDocumentPosition(other: NodeImpl): number {
-    const position = this.comparePosition(other);
-
-    if (position === null) {
-      return DOCUMENT_POSITION_DISCONNECTED |
-        DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC;
+    if (other === this) return 0;
+    const attr1 = other.isAttribute() ? other : null;
+    const attr2 = this.isAttribute() ? this : null;
+    const node1 = attr1 === null ? other : attr1.ownerElement;
+    const node2 = attr2 === null ? this : attr2.ownerElement;
+    if (attr1 !== null && attr2 !== null && node1 !== null && node1 === node2) {
+      for (const attribute of attr1.ownerElement!.attributeList) {
+        if (attribute === attr1) return DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC | DOCUMENT_POSITION_PRECEDING;
+        if (attribute === attr2) return DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC | DOCUMENT_POSITION_FOLLOWING;
+      }
     }
-
-    if (position === 0) return 0;
-
-    if (position < 0) {
-      return this.contains(other)
-        ? DOCUMENT_POSITION_FOLLOWING | DOCUMENT_POSITION_CONTAINED_BY
-        : DOCUMENT_POSITION_FOLLOWING;
+    if (node1 === null || node2 === null || node1.getRoot() !== node2.getRoot()) {
+      this.#disconnectedOrder ??= NodeImpl.#nextDisconnectedOrder++;
+      other.#disconnectedOrder ??= NodeImpl.#nextDisconnectedOrder++;
+      return DOCUMENT_POSITION_DISCONNECTED | DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC |
+        (other.#disconnectedOrder < this.#disconnectedOrder ? DOCUMENT_POSITION_PRECEDING : DOCUMENT_POSITION_FOLLOWING);
     }
-
-    return other.contains(this)
-      ? DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS
-      : DOCUMENT_POSITION_PRECEDING;
+    if ((node1 !== node2 && node1.contains(node2) && attr1 === null) || (node1 === node2 && attr2 !== null)) {
+      return DOCUMENT_POSITION_PRECEDING | DOCUMENT_POSITION_CONTAINS;
+    }
+    if ((node1 !== node2 && node2.contains(node1) && attr2 === null) || (node1 === node2 && attr1 !== null)) {
+      return DOCUMENT_POSITION_FOLLOWING | DOCUMENT_POSITION_CONTAINED_BY;
+    }
+    return node1.comparePosition(node2) === -1 ? DOCUMENT_POSITION_PRECEDING : DOCUMENT_POSITION_FOLLOWING;
   }
 
   /** Test ancestry including this node and any intervening shadow hosts. */
@@ -868,6 +1052,11 @@ export abstract class NodeImpl extends EventTargetImpl {
   // https://dom.spec.whatwg.org/#concept-node-insert-ext
   protected insertionSteps(): void {}
 
+  /** Extension point for specifications that copy state beyond ordinary node data. */
+  // https://dom.spec.whatwg.org/#concept-node-clone-ext
+  // PROVISIONAL(HTML): template, script, and form-control cloning steps need their implementations.
+  protected cloningSteps(_copy: NodeImpl, _subtree: boolean): void {}
+
   /** Specification extensions for a move, without removal or insertion side effects. */
   // https://dom.spec.whatwg.org/#concept-node-move-ext
   protected movingSteps(_isSubtreeRoot: boolean, _oldAncestor: NodeImpl): void {}
@@ -1003,33 +1192,60 @@ export abstract class NodeImpl extends EventTargetImpl {
  *   [CEReactions] Node removeChild(Node child);
  * };
  */
-// PROVISIONAL: only a subset of the interface above is implemented and bound.
-// Missing members follow ROADMAP.md's section 4 slices.
 export const nodeIDL = defineInterface({
   name: 'Node',
   inherits: 'EventTarget',
   exposed: 'Window',
   implementation: impl(NodeImpl),
   members: [
+    constant('ELEMENT_NODE', idlType.unsignedShort, integer(1)),
+    constant('ATTRIBUTE_NODE', idlType.unsignedShort, integer(2)),
+    constant('TEXT_NODE', idlType.unsignedShort, integer(3)),
+    constant('CDATA_SECTION_NODE', idlType.unsignedShort, integer(4)),
+    constant('ENTITY_REFERENCE_NODE', idlType.unsignedShort, integer(5)),
+    constant('ENTITY_NODE', idlType.unsignedShort, integer(6)),
+    constant('PROCESSING_INSTRUCTION_NODE', idlType.unsignedShort, integer(7)),
+    constant('COMMENT_NODE', idlType.unsignedShort, integer(8)),
+    constant('DOCUMENT_NODE', idlType.unsignedShort, integer(9)),
+    constant('DOCUMENT_TYPE_NODE', idlType.unsignedShort, integer(10)),
+    constant('DOCUMENT_FRAGMENT_NODE', idlType.unsignedShort, integer(11)),
+    constant('NOTATION_NODE', idlType.unsignedShort, integer(12)),
     roAttr('nodeType', idlType.unsignedShort),
-    roAttr('baseURI', idlType.DOMString),
+    roAttr('nodeName', idlType.DOMString),
+    roAttr('baseURI', idlType.USVString),
+    roAttr('isConnected', idlType.boolean),
     roAttr('ownerDocument', nullable(reference('Document'))),
+    op('getRootNode', reference('Node'), [
+      arg('options', reference('GetRootNodeOptions'), { default: emptyDictionary, optional: true }),
+    ]),
     roAttr('parentNode', nullable(reference('Node'))),
     roAttr('parentElement', nullable(reference('Element'))),
+    op('hasChildNodes', idlType.boolean, []),
     roAttr('childNodes', reference('NodeList'), xattr('SameObject')),
     roAttr('firstChild', nullable(reference('Node'))),
     roAttr('lastChild', nullable(reference('Node'))),
     roAttr('previousSibling', nullable(reference('Node'))),
     roAttr('nextSibling', nullable(reference('Node'))),
-    roAttr('isConnected', idlType.boolean),
-    op('getRootNode', reference('Node'), [
-      arg('options', reference('GetRootNodeOptions'), {
-        default: emptyDictionary, optional: true,
-      }),
-    ]),
     attr('nodeValue', nullable(idlType.DOMString), xattr('CEReactions')),
     attr('textContent', nullable(idlType.DOMString), xattr('CEReactions')),
     op('normalize', idlType.undefined, [], xattr('CEReactions')),
+    op('cloneNode', reference('Node'),
+      [arg('subtree', idlType.boolean, { default: false, optional: true })],
+      xattr('CEReactions', 'NewObject'),
+    ),
+    op('isEqualNode', idlType.boolean, [arg('otherNode', nullable(reference('Node')))]),
+    op('isSameNode', idlType.boolean, [arg('otherNode', nullable(reference('Node')))]),
+    constant('DOCUMENT_POSITION_DISCONNECTED', idlType.unsignedShort, integer(1)),
+    constant('DOCUMENT_POSITION_PRECEDING', idlType.unsignedShort, integer(2)),
+    constant('DOCUMENT_POSITION_FOLLOWING', idlType.unsignedShort, integer(4)),
+    constant('DOCUMENT_POSITION_CONTAINS', idlType.unsignedShort, integer(8)),
+    constant('DOCUMENT_POSITION_CONTAINED_BY', idlType.unsignedShort, integer(16)),
+    constant('DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC', idlType.unsignedShort, integer(32)),
+    op('compareDocumentPosition', idlType.unsignedShort, [arg('other', reference('Node'))]),
+    op('contains', idlType.boolean, [arg('other', nullable(reference('Node')))]),
+    op('lookupPrefix', nullable(idlType.DOMString), [arg('namespace', nullable(idlType.DOMString))]),
+    op('lookupNamespaceURI', nullable(idlType.DOMString), [arg('prefix', nullable(idlType.DOMString))]),
+    op('isDefaultNamespace', idlType.boolean, [arg('namespace', nullable(idlType.DOMString))]),
     op('insertBefore', reference('Node'),
       [arg('node', reference('Node')), arg('child', nullable(reference('Node')))],
       xattr('CEReactions'),
@@ -1046,12 +1262,6 @@ export const nodeIDL = defineInterface({
       [arg('child', reference('Node'))],
       xattr('CEReactions'),
     ),
-    op('contains', idlType.boolean, [
-      arg('other', nullable(reference('Node'))),
-    ]),
-    op('compareDocumentPosition', idlType.unsignedShort, [
-      arg('other', reference('Node')),
-    ]),
   ],
 });
 

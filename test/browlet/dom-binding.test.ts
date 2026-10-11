@@ -279,26 +279,52 @@ describe('Browlet DOM binding', () => {
     ]);
     expect(ownKeys(getPrototype(browlet, 'Node'))).toEqual([
       'appendChild',
+      'ATTRIBUTE_NODE',
       'baseURI',
+      'CDATA_SECTION_NODE',
       'childNodes',
+      'cloneNode',
+      'COMMENT_NODE',
       'compareDocumentPosition',
       'constructor',
       'contains',
+      'DOCUMENT_FRAGMENT_NODE',
+      'DOCUMENT_NODE',
+      'DOCUMENT_POSITION_CONTAINED_BY',
+      'DOCUMENT_POSITION_CONTAINS',
+      'DOCUMENT_POSITION_DISCONNECTED',
+      'DOCUMENT_POSITION_FOLLOWING',
+      'DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC',
+      'DOCUMENT_POSITION_PRECEDING',
+      'DOCUMENT_TYPE_NODE',
+      'ELEMENT_NODE',
+      'ENTITY_NODE',
+      'ENTITY_REFERENCE_NODE',
       'firstChild',
       'getRootNode',
+      'hasChildNodes',
       'insertBefore',
       'isConnected',
+      'isDefaultNamespace',
+      'isEqualNode',
+      'isSameNode',
       'lastChild',
+      'lookupNamespaceURI',
+      'lookupPrefix',
       'nextSibling',
+      'nodeName',
       'nodeType',
       'nodeValue',
       'normalize',
+      'NOTATION_NODE',
       'ownerDocument',
       'parentElement',
       'parentNode',
       'previousSibling',
+      'PROCESSING_INSTRUCTION_NODE',
       'removeChild',
       'replaceChild',
+      'TEXT_NODE',
       'textContent',
     ]);
     expect(ownKeys(getPrototype(browlet, 'Document'))).toEqual([
@@ -315,11 +341,14 @@ describe('Browlet DOM binding', () => {
       'contentType',
       'createAttribute',
       'createAttributeNS',
+      'createCDATASection',
       'createComment',
       'createDocumentFragment',
       'createElement',
       'createElementNS',
+      'createEvent',
       'createNodeIterator',
+      'createProcessingInstruction',
       'createRange',
       'createTextNode',
       'customElementRegistry',
@@ -333,6 +362,8 @@ describe('Browlet DOM binding', () => {
       'getElementsByTagName',
       'getElementsByTagNameNS',
       'head',
+      'implementation',
+      'importNode',
       'inputEncoding',
       'lastElementChild',
       'moveBefore',
@@ -354,6 +385,7 @@ describe('Browlet DOM binding', () => {
       'before',
       'childElementCount',
       'children',
+      'className',
       'closest',
       'constructor',
       'firstElementChild',
@@ -368,6 +400,9 @@ describe('Browlet DOM binding', () => {
       'hasAttribute',
       'hasAttributeNS',
       'hasAttributes',
+      'id',
+      'insertAdjacentElement',
+      'insertAdjacentText',
       'lastElementChild',
       'localName',
       'matches',
@@ -392,6 +427,7 @@ describe('Browlet DOM binding', () => {
       'shadowRoot',
       'slot',
       Symbol.unscopables,
+      'tagName',
       'toggleAttribute',
       'webkitMatchesSelector',
     ]);
@@ -628,7 +664,7 @@ describe('Browlet DOM binding', () => {
     const ctx = getBindingContext(realm);
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123);
     const target = ctx.construct(EventTargetImpl);
-    const event = target.createEvent();
+    const event = target.createTrustedEvent();
 
     expect(event.timeStamp).toBe(123);
     expect(event.isTrusted).toBe(true);
@@ -642,7 +678,7 @@ describe('Browlet DOM binding', () => {
     const ctx = getBindingContext(realm);
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(456);
     const document = realm.env.exec.createDocument();
-    const event = document.createEvent();
+    const event = document.createTrustedEvent();
 
     expect(event.timeStamp).toBe(456);
     expect(ctx.getObjectRecord(event)?.realm).toBe(realm);
@@ -660,7 +696,7 @@ describe('Browlet DOM binding', () => {
       const document = unwrap<DocumentImpl>(first.document);
       const node = kind === 'element' ? document.createElement('div') :
         kind === 'text' ? document.createTextNode('text') : document.createDocumentFragment();
-      const event = node.createEvent();
+      const event = node.createTrustedEvent();
 
       expect(event.timeStamp).toBe(789);
       expect(ctx.getObjectRecord(node)?.platformObject === undefined).toBe(true);
@@ -677,7 +713,7 @@ describe('Browlet DOM binding', () => {
     const ctx = getBindingContext(realm);
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(321);
     const window = ctx.unwrap(realm.globalObject, WindowImpl)!;
-    const event = window.createEvent();
+    const event = window.createTrustedEvent();
 
     expect(event.timeStamp).toBe(321);
     expect(ctx.getObjectRecord(event)?.realm).toBe(realm);

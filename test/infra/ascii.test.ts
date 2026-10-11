@@ -1,6 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { hasWhitespaceToken } from '../../src/infra/ascii';
+import { asciiLower, asciiUpper, hasWhitespaceToken } from '../../src/infra/ascii';
+
+describe('ASCII case conversion', () => {
+  it('changes only the corresponding ASCII letter range', () => {
+    const input = Array.from({ length: 128 }, (_, code) => String.fromCharCode(code)).join('');
+    expect(asciiUpper(input)).toBe(input.toUpperCase());
+    expect(asciiLower(input)).toBe(input.toLowerCase());
+  });
+
+  it('preserves non-ASCII letters, astral characters, and lone surrogates', () => {
+    const unchanged = 'éÉßİıK😀\uD800';
+    expect(asciiUpper(`${unchanged}aZ`)).toBe(`${unchanged}AZ`);
+    expect(asciiLower(`${unchanged}aZ`)).toBe(`${unchanged}az`);
+  });
+
+  it('handles empty and already normalized strings', () => {
+    expect(asciiUpper('')).toBe('');
+    expect(asciiLower('')).toBe('');
+    expect(asciiUpper('MY-ELEMENT:123')).toBe('MY-ELEMENT:123');
+    expect(asciiLower('my-element:123')).toBe('my-element:123');
+  });
+});
 
 describe('hasWhitespaceToken', () => {
   it('matches whole whitespace-separated tokens', () => {

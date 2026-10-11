@@ -94,14 +94,15 @@ export class EventTargetImpl {
     initialize?: (event: EventImpl) => void,
     legacyTargetOverride = false,
   ): boolean {
-    const event = this.createEvent(eventConstructor);
+    const event = this.createTrustedEvent(eventConstructor);
     event.type = name;
     initialize?.(event);
     return this.#dispatch(event, legacyTargetOverride);
   }
 
   /** Create a trusted event in the environment supplied at construction. */
-  createEvent(eventConstructor?: EventImplConstructor): EventImpl {
+  // https://dom.spec.whatwg.org/#concept-event-create
+  createTrustedEvent(eventConstructor?: EventImplConstructor): EventImpl {
     return this.env.exec.createEvent(eventConstructor);
   }
 

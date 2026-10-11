@@ -1,3 +1,22 @@
+/** Convert only ASCII lowercase letters, preserving non-ASCII code units. */
+// https://infra.spec.whatwg.org/#ascii-uppercase
+export function asciiUpper(s: string): string {
+  for (let i = 0, l = s.length; i < l; ++i) {
+    const c = s.charCodeAt(i);
+    if (c >= 97 && c <= 122) {
+      let out = s.slice(0, i) + String.fromCharCode(c - 32);
+      for (++i; i < l; ++i) {
+        const d = s.charCodeAt(i);
+        out += d >= 97 && d <= 122 ? String.fromCharCode(d - 32) : s[i];
+      }
+      return out;
+    }
+  }
+  return s;
+}
+
+/** Convert only ASCII uppercase letters, preserving non-ASCII code units. */
+// https://infra.spec.whatwg.org/#ascii-lowercase
 export function asciiLower(s: string): string {
   for (let i = 0, l = s.length; i < l; ++i) {
     const c = s.charCodeAt(i);

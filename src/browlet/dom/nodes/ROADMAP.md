@@ -2,9 +2,9 @@
 
 ## Audit outcome
 
-The directory currently covers the core `Node`, `Document`, `DocumentType`,
+The directory currently covers the core `Node`, `Document`, `XMLDocument`, `DOMImplementation`, `DocumentType`,
 `DocumentFragment`, `ShadowRoot`, `Element`, `NamedNodeMap`, `Attr`,
-`CharacterData`, `Text`, and `Comment` implementation families, together with
+`CharacterData`, `Text`, `CDATASection`, `ProcessingInstruction`, and `Comment` implementation families, together with
 collections and the mixins already required by them.
 
 Those familiar interfaces are not the difficult dependency in DOM §4. The
@@ -13,7 +13,7 @@ ranges, traversal, MutationObserver, shadow-slot assignment, custom-element
 reactions, style/tree-scope invalidation, and HTML's insertion/removal hooks.
 `NodeImpl` owns its tree links and mutation ordering. Its private storage
 operations update links after the required mutation participants have run.
-The 4B–4H implementation supports structural and text mutations with live Range,
+The 4B–4I implementation supports structural and text mutations with live Range,
 NodeIterator, collection, MutationObserver, and slot-assignment participants and
 a shared attribute-change path. Custom-element reactions still leave the full
 mutation path incomplete.
@@ -37,10 +37,10 @@ the interface exists; implementations receive already-converted values.
 
 [Trusted Types TT-A/TT-B](../../browsing/policy/trusted-types/ROADMAP.md#next-slices) completes
 the Window policy/CSP dependency and existing attribute checks between 4D and 4E.
-4E is implemented for the available node types; ProcessingInstruction's
-attribute synchronization remains explicitly provisional below. Collections and
-mutation observers are implemented in 4F/4G; 4H adds shadow attachment and slot
-assignment. Next is 4I's Node/Document and leaf-interface completion.
+4E's character-data path now includes ProcessingInstruction attribute
+synchronization. Collections and mutation observers are implemented in 4F/4G;
+4H adds shadow attachment and slot assignment. 4I completes the available
+Node/Document and leaf-interface contracts; remaining dependencies are listed below.
 Parser options, sanitization, and script/worker enforcement are later branches,
 not additions to the current DOM slice.
 
@@ -100,16 +100,15 @@ It validates UTF-16 offsets, queues the old data, updates live ranges, and then
 notifies the parent. `Text.splitText()` inserts and retargets ranges before
 truncation; `Node.normalize()` merges exclusive Text runs and retargets all
 affected endpoints before removing the old nodes. `wholeText` includes adjacent
-CDATA sections once that node class exists; normalization deliberately excludes
+CDATA sections; normalization deliberately excludes
 them. Element/DocumentFragment text-content writes use `stringReplaceAll()` and
 the existing structural mutation path, even for unchanged text.
 
 The current DOM replace-data algorithm also calls ProcessingInstruction's
 `updateAttributesFromData()` unless its optional flag says attributes were
-already updated. `ProcessingInstructionImpl` now supplies target/data storage
-and an approved provisional no-op for this hook. Initialization validation,
-pseudo-attribute algorithms, Web IDL exposure, and document construction remain
-4I work. Character-data changes now use the shared mutation-record operation and
+already updated. 4I replaces the approved provisional hook with pseudo-attribute
+parsing and implements initialization, setters, Web IDL exposure, and document
+construction. Character-data changes use the shared mutation-record operation and
 4G's observer delivery, as do tree and attribute changes.
 
 Public and parser tests cover topology, document ownership, and existing
@@ -179,7 +178,7 @@ elements) remain explicit dependencies for selectors that inspect those states.
 Collection lookup regressions cover empty IDs, HTML/foreign tag-name case,
 quirks-mode class matching, null-namespace ID/name/class attributes, and namespace prefixes. The existing
 namespace validator and a retained element prefix supply the bounded construction
-prerequisite; broader factory completion remains in 4I.
+prerequisite; 4I completes the available document factories.
 
 Public coverage is in `collections.test.ts`, `tree-mixins.test.ts`, and
 `selectors.test.ts`; implementation lookup tests exercise the same collection
@@ -310,11 +309,12 @@ Collection regressions retain each side of a manual assignment in turn and
 verify that detached Element/Text nodes and their former slot can be reclaimed
 after pending notifications drain, through both implementation and platform identities.
 
-Stopping points: custom-element definitions, `is` values, and the definition's
+Stopping points: custom-element definitions and the definition's
 disable-shadow check remain provisional with custom-element construction and
 `[HTMLConstructor]`. Registry definition/initialization, ElementInternals, focus
 delegation, shadow style scopes, declarative parsing, and markup serialization
-belong to their later consumers. Cloning must consume the retained flags in 4I.
+belong to their later consumers. 4I retains element `is` values and clones shadow
+trees using their attachment flags; this does not implement custom-element construction.
 
 ### Shadow-tree compatibility
 
@@ -343,29 +343,74 @@ The approved choices are retained beside the implementation:
 
 The browser probe is retained in `scratch/dom-4h-probe.mjs` for these disagreements.
 
-## Missing or unprojected objects
+## Node and Document completion (4I)
 
-| Planned source | Contract | Specification |
-| --- | --- | --- |
-| `dom-implementation.ts` | `DOMImplementation` | DOM §4.5.1, `#interface-domimplementation` |
-| `cdata-section.ts` | `CDATASection` | DOM §4.12, `#interface-cdatasection` |
-| `processing-instruction.ts` | Complete the provisional target/data implementation with validation, pseudo-attributes, document construction, and Web IDL exposure | DOM §4.13, `#interface-processinginstruction` |
+Node now exposes names, constants, cloning, equality/identity, namespace lookup,
+and complete document-position flags, including attributes and disconnected
+nodes. Cloning copies ordinary trees and clonable shadow trees through existing
+document allocators and mutation algorithms. Import uses the destination's realm
+even for a borrowed method. Boolean and dictionary import options retain their
+different depth defaults. Listeners and manual slot assignments are not copied.
 
-`CDATASection` and `ProcessingInstruction` are small, but they are prerequisites
-for a faithful XML parser rather than prerequisites for the browser lifecycle
-spine. `DOMImplementation` similarly follows the element/document construction
-contract instead of defining it.
+Document factories validate names before mutation and distinguish HTML, XHTML,
+and XML creation. `DOMImplementation` retains its associated document and creates
+XMLDocument, doctypes, and an HTML document's initial tree without parsing.
+`CDATASection` and `ProcessingInstruction` are projected, with XML construction
+validation and pseudo-attribute parsing/mutation for ProcessingInstruction.
+Cloning existing character data does not repeat public XML syntax validation.
+Element adds tag-name casing, id/className reflection, and adjacent element/text
+insertion through the same mutation path. Internal empty-string namespaces remain
+compatible with the host-neutral selector/style contracts; platform getters return null.
+
+The ordered §4 interface audit leaves the following explicit dependencies:
+
+- `Document.createTreeWalker()` needs §6's TreeWalker; `Element.classList` needs
+  §7's DOMTokenList. Neither has a placeholder public method.
+- `createEvent()` supports the exposed Event/CustomEvent interfaces and their
+  legacy aliases. Other names throw NotSupportedError until their owning event
+  interfaces are exposed, as required by DOM's exposure check.
+- Custom-element registry selection and retained `is` values do not complete
+  definition lookup, construction, upgrade, registry exposure, or `[CEReactions]`.
+- HTML cloning steps for template contents, scripts, and form-control state
+  remain with those implementations; `cloningSteps()` is their extension point.
+- Shadow focus, style, declarative parsing, ElementInternals, and serialization
+  remain at their existing consumer gates.
+
+Public coverage is in `cloning.test.ts`, `node-identity.test.ts`,
+`namespace-lookup.test.ts`, `document-factories.test.ts`,
+`processing-instruction.test.ts`, and `adjacent-insertion.test.ts`.
+
+### Node completion compatibility
+
+The 2026-10-10 probe used Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5:
+
+- `SPEC_CLASH(document-xml-document-equality)`: DOM's [equality algorithm](https://dom.spec.whatwg.org/#concept-node-equals)
+  requires the same interfaces. All three engines consider an empty Document
+  equal to an empty XMLDocument. Browlet follows the engines for document nodes;
+  other node families retain the interface distinction.
+- `SPEC_GAP(processing-instruction-clone-attributes)`: [cloning a single node](https://dom.spec.whatwg.org/#concept-node-clone-single)
+  copies a ProcessingInstruction's target and data without specifying how to
+  initialize its new pseudo-attribute map. Browlet reparses the copied data.
+  Thus setter-created names accepted by DOM but rejected by the XML parser do
+  not survive as map entries after cloning, although the copied data is unchanged.
+  None of the installed engines exposes the new pseudo-attribute API, so this
+  choice has public Browlet regressions but no browser oracle yet.
+
+Both choices were reviewed and approved. `scratch/dom-4i-probe.mjs` retains the probe.
+The XML stylesheet parser represents pseudo-attributes as an ordered
+`Map<string, string>` and signals a parse error with null. ProcessingInstruction
+owns the map directly and replaces malformed input with an empty map; parsing
+does not throw. This representation has been reviewed and accepted.
 
 ## Interface completion
 
 | Family | Remaining contract | Specification |
 | --- | --- | --- |
-| `Node` and tree mixins | Complete cloning, equality, namespace lookup, and remaining declared members; collections and convenience mutations are implemented | DOM §§4.2.4–4.4 |
-| `Document` and `DOMImplementation` | Complete construction, import/adopt, lookup, event, Range, traversal, and document-factory methods | DOM §§4.5–4.5.1 |
-| `Element`, `Attr`, and `NamedNodeMap` | Custom-element reactions, class/token state, remaining selector host states, and adjacent insertion | DOM §§4.9–4.10 |
-| `ShadowRoot` and `Slottable` | Shadow style scopes, custom-element definition checks, and consumers of the retained cloning/serialization/focus flags | DOM §§4.2.2, 4.2.7, and 4.8 |
-| `CharacterData` and `Text` | Provisional ProcessingInstruction attribute-synchronization hook | DOM §§4.11–4.11.1 |
-| Leaf nodes | Complete `DocumentType`, `DocumentFragment`, `CDATASection`, `ProcessingInstruction`, and `Comment` | DOM §§4.6–4.7 and 4.12–4.14 |
+| `Node` and tree mixins | HTML cloning/mutation extension hooks and custom-element reactions | DOM §§4.2.4–4.4 |
+| `Document` and `DOMImplementation` | TreeWalker construction; additional legacy event interfaces when exposed | DOM §§4.5–4.5.1 |
+| `Element`, `Attr`, and `NamedNodeMap` | Custom-element reactions/registry exposure, class/token state, and remaining selector host states | DOM §§4.9–4.10 |
+| `ShadowRoot` and `Slottable` | Shadow style scopes, custom-element definition checks/registry exposure, and serialization/focus consumers | DOM §§4.2.2, 4.2.9, and 4.8 |
+| `CharacterData`, `Text`, and leaf nodes | Implemented for current DOM algorithms; ProcessingInstruction cloning gap recorded above | DOM §§4.6–4.7 and 4.10–4.14 |
 
 HTML's `HTMLAllCollection`, `HTMLFormControlsCollection`,
 `HTMLOptionsCollection`, `RadioNodeList`, and `DOMStringList` build upon this
@@ -397,10 +442,11 @@ Browlet coverage for:
    before expanding node convenience APIs or parser behavior.
 2. Agent-backed MutationObserver and slot delivery now use HTML's existing
    microtask checkpoint; slot assignment enters that path. Add custom-element reactions.
-3. Complete live collections, attributes, CharacterData/Text, shadow trees,
-   and the public node interfaces as consumers demand them.
-4. Add the XML leaf nodes before the XML parser milestone; finish remaining
-   convenience surfaces and `DOMImplementation` afterward.
+3. Live collections, attributes, CharacterData/Text, shadow trees, XML leaf nodes,
+   and document factories are implemented. Continue with Range operations,
+   TreeWalker, and DOMTokenList in their owning roadmaps.
+4. Revisit the remaining node hooks alongside custom elements, parsing, and
+   concrete HTML element behavior rather than hiding these missing dependencies.
 
 Blink keeps these classes largely flat in `core/dom`. Browlet's single
 `nodes/` directory follows that useful boundary without copying Blink's

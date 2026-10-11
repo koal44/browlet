@@ -41,6 +41,8 @@ class PlatformTypeGenerator {
   #usedNames = new Set<string>();
   /** Constructor and namespace objects are types, not fabricated exported runtime values. */
   #objects = new Map<object, string>();
+  /** Shared mapped-type name for properties without inherited constructor signatures. */
+  #ctorTypeName: string;
   /** Output dictionaries use output container types; defaults belong to input conversion only. */
   #dictionaryOutputs = new Map<AssembledDictionary, string>();
   /** TypeScript refinements recovered from declarations only for this generation run. */
@@ -63,6 +65,7 @@ class PlatformTypeGenerator {
       this.#objects.set(assembled, this.#reserve(`${assembled.primary.name}InterfaceObject`));
     }
     for (const [name, assembled] of assembly.namespaces) this.#objects.set(assembled, this.#name(name));
+    this.#ctorTypeName = this.#reserve('Ctor');
 
     // Unused typedef bodies still need types for their generated declarations.
     for (const assembled of assembly.typedefs.values()) assembly.getIDLType(assembled.primary.type);
@@ -73,6 +76,8 @@ class PlatformTypeGenerator {
     const blocks = [
       '// Generated from Web IDL declarations. Do not edit by hand.',
       '// Platform types only; importing this module does not install or export runtime objects.',
+      '/** Inherit constructor properties without inheriting construction signatures. */\n' +
+      `type ${this.#ctorTypeName}<T> = { [K in keyof T]: T[K] };`,
     ];
     for (const [name, assembled] of this.#assembly.enumerations) {
       blocks.push(`export type ${this.#name(name)} = ${assembled.primary.values.map(quote).join(' | ')};`);
@@ -174,8 +179,11 @@ class PlatformTypeGenerator {
           objectMembers.push(`new ${this.#typeParameters(constructorParameters)}(${this.#arguments(member.arguments, 'input')}): ${name}${typeArguments(parameters)};`);
         }
       }
-      // Interface objects inherit static members, but never inherit constructor signatures.
+      const parentObject = parent && this.#objects.get(parent);
+      // Inherit properties through the shared mapped type; only replaced static members need Omit.
+      // Without a parent interface object, collect its declarations here.
       const staticMembers = new Map<string, string[]>();
+      const inheritedNames = new Set<string>();
       for (const ancestor of assembled.getInheritanceChain()) {
         const own = new Map<string, string[]>();
         for (const entry of ancestor.members) {
@@ -187,10 +195,18 @@ class PlatformTypeGenerator {
           lines.push(...this.#member(member));
           own.set(member.name, lines);
         }
-        for (const [key, lines] of own) staticMembers.set(key, lines);
+        for (const [key, lines] of own) {
+          if (parentObject && ancestor !== assembled) inheritedNames.add(key);
+          else staticMembers.set(key, lines);
+        }
       }
       for (const lines of staticMembers.values()) objectMembers.push(...lines);
-      blocks.push(this.#interface(objectName, objectMembers));
+      let inherited = parentObject && `${this.#ctorTypeName}<${parentObject}>`;
+      if (inherited) {
+        const overridden = [...staticMembers.keys()].filter((name) => inheritedNames.has(name));
+        if (overridden.length) inherited = `Omit<${inherited}, ${overridden.map(quote).join(' | ')}>`;
+      }
+      blocks.push(this.#interface(objectName, objectMembers, inherited));
     }
     return blocks;
   }

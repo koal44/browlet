@@ -176,18 +176,20 @@ slot-change delivery are implemented. Custom-element reactions remain unfinished
 [attribute slice](browlet/dom/nodes/ROADMAP.md#section-4-slices) records these
 dependencies and the tests for the implemented storage and mutation behavior.
 
-Shadow attachment retains focus, cloning, and serialization flags without
-implementing their later consumers. Declarative parsing, shadow style scopes,
+Shadow attachment retains focus and serialization flags without implementing
+their later consumers; clonable shadow trees participate in clone/import.
+Declarative parsing, shadow style scopes,
 ElementInternals, and custom-element definition checks remain absent. Browser/spec
 differences in assignment updates and adopted-host root allocation are recorded
 in the [4H scope](browlet/dom/nodes/ROADMAP.md#shadow-trees-4h).
 
 Live Range boundaries track structural and character-data mutations, text splits,
-and normalization. ProcessingInstruction
-has provisional target/data storage, with a no-op `updateAttributesFromData()` hook.
-Validation, pseudo-attributes, and public construction/exposure remain unfinished.
-Its owner is recorded in the
-[nodes roadmap](browlet/dom/nodes/ROADMAP.md).
+and normalization. TreeWalker and DOMTokenList/classList remain absent. Generic
+cloning does not yet copy HTML-specific template, script, or form-control state.
+ProcessingInstruction validation, pseudo-attributes, and public construction are
+implemented. Its attribute-map cloning gap and the Document/XMLDocument equality
+choice are recorded in the
+[4I compatibility notes](browlet/dom/nodes/ROADMAP.md#node-completion-compatibility).
 MutationObserver's existing Web IDL contract gives callback arrays the callback's
 realm and retains the observer's binding ownership for records; browser behavior
 differs. This choice is recorded in the

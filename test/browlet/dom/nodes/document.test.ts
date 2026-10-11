@@ -230,6 +230,7 @@ describe('Document', () => {
 
   it('derives its head from the HTML document tree', () => {
     const document = createTestDocument();
+    document.type = 'html';
     const html = document.createElement('html');
     const head = document.createElement('head');
 

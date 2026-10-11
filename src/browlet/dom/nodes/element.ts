@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../infra/index';
-import { asciiLower } from '../../../infra/ascii';
+import { asciiLower, asciiUpper } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import {
   arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
@@ -53,6 +53,9 @@ export class ElementImpl extends NodeImpl {
   namespaceURI: string;
   /** Namespace prefix selected by createElementNS(), or null for an unprefixed name. */
   prefix: string | null;
+  /** Customized built-in name retained separately from the mutable is attribute. */
+  // https://dom.spec.whatwg.org/#concept-element-is-value
+  isValue: string | null = null;
   /** Associated shadow tree, including a closed root; platform exposure is separate. */
   // https://dom.spec.whatwg.org/#concept-element-shadow-root
   shadowRoot: ShadowRootImpl | null = null;
@@ -96,6 +99,21 @@ export class ElementImpl extends NodeImpl {
   get qualifiedName(): string {
     return this.prefix === null ? this.localName : `${this.prefix}:${this.localName}`;
   }
+
+  /** HTML-uppercased qualified name, recomputed because adoption can change the document type. */
+  // https://dom.spec.whatwg.org/#dom-element-tagname
+  get tagName(): string {
+    return this.namespaceURI === HTML_NAMESPACE && this.nodeDocument.type === 'html'
+      ? asciiUpper(this.qualifiedName) : this.qualifiedName;
+  }
+
+  /** Reflect the null-namespace ID attribute. */
+  get id(): string { return this.getAttributeNS(null, 'id') ?? ''; }
+  set id(value: string) { this.setAttributeValue('id', value); }
+
+  /** Reflect the null-namespace class attribute. */
+  get className(): string { return this.getAttributeNS(null, 'class') ?? ''; }
+  set className(value: string) { this.setAttributeValue('class', value); }
 
   /** Read the live list without bypassing attribute mutation steps. */
   get attributeList(): readonly AttrImpl[] {
@@ -396,6 +414,30 @@ export class ElementImpl extends NodeImpl {
     return findElementsByClassName(this, classNames);
   }
 
+  /** Insert an element at one of the four adjacent positions. */
+  // https://dom.spec.whatwg.org/#dom-element-insertadjacentelement
+  insertAdjacentElement(where: string, element: ElementImpl): ElementImpl | null {
+    return this.insertAdjacent(where, element);
+  }
+
+  /** Create text in this document and insert it at an adjacent position. */
+  // https://dom.spec.whatwg.org/#dom-element-insertadjacenttext
+  insertAdjacentText(where: string, data: string): void {
+    this.insertAdjacent(where, this.nodeDocument.createTextNode(data));
+  }
+
+  /** Shared adjacent insertion algorithm; outside positions return null for detached elements. */
+  // https://dom.spec.whatwg.org/#insert-adjacent
+  insertAdjacent<T extends NodeImpl>(where: string, node: T): T | null {
+    switch (asciiLower(where)) {
+      case 'beforebegin': return this.parentNode?.insertBefore(node, this) ?? null;
+      case 'afterbegin': return this.insertBefore(node, this.firstChild);
+      case 'beforeend': return this.appendChild(node);
+      case 'afterend': return this.parentNode?.insertBefore(node, this.nextSibling) ?? null;
+      default: throw new DOMExceptionImpl('', DOMExceptionNames.syntax);
+    }
+  }
+
   get children(): HTMLCollectionImpl {
     return this.#parentNodeMixin.children;
   }
@@ -613,9 +655,14 @@ export const elementIDL = defineInterface({
   exposed: 'Window',
   implementation: impl(ElementImpl),
   members: [
-    roAttr('namespaceURI', nullable(idlType.DOMString)),
+    roAttr('namespaceURI', nullable(idlType.DOMString), {
+      get() { return (this as ElementImpl).namespaceURI || null; },
+    }),
     roAttr('prefix', nullable(idlType.DOMString)),
     roAttr('localName', idlType.DOMString),
+    roAttr('tagName', idlType.DOMString),
+    attr('id', idlType.DOMString, xattr('CEReactions')),
+    attr('className', idlType.DOMString, xattr('CEReactions')),
     attr('slot', idlType.DOMString, xattr('CEReactions', 'Unscopable')),
     op('hasAttributes', idlType.boolean, []),
     roAttr('attributes', reference('NamedNodeMap'), xattr('SameObject')),
@@ -681,6 +728,12 @@ export const elementIDL = defineInterface({
       arg('namespace', nullable(idlType.DOMString)), arg('localName', idlType.DOMString),
     ]),
     op('getElementsByClassName', reference('HTMLCollection'), [arg('classNames', idlType.DOMString)]),
+    op('insertAdjacentElement', nullable(reference('Element')),
+      [arg('where', idlType.DOMString), arg('element', reference('Element'))], xattr('CEReactions'),
+    ),
+    op('insertAdjacentText', idlType.undefined,
+      [arg('where', idlType.DOMString), arg('data', idlType.DOMString)],
+    ),
   ],
 });
 
