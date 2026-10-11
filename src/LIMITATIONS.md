@@ -188,7 +188,11 @@ CSSOM View geometry remain absent; the
 [Range roadmap](browlet/dom/ranges/ROADMAP.md#processinginstruction-collapse)
 records the WebKit ProcessingInstruction collapse discrepancy. DOM §6 traversal
 is implemented; its compatibility choices are recorded in the
-[traversal roadmap](browlet/dom/traversal/ROADMAP.md). DOMTokenList/classList remain absent. Generic
+[traversal roadmap](browlet/dom/traversal/ROADMAP.md). DOMTokenList/classList are
+implemented; HTML token attributes and custom-element reaction delivery remain
+with their owners. The [token-list roadmap](browlet/dom/ROADMAP.md#empty-add-compatibility)
+records the browser disagreement for an empty `add()` on an absent attribute;
+Browlet follows DOM and WebKit. Generic
 cloning does not yet copy HTML-specific template, script, or form-control state.
 ProcessingInstruction validation, pseudo-attributes, and public construction are
 implemented. Its attribute-map cloning gap and the Document/XMLDocument equality

@@ -46,8 +46,10 @@ ProcessingInstruction pseudo-attributes. Shadow attachment and slot assignment
 share the mutation path and observer checkpoint. [DOM §5](browlet/dom/ranges/ROADMAP.md)
 completes the core Range surface; contextual fragments and geometry keep their
 parser/layout gates. DOM §6 traversal now supplies NodeFilter, NodeIterator, and
-TreeWalker through the Document factories. Next is DOM §7 sets as a separate
-slice. Custom elements and HTML cloning hooks retain their separate gates.
+TreeWalker through the Document factories. DOM §7 adds DOMTokenList and
+Element.classList through the shared attribute path. Next is HTML §4.13 and
+§3.2.3: custom-element definitions, construction, upgrades, and reaction delivery.
+HTML cloning hooks retain their separate gates.
 Selectlet continues to use its existing pointer traversal.
 Trusted parser options, sanitization, markup
 APIs, script compilation, and workers keep their later consumer gates.
@@ -109,8 +111,9 @@ The [DOM](browlet/dom/ROADMAP.md) and [custom-element](browlet/dom/nodes/html/cu
 owners supply MutationObserver delivery, reaction stacks/`[CEReactions]`, and
 slot assignment/signaling at the same checkpoint. The [parse5 adapter](browlet/html/parser/ROADMAP.md)
 must use that mutation path, including foster-parented text, templates, intended
-parents/scoped registries, scripting mode, and foreign content. Then add
-DOMTokenList/classList and [reflection](browlet/html/reflection/ROADMAP.md) for the
+parents/scoped registries, scripting mode, and foreign content. Build
+[reflection](browlet/html/reflection/ROADMAP.md) on the completed attribute and
+DOMTokenList/classList contracts for the
 initial html/head/title/base/meta/body/style/template/slot shell.
 
 These passes also retire relevant boundary debt: incomplete DOM host contracts,

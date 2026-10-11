@@ -11,6 +11,19 @@ const global: Window = window.window;
 const document: Document = global.document;
 const element: Element = document.createElement('div');
 const node: Node = element;
+const tokens: Platform.DOMTokenList = element.classList;
+element.classList = 'one two';
+tokens.value = 'one';
+tokens.add('two', 'three');
+const token: string | null = tokens.item(0);
+const tokenEntries: IterableIterator<[number, string]> = tokens.entries();
+tokens.forEach((value, index, list) => { const typed: [string, number, Platform.DOMTokenList] = [value, index, list]; });
+// @ts-expect-error length is readonly
+tokens.length = 0;
+// @ts-expect-error forwarded classList assignment uses DOMTokenList.value
+element.classList = 3;
+// @ts-expect-error DOMTokenList has no public constructor
+new window.DOMTokenList();
 const location: Location = window.location;
 window.location = 'https://example.test/next';
 

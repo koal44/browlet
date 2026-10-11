@@ -749,6 +749,7 @@ export interface Window extends EventTarget {
   Range: RangeConstructor;
   NodeIterator: NodeIteratorConstructor;
   TreeWalker: TreeWalkerConstructor;
+  DOMTokenList: DOMTokenListConstructor;
   Node: NodeConstructor;
   HTMLCollection: HTMLCollectionConstructor;
   NodeList: NodeListConstructor;
@@ -989,6 +990,30 @@ export interface TreeWalker {
 export interface TreeWalkerConstructor {
   readonly prototype: TreeWalker;
   [Symbol.hasInstance](value: unknown): value is TreeWalker;
+}
+
+export interface DOMTokenList {
+  readonly length: number;
+  item(index: number): (string | null);
+  contains(token: string): boolean;
+  add(...tokens: Array<string>): void;
+  remove(...tokens: Array<string>): void;
+  toggle(token: string, force?: boolean): boolean;
+  replace(token: string, newToken: string): boolean;
+  supports(token: string): boolean;
+  value: string;
+  toString(): string;
+  readonly [index: number]: (string | null) | undefined;
+  [Symbol.iterator](): IterableIterator<string>;
+  values(): IterableIterator<string>;
+  keys(): IterableIterator<number>;
+  entries(): IterableIterator<[number, string]>;
+  forEach(callback: (value: string, key: number, parent: this) => void, thisArg?: unknown): void;
+}
+
+export interface DOMTokenListConstructor {
+  readonly prototype: DOMTokenList;
+  [Symbol.hasInstance](value: unknown): value is DOMTokenList;
 }
 
 export interface Node extends EventTarget {
@@ -1360,6 +1385,8 @@ export interface Element extends Node {
   readonly tagName: string;
   id: string;
   className: string;
+  get classList(): DOMTokenList;
+  set classList(value: string);
   slot: string;
   hasAttributes(): boolean;
   readonly attributes: NamedNodeMap;

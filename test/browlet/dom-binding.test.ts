@@ -386,6 +386,7 @@ describe('Browlet DOM binding', () => {
       'before',
       'childElementCount',
       'children',
+      'classList',
       'className',
       'closest',
       'constructor',

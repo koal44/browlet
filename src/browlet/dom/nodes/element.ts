@@ -13,6 +13,7 @@ import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
 import type { EventImpl } from '../events/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
+import { DOMTokenListImpl } from '../token-list';
 import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
@@ -71,6 +72,8 @@ export class ElementImpl extends NodeImpl {
   #attributeList: AttrImpl[] = [];
   /** Child-node mutation behavior shared with text and doctype nodes. */
   #childNodeMixin = new ChildNodeMixin(this);
+  /** Stable token view, allocated when classList is first requested. */
+  #classList: DOMTokenListImpl | undefined;
   /** Lazily created inline style declaration. */
   #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
   /** Sheet loading and ownership for elements that provide a style sheet. */
@@ -114,6 +117,12 @@ export class ElementImpl extends NodeImpl {
   /** Reflect the null-namespace class attribute. */
   get className(): string { return this.getAttributeNS(null, 'class') ?? ''; }
   set className(value: string) { this.setAttributeValue('class', value); }
+
+  /** Stable live token set for the null-namespace class attribute. */
+  // https://dom.spec.whatwg.org/#dom-element-classlist
+  get classList(): DOMTokenListImpl {
+    return this.#classList ??= new DOMTokenListImpl(this, 'class');
+  }
 
   /** Read the live list without bypassing attribute mutation steps. */
   get attributeList(): readonly AttrImpl[] {
@@ -320,6 +329,7 @@ export class ElementImpl extends NodeImpl {
     localName: string, oldValue: string | null, newValue: string | null,
     namespace: string | null,
   ): void {
+    this.#classList?.attributeChanged(localName, oldValue, newValue, namespace);
     if (namespace !== null) return;
     if (localName === 'slot') this.#slottableMixin.attributeChanged(this, oldValue, newValue);
     if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
@@ -663,6 +673,7 @@ export const elementIDL = defineInterface({
     roAttr('tagName', idlType.DOMString),
     attr('id', idlType.DOMString, xattr('CEReactions')),
     attr('className', idlType.DOMString, xattr('CEReactions')),
+    roAttr('classList', reference('DOMTokenList'), xattr('SameObject', ['PutForwards', 'value'])),
     attr('slot', idlType.DOMString, xattr('CEReactions', 'Unscopable')),
     op('hasAttributes', idlType.boolean, []),
     roAttr('attributes', reference('NamedNodeMap'), xattr('SameObject')),

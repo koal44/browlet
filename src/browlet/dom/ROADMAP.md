@@ -35,7 +35,7 @@ that directly requires HTML's timeout and global-task machinery.
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §4, nodes | Slices 4A–4I implement mutation, collections/mixins, selectors, observers, shadow/slots, clone/import, namespace/equality queries, document factories, and XML leaf nodes | DOMTokenList, custom elements, and HTML extension hooks retain their owner gates; see `nodes/ROADMAP.md` |
+| DOM §4, nodes | Slices 4A–4I implement mutation, collections/mixins, selectors, observers, shadow/slots, clone/import, namespace/equality queries, document factories, and XML leaf nodes; §7 supplies classList | Custom elements and HTML extension hooks retain their owner gates; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot assignment uses the same notification checkpoint |
 | DOM §5, ranges | AbstractRange, StaticRange validity, and the complete DOM Range surface use the shared structural/text mutation path | HTML contextual fragments, CSSOM View geometry, and a WebKit collapse discrepancy stay in `ranges/ROADMAP.md` |
 
@@ -51,7 +51,7 @@ dependencies without projecting placeholders for missing APIs.
 | Section | Current state | Priority and boundary |
 | --- | --- | --- |
 | DOM §6, traversal | NodeFilter, NodeIterator, and TreeWalker are projected through the Document factories; NodeIterator participates in structural mutation | Core traversal is complete; compatibility evidence remains in `traversal/ROADMAP.md` |
-| DOM §7, sets | `DOMTokenList` is absent; ordered-set parsing/serialization already exists | Early interface-completion work because `classList` and several HTML token attributes exercise ordinary attribute mutation, CE reactions, observers, and style invalidation |
+| DOM §7, sets | DOMTokenList and stable Element.classList use the shared attribute mutation path, with indexed/iterable projection and stringification | HTML token attributes and custom-element reaction delivery remain with their owners |
 | DOM §8, XPath | Absent | Late XML/query subsystem; the current DOM Standard preserves Web IDL but explicitly lacks complete behavioral definitions; see `xpath/ROADMAP.md` |
 | DOM §9, XSLT | Absent | Late optional XML transformation subsystem requiring a qualified XSLT engine and HTML/parser/navigation integration; see `xslt/ROADMAP.md` |
 | DOM §10, security and privacy | The section states that DOM itself has no known considerations | No runtime module. External XPath/XSLT engines still need Browlet-controlled resource and host-I/O boundaries |
@@ -59,16 +59,17 @@ dependencies without projecting placeholders for missing APIs.
 
 ## DOMTokenList
 
-| Planned source | Contract | Specification |
+| Source | Contract | Specification |
 | --- | --- | --- |
 | `token-list.ts` | `DOMTokenList`, ordered token state, indexed/iterable projection, stringification, and live element-attribute synchronization | DOM §7, `#interface-domtokenlist` |
 
-`DOMTokenList` consumes `infra/ordered-set.ts`, but it is not merely a wrapper
-around a `Set<string>`. Each instance belongs to an Element/attribute pair,
-must be identity-stable for `[SameObject]` consumers, and updates through the
-normal attribute-value algorithm. Attribute changes in any direction run its
-attribute-change steps, so mutation records, custom-element reactions, and
-style invalidation must not be bypassed.
+`DOMTokenListImpl` retains its owning Element and attribute local name.
+`Element.classList` creates the list lazily and forwards matching attribute
+changes to it. Tokens use an ordered, unique array for indexed access, parsed
+only when the attribute changes. Writes use the existing attribute-value
+algorithm, including observer records, collection invalidation, and the
+custom-element enqueue hook. Binding supplies indexed properties, live Array
+iteration, stringification, and `[PutForwards=value]` assignment.
 
 Preserve the less obvious observable rules:
 
@@ -82,10 +83,36 @@ Preserve the less obvious observable rules:
 - use the existing Web IDL iterable/indexed machinery rather than making the
   implementation inherit from `Array`.
 
-Implement it after the normative attribute-mutation path and `[CEReactions]`,
-then expose `Element.classList`. HTML's `relList`, `sizes`, `blocking`,
-`sandbox`, and future token attributes reuse the same object with their own
-supported-token definitions.
+The [token-list tests](../../../test/browlet/dom/token-list.test.ts) cover
+validation order, duplicate replacement order, operation-specific attribute
+writes, raw spelling, all ordinary attribute entry points, mutation records,
+live iteration, argument conversion, XML/foreign elements, selectors/collections,
+and identity across realm borrowing, adoption, and cloning.
+
+Custom-element reaction delivery remains the existing HTML dependency. The
+mutating members declare `[CEReactions]` and reach the same enqueue hook as
+other attribute setters; this pass does not complete the reaction stack.
+HTML's `relList`, `sizes`, `blocking`, `sandbox`, and future token attributes
+remain with their element implementations. They can supply supported tokens
+and forward their attribute-change steps to the shared token-list implementation.
+
+### Empty add compatibility
+
+`SPEC_CLASH(domtokenlist-empty-add)` records one browser disagreement. DOM's
+[update steps](https://dom.spec.whatwg.org/#concept-dtl-update) return without
+writing when the attribute is absent and the token set is empty. Thus
+`document.createElement('div').classList.add()` leaves `class` absent and queues
+no mutation record. WebKit 26.5 agrees; Chromium 149.0.7827.55 and Firefox 151
+instead create `class=""` and queue an attributes record with a null old value.
+Browlet follows DOM and WebKit: an absent attribute remains absent, with no
+mutation record queued. Keep the clash marker until the implementations converge.
+
+The [2026-10-10 comparison](../../../scratch/DOM-7-PROBE.mjs) covers 207 cases
+across raw attribute values, operations, validation order, mutation records,
+iteration, conversion, and forwarding. WebKit matched all 207; Chromium and
+Firefox each differed only on the absent-attribute, zero-argument `add()` case.
+The ordinary mutation-record test retains the specification expectation, and
+the comparison still reports the browser differences as failures.
 
 ## Late XML query and transformation
 

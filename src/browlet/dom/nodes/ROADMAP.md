@@ -362,10 +362,10 @@ Element adds tag-name casing, id/className reflection, and adjacent element/text
 insertion through the same mutation path. Internal empty-string namespaces remain
 compatible with the host-neutral selector/style contracts; platform getters return null.
 
-The ordered §4 interface audit leaves the following explicit dependencies:
+DOM §6 supplies `Document.createTreeWalker()` and TreeWalker. DOM §7 supplies
+`Element.classList` through the same attribute path. The ordered §4 interface
+audit leaves the following explicit dependencies:
 
-- `Element.classList` needs §7's DOMTokenList and has no placeholder public
-  getter. DOM §6 now supplies `Document.createTreeWalker()` and TreeWalker.
 - `createEvent()` supports the exposed Event/CustomEvent interfaces and their
   legacy aliases. Other names throw NotSupportedError until their owning event
   interfaces are exposed, as required by DOM's exposure check.

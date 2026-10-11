@@ -32,7 +32,7 @@ export const layers = [
   ['browlet/browsing/policy/csp'],
   ['browlet/browsing/policy/trusted-types'],
   // Mutation participants retain typed nodes without loading their implementation classes.
-  ['browlet/dom/ranges', 'browlet/dom/traversal'],
+  ['browlet/dom/ranges', 'browlet/dom/traversal', 'browlet/dom/token-list'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance'],
   ['browlet/reporting/generate'],
