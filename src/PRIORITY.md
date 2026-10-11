@@ -47,11 +47,17 @@ share the mutation path and observer checkpoint. [DOM §5](browlet/dom/ranges/RO
 completes the core Range surface; contextual fragments and geometry keep their
 parser/layout gates. DOM §6 traversal now supplies NodeFilter, NodeIterator, and
 TreeWalker through the Document factories. DOM §7 adds DOMTokenList and
-Element.classList through the shared attribute path. Next is a bounded pass
-through HTML §§2–3 in specification order, beginning with the
-[§§2.1–2.2 audit](browlet/html/ROADMAP.md#sections-21-and-22-audit), then §2.3
-microsyntaxes. Retain missing dependencies with their owners; this is not a
-requirement to finish every referenced subsystem. HTML §3.2.3 leads into §4.13
+Element.classList through the shared attribute path. The bounded HTML §§2–3
+pass has recorded the [§§2.1–2.2 audit](browlet/html/ROADMAP.md#sections-21-and-22-audit).
+The [§2.3 microsyntax slices](browlet/html/microsyntaxes/ROADMAP.md#five-implementation-slices)
+now supply 2.3A's boolean/enumerated attribute values and canonical keywords,
+2.3B's exact integers, floating-point values, dimensions, and numeric lists,
+2.3C's dates, times, offsets, weeks, and durations, 2.3D's legacy colors and
+token syntax, and 2.3E's hash-name references. The media and identity review
+retains the deferred matching and serialization gates; the bounded pass moves
+to HTML §2.4 URLs next. Keep missing
+dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
+§3.2.3 leads into §4.13
 for custom-element definitions, construction, upgrades, and reaction delivery.
 HTML cloning hooks retain their separate gates.
 Selectlet continues to use its existing pointer traversal.
@@ -93,8 +99,10 @@ path. Implement the named portion of a roadmap, not every future feature in it.
 [abort](browlet/dom/abort/ROADMAP.md), and
 [browsing](browlet/browsing/ROADMAP.md) owners. Add element task destinations
 and checkpoint consumers when needed. Worker suspension, timer strings, and
-idle periods await their actual script/global/rendering consumers. Implement
-only the [microsyntaxes](browlet/html/microsyntaxes/ROADMAP.md) needed by reflection.
+idle periods await their actual script/global/rendering consumers. Follow the
+bounded [microsyntax slices](browlet/html/microsyntaxes/ROADMAP.md); reflection
+consumes their value algorithms, while media matching retains its style/host
+dependency gate.
 
 **2: complete the normative DOM mutation spine.**
 [Infrastructure](browlet/dom/infra/ROADMAP.md), [nodes](browlet/dom/nodes/ROADMAP.md),

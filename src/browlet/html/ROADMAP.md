@@ -79,8 +79,9 @@ belong to the existing owners, not new terminology or resource abstractions:
   inherited, and container policies plus actual feature checks. Register these
   defaults with that implementation, not in an unused standalone table.
 
-Continue with §2.3. This pass identifies the remaining dependencies; it does
-not mark §§2.1–2.2 fully implemented.
+The subsequent [§2.3 slices](microsyntaxes/ROADMAP.md) are complete within their
+bounded scope; continue with §2.4 URLs. These passes identify remaining
+dependencies, rather than marking §§2.1–2.2 fully implemented.
 
 ## HTML section 3 ownership
 

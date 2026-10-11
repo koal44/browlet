@@ -68,6 +68,10 @@ exported `InternalPromise`, override `observeNative()`, and supply it as `exec.P
 exports `DOMOperations`, `TimerHost`, `TaskHandle`, `Encoding`, `DecodeText`,
 and the `DOMException`/`DOMExceptionConstructor` contracts for host providers.
 
+`ColorRgba` maps lowercase CSS color names, including `transparent`, to packed
+`0xRRGGBBAA` values. `absoluteColorFromRgba()` creates an independent `AbsoluteColor`
+with legacy sRGB byte components and alpha (`is8Bit`), without constructing an engine.
+
 ## CSSOM binding
 
 The package exposes CSSOM implementations, including stylesheets, declarations,

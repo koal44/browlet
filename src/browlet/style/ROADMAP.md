@@ -68,9 +68,22 @@ The contracts come from CSSOM, CSSOM View, CSS Style Attributes, and HTML's
 style/link processing rather than one WHATWG HTML section. This file records
 the host boundary, not the CSS feature backlog.
 
-HTML §2.3.10's “matches the environment” operation belongs at this boundary:
-Stylelet owns media-query parsing/evaluation, while Browlet supplies the active
-environment and the HTML empty/whitespace-list behavior.
+## Media matching
+
+Defer [HTML §2.3.10](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#mq)
+integration until a concrete caller needs matching. Current
+sheet associations retain their media lists, but Stylelet's
+[`getActiveStyleSheets()`](../../stylelet/engine/cascade-engine.ts) checks only
+the disabled flag. Stylesheet applicability is a natural first integration;
+HTML's [`<source media>` selection](https://html.spec.whatwg.org/multipage/embedded-content.html#attr-source-media)
+and CSSOM View's [`Window.matchMedia()`](https://drafts.csswg.org/cssom-view/#dom-window-matchmedia) are
+other consumers. The latter creates a `MediaQueryList` associated with the
+Window's Document and matches that Document's state.
+
+Review the existing Document-owned style engine when implementing a consumer.
+Keep CSS parsing/evaluation in Stylelet and apply HTML's empty/whitespace-list
+rule where required. Determine the needed host inputs from that caller; no
+Environment or Agent matching operation is prescribed by this roadmap.
 
 ## Unchanged style type
 

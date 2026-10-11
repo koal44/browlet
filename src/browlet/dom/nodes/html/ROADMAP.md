@@ -128,6 +128,15 @@ Shared algorithms should live at the narrowest common owner—form association
 under `forms/`, media state under `embedded/`, and reflection under
 `html/reflection/`—rather than accumulating in `HTMLElementImpl`.
 
+[`embedded/image-map.ts`](embedded/image-map.ts) supplies `findImageMap()` for
+the future `img` implementation. It accepts the complete `usemap` value,
+uses the string-only hash-name parser in `html/microsyntaxes/`, and matches HTML
+maps by `id` or `name` in the source's ordinary tree. Its pointer scan is
+provisional for performance: replace it with tree-owned indexes that preserve
+first-match ordering and track insertion, removal, moves, and attribute changes.
+The stricter authoring-conformance definition adds no runtime validity gate.
+Image association and hit testing remain with the element implementation.
+
 Element classes consume `html/microsyntaxes/` for shared value state and
 `loader/element-fetch-options.ts` for HTML §2.5 fetch-related attributes. They
 must not duplicate either algorithm family.

@@ -403,6 +403,13 @@ Browlet's style mixins sit among its lowest foundations: they load Stylelet and
 retain type references to supplied DOM nodes. Element and style/link elements
 compose these mixins; the mixins do not construct browser environments or nodes.
 
+HTML microsyntaxes are value algorithms depending only on Infra and Stylelet's
+color facilities. They sit one level above Browlet's platform, timing, DOM infra,
+and style foundations, below DOM nodes and lifecycle components.
+Tree lookup belongs with its HTML consumer: hash-name parsing returns text,
+while image-map lookup lives under `dom/nodes/html/embedded` and consumes that parser.
+Embedded HTML has an explicit hierarchy entry above the shared node implementations.
+
 Document, Element, and the HTML, SVG, and MathML element implementations live
 under `browlet/dom/nodes`, alongside their element-selection table. Namespace
 directories retain their indexes and declaration collections. `NodeImpl` owns

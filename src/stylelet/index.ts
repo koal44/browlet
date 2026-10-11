@@ -16,3 +16,4 @@ export { CSSStyleDeclarationImpl } from './cssom/declaration';
 export { MediaListImpl } from './cssom/media-list';
 export { StyleSheetListImpl } from './cssom/stylesheet-list';
 export { styleletIDLDefinitions } from './web-idl';
+export { ColorRgba, absoluteColorFromRgba, type AbsoluteColor } from './values/color';

@@ -3873,7 +3873,8 @@ function hasMissingColorComponents(value: AbsoluteColor): boolean {
     value.components.some((component) => component === undefined);
 }
 
-function absoluteColorFromRgba(rgba: number): AbsoluteColor {
+/** Create an independent legacy sRGB value from packed 0xRRGGBBAA bytes, without color conversion. */
+export function absoluteColorFromRgba(rgba: number): AbsoluteColor {
   return {
     kind: ColorKind.Absolute,
     space: SPACES.srgb,

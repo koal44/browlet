@@ -25,6 +25,7 @@ export const layers = [
   ['xhr'],
   ['fetch'],
   ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/style'],
+  ['browlet/html/microsyntaxes'],
   ['browlet/scripting'],
   // Policy consumes event/report primitives; documents construct and retain policy state.
   ['browlet/dom/events', 'browlet/reporting'],
@@ -34,6 +35,7 @@ export const layers = [
   // Mutation participants retain typed nodes without loading their implementation classes.
   ['browlet/dom/ranges', 'browlet/dom/traversal', 'browlet/dom/token-list'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
+  ['browlet/dom/nodes/html/embedded'],
   ['browlet/dom', 'browlet/performance'],
   ['browlet/reporting/generate'],
   // Full browser settings and global APIs compose the lower facilities.
