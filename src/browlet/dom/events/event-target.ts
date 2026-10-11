@@ -415,14 +415,14 @@ export class EventTargetImpl {
     phase: InvocationPhase,
     invocationTargetInShadowTree: boolean,
   ): boolean {
+    const capture = phase === 'capturing';
     let found = false;
 
     for (const listener of listeners) {
       if (listener.removed || event.type !== listener.type) continue;
 
       found = true;
-      if (phase === 'capturing' && !listener.capture) continue;
-      if (phase === 'bubbling' && listener.capture) continue;
+      if (listener.capture !== capture) continue;
 
       const callback = listener.callback;
       if (callback === null) continue;

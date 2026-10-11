@@ -35,7 +35,7 @@ that directly requires HTML's timeout and global-task machinery.
 
 | Section | Current state | Boundary to close |
 | --- | --- | --- |
-| DOM §4, nodes | Slices 4A–4I implement mutation, collections/mixins, selectors, observers, shadow/slots, clone/import, namespace/equality queries, document factories, and XML leaf nodes | TreeWalker, DOMTokenList, custom elements, and HTML extension hooks retain their owner gates; see `nodes/ROADMAP.md` |
+| DOM §4, nodes | Slices 4A–4I implement mutation, collections/mixins, selectors, observers, shadow/slots, clone/import, namespace/equality queries, document factories, and XML leaf nodes | DOMTokenList, custom elements, and HTML extension hooks retain their owner gates; see `nodes/ROADMAP.md` |
 | DOM §4.3, mutation observers | Observation, records, transient cleanup, and Agent-backed microtask delivery are implemented | Recorded browser/spec differences remain in `nodes/ROADMAP.md`; slot assignment uses the same notification checkpoint |
 | DOM §5, ranges | AbstractRange, StaticRange validity, and the complete DOM Range surface use the shared structural/text mutation path | HTML contextual fragments, CSSOM View geometry, and a WebKit collapse discrepancy stay in `ranges/ROADMAP.md` |
 
@@ -50,7 +50,7 @@ dependencies without projecting placeholders for missing APIs.
 
 | Section | Current state | Priority and boundary |
 | --- | --- | --- |
-| DOM §6, traversal | NodeFilter and NodeIterator are projected and participate in structural mutation | Implement TreeWalker; see `traversal/ROADMAP.md` |
+| DOM §6, traversal | NodeFilter, NodeIterator, and TreeWalker are projected through the Document factories; NodeIterator participates in structural mutation | Core traversal is complete; compatibility evidence remains in `traversal/ROADMAP.md` |
 | DOM §7, sets | `DOMTokenList` is absent; ordered-set parsing/serialization already exists | Early interface-completion work because `classList` and several HTML token attributes exercise ordinary attribute mutation, CE reactions, observers, and style invalidation |
 | DOM §8, XPath | Absent | Late XML/query subsystem; the current DOM Standard preserves Web IDL but explicitly lacks complete behavioral definitions; see `xpath/ROADMAP.md` |
 | DOM §9, XSLT | Absent | Late optional XML transformation subsystem requiring a qualified XSLT engine and HTML/parser/navigation integration; see `xslt/ROADMAP.md` |

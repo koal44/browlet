@@ -42,9 +42,10 @@ export function findElementsByClassName(root: NodeImpl, classNames: string): HTM
 /** Create a live descendant collection under the document's HTML/XML naming rules. */
 // https://dom.spec.whatwg.org/#concept-getelementsbytagname
 export function findElementsByTagName(root: NodeImpl, qualifiedName: string): HTMLCollectionImpl {
+  const anyName = qualifiedName === '*';
   const html = root.nodeDocument.type === 'html';
   const lowercaseName = asciiLower(qualifiedName);
-  return new HTMLCollectionImpl(root, (element) => qualifiedName === '*' ||
+  return new HTMLCollectionImpl(root, (element) => anyName ||
     element.qualifiedName === (html && element.namespaceURI === HTML_NAMESPACE ? lowercaseName : qualifiedName));
 }
 
@@ -55,7 +56,9 @@ export function findElementsByTagNameNS(
 ): HTMLCollectionImpl {
   // Element's current storage uses an empty string for no namespace.
   const namespace = namespaceURI ?? '';
+  const anyNamespace = namespace === '*';
+  const anyName = localName === '*';
   return new HTMLCollectionImpl(root, (element) =>
-    (namespace === '*' || element.namespaceURI === namespace) &&
-    (localName === '*' || element.localName === localName));
+    (anyNamespace || element.namespaceURI === namespace) &&
+    (anyName || element.localName === localName));
 }

@@ -130,6 +130,29 @@ describe('NodeIterator traversal', () => {
 });
 
 describe('NodeIterator pre-removal', () => {
+  it('finds a following node through ancestors while keeping multiple cursors independent', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    expect(await browlet.evaluate(() => {
+      const root = document.createElement('root');
+      const branch = root.appendChild(document.createElement('branch'));
+      const previous = branch.appendChild(document.createElement('previous'));
+      const last = previous.appendChild(document.createTextNode('last'));
+      const removed = branch.appendChild(document.createElement('removed'));
+      const selected = removed.appendChild(document.createTextNode('selected'));
+      const following = root.appendChild(document.createElement('following'));
+      const before = document.createNodeIterator(root);
+      const after = document.createNodeIterator(root);
+      for (const iterator of [before, after]) {
+        while (iterator.nextNode() !== selected) { /* Position both cursors inside the removed subtree. */ }
+      }
+      before.previousNode();
+      removed.remove();
+      return [before.referenceNode === following, before.pointerBeforeReferenceNode,
+        after.referenceNode === last, after.pointerBeforeReferenceNode,
+        before.nextNode() === following, after.nextNode() === following];
+    })).toEqual([true, true, true, false, true, true]);
+  });
+
   it.each([true, false])('adjusts a pointer before a removed subtree, with a following sibling: %s', async (hasFollowing) => {
     const browlet = new Browlet({ route: () => '' });
     expect(await browlet.evaluate((hasFollowing) => {

@@ -364,8 +364,8 @@ compatible with the host-neutral selector/style contracts; platform getters retu
 
 The ordered §4 interface audit leaves the following explicit dependencies:
 
-- `Document.createTreeWalker()` needs §6's TreeWalker; `Element.classList` needs
-  §7's DOMTokenList. Neither has a placeholder public method.
+- `Element.classList` needs §7's DOMTokenList and has no placeholder public
+  getter. DOM §6 now supplies `Document.createTreeWalker()` and TreeWalker.
 - `createEvent()` supports the exposed Event/CustomEvent interfaces and their
   legacy aliases. Other names throw NotSupportedError until their owning event
   interfaces are exposed, as required by DOM's exposure check.
@@ -407,7 +407,7 @@ does not throw. This representation has been reviewed and accepted.
 | Family | Remaining contract | Specification |
 | --- | --- | --- |
 | `Node` and tree mixins | HTML cloning/mutation extension hooks and custom-element reactions | DOM §§4.2.4–4.4 |
-| `Document` and `DOMImplementation` | TreeWalker construction; additional legacy event interfaces when exposed | DOM §§4.5–4.5.1 |
+| `Document` and `DOMImplementation` | Additional legacy event interfaces when exposed | DOM §§4.5–4.5.1 |
 | `Element`, `Attr`, and `NamedNodeMap` | Custom-element reactions/registry exposure, class/token state, and remaining selector host states | DOM §§4.9–4.10 |
 | `ShadowRoot` and `Slottable` | Shadow style scopes, custom-element definition checks/registry exposure, and serialization/focus consumers | DOM §§4.2.2, 4.2.9, and 4.8 |
 | `CharacterData`, `Text`, and leaf nodes | Implemented for current DOM algorithms; ProcessingInstruction cloning gap recorded above | DOM §§4.6–4.7 and 4.10–4.14 |
@@ -443,8 +443,8 @@ Browlet coverage for:
 2. Agent-backed MutationObserver and slot delivery now use HTML's existing
    microtask checkpoint; slot assignment enters that path. Add custom-element reactions.
 3. Live collections, attributes, CharacterData/Text, shadow trees, XML leaf nodes,
-   and document factories are implemented, as is the core DOM §5 Range surface.
-   Continue with §6 traversal and §7 sets in their owning roadmaps.
+   and document factories are implemented, as are the core DOM §5 Range and §6
+   traversal surfaces. Continue with §7 sets in its owning roadmap.
 4. Revisit the remaining node hooks alongside custom elements, parsing, and
    concrete HTML element behavior rather than hiding these missing dependencies.
 

@@ -5,7 +5,7 @@ import {
   customEventInitIDL, eventIDL, eventInitIDL,
 } from './events/index';
 import { abstractRangeIDL, rangeIDL, staticRangeIDL, staticRangeInitIDL } from './ranges/index';
-import { nodeFilterIDL, nodeIteratorIDL } from './traversal/index';
+import { nodeFilterIDL, nodeIteratorIDL, treeWalkerIDL } from './traversal/index';
 import { abortControllerIDL, abortSignalIDL } from './abort/index';
 import {
   characterDataIDL, characterDataIncludesChildNodeIDL, characterDataIncludesNonDocumentTypeChildNodeIDL,
@@ -42,6 +42,7 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   rangeIDL,
   nodeFilterIDL,
   nodeIteratorIDL,
+  treeWalkerIDL,
 
   parentNodeIDL,
   nonElementParentNodeIDL,

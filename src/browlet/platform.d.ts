@@ -748,6 +748,7 @@ export interface Window extends EventTarget {
   StaticRange: StaticRangeConstructor;
   Range: RangeConstructor;
   NodeIterator: NodeIteratorConstructor;
+  TreeWalker: TreeWalkerConstructor;
   Node: NodeConstructor;
   HTMLCollection: HTMLCollectionConstructor;
   NodeList: NodeListConstructor;
@@ -969,6 +970,25 @@ export interface NodeIterator {
 export interface NodeIteratorConstructor {
   readonly prototype: NodeIterator;
   [Symbol.hasInstance](value: unknown): value is NodeIterator;
+}
+
+export interface TreeWalker {
+  readonly root: Node;
+  readonly whatToShow: number;
+  readonly filter: (NodeFilter | null);
+  currentNode: Node;
+  parentNode(): (Node | null);
+  firstChild(): (Node | null);
+  lastChild(): (Node | null);
+  previousSibling(): (Node | null);
+  nextSibling(): (Node | null);
+  previousNode(): (Node | null);
+  nextNode(): (Node | null);
+}
+
+export interface TreeWalkerConstructor {
+  readonly prototype: TreeWalker;
+  [Symbol.hasInstance](value: unknown): value is TreeWalker;
 }
 
 export interface Node extends EventTarget {
@@ -1285,6 +1305,7 @@ export interface Document extends Node {
   createEvent(interface_: string): Event;
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): NodeIterator;
+  createTreeWalker(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): TreeWalker;
   readonly head: (HTMLHeadElement | null);
   readonly body: (HTMLElement | null);
   write(...text: Array<string>): void;

@@ -15,7 +15,7 @@ export const FILTER_SKIP = 3;
 export const SHOW_ALL = 0xffffffff;
 
 // Retain the original callback only at the binding boundary, including object identity
-// for NodeIterator.filter. Traversal receives only the converted invocation contract.
+// for NodeIterator.filter and TreeWalker.filter. Traversal receives only the converted invocation contract.
 const callbacks = new WeakMap<NodeFilterCallback, IDLCallbackInterface>();
 
 /** Supply the converted callback value to a traversal object's Web IDL getter. */

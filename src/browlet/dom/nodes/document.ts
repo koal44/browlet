@@ -25,7 +25,7 @@ import {
 } from '../../browsing/policy/index';
 import { CSPList } from '../../browsing/policy/csp/index';
 import { RangeImpl } from '../ranges/index';
-import { NodeIteratorImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
+import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
@@ -496,6 +496,12 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createnodeiterator
   createNodeIterator(root: NodeImpl, whatToShow: number, filter: NodeFilterCallback | null): NodeIteratorImpl {
     return new NodeIteratorImpl(root, whatToShow, filter, this.env);
+  }
+
+  /** Create a walker whose initial position is its root, even in another document. */
+  // https://dom.spec.whatwg.org/#dom-document-createtreewalker
+  createTreeWalker(root: NodeImpl, whatToShow: number, filter: NodeFilterCallback | null): TreeWalkerImpl {
+    return new TreeWalkerImpl(root, whatToShow, filter, this.env);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createattribute
@@ -1195,6 +1201,14 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
     op('createEvent', reference('Event'), [arg('interface', idlType.DOMString)], xattr('NewObject')),
     op('createRange', reference('Range'), [], xattr('NewObject')),
     op('createNodeIterator', reference('NodeIterator'),
+      [
+        arg('root', reference('Node')),
+        arg('whatToShow', idlType.unsignedLong, { default: integer(SHOW_ALL), optional: true }),
+        arg('filter', nullable(reference('NodeFilter')), { default: null, optional: true }),
+      ],
+      xattr('NewObject'),
+    ),
+    op('createTreeWalker', reference('TreeWalker'),
       [
         arg('root', reference('Node')),
         arg('whatToShow', idlType.unsignedLong, { default: integer(SHOW_ALL), optional: true }),

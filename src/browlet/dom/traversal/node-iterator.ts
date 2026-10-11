@@ -7,26 +7,21 @@ import {
 import type { NodeImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';
 
-import { FILTER_ACCEPT, FILTER_SKIP, getNodeFilterCallback, type NodeFilterCallback } from './node-filter';
+import { FILTER_ACCEPT, getNodeFilterCallback, type NodeFilterCallback } from './node-filter';
+import { NodeTraverser } from './node-traverser';
 
 /** A filtered tree-order cursor which stays usable across subtree removal and adoption. */
 // https://dom.spec.whatwg.org/#interface-nodeiterator
-export class NodeIteratorImpl {
+export class NodeIteratorImpl extends NodeTraverser {
   /** Register by fixed traversal root, so adoption needs no document-wide migration. */
   static #byRoot = new WeakMap<NodeImpl, WeakOrderedSet<NodeIteratorImpl>>();
-  env: DOMEnvironment;
-  root: NodeImpl;
-  whatToShow: number;
-  filter: NodeFilterCallback | null;
+  /** Committed position, updated only by acceptance or node removal. */
   #reference: NodePointer;
+  /** In-flight position, also adjusted when an author filter removes nodes. */
   #candidate: NodePointer | null = null;
-  #active = false;
 
   constructor(root: NodeImpl, whatToShow: number, filter: NodeFilterCallback | null, env: DOMEnvironment) {
-    this.env = env;
-    this.root = root;
-    this.whatToShow = whatToShow;
-    this.filter = filter;
+    super(root, whatToShow, filter, env);
     this.#reference = { node: root, before: true };
     let iterators = NodeIteratorImpl.#byRoot.get(root);
     if (!iterators) NodeIteratorImpl.#byRoot.set(root, iterators = new WeakOrderedSet());
@@ -72,7 +67,7 @@ export class NodeIteratorImpl {
   #traverse(next: boolean): NodeImpl | null {
     // SPEC_CLASH(nodeiterator-reentrant-filter): DOM checks while filtering; Browlet follows Firefox's early traversal guard.
     // Reject before changing the outer candidate, even when this direction has no remaining nodes.
-    if (this.#active) throw new DOMExceptionImpl('', DOMExceptionNames.invalidState);
+    if (this.active) throw new DOMExceptionImpl('', DOMExceptionNames.invalidState);
     const candidate = { node: this.#reference.node, before: this.#reference.before };
     this.#candidate = candidate;
     try {
@@ -100,25 +95,13 @@ export class NodeIteratorImpl {
         // A callback may remove this node and adjust the candidate; return the node
         // that was filtered, but commit the adjusted pointer for the next operation.
         const node = candidate.node;
-        if (this.#filterNode(node) === FILTER_ACCEPT) {
+        if (this.filterNode(node) === FILTER_ACCEPT) {
           this.#reference = candidate;
           return node;
         }
       }
     } finally {
       this.#candidate = null;
-    }
-  }
-
-  // https://dom.spec.whatwg.org/#concept-node-filter
-  #filterNode(node: NodeImpl): number {
-    if (!(this.whatToShow & (1 << (node.nodeType - 1)))) return FILTER_SKIP;
-    if (this.filter === null) return FILTER_ACCEPT;
-    this.#active = true;
-    try {
-      return this.filter.acceptNode(node);
-    } finally {
-      this.#active = false;
     }
   }
 

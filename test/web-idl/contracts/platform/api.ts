@@ -14,6 +14,15 @@ const node: Node = element;
 const location: Location = window.location;
 window.location = 'https://example.test/next';
 
+const walker: Platform.TreeWalker = document.createTreeWalker(node, window.NodeFilter.SHOW_ELEMENT,
+  { acceptNode: (candidate) => candidate === element ? window.NodeFilter.FILTER_ACCEPT : window.NodeFilter.FILTER_SKIP });
+walker.currentNode = document;
+const nextNode: Node | null = walker.nextNode();
+// @ts-expect-error a traversal root cannot be replaced
+walker.root = node;
+// @ts-expect-error TreeWalker has no public constructor
+new window.TreeWalker();
+
 const event: Event = new window.Event('ready', { bubbles: true });
 const target: EventTarget = new window.EventTarget();
 target.addEventListener('ready', (received) => { const type: string = received.type; });

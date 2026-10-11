@@ -186,8 +186,9 @@ in the [4H scope](browlet/dom/nodes/ROADMAP.md#shadow-trees-4h).
 The core DOM Range surface is implemented. HTML contextual fragment parsing and
 CSSOM View geometry remain absent; the
 [Range roadmap](browlet/dom/ranges/ROADMAP.md#processinginstruction-collapse)
-records the WebKit ProcessingInstruction collapse discrepancy. TreeWalker and
-DOMTokenList/classList remain absent. Generic
+records the WebKit ProcessingInstruction collapse discrepancy. DOM §6 traversal
+is implemented; its compatibility choices are recorded in the
+[traversal roadmap](browlet/dom/traversal/ROADMAP.md). DOMTokenList/classList remain absent. Generic
 cloning does not yet copy HTML-specific template, script, or form-control state.
 ProcessingInstruction validation, pseudo-attributes, and public construction are
 implemented. Its attribute-map cloning gap and the Document/XMLDocument equality

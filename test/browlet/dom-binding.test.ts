@@ -351,6 +351,7 @@ describe('Browlet DOM binding', () => {
       'createProcessingInstruction',
       'createRange',
       'createTextNode',
+      'createTreeWalker',
       'customElementRegistry',
       'defaultView',
       'doctype',

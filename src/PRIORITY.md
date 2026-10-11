@@ -45,10 +45,10 @@ equality and namespace queries, document factories, XML leaf interfaces, and
 ProcessingInstruction pseudo-attributes. Shadow attachment and slot assignment
 share the mutation path and observer checkpoint. [DOM §5](browlet/dom/ranges/ROADMAP.md)
 completes the core Range surface; contextual fragments and geometry keep their
-parser/layout gates. Next, audit and complete DOM §6 traversal, then §7 sets, as
-separate slices. Custom elements and HTML cloning hooks retain their separate
-gates. Selectlet uses the existing pointer traversal; TreeWalker remains separate
-traversal work rather than a prerequisite for selector APIs.
+parser/layout gates. DOM §6 traversal now supplies NodeFilter, NodeIterator, and
+TreeWalker through the Document factories. Next is DOM §7 sets as a separate
+slice. Custom elements and HTML cloning hooks retain their separate gates.
+Selectlet continues to use its existing pointer traversal.
 Trusted parser options, sanitization, markup
 APIs, script compilation, and workers keep their later consumer gates.
 
