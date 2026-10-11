@@ -47,8 +47,12 @@ share the mutation path and observer checkpoint. [DOM §5](browlet/dom/ranges/RO
 completes the core Range surface; contextual fragments and geometry keep their
 parser/layout gates. DOM §6 traversal now supplies NodeFilter, NodeIterator, and
 TreeWalker through the Document factories. DOM §7 adds DOMTokenList and
-Element.classList through the shared attribute path. Next is HTML §4.13 and
-§3.2.3: custom-element definitions, construction, upgrades, and reaction delivery.
+Element.classList through the shared attribute path. Next is a bounded pass
+through HTML §§2–3 in specification order, beginning with the
+[§§2.1–2.2 audit](browlet/html/ROADMAP.md#sections-21-and-22-audit), then §2.3
+microsyntaxes. Retain missing dependencies with their owners; this is not a
+requirement to finish every referenced subsystem. HTML §3.2.3 leads into §4.13
+for custom-element definitions, construction, upgrades, and reaction delivery.
 HTML cloning hooks retain their separate gates.
 Selectlet continues to use its existing pointer traversal.
 Trusted parser options, sanitization, markup

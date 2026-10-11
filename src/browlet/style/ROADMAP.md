@@ -72,6 +72,22 @@ HTML §2.3.10's “matches the environment” operation belongs at this boundary
 Stylelet owns media-query parsing/evaluation, while Browlet supplies the active
 environment and the HTML empty/whitespace-list behavior.
 
+## Unchanged style type
+
+**SPEC_CLASH(style-type-same-value): stylesheet replacement after an equal-value write.**
+The 2026-10-10 HTML §2.1 audit found that assigning `text/css` again to an existing
+`style type="text/css"` replaced its sheet in Chromium 149.0.7827.55 and WebKit
+26.5, discarding a rule added through `insertRule`. Firefox 151.0 retained the
+sheet and the inserted rule. Browlet currently replaces it through `LinkStyleMixin`.
+
+[HTML §2.1.4](https://html.spec.whatwg.org/multipage/infrastructure.html#dom-trees)
+distinguishes equal-value assignments from changes, but the
+[style-block update triggers](https://html.spec.whatwg.org/multipage/semantics.html#the-style-element)
+do not explicitly include changes to this obsolete attribute at all. Review
+both changed and unchanged type assignments with HTML §4.2.6/CSSOM before
+changing this behavior. Do not infer a global attribute-notification shortcut
+from either this split or the separate frozen-base-URL clash.
+
 ## HTML rendering inputs
 
 HTML §15 contributes two kinds of style input that Browlet must not bury in

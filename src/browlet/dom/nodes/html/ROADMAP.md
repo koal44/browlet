@@ -48,12 +48,40 @@ custom-element reactions, and base-change consumers such as hyperlink state and
 speculation rules. The fallback algorithm distinguishes explicit srcdoc document
 state from a URL that merely spells `about:srcdoc`.
 
-The 2026-09-21 Playwright probe found divergent frozen-URL behavior. After changing
-the document URL, Chromium and WebKit refreshed the first base when a later base's
-href changed; Firefox did not refresh on a same-value assignment to the first base.
-Windows WebKit also accepted a `data:` base. Per review, the tests retain HTML's
-written rules: refresh on becoming first or changing that element's href (including
-same-value assignments), ignore later bases, and reject `data:`/`javascript:`.
+The 2026-09-21 Playwright probe found that Chromium and WebKit refreshed the first
+base when a later base's href changed; Windows WebKit also accepted a `data:` base.
+The reviewed choices remain to ignore later bases and reject `data:`/`javascript:`.
+
+**SPEC_CLASH(base-href-same-value): frozen URL refresh after an equal-value write.**
+[HTML §2.1.4](https://html.spec.whatwg.org/multipage/infrastructure.html#dom-trees)
+defines a content attribute as changing only when its value differs.
+[HTML §4.2.3](https://html.spec.whatwg.org/multipage/semantics.html#the-base-element)
+refreshes the first base's frozen URL when its href changes. Read together, these
+passages support preserving the frozen URL on an equal-value assignment. This is
+our interpretation, not an interoperable result or a settled upstream resolution.
+
+On 2026-10-10, a Playwright probe loaded `https://example.test/dir/page`, inserted
+`<base href="relative/">`, used `history.pushState` to change the document URL to
+`https://example.test/new/page`, and assigned `relative/` to href again:
+
+| Engine | Resulting `document.baseURI` |
+| --- | --- |
+| Chromium 149.0.7827.55 | `https://example.test/new/relative/` |
+| Firefox 151.0 | `https://example.test/dir/relative/` |
+| WebKit 26.5 | `https://example.test/new/relative/` |
+
+All three queued an attributes MutationRecord containing the old value
+`relative/`. DOM's [attribute-change algorithm](https://dom.spec.whatwg.org/#concept-element-attributes-change)
+does not skip identical assignments; the HTML definition must not suppress DOM
+notification, custom-element reactions, or the generic attribute-change steps.
+
+**Reviewed choice:** follow the combined HTML reading and Firefox, with a guard
+only around the base-specific refresh. Equal-value writes preserve the frozen
+URL, including an invalid base's frozen fallback. Changed values and becoming
+the first base still refresh it. Regressions cover `setAttribute`, reflected
+`href`, `Attr.value`, and `NamedNodeMap`, including MutationObserver delivery.
+The earlier roadmap incorrectly called equal-value refresh spec-aligned; keep
+this clash until the specification and browser implementations converge.
 
 `iframe` is intentionally the first nested-browsing consumer. Its element
 module stores element state and invokes the specified processing hooks;

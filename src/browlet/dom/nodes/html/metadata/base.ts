@@ -55,7 +55,8 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     namespace: string | null,
   ): void {
     super.attributeChanged(localName, oldValue, newValue, namespace);
-    if (namespace === null && localName === 'href') {
+    // SPEC_CLASH(base-href-same-value): Follow HTML's change definition and Firefox; Chromium/WebKit refresh on equal values. See ../ROADMAP.md.
+    if (namespace === null && localName === 'href' && oldValue !== newValue) {
       this.nodeDocument.updateBaseElement(this);
     }
   }

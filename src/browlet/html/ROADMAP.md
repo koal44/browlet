@@ -43,6 +43,45 @@ there is no catch-all `html/infra` module.
 | §§2.6.4–2.6.5 collections | `html/collections/` over DOM live-collection machinery |
 | §2.7 safe passing of structured data | `scripting/structured-data/` |
 
+### Sections 2.1 and 2.2 audit
+
+The 2026-10-10 pass found normative requirements among the terminology. They
+belong to the existing owners, not new terminology or resource abstractions:
+
+- Parallel-queue ordering already lives in Infra. Resource readiness and
+  critical subresources belong to each loading algorithm; §2.1.2 alone does
+  not establish one universal resource record or completion check.
+- Namespace-based element identity and live DOM views use the existing DOM
+  and binding machinery. Treating a value as absent or invalid for processing
+  must not rewrite the stored DOM value.
+- DOM mutations already invoke insertion, post-connection, removal, and move
+  hooks. That dispatch does not complete HTML's §2.1.4 steps: form-owner resets,
+  removal-time focus repair without blur/change events, popover hiding, and
+  processing internal resource links (`link rel=expect`) await their owners.
+  Insertion also needs the specified parser-inserted/open-element conditions;
+  the current parser/style deferral is not a general substitute.
+- Equal-value attribute assignments require consumer-specific review. The
+  [base-URL clash](../dom/nodes/html/ROADMAP.md) follows the HTML reading and
+  Firefox after review; the [style-block question](../style/ROADMAP.md#unchanged-style-type)
+  stays with HTML style processing. DOM mutation notification remains unconditional.
+- The conformance/dependency sections impose requirements on the referenced
+  implementations, including JavaScript proposals, Intl, and Temporal. They
+  do not establish that those implementations are complete. Optional plugin
+  support must exclude `text/plain` and `application/octet-stream`; unknown
+  markup stays in the DOM, and deliberately disabled features must be absent
+  from exposed interfaces rather than present but throwing.
+- XPath/XSLT have explicit HTML namespace and output-processing rules, retained
+  in their [XPath](../dom/xpath/ROADMAP.md) and [XSLT](../dom/xslt/ROADMAP.md)
+  roadmaps until those engines are implemented.
+- §2.2 defines `autoplay`, `cross-origin-isolated`, and
+  `focus-without-user-activation`, each with default allowlist `'self'`.
+  [Permissions Policy](../browsing/policy/ROADMAP.md) still needs declared,
+  inherited, and container policies plus actual feature checks. Register these
+  defaults with that implementation, not in an unused standalone table.
+
+Continue with §2.3. This pass identifies the remaining dependencies; it does
+not mark §§2.1–2.2 fully implemented.
+
 ## HTML section 3 ownership
 
 Section 3 defines the common Document and element substrate used by the

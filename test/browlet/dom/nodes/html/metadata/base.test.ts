@@ -160,8 +160,45 @@ describe('Frozen base URLs', () => {
     expect(base.href).toBe('https://example.test/new/relative/');
 
     base.setAttribute('href', 'relative/');
-    expect(document.baseURI).toBe('https://example.test/new/relative/');
+    expect(document.baseURI).toBe('https://example.test/dir/relative/');
+    base.setAttribute('href', 'changed/');
+    expect(document.baseURI).toBe('https://example.test/new/changed/');
   });
+
+  it.each(['setAttribute', 'href', 'Attr.value', 'NamedNodeMap'])(
+    'preserves the frozen URL but delivers a mutation record for an equal-value %s assignment', async (method) => {
+      const browlet = new Browlet({ route: () => '<base href="relative/">' });
+      await browlet.navigate('https://example.test/dir/page');
+      const documentImpl = getRelevantRealm(browlet.window).windowImplementation.getAssociatedDocument();
+      documentImpl.url = parseURL('https://example.test/new/page').url!;
+
+      expect(await browlet.evaluate((method) => {
+        const base = document.querySelector('base')!;
+        const records: unknown[] = [];
+        const observer = new MutationObserver((mutations) => {
+          records.push(...mutations.map((record) => [
+            record.type, record.attributeName, record.oldValue, record.target === base,
+          ]));
+        });
+        observer.observe(base, { attributes: true, attributeOldValue: true });
+        switch (method) {
+          case 'setAttribute': base.setAttribute('href', 'relative/'); break;
+          case 'href': base.href = 'relative/'; break;
+          case 'Attr.value': base.getAttributeNode('href')!.value = 'relative/'; break;
+          case 'NamedNodeMap': {
+            const attribute = document.createAttribute('href');
+            attribute.value = 'relative/';
+            base.attributes.setNamedItem(attribute);
+            break;
+          }
+        }
+        return { baseURI: document.baseURI, records };
+      }, method)).toEqual({
+        baseURI: 'https://example.test/dir/relative/',
+        records: [['attributes', 'href', 'relative/', true]],
+      });
+    },
+  );
 
   it('does not refresh the first base when later bases or unrelated attributes change', () => {
     const { document, root } = createDocument();
@@ -210,6 +247,8 @@ describe('Frozen base URLs', () => {
     document.url = parseURL('https://example.test/new/page').url!;
     expect(document.baseURI).toBe('https://example.test/dir/page');
     base.attributes.getNamedItem('href')!.value = 'https://[';
+    expect(document.baseURI).toBe('https://example.test/dir/page');
+    base.attributes.getNamedItem('href')!.value = 'https://[invalid';
     expect(document.baseURI).toBe('https://example.test/new/page');
   });
 });
