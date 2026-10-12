@@ -50,6 +50,7 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     attrs: Token.Attribute[],
   ): ElementImpl {
     const element = this.#document.createElementNode(tagName, namespaceURI);
+    element.initializeFromParser();
     for (const attribute of attrs) {
       element.appendAttribute(fromParserAttribute(attribute, this.#document));
     }

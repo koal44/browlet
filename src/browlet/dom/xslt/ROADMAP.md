@@ -1,5 +1,20 @@
 # DOM XSLT roadmap
 
+## Status: optional, implementation undecided
+
+[HTML §2.1.11](https://html.spec.whatwg.org/multipage/infrastructure.html#interactions-with-xpath-and-xslt)
+now explicitly discourages client-side XSLT and warns that it is being removed
+from the web platform. As checked on 2026-10-12,
+[Chromium's published plan](https://developer.chrome.com/docs/web-platform/deprecating-xslt)
+targets Chrome 158 (2026-11-17) for disabling it on Stable, with temporary
+origin-trial and enterprise exceptions. This is a planned transition, not a
+claim that all browsers have already removed it.
+
+The entries below preserve implementation requirements if Browlet elects to
+support XSLT; they are not a commitment to implement it. Reassess browser support
+and an actual Browlet use case before selecting an engine. XPath remains an
+independent feature and is not deferred by this XSLT decision.
+
 ## Standards boundary
 
 DOM §9 preserves the `XSLTProcessor` Web IDL but explicitly does not provide a
@@ -7,6 +22,14 @@ complete behavioral definition. HTML §2.1.11 adds DOM-output rules and also
 acknowledges that XSLT's parser, navigation, event-loop, and error-page
 integration remain incompletely specified. The short interface is therefore
 not a small transcription task.
+
+**SPEC_CLASH(html-xslt-dom-output): HTML overrides XSLT 1.0 DOM output.**
+[HTML's required override](https://html.spec.whatwg.org/multipage/infrastructure.html#dom-based-xslt-1.0-processors)
+is explicitly described as a willful violation: for the HTML output method,
+no-namespace elements acquire the HTML namespace, and their local names and
+non-namespaced attribute names are ASCII-lowercased before DOM construction.
+This does not alter serialized output. Any Browlet implementation must apply
+the HTML rule rather than blindly forward an engine's DOM output.
 
 ## Planned surface
 

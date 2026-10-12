@@ -22,6 +22,13 @@ Intersection Observer, focus visibility, `innerText`, paint timing, and
 screenshots must wait for that real box boundary rather than infer layout from
 DOM shape or computed `display` alone.
 
+HTML §2.5.7's Document consumer now uses the provisional
+[Intersection Observer implementation](../dom/intersection-observer/ROADMAP.md).
+That observer retains registrations and entry queues; scheduled notification
+remains unfinished, and this domain must supply truthful geometry and clipping
+inputs. The HTML tests feed explicit intersection
+entries and do not establish that rendering or lazy resource loading is present.
+
 The Window rendering-opportunity producer and the spec-ordered update pipeline
 live under `scripting/`. This domain supplies concrete style, layout, display,
 and output phase hooks when those systems exist; it must not replace the

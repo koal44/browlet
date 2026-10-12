@@ -1,0 +1,27 @@
+import { asciiLower } from '../../../../../infra/ascii';
+
+import { splitOnAsciiWhitespace } from '../../../infra/index';
+import type { ElementImpl } from '../../element';
+
+/** Tokens recognized by HTML and by a blocking attribute's DOMTokenList.supports(). */
+// https://html.spec.whatwg.org/multipage/urls-and-fetching.html#possible-blocking-token
+export const possibleBlockingTokens: ReadonlySet<string> = new Set<BlockingToken>(['render']);
+
+// TODO(render blocking): Document's HTML §3.1.6 mechanism must consume the element predicates,
+// including unblocking on disconnection and on blocking-attribute changes that end eligibility.
+// Loader/preparation entry and completion, request flags, and the rendering timeout remain with those owners.
+
+/** Interpret a supported element's blocking attribute without changing its author-visible token list. */
+// https://html.spec.whatwg.org/multipage/urls-and-fetching.html#blocking-tokens-set
+export function getBlockingTokens(element: ElementImpl): Set<BlockingToken> {
+  const value = element.getAttributeNS(null, 'blocking') ?? '';
+  const tokens = new Set<BlockingToken>();
+  // SPEC_CLASH(blocking-token-case): HTML lowercases tokens; Chromium/WebKit test exact lowercase membership. Follow HTML.
+  for (const token of splitOnAsciiWhitespace(asciiLower(value))) {
+    if (possibleBlockingTokens.has(token)) tokens.add(token as BlockingToken);
+  }
+  return tokens;
+}
+
+/** A recognized blocking operation, after case folding and removal of unsupported tokens. */
+export type BlockingToken = 'render';

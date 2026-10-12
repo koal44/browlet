@@ -19,6 +19,9 @@ import {
 
 export type LengthPercentageLiteral = DimensionPercentageLiteral<LengthLiteral>;
 
+/** A pixel length or a percentage whose reference size has not yet been supplied. */
+export type CanonicalLengthPercentageLiteral = DimensionPercentageLiteral<CanonicalLengthLiteral>;
+
 export type LengthPercentageResolutionContext = LengthResolutionContext & {
   percentageReferenceValue?: CanonicalLengthLiteral;
 };

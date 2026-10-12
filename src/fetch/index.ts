@@ -33,7 +33,7 @@ export type {
 export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, FetchHeaders } from './headers';
 export { isScriptLikeDestination, type Destination } from './destination';
 export {
-  requestIDL, FetchRequest, type FetchMode, type RequestCredentials, type RequestInternalPriority,
+  requestIDL, FetchRequest, type FetchMode, type RequestCredentials, type RequestPriority, type RequestInternalPriority,
   type FetchRequestInfo, type FetchRequestInit,
 } from './request';
 export { responseIDL, FetchResponse, isFilteredResponse, type CacheUsage, type ResponseImpl } from './response';
@@ -41,7 +41,9 @@ export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
 } from './integrity';
-export { referrerPolicyIDL, type ReferrerPolicy, type FetchIntegrityPolicy, type IntegrityViolationReportBody } from './policy';
+export {
+  referrerPolicyIDL, referrerPolicyValues, type ReferrerPolicy, type FetchIntegrityPolicy, type IntegrityViolationReportBody,
+} from './policy';
 export { isLocalScheme, isLocalURL } from './url';
 
 export const fetchIDLDefinitions: Definition<FetchEnvironment>[] = [

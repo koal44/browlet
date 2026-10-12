@@ -16,6 +16,14 @@ algorithm. Conformance work must combine:
 Do not fill those gaps silently from one engine. Record each interoperability
 decision or limitation beside its behavioral test.
 
+**SPEC_CLASH(html-xpath-default-element-namespace): HTML replaces XPath 1.0's namespace rule.**
+[HTML §2.1.11](https://html.spec.whatwg.org/multipage/infrastructure.html#xpath-1.0-processors)
+explicitly instructs implementations to replace the original QName paragraph
+and calls this a willful violation. Unprefixed element tests use the HTML
+namespace for an HTML context; unprefixed attributes and XML contexts retain
+the null namespace. Browlet's eventual evaluator must follow this HTML override,
+not an unmodified XPath 1.0 engine's default behavior.
+
 ## Planned surface
 
 | Planned source | Contract | Specification |

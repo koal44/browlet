@@ -16,4 +16,8 @@ export { CSSStyleDeclarationImpl } from './cssom/declaration';
 export { MediaListImpl } from './cssom/media-list';
 export { StyleSheetListImpl } from './cssom/stylesheet-list';
 export { styleletIDLDefinitions } from './web-idl';
+export type { BoxSides } from './values/box-sides';
 export { ColorRgba, absoluteColorFromRgba, type AbsoluteColor } from './values/color';
+export { lengthLiteral } from './values/numeric-literal/length';
+export { percentageLiteral } from './values/numeric-literal/percentage';
+export type { CanonicalLengthPercentageLiteral } from './values/numeric-literal/length-percentage';

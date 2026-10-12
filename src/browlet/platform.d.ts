@@ -451,6 +451,7 @@ export interface HTMLElement extends Element {
   /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
   get style(): object;
   set style(value: unknown);
+  nonce: string;
 }
 
 export interface HTMLElementConstructor extends Ctor<ElementConstructor> {
@@ -468,7 +469,11 @@ export interface HTMLUnknownElementConstructor extends Ctor<HTMLElementConstruct
 }
 
 export interface HTMLScriptElement extends HTMLElement {
-
+  get blocking(): DOMTokenList;
+  set blocking(value: string);
+  crossOrigin: (string | null);
+  referrerPolicy: string;
+  fetchPriority: string;
 }
 
 export interface HTMLScriptElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -508,6 +513,8 @@ export interface HTMLBaseElementConstructor extends Ctor<HTMLElementConstructor>
 }
 
 export interface HTMLStyleElement extends HTMLElement {
+  get blocking(): DOMTokenList;
+  set blocking(value: string);
   readonly sheet: (object | null);
 }
 
@@ -517,12 +524,63 @@ export interface HTMLStyleElementConstructor extends Ctor<HTMLElementConstructor
 }
 
 export interface HTMLLinkElement extends HTMLElement {
+  crossOrigin: (string | null);
+  referrerPolicy: string;
+  get blocking(): DOMTokenList;
+  set blocking(value: string);
+  fetchPriority: string;
   readonly sheet: (object | null);
 }
 
 export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLLinkElement;
   [Symbol.hasInstance](value: unknown): value is HTMLLinkElement;
+}
+
+export interface HTMLImageElement extends HTMLElement {
+  loading: string;
+  fetchPriority: string;
+}
+
+export interface HTMLImageElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLImageElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLImageElement;
+}
+
+export interface HTMLIFrameElement extends HTMLElement {
+  loading: string;
+}
+
+export interface HTMLIFrameElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLIFrameElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLIFrameElement;
+}
+
+export interface HTMLMediaElement extends HTMLElement {
+  loading: string;
+}
+
+export interface HTMLMediaElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLMediaElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLMediaElement;
+}
+
+export interface HTMLAudioElement extends HTMLMediaElement {
+
+}
+
+export interface HTMLAudioElementConstructor extends Ctor<HTMLMediaElementConstructor> {
+  readonly prototype: HTMLAudioElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLAudioElement;
+}
+
+export interface HTMLVideoElement extends HTMLMediaElement {
+
+}
+
+export interface HTMLVideoElementConstructor extends Ctor<HTMLMediaElementConstructor> {
+  readonly prototype: HTMLVideoElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLVideoElement;
 }
 
 export interface HTMLFormElement extends HTMLElement {
@@ -538,6 +596,7 @@ export interface SVGElement extends Element {
   /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
   get style(): object;
   set style(value: unknown);
+  nonce: string;
 }
 
 export interface SVGElementConstructor extends Ctor<ElementConstructor> {
@@ -558,6 +617,7 @@ export interface MathMLElement extends Element {
   /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
   get style(): object;
   set style(value: unknown);
+  nonce: string;
 }
 
 export interface MathMLElementConstructor extends Ctor<ElementConstructor> {
@@ -736,6 +796,11 @@ export interface Window extends EventTarget {
   HTMLBaseElement: HTMLBaseElementConstructor;
   HTMLStyleElement: HTMLStyleElementConstructor;
   HTMLLinkElement: HTMLLinkElementConstructor;
+  HTMLImageElement: HTMLImageElementConstructor;
+  HTMLIFrameElement: HTMLIFrameElementConstructor;
+  HTMLMediaElement: HTMLMediaElementConstructor;
+  HTMLAudioElement: HTMLAudioElementConstructor;
+  HTMLVideoElement: HTMLVideoElementConstructor;
   HTMLFormElement: HTMLFormElementConstructor;
   SVGElement: SVGElementConstructor;
   SVGStyleElement: SVGStyleElementConstructor;

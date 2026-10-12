@@ -3,7 +3,7 @@ import { internalType, type InternalPromise } from '../infra/promises';
 import type { TimerHost } from '../infra/execution';
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
-import type { StyleletUserAgent } from '../stylelet/index';
+import { percentageLiteral, type StyleletUserAgent } from '../stylelet/index';
 import { decode } from '../encoding/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
@@ -20,11 +20,13 @@ import {
 } from '../fetch/index';
 
 import { unsafeSharedCurrentTime } from './timing/index';
+import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import { EventLoop, WindowAgent } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import {
   PolicyContainer, HSTSStore, determineRequestReferrer, setRequestReferrerPolicyOnRedirect,
 } from './browsing/policy/index';
+import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import { type BrowletEnvironment } from './environment';
 import { HTTPAuthenticationStore } from './loader/index';
@@ -90,6 +92,15 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   storageEnabled = true;
   /** Allows outbound report queues and delivery; local ReportingObservers remain enabled. */
   reportDeliveryEnabled = true;
+  /** User preference for scripting; Browlet itself always has JavaScript support. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
+  scriptingEnabled = true;
+  /** Scroll-container expansion used when a document creates its lazy-loading observer. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-root-margin
+  // Implementation-defined: use WebKit's image-observer "100%" fallback until measurements justify tuning.
+  lazyLoadScrollMargin: IntersectionObserverMargin = [
+    percentageLiteral(100), percentageLiteral(100), percentageLiteral(100), percentageLiteral(100),
+  ];
   /** Maximum age of queued reports in milliseconds; Reporting suggests about two days. */
   maxReportAge = 2 * 24 * 60 * 60 * 1000;
   /** Reporting endpoints are retired after exceeding this consecutive-failure count. */
@@ -348,6 +359,13 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     });
   }
 
+  /** Whether automation permits scripting for the given environment. */
+  // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-scripting-is-enabled
+  webDriverBiDiScriptingIsEnabled(_env: BrowletEnvironment): boolean {
+    // PROVISIONAL: no BiDi sessions; select top-level traversable/user-context overrides when implemented.
+    return true;
+  }
+
   /** Whether automation emulates an offline network for the given environment. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-network-is-offline
   webDriverBiDiNetworkIsOffline(_env: BrowletEnvironment): boolean {
@@ -444,7 +462,3 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
 /** Outcome of one delivery attempt; the caller applies endpoint bookkeeping. */
 export type ReportDeliveryResult = 'success' | 'remove-endpoint' | 'failure';
-
-/** Interpreted states of an HTML crossorigin content attribute, distinct from raw attribute text. */
-// https://html.spec.whatwg.org/multipage/urls-and-fetching.html#cors-settings-attribute
-export type CORSSettingsState = 'no-cors' | 'anonymous' | 'use-credentials';

@@ -138,7 +138,9 @@ const laxAllowingUnsafeMaxAge = 2 * 60 * 1000;
 /** Referrer disclosure policy; an empty value defers to the client's policy. */
 export type ReferrerPolicy = typeof referrerPolicyValues[number];
 
-const referrerPolicyValues = [
+/** Standard policy keywords shared by Fetch, HTML attributes, and response-header parsing. */
+// https://w3c.github.io/webappsec-referrer-policy/#referrer-policies
+export const referrerPolicyValues = [
   '', 'no-referrer', 'no-referrer-when-downgrade', 'same-origin', 'origin',
   'strict-origin', 'origin-when-cross-origin', 'strict-origin-when-cross-origin', 'unsafe-url',
 ] as const;

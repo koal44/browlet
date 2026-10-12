@@ -38,7 +38,7 @@ there is no catch-all `html/infra` module.
 | §2.2 policy-controlled features | `browsing/policy/` |
 | §2.3 common microsyntaxes | `html/microsyntaxes/`, with media-query evaluation delegated to `style/` |
 | §2.4 URLs | `src/url` for URL semantics; Document, `<base>`, and `html/reflection/` for HTML integration |
-| §2.5 fetching resources | `loader/` over the sibling `src/fetch` project; resource sniffing and parser encoding extraction retain their named dependencies |
+| §2.5 fetching resources | `dom/nodes/html/attributes/` for shared element attribute definitions below node implementations; `loader/` over the sibling `src/fetch` project for resource lifecycles; sniffing and parser encoding extraction retain their named dependencies |
 | §§2.6.1–2.6.3 reflection | `html/reflection/`, with reusable value parsing in `html/microsyntaxes/` |
 | §§2.6.4–2.6.5 collections | `html/collections/` over DOM live-collection machinery |
 | §2.7 safe passing of structured data | `scripting/structured-data/` |
@@ -142,8 +142,8 @@ The larger stopping point is [respond to base URL changes](https://html.spec.wha
 - Reparse and update existing speculation-rule results on shadow-including
   descendant scripts. `HTMLScriptElementImpl` now supplies recognition, an
   initially uninitialized result, and its relevant Window from its existing realm.
-  Parsed and created HTML scripts have their own platform interface, without
-  reflected script members or preparation behavior yet.
+  Parsed and created HTML scripts have their own platform interface; the later
+  §2.5 slices add fetch-attribute reflection, while preparation remains missing.
   `Document.createSpeculationRulesParseResult(input)` currently initializes only
   the two-field record from [HTML §8.1.4.9](https://html.spec.whatwg.org/multipage/webappapis.html#speculation-rules-parse-results):
   `speculationRuleSet: null` and `errorToRethrow: null`. The shared type lives in
@@ -190,18 +190,49 @@ loads remain separate §7.6 work; they need not be the first loading excursion.
 
 ### Section 2.5 audit
 
-The 2026-10-11 ordered audit implements the bounded §2.5.2 resource-reader
-integration and §2.5.3 meta encoding extraction. The next review point is
-**§2.5.4, CORS settings attributes**: raw attribute interpretation, reflection,
-and element fetch consumers are not yet connected.
+The ordered audit implements the bounded §2.5.2 resource-reader integration,
+§2.5.3 meta encoding extraction, and, as of 2026-10-12, §§2.5.4–2.5.5's shared
+CORS/referrer attribute rules and reflection on the existing link/script elements.
+The subsequent §2.5.7 slice connects the lazy-loading consumer to a provisional
+observer and a provisional no-session automation hook; see below.
+**Element fetch integration, document policy delivery, and custom-element
+reactions** remain explicit dependencies, not completed by attribute reflection.
 
 | Requirement | Current implementation and remaining work |
 | --- | --- |
 | §2.5.1 response terminology | FetchResponse already represents the six response types and exposes the underlying response through `isFilteredResponse()` and `internalResponse`. HTML's CORS-same-origin classification covers basic/cors/default; CORS-cross-origin covers opaque/opaqueredirect. Network errors belong to neither group. These definitions do not require another response representation. |
-| §2.5.1 potential-CORS request | `UserAgent.createPotentialCORSRequest()` creates the existing FetchRequest with the required destination, mode, credentials mode, and use-URL-credentials flag. Its caller still supplies client and other feature-specific fields. Tests cover all three CORS states with and without same-origin fallback. Element fetch consumers and raw crossorigin attribute interpretation (§2.5.4) remain later work. |
+| §2.5.1 potential-CORS request | `UserAgent.createPotentialCORSRequest()` creates the existing FetchRequest with the required destination, mode, credentials mode, and use-URL-credentials flag. Its caller still supplies client and other feature-specific fields. Tests cover all three CORS states with and without same-origin fallback, including states interpreted from raw attribute values. Production element fetch consumers remain missing. |
 | §2.5.2 resource type detection | Loader's ResourceReader retains response metadata, computes a MIME type with existing MIME algorithms, and preserves the bounded sniffed prefix and any pending read for subsequent consumption. Real HTTP tests pass the same reader to the HTML parser. General handler selection and actual content support remain explicit §7.5 gates. |
 | §2.5.3 meta encoding extraction | `html/microsyntaxes/meta-encoding.ts` implements the shared string algorithm with Encoding's label lookup, below both future meta elements and parser consumers. Tests cover quoted/unquoted labels, repeated candidates, ASCII whitespace, and the deliberate differences from HTTP parameter parsing. Meta element processing, the encoding prescan, and restart remain §§4.2.5/13.2.3 work. |
-| §2.5.4 CORS settings attributes | The request factory accepts an interpreted state, but `script` and `link` only list `crossOrigin` in IDL comments, without implementing the member. Their fetch/preparation algorithms and the image/media/iframe consumers remain unfinished. Continue here with attribute ownership and actual consumers rather than claiming the existing state union completes this section. |
+| §2.5.4 keywords and defaults | `dom/nodes/html/attributes/cors.ts` reuses `EnumeratedAttribute`: ASCII-insensitive keywords without trimming; absence selects No CORS, while empty and invalid values select Anonymous. The shared definition also supplies canonical reflected keywords. |
+| §2.5.4 credentials translation | `getCORSSettingsCredentialsMode()` implements the always-CORS translation: No CORS/Anonymous select `same-origin`, Use Credentials selects `include`. This deliberately differs from potential-CORS request creation, where No CORS selects `include`. The helper takes the already-interpreted attribute state used by the specification's switch; the rule needs no element argument. |
+| §2.5.4 element consumers | Link and script expose nullable `crossOrigin` reflection through their actual Web IDL declarations, preserving raw text and using DOM mutation for writes/removal. Linked-resource processing (§4.2.4), script preparation/fetching (§§4.12.1/8.1.5), and image/audio/video implementations (§4.8) still need their request consumers. There is no iframe `crossorigin` attribute. `[CEReactions]` declarations and the DOM callback-enqueue hook remain visible; reaction stacks, delivery, and custom-element construction are unfinished §4.13 work. |
+| §2.5.5 keywords and defaults | `dom/nodes/html/attributes/referrer-policy.ts` reuses Fetch's policy values and `EnumeratedAttribute`. Each keyword names its state, including the empty string; absent/invalid attributes select that empty state. Matching is ASCII-insensitive without trimming or header-style comma splitting. Fetch resolves an empty request policy from its policy container. |
+| §2.5.5 reflection and request boundary | Link and script expose non-nullable `referrerPolicy` strings, limited to known values on reads while preserving assigned text. Tests carry the interpreted state through real Fetch request preparation to the outgoing Referer header. Production element loading remains with the same missing consumers as CORS; the other referrer-bearing element surfaces remain unimplemented. |
+| §2.5.5 policy delivery and precedence | The section's precedence note summarizes separate owners: hyperlink `rel=noreferrer`, element attributes, meta referrer processing, and response-header policy delivery. The header parser, redirect updates, and request calculations exist. Hyperlink activation, meta processing, and navigation response-to-Document policy association do not; `Navigable.createNavigationParams()` already marks complete policy-container selection as missing. See the [policy roadmap](../browsing/policy/ROADMAP.md#referrer-policy). |
+
+The CORS tests cover both the shared rules and real platform objects, including
+Web IDL conversion, null/undefined removal, namespaced-attribute isolation,
+attached Attr changes, and MutationObserver records for equal-value writes.
+They do not certify resource loading or custom-element reaction delivery.
+No fetching algorithm was replaced with a successful no-op to make this slice pass.
+
+The referrer tests distinguish one attribute keyword from the response header's
+comma-separated fallback list. Platform tests cover DOMString conversion,
+empty-attribute creation, equal-value writes, namespaces, and attached Attr
+changes. Unlike nullable `crossOrigin`, `referrerPolicy = null` stores `"null"`;
+both its invalid spelling and an absent attribute read back as `""`.
+
+**SPEC_CLASH(script-referrer-policy-null): script null/undefined assignments.**
+[HTML's script IDL](https://html.spec.whatwg.org/multipage/scripting.html#htmlscriptelement)
+declares non-nullable DOMString. The 2026-10-12 Playwright probe found Firefox
+151.0 and WebKit 26.5 storing `"null"` / `"undefined"`, while Chromium 149.0.7827.55
+removed the attribute for both inputs. All three use the HTML behavior for link.
+The local [Blink script declaration](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/html_script_element.idl)
+is nullable; [Gecko](https://github.com/mozilla-firefox/firefox/blob/main/dom/webidl/HTMLScriptElement.webidl)
+and [WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLScriptElement.idl)
+are not. Eric approved HTML/Firefox/WebKit: retain ordinary DOMString conversion,
+with a regression in `test/browlet/dom/nodes/html/referrer-policy.test.ts`.
 
 The request factory lives on UserAgent, the owner retained by FetchRequest even
 before an HTML caller selects a client. The same-origin fallback flag defaults
@@ -215,9 +246,180 @@ consumer, not that selection layer. `UserAgent.supportsMIMEType()` currently
 returns false as a provisional Resource Timing policy; wiring it into sniffing
 does not establish browser content support.
 
-§§2.5.5–2.5.9 remain unaudited in this pass: referrer policy, nonce, lazy loading,
-blocking, and fetch priority attributes.
-Their existing roadmap entries are dependency locations, not completion claims.
+The remaining shared attributes (§§2.5.6–2.5.9) are covered below. Common DOM
+interfaces and reusable reflection (§2.6) are next.
+
+### Section 2.5.6 nonce attributes
+
+The shared `HTMLOrSVGOrMathMLElementMixin` in `dom/nodes/` owns the internal
+nonce. HTML, SVG, and MathML implementations privately compose it and forward
+the nonce member and lifecycle hooks. Generic XML elements do not include it.
+The mixin's other members belong to their later HTML sections and remain TODOs.
+
+| Requirement | Implementation and evidence |
+| --- | --- |
+| Initial value and IDL | `nonce` starts as the empty string. Ordinary DOMString conversion occurs in Web IDL; the setter only changes internal state, without changing attributes or queuing mutation records. HTML intentionally omits `[CEReactions]` on this member. |
+| Content attribute changes | Null-namespace `nonce` writes, attached Attr updates/replacement, and removal update internal state through the existing DOM attribute-change hooks. Namespaced lookalikes do not. Empty/removal values clear the nonce; equal-value writes still run DOM's attribute-change steps. |
+| Browsing-context connection | The insertion hook checks the shadow-including root's browsing context and current policy container, using CSP's existing `hasHeaderDeliveredPolicy()`. A nonempty content attribute becomes empty while the separately retained nonce is restored. Both enforce and report-only header policies qualify; meta-only policies and documents without a browsing context do not. |
+| Observable mutation | Hiding uses normal attribute mutation, preserving MutationObserver records and selector/collection invalidation. Absent/empty attributes are not rewritten. Setting an attribute on an already connected element does not itself trigger the insertion algorithm. |
+| Cloning | Each including implementation copies the internal nonce after DOM has cloned attributes. Deep clones and imports preserve it independently of the visible attribute. |
+| Integration boundary | Existing parser attribute creation uses the same hooks. Navigation/meta CSP delivery and actual script/style fetch/inline checks remain with their owners; tests install real policy records directly, without claiming those missing consumers are complete. |
+
+**SPEC_CLASH(nonce-empty-attribute): empty writes.**
+[HTML §2.5.6](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#nonce-attributes)
+sets the internal nonce to the new content-attribute value, including the empty
+string. The 2026-10-12 Playwright probe found Firefox 151.0 and WebKit 26.5 doing
+so for HTML/SVG, while Chromium 149.0.7827.55 retained the previous nonce after
+`setAttribute('nonce', '')`. All three cleared it on removal. Eric approved
+HTML/Firefox/WebKit; the empty-write regression retains that result.
+
+**SPEC_CLASH(mathml-nonce): complete MathML inclusion.**
+Current HTML includes MathML in the nonce mixin. In the same probe, WebKit
+provided the property, attribute synchronization, connection-time hiding, and
+cloning. Chromium provided the property and copied it, but did not synchronize
+or hide the MathML attribute. Firefox exposed no nonce property; assignment
+created an ordinary expando that cloning did not copy. Eric approved HTML/WebKit
+for MathML. The same nonce contract tests run across all three namespaces.
+
+Tests live in `test/browlet/dom/nodes/html/nonce.test.ts`. They cover real
+platform conversion and mutation, header/meta/no-policy distinctions, shadow
+subtree connection, adoption, cloning/importing, parser input, and generic XML
+exclusion. CSP nonce matching itself remains in the existing policy tests.
+
+### Section 2.5.7 lazy loading
+
+The 2026-10-12 slice implements the HTML decisions and records the missing
+dependencies explicitly. Eric accepted this bounded slice as complete; it does
+**not** implement viewport-driven loading. The [Intersection Observer roadmap](../dom/intersection-observer/ROADMAP.md)
+and [rendering roadmap](../rendering/ROADMAP.md) own the remaining dependencies.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Lazy/Eager keywords and defaults | `dom/nodes/html/attributes/loading.ts` uses the common enumerated-attribute definition. Missing, empty, and invalid values select Eager. Matching is ASCII-insensitive without trimming. |
+| Element state and reflection | Basic `HTMLImageElementImpl`, `HTMLIFrameElementImpl`, `HTMLMediaElementImpl`, `HTMLAudioElementImpl`, and `HTMLVideoElementImpl` live in `dom/nodes/html/embedded/`. Image, iframe, and media retain initially-null lazy-load resumption steps; video also retains initially-null poster steps. Their limited `loading` reflection uses normal DOM mutation. Other element APIs, constructors, and loaders remain unfinished. |
+| Will lazy load | Each loading element asks its original `env.isScriptingEnabled()`, checks its current node document's browsing context, then tests the interpreted loading state. A detached element in an active document may qualify; a node belonging to a document without a browsing context may not. |
+| Scripting disabled | `BrowletEnvironment.isScriptingEnabled()` accounts for Browlet's JavaScript support, a UserAgent scripting preference, and the original realm's currently associated document's sandbox flag. `UserAgent.webDriverBiDiScriptingIsEnabled(env)` now has an approved provisional true result for the absence of BiDi sessions, alongside the other automation hooks. Scoped override storage/selection remains unfinished. Script execution itself still needs the same gate when script preparation is implemented. |
+| Document observer | Document retains one observer, creates it in its own environment with typed margins and the other IntersectionObserverInit defaults, and directly observes/unobserves implementation targets. The provisional observer now retains real registrations, options, callbacks, and entry queues. Complete option initialization, entry geometry, bindings, and automatic delivery remain in the [observer roadmap](../dom/intersection-observer/ROADMAP.md). |
+| Intersection callback | Internal entries bypass author-replaceable iteration and getters. Resumption functions are captured before either runs; observation stops first, then each retained function is cleared immediately before invocation. Video poster loading can resume without a media continuation. |
+| Becoming eager | The image, iframe, and media attribute-change hooks resume a retained load when the interpreted state changes from Lazy to Eager, including removal and invalid text. Same-state spelling changes and namespaced lookalikes do not resume it. Video captures both continuations before running either. |
+| Scroll margin | HTML explicitly leaves the value to the implementation. UserAgent defaults to `100%` on each of four typed Stylelet sides, following WebKit's fallback, and Document captures them at observer creation without string parsing. Dynamic retuning remains the upstream [immutable-options issue](https://github.com/w3c/IntersectionObserver/issues/428), not a second local observer API. |
+| Resource consumers | Image update/selection (§4.8.4), iframe attribute processing/navigation (§4.8.5), and media/poster loading (§4.8.8 onward) must install the actual continuation and call `element.nodeDocument.startObservingLazyLoadingElement(element)`. The new element classes do not synthesize a fetch, navigation, or successful media load. |
+| Intersection delivery | Real root/target geometry, scroll clipping, thresholds, initial entries, queued notifications, and lifecycle/adoption behavior belong to Intersection Observer and rendering. The existing `updateIntersectionObservations` rendering phase is available but unconnected. This is the stopping point for this slice. |
+
+The live [HTML callback](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#start-intersection-observing-a-lazy-loading-element),
+checked on 2026-10-12, now says to continue when both resumption functions are
+null. It agrees with Browlet's approved behavior and the prior Blink, Gecko,
+and WebKit source evidence. The older local HTML snapshot still says return.
+The resolved clash marker has been removed; the regression remains.
+
+The section's red editorial warnings concern missing low-level observer hooks
+([issue 464](https://github.com/w3c/IntersectionObserver/issues/464)), repeatedly
+requiring original constructors/getters/methods and iteration immune to author
+changes. Browlet uses implementation objects and indexed internal-entry access.
+The separate [issue 428](https://github.com/w3c/IntersectionObserver/issues/428)
+concerns dynamic margin suggestions versus immutable observer options. The
+current integration captures its implementation-defined margin at construction;
+dynamic retuning remains deferred. These upstream integration warnings do not
+mean the otherwise specified HTML steps were omitted.
+
+Tests cover attribute conversion/mutation, original-realm versus adopted-document
+scripting eligibility, eager transitions, shared observer ownership, callback
+ordering, poster-only work, and immunity to entry-array iterator replacement.
+They use real Browlet realms, nodes, and observer registrations while controlling
+the automation answer. The default spy calls the actual provisional no-session
+hook. Explicit entry injection and direct notification
+exercise the HTML consumer without claiming geometry or task-scheduling coverage.
+The observer module no longer needs a Vitest mock or a temporary test resolver.
+Its own tests cover registration history, independent observers, removal,
+reobservation, queue draining, callback reentrancy, and adopted targets.
+The provisional BiDi hook removes the missing-method dependency; it does not
+implement automation override selection or make real lazy loading operational.
+
+### Section 2.5.8 blocking attributes
+
+The attribute and potential-blocking decisions are implemented. This does not
+implement rendering waits: §3.1.6's Document mechanism and the element loading
+algorithms are separate dependencies, listed explicitly below.
+
+| Requirement | Implementation and boundary |
+| --- | --- |
+| Supported tokens | `dom/nodes/html/attributes/blocking.ts` defines the supported `render` token and the blocking-tokens-set algorithm. It ASCII-lowercases and splits on ASCII whitespace, filters unknown tokens, and deduplicates without modifying the attribute. |
+| Author API | Link, style, and script expose stable `DOMTokenList` objects through `[SameObject, PutForwards=value]`. The existing token-list implementation preserves raw spelling, retains unknown tokens, synchronizes through DOM attribute mutation, and supplies case-insensitive `supports()`. Token mutations and forwarded assignment retain the existing provisional custom-element reaction dependency. |
+| Explicit potential blocking | The three element implementations interpret the shared blocking tokens. Arbitrary HTML elements and foreign-namespace lookalikes do not acquire a blocking attribute or qualify just because their attribute list contains `blocking="render"`. |
+| Implicit stylesheet blocking | Style and stylesheet-link elements retain the document whose parser created them. They qualify while that document remains their node document; link additionally requires the ASCII-insensitive `stylesheet` relationship. Parser completion and detachment do not by themselves end potential eligibility. Clones/imports do not copy parser origin. |
+| Implicit script blocking | A script must have prepared type `classic`, a non-null parser document, and no null-namespace `async` or `defer` attribute. `scriptType` stores the prepared type separately from the raw attribute. The parser supplies its document, but script preparation must populate the type and perform its specified parser-document clearing/restoration. The current ad hoc script handler still does neither preparation nor render blocking. |
+| Parser integration | `HTMLTreeAdapter` calls each element's `initializeFromParser()` before adding attributes or inserting the element. The default hook needs no state; link/style/script retain their own association. XML and fragment parsing must enter the appropriate creation path when those consumers exist. This does not complete intended-parent, custom-element, force-async, or other script parser flags. |
+| Actual rendering dependency | Document's §3.1.6 render-blocking element set, HTML-content/body eligibility, and timeout predicate remain unimplemented. Element loading/preparation must add eligible blockers and remove them on completion, failure, disconnection, or loss of eligibility; Fetch request flags and rendering opportunities must consume that state. The existing script-blocking stylesheet set is a different mechanism. No successful rendering wait or load is synthesized here. |
+
+**SPEC_CLASH(blocking-token-case): case-insensitive interpretation.**
+[HTML §2.5.8](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#blocking-tokens-set)
+explicitly lowercases tokens before filtering. The 2026-10-12 Chromium
+149.0.7827.55 probe loaded delayed async scripts with `render`, `RENDER`, and
+`Render`: Resource Timing reported `blocking` only for the lowercase spelling.
+[Blink's implementation](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/html/blocking_attribute.cc)
+and [WebKit's script implementation](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLScriptElement.cpp)
+use case-sensitive membership. WebKit 26.5 did not expose the Resource Timing
+field, so its rendering evidence here is source inspection, not a measured
+timing result. Firefox 151.0 did not expose the `blocking` property on any of
+the three elements. Eric approved HTML's case-insensitive interpretation;
+the internal-predicate regression retains uppercase and mixed-case coverage.
+
+Chromium and WebKit agreed on the public token-list cases: `supports('RENDER')`
+is true, `contains()` is case-sensitive, raw spelling/unknown tokens remain,
+and assignment forwards to the retained list's `value`. Their zero-argument
+`add()` disagreement is the already-approved `domtokenlist-empty-add` clash,
+not a new blocking-specific decision.
+
+`test/browlet/dom/nodes/html/blocking.test.ts` covers the public contracts,
+ordinary attribute/Attr mutation, namespaced lookalikes, cloning/adoption,
+parser-origin stylesheet eligibility, and the script predicate with explicitly
+supplied preparation output. It does not claim script preparation, real
+resource loading, or paint scheduling coverage.
+
+### Section 2.5.9 fetch-priority attributes
+
+`dom/nodes/html/attributes/fetch-priority.ts` defines High, Low, and Auto using
+Fetch's existing `RequestPriority` values. Missing, empty, and invalid attributes
+select `auto`; valid keywords match ASCII case-insensitively without trimming.
+Empty and otherwise invalid text still fail the authoring-syntax check.
+The priority is a hint relative to requests with the same destination, not an
+absolute queue position or a promise of completion order.
+
+Image, link, and script expose `fetchPriority` through non-nullable DOMString
+bindings, limited to known values on reads. Setters preserve the converted
+text and use ordinary DOM attribute mutation. Parser-created attributes,
+attached Attr changes, cloning/import/adoption, namespace isolation, and
+MutationObserver delivery use the existing DOM mechanisms. `[CEReactions]`
+remains declared with its existing unfinished delivery dependency.
+
+**SPEC_CLASH(fetch-priority-case): ASCII-insensitive keywords.**
+[HTML §2.5.9](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#fetch-priority-attribute)
+uses the [enumerated-attribute algorithm](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#keywords-and-enumerated-attributes).
+The 2026-10-12 Playwright probe found Chromium 149.0.7827.55 and Firefox 151.0
+recognizing uppercase/mixed-case keywords, while WebKit 26.5 returned `auto`
+for `HIGH` and `LOW` on all three elements. Eric approved HTML/Chromium/Firefox;
+the shared definition and platform tests retain case-folding regressions.
+All three agreed on the tested absent/empty/invalid defaults, whitespace
+rejection, raw-text preservation, null/undefined stringification, object
+conversion, equal-write mutation records, and namespaced-attribute isolation.
+
+The two `fetch-priority.test.ts` files under `test/browlet/dom/nodes/html/`
+and its `attributes/` folder cover reflection and the shared state definition.
+The latter also supplies that state to a real FetchRequest and verifies that
+Fetch passes it to UserAgent's priority-selection hook. It does not simulate an
+element loader or claim actual network scheduling. Remaining consumers are:
+
+- Link processing options, preload/modulepreload, and HTTP Link processing
+  (§4.2.4 and the relevant §4.6 link types) must transfer the selected hint.
+- Image update/fetch algorithms (§4.8.4) must copy the current attribute state
+  to the selected request at their specified steps.
+- Script preparation (§4.12.1) must capture the state in script fetch options;
+  the hint does not propagate to module imports (§4.12.1's attribute table).
+- `UserAgent.determineFetchPriority()` remains provisional. Actual scheduling
+  must consider the hint, destination, initiator, and render-blocking state.
+
+These are existing loader/scheduler gates, not omitted steps in §2.5.9's
+attribute definition. See the [loader roadmap](../loader/ROADMAP.md).
 
 ## HTML section 3 ownership
 

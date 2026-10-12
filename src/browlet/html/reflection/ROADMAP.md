@@ -4,6 +4,22 @@ HTML §2.6, “Common DOM interfaces”, defines the reusable algorithms by whic
 IDL attributes reflect content attributes. This directory should own those
 algorithms; individual element classes should only select a reflection form.
 
+The §§2.5.4–2.5.5 slices implement nullable `crossOrigin` and non-nullable
+`referrerPolicy` reflection on link and script over shared `dom/nodes/html/attributes/`
+definitions, with reads limited to known values. Referrer-policy assignments
+retain empty/invalid strings; null/undefined are converted to strings rather
+than removing the attribute. Their accessors use DOM attribute storage and
+removal directly; the reusable reflection
+adapter and metadata-driven binding integration below remain unimplemented.
+Tests exercise conversion and DOM mutation, not the still-missing `[CEReactions]`
+stack and delivery.
+
+§2.5.9 adds image/link/script `fetchPriority` using the same non-nullable
+enumerated reflection pattern. Consolidate these repeated accessors with the
+other reflected attributes here; the attribute-specific definitions stay in
+`dom/nodes/html/attributes/`, and bindings retain author conversion and reaction
+boundaries.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `content-attribute.ts` | Basic DOMString and nullable reflection | HTML §2.6.1 |

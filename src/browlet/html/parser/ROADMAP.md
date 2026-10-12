@@ -13,6 +13,12 @@
   `NodeImpl`, with parse5 types confined to the parser module. The streaming
   parser enables these locations; Browlet reads script start-tag positions
   to preserve document-relative line numbers in inline-script stack traces.
+- The creation callback calls `initializeFromParser()` before attribute changes
+  or insertion. Link/style retain their creating document for implicit potential
+  render blocking; script retains its parser document. Script preparation must
+  still populate its prepared type and clear/restore that parser association.
+  This small hook does not implement force-async, already-started, or the
+  adjusted-current-element/intended-parent creation requirements below.
 - `document-parser.ts` enters and resumes parsing through HTML networking tasks.
   It uses `document.env` for execution and the event loop; stylesheet waits and
   script-handler completion use `InternalPromise`. Node's stream-finished callback

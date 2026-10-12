@@ -41,7 +41,15 @@ time-origin inputs rather than substitute the global for its settings object.
 
 Settings satisfy narrow subsystem contracts. Browser-owned work can retain its
 UserAgent independently of a live Document. BiDi hooks live on that UserAgent,
-with explicit scoped inputs and provisional no-session results.
+with explicit scoped inputs and provisional no-session results. The lazy-loading
+slice adds `BrowletEnvironment.isScriptingEnabled()`:
+it checks the UserAgent preference and the relevant Window's current sandbox,
+then calls `webDriverBiDiScriptingIsEnabled(env)`. That hook provisionally returns
+true, the no-session/no-override result, alongside the existing network hooks.
+BiDi's top-level traversable/user-context override selection remains unimplemented.
+Script preparation/execution must eventually consume the
+same settings predicate; adding this consumer has not made all execution paths
+respect the new preference.
 
 ## Remaining implementation
 

@@ -10,7 +10,7 @@ import {
 } from '../../../web-idl/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import {
-  Stylelet, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
+  Stylelet, lengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
 import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord } from '../../../url/index';
 import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
@@ -27,6 +27,8 @@ import {
 import { CSPList } from '../../browsing/policy/csp/index';
 import { RangeImpl } from '../ranges/index';
 import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } from '../traversal/index';
+// The observer retains registrations; rendering input and scheduled notification remain provisional.
+import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
@@ -58,6 +60,9 @@ import {
 import { resolveElementInterface } from './element-interfaces';
 import { HTMLBaseElementImpl, HTMLHeadElementImpl } from './html/metadata/index';
 import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
+import {
+  HTMLVideoElementImpl, type HTMLImageElementImpl, type HTMLIFrameElementImpl, type HTMLMediaElementImpl,
+} from './html/embedded/index';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 
 /** Create a document in env with optional binding-owned node allocation. */
@@ -168,6 +173,9 @@ export class DocumentImpl extends NodeImpl {
   #relevantGlobalObject: WindowImpl | null = null;
   /** First base element with an href attribute, whose frozen URL supplies the base. */
   #firstBaseElement: HTMLBaseElementImpl | null = null;
+  /** One internal observer shared by this document's deferred images, frames, and media. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-intersection-observer
+  #lazyLoadIntersectionObserver: IntersectionObserverImpl | null = null;
   /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   /** Lazily created style engine for this document. */
@@ -923,6 +931,35 @@ export class DocumentImpl extends NodeImpl {
     // PROVISIONAL: rule matching, candidate selection, prefetch, and prerender lifecycles are not implemented.
   }
 
+  /** Observe a deferred resource element belonging to this document, sharing one internal observer. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#start-intersection-observing-a-lazy-loading-element
+  startObservingLazyLoadingElement(element: LazyLoadingElement): void {
+    this.#lazyLoadIntersectionObserver ??= new IntersectionObserverImpl(
+      (entries: IntersectionObserverEntryImpl[]) => this.#resumeLazyLoadingElements(entries),
+      {
+        root: null,
+        rootMargin: [lengthLiteral(0), lengthLiteral(0), lengthLiteral(0), lengthLiteral(0)],
+        scrollMargin: this.env.userAgent.lazyLoadScrollMargin,
+        threshold: 0,
+        delay: 0,
+        trackVisibility: false,
+      },
+      this.env,
+    );
+    // Use implementation methods and records, never author-replaceable constructors or getters.
+    // https://github.com/w3c/IntersectionObserver/issues/464
+    this.#lazyLoadIntersectionObserver.observe(element);
+  }
+
+  /** Stop observing an element in this document without discarding the shared observer. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#stop-intersection-observing-a-lazy-loading-element
+  stopObservingLazyLoadingElement(element: LazyLoadingElement): void {
+    if (this.#lazyLoadIntersectionObserver === null) {
+      throw new InternalError('A lazy-loading element must have an intersection observer');
+    }
+    this.#lazyLoadIntersectionObserver.unobserve(element);
+  }
+
   /** Recompute the controlling base element after insertion, removal, or an href change. */
   // https://html.spec.whatwg.org/multipage/semantics.html#frozen-base-url
   updateBaseElement(changedHref?: HTMLBaseElementImpl): void {
@@ -1126,6 +1163,30 @@ export class DocumentImpl extends NodeImpl {
         this.waitForScriptBlockingStyleSheets(env),
       );
     }, idlType.undefined);
+  }
+
+  /** Resume intersecting resources using the observer's internal, unprojected entries. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#start-intersection-observing-a-lazy-loading-element
+  #resumeLazyLoadingElements(entries: IntersectionObserverEntryImpl[]): void {
+    for (let index = 0; index < entries.length; index++) {
+      const entry = entries[index]!;
+      if (!entry.isIntersecting) continue;
+      // Only lazy-loading elements are registered with this private observer.
+      const element = entry.target as LazyLoadingElement;
+      const video = HTMLVideoElementImpl.is(element) ? element : null;
+      const steps = element.lazyLoadResumptionSteps;
+      const posterSteps = video === null ? null : video.posterLazyLoadResumptionSteps;
+      if (steps === null && posterSteps === null) continue;
+      element.nodeDocument.stopObservingLazyLoadingElement(element);
+      if (steps !== null) {
+        element.lazyLoadResumptionSteps = null;
+        steps();
+      }
+      if (posterSteps !== null) {
+        video!.posterLazyLoadResumptionSteps = null;
+        posterSteps();
+      }
+    }
   }
 
   #extractElementCreationOptions(
@@ -1532,6 +1593,9 @@ export type DocumentLoadTimingInfo = {
 };
 
 type FullyActiveStateObserver = (fullyActive: boolean) => void;
+
+/** The HTML element families that can retain a lazy-loading continuation. */
+type LazyLoadingElement = HTMLImageElementImpl | HTMLIFrameElementImpl | HTMLMediaElementImpl;
 
 function parseDocumentURL(input: string): URLRecord {
   const url = parseURL(input).url;

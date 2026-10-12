@@ -426,7 +426,28 @@ color facilities. They sit one level above Browlet's platform, timing, DOM infra
 and style foundations, below DOM nodes and lifecycle components.
 Tree lookup belongs with its HTML consumer: hash-name parsing returns text,
 while image-map lookup lives under `dom/nodes/html/embedded` and consumes that parser.
-Embedded HTML has an explicit hierarchy entry above the shared node implementations.
+Embedded HTML element classes participate in the cooperating node implementation
+family, including element selection and Web IDL declaration collection. The earlier
+separate layer contained only image-map lookup; it no longer describes this family.
+
+`dom/nodes/html/attributes/` owns shared HTML element attribute definitions and
+closely related state rules. This directory sits above microsyntaxes and below
+node implementations in the dependency hierarchy despite its physical location.
+Microsyntaxes retain generic keyword/state interpretation; `html/reflection/`
+owns reusable reflection machinery. Element implementations select the attribute
+definitions; resource lifecycles remain in the loader and their HTML consumers.
+Shared attribute rules do not retain elements or environments.
+
+Lazy-loading continuation state belongs to the image, iframe, and media element
+implementations; video retains an additional poster continuation. Document owns
+one internal Intersection Observer, with concrete implementation targets and
+entries. Its provisional implementation owns callback/options, ordered targets,
+Element registrations, and queued entries. Rendering input, complete entry
+objects, and scheduled notification remain unfinished; observing a target never
+guesses its visibility. The implementation will consume real rendering inputs
+and the existing rendering-update phase. UserAgent supplies the implementation-defined
+scroll margin. The element uses its original environment's scripting policy and
+its current node document's browsing-context association after adoption.
 
 Document, Element, and the HTML, SVG, and MathML element implementations live
 under `browlet/dom/nodes`, alongside their element-selection table. Namespace

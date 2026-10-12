@@ -228,6 +228,16 @@ explicit standard content-handler list used for sink metadata.
 
 ## HTML integration gates
 
+- **Lazy loading is scaffolding, not operational resource loading.** Basic
+  image/iframe/audio/video classes expose `loading` and retained continuations,
+  and Document now uses an internal observer scaffold with real registrations
+  and entry queues. Observer option parsing, complete entry geometry, author
+  bindings, automatic notification, and actual element resource loading are
+  absent. Tests supply explicit entries and trigger notification themselves.
+  Scripting eligibility uses a provisional BiDi hook with the no-session result
+  of true; scoped automation overrides are not implemented.
+  See the [HTML audit](browlet/html/ROADMAP.md#section-257-lazy-loading).
+
 The [§2.4.3 base-change response](browlet/html/ROADMAP.md#section-24-audit)
 connects explicitly provisional consumers. Base/fallback selection and notification
 sequencing are implemented, but browser UI updates, link-state invalidation,
@@ -235,9 +245,22 @@ Window speculation-rule registration, and speculative loading remain no-ops.
 Parse-result creation only initializes an empty record; it does not parse or
 report errors yet.
 `HTMLScriptElement` has a dedicated implementation/platform identity and result
-state, without its reflected members or preparation algorithm. Browlet's existing
-parser callback still evaluates data-block scripts such as `application/json` as
+state, plus `crossOrigin` and `referrerPolicy` reflection, without its preparation
+algorithm. Link and script reflection uses the shared HTML attribute definitions,
+but element fetching and `[CEReactions]` delivery remain missing. The credentials
+mapper and potential-CORS request factory do not by themselves implement resource
+loading. Fetch applies populated referrer policies, but navigation response-header
+association, meta referrer processing, and hyperlink `rel=noreferrer` still lack
+their HTML consumers; complete referrer-policy precedence is not implemented.
+Browlet's existing parser callback still evaluates data-block scripts such as `application/json` as
 JavaScript; an approved expected-failure regression retains that limitation.
+
+Image/link/script `fetchPriority` reflects the shared attribute state. Element
+loaders do not yet transfer these hints into requests, and UserAgent's Fetch
+priority-selection hook still has no transport scheduler. Setting the attribute
+therefore does not change network scheduling. The
+[§2.5.9 audit](browlet/html/ROADMAP.md#section-259-fetch-priority-attributes)
+records the implemented boundary and WebKit keyword-case disagreement.
 
 The [loader](browlet/loader/ROADMAP.md) now consumes streamed Fetch responses,
 including response CSP and basic decoding/abort. `ResourceReader` preserves

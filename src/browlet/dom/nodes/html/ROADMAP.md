@@ -3,8 +3,16 @@
 `HTMLElementImpl` and the currently needed metadata elements are present.
 [`script.ts`](script.ts) is an approved provisional addition for the §2.4.3
 base-change response: element/interface selection, initially uninitialized result
-state, and the script's relevant Window are present. Reflected members, HTML
-construction, preparation, and the full script-result union remain §4.12.1 work.
+state, and the script's relevant Window are present. Link and script now expose
+`crossOrigin` and `referrerPolicy` reflection using the shared HTML §§2.5.4–2.5.5
+attribute definitions in [`attributes/`](attributes/index.ts). These shared
+definitions depend on the generic microsyntax machinery and sit below element
+implementations in the dependency hierarchy. Reusable reflection remains with
+`html/reflection/`. The reviewed [script null-assignment clash](../../../html/ROADMAP.md#section-25-audit)
+follows HTML, Firefox, and WebKit.
+Remaining reflected members, HTML construction, preparation, and the full
+script-result union remain §4.12.1 work. `[CEReactions]` entry/exit and callback
+delivery remain with custom elements; link fetching remains §4.2.4 work.
 Other empty element classes should wait for a concrete consumer.
 
 `web-idl.ts` retains a declaration-only `HTMLFormElement` type for FormData's

@@ -2,6 +2,7 @@ import type { Definition } from '../../../../web-idl/index';
 
 import {
   svgElementIDL, svgElementIncludesElementCSSInlineStyleIDL,
+  svgElementIncludesHTMLOrSVGOrMathMLElementIDL,
 } from './element';
 import {
   svgStyleElementIDL, svgStyleElementIncludesLinkStyleIDL,
@@ -10,6 +11,7 @@ import {
 export const svgIDLDefinitions: Definition[] = [
   svgElementIDL,
   svgElementIncludesElementCSSInlineStyleIDL,
+  svgElementIncludesHTMLOrSVGOrMathMLElementIDL,
   svgStyleElementIDL,
   svgStyleElementIncludesLinkStyleIDL,
 ];

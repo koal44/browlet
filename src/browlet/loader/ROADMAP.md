@@ -16,13 +16,56 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `UserAgent.createPotentialCORSRequest()` | Implemented potential-CORS request construction using FetchRequest and its browser owner; element consumers remain pending | HTML §2.5.1 |
 | `resource-loader.ts` | Fetch-backed subresource requests, credentials, referrer and policy inputs | Fetch plus each HTML element's fetch algorithm |
 | `resource-reader.ts` | Retain response metadata, sniff a bounded prefix, and replay it before subsequent body bytes | HTML §2.5.2, MIME Sniffing, and Streams |
-| `element-fetch-options.ts` | Normalize CORS settings, referrer policy, integrity metadata, nonce, lazy-loading, blocking, and fetch-priority attributes into Fetch inputs | HTML §§2.5.4–2.5.9; SRI §§3.4–3.5 |
+| `element-fetch-options.ts` | Apply shared attribute rules from `dom/nodes/html/attributes/` to element requests, together with integrity, nonce, lazy-loading, blocking, and fetch-priority inputs | HTML §§2.5.4–2.5.9; SRI §§3.4–3.5 |
 | `linked-resource.ts` | `<link>` processing and external style sheets | HTML §4.2.4 and CSSOM |
 | `script-loader.ts` | Shared classic/module graph fetching plus parser, worker, `importScripts()`, and worklet coordination | HTML §§4.12.1 and 8.1.5; HTML §§10.2.4, 10.3.1, and 11.3.2 |
 | `preload.ts` | preload/modulepreload resource hints, parser-discovered preloads, and Link-header integrity metadata | HTML §4.2.4; Fetch; SRI §3.6 |
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
+
+The shared [CORS attribute definition](../dom/nodes/html/attributes/cors.ts) and link/script
+`crossOrigin` reflection are implemented. Element loaders must read the current
+attribute state when their own algorithms select it; reflection alone does not
+start or modify a fetch. Ordinary requests use `createPotentialCORSRequest()`;
+module fetches use the separate always-CORS credentials translation, whose absent
+attribute default differs. The missing link processing, script preparation, and
+module graph owners remain the next integration boundary; no alternate Fetch
+path or provisional successful load has been introduced.
+The shared referrer-policy attribute and link/script `referrerPolicy` reflection
+are also implemented. Loaders must transfer the selected state to the request;
+Fetch already resolves an empty request policy from its policy container.
+
+Link/style/script now expose `blocking` token lists and
+`isPotentiallyRenderBlocking()`. Their loaders must still enter Document's
+unimplemented [render-blocking mechanism](https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism),
+propagate the actual blocked state to Fetch, and release blockers at the specified
+completion/failure points. Disconnection and loss of blocking eligibility also
+need that Document mechanism. The existing script-blocking stylesheet set is
+separate. Script's implicit predicate reads prepared `scriptType`; preparation
+must supply that state rather than using the raw `type` attribute as a shortcut.
+See the [§2.5.8 audit](../html/ROADMAP.md#section-258-blocking-attributes).
+
+Image/link/script `fetchPriority` reflection and the shared fetch-priority
+attribute definition are implemented using Fetch's `RequestPriority` type.
+Image requests, link processing options (including preload and HTTP Link), and
+script preparation must capture that state at their specified steps. Script's
+hint does not propagate to module imports. Fetch already passes a request's
+priority to `UserAgent.determineFetchPriority()`, but that hook still has no
+transport scheduler. Attribute mutation alone neither starts nor reprioritizes
+a resource load. See the [§2.5.9 audit](../html/ROADMAP.md#section-259-fetch-priority-attributes).
+
+**Provisional lazy-load resumption representation:** HTML's
+[lazy-load resumption steps](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps)
+are currently nullable callbacks on image, iframe, and media implementations,
+with a separate poster callback on video. This directly represents the specified
+suspended remainder of each loading algorithm while those loaders are missing.
+When implementing them, reconsider whether the owning loader should instead
+retain pending request/navigation state and expose an ordinary resume method.
+Neither representation is locked in. Make that decision once the concrete state
+and lifecycle are known; preserve which inputs were captured versus read at
+resumption, cancellation/replacement, clearing before invocation, and the
+independent media and poster loads.
 
 HTML §2.4.3's `Document.respondToBaseURLChanges()` has approved provisional
 consumers: a basic HTML script result (§4.12.1), a parse-result record initialized

@@ -6,6 +6,12 @@ roadmap. File API's completed Blob URL path uses `BlobImpl` entries and a
 provisional Blob-only `URL.createObjectURL()` declaration. Media Source
 Extensions (MSE) is not a Fetch preflight prerequisite.
 
+The HTML §2.5.7 slice has added basic `HTMLMediaElementImpl`, audio, and video
+classes under `dom/nodes/html/embedded/`. They retain lazy-loading continuations
+and reflect `loading`; they do not yet select, fetch, decode, or play media.
+Video also retains its independent poster continuation. Resource selection
+must install those steps and start the Document's observer when implemented.
+
 ## Sources and scope
 
 Reviewed the [MSE editor's draft](https://w3c.github.io/media-source/), dated

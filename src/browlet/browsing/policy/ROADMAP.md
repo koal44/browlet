@@ -67,7 +67,14 @@ letter/hyphen extensions, and whole-value rejection for malformed tokens.
 Chromium follows that rejection rule; Gecko/WebKit skip malformed tokens.
 Absent/rejected headers preserve the request's policy.
 
+HTML §2.5.5 now defines referrer-policy attributes over the shared values, and
+link/script expose `referrerPolicy`. An empty or invalid attribute defers to
+Fetch's existing policy-container fallback; it does not mean `no-referrer`.
 Complete element/stylesheet delivery and inherited state with their loaders.
+Navigation still does not associate the response's Referrer-Policy header with
+the new Document's policy container. Meta referrer processing and hyperlink
+`rel=noreferrer` are also missing; the complete precedence described by HTML
+§2.5.5 requires those consumers, not another shared attribute parser.
 Navigable.container is still provisional, so loaded srcdoc remains an approved
 expected failure. Use the actual container element's node Document, including
 inactive predecessors, rather than the current parent navigable's active Document.

@@ -14,6 +14,7 @@ import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver
 import type { EventImpl } from '../events/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import { DOMTokenListImpl } from '../token-list';
+import type { IntersectionObserverRegistration } from '../intersection-observer/index';
 import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
@@ -66,6 +67,9 @@ export class ElementImpl extends NodeImpl {
   /** Construction/upgrade state; ordinary elements start uncustomized. */
   // https://dom.spec.whatwg.org/#concept-element-custom-element-state
   customElementState: CustomElementState = 'uncustomized';
+  /** Intersection observers tracking this element, with independent history for each observer. */
+  // https://w3c.github.io/IntersectionObserver/#element
+  registeredIntersectionObservers: IntersectionObserverRegistration[] = [];
 
   /** Ordered attribute storage; only this element's mutation algorithms modify it. */
   // https://dom.spec.whatwg.org/#concept-element-attribute
@@ -563,6 +567,15 @@ export class ElementImpl extends NodeImpl {
   /** Style sheet supplied by this element, if its style behavior has one. */
   getStyleSheet(): CSSStyleSheetImpl | null {
     return this.linkStyleMixin?.sheet ?? null;
+  }
+
+  /** Record parser creation before attributes and insertion; ordinary elements need no state. */
+  initializeFromParser(): void {}
+
+  /** Ordinary elements have neither a blocking attribute nor implicit render-blocking behavior. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#potentially-render-blocking
+  isPotentiallyRenderBlocking(): boolean {
+    return false;
   }
 
   /** Defer child-dependent style processing while the parser populates this element. */

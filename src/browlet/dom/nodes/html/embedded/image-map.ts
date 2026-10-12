@@ -1,6 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 
 import { parseHashNameReference } from '../../../../html/microsyntaxes/index';
+
 import type { ElementImpl } from '../../element';
 import type { NodeImpl } from '../../node';
 

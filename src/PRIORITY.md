@@ -62,10 +62,25 @@ hyperlink state, speculation-rule parsing/registration, and speculative loads.
 Those effects and the proposed nested-document slices remain explicit follow-ups.
 The [§2.5 audit](browlet/html/ROADMAP.md#section-25-audit) now includes §2.5.1's
 potential-CORS request construction, §2.5.2's response reader and sniffed-prefix
-replay, and §2.5.3's meta charset extractor. Actual content support and general
-document-handler selection remain explicit loader gates. The next review is
-§2.5.4's element attribute/reflection and fetch integration, before implementing
-the remaining shared fetching attributes.
+replay, §2.5.3's meta charset extractor, §2.5.4's CORS attribute states and
+credentials mapping, and §2.5.5's referrer-policy attribute interpretation.
+Link/script expose `crossOrigin` and `referrerPolicy` reflection. Actual content
+support and general document-handler selection remain explicit loader gates.
+Element fetch consumers, complete document policy delivery, and custom-element
+reactions remain explicit dependencies. The bounded §2.5.7 lazy-loading slice is
+accepted complete; its element state and HTML observer consumer use a provisional
+Intersection Observer for registrations and entry queues. Complete observer
+initialization, geometry, bindings, automatic delivery, and actual element loaders
+remain in the HTML/observer roadmaps. The BiDi scripting hook has an approved
+provisional no-session result; scoped automation overrides remain unfinished.
+§2.5.6 adds nonce state, IDL, attribute synchronization, connection-time hiding,
+and cloning across HTML, SVG, and MathML. Policy delivery and script/style loading
+remain separate consumers. §2.5.8 adds link/style/script `blocking` token lists
+and potential-render-blocking predicates, including parser-origin state.
+Script preparation and Document's actual render-blocking mechanism remain
+explicit dependencies. §2.5.9 adds shared fetch-priority states and image/link/script
+reflection; element loaders and actual network prioritization remain pending.
+§2.6 common DOM interfaces and reusable reflection are next.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

@@ -125,6 +125,16 @@ export abstract class BrowletEnvironment extends EnvironmentRecord implements
     return url === null ? null : serializeURL(url);
   }
 
+  /** Whether these settings currently permit scripting, including sandbox and automation policy. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
+  isScriptingEnabled(): boolean {
+    // Browlet supports JavaScript; this flag is the user's global disable preference.
+    if (!this.userAgent.scriptingEnabled) return false;
+    const document = this.realm.getAssociatedDocument();
+    if (document?.activeSandboxingFlagSet.has('sandboxed-scripts')) return false;
+    return this.userAgent.webDriverBiDiScriptingIsEnabled(this);
+  }
+
   abstract get apiBaseURL(): URLRecord;
   abstract get moduleMap(): ModuleMap;
   abstract get origin(): Origin;

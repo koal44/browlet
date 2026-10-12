@@ -9,6 +9,9 @@ import {
 } from './html/index';
 import { isValidCustomElementName } from './html/custom-elements/index';
 import {
+  htmlImageElementInterface, htmlIFrameElementInterface, htmlAudioElementInterface, htmlVideoElementInterface,
+} from './html/embedded/index';
+import {
   htmlHeadElementInterface, htmlBaseElementInterface, htmlLinkElementInterface, htmlStyleElementInterface,
 } from './html/metadata/index';
 import { mathMLElementInterface } from './mathml/index';
@@ -46,6 +49,10 @@ const elementInterfaces = compileElementInterfaces([
   htmlBaseElementInterface,
   htmlLinkElementInterface,
   htmlStyleElementInterface,
+  htmlImageElementInterface,
+  htmlIFrameElementInterface,
+  htmlAudioElementInterface,
+  htmlVideoElementInterface,
   svgStyleElementInterface,
 ]);
 
