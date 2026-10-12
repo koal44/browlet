@@ -18,6 +18,7 @@ import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import type { TreeScopeResolver } from '../../style/index';
+import type { SpeculationRulesParseResult } from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
@@ -56,7 +57,7 @@ import {
 } from './lookups';
 import { resolveElementInterface } from './element-interfaces';
 import { HTMLBaseElementImpl, HTMLHeadElementImpl } from './html/metadata/index';
-import { HTMLElementImpl } from './html/index';
+import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 
 /** Create a document in env with optional binding-owned node allocation. */
@@ -828,7 +829,26 @@ export class DocumentImpl extends NodeImpl {
     // TODO(Fetch): potentially free deferred-fetch quota for this document.
   }
 
-  /** The URL used to resolve relative URLs in this document. */
+  /** Parse against this Document's base URL using UTF-8; return null on failure. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#parse-a-url
+  parseHTMLURL(input: string): URLRecord | null {
+    return this.env.parseURL(input, this.getBaseURL()).url;
+  }
+
+  /** Parse against this Document's base URL and encoding, including when it is detached. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#encoding-parsing-a-url
+  encodingParseURL(input: string): URLRecord | null {
+    return this.env.parseURL(input, this.getBaseURL(), this.encoding).url;
+  }
+
+  /** Encoding-parse and serialize a URL, preserving parse failure as null. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#encoding-parsing-and-serializing-a-url
+  encodingParseAndSerializeURL(input: string): string | null {
+    const url = this.encodingParseURL(input);
+    return url === null ? null : serializeURL(url);
+  }
+
+  /** Read the retained first base's URL, or the fallback, without traversing the tree. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#document-base-url
   getBaseURL(): URLRecord {
     return this.#firstBaseElement === null ? this.getFallbackBaseURL() : this.#firstBaseElement.frozenBaseURL;
@@ -849,6 +869,58 @@ export class DocumentImpl extends NodeImpl {
       return this.aboutBaseURL;
     }
     return url;
+  }
+
+  /** Change the document URL, then update consumers of its base URL. */
+  // Initial construction and cloning assign URL state directly; live changes use this operation.
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#set-the-url
+  setURL(url: URLRecord): void {
+    this.url = url;
+    this.respondToBaseURLChanges();
+  }
+
+  /** Update URL-dependent state without restarting already loaded resources. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#respond-to-base-url-changes
+  respondToBaseURLChanges(): void {
+    this.env.userAgent.updateURLDisplays(this);
+    this.updateLinkStates();
+
+    for (
+      let descendant = this.firstChild;
+      descendant !== null;
+      descendant = descendant.nextShadowIncludingDescendant(this)
+    ) {
+      if (!HTMLScriptElementImpl.is(descendant)) continue;
+      const oldResult = descendant.result;
+      if (oldResult === null || oldResult === 'uninitialized') continue;
+      // PROVISIONAL: speculation rules are the only prepared result type currently represented.
+      // Distinguish them from classic/module scripts and import maps when those records are added.
+
+      const newResult = this.createSpeculationRulesParseResult(descendant.getChildTextContent());
+      // Use the script's relevant Window, which adoption need not change.
+      descendant.getRelevantGlobalObject().updateSpeculationRules(oldResult, newResult);
+    }
+
+    this.considerSpeculativeLoads();
+  }
+
+  /** Refresh hyperlink state after URLs resolve against a different document base. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#respond-to-base-url-changes
+  updateLinkStates(): void {
+    // PROVISIONAL: visited-link history and the corresponding style invalidation are not implemented.
+  }
+
+  /** Create the result record for speculation rules parsed against this document's base URL. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#create-a-speculation-rules-parse-result
+  createSpeculationRulesParseResult(_input: string): SpeculationRulesParseResult {
+    // PROVISIONAL: initialize the record only; HTML §7.6 rule-set parsing and error capture are missing.
+    return { speculationRuleSet: null, errorToRethrow: null };
+  }
+
+  /** Reconsider prefetch and prerender candidates for this document. */
+  // https://html.spec.whatwg.org/multipage/speculative-loading.html#consider-speculative-loads
+  considerSpeculativeLoads(): void {
+    // PROVISIONAL: rule matching, candidate selection, prefetch, and prerender lifecycles are not implemented.
   }
 
   /** Recompute the controlling base element after insertion, removal, or an href change. */

@@ -1,8 +1,11 @@
 # HTML elements roadmap
 
 `HTMLElementImpl` and the currently needed metadata elements are present.
-Create the remaining files only as their behavior is implemented; do not add
-empty classes merely to complete this list.
+[`script.ts`](script.ts) is an approved provisional addition for the §2.4.3
+base-change response: element/interface selection, initially uninitialized result
+state, and the script's relevant Window are present. Reflected members, HTML
+construction, preparation, and the full script-result union remain §4.12.1 work.
+Other empty element classes should wait for a concrete consumer.
 
 `web-idl.ts` retains a declaration-only `HTMLFormElement` type for FormData's
 constructor signature. It has no implementation or Window exposure; move that
@@ -101,7 +104,7 @@ responses, WindowProxy identity, origins, sandboxing, and permissions.
 | `tables/table.ts`, `caption.ts`, `section.ts`, `row.ts`, `cell.ts`, `col.ts` | Table model interfaces | HTML §4.9 |
 | `forms/form.ts`, `label.ts`, `input.ts`, `button.ts`, `select.ts`, `data-list.ts`, `opt-group.ts`, `option.ts`, `text-area.ts`, `output.ts`, `progress.ts`, `meter.ts`, `field-set.ts`, `legend.ts` | Form controls, validation, submission, and form association | HTML §4.10 |
 | `interactive/details.ts`, `dialog.ts` | Interactive elements | HTML §4.11 |
-| `scripting/script.ts`, `template.ts`, `slot.ts`, `canvas.ts` | Script-supporting elements and canvas | HTML §4.12 |
+| `script.ts`, `template.ts`, `slot.ts`, `canvas.ts` | Script-supporting elements and canvas | HTML §4.12 |
 | `legacy/` contributions coordinated by `html/legacy/` | `HTMLMarqueeElement`, `HTMLFrameSetElement`, `HTMLFrameElement`, `HTMLDirectoryElement`, `HTMLFontElement`, `HTMLParamElement`, and obsolete generic elements | HTML §16 |
 
 ## Supporting interfaces exposed by section 4

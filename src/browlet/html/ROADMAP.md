@@ -80,8 +80,113 @@ belong to the existing owners, not new terminology or resource abstractions:
   defaults with that implementation, not in an unused standalone table.
 
 The subsequent [§2.3 slices](microsyntaxes/ROADMAP.md) are complete within their
-bounded scope; continue with §2.4 URLs. These passes identify remaining
+bounded scope. These passes identify remaining
 dependencies, rather than marking §§2.1–2.2 fully implemented.
+
+### Section 2.4 audit
+
+The 2026-10-11 audit of [HTML §2.4](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#urls)
+found the URL primitives and document-base selection in place. **§2.4.2 is now
+implemented** on Document and the browser environment. Section 2.4 as a whole
+remains incomplete: its base-change response now calls explicitly provisional
+consumers. After reviewing the missing dependencies, Eric approved a basic script
+implementation and typed stubs so the surrounding URL behavior remains testable.
+The bounded pass can close with these explicit dependencies; this does not
+complete browser UI, hyperlink state, script preparation, or speculative loading.
+
+| Requirement | Current implementation and remaining work |
+| --- | --- |
+| §2.4.1 URL authoring terminology | These definitions distinguish valid authoring syntax from recoverable parser input. No standalone HTML conformance validator is present; do not make runtime parsing reject recoverable input merely to implement these definitions. |
+| Reserved `about:` URLs | Fetch returns a network error for the unresolvable `legacy-compat`, `html-kind`, and `srcdoc` paths. Their identifiers still belong to the doctype, media-track, and iframe consumers. |
+| `about:` matching | Document fallback implements the `about:blank` test, including permitted query/fragment components. There is no shared `about:srcdoc` matcher; future consumers must require a null query, while allowing a fragment. A URL spelling `about:srcdoc` does not itself make the Document an iframe srcdoc document. |
+| §2.4.2 parsing wrappers | Document and BrowletEnvironment supply `parseHTMLURL()`, `encodingParseURL()`, and `encodingParseAndSerializeURL()`. They return a URL record/string or null on failure. `BrowletEnvironment.parseURL()` remains the explicit-base primitive; Fetch's Request/Response consumers already select `apiBaseURL` and UTF-8 themselves. |
+| §2.4.3 document and fallback bases | Document selects the first descendant `base[href]` and its frozen URL, otherwise the specified fallback. The existing regressions cover changes, removal/reordering, about-base inheritance, and the reviewed equal-value-write clash. `<base>` deliberately parses against the fallback with the Document encoding, avoiding recursive base selection. |
+| Set the Document URL and respond to base changes | `Document.setURL()` assigns first, then calls `respondToBaseURLChanges()`. Successful frozen-base updates also call it. Construction and cloning still assign initial URL state directly. The response connects the provisional UserAgent, Document, and Window consumers described below. |
+
+The HTML parsing methods retain the owner's UserAgent for Blob URL resolution.
+Encoding-aware Window parsing reads its associated **current Document**;
+Document parsing uses that Document even when it is detached. Other settings
+use UTF-8. The tests distinguish all three cases and cover live base selection,
+replacement Documents, legacy query encoding, serialization, failure, and URL
+parser recovery. `<base>` processing retains the explicit-base primitive.
+
+**Base lookup cost.** `getBaseURL()` reads the retained `#firstBaseElement` or
+the fallback; it does not traverse the document. `updateBaseElement()` searches
+in ordinary tree order when a base is inserted, removed, moved, or changes href.
+It stops at the first qualifying element, and ignores detached/shadow trees and
+non-HTML or namespaced lookalikes. An index is not needed for repeated reads.
+
+The 2026-10-11 local source audit found the same read/update split in all three
+engines. These are implementation observations, not a new browser behavior probe:
+
+- [Blink `Document::BaseURL()` / `ProcessBaseElement()`](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/core/dom/document.cc):
+  cached `base_url_` on reads; base-element traversal on relevant mutations.
+- [Gecko `Document::GetDocBaseURI()`](https://github.com/mozilla-firefox/firefox/blob/main/dom/base/Document.h)
+  reads the retained URI or fallback;
+  [`SetBaseURIUsingFirstBaseWithHref()`](https://github.com/mozilla-firefox/firefox/blob/main/dom/html/HTMLSharedElement.cpp)
+  searches the ordinary tree and stops at its first qualifying base.
+- [WebKit `Document::baseURL()`](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/dom/Document.h)
+  reads `m_baseURL`;
+  [`processBaseElement()`](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/dom/Document.cpp)
+  searches base descendants when their state changes.
+
+The larger stopping point is [respond to base URL changes](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#respond-to-base-url-changes):
+
+- Notify the UserAgent to update affected browser UI before the other response
+  steps. `UserAgent.updateURLDisplays(document)` is an explicit provisional
+  no-op until a UI host supplies displays of URLs or data derived from them.
+- Update hyperlink styling/state. Selectlet's script-visible selector behavior
+  does not supply browser visited-link history or its rendering invalidation.
+  `Document.updateLinkStates()` is an explicit provisional no-op;
+  the [style integration roadmap](../style/ROADMAP.md) records the dependency.
+- Reparse and update existing speculation-rule results on shadow-including
+  descendant scripts. `HTMLScriptElementImpl` now supplies recognition, an
+  initially uninitialized result, and its relevant Window from its existing realm.
+  Parsed and created HTML scripts have their own platform interface, without
+  reflected script members or preparation behavior yet.
+  `Document.createSpeculationRulesParseResult(input)` currently initializes only
+  the two-field record from [HTML §8.1.4.9](https://html.spec.whatwg.org/multipage/webappapis.html#speculation-rules-parse-results):
+  `speculationRuleSet: null` and `errorToRethrow: null`. The shared type lives in
+  `scripting/speculation-rules.ts`; real rule-set parsing and error capture remain
+  missing. `Window.updateSpeculationRules(oldResult, newResult)` is a provisional
+  no-op pending registration and queued error reporting. The response uses the
+  current Document for parsing and the script's original Window for updating,
+  including after adoption. When classic/module script and import-map records
+  are added, extend the result union and distinguish speculation records here.
+- Consider speculative loads. The [loader roadmap](../loader/ROADMAP.md) owns
+  this missing subsystem under HTML §7.6. `Document.considerSpeculativeLoads()`
+  is an explicit provisional no-op pending rule matching, candidate selection,
+  prefetch, and prerender lifecycles.
+
+The approved stubs preserve call ownership and sequencing for later slices;
+they do not claim those effects are implemented. Changing a base must not restart an
+already loaded image merely because its reflected URL would now differ.
+The written frozen-base algorithm returns before notification for invalid,
+forbidden-scheme, and CSP-blocked URLs; this draft preserves that return.
+Its notification paths when the last base disappears or a valid base becomes
+invalid still need review with the link-state consumer; returning the correct
+base URL alone does not establish correct style invalidation.
+
+Focused regressions cover assignment order, frozen-URL retention, notification
+selection, UI notification before link state, and the real provisional path.
+Script coverage checks interface selection, shadow-including update order,
+immediate child text, and relevant-Window ownership after adoption. A separately
+approved expected failure records the
+existing parser callback evaluating `application/json` data blocks as JavaScript;
+complete script preparation in HTML §4.12.1 must resolve it. The existing loaded-
+srcdoc-iframe expected failure remains a separate iframe lifecycle gate.
+
+**Proposed bounded follow-ups, for review:** first complete the nested branch
+of browsing-context creation (creator/embedder state, inherited base/origin,
+referrer, and policy/sandbox inputs). Then connect an iframe's initial
+`about:blank` child through creation, container/parent associations, nested
+history, and removal. That work spans HTML §4.8.5 and §7.3; the present
+`Navigable.container` placeholder and embedded-sandboxing failure are explicit
+dependencies, not reasons to claim an empty iframe is complete. Follow with
+`srcdoc` using the existing Document and parser machinery, preserving its
+distinct document flag and inherited base. Review further navigation, history,
+and policy gaps as they appear. Speculation-rule processing and speculative
+loads remain separate §7.6 work; they need not be the first loading excursion.
 
 ## HTML section 3 ownership
 

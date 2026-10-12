@@ -75,6 +75,13 @@ callers commit synchronously before parser tasks run. Full navigation must
 supply its actual readiness condition. None of these provisional contracts
 completes script preparation or replaces the existing source-string route.
 
+The source-route callback in `Browlet` currently evaluates every encountered
+script as JavaScript, ignoring its `type`. A JSON data block therefore throws
+instead of remaining inert. The approved expected failure in
+[`script.test.ts`](../../../../test/browlet/dom/nodes/html/script.test.ts)
+retains this concrete preparation gap; the basic `HTMLScriptElementImpl` added
+for base-URL notifications does not fix it.
+
 [Loading HTML documents](https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html)
 defines input tasks, first-input Link processing, the script-readiness wait,
 and EOF; the [input byte stream](https://html.spec.whatwg.org/#input-byte-stream)

@@ -32,6 +32,11 @@
 
 ## Next boundary change
 
+- [ ] Replace the provisional no-op `Document.updateLinkStates()` from HTML
+  §2.4.3, including visited-link history and style invalidation after a base URL
+  changes. Selectlet's script-visible `:visited` result is not that history or
+  a renderer invalidation mechanism. Keep browser history in Browlet and expose
+  only the resulting host state/invalidation through Stylelet's existing boundary.
 - [x] Share DOM operations with Selectlet, retaining original node identities
   without requiring host nodes to implement either engine's structural types.
 - [ ] Connect focus, editing, custom-element upgrade state, and form/media state

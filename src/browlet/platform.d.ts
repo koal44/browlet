@@ -467,6 +467,15 @@ export interface HTMLUnknownElementConstructor extends Ctor<HTMLElementConstruct
   [Symbol.hasInstance](value: unknown): value is HTMLUnknownElement;
 }
 
+export interface HTMLScriptElement extends HTMLElement {
+
+}
+
+export interface HTMLScriptElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLScriptElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLScriptElement;
+}
+
 export interface HTMLSlotElement extends HTMLElement {
   name: string;
   assignedNodes(options?: AssignedNodesOptions): Array<Node>;
@@ -721,6 +730,7 @@ export interface Window extends EventTarget {
   CustomElementRegistry: CustomElementRegistryConstructor;
   HTMLElement: HTMLElementConstructor;
   HTMLUnknownElement: HTMLUnknownElementConstructor;
+  HTMLScriptElement: HTMLScriptElementConstructor;
   HTMLSlotElement: HTMLSlotElementConstructor;
   HTMLHeadElement: HTMLHeadElementConstructor;
   HTMLBaseElement: HTMLBaseElementConstructor;

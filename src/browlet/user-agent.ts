@@ -25,6 +25,7 @@ import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import {
   PolicyContainer, HSTSStore, determineRequestReferrer, setRequestReferrerPolicyOnRedirect,
 } from './browsing/policy/index';
+import type { DocumentImpl } from './dom/nodes/index';
 import { type BrowletEnvironment } from './environment';
 import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
 import { HTTPAuthenticationStore } from './loader/index';
@@ -132,6 +133,12 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     }
 
     this.browsingContextGroupSet.delete(group);
+  }
+
+  /** Refresh browser UI displaying URLs or derived data affected by this document's base URL. */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#respond-to-base-url-changes
+  updateURLDisplays(_document: DocumentImpl): void {
+    // PROVISIONAL: no browser UI is attached; retain this notification for a future UI host.
   }
 
   /** Generate a fresh canonical UUID for browser-owned registrations. */

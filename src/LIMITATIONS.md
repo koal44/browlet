@@ -228,6 +228,17 @@ explicit standard content-handler list used for sink metadata.
 
 ## HTML integration gates
 
+The [§2.4.3 base-change response](browlet/html/ROADMAP.md#section-24-audit)
+connects explicitly provisional consumers. Base/fallback selection and notification
+sequencing are implemented, but browser UI updates, link-state invalidation,
+Window speculation-rule registration, and speculative loading remain no-ops.
+Parse-result creation only initializes an empty record; it does not parse or
+report errors yet.
+`HTMLScriptElement` has a dedicated implementation/platform identity and result
+state, without its reflected members or preparation algorithm. Browlet's existing
+parser callback still evaluates data-block scripts such as `application/json` as
+JavaScript; an approved expected-failure regression retains that limitation.
+
 The [loader](browlet/loader/ROADMAP.md) now consumes streamed Fetch responses,
 including response CSP and basic decoding/abort. The synchronous source-text
 route also remains. Neither establishes full HTML navigation, encoding restart,

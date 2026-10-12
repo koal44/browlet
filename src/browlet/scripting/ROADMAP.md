@@ -22,6 +22,7 @@ Do not restart the completed task/timer foundation when adding these consumers.
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
 | `rendering-opportunity.ts` | Independent opportunity producer and ordered rendering pipeline seams |
+| `speculation-rules.ts` | Provisional parse-result record shared by HTML scripts, Document parsing, and Window updates; no rule-set parsing or registration yet |
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
 
 `createWindowEnvironment()` composes the same Window/realm/execution boundary
@@ -82,8 +83,10 @@ Use bounded consumer slices within HTML's script algorithms:
    per-global lifecycle. Node's process-wide events cannot supply that ownership.
 4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Introduce module maps,
    engine linking/evaluation, fetching, registration, and dynamic-import hooks.
-5. **Speculation rules (§8.1.4.9).** Add registration with the Document and
-   loader policy that actually consume it.
+5. **Speculation rules (§8.1.4.9).** Replace the provisional Document parse-result
+   factory and Window update with parsing/error capture and registration with the
+   Document and loader policy that consume it. The record's rule-set field is
+   currently null; extend it with the concrete §7.6 rule-set type at that point.
 
 The early controlled-entry subset is complete. Custom host hooks extend it,
 but neither they nor native queues reveal every arbitrary V8 frame. Retain the

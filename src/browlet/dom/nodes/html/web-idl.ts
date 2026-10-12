@@ -4,6 +4,7 @@ import {
   htmlElementIDL, htmlElementIncludesElementCSSInlineStyleIDL,
 } from './html-element';
 import { htmlUnknownElementIDL } from './html-unknown-element';
+import { htmlScriptElementIDL } from './script';
 import { assignedNodesOptionsIDL, htmlSlotElementIDL } from './slot';
 import {
   htmlHeadElementIDL, htmlBaseElementIDL, htmlLinkElementIDL, htmlLinkElementIncludesLinkStyleIDL,
@@ -16,6 +17,7 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlElementIDL,
   htmlElementIncludesElementCSSInlineStyleIDL,
   htmlUnknownElementIDL,
+  htmlScriptElementIDL,
   htmlSlotElementIDL,
   assignedNodesOptionsIDL,
   htmlHeadElementIDL,

@@ -54,8 +54,14 @@ now supply 2.3A's boolean/enumerated attribute values and canonical keywords,
 2.3B's exact integers, floating-point values, dimensions, and numeric lists,
 2.3C's dates, times, offsets, weeks, and durations, 2.3D's legacy colors and
 token syntax, and 2.3E's hash-name references. The media and identity review
-retains the deferred matching and serialization gates; the bounded pass moves
-to HTML §2.4 URLs next. Keep missing
+retains the deferred matching and serialization gates. The
+[§2.4 URL audit](browlet/html/ROADMAP.md#section-24-audit) led to §2.4.2's parsing
+methods on Document and the browser environment. The §2.4.3 base-change response
+now has a basic HTML script implementation and approved provisional consumers for
+hyperlink state, speculation-rule parsing/registration, and speculative loads.
+Those effects remain unimplemented; review their owning roadmaps and the proposed
+nested-document slices before moving to §2.5.
+Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13
 for custom-element definitions, construction, upgrades, and reaction delivery.

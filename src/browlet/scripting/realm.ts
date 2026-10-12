@@ -155,7 +155,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     console.error(exception);
   }
 
-  /** Document used for HTML task activity checks; non-Window globals have none. */
+  /** Document associated with a Window global; non-Window globals have none. */
   getAssociatedDocument(): DocumentImpl | null {
     return null;
   }

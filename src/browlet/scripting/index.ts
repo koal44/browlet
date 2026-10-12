@@ -21,6 +21,7 @@ export {
   type RenderingUpdateContext, type RenderingDocumentFilters, type RenderingUpdatePhase,
   renderingUpdatePhases,
 } from './rendering-opportunity';
+export type { SpeculationRulesParseResult } from './speculation-rules';
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
   navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource,

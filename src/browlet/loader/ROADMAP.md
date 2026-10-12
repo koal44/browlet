@@ -23,6 +23,15 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
 | `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
 
+HTML §2.4.3's `Document.respondToBaseURLChanges()` has approved provisional
+consumers: a basic HTML script result (§4.12.1), a parse-result record initialized
+without parsing, and a no-op Window update (§8.1.4.9).
+`Document.considerSpeculativeLoads()` (§7.6) is also a marked no-op. Completing it
+requires rule matching, candidate selection, prefetch/prerender state, and
+navigation lifecycles; it is a substantial subsystem, not a direct `fetch()` call.
+The result type lives in `scripting/speculation-rules.ts`; expand its currently
+null rule-set field when the concrete rule-set representation is implemented here.
+
 UserAgent composes the [Node transport](../integration/network/node-transport.ts)
 and [native decoders](../integration/network/node-decoder.ts) from `integration/network/`.
 Fetch's internal network algorithm calls the transport. Loopback HTTP/HTTPS tests exercise headers,

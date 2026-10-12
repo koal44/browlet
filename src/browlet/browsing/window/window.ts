@@ -9,7 +9,7 @@ import {
 import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 
-import type { TimerAction } from '../../scripting/index';
+import type { SpeculationRulesParseResult, TimerAction } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import { type DocumentImpl, ElementImpl } from '../../dom/nodes/index';
@@ -143,6 +143,12 @@ export class WindowImpl extends EventTargetImpl {
   ): T {
     return this.getWindowOrWorkerGlobalScopeMixin()
       .structuredClone(value, options) as T;
+  }
+
+  /** Replace registered speculation rules and queue any new parse error for this Window. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#update-speculation-rules
+  updateSpeculationRules(_oldResult: SpeculationRulesParseResult, _newResult: SpeculationRulesParseResult): void {
+    // PROVISIONAL: document rule-set registration and queued parse-error reporting are not implemented.
   }
 
   /** Return the current associated document, throwing until it has been attached. */
