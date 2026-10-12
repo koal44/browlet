@@ -1,13 +1,21 @@
 import { InternalError } from '../../../infra/internal-error';
-import { areSameOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
-import type { FetchPromptTarget, fetchPromptTargetBrand } from '../../../fetch/index';
+import { areSameOrigin, areSameOriginDomain, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
+import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
+import { coarsenedSharedCurrentTime } from '../../timing/index';
+import { obtainSimilarOriginWindowAgent } from '../../scripting/index';
+import { PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
+import { CSPList } from '../policy/csp/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
+import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
+import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { WindowImpl } from '../window/index';
+import type { ResourceReader } from '../../loader/index';
 import type { UserAgent } from '../../user-agent';
 
 import { BrowsingContext } from './browsing-context';
 import { createDocumentState, type DocumentBackedState } from './document-state';
+import { NavigationParams } from './params';
 import { createSessionHistoryEntry, type SessionHistoryEntry } from './session-history';
 
 /** Owns a navigation destination and its current and active history entries. */
@@ -107,6 +115,145 @@ export class Navigable {
     return 'allowed';
   }
 
+  /** Prepare response-delivered CSP and sandbox restrictions before selecting the document's realm. */
+  createNavigationParams(response: FetchResponse): NavigationParams {
+    const context = this.activeBrowsingContext;
+    if (context === null) throw new InternalError('Navigation requires an active browsing context');
+    const env = context.activeWindow.env;
+    const params = new NavigationParams(
+      response,
+      new SandboxingFlagSet(context.popupSandboxingFlagSet),
+      coarsenedSharedCurrentTime(env.crossOriginIsolatedCapability).milliseconds,
+    );
+    params.policyContainer.cspList = CSPList.parse(response);
+    for (const flag of params.policyContainer.cspList.getSandboxingFlags()) params.finalSandboxingFlagSet.add(flag);
+    if (params.finalSandboxingFlagSet.has('sandboxed-origin')) params.origin = createOpaqueOrigin();
+    // Full navigation policy-container selection (history/local URL inheritance,
+    // COEP, referrer, and integrity delivery) remains with the Fetch-backed loader.
+    return params;
+  }
+
+  /** Prepare the response metadata for Browlet's synchronous source route. */
+  createNavigationParamsFromSource(url: URLRecord): NavigationParams {
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    // The local route supplies text directly to the parser and session history;
+    // it does not create a Fetch body stream in the departing document's realm.
+    return this.createNavigationParams(response);
+  }
+
+  /**
+   * Create an HTML document after handler selection and start consuming its response.
+   * Supply the reader whose determined MIME type selected this handler, retaining its inspected bytes.
+   */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#read-html
+  // SPEC_MISMATCH: load an HTML document(navigationParams) -> Document
+  loadHTMLDocument(
+    params: NavigationParams, handleScript: ScriptHandler, resource: ResourceReader,
+  ): DocumentImpl {
+    const document = this.createAndInitializeDocument('html', 'text/html', params);
+    if (document.URL === 'about:blank') {
+      document.populateWithHTMLHeadBody();
+      return document;
+    }
+
+    const { env } = document;
+    const parser = new HTMLDocumentParser(
+      document,
+      (element, write) => document.waitForScriptsMayRun().then(() => handleScript(element, write)),
+    );
+    document.activeParser = parser;
+    // PROVISIONAL(HTML bytes): BOM/transport decoding works; full encoding
+    // selection and replay for restart remain with the parser integration.
+    const parsing = parser.parseBytes(
+      resource,
+      () => document.processLinkHeaders(params.response, 'media'),
+    );
+    parsing.observe(
+      () => env.exec.queueTask('network', () => {
+        document.activeParser = null;
+        document.finishLoading();
+      }),
+      () => env.exec.queueTask('network', () => {
+        document.abort();
+        document.activeParser = null;
+      }),
+    );
+    return document;
+  }
+
+  /** Select the Window and realm, then create the document for a navigation response. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
+  createAndInitializeDocument(
+    type: 'html' | 'xml', contentType: string, params: NavigationParams,
+  ): DocumentImpl {
+    const browsingContext = this.#obtainBrowsingContext(params);
+    const permissionsPolicy = this.#createPermissionsPolicy(params);
+    const creationURL = params.request?.currentURL ?? params.url;
+    const activeDocument = browsingContext.activeDocument;
+
+    let window: WindowImpl;
+    if (activeDocument.isInitialAboutBlank && areSameOriginDomain(activeDocument.origin, params.origin)) {
+      window = browsingContext.activeWindow;
+    } else {
+      const group = browsingContext.group;
+      if (group === null) throw new InternalError('Navigation browsing context has no group');
+      const agent = obtainSimilarOriginWindowAgent(params.origin, group, params.requestsOriginAgentCluster());
+      window = group.userAgent.createWindowEnvironment({
+        agent, userAgent: group.userAgent,
+        creationURL,
+        origin: params.origin,
+        parent: this.parent?.activeWindow ?? null,
+        topLevelCreationURL: creationURL,
+        topLevelOrigin: params.origin,
+        reservedEnv: params.reservedEnv,
+        previousRealm: browsingContext.activeWindow.env.realm,
+      }).window;
+    }
+
+    const document = window.env.exec.createDocument();
+    document.type = type;
+    document.contentType = contentType;
+    document.origin = params.origin;
+    document.browsingContext = browsingContext;
+    document.policyContainer = params.policyContainer;
+    document.permissionsPolicy = permissionsPolicy;
+    document.setActiveSandboxingFlagSet(params.finalSandboxingFlagSet);
+    document.openerPolicy = params.openerPolicy;
+    document.initializeLoadTimingInfo(params.startTime);
+    document.wasCreatedViaCrossOriginRedirects = params.response.redirectTaint !== 'same-origin';
+    document.duringLoadingNavigationID = params.id;
+    document.url = creationURL;
+    document.currentDocumentReadiness = 'loading';
+    document.aboutBaseURL = params.aboutBaseURL;
+    document.allowDeclarativeShadowRoots = true;
+    document.customElementRegistry = new CustomElementRegistryImpl();
+
+    window.setAssociatedDocument(document);
+    document.initializeAncestry(params.iframeReferrerPolicy);
+    document.initializeInsecureRequestsPolicy();
+    document.initializeCSP();
+    document.initializeReferrer(params.request);
+    document.createNavigationTimingEntry(params);
+    document.processResponseIntegrations(params);
+    return document;
+  }
+
+  /** Retain the new document and the navigation data needed to restore it. */
+  createHistoryEntry(
+    document: DocumentImpl, params: NavigationParams, source: string | null = null,
+  ): SessionHistoryEntry {
+    const activeState = this.activeSessionHistoryEntry.documentState;
+    const documentState = createDocumentState(document);
+    documentState.initiatorOrigin = null;
+    documentState.origin = params.origin;
+    documentState.aboutBaseURL = params.aboutBaseURL;
+    documentState.resource = source;
+    documentState.everPopulated = true;
+    documentState.navigableTargetName = activeState.navigableTargetName;
+    return createSessionHistoryEntry(documentState);
+  }
+
   /** Choose whether navigation appends a history entry or replaces the active one. */
   // https://html.spec.whatwg.org/multipage/browsing-the-web.html#navigate-convert-to-replace
   resolveHistoryBehavior(url: URLRecord, origin: Origin): NavigationHistoryBehavior {
@@ -183,6 +330,29 @@ export class Navigable {
 
     traversable.applyPushOrReplaceHistoryStep(this, targetStep, historyEntry);
     void userInvolvement;
+  }
+
+  /** Select the browsing context in which the response will create a document. */
+  #obtainBrowsingContext(params: NavigationParams): BrowsingContext {
+    if (params.coopEnforcementResult.needsBrowsingContextGroupSwitch) {
+      throw new InternalError('COOP browsing-context group switching is not implemented');
+    }
+    const browsingContext = this.activeBrowsingContext;
+    if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
+    return browsingContext;
+  }
+
+  /** Combine response and container permissions for the destination document. */
+  // https://w3c.github.io/webappsec-permissions-policy/#create-from-response
+  // PROVISIONAL: only top-level destinations without a Permissions-Policy header are supported.
+  #createPermissionsPolicy(params: NavigationParams): PermissionsPolicy {
+    if (params.response.headerList.get('Permissions-Policy') !== null) {
+      throw new InternalError('Permissions-Policy response parsing is not implemented');
+    }
+    if (!(this instanceof TopLevelTraversable)) {
+      throw new InternalError('Container permissions-policy creation is not implemented');
+    }
+    return PermissionsPolicy.create(null, params.origin);
   }
 }
 

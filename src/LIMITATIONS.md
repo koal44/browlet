@@ -240,7 +240,11 @@ parser callback still evaluates data-block scripts such as `application/json` as
 JavaScript; an approved expected-failure regression retains that limitation.
 
 The [loader](browlet/loader/ROADMAP.md) now consumes streamed Fetch responses,
-including response CSP and basic decoding/abort. The synchronous source-text
+including response CSP and basic decoding/abort. `ResourceReader` preserves
+MIME-sniffed input for the selected consumer, but general document-handler
+selection and a concrete browser MIME-support policy remain unfinished.
+The meta charset extractor is present without the encoding prescan or meta
+element processing. The synchronous source-text
 route also remains. Neither establishes full HTML navigation, encoding restart,
 script readiness, Link/preload processing, load-event ordering, or public timing
 entries. Fragment and `javascript:` navigation still need their specified paths.

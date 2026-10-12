@@ -6,7 +6,7 @@ import { getBufferSourceCopy, isUint8Array, type GlobalObject } from '../js-engi
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../web-idl/index';
-import { ReadableStreamImpl } from '../streams/index';
+import { ReadableStreamImpl, type ReadableStreamDefaultReaderImpl } from '../streams/index';
 import { TextDecoderStreamImpl, utf8Decode, utf8Encode } from '../encoding/index';
 import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';
 import { serializeMIMEType } from '../mime/index';
@@ -107,7 +107,7 @@ export class FetchBody {
     return clone;
   }
 
-  /** Deliver copied chunks as tasks, reading the next only after the previous callback. */
+  /** Deliver copied chunks and completion through tasks on the selected destination. */
   // https://fetch.spec.whatwg.org/#body-incrementally-read
   incrementallyRead(
     processBodyChunk: (bytes: Uint8Array) => void,
@@ -118,28 +118,44 @@ export class FetchBody {
     const env = this.#env;
     const destination = taskDestination ?? new ParallelQueue(env.exec.runInParallel);
     const reader = this.stream.getDefaultReader();
+    const readLoop = (): void => {
+      this.readChunk(reader, destination, (bytes) => {
+        processBodyChunk(bytes);
+        readLoop();
+      }, processEndOfBody, processBodyError);
+    };
     readLoop();
+  }
 
-    // The next read starts inside the task that processes this chunk.
-    function readLoop(): void {
-      reader.readChunk({
-        chunkSteps(chunk) {
-          let continueAlgorithm: () => void;
-          if (!isUint8Array(chunk)) {
-            continueAlgorithm = () => processBodyError(new TypeError('Body stream produced a non-Uint8Array chunk'));
-          } else {
-            const bytes = getBufferSourceCopy(chunk);
-            continueAlgorithm = () => {
-              processBodyChunk(bytes);
-              readLoop();
-            };
-          }
-          queueFetchTask(continueAlgorithm, destination, env);
-        },
-        closeSteps: () => queueFetchTask(processEndOfBody, destination, env),
-        errorSteps: (error) => queueFetchTask(() => processBodyError(error), destination, env),
-      });
-    }
+  /**
+   * Deliver one copied byte chunk, EOF, or error through a Fetch task.
+   * The caller supplies this body's reader and owns further reads and lock release.
+   */
+  // One iteration of Fetch's incrementally-read loop; the caller supplies continuation.
+  // https://fetch.spec.whatwg.org/#incrementally-read-loop
+  // SPEC_MISMATCH: incrementally-read loop(reader, taskDestination, processBodyChunk, processEndOfBody, processBodyError) -> nothing
+  readChunk(
+    reader: ReadableStreamDefaultReaderImpl,
+    taskDestination: GlobalObject | ParallelQueue,
+    processBodyChunk: (bytes: Uint8Array) => void,
+    processEndOfBody: () => void,
+    processBodyError: (error: unknown) => void,
+  ): void {
+    const env = this.#env;
+    reader.readChunk({
+      chunkSteps(chunk) {
+        let continueAlgorithm: () => void;
+        if (!isUint8Array(chunk)) {
+          continueAlgorithm = () => processBodyError(new TypeError('Body stream produced a non-Uint8Array chunk'));
+        } else {
+          const bytes = getBufferSourceCopy(chunk);
+          continueAlgorithm = () => processBodyChunk(bytes);
+        }
+        queueFetchTask(continueAlgorithm, taskDestination, env);
+      },
+      closeSteps: () => queueFetchTask(processEndOfBody, taskDestination, env),
+      errorSteps: (error) => queueFetchTask(() => processBodyError(error), taskDestination, env),
+    });
   }
 
   /** Queue the complete bytes or read failure on the selected task destination. */

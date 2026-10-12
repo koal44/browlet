@@ -366,6 +366,24 @@ WindowProxy, and Location. Their consumers use the corresponding component's
 index; cooperating modules within navigation import each other directly.
 There is no umbrella browsing barrel.
 
+Navigable coordinates response preparation, destination context and Window
+selection, document loading, and history commit. NavigationParams carries the
+per-navigation inputs; the destination is the receiving Navigable, rather than
+a reference stored in those params. Resource consumption stays in `loader/`,
+below navigation. Its ResourceReader collects a bounded prefix and retains the
+complete chunks for the consumer. MIME owns supplied-type detection, the
+metadata-only preservation rule, and classification through `sniffMIMEType()`;
+it holds no per-resource state. ResourceReader owns the deadline and stores
+the returned MIME type as a concrete value; body reads throw until that value
+exists. They drain the retained chunks and continue from the same Fetch reader.
+A read pending at the deadline remains available to the body consumer. Fetch
+supplies source reads, byte copying, and task delivery. HTML parsing stays in
+`html/parser/`. A navigable outlives
+individual environments; the new document's environment can exist before it
+becomes active. Document loading and parsing use that document's owner.
+BrowsingContext creates the initial about:blank document before the navigable
+is initialized.
+
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
 component order for import layout and dependency review. Imports put external
 packages first, then other subsystems and foundations (Infra before JS Engine and

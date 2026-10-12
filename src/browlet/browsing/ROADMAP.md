@@ -8,8 +8,8 @@ owns the browsing-context and session-history lifecycle.
 
 - `origin.ts` implements the origin/site comparisons currently required by
   agents, navigation, and Window security decisions.
-- `navigation/browsing-context.ts`, `navigation/navigable.ts`, and
-  `navigation/document-lifecycle.ts` form the bounded top-level navigation spine.
+- `navigation/browsing-context.ts` and `navigation/navigable.ts` form the
+  bounded top-level navigation spine.
 - `navigation/navigable.ts` derives a node's navigable and a top-level Document's
   fully-active status from the navigable's active session-history entry.
 
@@ -23,7 +23,7 @@ owns the browsing-context and session-history lifecycle.
 | `navigation/browsing-context-group.ts` if group behavior outgrows browsing-context.ts | Browsing-context groups and related group switching | HTML §§7.1 and 7.3.2 |
 | existing `navigation/navigable.ts` | Child/related navigables, destruction, container association, active/current-entry invariants, and fully-active recursion through the container Document | HTML §§7.3.1–7.3.3 |
 | `navigation/target.ts` | Choosing/naming browsing contexts and navigables | HTML §7.3.1 |
-| existing `navigation/document-lifecycle.ts`, `NavigationParams`, and `DocumentImpl` | Creation factory selects Window/realm; navigation owns response/destination operations; Document owns initialization, loading completion, destruction, abortion, and unloading cleanup | HTML §7.5 |
+| existing `Navigable`, `NavigationParams`, and `DocumentImpl` | Navigable selects Window/realm and creates the destination Document and history entry; NavigationParams retains navigation inputs; Document owns initialization, loading completion, destruction, abortion, and unloading cleanup | HTML §7.5 |
 | existing `user-agent.ts` plus the future embedder/automation boundary | Browser-UI navigation, reload, stop, traversal, creation, closing, POST confirmation, and cache-bypass requests routed through the ordinary algorithms with `browser UI` involvement | HTML §7.9 |
 
 Creator-based browsing-context creation still stops at the explicit guard in

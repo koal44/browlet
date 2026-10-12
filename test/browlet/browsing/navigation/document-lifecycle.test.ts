@@ -8,8 +8,6 @@ import { UserAgent } from '../../../../src/browlet/user-agent';
 import { unwrap, project, getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { Window } from '../../../../src/browlet/platform';
-import { createAndInitializeDocument } from '../../../../src/browlet/browsing/navigation/document-lifecycle';
-import { NavigationParams } from '../../../../src/browlet/browsing/navigation/params';
 import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/realm';
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
@@ -452,6 +450,33 @@ describe('environment settings objects', () => {
 });
 
 describe('navigation response inputs', () => {
+  it('prepares a document in its own environment before replacing the active document', () => {
+    const traversable = TopLevelTraversable.create(new UserAgent(), null, 'destination');
+    const previousEntry = traversable.activeSessionHistoryEntry;
+    const previousWindow = traversable.activeWindow!;
+    const previousDocument = traversable.activeDocument!;
+    const params = traversable.createNavigationParamsFromSource(requireURL('https://example.test/page'));
+
+    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
+    const entry = traversable.createHistoryEntry(document, params, '<p>saved source</p>');
+
+    expect(traversable.activeSessionHistoryEntry).toBe(previousEntry);
+    expect(traversable.activeDocument).toBe(previousDocument);
+    expect(traversable.activeWindow).toBe(previousWindow);
+    expect(previousWindow.env.realm.getAssociatedDocument()).toBe(previousDocument);
+    expect(document.env).not.toBe(previousWindow.env);
+    expect(document.env.realm.getAssociatedDocument()).toBe(document);
+    expect(document.env.userAgent).toBe(previousWindow.env.userAgent);
+    expect(entry.documentState.navigableTargetName).toBe('destination');
+    expect(entry.documentState.resource).toBe('<p>saved source</p>');
+
+    traversable.finalizeCrossDocumentNavigation('replace', params.userInvolvement, entry);
+
+    expect(traversable.activeDocument).toBe(document);
+    expect(traversable.activeWindow?.env).toBe(document.env);
+    expect(previousWindow.env.realm.getAssociatedDocument()).toBe(previousDocument);
+  });
+
   it.each(['same-origin', 'same-site', 'cross-site'] as const)(
     'uses a Fetch request and a response with %s redirect taint', (redirectTaint) => {
       const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
@@ -462,10 +487,10 @@ describe('navigation response inputs', () => {
       const response = new FetchResponse();
       response.urlList.push(url);
       response.redirectTaint = redirectTaint;
-      const params = NavigationParams.fromResponse(traversable, response);
+      const params = traversable.createNavigationParams(response);
       params.request = request;
 
-      const document = createAndInitializeDocument('html', 'text/html', params);
+      const document = traversable.createAndInitializeDocument('html', 'text/html', params);
 
       expect(document.url).toBe(request.currentURL);
       expect(document.url).toEqual(url);
@@ -479,7 +504,7 @@ describe('navigation response inputs', () => {
     const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
     const response = new FetchResponse();
     response.urlList.push(requireURL('https://example.test/page'));
-    const params = NavigationParams.fromResponse(traversable, response);
+    const params = traversable.createNavigationParams(response);
     const controller = new FetchController();
     const timing = new FetchTimingInfo();
     timing.startTime = 42;
@@ -496,10 +521,10 @@ describe('navigation response inputs', () => {
     response.urlList.push(requireURL('https://example.test/page'));
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     response.body = new FetchBody(stream, env);
-    const params = NavigationParams.fromResponse(traversable, response);
-    const document = createAndInitializeDocument('html', 'text/html', params);
+    const params = traversable.createNavigationParams(response);
+    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
 
-    expect(params.createHistoryEntry(document).documentState.resource).toBeNull();
+    expect(traversable.createHistoryEntry(document, params).documentState.resource).toBeNull();
     expect(response.body.stream).toBe(stream);
     expect(stream.disturbed).toBe(false);
     expect(stream.locked).toBe(false);

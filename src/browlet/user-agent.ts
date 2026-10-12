@@ -16,7 +16,7 @@ import type { BlobImpl } from '../file/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
-  type RequestInternalPriority, type ServiceWorkerTimingInfo,
+  type Destination, type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 
 import { unsafeSharedCurrentTime } from './timing/index';
@@ -27,8 +27,8 @@ import {
 } from './browsing/policy/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import { type BrowletEnvironment } from './environment';
-import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
 import { HTTPAuthenticationStore } from './loader/index';
+import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
 import { BlobURLEntry, BlobURLStore } from './integration/file/index';
 import {
@@ -149,6 +149,25 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Parse a browser URL and retain its Blob registration before revocation can remove it. */
   parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLParseResult {
     return parseURL(input, base, encoding, this);
+  }
+
+  /**
+   * Create an element resource request using its interpreted CORS setting.
+   * The calling HTML algorithm supplies the client and other resource-specific fields afterward.
+   */
+  // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#create-a-potential-cors-request
+  createPotentialCORSRequest(
+    url: URLRecord, destination: Destination, corsAttributeState: CORSSettingsState,
+    sameOriginFallback = false,
+  ): FetchRequest {
+    const request = new FetchRequest(url, null, this);
+    request.destination = destination;
+    request.mode = corsAttributeState === 'no-cors'
+      ? sameOriginFallback ? 'same-origin' : 'no-cors'
+      : 'cors';
+    request.credentialsMode = corsAttributeState === 'anonymous' ? 'same-origin' : 'include';
+    request.useURLCredentials = true;
+    return request;
   }
 
   /** Acquire a captured Blob entry without resolving its URL again after revocation. */
@@ -425,3 +444,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
 /** Outcome of one delivery attempt; the caller applies endpoint bookkeeping. */
 export type ReportDeliveryResult = 'success' | 'remove-endpoint' | 'failure';
+
+/** Interpreted states of an HTML crossorigin content attribute, distinct from raw attribute text. */
+// https://html.spec.whatwg.org/multipage/urls-and-fetching.html#cors-settings-attribute
+export type CORSSettingsState = 'no-cors' | 'anonymous' | 'use-credentials';

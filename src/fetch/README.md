@@ -80,6 +80,14 @@ pauses both decoding and wire input. A separate
 
 ## Bodies and caches
 
+`FetchBody.incrementallyRead()` delivers copied byte chunks through Fetch tasks,
+continuing after each chunk callback as the specification requires.
+`readChunk()` supplies one iteration of that loop: byte validation, copying,
+and delivery of a chunk, EOF, or error. Its caller supplies the Streams reader
+and owns further reads and lock release. HTML's bounded resource reader uses
+this primitive to read on demand without pausing an automatic loop. This
+extraction's callable shape is marked for review in `body.ts`.
+
 `FetchResponse.clone()` tees its existing body. `copy(body)` copies metadata
 with an explicit replacement body, including null. Multipart replay retains
 the encoded `BlobData`, preserving the boundary and captured fields without

@@ -23,13 +23,13 @@ export {
 
 export {
   detectSuppliedMIMEType,
-  readResourceHeader,
+  maximumResourceHeaderLength,
   type MIMETypeSource,
-  type ReadResourceBytes,
   type SuppliedMIMETypeDetection,
 } from './resource';
 
 export {
+  preservedMIMEType,
   sniffMIMEType,
   sniffMIMETypeInAudioOrVideoContext,
   sniffMIMETypeInBrowsingContext,

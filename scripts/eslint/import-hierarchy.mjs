@@ -42,8 +42,10 @@ export const layers = [
   ['browlet/environment', 'browlet/global-scope'],
   ['browlet/html/parser', 'browlet/scripting/structured-data'],
   ['browlet/html', 'browlet/browsing/window', 'browlet/workers', 'browlet/automation'],
+  // Navigation composes resource consumption with document creation and parsing.
+  ['browlet/loader'],
   ['browlet/browsing/navigation'],
-  ['browlet/loader', 'browlet/integration/network', 'browlet/integration/xhr'],
+  ['browlet/integration/network', 'browlet/integration/xhr'],
   ['browlet/integration/file'],
   ['browlet/integration'],
   ['browlet/bindings'],

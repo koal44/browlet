@@ -21,3 +21,4 @@ export {
 export { parseLegacyColor } from './color';
 export { parseCommaSeparatedTokens } from './tokens';
 export { parseHashNameReference } from './references';
+export { extractMetaEncoding } from './meta-encoding';

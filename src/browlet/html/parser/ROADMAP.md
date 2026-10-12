@@ -7,14 +7,14 @@
 - `tree-adapter.ts` maps parse5 tree operations to Browlet DOM algorithms.
   Structural callbacks enter the tested 4B Node insertion/removal path, with
   provisional mutation participants tracked in the
-  [nodes roadmap](../../dom/nodes/ROADMAP.md). Text merging still awaits the
-  complete CharacterData path in 4E.
+  [nodes roadmap](../../dom/nodes/ROADMAP.md). Adjacent text merges use
+  CharacterData's `data` setter.
   Its private source-location stamp keeps optional parser metadata on each
   `NodeImpl`, with parse5 types confined to the parser module. The streaming
   parser enables these locations; Browlet reads script start-tag positions
   to preserve document-relative line numbers in inline-script stack traces.
 - `document-parser.ts` enters and resumes parsing through HTML networking tasks.
-  It retains the supplied EventLoop and JSEnvironment; stylesheet waits and
+  It uses `document.env` for execution and the event loop; stylesheet waits and
   script-handler completion use `InternalPromise`. Node's stream-finished callback
   only queues document finalization back into HTML. `Browlet.navigate()` keeps
   a native Promise at its outer Node API boundary.
@@ -61,13 +61,20 @@ Then complete these seams in order:
 ## Missing host integration
 
 Fetch 9E supplies a concrete consumer in
-[`loadHTMLDocument()`](../../loader/document-loader.ts). The provisional
-`parseBytes(body, headers, onFirstInput)` returns `InternalPromise<void>` and
-has real network coverage. Complete HTML encoding selection still needs the
-prescan/meta rules, encoding confidence, and retained bytes for restart without
+[`Navigable.loadHTMLDocument()`](../../browsing/navigation/navigable.ts). The provisional
+`parseBytes(resource, onFirstInput)` returns `InternalPromise<void>` and
+has real network coverage. Loader's `ResourceReader` owns stream reads,
+cancellation, and replay of the MIME-sniffed prefix; the parser still schedules
+input and completion in its Document's environment. Complete HTML encoding selection needs the
+byte prescan, meta processing, encoding confidence, and retained bytes for restart without
 refetching. The current decoder does not retain a whole-body copy for that
 future mechanism. Abort still needs the specified readiness events,
 open-element cleanup, and speculative-parser lifecycle.
+
+The shared `extractMetaEncoding()` string algorithm is implemented in
+[`microsyntaxes/meta-encoding.ts`](../microsyntaxes/meta-encoding.ts), below both
+the DOM and parser. It is ready for the byte prescan and future meta element
+processing; it does not implement either consumer or encoding changes itself.
 
 The consumer waits for `Document.waitForScriptsMayRun()` before invoking its
 existing script handler. That gate currently resolves immediately: present
@@ -95,7 +102,7 @@ disposal and the remaining lifecycle work.
 | `encoding.ts` | Byte-stream decoding, encoding sniffing, `<meta>` extraction, confidence, and navigation restart without a second network fetch | HTML §§2.1.7, 2.5.3, and 13.2 |
 | `script-runner.ts` | Parser-inserted scripts, pause/resume, nesting level, pending parsing-blocking script | HTML §§13.2.2 and 13.2.6.4 |
 | `dynamic-markup.ts` | `document.open()`, `close()`, `write()`, and `writeln()` over the active parser, including reentrancy, destructive-write guards, and script insertion points | HTML §8.4 |
-| Existing `document-parser.ts` plus `browsing/navigation/document-lifecycle.ts` | Stop/abort parsing, readiness changes, deferred scripts, `DOMContentLoaded`, load-event delay, and final completion | HTML §13.2, "The end" |
+| Existing `document-parser.ts` and `DocumentImpl` | Stop/abort parsing, readiness changes, deferred scripts, `DOMContentLoaded`, load-event delay, and final completion | HTML §13.2, "The end" |
 | `preload-scanner.ts` only after ordinary loading works | Optional speculative resource discovery without semantic tree mutation | HTML §13.2, "Speculative HTML parsing" |
 
 parse5 continues to own tokenization, tree construction, insertion modes,

@@ -1,30 +1,33 @@
 import { idlType } from '../../../../src/web-idl/core/index';
 import { describe, expect, it } from 'vitest';
+import type { InternalPromise } from '../../../../src/infra/promises';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../src/fetch/body';
 import { FetchHeaders } from '../../../../src/fetch/headers';
+import { FetchResponse } from '../../../../src/fetch/response';
+import { ResourceReader } from '../../../../src/browlet/loader/resource-reader';
 import { utf8Encode } from '../../../../src/encoding/codecs/utf-8';
 import { ReadableStreamImpl } from '../../../../src/streams/index';
 
 import {
-  BrowletParser,
+  HTMLDocumentParser,
 } from '../../../../src/browlet/html/parser/document-parser';
 import { HTMLLinkElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/link';
 import { HTMLStyleElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/style';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 
-describe('BrowletParser', () => {
+describe('HTMLDocumentParser', () => {
   it('resumes through HTML tasks when a stylesheet blocker is released', async () => {
-    const { document, realm, env, drain } = createParserDocument();
+    const { document, realm, drain } = createParserDocument();
     const blocker = document.createElement('style');
     document.addScriptBlockingStyleSheet(blocker);
     let scripts = 0;
     let complete = false;
     const errors: unknown[] = [];
-    const parser = new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, env);
+    const parser = new HTMLDocumentParser(document, () => { scripts++; });
     void parser.parse('<script></script><main id="after"></main>').then(
       () => { complete = true; },
       (error) => { errors.push(error); },
@@ -52,14 +55,12 @@ describe('BrowletParser', () => {
 
   it('waits for script-blocking style sheets before executing a script', async () => {
     const scripts: ElementImpl[] = [];
-    const { document, realm, env, drain } = createParserDocument();
-    const parser = new BrowletParser(
+    const { document, realm, drain } = createParserDocument();
+    const parser = new HTMLDocumentParser(
       document,
       (script) => {
         scripts.push(script);
       },
-      realm.agent.eventLoop,
-      env,
     );
     expect(parser.document).toBe(document);
     const first = parser.document.createElement('style');
@@ -103,13 +104,13 @@ describe('BrowletParser', () => {
   });
 
   it.each([false, true])('rechecks a new stylesheet blocker (later task: %s)', async (laterTask) => {
-    const { document, realm, env, drain } = createParserDocument();
+    const { document, realm, drain } = createParserDocument();
     const first = document.createElement('style');
     const second = document.createElement('style');
     document.addScriptBlockingStyleSheet(first);
     let scripts = 0;
     const errors: unknown[] = [];
-    new BrowletParser(document, () => { scripts++; }, realm.agent.eventLoop, env)
+    new HTMLDocumentParser(document, () => { scripts++; })
       .parse('<script></script>').observe(() => {}, (error) => { errors.push(error); });
     await inNodeTask(drain);
 
@@ -135,10 +136,10 @@ describe('BrowletParser', () => {
   });
 
   it('checkpoints pending microtasks before running a parser script', async () => {
-    const { document, realm, env, drain } = createParserDocument();
+    const { document, env, drain } = createParserDocument();
     const order: string[] = [];
     env.exec.queueMicrotask(() => { order.push('microtask'); });
-    new BrowletParser(document, () => { order.push('script'); }, realm.agent.eventLoop, env)
+    new HTMLDocumentParser(document, () => { order.push('script'); })
       .parse('<script></script>').observe(
         () => { order.push('complete'); },
         () => { order.push('error'); },
@@ -154,7 +155,7 @@ describe('BrowletParser', () => {
     const failure = new Error('script preparation failed');
     let complete = false;
     const errors: unknown[] = [];
-    new BrowletParser(document, () => ready.promise, realm.agent.eventLoop, env)
+    new HTMLDocumentParser(document, () => ready.promise)
       .parse('<script></script><main id="after"></main>').observe(
         () => { complete = true; },
         (error) => { errors.push(error); },
@@ -174,7 +175,7 @@ describe('BrowletParser', () => {
   });
 });
 
-describe('BrowletParser response bytes', () => {
+describe('HTMLDocumentParser response bytes', () => {
   it('parses before EOF and retains split BOM and character bytes across input chunks', async () => {
     const { document, realm, env, drain } = createParserDocument();
     const stream = ReadableStreamImpl.createDefault(undefined, undefined, 0, () => 1, env);
@@ -183,11 +184,16 @@ describe('BrowletParser response bytes', () => {
     stream.enqueueChunk(Uint8Array.of(0xef));
     stream.enqueueChunk(Uint8Array.of(0xbb));
     stream.enqueueChunk(Uint8Array.from([0xbf, ...utf8Encode('<p id="first"></p><p id="last">caf'), 0xc3]));
-    const parser = new BrowletParser(document, () => {}, realm.agent.eventLoop, env);
+    const parser = new HTMLDocumentParser(document, () => {});
     let firstInputs = 0;
     let complete = false;
     const errors: unknown[] = [];
-    parser.parseBytes(new FetchBody(stream, env), headers, () => {
+    const response = new FetchResponse();
+    response.body = new FetchBody(stream, env);
+    response.headerList = headers;
+    const resource = new ResourceReader(response, env.userAgent);
+    await observe(resource.determineMIMEType());
+    parser.parseBytes(resource, () => {
       expect(realm.agent.eventLoop.currentlyRunningTask).not.toBeNull();
       expect(document.getElementById('first')).not.toBeNull();
       firstInputs++;
@@ -209,12 +215,17 @@ describe('BrowletParser response bytes', () => {
   });
 
   it('cancels response input when aborted before the first parser task', async () => {
-    const { document, realm, env, drain } = createParserDocument();
+    const { document, env, drain } = createParserDocument();
     let canceled = 0;
     const stream = ReadableStreamImpl.createDefault(undefined, () => { canceled++; }, 0, () => 1, env);
-    const parser = new BrowletParser(document, () => {}, realm.agent.eventLoop, env);
+    const parser = new HTMLDocumentParser(document, () => {});
     const errors: unknown[] = [];
-    parser.parseBytes(new FetchBody(stream, env), new FetchHeaders(), () => {})
+    const response = new FetchResponse();
+    response.body = new FetchBody(stream, env);
+    response.headerList.append('Content-Type', 'text/html');
+    const resource = new ResourceReader(response, env.userAgent);
+    await observe(resource.determineMIMEType());
+    parser.parseBytes(resource, () => {})
       .observe(() => {}, (error) => { errors.push(error); });
     parser.abort();
     await expect.poll(async () => { await inNodeTask(drain); return errors.length; }).toBe(1);
@@ -230,13 +241,18 @@ describe('BrowletParser response bytes', () => {
     const stream = ReadableStreamImpl.createDefault(undefined, () => { canceled++; }, 0, () => 1, env);
     stream.enqueueChunk(utf8Encode(waiting === 'script'
       ? '<script></script><main id="after"></main>' : '<p></p>'));
-    const parser = new BrowletParser(document, () => ready.promise, realm.agent.eventLoop, env);
+    const parser = new HTMLDocumentParser(document, () => ready.promise);
     document.activeParser = parser;
     document.currentDocumentReadiness = 'loading';
     let firstInput = false;
     let complete = false;
     const errors: unknown[] = [];
-    parser.parseBytes(new FetchBody(stream, env), new FetchHeaders(), () => { firstInput = true; })
+    const response = new FetchResponse();
+    response.body = new FetchBody(stream, env);
+    response.headerList.append('Content-Type', 'text/html');
+    const resource = new ResourceReader(response, env.userAgent);
+    await observe(resource.determineMIMEType());
+    parser.parseBytes(resource, () => { firstInput = true; })
       .observe(() => { complete = true; }, (error) => { errors.push(error); });
     await expect.poll(async () => { await inNodeTask(drain); return firstInput; }).toBe(true);
 
@@ -253,6 +269,10 @@ describe('BrowletParser response bytes', () => {
     expect(document.getElementById('after')).toBeNull();
   });
 });
+
+function observe<T>(promise: InternalPromise<T>): Promise<T> {
+  return new Promise<T>((resolve, reject) => { promise.observe(resolve, reject); });
+}
 
 function inNodeTask(steps: () => void): Promise<void> {
   return new Promise((resolve, reject) => {

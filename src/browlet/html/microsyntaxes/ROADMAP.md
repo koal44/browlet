@@ -5,6 +5,11 @@ defines reusable value syntax and parsing behavior consumed by elements,
 reflection, parsing, and loading. This directory owns the HTML value algorithms;
 content-attribute access, element state, and CSS evaluation retain their owners.
 
+[`meta-encoding.ts`](meta-encoding.ts) also owns HTML §2.5.3's shared string
+extraction algorithm. Keeping it below DOM and parsing lets both the future
+meta element and encoding prescan use it. The extractor is implemented and
+tested; those consumers retain their §§4.2.5/13.2.3 integration gates.
+
 ## Five implementation slices
 
 Proceed in specification order, with one implementation/review unit per slice.

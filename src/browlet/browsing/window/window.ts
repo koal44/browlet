@@ -233,8 +233,6 @@ export class WindowImpl extends EventTargetImpl {
     return true;
   }
 
-  // -- Private ----------------------------------------------------------
-
   /** Bind a converted callback to this Window's proxy for later timer delivery. */
   #createTimerAction(handler: TimerHandler): TimerAction {
     if (typeof handler === 'string') {

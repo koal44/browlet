@@ -200,6 +200,47 @@ describe('Fetch full body reading', () => {
   });
 });
 
+describe('Fetch single-chunk body reading', () => {
+  it('copies and queues one chunk per request while leaving reader ownership with the caller', () => {
+    const fixture = createBodyFixture();
+    const first = Uint8Array.of(1);
+    const second = Uint8Array.of(2);
+    const body = fixture.createBody([first, second]);
+    body.stream.close();
+    const chunks: number[][] = [];
+    const end = vi.fn();
+    const error = vi.fn();
+    const reader = body.stream.getDefaultReader();
+    const read = () => body.readChunk(reader, fixture.global,
+      (bytes) => { chunks.push([...bytes]); }, end, error,
+    );
+
+    read();
+    expect(chunks).toEqual([]);
+    first[0] = 99;
+    fixture.runTask();
+    expect(chunks).toEqual([[1]]);
+    expect(fixture.tasks).toHaveLength(0);
+
+    second[0] = 3;
+    read();
+    second[0] = 4;
+    expect(chunks).toEqual([[1]]);
+    fixture.runTask();
+    expect(chunks).toEqual([[1], [3]]);
+    expect(end).not.toHaveBeenCalled();
+    expect(fixture.tasks).toHaveLength(0);
+
+    read();
+    fixture.runTask();
+    expect(end).toHaveBeenCalledOnce();
+    expect(error).not.toHaveBeenCalled();
+    expect(body.stream.locked).toBe(true);
+    reader.release(fixture.env);
+    expect(body.stream.locked).toBe(false);
+  });
+});
+
 describe('Fetch incremental body reading', () => {
   it('copies each chunk and waits for its global Fetch task before reading the next one', () => {
     const fixture = createBodyFixture();
@@ -211,7 +252,7 @@ describe('Fetch incremental body reading', () => {
     const error = vi.fn();
 
     body.incrementallyRead(
-      (bytes) => events.push([...bytes]), () => events.push('end'), error,
+      (bytes) => { events.push([...bytes]); }, () => events.push('end'), error,
       fixture.global,
     );
     expect(events).toEqual([]);
@@ -239,7 +280,7 @@ describe('Fetch incremental body reading', () => {
     const destination = kind === 'supplied' ? fixture.createParallelQueue() : null;
     const events: (number[] | string)[] = [];
     body.incrementallyRead(
-      (bytes) => events.push([...bytes]), () => events.push('end'), vi.fn(),
+      (bytes) => { events.push([...bytes]); }, () => events.push('end'), vi.fn(),
       destination,
     );
     expect(events).toEqual([]);
@@ -285,7 +326,7 @@ describe('Fetch incremental body reading', () => {
     const failure = new Error('source failed');
     const events: unknown[] = [];
     body.incrementallyRead(
-      (bytes) => events.push([...bytes]), () => events.push('end'), (error) => events.push(error),
+      (bytes) => { events.push([...bytes]); }, () => events.push('end'), (error) => events.push(error),
       fixture.global,
     );
     body.stream.error(failure);

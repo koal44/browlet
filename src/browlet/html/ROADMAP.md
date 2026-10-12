@@ -188,6 +188,37 @@ distinct document flag and inherited base. Review further navigation, history,
 and policy gaps as they appear. Speculation-rule processing and speculative
 loads remain separate §7.6 work; they need not be the first loading excursion.
 
+### Section 2.5 audit
+
+The 2026-10-11 ordered audit implements the bounded §2.5.2 resource-reader
+integration and §2.5.3 meta encoding extraction. The next review point is
+**§2.5.4, CORS settings attributes**: raw attribute interpretation, reflection,
+and element fetch consumers are not yet connected.
+
+| Requirement | Current implementation and remaining work |
+| --- | --- |
+| §2.5.1 response terminology | FetchResponse already represents the six response types and exposes the underlying response through `isFilteredResponse()` and `internalResponse`. HTML's CORS-same-origin classification covers basic/cors/default; CORS-cross-origin covers opaque/opaqueredirect. Network errors belong to neither group. These definitions do not require another response representation. |
+| §2.5.1 potential-CORS request | `UserAgent.createPotentialCORSRequest()` creates the existing FetchRequest with the required destination, mode, credentials mode, and use-URL-credentials flag. Its caller still supplies client and other feature-specific fields. Tests cover all three CORS states with and without same-origin fallback. Element fetch consumers and raw crossorigin attribute interpretation (§2.5.4) remain later work. |
+| §2.5.2 resource type detection | Loader's ResourceReader retains response metadata, computes a MIME type with existing MIME algorithms, and preserves the bounded sniffed prefix and any pending read for subsequent consumption. Real HTTP tests pass the same reader to the HTML parser. General handler selection and actual content support remain explicit §7.5 gates. |
+| §2.5.3 meta encoding extraction | `html/microsyntaxes/meta-encoding.ts` implements the shared string algorithm with Encoding's label lookup, below both future meta elements and parser consumers. Tests cover quoted/unquoted labels, repeated candidates, ASCII whitespace, and the deliberate differences from HTTP parameter parsing. Meta element processing, the encoding prescan, and restart remain §§4.2.5/13.2.3 work. |
+| §2.5.4 CORS settings attributes | The request factory accepts an interpreted state, but `script` and `link` only list `crossOrigin` in IDL comments, without implementing the member. Their fetch/preparation algorithms and the image/media/iframe consumers remain unfinished. Continue here with attribute ownership and actual consumers rather than claiming the existing state union completes this section. |
+
+The request factory lives on UserAgent, the owner retained by FetchRequest even
+before an HTML caller selects a client. The same-origin fallback flag defaults
+to false. This ownership choice has been reviewed; no Fetch protocol algorithm
+was duplicated.
+
+For §2.5.2, the [loader roadmap](../loader/ROADMAP.md#section-252-resource-reading)
+records the implemented response/header owner and byte-prefix retention, plus
+the remaining support policy and handler selection. `Navigable.loadHTMLDocument()` is specifically an HTML
+consumer, not that selection layer. `UserAgent.supportsMIMEType()` currently
+returns false as a provisional Resource Timing policy; wiring it into sniffing
+does not establish browser content support.
+
+§§2.5.5–2.5.9 remain unaudited in this pass: referrer policy, nonce, lazy loading,
+blocking, and fetch priority attributes.
+Their existing roadmap entries are dependency locations, not completion claims.
+
 ## HTML section 3 ownership
 
 Section 3 defines the common Document and element substrate used by the

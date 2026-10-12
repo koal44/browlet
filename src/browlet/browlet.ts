@@ -6,10 +6,10 @@ import { isHeaderValue } from '../fetch/index';
 import type { Document, WindowProxy } from './platform';
 import { type BrowletRealm, installHostHooks } from './scripting/index';
 import type { DocumentImpl, ElementImpl } from './dom/nodes/index';
-import { getSourceCodeLocation, BrowletParser, type DocumentWrite } from './html/parser/index';
+import { getSourceCodeLocation, HTMLDocumentParser, type DocumentWrite } from './html/parser/index';
 import { PageEvaluation } from './automation/index';
-import { createAndInitializeDocument, NavigationParams, TopLevelTraversable } from './browsing/navigation/index';
 import type { AuthenticationPrompt } from './loader/index';
+import { TopLevelTraversable } from './browsing/navigation/index';
 import { browletBindingWorld } from './bindings';
 import { UserAgent } from './user-agent';
 
@@ -117,23 +117,19 @@ export class Browlet {
     if (documentURLRecord === null) {
       throw new InternalError(`Could not parse validated navigation URL ${documentURL.href}`);
     }
-    const navigationParams = NavigationParams.fromSource(
-      this.#traversable,
-      documentURLRecord,
-    );
+    const navigationParams = this.#traversable.createNavigationParamsFromSource(documentURLRecord);
     const historyHandling = this.#traversable.resolveHistoryBehavior(
       documentURLRecord,
       navigationParams.origin,
     );
-    const document = createAndInitializeDocument(
+    const document = this.#traversable.createAndInitializeDocument(
       'html',
       'text/html',
       navigationParams,
     );
-    const env = document.env;
     // Document initialization has attached the Window selected for this navigation.
     const realm = document.getRelevantGlobalObject()!.env.realm;
-    const historyEntry = navigationParams.createHistoryEntry(document, source);
+    const historyEntry = this.#traversable.createHistoryEntry(document, navigationParams, source);
     this.#traversable.finalizeCrossDocumentNavigation(
       historyHandling,
       navigationParams.userInvolvement,
@@ -145,7 +141,7 @@ export class Browlet {
       this.#evaluation.exposeFunction(name, callback);
     }
 
-    const parser = new BrowletParser(
+    const parser = new HTMLDocumentParser(
       document,
       (element, write) => {
         this.#executeScript(
@@ -156,8 +152,6 @@ export class Browlet {
           realm,
         );
       },
-      realm.agent.eventLoop,
-      env,
     );
 
     return parser.parse(source).then(() => {

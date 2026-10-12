@@ -270,8 +270,6 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
     if (current) Object.assign(current, location);
   }
 
-  // -- Private ----------------------------------------------------------
-
   #finishPendingUnpushedElement(): void {
     const element = this.#pendingUnpushedElement;
     if (!element) return;

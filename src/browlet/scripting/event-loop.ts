@@ -338,8 +338,6 @@ export class EventLoop {
     return this.#taskQueues;
   }
 
-  // -- Private ----------------------------------------------------------
-
   #getTaskQueue(source: TaskSource): Set<Task> {
     let queue = this.#taskQueueBySource.get(source);
     if (queue === undefined) {

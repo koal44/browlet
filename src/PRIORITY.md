@@ -59,8 +59,13 @@ retains the deferred matching and serialization gates. The
 methods on Document and the browser environment. The §2.4.3 base-change response
 now has a basic HTML script implementation and approved provisional consumers for
 hyperlink state, speculation-rule parsing/registration, and speculative loads.
-Those effects remain unimplemented; review their owning roadmaps and the proposed
-nested-document slices before moving to §2.5.
+Those effects and the proposed nested-document slices remain explicit follow-ups.
+The [§2.5 audit](browlet/html/ROADMAP.md#section-25-audit) now includes §2.5.1's
+potential-CORS request construction, §2.5.2's response reader and sniffed-prefix
+replay, and §2.5.3's meta charset extractor. Actual content support and general
+document-handler selection remain explicit loader gates. The next review is
+§2.5.4's element attribute/reflection and fetch integration, before implementing
+the remaining shared fetching attributes.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

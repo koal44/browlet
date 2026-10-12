@@ -4,7 +4,6 @@ export {
   TopLevelTraversable, SessionHistoryTraversalQueue,
 } from './navigable';
 export { NavigationParams, type OpenerPolicyEnforcementResult } from './params';
-export { createAndInitializeDocument } from './document-lifecycle';
 export {
   createDocumentState, type DocumentState, type DocumentBackedState, type PostResource,
 } from './document-state';

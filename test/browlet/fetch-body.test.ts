@@ -44,7 +44,7 @@ describe('Fetch body delivery through HTML', () => {
     const events: (number[] | string)[] = [];
     const error = vi.fn();
     body.incrementallyRead(
-      (bytes) => events.push([...bytes]), () => events.push('end'), error,
+      (bytes) => { events.push([...bytes]); }, () => events.push('end'), error,
       target.realm.globalObject,
     );
     expect(events).toEqual([]);
@@ -107,7 +107,7 @@ describe('Fetch body delivery through HTML', () => {
     const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.context.getEnvironment());
     const chunks: number[][] = [];
     const completed = new Promise<void>((resolve, reject) => {
-      body.incrementallyRead((bytes) => chunks.push([...bytes]), resolve, reject);
+      body.incrementallyRead((bytes) => { chunks.push([...bytes]); }, resolve, reject);
     });
     expect(chunks).toEqual([]);
     fixture.runTask();

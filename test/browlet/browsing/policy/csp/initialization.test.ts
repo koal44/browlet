@@ -1,6 +1,4 @@
 import { describe, expect, it, vi } from 'vitest';
-import { NavigationParams } from '../../../../../src/browlet/browsing/navigation/params';
-import { createAndInitializeDocument } from '../../../../../src/browlet/browsing/navigation/document-lifecycle';
 import { ContentSecurityPolicy } from '../../../../../src/browlet/browsing/policy/csp/policy';
 import { FetchResponse } from '../../../../../src/fetch/response';
 import { createOpaqueOrigin } from '../../../../../src/url/origin';
@@ -47,7 +45,7 @@ describe('CSP document initialization', () => {
     const response = new FetchResponse();
     response.urlList.push(parseURL('https://initial.test/').url!, parseURL('https://protected.test/page').url!);
     response.headerList.append('Content-Security-Policy', "sandbox allow-scripts; default-src 'self'");
-    const params = NavigationParams.fromResponse(traversable, response);
+    const params = traversable.createNavigationParams(response);
     expect(params.response).toBe(response);
     expect(params.origin.kind).toBe('opaque');
     expect(params.finalSandboxingFlagSet.has('sandboxed-origin')).toBe(true);
@@ -60,7 +58,7 @@ describe('CSP document initialization', () => {
     const response = new FetchResponse();
     response.urlList.push(parseURL('https://protected.test/page').url!);
     response.headerList.append('Content-Security-Policy', 'sandbox allow-same-origin');
-    const params = NavigationParams.fromResponse(traversable, response);
+    const params = traversable.createNavigationParams(response);
     expect(params.origin).toEqual(obtainURLOrigin(response.url!));
     expect(params.finalSandboxingFlagSet.has('sandboxed-scripts')).toBe(true);
   });
@@ -74,8 +72,8 @@ describe('CSP delivery', () => {
     response.status = 203;
     response.headerList.append('Content-Security-Policy', 'upgrade-insecure-requests');
     response.headerList.append('Reporting-Endpoints', 'csp="/reports"');
-    const params = NavigationParams.fromResponse(traversable, response);
-    const document = createAndInitializeDocument('html', 'text/html', params);
+    const params = traversable.createNavigationParams(response);
+    const document = traversable.createAndInitializeDocument('html', 'text/html', params);
     expect(document.httpStatus).toBe(203);
     expect(document.env.insecureRequestsPolicy.upgrade).toBe(true);
     expect(document.env.getWindowOrWorkerGlobalScopeMixin().reportingEndpoints).toHaveLength(1);

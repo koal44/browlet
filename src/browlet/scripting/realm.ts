@@ -206,8 +206,6 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     this.#hostDefined = env;
   }
 
-  // -- Private ----------------------------------------------------------
-
   #getCallbackEnvironment(
     context: object,
   ): BrowletEnvironment | undefined {

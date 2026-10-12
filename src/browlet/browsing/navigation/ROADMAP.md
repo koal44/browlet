@@ -8,13 +8,23 @@ outside consumers use its index, while its modules import each other directly.
 
 - `browsing-context.ts` retains context/group relationships and creates the
   initial Window and about:blank document through the UserAgent's factory.
-- `document-lifecycle.ts` selects the Window/realm and initializes the document
-  for a navigation response.
+- `Navigable` prepares response policy inputs, selects the browsing context and
+  Window/realm, and creates the destination document and history entry.
+  `loadHTMLDocument()` starts HTML parsing and coordinates completion or abortion.
+  Its bounded cross-document commit activates the entry; `Traversable` applies
+  the history step and clears forward entries.
 - `session-history.ts` models entries and nested histories for the active
   top-level traversable; `document-state.ts` retains their document/reload state.
-- `params.ts` prepares response, policy, and history-entry inputs.
-- `Navigable` owns the bounded cross-document commit; `Traversable`
-  applies its history step and clears forward entries.
+- `params.ts` carries response, policies, and timing. The destination is the
+  Navigable receiving those inputs, so params need no reference back to it.
+
+The navigable survives changes of Document, Window, and environment. Preparing
+a response can create a new environment while the old document remains active;
+consumers use the created document's environment, not a stored environment on
+the navigable. Initial about:blank creation still starts in `BrowsingContext`
+before that document is used to initialize a navigable. The HTML response
+handler uses the lower-level `loader/ResourceReader` to consume bytes and
+`html/parser/HTMLDocumentParser` to parse them in the document's environment.
 
 ## Missing
 

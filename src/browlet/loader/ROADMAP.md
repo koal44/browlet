@@ -11,10 +11,11 @@ it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 
 | Source / planned source | Contract | Specification |
 | --- | --- | --- |
-| `document-loader.ts` | Streamed navigation response consumption and Document load coordination; encoding-restart byte retention remains pending | HTML §§7.4–7.5 and 13.2.3 |
-| `document-handlers.ts` | Select and populate HTML, XML, text, multipart, media, and content-handler Documents from response MIME/type state | HTML §§7.5.2–7.5.7 |
+| `Navigable.loadHTMLDocument()` in `browsing/navigation/` | Document creation and streamed HTML load coordination using this directory's ResourceReader; encoding-restart byte retention remains pending | HTML §§7.4–7.5 and 13.2.3 |
+| Navigable document handlers | Select and populate HTML, XML, text, multipart, media, and content-handler Documents from response MIME/type state | HTML §§7.5.2–7.5.7 |
+| `UserAgent.createPotentialCORSRequest()` | Implemented potential-CORS request construction using FetchRequest and its browser owner; element consumers remain pending | HTML §2.5.1 |
 | `resource-loader.ts` | Fetch-backed subresource requests, credentials, referrer and policy inputs | Fetch plus each HTML element's fetch algorithm |
-| `resource-type.ts` | Determine resource type from response metadata and sniffing inputs | HTML §2.5.2 and MIME Sniffing |
+| `resource-reader.ts` | Retain response metadata, sniff a bounded prefix, and replay it before subsequent body bytes | HTML §2.5.2, MIME Sniffing, and Streams |
 | `element-fetch-options.ts` | Normalize CORS settings, referrer policy, integrity metadata, nonce, lazy-loading, blocking, and fetch-priority attributes into Fetch inputs | HTML §§2.5.4–2.5.9; SRI §§3.4–3.5 |
 | `linked-resource.ts` | `<link>` processing and external style sheets | HTML §4.2.4 and CSSOM |
 | `script-loader.ts` | Shared classic/module graph fetching plus parser, worker, `importScripts()`, and worklet coordination | HTML §§4.12.1 and 8.1.5; HTML §§10.2.4, 10.3.1, and 11.3.2 |
@@ -42,10 +43,14 @@ remains provisional in the [Fetch roadmap](../../fetch/ROADMAP.md#remaining-fetc
 Public `fetch()` now uses this transport. The source-text navigation route
 below is unchanged.
 
-**Implemented bounded consumer:** `document-loader.ts` creates the Document
-synchronously, including `about:blank`, and consumes a streamed Fetch body.
-`BrowletParser.parseBytes()` implements BOM/transport decoding with a UTF-8
-fallback; `abort()` cancels input and pending continuations. Complete sniffing,
+**Implemented bounded consumer:**
+[`Navigable.loadHTMLDocument()`](../browsing/navigation/navigable.ts) creates the
+Document synchronously, including `about:blank`, and coordinates streamed
+parsing through ResourceReader and HTMLDocumentParser. Callers supply the reader
+already used for MIME determination and handler selection; the HTML handler
+does not construct a fresh reader. The about:blank path consumes no bytes.
+`HTMLDocumentParser.parseBytes()` implements BOM/transport decoding with a UTF-8
+fallback; `abort()` cancels input and pending continuations. Encoding sniffing,
 byte retention for restart, and parser lifecycle remain in the
 [parser integration](../html/parser/ROADMAP.md).
 
@@ -56,11 +61,13 @@ media selection remain here. Navigation timing retains live Fetch/body/Document
 records, pending public Performance entries. The extra ScriptHandler parameter
 is still a callable-shape review point until script preparation has an owner.
 
-The real network regression uses Windows-1252 bytes and response CSP, then
-checks parsing and live timing/byte counts. It supplies navigation inputs,
-selects Fetch's parallel callback queue and sandbox body owner, and commits
-before parsing. It does not implement HTML §7.4's state machine, MIME handler
-selection, Refresh, or Speculation-Rules processing. These remain HTML work.
+The real network regressions use Windows-1252 with a supplied type and UTF-8
+with no supplied type. They determine the MIME type before passing the same
+ResourceReader to the HTML handler, then check parsing, CSP, and live byte counts.
+They supply navigation inputs, select Fetch's parallel callback queue and sandbox
+body owner, and commit before parser input tasks run. They do not implement
+HTML §7.4's state machine, general MIME handler selection, Refresh, or
+Speculation-Rules processing. These remain HTML work.
 
 The first element consumers should be `<link>`, `<script>`, `<img>`, and
 `<iframe>`, in that order of increasing lifecycle reach. That sequence proves
@@ -68,12 +75,13 @@ render blocking, parser execution, an ordinary subresource, and a child
 navigation without making media playback or the full element catalog loader
 prerequisites. Inline `<style>` processing reaches Stylelet without a Fetch.
 
-`browsing/navigation/` owns the navigation state machine; this directory owns
-request/response and resource-load lifecycles. `html/parser/` consumes loaded
-bytes and may discover resources, but must not become the loader.
+`browsing/navigation/` owns the navigation state machine and document-load
+coordination; this directory supplies resource consumption and shared loading
+facilities below navigation. `html/parser/` consumes loaded bytes and may
+discover resources, but must not become the loader.
 
 `NavigationParams` now retains the actual `FetchRequest`, `FetchResponse`, and
-`FetchController`. Response CSP and sandbox restrictions are selected before
+`FetchController`. Navigable selects response CSP and sandbox restrictions before
 origin/Window creation; the created Document receives the protected response
 status, redirect taint, resolved referrer, and Reporting endpoints. The CSP
 initialization and document-lifecycle tests cover these inputs.
@@ -85,7 +93,8 @@ its start time there. Creating PerformanceNavigationTiming remains gated by the
 The synchronous source route creates only Fetch response metadata. Its text
 still goes directly to the parser and explicitly into the history source slot;
 a streamed network response body must not be stored in that slot. Full navigation
-and complete resource lifecycles remain loader work. Policy-container selection must also
+and complete resource lifecycles remain integration work between navigation and
+the loading facilities. Policy-container selection must also
 preserve history/local-URL inheritance and deliver the other response policies.
 
 Encoding restart still needs loader-owned replayable bytes and response metadata
@@ -107,11 +116,87 @@ globals, ports, exposure, or termination.
 
 Unloading, destroying, and aborting Documents are browsing-lifecycle
 algorithms even when they cancel loader work. The loader exposes cancellation
-and response/body completion; `browsing/navigation/document-lifecycle.ts` orders events,
-realm cleanup, navigable detachment, and history state.
+and response/body completion; Document owns its events and cleanup, while
+`browsing/navigation/` owns destination selection and history state.
 
 Blink's `core/loader`, `platform/loader`, and `DocumentLoader` provide useful
 evidence for this split.
+
+## Section 2.5.2 resource reading
+
+The [ordered HTML audit](../html/ROADMAP.md#section-25-audit) now connects the
+existing MIME algorithms to a response body through `ResourceReader`:
+
+- The reader retains the underlying response and a concrete MIME type once
+  determined. Overlapping determination calls throw; the operation's Promise
+  stays local, and later calls return the completed type. It
+  supplies metadata and no-sniff state to MIME's pure functions. HTTP metadata
+  passes the last Content-Type field unchanged as a byte string; other schemes
+  use their supplied parsed type without the HTTP workaround.
+- Header collection stops at 1445 bytes, EOF, or a 500 ms monotonic deadline.
+  MIME Sniffing explicitly leaves the reasonable time limit to the user agent;
+  500 ms is Browlet's initial policy, not a specification constant.
+  Supplied HTML/XML types return before reading, as the sniffing algorithm
+  requires no body inspection for them.
+- One Streams reader supplies the prefix and subsequent body input. Callers
+  finish determination before reading the body, then drain the complete chunks,
+  including bytes beyond that prefix. There is no stream tee or second source
+  reader. The deadline ends inspection; the outstanding Fetch read remains
+  available to the body consumer. EOF, errors, and cancellation release the lock.
+- Stream operations enter the body's owning environment, which may be the
+  browser sandbox. Parser input separately enters the destination Document's
+  networking tasks. Neither sniffing nor host Promise completion changes that owner.
+
+`determineMIMEType()` asks MIME's `preservedMIMEType()` whether supplied metadata
+is sufficient. Otherwise, it collects at most 1445 bytes into a local prefix
+buffer, then calls `sniffMIMEType()` once with that prefix and the UserAgent's
+support predicate. MIME interprets the bytes; ResourceReader owns collection,
+the deadline, and the resulting concrete type. Its body-consumption code does
+no sniffing. Collection copies at most 1445 bytes, avoiding a second chunk list
+and stateful sniffer; complete Fetch chunks remain available for body delivery.
+
+The deadline uses the UserAgent's monotonic clock and timer host. Collection
+checks the clock before admitting each chunk, excluding late bytes even when
+the timer is delayed. Early wakeups wait out the remaining interval. There is
+no polling loop or MIME completion callback, and supplied HTML/XML types require
+neither a prefix buffer nor a timer.
+`read()` is Browlet's pull interface and throws until a concrete MIME type is
+available. It returns buffered chunks first, then chains the outstanding or
+next Fetch read directly. There is no separate body resolver or dispatcher.
+The source read retains its result until sniffing or the consumer takes it,
+including when it completes between the sniffing deadline and consumer demand.
+`FetchBody.readChunk()` owns one source read, byte validation, copying, and
+task delivery. The resource owner acquires one Streams reader and requests
+another chunk only when sniffing or the consumer needs it. Promises represent
+ongoing work and the one unconsumed Fetch result; the completed MIME type and
+inspected body chunks are retained directly.
+Terminal EOF or failure remains available to later reads without
+reacquiring the stream. The resource owner releases its
+lock on EOF, failure, or cancellation, cancels the body in its stream's
+environment, and discards deliveries queued before cancellation.
+`FetchBody.incrementallyRead()` reuses the same primitive for its automatic loop.
+`readAll()` waits for EOF, and `BodyMixin.textStream()` always decodes UTF-8,
+so neither supplies this bounded byte-reading contract.
+The shape follows the inspected browser pipelines: Chromium's
+[URLLoader](https://chromium.googlesource.com/chromium/src/+/main/services/network/url_loader.cc)
+sniffs its delivery buffer before exposing the response. Blink's
+[MimeSniffingURLLoader](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/common/loader/mime_sniffing_url_loader.cc)
+and Gecko's
+[nsUnknownDecoder](https://searchfox.org/mozilla-central/source/netwerk/streamconv/converters/nsUnknownDecoder.cpp)
+forward retained prefix bytes before subsequent input. This informs ownership,
+not Browlet's chosen byte limit or deadline.
+
+Two integration gates remain explicit. UserAgent's support predicate still
+returns false provisionally; the concrete document/image/media support policy
+must follow the handlers Browlet actually supplies. General handler selection
+still precedes `Navigable.loadHTMLDocument()`: the tests explicitly select known/sniffed
+HTML, while XML, text, media, and other handlers remain §7.5 work. Context-specific
+sniffers remain in MIME for their eventual element consumers. Reading a header
+does not implement HTML encoding restart or retain the entire response for replay.
+
+The [MIME integration notes](../../mime/ROADMAP.md) remain until the support
+policy and handler selection are settled. Fetch's MIME/nosniff blocking checks
+continue to serve their separate requirements.
 
 ## Removal condition
 

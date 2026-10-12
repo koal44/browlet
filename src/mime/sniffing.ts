@@ -34,11 +34,8 @@ export function sniffMIMEType(
 ): MIMEType {
   const supplied = detection.suppliedMIMEType;
 
-  if (supplied !== undefined && (
-    isXMLMIMEType(supplied) || isHTMLMIMEType(supplied)
-  )) {
-    return supplied;
-  }
+  const preserved = preservedMIMEType(supplied);
+  if (preserved !== undefined) return preserved;
 
   if (supplied === undefined || unknownMIMETypeEssences.has(
     getMIMETypeEssence(supplied),
@@ -245,6 +242,13 @@ export function sniffMIMETypeInCacheManifestContext(): MIMEType {
 }
 
 type MatchTypePattern = (header: Uint8Array) => MIMEType | undefined;
+
+/** Supplied HTML/XML types are final without acquiring a resource header. */
+// https://mimesniff.spec.whatwg.org/#mime-type-sniffing-algorithm (step 1)
+export function preservedMIMEType(supplied: MIMEType | undefined): MIMEType | undefined {
+  return supplied !== undefined && (isXMLMIMEType(supplied) || isHTMLMIMEType(supplied))
+    ? supplied : undefined;
+}
 
 function sniffPatternContext(
   suppliedMIMEType: MIMEType | undefined,
