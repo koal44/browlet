@@ -147,6 +147,26 @@ roadmap. Completion of the full mutation path requires that final participant.
 Range and traversal state belongs to those owners. Observer and slot delivery
 use HTML's existing checkpoint; custom-element reactions must join that machinery.
 
+## Attribute lookup and token-list performance follow-up
+
+Attribute lookup currently scans the ordered `AttrImpl[]`. Measure typical small
+attribute lists and larger lists before adding an index or replacing storage.
+An index must distinguish qualified-name lookup from namespace/local-name lookup,
+preserve first-match behavior for duplicate qualified names, and keep attribute
+order, `Attr` identity, replacement, and removal consistent with `NamedNodeMap`.
+
+`ElementImpl` lazily caches token-list objects by attribute name. Compare that map
+with dedicated fields for common lists such as `classList` when profiling. The
+cache retains object identity: attribute changes update the existing list, rather
+than invalidating it and creating another. Retained lists must stay live through
+attribute removal and replacement; a list also needs its element association so
+mutations through a retained reference reach the correct owner.
+
+Keep the existing attribute/NamedNodeMap tests and
+[`token-list.test.ts`](../../../../test/browlet/dom/token-list.test.ts) plus
+[`reflection/`](../../../../test/browlet/html/reflection/) as behavioral constraints
+when changing either representation. Neither optimization is selected yet.
+
 ## Collections, tree mixins, and selectors (4F)
 
 `Node.childNodes` and `ParentNode.children` retain stable collection objects.
@@ -311,7 +331,7 @@ after pending notifications drain, through both implementation and platform iden
 
 Stopping points: custom-element definitions and the definition's
 disable-shadow check remain provisional with custom-element construction and
-`[HTMLConstructor]`. Registry definition/initialization, ElementInternals, focus
+`[HTMLConstructor]`. Registry definition/initialization, ElementInternals attachment, focus
 delegation, shadow style scopes, declarative parsing, and markup serialization
 belong to their later consumers. 4I retains element `is` values and clones shadow
 trees using their attachment flags; this does not implement custom-element construction.
@@ -373,7 +393,7 @@ audit leaves the following explicit dependencies:
   definition lookup, construction, upgrade, registry exposure, or `[CEReactions]`.
 - HTML cloning steps for template contents, scripts, and form-control state
   remain with those implementations; `cloningSteps()` is their extension point.
-- Shadow focus, style, declarative parsing, ElementInternals, and serialization
+- Shadow focus, style, declarative parsing, ElementInternals attachment, and serialization
   remain at their existing consumer gates.
 
 Public coverage is in `cloning.test.ts`, `node-identity.test.ts`,

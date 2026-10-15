@@ -179,7 +179,7 @@ dependencies and the tests for the implemented storage and mutation behavior.
 Shadow attachment retains focus and serialization flags without implementing
 their later consumers; clonable shadow trees participate in clone/import.
 Declarative parsing, shadow style scopes,
-ElementInternals, and custom-element definition checks remain absent. Browser/spec
+ElementInternals attachment, and custom-element definition checks remain absent. Browser/spec
 differences in assignment updates and adopted-host root allocation are recorded
 in the [4H scope](browlet/dom/nodes/ROADMAP.md#shadow-trees-4h).
 
@@ -261,6 +261,16 @@ priority-selection hook still has no transport scheduler. Setting the attribute
 therefore does not change network scheduling. The
 [§2.5.9 audit](browlet/html/ROADMAP.md#section-259-fetch-priority-attributes)
 records the implemented boundary and WebKit keyword-case disagreement.
+
+The shared [reflection slice](browlet/html/reflection/ROADMAP.md) covers the
+implemented Element paths and a minimal ElementInternals owner for internal
+defaults, separate element associations, and eligible shadow-root access.
+`HTMLElement.attachInternals()` still needs custom-element definitions and
+construction checks. ARIAMixin, form-associated internals, and CustomStateSet
+remain absent; internal construction tests do not establish those author APIs.
+Custom-element reaction delivery remains missing at the binding boundary.
+Browlet now supplies HTML reflection through a Web IDL extended-attribute
+preparation hook; this does not yet supply `[CEReactions]` invocation wrapping.
 
 The [loader](browlet/loader/ROADMAP.md) now consumes streamed Fetch responses,
 including response CSP and basic decoding/abort. `ResourceReader` preserves

@@ -1,0 +1,127 @@
+import { describe, expect, expectTypeOf, it } from 'vitest';
+
+import {
+  BindingWorld, attr, defineIncludes, defineInterface, defineInterfaceMixin, defineTypedef,
+  hasExtendedAttribute, idlType, impl, reference, reflect, xattr,
+  type AttributeBinding, type ExtendedAttributeHooks, type WebIDLEnvironment,
+} from '../../../src/web-idl/index';
+import { TestRealm } from '../../support/web-idl-realm';
+
+describe('Web IDL extended-attribute integration', () => {
+  it('prepares resolved members once per world and uses the receiver environment across realms', () => {
+    let preparations = 0;
+    const invocations: WebIDLEnvironment[] = [];
+    const extendedAttributes: ExtendedAttributeHooks = {
+      prepareReflectedAttribute(member, owners) {
+        if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
+        preparations++;
+        expect(member.type.kind).toBe('integer');
+        expect(owners.map((owner) => owner.primary.implementation?.implClass)).toEqual([ExampleImpl]);
+        const accessors: AttributeBinding<WebIDLEnvironment, ExampleImpl> = {
+          get(ctx) {
+            expectTypeOf(this).toEqualTypeOf<ExampleImpl>();
+            invocations.push(ctx.getEnvironment());
+            return this.value * 2;
+          },
+          set(ctx, value) {
+            expectTypeOf(this).toEqualTypeOf<ExampleImpl>();
+            invocations.push(ctx.getEnvironment());
+            expect(typeof value).toBe('number');
+            this.value = (value as number) / 2;
+          },
+        };
+        // The owners above establish the receiver required by these typed accessors.
+        return new Map(owners.map((owner) => [owner, accessors as AttributeBinding]));
+      },
+    };
+    const world = new BindingWorld(definitions, { extendedAttributes });
+    expect(preparations).toBe(1);
+    const first = project(world);
+    const second = project(world);
+    const borrowed = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(second.object), 'value')!;
+    const input = { valueOf() { return 15.9; } };
+    borrowed.set!.call(first.object, input);
+    expect(first.implementation.value).toBe(7.5);
+    expect(borrowed.get!.call(first.object)).toBe(15);
+    expect(first.object.value).toBe(15);
+    expect(invocations).toEqual([first.env, first.env, first.env]);
+    expect(second.implementation.value).toBe(3);
+    expect(first.object.label).toBe('ordinary');
+    expect(() => { borrowed.get!.call({}); }).toThrow(second.env.realm.intrinsics.typeError);
+    expect(preparations).toBe(1);
+
+    // Preparation must not replace the declaration's type or mutate shared getter/setter metadata.
+    expect(valueMember.type).toEqual(reference('Count'));
+    expect(valueMember.get).toBeUndefined();
+    expect(valueMember.set).toBeUndefined();
+    const ordinary = project(new BindingWorld(definitions));
+    expect(ordinary.object.value).toBe(3);
+  });
+
+  it('prepares a shared mixin member once with different accessors for its includers', () => {
+    class FirstImpl extends ExampleImpl {}
+    class SecondImpl extends ExampleImpl {}
+    let preparations = 0;
+    const world = new BindingWorld([
+      defineInterfaceMixin({ name: 'Shared', members: [attr('value', idlType.long, xattr(reflect()))] }),
+      defineInterface({ name: 'First', implementation: impl(FirstImpl), members: [] }),
+      defineInterface({ name: 'Second', implementation: impl(SecondImpl), members: [] }),
+      defineIncludes({ interface: 'First', mixin: 'Shared' }),
+      defineIncludes({ interface: 'Second', mixin: 'Shared' }),
+    ], {
+      extendedAttributes: {
+        prepareReflectedAttribute(member, owners) {
+          if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
+          preparations++;
+          expect(owners.map((owner) => owner.primary.implementation?.implClass)).toEqual([FirstImpl, SecondImpl]);
+          return new Map(owners.map((owner) => {
+            const multiplier = owner.primary.implementation!.implClass === FirstImpl ? 2 : 3;
+            const accessors: AttributeBinding<WebIDLEnvironment, ExampleImpl> = {
+              get() { return this.value * multiplier; },
+            };
+            return [owner, accessors as AttributeBinding];
+          }));
+        },
+      },
+    });
+    const context = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+    for (const implementation of [FirstImpl, SecondImpl]) {
+      const object = context.project(implementation, context.construct(implementation));
+      expect(Reflect.get(object, 'value')).toBe(implementation === FirstImpl ? 6 : 9);
+    }
+    expect(preparations).toBe(1);
+  });
+
+  it('rejects an invalid extension during world preparation, before any realm is registered', () => {
+    const failure = new Error('Invalid extended attribute');
+    expect(() => new BindingWorld(definitions, {
+      extendedAttributes: {
+        prepareReflectedAttribute(member) {
+          if (hasExtendedAttribute(member.extendedAttributes, 'Reflect')) throw failure;
+        },
+      },
+    })).toThrow(failure);
+  });
+});
+
+class ExampleImpl {
+  value = 3;
+  label = 'ordinary';
+}
+
+const valueMember = attr('value', reference('Count'), xattr(reflect()));
+const definitions = [
+  defineInterface({
+    name: 'Example', exposed: '*', implementation: impl(ExampleImpl),
+    members: [valueMember, attr('label', idlType.DOMString, xattr('Unrecognized'))],
+  }),
+  defineTypedef({ name: 'Count', type: idlType.long }),
+];
+
+function project(world: BindingWorld) {
+  const env = { realm: new TestRealm() };
+  const context = world.register(env.realm, () => env);
+  const implementation = context.construct(ExampleImpl);
+  const object = context.project(ExampleImpl, implementation) as unknown as { value: number; label: string; };
+  return { env, context, implementation, object };
+}

@@ -11,7 +11,7 @@ import {
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import {
   AssembledInterface, type IDLType, type IDLDictionaryType, type IDLAttribute,
-  type AssembledDictionary, type DefinitionAssembly,
+  type AssembledDictionary, type DefinitionAssembly, type IDLFrozenArrayType,
 } from '../assembly/index';
 import {
   getImplementationRecord, getPlatformRecord, isStampedImplInstance, isStampedPlatformObject, PlatformRecord,
@@ -160,6 +160,12 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   /** Convert a declared implementation result to its author-facing representation. */
   implToJS(value: unknown, type: WebIDLType): unknown {
     return this.getConverter(this.assembly.getIDLType(type)).idlToJS(value);
+  }
+
+  /** Create a frozen array from implementation values using this owner's realm and element conversion. */
+  // https://webidl.spec.whatwg.org/#dfn-create-frozen-array
+  createFrozenArray(values: readonly unknown[], type: IDLFrozenArrayType): readonly unknown[] {
+    return this.getConverter(type).createFrozenArray(values);
   }
 
   /** Create a platform object by interface name; return undefined if unknown or unexposed. */

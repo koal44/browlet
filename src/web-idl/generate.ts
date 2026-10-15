@@ -375,24 +375,24 @@ class PlatformTypeGenerator {
       case 'integer': case 'float': return 'number';
       case 'string': return 'string';
       case 'buffer-source': {
-        if (type.name === 'ArrayBuffer') return type.allowShared ? '(ArrayBuffer | SharedArrayBuffer)' : 'ArrayBuffer';
+        if (type.name === 'ArrayBuffer') return type.allowShared ? 'ArrayBuffer | SharedArrayBuffer' : 'ArrayBuffer';
         if (type.name === 'SharedArrayBuffer') return 'SharedArrayBuffer';
         return `${type.name}<${type.allowShared ? 'ArrayBufferLike' : 'ArrayBuffer'}>`;
       }
-      case 'nullable': return `(${this.#type(type.innerType, direction)} | null)`;
-      case 'union': return `(${type.memberTypes.map((member) => this.#type(member, direction)).join(' | ')})`;
+      case 'nullable': return `${this.#type(type.innerType, direction)} | null`;
+      case 'union': return type.memberTypes.map((member) => this.#type(member, direction)).join(' | ');
       case 'sequence': return `${direction === 'input' ? 'Iterable' : 'Array'}<${this.#type(type.elementType, direction)}>`;
       case 'async-sequence': {
         const element = this.#type(type.elementType, direction);
         // Output returns the captured object, which can still be a synchronous iterable.
-        return `(AsyncIterable<${element}> | Iterable<${element}>)`;
+        return `AsyncIterable<${element}> | Iterable<${element}>`;
       }
       case 'frozen-array': return `${direction === 'input' ? 'Iterable' : 'ReadonlyArray'}<${this.#type(type.elementType, direction)}>`;
       case 'observable-array': return `Array<${this.#type(type.elementType, direction)}>`;
       case 'record': return `Record<string, ${this.#type(type.valueType, direction)}>`;
       case 'promise': {
         const value = this.#result(type.resultType, direction);
-        return direction === 'input' ? `(${value} | PromiseLike<${value}>)` : `Promise<${value}>`;
+        return direction === 'input' ? `${value} | PromiseLike<${value}>` : `Promise<${value}>`;
       }
       case 'dictionary': {
         if (direction === 'input') return this.#name(type.assembled.primary.name);

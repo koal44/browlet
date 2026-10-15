@@ -3,13 +3,14 @@ import type { JSRealm } from '../../js-engine/index';
 import { webIDLCommonDefinitions, type Definition } from '../core/index';
 
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
-import { DefinitionAssembly } from '../assembly/index';
+import { DefinitionAssembly, type AssembledInterface, type IDLAttribute } from '../assembly/index';
 import {
   getImplementationRecord, getPlatformRecord, type StampedImplInstance, type StampedPlatformObject,
 } from './platform';
 
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
+import type { AttributeBinding, ExtendedAttributeHooks } from './extended-attributes';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
@@ -19,14 +20,34 @@ import { registerImplementationBindings } from './register';
 export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironment> {
   #assembly: DefinitionAssembly;
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
+  /** Prepared cross-specification accessors shared by every realm in this world. */
+  #attributeBindings = new Map<IDLAttribute, Map<AssembledInterface, AttributeBinding>>();
 
-  constructor(definitions: Definition<Env>[]) {
+  constructor(definitions: Definition<Env>[], options: BindingWorldOptions<Env> = {}) {
     this.#assembly = new DefinitionAssembly([
       ...webIDLCommonDefinitions,
       // BindingWorld restricts registration to the environment required by these callbacks.
       // Assembly itself only combines declarations; it does not invoke the callbacks.
       ...(definitions as Definition[]),
     ]);
+    const prepare = options.extendedAttributes?.prepareReflectedAttribute;
+    if (prepare) {
+      // A shared mixin member must be prepared against all its includers, not just the first.
+      const owners = new Map<IDLAttribute, AssembledInterface[]>();
+      for (const assembled of this.#assembly.interfaces.values()) {
+        for (const { member } of assembled.members) {
+          if (member.kind !== 'attribute') continue;
+          const includers = owners.get(member);
+          if (includers) includers.push(assembled);
+          else owners.set(member, [assembled]);
+        }
+      }
+      for (const [member, includers] of owners) {
+        const accessors = prepare(member, includers);
+        // As with declaration callbacks, registration enforces this world's Env contract.
+        if (accessors) this.#attributeBindings.set(member, accessors as Map<AssembledInterface, AttributeBinding>);
+      }
+    }
   }
 
   /** Compose a realm's environment and binding context, reusing an existing registration. */
@@ -51,6 +72,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
     }
     this.#realmBindings.set(realm, binding);
     return binding;
+  }
+
+  /** Find this world's prepared accessors for a member on its declaring or including interface. */
+  getAttributeBinding(member: IDLAttribute, owner: AssembledInterface): AttributeBinding | undefined {
+    return this.#attributeBindings.get(member)?.get(owner);
   }
 
   /** Find a realm's binding context in this world without registering it. */
@@ -83,10 +109,15 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   }
 }
 
+/** Cross-specification integrations supplied by the composition root owning this world. */
+export type BindingWorldOptions<Env extends WebIDLEnvironment = WebIDLEnvironment> = {
+  extendedAttributes?: ExtendedAttributeHooks<Env>;
+};
+
 /** Public operations of a realm binding; this type does not introduce another runtime object. */
 export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = Pick<RealmBinding<Env>,
   | 'realm' | 'Promise' | 'DOMException' | 'getEnvironment'
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord'
-  | 'jsToImpl' | 'implToJS' | 'realizeException'
+  | 'jsToImpl' | 'implToJS' | 'createFrozenArray' | 'realizeException'
   | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'
 >;

@@ -178,15 +178,21 @@ export function serializeExtendedAttribute(
   switch (attribute.kind) {
     case 'no-arguments':
       return serializeIdentifier(attribute.name);
+    case 'string':
+      return `${serializeIdentifier(attribute.name)}=${serializeString(attribute.value)}`;
+    case 'reflection': {
+      let text = serializeIdentifier(attribute.name);
+      if (attribute.attributeName !== undefined) text += `=${serializeString(attribute.attributeName)}`;
+      if (attribute.default) text += `, ReflectDefault=${attribute.default.value}`;
+      if (attribute.range) text += `, ReflectRange=(${attribute.range.join(', ')})`;
+      return text;
+    }
     case 'arguments':
       return `${serializeIdentifier(attribute.name)}(`
         + `${attribute.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')})`;
     case 'identifier':
       return `${serializeIdentifier(attribute.name)}=`
         + serializeIdentifier(attribute.value);
-    case 'string':
-      return `${serializeIdentifier(attribute.name)}=`
-        + serializeString(attribute.value);
     case 'integer':
     case 'decimal':
       return `${serializeIdentifier(attribute.name)}=${attribute.value}`;

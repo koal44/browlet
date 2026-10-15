@@ -8,6 +8,13 @@ import {
 import { parseOrderedSet } from './infra/index';
 import type { ElementImpl } from './nodes/index';
 
+/** Shared attribute definition used by internal callers and reflected token-list bindings. */
+export type TokenListAttribute = {
+  name: string;
+  /** Lowercase supported tokens; null means no supported-token set is defined. */
+  supportedTokens: ReadonlySet<string> | null;
+};
+
 /** An ordered token set kept in sync with one element's null-namespace attribute. */
 // https://dom.spec.whatwg.org/#interface-domtokenlist
 export class DOMTokenListImpl {
@@ -24,8 +31,7 @@ export class DOMTokenListImpl {
     this.#element = element;
     this.#attributeName = attributeName;
     this.#supportedTokens = supportedTokens;
-    const value = element.getAttributeNS(null, attributeName);
-    this.attributeChanged(attributeName, value, value, null);
+    this.updateTokens(element.getAttributeNS(null, attributeName));
   }
 
   /** Number of distinct tokens in the associated attribute. */
@@ -122,9 +128,8 @@ export class DOMTokenListImpl {
     this.#element.setAttributeValue(this.#attributeName, value);
   }
 
-  /** Synchronize token state when the element forwards its attribute-change steps. */
-  attributeChanged(localName: string, _oldValue: string | null, value: string | null, namespace: string | null): void {
-    if (localName !== this.#attributeName || namespace !== null) return;
+  /** Synchronize tokens from the selected attribute's current value; null clears the list. */
+  updateTokens(value: string | null): void {
     this.#tokens = value === null ? [] : [...parseOrderedSet(value)];
   }
 

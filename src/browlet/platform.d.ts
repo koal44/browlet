@@ -35,11 +35,11 @@ export type ReferrerPolicy = "" | "no-referrer" | "no-referrer-when-downgrade" |
 
 export type ResponseType = "basic" | "cors" | "default" | "error" | "opaque" | "opaqueredirect";
 
-export type ArrayBufferView = (Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>);
+export type ArrayBufferView = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>;
 
-export type BufferSource = ((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer);
+export type BufferSource = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer;
 
-export type AllowSharedBufferSource = (ArrayBuffer | SharedArrayBuffer | (Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>));
+export type AllowSharedBufferSource = ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>;
 
 export type ReportList = Iterable<Report>;
 
@@ -47,27 +47,27 @@ export type DOMHighResTimeStamp = number;
 
 export type EpochTimeStamp = number;
 
-export type EventHandler = (EventHandlerNonNull | null);
+export type EventHandler = EventHandlerNonNull | null;
 
-export type TimerHandler = (string | Function);
+export type TimerHandler = string | Function;
 
-export type ReadableStreamController = (ReadableStreamDefaultController | ReadableByteStreamController);
+export type ReadableStreamController = ReadableStreamDefaultController | ReadableByteStreamController;
 
-export type ReadableStreamReader = (ReadableStreamDefaultReader | ReadableStreamBYOBReader);
+export type ReadableStreamReader = ReadableStreamDefaultReader | ReadableStreamBYOBReader;
 
-export type BlobPart = (((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | Blob | string);
+export type BlobPart = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | Blob | string;
 
-export type FormDataEntryValue = (File | string);
+export type FormDataEntryValue = File | string;
 
-export type HeadersInit = (Iterable<Iterable<string>> | Record<string, string>);
+export type HeadersInit = Iterable<Iterable<string>> | Record<string, string>;
 
-export type XMLHttpRequestBodyInit = (Blob | ((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | FormData | URLSearchParams | string);
+export type XMLHttpRequestBodyInit = Blob | Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | FormData | URLSearchParams | string;
 
-export type BodyInit = (ReadableStream | (Blob | ((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | FormData | URLSearchParams | string));
+export type BodyInit = ReadableStream | Blob | Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | FormData | URLSearchParams | string;
 
-export type RequestInfo = (Request | string);
+export type RequestInfo = Request | string;
 
-export type TrustedType = (TrustedHTML | TrustedScript | TrustedScriptURL);
+export type TrustedType = TrustedHTML | TrustedScript | TrustedScriptURL;
 
 export type WindowProxy = Window;
 
@@ -158,13 +158,13 @@ export interface ImportNodeOptions {
 }
 
 export interface ElementCreationOptions {
-  customElementRegistry?: (CustomElementRegistry | null);
+  customElementRegistry?: CustomElementRegistry | null;
   is?: string;
 }
 
 export interface ShadowRootInit {
   clonable?: boolean;
-  customElementRegistry?: (CustomElementRegistry | null);
+  customElementRegistry?: CustomElementRegistry | null;
   delegatesFocus?: boolean;
   mode: ShadowRootMode;
   serializable?: boolean;
@@ -269,11 +269,11 @@ export interface ProgressEventInit {
 }
 
 export interface RequestInit {
-  body?: ((ReadableStream | (Blob | ((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | FormData | URLSearchParams | string)) | null);
+  body?: ReadableStream | Blob | Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | FormData | URLSearchParams | string | null;
   cache?: RequestCache;
   credentials?: RequestCredentials;
   duplex?: RequestDuplex;
-  headers?: (Iterable<Iterable<string>> | Record<string, string>);
+  headers?: Iterable<Iterable<string>> | Record<string, string>;
   integrity?: string;
   keepalive?: boolean;
   method?: string;
@@ -282,12 +282,12 @@ export interface RequestInit {
   redirect?: RequestRedirect;
   referrer?: string;
   referrerPolicy?: ReferrerPolicy;
-  signal?: (AbortSignal | null);
+  signal?: AbortSignal | null;
   window?: any;
 }
 
 export interface ResponseInit {
-  headers?: (Iterable<Iterable<string>> | Record<string, string>);
+  headers?: Iterable<Iterable<string>> | Record<string, string>;
   status?: number;
   statusText?: string;
 }
@@ -310,33 +310,33 @@ export type MutationCallback = (mutations: Array<MutationRecord>, observer: Muta
 
 export type QueuingStrategySize = (chunk: any) => number;
 
-export type UnderlyingSourceStartCallback = (controller: (ReadableStreamDefaultController | ReadableByteStreamController)) => any;
+export type UnderlyingSourceStartCallback = (controller: ReadableStreamDefaultController | ReadableByteStreamController) => any;
 
-export type UnderlyingSourcePullCallback = (controller: (ReadableStreamDefaultController | ReadableByteStreamController)) => (void | PromiseLike<void>);
+export type UnderlyingSourcePullCallback = (controller: ReadableStreamDefaultController | ReadableByteStreamController) => void | PromiseLike<void>;
 
-export type UnderlyingSourceCancelCallback = (reason?: any) => (void | PromiseLike<void>);
+export type UnderlyingSourceCancelCallback = (reason?: any) => void | PromiseLike<void>;
 
 export type UnderlyingSinkStartCallback = (controller: WritableStreamDefaultController) => any;
 
-export type UnderlyingSinkWriteCallback = (chunk: any, controller: WritableStreamDefaultController) => (void | PromiseLike<void>);
+export type UnderlyingSinkWriteCallback = (chunk: any, controller: WritableStreamDefaultController) => void | PromiseLike<void>;
 
-export type UnderlyingSinkCloseCallback = () => (void | PromiseLike<void>);
+export type UnderlyingSinkCloseCallback = () => void | PromiseLike<void>;
 
-export type UnderlyingSinkAbortCallback = (reason?: any) => (void | PromiseLike<void>);
+export type UnderlyingSinkAbortCallback = (reason?: any) => void | PromiseLike<void>;
 
 export type TransformerStartCallback = (controller: TransformStreamDefaultController) => any;
 
-export type TransformerFlushCallback = (controller: TransformStreamDefaultController) => (void | PromiseLike<void>);
+export type TransformerFlushCallback = (controller: TransformStreamDefaultController) => void | PromiseLike<void>;
 
-export type TransformerTransformCallback = (chunk: any, controller: TransformStreamDefaultController) => (void | PromiseLike<void>);
+export type TransformerTransformCallback = (chunk: any, controller: TransformStreamDefaultController) => void | PromiseLike<void>;
 
-export type TransformerCancelCallback = (reason: any) => (void | PromiseLike<void>);
+export type TransformerCancelCallback = (reason: any) => void | PromiseLike<void>;
 
-export type CreateHTMLCallback = (input: string, ...arguments_: Array<any>) => (string | null);
+export type CreateHTMLCallback = (input: string, ...arguments_: Array<any>) => string | null;
 
-export type CreateScriptCallback = (input: string, ...arguments_: Array<any>) => (string | null);
+export type CreateScriptCallback = (input: string, ...arguments_: Array<any>) => string | null;
 
-export type CreateScriptURLCallback = (input: string, ...arguments_: Array<any>) => (string | null);
+export type CreateScriptURLCallback = (input: string, ...arguments_: Array<any>) => string | null;
 
 export type EventListener = {
   handleEvent(event: Event): void;
@@ -428,8 +428,8 @@ export interface DOMExceptionConstructor {
 }
 
 export interface QuotaExceededError extends DOMException {
-  readonly quota: (number | null);
-  readonly requested: (number | null);
+  readonly quota: number | null;
+  readonly requested: number | null;
 }
 
 export interface QuotaExceededErrorConstructor extends Ctor<DOMExceptionConstructor> {
@@ -445,6 +445,15 @@ export interface CustomElementRegistry {
 export interface CustomElementRegistryConstructor {
   readonly prototype: CustomElementRegistry;
   [Symbol.hasInstance](value: unknown): value is CustomElementRegistry;
+}
+
+export interface ElementInternals {
+  readonly shadowRoot: ShadowRoot | null;
+}
+
+export interface ElementInternalsConstructor {
+  readonly prototype: ElementInternals;
+  [Symbol.hasInstance](value: unknown): value is ElementInternals;
 }
 
 export interface HTMLElement extends Element {
@@ -471,7 +480,7 @@ export interface HTMLUnknownElementConstructor extends Ctor<HTMLElementConstruct
 export interface HTMLScriptElement extends HTMLElement {
   get blocking(): DOMTokenList;
   set blocking(value: string);
-  crossOrigin: (string | null);
+  crossOrigin: string | null;
   referrerPolicy: string;
   fetchPriority: string;
 }
@@ -485,7 +494,7 @@ export interface HTMLSlotElement extends HTMLElement {
   name: string;
   assignedNodes(options?: AssignedNodesOptions): Array<Node>;
   assignedElements(options?: AssignedNodesOptions): Array<Element>;
-  assign(...nodes: Array<(Element | Text)>): void;
+  assign(...nodes: Array<Element | Text>): void;
 }
 
 export interface HTMLSlotElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -515,7 +524,7 @@ export interface HTMLBaseElementConstructor extends Ctor<HTMLElementConstructor>
 export interface HTMLStyleElement extends HTMLElement {
   get blocking(): DOMTokenList;
   set blocking(value: string);
-  readonly sheet: (object | null);
+  readonly sheet: object | null;
 }
 
 export interface HTMLStyleElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -524,12 +533,12 @@ export interface HTMLStyleElementConstructor extends Ctor<HTMLElementConstructor
 }
 
 export interface HTMLLinkElement extends HTMLElement {
-  crossOrigin: (string | null);
+  crossOrigin: string | null;
   referrerPolicy: string;
   get blocking(): DOMTokenList;
   set blocking(value: string);
   fetchPriority: string;
-  readonly sheet: (object | null);
+  readonly sheet: object | null;
 }
 
 export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -605,7 +614,7 @@ export interface SVGElementConstructor extends Ctor<ElementConstructor> {
 }
 
 export interface SVGStyleElement extends SVGElement {
-  readonly sheet: (object | null);
+  readonly sheet: object | null;
 }
 
 export interface SVGStyleElementConstructor extends Ctor<SVGElementConstructor> {
@@ -662,7 +671,7 @@ export interface LocationConstructor {
 export interface Report {
   readonly type: string;
   readonly url: string;
-  readonly body: (ReportBody | null);
+  readonly body: ReportBody | null;
   toJSON(): object;
 }
 
@@ -703,16 +712,16 @@ export interface COEPViolationReportBody extends ReportBody {
 
 export interface CSPViolationReportBody extends ReportBody {
   readonly documentURL: string;
-  readonly referrer: (string | null);
-  readonly blockedURL: (string | null);
+  readonly referrer: string | null;
+  readonly blockedURL: string | null;
   readonly effectiveDirective: string;
   readonly originalPolicy: string;
-  readonly sourceFile: (string | null);
-  readonly sample: (string | null);
+  readonly sourceFile: string | null;
+  readonly sample: string | null;
   readonly disposition: SecurityPolicyViolationEventDisposition;
   readonly statusCode: number;
-  readonly lineNumber: (number | null);
-  readonly columnNumber: (number | null);
+  readonly lineNumber: number | null;
+  readonly columnNumber: number | null;
   toJSON(): object;
 }
 
@@ -772,22 +781,23 @@ export interface Window extends EventTarget {
   readonly document: Document;
   get location(): Location;
   set location(value: string);
-  get event(): (Event | undefined);
+  get event(): Event | undefined;
   set event(value: unknown);
   readonly isSecureContext: boolean;
-  setTimeout(handler: (string | Function), timeout?: number, ...arguments_: Array<any>): number;
+  setTimeout(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
   clearTimeout(id?: number): void;
-  setInterval(handler: (string | Function), timeout?: number, ...arguments_: Array<any>): number;
+  setInterval(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
   clearInterval(id?: number): void;
   queueMicrotask(callback: VoidFunction): void;
   structuredClone<T = any>(value: T, options?: StructuredSerializeOptions): T;
   get performance(): Performance;
   set performance(value: unknown);
   readonly trustedTypes: TrustedTypePolicyFactory;
-  fetch(input: (Request | string), init?: RequestInit): Promise<Response>;
+  fetch(input: Request | string, init?: RequestInit): Promise<Response>;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
   CustomElementRegistry: CustomElementRegistryConstructor;
+  ElementInternals: ElementInternalsConstructor;
   HTMLElement: HTMLElementConstructor;
   HTMLUnknownElement: HTMLUnknownElementConstructor;
   HTMLScriptElement: HTMLScriptElementConstructor;
@@ -888,9 +898,9 @@ export interface WindowConstructor extends Ctor<EventTargetConstructor> {
 
 export interface Event {
   readonly type: string;
-  readonly target: (EventTarget | null);
-  readonly srcElement: (EventTarget | null);
-  readonly currentTarget: (EventTarget | null);
+  readonly target: EventTarget | null;
+  readonly srcElement: EventTarget | null;
+  readonly currentTarget: EventTarget | null;
   composedPath(): Array<EventTarget>;
   readonly NONE: 0;
   readonly CAPTURING_PHASE: 1;
@@ -933,8 +943,8 @@ export interface CustomEventConstructor extends Ctor<EventConstructor> {
 }
 
 export interface EventTarget {
-  addEventListener(type: string, callback: (EventListener | null), options?: (AddEventListenerOptions | boolean)): void;
-  removeEventListener(type: string, callback: (EventListener | null), options?: (EventListenerOptions | boolean)): void;
+  addEventListener(type: string, callback: EventListener | null, options?: AddEventListenerOptions | boolean): void;
+  removeEventListener(type: string, callback: EventListener | null, options?: EventListenerOptions | boolean): void;
   dispatchEvent(event: Event): boolean;
 }
 
@@ -948,7 +958,7 @@ export interface AbortSignal extends EventTarget {
   readonly aborted: boolean;
   readonly reason: any;
   throwIfAborted(): void;
-  onabort: (EventHandlerNonNull | null);
+  onabort: EventHandlerNonNull | null;
 }
 
 export interface AbortSignalConstructor extends Ctor<EventTargetConstructor> {
@@ -1037,9 +1047,9 @@ export interface NodeIterator {
   readonly referenceNode: Node;
   readonly pointerBeforeReferenceNode: boolean;
   readonly whatToShow: number;
-  readonly filter: (NodeFilter | null);
-  nextNode(): (Node | null);
-  previousNode(): (Node | null);
+  readonly filter: NodeFilter | null;
+  nextNode(): Node | null;
+  previousNode(): Node | null;
   detach(): void;
 }
 
@@ -1051,15 +1061,15 @@ export interface NodeIteratorConstructor {
 export interface TreeWalker {
   readonly root: Node;
   readonly whatToShow: number;
-  readonly filter: (NodeFilter | null);
+  readonly filter: NodeFilter | null;
   currentNode: Node;
-  parentNode(): (Node | null);
-  firstChild(): (Node | null);
-  lastChild(): (Node | null);
-  previousSibling(): (Node | null);
-  nextSibling(): (Node | null);
-  previousNode(): (Node | null);
-  nextNode(): (Node | null);
+  parentNode(): Node | null;
+  firstChild(): Node | null;
+  lastChild(): Node | null;
+  previousSibling(): Node | null;
+  nextSibling(): Node | null;
+  previousNode(): Node | null;
+  nextNode(): Node | null;
 }
 
 export interface TreeWalkerConstructor {
@@ -1069,7 +1079,7 @@ export interface TreeWalkerConstructor {
 
 export interface DOMTokenList {
   readonly length: number;
-  item(index: number): (string | null);
+  item(index: number): string | null;
   contains(token: string): boolean;
   add(...tokens: Array<string>): void;
   remove(...tokens: Array<string>): void;
@@ -1078,7 +1088,7 @@ export interface DOMTokenList {
   supports(token: string): boolean;
   value: string;
   toString(): string;
-  readonly [index: number]: (string | null) | undefined;
+  readonly [index: number]: string | null | undefined;
   [Symbol.iterator](): IterableIterator<string>;
   values(): IterableIterator<string>;
   keys(): IterableIterator<number>;
@@ -1108,22 +1118,22 @@ export interface Node extends EventTarget {
   readonly nodeName: string;
   readonly baseURI: string;
   readonly isConnected: boolean;
-  readonly ownerDocument: (Document | null);
+  readonly ownerDocument: Document | null;
   getRootNode(options?: GetRootNodeOptions): Node;
-  readonly parentNode: (Node | null);
-  readonly parentElement: (Element | null);
+  readonly parentNode: Node | null;
+  readonly parentElement: Element | null;
   hasChildNodes(): boolean;
   readonly childNodes: NodeList;
-  readonly firstChild: (Node | null);
-  readonly lastChild: (Node | null);
-  readonly previousSibling: (Node | null);
-  readonly nextSibling: (Node | null);
-  nodeValue: (string | null);
-  textContent: (string | null);
+  readonly firstChild: Node | null;
+  readonly lastChild: Node | null;
+  readonly previousSibling: Node | null;
+  readonly nextSibling: Node | null;
+  nodeValue: string | null;
+  textContent: string | null;
   normalize(): void;
   cloneNode(subtree?: boolean): Node;
-  isEqualNode(otherNode: (Node | null)): boolean;
-  isSameNode(otherNode: (Node | null)): boolean;
+  isEqualNode(otherNode: Node | null): boolean;
+  isSameNode(otherNode: Node | null): boolean;
   readonly DOCUMENT_POSITION_DISCONNECTED: 1;
   readonly DOCUMENT_POSITION_PRECEDING: 2;
   readonly DOCUMENT_POSITION_FOLLOWING: 4;
@@ -1131,11 +1141,11 @@ export interface Node extends EventTarget {
   readonly DOCUMENT_POSITION_CONTAINED_BY: 16;
   readonly DOCUMENT_POSITION_IMPLEMENTATION_SPECIFIC: 32;
   compareDocumentPosition(other: Node): number;
-  contains(other: (Node | null)): boolean;
-  lookupPrefix(namespace: (string | null)): (string | null);
-  lookupNamespaceURI(prefix: (string | null)): (string | null);
-  isDefaultNamespace(namespace: (string | null)): boolean;
-  insertBefore(node: Node, child: (Node | null)): Node;
+  contains(other: Node | null): boolean;
+  lookupPrefix(namespace: string | null): string | null;
+  lookupNamespaceURI(prefix: string | null): string | null;
+  isDefaultNamespace(namespace: string | null): boolean;
+  insertBefore(node: Node, child: Node | null): Node;
   appendChild(node: Node): Node;
   replaceChild(node: Node, child: Node): Node;
   removeChild(child: Node): Node;
@@ -1166,10 +1176,10 @@ export interface NodeConstructor extends Ctor<EventTargetConstructor> {
 
 export interface HTMLCollection {
   readonly length: number;
-  item(index: number): (Element | null);
-  namedItem(name: string): (Element | null);
-  readonly [index: number]: (Element | null) | undefined;
-  [Symbol.iterator](): IterableIterator<(Element | null)>;
+  item(index: number): Element | null;
+  namedItem(name: string): Element | null;
+  readonly [index: number]: Element | null | undefined;
+  [Symbol.iterator](): IterableIterator<Element | null>;
 }
 
 export interface HTMLCollectionConstructor {
@@ -1178,9 +1188,9 @@ export interface HTMLCollectionConstructor {
 }
 
 export interface NodeList {
-  item(index: number): (Node | null);
+  item(index: number): Node | null;
   readonly length: number;
-  readonly [index: number]: (Node | null) | undefined;
+  readonly [index: number]: Node | null | undefined;
   [Symbol.iterator](): IterableIterator<Node>;
   values(): IterableIterator<Node>;
   keys(): IterableIterator<number>;
@@ -1210,11 +1220,11 @@ export interface MutationRecord {
   readonly target: Node;
   readonly addedNodes: NodeList;
   readonly removedNodes: NodeList;
-  readonly previousSibling: (Node | null);
-  readonly nextSibling: (Node | null);
-  readonly attributeName: (string | null);
-  readonly attributeNamespace: (string | null);
-  readonly oldValue: (string | null);
+  readonly previousSibling: Node | null;
+  readonly nextSibling: Node | null;
+  readonly attributeName: string | null;
+  readonly attributeNamespace: string | null;
+  readonly oldValue: string | null;
 }
 
 export interface MutationRecordConstructor {
@@ -1224,15 +1234,15 @@ export interface MutationRecordConstructor {
 
 export interface NamedNodeMap {
   readonly length: number;
-  item(index: number): (Attr | null);
-  getNamedItem(qualifiedName: string): (Attr | null);
-  getNamedItemNS(namespace: (string | null), localName: string): (Attr | null);
-  setNamedItem(attr: Attr): (Attr | null);
-  setNamedItemNS(attr: Attr): (Attr | null);
+  item(index: number): Attr | null;
+  getNamedItem(qualifiedName: string): Attr | null;
+  getNamedItemNS(namespace: string | null, localName: string): Attr | null;
+  setNamedItem(attr: Attr): Attr | null;
+  setNamedItemNS(attr: Attr): Attr | null;
   removeNamedItem(qualifiedName: string): Attr;
-  removeNamedItemNS(namespace: (string | null), localName: string): Attr;
-  readonly [index: number]: (Attr | null) | undefined;
-  [Symbol.iterator](): IterableIterator<(Attr | null)>;
+  removeNamedItemNS(namespace: string | null, localName: string): Attr;
+  readonly [index: number]: Attr | null | undefined;
+  [Symbol.iterator](): IterableIterator<Attr | null>;
 }
 
 export interface NamedNodeMapConstructor {
@@ -1241,12 +1251,12 @@ export interface NamedNodeMapConstructor {
 }
 
 export interface Attr extends Node {
-  readonly namespaceURI: (string | null);
-  readonly prefix: (string | null);
+  readonly namespaceURI: string | null;
+  readonly prefix: string | null;
   readonly localName: string;
   readonly name: string;
   value: string;
-  readonly ownerElement: (Element | null);
+  readonly ownerElement: Element | null;
   readonly specified: boolean;
 }
 
@@ -1263,12 +1273,12 @@ export interface CharacterData extends Node {
   insertData(offset: number, data: string): void;
   deleteData(offset: number, count: number): void;
   replaceData(offset: number, count: number, data: string): void;
-  before(...nodes: Array<(Node | string)>): void;
-  after(...nodes: Array<(Node | string)>): void;
-  replaceWith(...nodes: Array<(Node | string)>): void;
+  before(...nodes: Array<Node | string>): void;
+  after(...nodes: Array<Node | string>): void;
+  replaceWith(...nodes: Array<Node | string>): void;
   remove(): void;
-  readonly previousElementSibling: (Element | null);
-  readonly nextElementSibling: (Element | null);
+  readonly previousElementSibling: Element | null;
+  readonly nextElementSibling: Element | null;
 }
 
 export interface CharacterDataConstructor extends Ctor<NodeConstructor> {
@@ -1280,9 +1290,9 @@ export interface DocumentType extends Node {
   readonly name: string;
   readonly publicId: string;
   readonly systemId: string;
-  before(...nodes: Array<(Node | string)>): void;
-  after(...nodes: Array<(Node | string)>): void;
-  replaceWith(...nodes: Array<(Node | string)>): void;
+  before(...nodes: Array<Node | string>): void;
+  after(...nodes: Array<Node | string>): void;
+  replaceWith(...nodes: Array<Node | string>): void;
   remove(): void;
 }
 
@@ -1294,7 +1304,7 @@ export interface DocumentTypeConstructor extends Ctor<NodeConstructor> {
 export interface Text extends CharacterData {
   splitText(offset: number): Text;
   readonly wholeText: string;
-  readonly assignedSlot: (HTMLSlotElement | null);
+  readonly assignedSlot: HTMLSlotElement | null;
 }
 
 export interface TextConstructor extends Ctor<CharacterDataConstructor> {
@@ -1316,7 +1326,7 @@ export interface ProcessingInstruction extends CharacterData {
   readonly target: string;
   hasAttributes(): boolean;
   getAttributeNames(): Array<string>;
-  getAttribute(name: string): (string | null);
+  getAttribute(name: string): string | null;
   setAttribute(name: string, value: string): void;
   removeAttribute(name: string): void;
   toggleAttribute(name: string, force?: boolean): boolean;
@@ -1341,16 +1351,16 @@ export interface CommentConstructor extends Ctor<CharacterDataConstructor> {
 
 export interface DocumentFragment extends Node {
   readonly children: HTMLCollection;
-  readonly firstElementChild: (Element | null);
-  readonly lastElementChild: (Element | null);
+  readonly firstElementChild: Element | null;
+  readonly lastElementChild: Element | null;
   readonly childElementCount: number;
-  prepend(...nodes: Array<(Node | string)>): void;
-  append(...nodes: Array<(Node | string)>): void;
-  replaceChildren(...nodes: Array<(Node | string)>): void;
-  moveBefore(node: Node, child: (Node | null)): void;
-  querySelector(selectors: string): (Element | null);
+  prepend(...nodes: Array<Node | string>): void;
+  append(...nodes: Array<Node | string>): void;
+  replaceChildren(...nodes: Array<Node | string>): void;
+  moveBefore(node: Node, child: Node | null): void;
+  querySelector(selectors: string): Element | null;
   querySelectorAll(selectors: string): NodeList;
-  getElementById(elementId: string): (Element | null);
+  getElementById(elementId: string): Element | null;
 }
 
 export interface DocumentFragmentConstructor extends Ctor<NodeConstructor> {
@@ -1366,8 +1376,8 @@ export interface ShadowRoot extends DocumentFragment {
   readonly clonable: boolean;
   readonly serializable: boolean;
   readonly host: Element;
-  onslotchange: (EventHandlerNonNull | null);
-  readonly customElementRegistry: (CustomElementRegistry | null);
+  onslotchange: EventHandlerNonNull | null;
+  readonly customElementRegistry: CustomElementRegistry | null;
   readonly styleSheets: object;
   adoptedStyleSheets: any;
 }
@@ -1386,42 +1396,42 @@ export interface Document extends Node {
   readonly charset: string;
   readonly inputEncoding: string;
   readonly contentType: string;
-  readonly doctype: (DocumentType | null);
-  readonly documentElement: (Element | null);
+  readonly doctype: DocumentType | null;
+  readonly documentElement: Element | null;
   getElementsByTagName(qualifiedName: string): HTMLCollection;
-  getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
+  getElementsByTagNameNS(namespace: string | null, localName: string): HTMLCollection;
   getElementsByClassName(classNames: string): HTMLCollection;
-  createElement(localName: string, options?: (string | ElementCreationOptions)): Element;
-  createElementNS(namespace: (string | null), qualifiedName: string, options?: (string | ElementCreationOptions)): Element;
+  createElement(localName: string, options?: string | ElementCreationOptions): Element;
+  createElementNS(namespace: string | null, qualifiedName: string, options?: string | ElementCreationOptions): Element;
   createDocumentFragment(): DocumentFragment;
   createTextNode(data: string): Text;
   createCDATASection(data: string): CDATASection;
   createComment(data: string): Comment;
   createProcessingInstruction(target: string, data: string): ProcessingInstruction;
-  importNode(node: Node, options?: (boolean | ImportNodeOptions)): Node;
+  importNode(node: Node, options?: boolean | ImportNodeOptions): Node;
   adoptNode(node: Node): Node;
   createAttribute(localName: string): Attr;
-  createAttributeNS(namespace: (string | null), qualifiedName: string): Attr;
+  createAttributeNS(namespace: string | null, qualifiedName: string): Attr;
   createEvent(interface_: string): Event;
   createRange(): Range;
-  createNodeIterator(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): NodeIterator;
-  createTreeWalker(root: Node, whatToShow?: number, filter?: (NodeFilter | null)): TreeWalker;
-  readonly head: (HTMLHeadElement | null);
-  readonly body: (HTMLElement | null);
+  createNodeIterator(root: Node, whatToShow?: number, filter?: NodeFilter | null): NodeIterator;
+  createTreeWalker(root: Node, whatToShow?: number, filter?: NodeFilter | null): TreeWalker;
+  readonly head: HTMLHeadElement | null;
+  readonly body: HTMLElement | null;
   write(...text: Array<string>): void;
-  readonly defaultView: (WindowProxy | null);
+  readonly defaultView: WindowProxy | null;
   readonly children: HTMLCollection;
-  readonly firstElementChild: (Element | null);
-  readonly lastElementChild: (Element | null);
+  readonly firstElementChild: Element | null;
+  readonly lastElementChild: Element | null;
   readonly childElementCount: number;
-  prepend(...nodes: Array<(Node | string)>): void;
-  append(...nodes: Array<(Node | string)>): void;
-  replaceChildren(...nodes: Array<(Node | string)>): void;
-  moveBefore(node: Node, child: (Node | null)): void;
-  querySelector(selectors: string): (Element | null);
+  prepend(...nodes: Array<Node | string>): void;
+  append(...nodes: Array<Node | string>): void;
+  replaceChildren(...nodes: Array<Node | string>): void;
+  moveBefore(node: Node, child: Node | null): void;
+  querySelector(selectors: string): Element | null;
   querySelectorAll(selectors: string): NodeList;
-  getElementById(elementId: string): (Element | null);
-  readonly customElementRegistry: (CustomElementRegistry | null);
+  getElementById(elementId: string): Element | null;
+  readonly customElementRegistry: CustomElementRegistry | null;
   readonly styleSheets: object;
   adoptedStyleSheets: any;
 }
@@ -1443,7 +1453,7 @@ export interface XMLDocumentConstructor extends Ctor<DocumentConstructor> {
 
 export interface DOMImplementation {
   createDocumentType(name: string, publicId: string, systemId: string): DocumentType;
-  createDocument(namespace: (string | null), qualifiedName: string, doctype?: (DocumentType | null)): XMLDocument;
+  createDocument(namespace: string | null, qualifiedName: string, doctype?: DocumentType | null): XMLDocument;
   createHTMLDocument(title?: string): Document;
   hasFeature(): boolean;
 }
@@ -1454,8 +1464,8 @@ export interface DOMImplementationConstructor {
 }
 
 export interface Element extends Node {
-  readonly namespaceURI: (string | null);
-  readonly prefix: (string | null);
+  readonly namespaceURI: string | null;
+  readonly prefix: string | null;
   readonly localName: string;
   readonly tagName: string;
   id: string;
@@ -1466,47 +1476,47 @@ export interface Element extends Node {
   hasAttributes(): boolean;
   readonly attributes: NamedNodeMap;
   getAttributeNames(): Array<string>;
-  getAttribute(qualifiedName: string): (string | null);
-  getAttributeNS(namespace: (string | null), localName: string): (string | null);
-  setAttribute(qualifiedName: string, value: ((TrustedHTML | TrustedScript | TrustedScriptURL) | string)): void;
-  setAttributeNS(namespace: (string | null), qualifiedName: string, value: ((TrustedHTML | TrustedScript | TrustedScriptURL) | string)): void;
+  getAttribute(qualifiedName: string): string | null;
+  getAttributeNS(namespace: string | null, localName: string): string | null;
+  setAttribute(qualifiedName: string, value: TrustedHTML | TrustedScript | TrustedScriptURL | string): void;
+  setAttributeNS(namespace: string | null, qualifiedName: string, value: TrustedHTML | TrustedScript | TrustedScriptURL | string): void;
   removeAttribute(qualifiedName: string): void;
-  removeAttributeNS(namespace: (string | null), localName: string): void;
+  removeAttributeNS(namespace: string | null, localName: string): void;
   toggleAttribute(qualifiedName: string, force?: boolean): boolean;
   hasAttribute(qualifiedName: string): boolean;
-  hasAttributeNS(namespace: (string | null), localName: string): boolean;
-  getAttributeNode(qualifiedName: string): (Attr | null);
-  getAttributeNodeNS(namespace: (string | null), localName: string): (Attr | null);
-  setAttributeNode(attr: Attr): (Attr | null);
-  setAttributeNodeNS(attr: Attr): (Attr | null);
+  hasAttributeNS(namespace: string | null, localName: string): boolean;
+  getAttributeNode(qualifiedName: string): Attr | null;
+  getAttributeNodeNS(namespace: string | null, localName: string): Attr | null;
+  setAttributeNode(attr: Attr): Attr | null;
+  setAttributeNodeNS(attr: Attr): Attr | null;
   removeAttributeNode(attr: Attr): Attr;
   attachShadow(init: ShadowRootInit): ShadowRoot;
-  readonly shadowRoot: (ShadowRoot | null);
-  closest(selectors: string): (Element | null);
+  readonly shadowRoot: ShadowRoot | null;
+  closest(selectors: string): Element | null;
   matches(selectors: string): boolean;
   webkitMatchesSelector(selectors: string): boolean;
   getElementsByTagName(qualifiedName: string): HTMLCollection;
-  getElementsByTagNameNS(namespace: (string | null), localName: string): HTMLCollection;
+  getElementsByTagNameNS(namespace: string | null, localName: string): HTMLCollection;
   getElementsByClassName(classNames: string): HTMLCollection;
-  insertAdjacentElement(where: string, element: Element): (Element | null);
+  insertAdjacentElement(where: string, element: Element): Element | null;
   insertAdjacentText(where: string, data: string): void;
   readonly children: HTMLCollection;
-  readonly firstElementChild: (Element | null);
-  readonly lastElementChild: (Element | null);
+  readonly firstElementChild: Element | null;
+  readonly lastElementChild: Element | null;
   readonly childElementCount: number;
-  prepend(...nodes: Array<(Node | string)>): void;
-  append(...nodes: Array<(Node | string)>): void;
-  replaceChildren(...nodes: Array<(Node | string)>): void;
-  moveBefore(node: Node, child: (Node | null)): void;
-  querySelector(selectors: string): (Element | null);
+  prepend(...nodes: Array<Node | string>): void;
+  append(...nodes: Array<Node | string>): void;
+  replaceChildren(...nodes: Array<Node | string>): void;
+  moveBefore(node: Node, child: Node | null): void;
+  querySelector(selectors: string): Element | null;
   querySelectorAll(selectors: string): NodeList;
-  before(...nodes: Array<(Node | string)>): void;
-  after(...nodes: Array<(Node | string)>): void;
-  replaceWith(...nodes: Array<(Node | string)>): void;
+  before(...nodes: Array<Node | string>): void;
+  after(...nodes: Array<Node | string>): void;
+  replaceWith(...nodes: Array<Node | string>): void;
   remove(): void;
-  readonly previousElementSibling: (Element | null);
-  readonly nextElementSibling: (Element | null);
-  readonly assignedSlot: (HTMLSlotElement | null);
+  readonly previousElementSibling: Element | null;
+  readonly nextElementSibling: Element | null;
+  readonly assignedSlot: HTMLSlotElement | null;
 }
 
 export interface ElementConstructor extends Ctor<NodeConstructor> {
@@ -1539,7 +1549,7 @@ export interface CountQueuingStrategyConstructor {
 export interface ReadableStream {
   readonly locked: boolean;
   cancel(reason?: any): Promise<void>;
-  getReader(options?: ReadableStreamGetReaderOptions): (ReadableStreamDefaultReader | ReadableStreamBYOBReader);
+  getReader(options?: ReadableStreamGetReaderOptions): ReadableStreamDefaultReader | ReadableStreamBYOBReader;
   pipeThrough(transform: ReadableWritablePair, options?: StreamPipeOptions): ReadableStream;
   pipeTo(destination: WritableStream, options?: StreamPipeOptions): Promise<void>;
   tee(): Array<ReadableStream>;
@@ -1551,7 +1561,7 @@ export interface ReadableStreamConstructor {
   readonly prototype: ReadableStream;
   [Symbol.hasInstance](value: unknown): value is ReadableStream;
   new (underlyingSource?: object, strategy?: QueuingStrategy): ReadableStream;
-  from(asyncIterable: (AsyncIterable<any> | Iterable<any>)): ReadableStream;
+  from(asyncIterable: AsyncIterable<any> | Iterable<any>): ReadableStream;
 }
 
 export interface ReadableStreamDefaultReader {
@@ -1568,7 +1578,7 @@ export interface ReadableStreamDefaultReaderConstructor {
 }
 
 export interface ReadableStreamBYOBReader {
-  read(view: (Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>), options?: ReadableStreamBYOBReaderReadOptions): Promise<ReadableStreamReadResultResult>;
+  read(view: Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>, options?: ReadableStreamBYOBReaderReadOptions): Promise<ReadableStreamReadResultResult>;
   releaseLock(): void;
   readonly closed: Promise<void>;
   cancel(reason?: any): Promise<void>;
@@ -1581,7 +1591,7 @@ export interface ReadableStreamBYOBReaderConstructor {
 }
 
 export interface ReadableStreamDefaultController {
-  readonly desiredSize: (number | null);
+  readonly desiredSize: number | null;
   close(): void;
   enqueue(chunk?: any): void;
   error(e?: any): void;
@@ -1593,10 +1603,10 @@ export interface ReadableStreamDefaultControllerConstructor {
 }
 
 export interface ReadableByteStreamController {
-  readonly byobRequest: (ReadableStreamBYOBRequest | null);
-  readonly desiredSize: (number | null);
+  readonly byobRequest: ReadableStreamBYOBRequest | null;
+  readonly desiredSize: number | null;
   close(): void;
-  enqueue(chunk: (Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>)): void;
+  enqueue(chunk: Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>): void;
   error(e?: any): void;
 }
 
@@ -1606,9 +1616,9 @@ export interface ReadableByteStreamControllerConstructor {
 }
 
 export interface ReadableStreamBYOBRequest {
-  readonly view: (Uint8Array<ArrayBuffer> | null);
+  readonly view: Uint8Array<ArrayBuffer> | null;
   respond(bytesWritten: number): void;
-  respondWithNewView(view: (Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>)): void;
+  respondWithNewView(view: Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>): void;
 }
 
 export interface ReadableStreamBYOBRequestConstructor {
@@ -1641,7 +1651,7 @@ export interface WritableStreamDefaultControllerConstructor {
 
 export interface WritableStreamDefaultWriter {
   readonly closed: Promise<void>;
-  readonly desiredSize: (number | null);
+  readonly desiredSize: number | null;
   readonly ready: Promise<void>;
   abort(reason?: any): Promise<void>;
   close(): Promise<void>;
@@ -1667,7 +1677,7 @@ export interface TransformStreamConstructor {
 }
 
 export interface TransformStreamDefaultController {
-  readonly desiredSize: (number | null);
+  readonly desiredSize: number | null;
   enqueue(chunk?: any): void;
   error(reason?: any): void;
   terminate(): void;
@@ -1679,7 +1689,7 @@ export interface TransformStreamDefaultControllerConstructor {
 }
 
 export interface TextDecoder {
-  decode(input?: (ArrayBuffer | SharedArrayBuffer | (Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>)), options?: TextDecodeOptions): string;
+  decode(input?: ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>, options?: TextDecodeOptions): string;
   readonly encoding: string;
   readonly fatal: boolean;
   readonly ignoreBOM: boolean;
@@ -1743,7 +1753,7 @@ export interface Blob {
 export interface BlobConstructor {
   readonly prototype: Blob;
   [Symbol.hasInstance](value: unknown): value is Blob;
-  new (blobParts?: Iterable<(((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | Blob | string)>, options?: BlobPropertyBag): Blob;
+  new (blobParts?: Iterable<Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | Blob | string>, options?: BlobPropertyBag): Blob;
 }
 
 export interface File extends Blob {
@@ -1754,14 +1764,14 @@ export interface File extends Blob {
 export interface FileConstructor extends Ctor<BlobConstructor> {
   readonly prototype: File;
   [Symbol.hasInstance](value: unknown): value is File;
-  new (fileBits: Iterable<(((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | Blob | string)>, fileName: string, options?: FilePropertyBag): File;
+  new (fileBits: Iterable<Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | Blob | string>, fileName: string, options?: FilePropertyBag): File;
 }
 
 export interface FileList {
-  item(index: number): (File | null);
+  item(index: number): File | null;
   readonly length: number;
-  readonly [index: number]: (File | null) | undefined;
-  [Symbol.iterator](): IterableIterator<(File | null)>;
+  readonly [index: number]: File | null | undefined;
+  [Symbol.iterator](): IterableIterator<File | null>;
 }
 
 export interface FileListConstructor {
@@ -1779,14 +1789,14 @@ export interface FileReader extends EventTarget {
   readonly LOADING: 1;
   readonly DONE: 2;
   readonly readyState: number;
-  readonly result: ((string | ArrayBuffer) | null);
-  readonly error: (DOMException | null);
-  onloadstart: (EventHandlerNonNull | null);
-  onprogress: (EventHandlerNonNull | null);
-  onload: (EventHandlerNonNull | null);
-  onabort: (EventHandlerNonNull | null);
-  onerror: (EventHandlerNonNull | null);
-  onloadend: (EventHandlerNonNull | null);
+  readonly result: string | ArrayBuffer | null;
+  readonly error: DOMException | null;
+  onloadstart: EventHandlerNonNull | null;
+  onprogress: EventHandlerNonNull | null;
+  onload: EventHandlerNonNull | null;
+  onabort: EventHandlerNonNull | null;
+  onerror: EventHandlerNonNull | null;
+  onloadend: EventHandlerNonNull | null;
 }
 
 export interface FileReaderConstructor extends Ctor<EventTargetConstructor> {
@@ -1802,22 +1812,22 @@ export interface FormData {
   append(name: string, value: string): void;
   append(name: string, blobValue: Blob, filename?: string): void;
   delete(name: string): void;
-  get(name: string): ((File | string) | null);
-  getAll(name: string): Array<(File | string)>;
+  get(name: string): File | string | null;
+  getAll(name: string): Array<File | string>;
   has(name: string): boolean;
   set(name: string, value: string): void;
   set(name: string, blobValue: Blob, filename?: string): void;
-  [Symbol.iterator](): IterableIterator<[string, (File | string)]>;
-  values(): IterableIterator<(File | string)>;
+  [Symbol.iterator](): IterableIterator<[string, File | string]>;
+  values(): IterableIterator<File | string>;
   keys(): IterableIterator<string>;
-  entries(): IterableIterator<[string, (File | string)]>;
-  forEach(callback: (value: (File | string), key: string, parent: this) => void, thisArg?: unknown): void;
+  entries(): IterableIterator<[string, File | string]>;
+  forEach(callback: (value: File | string, key: string, parent: this) => void, thisArg?: unknown): void;
 }
 
 export interface FormDataConstructor {
   readonly prototype: FormData;
   [Symbol.hasInstance](value: unknown): value is FormData;
-  new (form?: HTMLFormElement, submitter?: (HTMLElement | null)): FormData;
+  new (form?: HTMLFormElement, submitter?: HTMLElement | null): FormData;
 }
 
 export interface ProgressEvent extends Event {
@@ -1853,7 +1863,7 @@ export interface URLConstructor {
   readonly prototype: URL;
   [Symbol.hasInstance](value: unknown): value is URL;
   new (url: string, base?: string): URL;
-  parse(url: string, base?: string): (URL | null);
+  parse(url: string, base?: string): URL | null;
   canParse(url: string, base?: string): boolean;
   createObjectURL(obj: Blob): string;
   revokeObjectURL(url: string): void;
@@ -1863,7 +1873,7 @@ export interface URLSearchParams {
   readonly size: number;
   append(name: string, value: string): void;
   delete(name: string, value?: string): void;
-  get(name: string): (string | null);
+  get(name: string): string | null;
   getAll(name: string): Array<string>;
   has(name: string, value?: string): boolean;
   set(name: string, value: string): void;
@@ -1879,13 +1889,13 @@ export interface URLSearchParams {
 export interface URLSearchParamsConstructor {
   readonly prototype: URLSearchParams;
   [Symbol.hasInstance](value: unknown): value is URLSearchParams;
-  new (init?: (Iterable<Iterable<string>> | Record<string, string> | string)): URLSearchParams;
+  new (init?: Iterable<Iterable<string>> | Record<string, string> | string): URLSearchParams;
 }
 
 export interface Headers {
   append(name: string, value: string): void;
   delete(name: string): void;
-  get(name: string): (string | null);
+  get(name: string): string | null;
   getSetCookie(): Array<string>;
   has(name: string): boolean;
   set(name: string, value: string): void;
@@ -1899,7 +1909,7 @@ export interface Headers {
 export interface HeadersConstructor {
   readonly prototype: Headers;
   [Symbol.hasInstance](value: unknown): value is Headers;
-  new (init?: (Iterable<Iterable<string>> | Record<string, string>)): Headers;
+  new (init?: Iterable<Iterable<string>> | Record<string, string>): Headers;
 }
 
 export interface Request {
@@ -1920,7 +1930,7 @@ export interface Request {
   readonly signal: AbortSignal;
   readonly duplex: RequestDuplex;
   clone(): Request;
-  readonly body: (ReadableStream | null);
+  readonly body: ReadableStream | null;
   readonly bodyUsed: boolean;
   arrayBuffer(): Promise<ArrayBuffer>;
   blob(): Promise<Blob>;
@@ -1934,7 +1944,7 @@ export interface Request {
 export interface RequestConstructor {
   readonly prototype: Request;
   [Symbol.hasInstance](value: unknown): value is Request;
-  new (input: (Request | string), init?: RequestInit): Request;
+  new (input: Request | string, init?: RequestInit): Request;
 }
 
 export interface Response {
@@ -1946,7 +1956,7 @@ export interface Response {
   readonly statusText: string;
   readonly headers: Headers;
   clone(): Response;
-  readonly body: (ReadableStream | null);
+  readonly body: ReadableStream | null;
   readonly bodyUsed: boolean;
   arrayBuffer(): Promise<ArrayBuffer>;
   blob(): Promise<Blob>;
@@ -1960,7 +1970,7 @@ export interface Response {
 export interface ResponseConstructor {
   readonly prototype: Response;
   [Symbol.hasInstance](value: unknown): value is Response;
-  new (body?: ((ReadableStream | (Blob | ((Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer>) | ArrayBuffer) | FormData | URLSearchParams | string)) | null), init?: ResponseInit): Response;
+  new (body?: ReadableStream | Blob | Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer | FormData | URLSearchParams | string | null, init?: ResponseInit): Response;
   error(): Response;
   redirect(url: string, status?: number): Response;
   json(data: any, init?: ResponseInit): Response;
@@ -2015,9 +2025,9 @@ export interface TrustedTypePolicyFactory {
   isScriptURL(value: any): boolean;
   readonly emptyHTML: TrustedHTML;
   readonly emptyScript: TrustedScript;
-  getAttributeType(tagName: string, attribute: string, elementNs?: (string | null), attrNs?: (string | null)): (string | null);
-  getPropertyType(tagName: string, property: string, elementNs?: (string | null)): (string | null);
-  readonly defaultPolicy: (TrustedTypePolicy | null);
+  getAttributeType(tagName: string, attribute: string, elementNs?: string | null, attrNs?: string | null): string | null;
+  getPropertyType(tagName: string, property: string, elementNs?: string | null): string | null;
+  readonly defaultPolicy: TrustedTypePolicy | null;
 }
 
 export interface TrustedTypePolicyFactoryConstructor {

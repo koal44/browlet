@@ -14,6 +14,14 @@
   if reached before custom-element construction and reaction delivery exist.
 - `reactions.ts` owns the lifecycle callback argument types; reaction queues and
   delivery remain unimplemented.
+- `element-internals.ts` supplies a minimal `ElementInternalsImpl` with its
+  `targetElement`, separate weak element associations, and the specified
+  `shadowRoot` getter. Reflection uses the target element's lazy internal
+  content-attribute map; ordinary DOM writes do not reset internals' associations.
+  Its Window interface is declared without an author constructor. Internal
+  construction and projection are tested; `HTMLElement.attachInternals()` still
+  needs definition lookup, disable-internals, construction-state, and repeated
+  attachment checks. Those checks must not be bypassed to expose attachment early.
 
 ## Missing
 
@@ -23,7 +31,7 @@
 | existing `reactions.ts` | Reaction stacks, queues, backup queue, `[CEReactions]` entry/exit | HTML §4.13.6 |
 | `upgrade.ts` | Upgrade candidates and upgrade algorithm | HTML §4.13.5 |
 | `construction-stack.ts` | HTMLElement constructor and construction-stack rules | HTML §4.13.3 |
-| `element-internals.ts` | `ElementInternals`, shadow-root access, form-associated state/validation, and accessibility reflection | HTML §4.13.7 |
+| existing `element-internals.ts` and `HTMLElement` | `attachInternals()`, form-associated state/validation, and ARIAMixin declarations; accessibility consumers of internal defaults | HTML §4.13.7 |
 | `custom-state-set.ts` | `CustomStateSet` and custom-state pseudo-class state | HTML §4.13.7.5 |
 | existing `registry.ts` | Scoped registries, `whenDefined()`, upgrade candidates, and definition bookkeeping | HTML §§4.13.4–4.13.5 |
 
@@ -34,6 +42,12 @@ steps, invoke the popped queue, and then return or rethrow the original outcome.
 It remains Browlet-supplied rather than becoming generic Web IDL behavior. Do
 not install a no-op wrapper merely because declarations already retain the
 extended attribute.
+
+`BindingWorld` now accepts Browlet's `ExtendedAttributeHooks` integration, used
+for preparing reflection accessors after type resolution. Extend that explicit
+composition seam for reaction wrapping when implementing this slice; the current
+`prepareReflectedAttribute` hook does not wrap operations, setters, or deleters. Preserve
+the receiver's relevant agent when a method is borrowed across realms.
 
 Continue with `Document.createElement*`, definitions and upgrade, then tree
 connection/disconnection callbacks. HTML parsing consumes the same machinery

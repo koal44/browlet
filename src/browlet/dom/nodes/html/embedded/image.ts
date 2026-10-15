@@ -1,8 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
-import type { RequestPriority } from '../../../../../fetch/index';
+import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
-import { loadingAttribute, type LoadingState, fetchPriorityAttribute } from '../attributes/index';
+import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
 
 import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
@@ -20,32 +19,12 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
     return value instanceof HTMLImageElementImpl;
   }
 
-  /** Canonical loading keyword; assignment preserves the supplied attribute text. */
-  // https://html.spec.whatwg.org/multipage/embedded-content.html#dom-img-loading
-  get loading(): LoadingState {
-    return loadingAttribute.getState(this.getAttributeNS(null, 'loading'))!;
-  }
-
-  set loading(value: string) {
-    this.setAttributeValue('loading', value);
-  }
-
-  /** Canonical fetch-priority hint; assignment preserves the supplied attribute text. */
-  // https://html.spec.whatwg.org/multipage/embedded-content.html#dom-img-fetchPriority
-  get fetchPriority(): RequestPriority {
-    return fetchPriorityAttribute.getState(this.getAttributeNS(null, 'fetchpriority'))!;
-  }
-
-  set fetchPriority(value: string) {
-    this.setAttributeValue('fetchpriority', value);
-  }
-
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#will-lazy-load-element-steps
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-n-noscript
   willLazyLoad(): boolean {
     if (!this.env.isScriptingEnabled() || this.nodeDocument.browsingContext === null) return false;
-    return this.loading === 'lazy';
+    return loadingAttribute.getState(this.getAttributeNS(null, 'loading')) === 'lazy';
   }
 
   override attributeChanged(
@@ -73,8 +52,8 @@ export const htmlImageElementIDL = defineInterface({
   implementation: impl(HTMLImageElementImpl),
   members: [
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
-    attr('loading', idlType.DOMString, xattr('CEReactions')),
-    attr('fetchPriority', idlType.DOMString, xattr('CEReactions')),
+    attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
+    attr('fetchPriority', idlType.DOMString, xattr('CEReactions', reflectEnumerated(fetchPriorityAttribute))),
   ],
 });
 

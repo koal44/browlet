@@ -246,8 +246,8 @@ consumer, not that selection layer. `UserAgent.supportsMIMEType()` currently
 returns false as a provisional Resource Timing policy; wiring it into sniffing
 does not establish browser content support.
 
-The remaining shared attributes (§§2.5.6–2.5.9) are covered below. Common DOM
-interfaces and reusable reflection (§2.6) are next.
+The remaining shared attributes (§§2.5.6–2.5.9) are covered below. The bounded
+§§2.6.1–2.6.3 reflection slice follows them; §§2.6.4–2.6.5 collections remain next.
 
 ### Section 2.5.6 nonce attributes
 
@@ -420,6 +420,21 @@ element loader or claim actual network scheduling. Remaining consumers are:
 
 These are existing loader/scheduler gates, not omitted steps in §2.5.9's
 attribute definition. See the [loader roadmap](../loader/ROADMAP.md).
+
+## HTML §§2.6.1–2.6.3 reflection
+
+The [reflection roadmap](reflection/ROADMAP.md) records the shared adapter,
+value algorithms, weak element associations, stable token views, and binding-owned
+frozen-array cache. Existing fetching attributes, base target/href setters, and
+slot name now use it. Internal consumers read raw attributes or associated-element
+algorithms as §2.6.3 requires. The two approved browser clashes and unused
+double-with-fallback specification gap are recorded there.
+
+Minimal ElementInternals (§4.13.7) now provides internal defaults, separate
+associations, and shadow-root access. Attachment still needs custom-element
+definition/construction checks; reaction delivery (§4.13.6) remains provisional.
+This slice does not add ARIA or form-associated internals, and does not advance
+§§2.6.4–2.6.5 collections.
 
 ## HTML section 3 ownership
 

@@ -1,14 +1,14 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { InternalError } from '../../../../infra/internal-error';
-import { attr, defineInterface, idlType, impl, nullable, reference, roAttr, xattr } from '../../../../web-idl/index';
-import type { ReferrerPolicy, RequestPriority } from '../../../../fetch/index';
+import {
+  attr, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr, xattr,
+} from '../../../../web-idl/index';
 
 import {
-  corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, possibleBlockingTokens,
+  corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, blockingAttribute,
   fetchPriorityAttribute,
 } from './attributes/index';
 import type { SpeculationRulesParseResult } from '../../../scripting/index';
-import { DOMTokenListImpl } from '../../token-list';
 import type { WindowImpl } from '../../../browsing/window/index';
 
 import { defineElementInterface } from '../element';
@@ -31,59 +31,9 @@ export class HTMLScriptElementImpl extends HTMLElementImpl {
   // PROVISIONAL: extend the union when classic/module scripts and import maps exist.
   result: 'uninitialized' | null | SpeculationRulesParseResult = 'uninitialized';
 
-  /** Stable author-facing token list, created on first access. */
-  #blocking: DOMTokenListImpl | undefined;
-
   /** Recognize an HTML script implementation, independently of mutable attributes. */
   static is(value: unknown): value is HTMLScriptElementImpl {
     return value instanceof HTMLScriptElementImpl;
-  }
-
-  /** Live, case-preserving token list for the blocking content attribute. */
-  // https://html.spec.whatwg.org/multipage/scripting.html#dom-script-blocking
-  get blocking(): DOMTokenListImpl {
-    return this.#blocking ??= new DOMTokenListImpl(this, 'blocking', possibleBlockingTokens);
-  }
-
-  /** Canonical CORS keyword, or null for the missing attribute's No CORS state. */
-  // https://html.spec.whatwg.org/multipage/scripting.html#dom-script-crossOrigin
-  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflect
-  get crossOrigin(): string | null {
-    const state = corsSettingsAttribute.getState(this.getAttributeNS(null, 'crossorigin'))!;
-    return corsSettingsAttribute.getCanonicalKeyword(state);
-  }
-
-  set crossOrigin(value: string | null) {
-    if (value === null) this.removeAttributeNS(null, 'crossorigin');
-    else this.setAttributeValue('crossorigin', value);
-  }
-
-  /** Canonical referrer policy, or an empty string to defer to the request's policy container. */
-  // https://html.spec.whatwg.org/multipage/scripting.html#dom-script-referrerPolicy
-  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflect
-  get referrerPolicy(): ReferrerPolicy {
-    return referrerPolicyAttribute.getState(this.getAttributeNS(null, 'referrerpolicy'))!;
-  }
-
-  set referrerPolicy(value: string) {
-    this.setAttributeValue('referrerpolicy', value);
-  }
-
-  /** Canonical fetch-priority hint; assignment preserves the supplied attribute text. */
-  // https://html.spec.whatwg.org/multipage/scripting.html#dom-script-fetchPriority
-  get fetchPriority(): RequestPriority {
-    return fetchPriorityAttribute.getState(this.getAttributeNS(null, 'fetchpriority'))!;
-  }
-
-  set fetchPriority(value: string) {
-    this.setAttributeValue('fetchpriority', value);
-  }
-
-  override attributeChanged(
-    localName: string, oldValue: string | null, newValue: string | null, namespace: string | null,
-  ): void {
-    super.attributeChanged(localName, oldValue, newValue, namespace);
-    this.#blocking?.attributeChanged(localName, oldValue, newValue, namespace);
   }
 
   override initializeFromParser(): void {
@@ -141,12 +91,14 @@ export const htmlScriptElementIDL = defineInterface({
   exposed: 'Window',
   implementation: impl(HTMLScriptElementImpl),
   members: [
-    roAttr('blocking', reference('DOMTokenList'), xattr('SameObject', ['PutForwards', 'value'])),
+    roAttr('blocking', reference('DOMTokenList'),
+      xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
+    ),
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
-    attr('crossOrigin', nullable(idlType.DOMString), xattr('CEReactions')),
+    attr('crossOrigin', nullable(idlType.DOMString), xattr('CEReactions', reflectEnumerated(corsSettingsAttribute))),
     // SPEC_CLASH(script-referrer-policy-null): HTML/Firefox/WebKit stringify null/undefined; Chromium removes the attribute.
-    attr('referrerPolicy', idlType.DOMString, xattr('CEReactions')),
-    attr('fetchPriority', idlType.DOMString, xattr('CEReactions')),
+    attr('referrerPolicy', idlType.DOMString, xattr('CEReactions', reflectEnumerated(referrerPolicyAttribute))),
+    attr('fetchPriority', idlType.DOMString, xattr('CEReactions', reflectEnumerated(fetchPriorityAttribute))),
   ],
 });
 

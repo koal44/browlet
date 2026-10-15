@@ -438,6 +438,43 @@ owns reusable reflection machinery. Element implementations select the attribute
 definitions; resource lifecycles remain in the loader and their HTML consumers.
 Shared attribute rules do not retain elements or environments.
 
+HTML declarations retain `[Reflect]` annotations; Browlet's `[ReflectEnumerated]`
+spells out prose-defined reflection limited to known values, and `[ReflectTokens]`
+identifies DOMTokenList reflection through a shared attribute definition. Web IDL Core owns
+these annotation records and declaration helpers. The helpers tag reflection
+records with `kind: 'reflection'`, so the HTML hook selects them directly without
+a registry of annotation names. Numeric defaults and ranges are
+nested on their applicable reflection annotation; serialization expands them into
+HTML's separate `[ReflectDefault]` and `[ReflectRange]` syntax. They carry enumerated
+and token-list definitions as `unknown`; declaration tests check those definitions
+and reflection constraints. Browlet supplies
+`htmlExtendedAttributeHooks` from `integration/web-idl/` when constructing its
+`BindingWorld`. Its `prepareReflectedAttribute` hook prepares accessors once after resolving declaration
+types, retaining them across realm registrations without mutating declarations.
+`BindingWorld` alone owns the prepared-accessor map. Realm registration retrieves
+accessors from that world; `RealmBinding` does not retain another map reference.
+Preparation receives all declaring or including interfaces for each member. HTML
+selects ordinary or internal attribute operations from each owner's implementation
+class through adapters in `integration/web-idl/reflection-target.ts`, so accessors
+need no Element/ElementInternals discriminator at invocation.
+Declaration tests check the owner contracts. Shared mixins retain one preparation
+and projected-array cache across their includers.
+Generic Web IDL supplies the extension point; HTML owns the reflection rules.
+Element owns token views and explicit weak element associations. Internal callers
+and reflected bindings use the same `TokenListAttribute` record, containing the
+attribute name and supported tokens; lookup never supplies a separate optional configuration.
+The integration
+owns cached projected frozen arrays. Binding's existing converters supply their
+receiver realm and element projection. Internal HTML algorithms read raw
+attributes/state or the specified associated-element methods, never the projected
+reflection getter. ElementInternals owns separate associations and the read/write/delete
+operations over its target element's internal attribute map;
+ordinary DOM attribute changes leave those associations intact. `[CEReactions]`
+entry/exit surrounds the originally specified member steps after author argument
+conversion, not the lower-level mutation primitives.
+Reaction delivery remains unimplemented; the new attribute-preparation hook does
+not provide a no-op reaction handler or yet wrap operation/setter/deleter steps.
+
 Lazy-loading continuation state belongs to the image, iframe, and media element
 implementations; video retains an additional poster continuation. Document owns
 one internal Intersection Observer, with concrete implementation targets and

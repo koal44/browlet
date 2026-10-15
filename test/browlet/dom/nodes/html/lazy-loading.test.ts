@@ -55,7 +55,7 @@ describe.each(tags)('%s loading policy', (tag) => {
   it('requires scripting and a node document with a browsing context', () => {
     const { element, document, automation } = createElement(tag);
     expect(element.willLazyLoad()).toBe(false);
-    element.loading = 'lazy';
+    element.setAttributeValue('loading', 'lazy');
     expect(element.willLazyLoad()).toBe(true);
     expect(automation).toHaveBeenLastCalledWith(element.env);
 
@@ -78,7 +78,7 @@ describe.each(tags)('%s loading policy', (tag) => {
   it('keeps the original realm settings after adoption into a different active document', () => {
     const source = createElement(tag);
     const destination = createElement(tag);
-    source.element.loading = 'lazy';
+    source.element.setAttributeValue('loading', 'lazy');
     destination.document.adoptNode(source.element);
     destination.document.activeSandboxingFlagSet.add('sandboxed-scripts');
     expect(source.element.willLazyLoad()).toBe(true);
@@ -88,22 +88,22 @@ describe.each(tags)('%s loading policy', (tag) => {
 
   it.each(['eager', '', 'invalid', null])('resumes once when lazy becomes %j', (value) => {
     const { element } = createElement(tag);
-    element.loading = 'lazy';
+    element.setAttributeValue('loading', 'lazy');
     const steps = vi.fn(() => expect(element.lazyLoadResumptionSteps).toBeNull());
     element.lazyLoadResumptionSteps = steps;
     if (value === null) element.removeAttribute('loading');
-    else element.loading = value;
+    else element.setAttributeValue('loading', value);
     expect(steps).toHaveBeenCalledTimes(1);
-    element.loading = 'eager';
+    element.setAttributeValue('loading', 'eager');
     expect(steps).toHaveBeenCalledTimes(1);
   });
 
   it('does not resume when spelling changes without a state transition', () => {
     const { element } = createElement(tag);
-    element.loading = 'lazy';
+    element.setAttributeValue('loading', 'lazy');
     const steps = vi.fn();
     element.lazyLoadResumptionSteps = steps;
-    element.loading = 'LAZY';
+    element.setAttributeValue('loading', 'LAZY');
     element.setAttributeNS('urn:other', 'x:loading', 'eager');
     expect(steps).not.toHaveBeenCalled();
     expect(element.lazyLoadResumptionSteps).toBe(steps);
@@ -114,7 +114,7 @@ describe('video poster continuation', () => {
   it('captures both continuations before invoking media loading and clears each immediately before invocation', () => {
     const { element } = createElement('video');
     if (!HTMLVideoElementImpl.is(element)) throw new Error('Expected video implementation');
-    element.loading = 'lazy';
+    element.setAttributeValue('loading', 'lazy');
     const calls: string[] = [];
     const poster = () => {
       expect(element.posterLazyLoadResumptionSteps).toBeNull();
@@ -128,7 +128,7 @@ describe('video poster continuation', () => {
       element.posterLazyLoadResumptionSteps = replacement;
       calls.push('media');
     };
-    element.loading = 'eager';
+    element.setAttributeValue('loading', 'eager');
     expect(calls).toEqual(['media', 'poster']);
     expect(replacement).not.toHaveBeenCalled();
   });
@@ -136,10 +136,10 @@ describe('video poster continuation', () => {
   it('can resume only the poster without a media continuation', () => {
     const { element } = createElement('video');
     if (!HTMLVideoElementImpl.is(element)) throw new Error('Expected video implementation');
-    element.loading = 'lazy';
+    element.setAttributeValue('loading', 'lazy');
     const poster = vi.fn();
     element.posterLazyLoadResumptionSteps = poster;
-    element.loading = 'eager';
+    element.setAttributeValue('loading', 'eager');
     expect(poster).toHaveBeenCalledOnce();
     expect(element.posterLazyLoadResumptionSteps).toBeNull();
   });

@@ -32,10 +32,12 @@ function registerInterfaceImplementation(
   for (const { member } of assembled.members) {
     const memberBinding = implementationBinding.getOrCreateMemberBinding(member);
     switch (member.kind) {
-      case 'attribute':
-        if (member.attributeFunction || member.get || member.set) {
+      case 'attribute': {
+        const accessors = binding.world.getAttributeBinding(member, assembled);
+        const attribute = accessors ? { ...member, ...accessors } : member;
+        if (attribute.attributeFunction || attribute.get || attribute.set) {
           registerDefinedAttribute(
-            memberBinding, member, assembled, binding,
+            memberBinding, attribute, assembled, binding,
           );
         } else {
           registerAttribute(
@@ -46,6 +48,7 @@ function registerInterfaceImplementation(
           );
         }
         break;
+      }
       case 'constructor': {
         if (member.construct) {
           const construct = member.construct;

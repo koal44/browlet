@@ -41,6 +41,12 @@ Providers implement contracts owned by the consuming subsystem. Browser-dependen
 implementations such as FileReader stay whole here; domain-local behavior stays
 with its subsystem. See the [composition rules](../../ARCHITECTURE.md#choosing-a-dependency).
 
+- `web-idl/` supplies HTML's extended-attribute handlers to the `BindingWorld`
+  composition in `bindings.ts`. Reflection is prepared after type resolution,
+  once per world. Declarations retain annotations and typed metadata without
+  importing this integration; invocations use the receiver's binding context.
+  Reusable HTML value rules and DOM state remain with their existing owners.
+  Custom-element reaction wrapping is still pending in its owning slice.
 - `xhr/` owns ProgressEvent's browser implementation, declaration, and trusted
   firing over DOM events. FileReader consumes this same implementation; the
   standalone XHR package remains independent of Browlet. Binding composition

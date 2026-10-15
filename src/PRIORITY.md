@@ -80,7 +80,11 @@ and potential-render-blocking predicates, including parser-origin state.
 Script preparation and Document's actual render-blocking mechanism remain
 explicit dependencies. §2.5.9 adds shared fetch-priority states and image/link/script
 reflection; element loaders and actual network prioritization remain pending.
-§2.6 common DOM interfaces and reusable reflection are next.
+The [§§2.6.1–2.6.3 reflection slice](browlet/html/reflection/ROADMAP.md) now
+consolidates the implemented attributes and supplies numeric, URL, token, and
+element-reference rules. Minimal ElementInternals state and shadow-root access
+are present; attachment, ARIA, forms, and reaction delivery remain pending.
+§§2.6.4–2.6.5 collections are the next bounded slice.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

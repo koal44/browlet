@@ -38,20 +38,20 @@ describe('HTMLBaseElement', () => {
   it('uses the first base with href and updates on attribute changes', () => {
     const { document, root } = createDocument();
     const first = createBase(document);
-    first.target = 'frame';
+    first.setAttributeValue('target', 'frame');
     const second = createBase(document);
-    second.href = '/second/';
+    second.setAttributeValue('href', '/second/');
     root.appendChild(first);
     root.appendChild(second);
     expect(document.baseURI).toBe('https://example.test/second/');
 
-    first.href = 'first/';
+    first.setAttributeValue('href', 'first/');
     expect(document.baseURI).toBe('https://example.test/dir/first/');
     first.setAttribute('href', '/changed/');
     expect(document.baseURI).toBe('https://example.test/changed/');
     first.removeAttribute('href');
     expect(document.baseURI).toBe('https://example.test/second/');
-    first.href = '';
+    first.setAttributeValue('href', '');
     expect(document.baseURI).toBe(document.URL);
     expect(document.createTextNode('detached').baseURI).toBe(document.baseURI);
   });
@@ -60,10 +60,10 @@ describe('HTMLBaseElement', () => {
     const { document, root } = createDocument();
     const container = document.createElement('div');
     const first = createBase(document);
-    first.href = '/first/';
+    first.setAttributeValue('href', '/first/');
     container.appendChild(first);
     const second = createBase(document);
-    second.href = '/second/';
+    second.setAttributeValue('href', '/second/');
     root.appendChild(second);
     expect(document.baseURI).toBe('https://example.test/second/');
 
@@ -103,9 +103,9 @@ describe('HTMLBaseElement', () => {
   it.each(['https://[', 'data:text/plain,content', 'javascript:1'])('falls back for %s without selecting a later base', (href) => {
     const { document, root } = createDocument();
     const first = createBase(document);
-    first.href = href;
+    first.setAttributeValue('href', href);
     const second = createBase(document);
-    second.href = '/second/';
+    second.setAttributeValue('href', '/second/');
     root.appendChild(first);
     root.appendChild(second);
     expect(document.baseURI).toBe(document.URL);
@@ -126,7 +126,7 @@ describe('HTMLBaseElement', () => {
     expect(document.baseURI).toBe(document.URL);
     expect(base.href).toBe(document.URL);
 
-    base.href = '/ordinary/';
+    base.setAttributeValue('href', '/ordinary/');
     expect(namespaced.value).toBe('/namespaced/');
     expect(base.getAttributeNS(null, 'href')).toBe('/ordinary/');
     expect(document.baseURI).toBe('https://example.test/ordinary/');
@@ -137,12 +137,12 @@ describe('HTMLBaseElement', () => {
   it('ignores bases in detached and shadow trees', () => {
     const { document, root } = createDocument();
     const base = createBase(document);
-    base.href = '/shadow/';
+    base.setAttributeValue('href', '/shadow/');
     const shadow = new ShadowRootImpl(root, 'open', document.env);
     shadow.appendChild(base);
     expect(base.isConnected).toBe(true);
     expect(document.baseURI).toBe(document.URL);
-    base.href = '/changed/';
+    base.setAttributeValue('href', '/changed/');
     expect(document.baseURI).toBe(document.URL);
     root.appendChild(base);
     expect(document.baseURI).toBe('https://example.test/changed/');
@@ -153,7 +153,7 @@ describe('Frozen base URLs', () => {
   it('retains the selected URL when the document URL changes while href resolves against the new fallback', () => {
     const { document, root } = createDocument();
     const base = createBase(document);
-    base.href = 'relative/';
+    base.setAttributeValue('href', 'relative/');
     root.appendChild(base);
     document.url = parseURL('https://example.test/new/page').url!;
     expect(document.baseURI).toBe('https://example.test/dir/relative/');
@@ -203,14 +203,14 @@ describe('Frozen base URLs', () => {
   it('does not refresh the first base when later bases or unrelated attributes change', () => {
     const { document, root } = createDocument();
     const first = createBase(document);
-    first.href = 'first/';
+    first.setAttributeValue('href', 'first/');
     root.appendChild(first);
     document.url = parseURL('https://example.test/new/page').url!;
     const second = createBase(document);
-    second.href = 'second/';
+    second.setAttributeValue('href', 'second/');
     root.appendChild(second);
-    second.href = 'changed/';
-    first.target = 'frame';
+    second.setAttributeValue('href', 'changed/');
+    first.setAttributeValue('target', 'frame');
     first.attributes.setNamedItem(first.attributes.getNamedItem('href')!);
     expect(document.baseURI).toBe('https://example.test/dir/first/');
 
@@ -223,9 +223,9 @@ describe('Frozen base URLs', () => {
   it('refreshes the frozen URL when the first base is reinserted at its existing position', () => {
     const { document, root } = createDocument();
     const first = createBase(document);
-    first.href = 'first/';
+    first.setAttributeValue('href', 'first/');
     const second = createBase(document);
-    second.href = 'second/';
+    second.setAttributeValue('href', 'second/');
     root.appendChild(first);
     root.appendChild(second);
     document.url = parseURL('https://example.test/new/page').url!;
@@ -242,7 +242,7 @@ describe('Frozen base URLs', () => {
   it('freezes an invalid base to the fallback at selection time', () => {
     const { document, root } = createDocument();
     const base = createBase(document);
-    base.href = 'https://[';
+    base.setAttributeValue('href', 'https://[');
     root.appendChild(base);
     document.url = parseURL('https://example.test/new/page').url!;
     expect(document.baseURI).toBe('https://example.test/dir/page');

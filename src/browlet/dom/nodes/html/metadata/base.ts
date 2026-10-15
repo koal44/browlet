@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
+import { attr, defineInterface, idlType, impl, reflect, reflectSetter, xattr } from '../../../../../web-idl/index';
 import { serializeURL, type URLRecord } from '../../../../../url/index';
 
 import { defineElementInterface } from '../../element';
@@ -23,19 +23,6 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     const { env } = document;
     const url = env.parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
     return url === null ? href : serializeURL(url);
-  }
-
-  set href(value: string) {
-    this.setAttributeValue('href', value);
-  }
-
-  /** The reflected default navigation target name. */
-  get target(): string {
-    return this.getAttributeNS(null, 'target') ?? '';
-  }
-
-  set target(value: string) {
-    this.setAttributeValue('target', value);
   }
 
   // https://html.spec.whatwg.org/multipage/semantics.html#set-the-frozen-base-url
@@ -96,8 +83,8 @@ export const htmlBaseElementIDL = defineInterface({
   exposed: 'Window',
   implementation: impl(HTMLBaseElementImpl),
   members: [
-    attr('href', idlType.USVString, xattr('CEReactions', 'ReflectSetter')),
-    attr('target', idlType.DOMString, xattr('CEReactions', 'Reflect')),
+    attr('href', idlType.USVString, xattr('CEReactions', reflectSetter())),
+    attr('target', idlType.DOMString, xattr('CEReactions', reflect())),
   ],
 });
 

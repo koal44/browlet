@@ -29,7 +29,7 @@ describe('Document base URL changes', () => {
     // Isolate URL selection from the unimplemented base-change consumers.
     const respond = vi.spyOn(document, 'respondToBaseURLChanges').mockImplementation(() => {});
     const base = document.createElementNS(HTML_NAMESPACE, 'base') as HTMLBaseElementImpl;
-    base.href = 'assets/';
+    base.setAttributeValue('href', 'assets/');
     document.appendChild(base);
     const frozen = document.getBaseURL();
     respond.mockClear();
@@ -50,10 +50,10 @@ describe('Document base URL changes', () => {
       bases.push(document.baseURI);
     });
     const base = document.createElementNS(HTML_NAMESPACE, 'base') as HTMLBaseElementImpl;
-    base.href = '/first/';
+    base.setAttributeValue('href', '/first/');
     document.appendChild(base);
-    base.href = '/second/';
-    base.href = '/second/';
+    base.setAttributeValue('href', '/second/');
+    base.setAttributeValue('href', '/second/');
 
     expect(bases).toEqual(['https://example.test/first/', 'https://example.test/second/']);
   });
@@ -63,7 +63,7 @@ describe('Document base URL changes', () => {
     document.url = parseURL('https://example.test/').url!;
     const respond = vi.spyOn(document, 'respondToBaseURLChanges').mockImplementation(() => {});
     const base = document.createElementNS(HTML_NAMESPACE, 'base') as HTMLBaseElementImpl;
-    base.href = 'data:text/plain,content';
+    base.setAttributeValue('href', 'data:text/plain,content');
     document.appendChild(base);
 
     expect(document.getBaseURL()).toBe(document.url);

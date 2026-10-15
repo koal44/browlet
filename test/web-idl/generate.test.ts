@@ -3,7 +3,7 @@ import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 
 import {
-  annotated, arg, asyncIter, attr, constant, ctor, defineCallbackFunction, defineCallbackInterface,
+  annotated, arg, asyncIter, asyncSequence, attr, constant, ctor, defineCallbackFunction, defineCallbackInterface,
   defineDictionary, defineEnumeration, defineIncludes, defineInterface, defineInterfaceMixin,
   defineNamespace, definePartialDictionary, definePartialInterface, definePartialInterfaceMixin,
   definePartialNamespace, defineProxyObject, defineTypedef, dictMember, frozenArray, idlType,
@@ -14,6 +14,45 @@ import { DefinitionAssembly } from '../../src/web-idl/assembly/index';
 import { generatePlatformTypes } from '../../src/web-idl/generate';
 
 describe('platform declaration generation', () => {
+  it('omits redundant union parentheses while preserving function and array grouping', () => {
+    const choice = union(idlType.DOMString, idlType.long);
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Node', members: [] }),
+      defineInterface({
+        name: 'Host', members: [
+          roAttr('root', nullable(reference('Node'))),
+          roAttr('choice', nullable(choice)),
+          roAttr('choices', sequence(nullable(choice))),
+          roAttr('buffer', annotated(idlType.ArrayBuffer, xattr('AllowShared'))),
+          attr('callback', nullable(tsType(idlType.object, '() => number'))),
+          roAttr('array', tsType(idlType.object, '(string | number)[]')),
+          op('read', idlType.undefined,
+            [arg('pending', promise(idlType.long)), arg('stream', asyncSequence(idlType.DOMString))],
+          ),
+        ],
+      }),
+    ]);
+    const source = generatePlatformTypes(assembly);
+    expect(source).toContain('readonly root: Node | null;');
+    expect(source).toContain('readonly choice: string | number | null;');
+    expect(source).toContain('readonly choices: Array<string | number | null>;');
+    expect(source).toContain('readonly buffer: ArrayBuffer | SharedArrayBuffer;');
+    expect(source).toContain('callback: (() => number) | null;');
+    expect(source).toContain('readonly array: (string | number)[];');
+    expect(source).toContain('read(pending: number | PromiseLike<number>, stream: AsyncIterable<string> | Iterable<string>): void;');
+    expect(compile(source, `
+      import type { Host } from './platform';
+      declare const host: Host;
+      host.callback = null;
+      host.callback = () => 1;
+      // @ts-expect-error null belongs to the callback union, not its return type
+      host.callback = () => null;
+      const array: (string | number)[] = host.array;
+      host.read(1, ['text']);
+      host.read(Promise.resolve(1), ['text']);
+    `)).toEqual([]);
+  });
+
   it('infers operation parameters independently, including mixins and nested type annotations', () => {
     const assembly = new DefinitionAssembly([
       defineInterfaceMixin({

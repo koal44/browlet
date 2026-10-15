@@ -1,7 +1,7 @@
 import {
   arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface, defineProxyObject,
   dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp, tsType,
-  webIDLCommonDefinitions, xattr,
+  reflect, webIDLCommonDefinitions, xattr,
   type SerialSteps, type TransferSteps,
 } from '../../../../src/web-idl/core/index';
 
@@ -15,6 +15,10 @@ class Example {}
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
 
 webIDLCommonDefinitions.includes(domExceptionIDL);
+
+attr('span', idlType.unsignedLong, xattr(reflect({ default: 1, range: [1, 1000] })));
+// @ts-expect-error A reflection range has exactly two bounds.
+reflect({ range: [0] });
 
 const proxy = {};
 const handle = { platform: proxy, currentReceiver: {} };

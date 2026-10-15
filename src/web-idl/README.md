@@ -323,6 +323,58 @@ including its fragments and inheritance. Named lookups only read the completed
 assembly. Declarations and their nested members and types must remain unchanged
 after assembly. Dictionaries retain their members in conversion order;
 callback interfaces index their operation declarations.
+
+The optional second constructor argument accepts `{ extendedAttributes }`.
+Its `ExtendedAttributeHooks<Env>.prepareReflectedAttribute(member, owners)` receives
+each assembled interface attribute once, together with every declaring or including
+interface, and can return a map from those owners to binding accessors. Shared
+mixins include all their owners in that single preparation. Types are already
+resolved, including aliases and implementation-class references. `BindingWorld`
+alone owns the prepared-accessor map, separate from the declarations. Implementation
+registration retrieves each member's accessors through
+`binding.world.getAttributeBinding(member, owner)`; `RealmBinding` neither stores
+nor receives that map. Invocation receives the receiver's binding context,
+including its existing environment; preparation needs no realm or new environment.
+`AttributeBinding<Env, Receiver>` types the implementation receiver inside supplied
+accessors. An integration selects accessors for its known owner implementations,
+then erases that narrower receiver type at its entry to the generic registry.
+HTML checks these internal declaration contracts in tests, including every mixin
+includer, and selects attribute storage during preparation rather than invocation.
+Ordinary binding still validates and unwraps the receiver at invocation.
+Unclaimed annotations retain ordinary binding. Browlet supplies HTML reflection
+through this seam; Web IDL itself does not import HTML or interpret `[Reflect]`.
+Operation and reaction-boundary wrapping are not implemented by this hook yet.
+
+Core's `reflect()`, `reflectSetter()`, `reflectURL()`, `reflectNonNegative()`,
+`reflectPositive()`, and `reflectPositiveWithFallback()` helpers record the
+corresponding HTML annotations. Their optional `name` selects the content
+attribute. They share one `ReflectionOptions` type with optional `name`, `default`,
+and `range`. The HTML declaration audit checks which options apply to each
+reflection behavior and IDL member type. For example,
+`reflect({ default: 1, range: [1, 1000] })` produces one declaration record.
+The serializer emits `[Reflect, ReflectDefault=1, ReflectRange=(1, 1000)]`
+without modifying that record. There are no separate default/range annotation
+types or binding lookups. Numeric literals retain their spelling; use
+`decimal('1.0')` for an integral double default. Use `xattr(reflect())` when no
+options are needed. The helpers produce records with `kind: 'reflection'`;
+generic annotation strings remain serializable but do not enable HTML reflection.
+
+The `reflectEnumerated()` and `reflectTokens()` helpers record annotation
+metadata without preparing accessors. Both definitions are `unknown` to Web IDL;
+HTML's declaration tests validate them before their bindings are exercised.
+All DOMTokenList reflection uses `[ReflectTokens]` with a shared `TokenListAttribute`
+definition containing the content-attribute name and supported tokens. Internal
+callers use that same definition. A null supported-token set makes `supports()`
+throw, while an empty set makes it return false. Neither restricts the tokens that
+can be stored. IDL serialization
+emits `[ReflectEnumerated]` or `[ReflectTokens]`, omitting both metadata payloads.
+
+All helpers return one `ReflectionExtendedAttribute` record with a required
+reflection name and optional metadata. The HTML hook and serializer narrow by
+`kind` and read those fields directly. The owning subsystem's declaration tests
+check option combinations and required metadata; preparation does not repeat
+their validation.
+
 Callable arguments and dictionary members retain their assembled types, including
 applicable conversion attributes such as `[Clamp]`, with names, defaults, and callback
 policies directly on the compiled records. Callables also retain argument
@@ -471,6 +523,13 @@ Converter methods take the value; type and ownership come from the receiver.
 `SequenceConverter.jsToIDLIterable()` also accepts the iterator method already
 read by overload or union resolution. `FrozenArrayConverter` reuses iteration
 and element conversion, then projects and freezes the converted entries.
+`BindingContext.createFrozenArray(values, type)` exposes the same projection for
+bindings that must retain array identity, such as HTML element-array reflection.
+It accepts only an assembled `IDLFrozenArrayType`; declaration types are resolved
+before binding preparation.
+The binding supplies implementation entries and caches the returned platform
+array; ordinary FrozenArray output conversion preserves it. No HTML-specific
+cache or attribute behavior belongs in the generic converter.
 Enumeration membership uses a retained set of values.
 Returned candidate and inheritance lists are shared and must not be modified.
 Assembled interfaces collect legacy factory names and lazily prepare their overload

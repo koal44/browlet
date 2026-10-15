@@ -13,8 +13,9 @@ import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
 import type { EventImpl } from '../events/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
-import { DOMTokenListImpl } from '../token-list';
+import { DOMTokenListImpl, type TokenListAttribute } from '../token-list';
 import type { IntersectionObserverRegistration } from '../intersection-observer/index';
+import { ElementAssociations, type ElementConstructor } from '../../html/reflection/index';
 import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
@@ -24,7 +25,8 @@ import type { DocumentImpl } from './document';
 import type { TextImpl } from './text';
 import type { ShadowRootImpl, ShadowRootMode, SlotAssignmentMode } from './shadow-root';
 import {
-  isValidCustomElementName, type CustomElementRegistryImpl, type CustomElementCallbackArguments,
+  isValidCustomElementName, type CustomElementRegistryImpl,
+  type CustomElementCallbackArguments,
 } from './html/custom-elements/index';
 import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import {
@@ -39,6 +41,8 @@ import {
 import { ParentNodeMixin, parentNodeIDL } from './parent-node';
 import { SlottableMixin, slottableIDL } from './slottable';
 import type { HTMLSlotElementImpl } from './html/index';
+
+const classAttribute: TokenListAttribute = { name: 'class', supportedTokens: null };
 
 /** Element names, attributes, child navigation, and composed style behavior. */
 // https://dom.spec.whatwg.org/#interface-element
@@ -70,14 +74,19 @@ export class ElementImpl extends NodeImpl {
   /** Intersection observers tracking this element, with independent history for each observer. */
   // https://w3c.github.io/IntersectionObserver/#element
   registeredIntersectionObservers: IntersectionObserverRegistration[] = [];
+  /** Separate content-attribute storage for ElementInternals, allocated only when used. */
+  // https://html.spec.whatwg.org/multipage/custom-elements.html#internal-content-attribute-map
+  internalContentAttributeMap: Map<string, string> | undefined;
 
   /** Ordered attribute storage; only this element's mutation algorithms modify it. */
   // https://dom.spec.whatwg.org/#concept-element-attribute
   #attributeList: AttrImpl[] = [];
   /** Child-node mutation behavior shared with text and doctype nodes. */
   #childNodeMixin = new ChildNodeMixin(this);
-  /** Stable token view, allocated when classList is first requested. */
-  #classList: DOMTokenListImpl | undefined;
+  /** Stable token views, allocated only for attributes whose lists have been requested. */
+  #attributeTokenLists: Map<string, DOMTokenListImpl> | undefined;
+  /** Explicit weak element associations shared by this element's reflected reference attributes. */
+  #elementAssociations: ElementAssociations | undefined;
   /** Lazily created inline style declaration. */
   #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
   /** Sheet loading and ownership for elements that provide a style sheet. */
@@ -125,7 +134,44 @@ export class ElementImpl extends NodeImpl {
   /** Stable live token set for the null-namespace class attribute. */
   // https://dom.spec.whatwg.org/#dom-element-classlist
   get classList(): DOMTokenListImpl {
-    return this.#classList ??= new DOMTokenListImpl(this, 'class');
+    return this.getAttributeTokenList(classAttribute);
+  }
+
+  /** Obtain the stable token list associated with a null-namespace attribute. */
+  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflect
+  getAttributeTokenList(attribute: TokenListAttribute): DOMTokenListImpl {
+    const { name, supportedTokens } = attribute;
+    const lists = this.#attributeTokenLists ??= new Map<string, DOMTokenListImpl>();
+    let list = lists.get(name);
+    if (!list) {
+      list = new DOMTokenListImpl(this, name, supportedTokens);
+      lists.set(name, list);
+    }
+    return list;
+  }
+
+  /** Read this element's associated target or target list, narrowed to the supplied implementation constructor. */
+  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-element
+  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-elements
+  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructor: ElementConstructor<T>, isArray: false): T | null;
+  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructor: ElementConstructor<T>, isArray: true): T[] | null;
+  getAssociatedElements<T extends ElementImpl>(
+    name: string, targetConstructor: ElementConstructor<T>, isArray: boolean,
+  ): T | T[] | null {
+    const associations = this.#elementAssociations ??= new ElementAssociations();
+    return associations.get(this, name, this.getAttributeNS(null, name), targetConstructor, isArray);
+  }
+
+  /** Store a converted element or list and synchronize the content attribute; null clears either assignment. */
+  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflect
+  setAssociatedElements(name: string, value: ElementImpl | ElementImpl[] | null): void {
+    if (value === null) {
+      this.#elementAssociations?.clear(name);
+      this.removeAttributeNS(null, name);
+      return;
+    }
+    this.setAttributeValue(name, '');
+    (this.#elementAssociations ??= new ElementAssociations()).set(name, value);
   }
 
   /** Read the live list without bypassing attribute mutation steps. */
@@ -333,8 +379,9 @@ export class ElementImpl extends NodeImpl {
     localName: string, oldValue: string | null, newValue: string | null,
     namespace: string | null,
   ): void {
-    this.#classList?.attributeChanged(localName, oldValue, newValue, namespace);
     if (namespace !== null) return;
+    this.#attributeTokenLists?.get(localName)?.updateTokens(newValue);
+    this.#elementAssociations?.clear(localName);
     if (localName === 'slot') this.#slottableMixin.attributeChanged(this, oldValue, newValue);
     if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
     this.linkStyleMixin?.attributeChanged(localName);

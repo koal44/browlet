@@ -1,10 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineIncludes, defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
+import { defineIncludes, defineInterface, impl, reference, reflectTokens, roAttr, xattr } from '../../../../../web-idl/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
 import { LinkStyleMixin } from '../../../../style/index';
-import { getBlockingTokens, possibleBlockingTokens } from '../attributes/index';
-import { DOMTokenListImpl } from '../../../token-list';
+import { getBlockingTokens, blockingAttribute } from '../attributes/index';
 import type { BrowletEnvironment } from '../../../../environment';
 
 import { defineElementInterface, type ElementCreationContext } from '../../element';
@@ -20,8 +19,6 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
     children: true,
   };
 
-  /** Stable author-facing token list, created on first access. */
-  #blocking: DOMTokenListImpl | undefined;
   /** Document whose parser created this style element; adoption does not replace it. */
   #parserDocument: DocumentImpl | null = null;
 
@@ -36,21 +33,8 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
     return value instanceof HTMLStyleElementImpl;
   }
 
-  /** Live, case-preserving token list for the blocking content attribute. */
-  // https://html.spec.whatwg.org/multipage/semantics.html#dom-style-blocking
-  get blocking(): DOMTokenListImpl {
-    return this.#blocking ??= new DOMTokenListImpl(this, 'blocking', possibleBlockingTokens);
-  }
-
   get sheet(): CSSStyleSheetImpl | null {
     return this.getStyleSheet();
-  }
-
-  override attributeChanged(
-    localName: string, oldValue: string | null, newValue: string | null, namespace: string | null,
-  ): void {
-    super.attributeChanged(localName, oldValue, newValue, namespace);
-    this.#blocking?.attributeChanged(localName, oldValue, newValue, namespace);
   }
 
   override initializeFromParser(): void {
@@ -88,7 +72,9 @@ export const htmlStyleElementIDL = defineInterface({
   exposed: 'Window',
   implementation: impl(HTMLStyleElementImpl),
   members: [
-    roAttr('blocking', reference('DOMTokenList'), xattr('SameObject', ['PutForwards', 'value'])),
+    roAttr('blocking', reference('DOMTokenList'),
+      xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
+    ),
   ],
 });
 

@@ -252,7 +252,7 @@ export const emptyDictionary = {
 // Project shorthand for Web IDL §3.3.7 [Exposed].
 export type Exposed = string | [string, ...string[]];
 
-// Project representation of the syntax forms in Web IDL §2.14 Extended attributes.
+// Project representation of Web IDL §2.14 syntax forms and attached declaration metadata.
 export type ExtendedAttribute =
   | NoArgumentsExtendedAttribute
   | ArgumentsExtendedAttribute
@@ -264,7 +264,8 @@ export type ExtendedAttribute =
   | IdentifierListExtendedAttribute
   | IntegerListExtendedAttribute
   | NamedArgumentsExtendedAttribute
-  | RawExtendedAttribute;
+  | RawExtendedAttribute
+  | ReflectionExtendedAttribute;
 
 export type NoArgumentsExtendedAttribute = {
   kind: 'no-arguments';
@@ -328,6 +329,23 @@ export type NamedArgumentsExtendedAttribute = {
 export type RawExtendedAttribute = {
   kind: 'raw';
   value: string;
+};
+
+/** HTML reflection annotations, including project notation for prose-defined behavior. */
+export type ReflectionExtendedAttribute = {
+  kind: 'reflection';
+  name: 'Reflect' | 'ReflectSetter' | 'ReflectURL' | 'ReflectNonNegative' | 'ReflectPositive'
+    | 'ReflectPositiveWithFallback' | 'ReflectEnumerated' | 'ReflectTokens';
+  /** Content-attribute name; absent names use the ASCII-lowercased IDL member name. */
+  attributeName?: string;
+  /** Numeric fallback, preserving integer/decimal syntax and spelling. */
+  default?: NumericLiteral;
+  /** Inclusive unsigned-long getter bounds, serialized as [ReflectRange]. */
+  range?: [minimum: string, maximum: string];
+  /** Opaque to Web IDL; the supplied HTML handler interprets the enumerated definition. */
+  enumerated?: unknown;
+  /** Opaque to Web IDL; HTML supplies the shared token-list attribute definition. */
+  tokenList?: unknown;
 };
 
 // Implementation identity and declaration hooks

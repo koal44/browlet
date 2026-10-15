@@ -12,7 +12,7 @@ import {
   htmlHeadElementIDL, htmlBaseElementIDL, htmlLinkElementIDL, htmlLinkElementIncludesLinkStyleIDL,
   htmlStyleElementIDL, htmlStyleElementIncludesLinkStyleIDL,
 } from './metadata/index';
-import { customElementRegistryIDL } from './custom-elements/index';
+import { customElementRegistryIDL, elementInternalsIDL } from './custom-elements/index';
 import {
   htmlImageElementIDL, htmlIFrameElementIDL, htmlMediaElementIDL, htmlAudioElementIDL, htmlVideoElementIDL,
 } from './embedded/index';
@@ -20,6 +20,7 @@ import {
 export const htmlIDLDefinitions: Definition[] = [
   htmlOrSVGOrMathMLElementIDL,
   customElementRegistryIDL,
+  elementInternalsIDL,
   htmlElementIDL,
   htmlElementIncludesElementCSSInlineStyleIDL,
   htmlElementIncludesHTMLOrSVGOrMathMLElementIDL,

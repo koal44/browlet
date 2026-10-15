@@ -40,7 +40,8 @@ export {
   iter, asyncIter, maplike, setlike, indexedGetter, namedGetter,
   reference, implementationType, nullable, union, sequence, asyncSequence, record, promise,
   frozenArray, observableArray, annotated, tsType,
-  integer, decimal, xattr,
+  integer, decimal, xattr, reflect, reflectSetter, reflectURL,
+  reflectNonNegative, reflectPositive, reflectPositiveWithFallback, reflectEnumerated, reflectTokens,
   impl, atArg, invokeWith, unwrapArg, cbDict, onError, hasExtendedAttribute,
 } from './helpers';
 
@@ -54,6 +55,7 @@ export type {
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposed, ExtendedAttribute, NamedArgumentsExtendedAttribute,
+  ReflectionExtendedAttribute,
   ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior,
 } from './types';
 

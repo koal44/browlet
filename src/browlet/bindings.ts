@@ -56,6 +56,7 @@ import {
   WindowProxyHandle, windowProxyDefinition,
 } from './browsing/window/index';
 import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
+import { htmlExtendedAttributeHooks } from './integration/web-idl/index';
 import { fileReaderIDL, objectURLIDL } from './integration/file/index';
 import { queueNodeTask } from './integration/index';
 import type { UserAgent } from './user-agent';
@@ -270,4 +271,6 @@ export const browletDefinitions = [
 ];
 
 /** Main world for composition and host API projection; implementations use their supplied environment. */
-export const browletBindingWorld = new BindingWorld<BrowletEnvironment>(browletDefinitions);
+export const browletBindingWorld = new BindingWorld<BrowletEnvironment>(browletDefinitions, {
+  extendedAttributes: htmlExtendedAttributeHooks,
+});

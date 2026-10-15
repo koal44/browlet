@@ -1,11 +1,14 @@
 import { asciiLower } from '../../../../../infra/ascii';
 
 import { splitOnAsciiWhitespace } from '../../../infra/index';
+import type { TokenListAttribute } from '../../../token-list';
 import type { ElementImpl } from '../../element';
 
 /** Tokens recognized by HTML and by a blocking attribute's DOMTokenList.supports(). */
 // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#possible-blocking-token
-export const possibleBlockingTokens: ReadonlySet<string> = new Set<BlockingToken>(['render']);
+const possibleBlockingTokens: ReadonlySet<string> = new Set<BlockingToken>(['render']);
+/** Attribute definition shared by internal token-list callers and reflected bindings. */
+export const blockingAttribute: TokenListAttribute = { name: 'blocking', supportedTokens: possibleBlockingTokens };
 
 // TODO(render blocking): Document's HTML §3.1.6 mechanism must consume the element predicates,
 // including unblocking on disconnection and on blocking-attribute changes that end eligibility.

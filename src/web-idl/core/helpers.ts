@@ -5,8 +5,9 @@ import type { InternalPromise, PromiseResult, ResultValue } from '../../infra/pr
 import type {
   AnnotatedType, AsyncSequenceType, CallbackExceptionBehavior,
   ConstantValue, DecimalLiteral, DeclarationHook, DefaultValue, ExtendedAttribute, FrozenArrayType,
-  ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, InterfaceType, NullableType, ObservableArrayType,
-  PromiseType, RecordType, ReferenceType, SequenceType, StringType, UnionType, WebIDLType,
+  ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, InterfaceType,
+  NullableType, NumericLiteral, ObservableArrayType, PromiseType, RecordType, ReferenceType,
+  ReflectionExtendedAttribute, SequenceType, StringType, UnionType, WebIDLType,
 } from './types';
 import type {
   ArgumentDefinition, AsyncIterableMember, AttributeMember, ConstantMember, ConstructorMember,
@@ -337,6 +338,55 @@ export function xattr(
   return { extendedAttributes: attributes.map(normalizeExtendedAttribute) };
 }
 
+/** Declare reflection with an optional content-attribute name, numeric default, and unsigned-long range. */
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#xattr-reflect
+export function reflect(options: ReflectionOptions = {}): ReflectionExtendedAttribute {
+  return reflectionAttribute('Reflect', options);
+}
+
+/** Reflect only writes, preserving the separately defined getter. */
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#xattr-reflectsetter
+export function reflectSetter(options: ReflectionOptions = {}): ReflectionExtendedAttribute {
+  return reflectionAttribute('ReflectSetter', options);
+}
+
+/** Declare URL reflection with an optional content-attribute name. */
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#xattr-reflecturl
+export function reflectURL(options: ReflectionOptions = {}): ReflectionExtendedAttribute {
+  return reflectionAttribute('ReflectURL', options);
+}
+
+/** Declare nonnegative signed-long reflection with an optional default. */
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#xattr-reflectnonnegative
+export function reflectNonNegative(options: ReflectionOptions = {}): ReflectionExtendedAttribute {
+  return reflectionAttribute('ReflectNonNegative', options);
+}
+
+/** Declare positive numeric reflection with an optional default. */
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#xattr-reflectpositive
+export function reflectPositive(options: ReflectionOptions = {}): ReflectionExtendedAttribute {
+  return reflectionAttribute('ReflectPositive', options);
+}
+
+/** Declare positive unsigned-long reflection that substitutes its default for out-of-range values. */
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#xattr-reflectpositivewithfallback
+export function reflectPositiveWithFallback(options: ReflectionOptions = {}): ReflectionExtendedAttribute {
+  return reflectionAttribute('ReflectPositiveWithFallback', options);
+}
+
+/** Declare reflection limited to an enumerated attribute's known canonical keywords. */
+// [ReflectEnumerated] is project notation for HTML's prose requirement, not a standard extended attribute.
+// https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#limited-to-only-known-values
+export function reflectEnumerated(enumerated: unknown): ReflectionExtendedAttribute {
+  return { kind: 'reflection', name: 'ReflectEnumerated', enumerated };
+}
+
+/** Declare DOMTokenList reflection using the consuming specification's shared attribute definition. */
+// [ReflectTokens] is project notation for HTML's DOMTokenList reflection rules.
+export function reflectTokens(tokenList: unknown): ReflectionExtendedAttribute {
+  return { kind: 'reflection', name: 'ReflectTokens', tokenList };
+}
+
 /** Check for a structured extended attribute with the supplied name. */
 export function hasExtendedAttribute(
   attributes: ExtendedAttribute[] | undefined,
@@ -502,10 +552,31 @@ type ExtendedAttributeOptions = {
   extendedAttributes: ExtendedAttribute[];
 };
 
+type ReflectionOptions = {
+  /** Content-attribute name; omitted names use the ASCII-lowercased IDL member name. */
+  name?: string;
+  /** Numeric fallback; use decimal() for an integral double default or to retain decimal spelling. */
+  default?: number | NumericLiteral;
+  /** Inclusive unsigned-long getter bounds; text preserves the IDL integer spelling. */
+  range?: [minimum: number | string, maximum: number | string];
+};
+
 type ImplementationOptions<Env = unknown, Impl extends object = object> = Omit<
   NonNullable<PrimaryInterfaceDefinition<Env, Impl>['implementation']>,
   'implClass'
 >;
+
+function reflectionAttribute(name: ReflectionExtendedAttribute['name'], options: ReflectionOptions): ReflectionExtendedAttribute {
+  return {
+    kind: 'reflection', name, attributeName: options.name,
+    default: reflectionDefault(options.default),
+    range: options.range && [String(options.range[0]), String(options.range[1])],
+  };
+}
+
+function reflectionDefault(value: number | NumericLiteral | undefined): NumericLiteral | undefined {
+  return typeof value === 'number' ? Number.isInteger(value) ? integer(value) : decimal(value) : value;
+}
 
 // Project helper: expand shorthand extended attributes into declaration records.
 function normalizeExtendedAttribute(

@@ -35,6 +35,8 @@ export const layers = [
   ['browlet/browsing/policy/trusted-types'],
   // Mutation participants retain typed nodes without loading their implementation classes.
   ['browlet/dom/ranges', 'browlet/dom/traversal', 'browlet/dom/token-list', 'browlet/dom/intersection-observer'],
+  // HTML reflection reuses DOM operations through supplied nodes, without loading their classes.
+  ['browlet/html/reflection'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance'],
   ['browlet/reporting/generate'],
@@ -45,7 +47,7 @@ export const layers = [
   // Navigation composes resource consumption with document creation and parsing.
   ['browlet/loader'],
   ['browlet/browsing/navigation'],
-  ['browlet/integration/network', 'browlet/integration/xhr'],
+  ['browlet/integration/network', 'browlet/integration/xhr', 'browlet/integration/web-idl'],
   ['browlet/integration/file'],
   ['browlet/integration'],
   ['browlet/bindings'],

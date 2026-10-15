@@ -9,11 +9,12 @@ import {
   definePartialInterfaceMixin, definePartialNamespace, defineTypedef, dictMember,
   emptyDictionary, emptySequence, frozenArray, idlType, impl, integer, iter,
   maplike, nullable, observableArray, op, staticOp, promise, roAttr, record,
-  reference, sequence, setlike, stringifier, undefinedDefault, union, xattr,
+  reference, reflect, reflectSetter, reflectURL, reflectNonNegative, reflectPositive, reflectPositiveWithFallback,
+  reflectEnumerated, reflectTokens, sequence, setlike, stringifier, undefinedDefault, union, xattr,
 } from '../../../src/web-idl/core/index';
 import {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute,
-  serializeType,
+  serializeMember, serializeType,
 } from '../../../src/web-idl/core/index';
 
 describe('Web IDL declarations and serialization', () => {
@@ -245,6 +246,56 @@ dictionary AddEventListenerOptions : EventListenerOptions {
       'ObservableArray<long>',
       '[Clamp] long',
     ]);
+  });
+
+  it('serializes nested reflection modifiers as separate IDL annotations without changing the declaration', () => {
+    const reflection = reflect({ name: 'data-count', default: 0, range: [0, 1000] });
+    const member = attr('count', idlType.unsignedLong, xattr('CEReactions', reflection));
+    expect(serializeMember(member))
+      .toBe('[CEReactions, Reflect="data-count", ReflectDefault=0, ReflectRange=(0, 1000)] attribute unsigned long count;');
+    expect(member.extendedAttributes).toHaveLength(2);
+    expect(member.extendedAttributes?.[1]).toBe(reflection);
+    expect(reflection.default).toEqual(integer(0));
+    expect(reflection.range).toEqual(['0', '1000']);
+  });
+
+  it('serializes reflection variants, renamed attributes, and retained numeric literal spelling', () => {
+    expect([
+      reflect(), reflect({ default: 1 }), reflect({ range: [0, 8] }),
+      reflectSetter(), reflectSetter({ name: 'data-index' }),
+      reflectURL(), reflectURL({ name: 'href' }),
+      reflectNonNegative({ default: -1 }),
+      reflectPositive({ default: decimal('1.0') }),
+      reflectPositiveWithFallback({ default: 20 }),
+      reflect({ default: integer('0x1'), range: ['0x0', '0x8'] }),
+    ].map((reflection) => serializeExtendedAttribute(reflection))).toEqual([
+      'Reflect', 'Reflect, ReflectDefault=1', 'Reflect, ReflectRange=(0, 8)',
+      'ReflectSetter', 'ReflectSetter="data-index"',
+      'ReflectURL', 'ReflectURL="href"',
+      'ReflectNonNegative, ReflectDefault=-1',
+      'ReflectPositive, ReflectDefault=1.0',
+      'ReflectPositiveWithFallback, ReflectDefault=20',
+      'Reflect, ReflectDefault=0x1, ReflectRange=(0x0, 0x8)',
+    ]);
+  });
+
+  it('retains opaque reflection metadata without interpreting or serializing it', () => {
+    const enumerated = { owner: 'HTML' };
+    const annotation = reflectEnumerated(enumerated);
+    const member = attr('loading', idlType.DOMString, xattr('CEReactions', annotation));
+    expect(annotation.enumerated).toBe(enumerated);
+    expect(member.extendedAttributes?.[1]).toBe(annotation);
+    expect(member.get).toBeUndefined();
+    expect(member.set).toBeUndefined();
+    expect(serializeMember(member)).toBe('[CEReactions, ReflectEnumerated] attribute DOMString loading;');
+
+    const tokenList = { name: 'tokens', supportedTokens: new Set(['render']) };
+    const tokens = reflectTokens(tokenList);
+    expect(tokens.tokenList).toBe(tokenList);
+    expect(serializeMember(roAttr('blocking', reference('DOMTokenList'), xattr(tokens))))
+      .toBe('[ReflectTokens] readonly attribute DOMTokenList blocking;');
+    expect(serializeMember(roAttr('tokens', reference('DOMTokenList'), xattr(reflectTokens({ name: 'tokens', supportedTokens: null })))))
+      .toBe('[ReflectTokens] readonly attribute DOMTokenList tokens;');
   });
 
   it('preserves arguments, dictionary defaults, and extended attribute forms', () => {

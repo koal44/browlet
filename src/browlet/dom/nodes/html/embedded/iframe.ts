@@ -1,7 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
+import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
-import { loadingAttribute, type LoadingState } from '../attributes/index';
+import { loadingAttribute } from '../attributes/index';
 
 import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
@@ -19,22 +19,12 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
     return value instanceof HTMLIFrameElementImpl;
   }
 
-  /** Canonical loading keyword; assignment preserves the supplied attribute text. */
-  // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#dom-iframe-loading
-  get loading(): LoadingState {
-    return loadingAttribute.getState(this.getAttributeNS(null, 'loading'))!;
-  }
-
-  set loading(value: string) {
-    this.setAttributeValue('loading', value);
-  }
-
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#will-lazy-load-element-steps
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-n-noscript
   willLazyLoad(): boolean {
     if (!this.env.isScriptingEnabled() || this.nodeDocument.browsingContext === null) return false;
-    return this.loading === 'lazy';
+    return loadingAttribute.getState(this.getAttributeNS(null, 'loading')) === 'lazy';
   }
 
   override attributeChanged(
@@ -61,7 +51,7 @@ export const htmlIFrameElementIDL = defineInterface({
   implementation: impl(HTMLIFrameElementImpl),
   members: [
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
-    attr('loading', idlType.DOMString, xattr('CEReactions')),
+    attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
   ],
 });
 

@@ -2,7 +2,7 @@ import { HTML_NAMESPACE } from '../../../../infra/index';
 import { WeakOrderedSet } from '../../../../infra/collections';
 import {
   arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl,
-  op, reference, sequence, union, xattr,
+  op, reference, reflect, sequence, union, xattr,
 } from '../../../../web-idl/index';
 
 import { defineElementInterface, type ElementImpl } from '../element';
@@ -21,15 +21,6 @@ export class HTMLSlotElementImpl extends HTMLElementImpl {
   /** Explicit assignments preserve order without retaining detached nodes. */
   // https://html.spec.whatwg.org/multipage/scripting.html#slot-manually-assigned-nodes
   manuallyAssignedNodes = new WeakOrderedSet<ElementImpl | TextImpl>();
-
-  /** Reflect the slot name through the shared attribute mutation path. */
-  get name(): string {
-    return this.getAttributeNS(null, 'name') ?? '';
-  }
-
-  set name(value: string) {
-    this.setAttributeValue('name', value);
-  }
 
   /** Return current assignments, optionally flattening nested slots and fallback children. */
   // https://html.spec.whatwg.org/multipage/scripting.html#dom-slot-assignednodes
@@ -164,7 +155,7 @@ export const htmlSlotElementIDL = defineInterface({
   exposed: 'Window',
   implementation: impl(HTMLSlotElementImpl),
   members: [
-    attr('name', idlType.DOMString, xattr('CEReactions', 'Reflect')),
+    attr('name', idlType.DOMString, xattr('CEReactions', reflect())),
     op('assignedNodes', sequence(reference('Node')),
       [arg('options', reference('AssignedNodesOptions'), { optional: true, default: emptyDictionary })],
     ),
