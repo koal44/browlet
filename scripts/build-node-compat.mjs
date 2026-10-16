@@ -23,7 +23,10 @@ try {
 
   const addon = resolve(root, 'node-compat/addon');
   const build = target.build;
-  const sources = ['addon.cc', 'array-buffer.cc', 'vm.cc', 'property-delegate.cc', 'host-hooks.cc'].map(name => resolve(addon, name));
+  const sources = [
+    'addon.cc', 'array-buffer.cc', 'host-hooks.cc',
+    'iterators.cc', 'promise.cc', 'property-delegate.cc', 'realm.cc', 'vm.cc',
+  ].map(name => resolve(addon, name));
   const isolateHeader = target.includes.map(path => resolve(path, 'v8-isolate.h')).find(existsSync);
   const api = readFileSync(isolateHeader, 'utf8');
   const hostHooks = ['SetPromiseCaptureHook', 'SetPromiseCallHook', 'SetPromiseJobEnqueueHook',

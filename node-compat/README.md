@@ -16,9 +16,18 @@ the observable constraints of each runtime.
 
 | Area | Implementation and evidence |
 | --- | --- |
-| Contexts, globals, and microtask queues | [vm.cc](addon/vm.cc), [property-delegate.cc](addon/property-delegate.cc); [queue and Promise tests](test/capabilities.test.cjs), [browser global tests](../test/browlet/browsing/native-global.test.ts) |
-| Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
-| Native value inspection and iteration | [Iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
+| Contexts, globals, and microtask queues | [vm.cc](addon/vm.cc), [JavaScript adapters](addon/vm.cjs); [queue tests](test/capabilities.test.cjs), [browser global tests](../test/browlet/browsing/native-global.test.ts) |
+| Realm identity and lookup | [realm.cc](addon/realm.cc); [realm tests](test/capabilities.test.cjs) |
+| Promise observation | [promise.cc](addon/promise.cc); [Promise tests](test/capabilities.test.cjs) |
+| Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc), [JavaScript adapter](addon/host-hooks.cjs); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
+| Native property interception | [property-delegate.cc](addon/property-delegate.cc), [JavaScript adapters](addon/property-delegate.cjs); [global property tests](test/capabilities.test.cjs) |
+| Native value inspection and iteration | [iterators.cc](addon/iterators.cc), [array-buffer.cc](addon/array-buffer.cc); [iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
+
+[addon.cc](addon/addon.cc) registers the native modules;
+[index.cjs](addon/index.cjs) loads the binary and assembles the JavaScript API.
+Context and queue handles retain their shared lifetime owner in `vm.cc`.
+Factories that allocate in a context use `GetContext()` with the opaque callback
+data returned by `InitializeVm()`; they do not access the handle's stored state.
 
 The [standalone suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
@@ -190,6 +199,13 @@ Addon changes also need the native suite on each supported base:
 node scripts/with-node.mjs --base custom --runtime compat node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
 ```
 
-Capability-gated Vitest tests use `itPassesWith(...)` to retain required assertions
-as approved expected failures on unsupported paths; unexpected passes require review.
+Capability-dependent tests use `itPassesWith(...)` from
+[`test/test-runtime.ts`](../test/test-runtime.ts), or its small `node:test`
+counterpart in [`test/support/test-runtime.cjs`](test/support/test-runtime.cjs).
+Both execute the required assertions on unsupported paths as approved expected
+failures; unexpected passes fail the run and require review. The native helper
+labels these cases `[expected failure]` because `node:test` has no strict
+expected-failure mode. Do not use capability-based skips or local replacements
+for this policy.
+
 Ordinary asynchronous completion remains required on every backend.

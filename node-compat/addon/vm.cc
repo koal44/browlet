@@ -1,6 +1,6 @@
 #include <node.h>
 #include "vm.h"
-#include "host-hooks.h"
+#include "realm.h"
 #include "property-delegate.h"
 
 #include <memory>
@@ -280,17 +280,12 @@ void Detach(const FunctionCallbackInfo<Value>& args) {
 
 void Evaluate(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
-  auto handle = Unwrap<ContextHandle>(isolate, args[1], Data(args)->context_key);
-  if (!handle) return;
-  if (handle->state != ContextHandle::kAttached || handle->context.IsEmpty()) {
-    Fail(isolate, "ERR_CONTEXT_NOT_INITIALIZED", "Context handle is detached");
-    return;
-  }
+  Local<Context> realm;
+  if (!GetContext(args, args[1]).ToLocal(&realm)) return;
   if (!args[0]->IsString() || !args[2]->IsString() || !args[3]->IsInt32()) {
     Fail(isolate, "ERR_INVALID_ARG_TYPE", "Expected source, filename and line offset");
     return;
   }
-  auto realm = handle->context.Get(isolate);
   Context::Scope scope(realm);
   ScriptOrigin origin(args[2], args[3].As<Int32>()->Value());
   Local<Script> script;
@@ -299,38 +294,6 @@ void Evaluate(const FunctionCallbackInfo<Value>& args) {
       !script->Run(realm).ToLocal(&result)) return;
   args.GetReturnValue().Set(result);
 }
-
-#ifdef NODE_COMPAT_COLLECTION_ITERATORS
-void CreateCollectionIterator(const FunctionCallbackInfo<Value>& args) {
-  auto isolate = args.GetIsolate();
-  auto handle = Unwrap<ContextHandle>(isolate, args[0], Data(args)->context_key);
-  if (!handle) return;
-  if (handle->state != ContextHandle::kAttached || handle->context.IsEmpty()) {
-    Fail(isolate, "ERR_CONTEXT_NOT_INITIALIZED", "Context handle is detached");
-    return;
-  }
-  CollectionIterator::Kind kind;
-  if (args[1]->StrictEquals(Text(isolate, "map"))) {
-    kind = CollectionIterator::Kind::kMap;
-  } else if (args[1]->StrictEquals(Text(isolate, "set"))) {
-    kind = CollectionIterator::Kind::kSet;
-  } else {
-    Fail(isolate, "ERR_INVALID_ARG_VALUE", "Iterator kind must be map or set");
-    return;
-  }
-  if (!args[2]->IsFunction()) {
-    Fail(isolate, "ERR_INVALID_ARG_TYPE", "Iterator steps must be a function");
-    return;
-  }
-  auto realm = handle->context.Get(isolate);
-  Context::Scope scope(realm);
-  Local<Object> iterator;
-  if (CollectionIterator::New(realm, kind, args[2].As<Function>())
-          .ToLocal(&iterator)) {
-    args.GetReturnValue().Set(iterator);
-  }
-}
-#endif
 
 void IsContext(const FunctionCallbackInfo<Value>& args) {
   auto isolate = args.GetIsolate();
@@ -350,7 +313,8 @@ void IsContext(const FunctionCallbackInfo<Value>& args) {
 
 }  // namespace
 
-void InitializeVm(v8::Local<v8::Object> exports, v8::Local<v8::Context> context) {
+v8::Local<v8::External> InitializeVm(v8::Local<v8::Object> exports,
+                                   v8::Local<v8::Context> context) {
   using namespace v8;
   auto isolate = Isolate::GetCurrent();
   auto data = new AddonData{node::GetCurrentEnvironment(context)};
@@ -381,9 +345,6 @@ void InitializeVm(v8::Local<v8::Object> exports, v8::Local<v8::Context> context)
   const struct { const char* name; FunctionCallback callback; } methods[] = {
     {"createMicrotaskQueue", CreateQueue},
     {"createContextHandle", CreateContext},
-#ifdef NODE_COMPAT_COLLECTION_ITERATORS
-    {"createCollectionIterator", CreateCollectionIterator},
-#endif
     {"evaluate", Evaluate},
     {"isContext", IsContext},
     {"setPropertyDelegate", SetPropertyDelegate},
@@ -391,8 +352,21 @@ void InitializeVm(v8::Local<v8::Object> exports, v8::Local<v8::Context> context)
   for (const auto& method : methods) {
     Local<Function> function;
     if (!Function::New(context, method.callback, external).ToLocal(&function) ||
-        exports->Set(context, Text(isolate, method.name), function).IsNothing()) return;
+        exports->Set(context, Text(isolate, method.name), function).IsNothing()) return {};
   }
+  return external;
+}
+
+v8::MaybeLocal<v8::Context> GetContext(
+    const v8::FunctionCallbackInfo<v8::Value>& args, v8::Local<v8::Value> value) {
+  auto isolate = args.GetIsolate();
+  auto handle = Unwrap<ContextHandle>(isolate, value, Data(args)->context_key);
+  if (!handle) return {};
+  if (handle->state != ContextHandle::kAttached || handle->context.IsEmpty()) {
+    Fail(isolate, "ERR_CONTEXT_NOT_INITIALIZED", "Context handle is detached");
+    return {};
+  }
+  return handle->context.Get(isolate);
 }
 
 }  // namespace node_compat

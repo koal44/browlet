@@ -3,6 +3,9 @@
 
 #include <v8.h>
 
+// Run Web IDL property algorithms on native globals and prototype layers while
+// keeping their engine identity. V8 interceptors provide the property operations
+// without an outer JavaScript Proxy.
 namespace node_compat {
 void ConfigurePropertyDelegate(v8::Isolate* isolate, v8::Local<v8::ObjectTemplate> object,
                                bool global = false);

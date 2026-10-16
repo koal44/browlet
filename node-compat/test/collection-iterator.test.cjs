@@ -1,16 +1,12 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
 const { inspect } = require('node:util');
 const compat = require('../addon/index.cjs');
-const options = {
-  skip: typeof compat.createCollectionIterator !== 'function' &&
-    'This engine does not expose CollectionIterator::New',
-};
+const { itPassesWith } = require('./support/test-runtime.cjs');
 
 for (const kind of ['map', 'set']) {
-  test(`${kind} callback iterator uses the supplied context and native next`, options, () => {
+  itPassesWith('collectionIterators')(`${kind} callback iterator uses the supplied context and native next`, () => {
     const first = compat.createContextHandle();
     const second = compat.createContextHandle();
     const expression = kind === 'map'
@@ -41,7 +37,7 @@ for (const kind of ['map', 'set']) {
   });
 }
 
-test('callback iterator creation rejects invalid inputs and detached contexts', options, () => {
+itPassesWith('collectionIterators')('callback iterator creation rejects invalid inputs and detached contexts', () => {
   const realm = compat.createContextHandle();
   const next = () => ({ done: true });
   assert.throws(() => compat.createCollectionIterator({}, 'map', next), {

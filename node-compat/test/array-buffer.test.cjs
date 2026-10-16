@@ -1,13 +1,10 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
 const compat = require('../addon/index.cjs');
+const { itPassesWith } = require('./support/test-runtime.cjs');
 
-test('length tracking is queried without touching a view or its backing storage', {
-  skip: typeof compat.isLengthTrackingArrayBufferView !== 'function' &&
-    'This engine does not expose ArrayBufferView::IsLengthTracking',
-}, () => {
+itPassesWith('lengthTracking')('length tracking is queried without touching a view or its backing storage', () => {
   const query = compat.isLengthTrackingArrayBufferView;
   const realm = compat.createContextHandle();
   const { buffer, shared, fixed, tracking } = compat.runInContext(`(() => {

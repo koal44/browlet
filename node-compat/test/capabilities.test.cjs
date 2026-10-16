@@ -9,12 +9,10 @@ const { Worker } = require('node:worker_threads');
 const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
 const { assertCollected } = require('./support/gc.cjs');
+const { itPassesWith } = require('./support/test-runtime.cjs');
 
-test('native Promise observation bypasses author properties and selects the observer queue', {
-  todo: Number(process.versions.node.split('.')[0]) < 26
-    ? 'Node 24 V8 Promise::Then still reads constructor/@@species'
-    : false,
-}, () => {
+// Node 24 V8 Promise::Then still reads constructor/@@species.
+itPassesWith('v26+')('native Promise observation bypasses author properties and selects the observer queue', () => {
   const queue = compat.createMicrotaskQueue();
   const realm = compat.createContextHandle({ microtaskQueue: queue });
   const anchor = compat.runInContext('Promise', realm);

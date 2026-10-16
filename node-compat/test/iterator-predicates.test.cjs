@@ -1,9 +1,9 @@
 'use strict';
 
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
 const vm = require('node:vm');
 const compat = require('../addon/index.cjs');
+const { itPassesWith } = require('./support/test-runtime.cjs');
 
 const cases = [
   ['Array', 'isArrayIterator', '[1, 2].values()', 1],
@@ -12,9 +12,7 @@ const cases = [
 ];
 
 for (const [name, method, source, firstValue] of cases) {
-  test(`${name} iterator predicate reads the native brand without author code`, {
-    skip: !compat[method] && `This engine does not expose ${method}`,
-  }, () => {
+  itPassesWith('iteratorPredicates')(`${name} iterator predicate reads the native brand without author code`, () => {
     const query = compat[method];
     const fail = () => { throw new Error('Author code ran'); };
     for (const iterator of [vm.runInThisContext(source), vm.runInNewContext(source)]) {
@@ -56,9 +54,7 @@ for (const [name, method, source, firstValue] of cases) {
   });
 }
 
-test('Array iterator predicate includes keys, values, and entries of arrays and typed arrays', {
-  skip: !compat.isArrayIterator && 'This engine does not expose isArrayIterator',
-}, () => {
+itPassesWith('iteratorPredicates')('Array iterator predicate includes keys, values, and entries of arrays and typed arrays', () => {
   for (const collection of [[1, 2], new Uint8Array([1, 2])]) {
     for (const method of ['keys', 'values', 'entries']) {
       assert.equal(compat.isArrayIterator(collection[method]()), true);
