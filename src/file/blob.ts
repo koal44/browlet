@@ -209,16 +209,16 @@ export const blobSerialSteps = {
         );
       }
     }
-    serialized.set('SnapshotState', state.snapshotState);
-    serialized.set('ByteSequence', data);
+    serialized.fields.SnapshotState = state.snapshotState;
+    serialized.fields.ByteSequence = data;
     // Preserve the MIME type, which the draft's listed record fields omit.
-    serialized.set('Type', state.type);
+    serialized.fields.Type = state.type;
   },
   deserializationSteps(serialized, value) {
     value.setSerializationState({
-      data: serialized.get('ByteSequence'),
-      snapshotState: serialized.get('SnapshotState'),
-      type: serialized.get('Type'),
+      data: serialized.fields.ByteSequence,
+      snapshotState: serialized.fields.SnapshotState,
+      type: serialized.fields.Type,
     });
   },
 } satisfies SerialSteps<BlobImpl, BlobSerializedFields>;

@@ -1,80 +1,88 @@
-import type { BufferViewTypeName, StructuredDataRecord } from '../../../web-idl/index';
+import { InternalError } from '../../../infra/internal-error';
+import type { BufferViewTypeName, StructuredData } from '../../../web-idl/index';
 
-export function createStructuredDataRecord(): StructuredDataRecord {
-  return new Map();
-}
+import type { AgentCluster } from '../agents';
+import type { BrowletEnvironment } from '../../environment';
 
+/** Serialized graph node; a null cluster means the value is unrestricted. */
 export type SerializedRecord =
-  | PrimitiveSerializedRecord
-  | BoxedPrimitiveSerializedRecord
-  | DateSerializedRecord
-  | RegExpSerializedRecord
-  | ArrayBufferSerializedRecord
-  | SharedArrayBufferSerializedRecord
-  | ArrayBufferViewSerializedRecord
-  | MapSerializedRecord
-  | SetSerializedRecord
-  | ErrorSerializedRecord
-  | ArraySerializedRecord
-  | ObjectSerializedRecord
-  | PlatformObjectSerializedRecord
-  | TransferPlaceholderSerializedRecord;
+  | SerializedPrimitive
+  | SerializedBoxedPrimitive
+  | SerializedDate
+  | SerializedRegExp
+  | SerializedArrayBuffer
+  | SerializedSharedArrayBuffer
+  | SerializedArrayBufferView
+  | SerializedMap
+  | SerializedSet
+  | SerializedError
+  | SerializedArray
+  | SerializedObject
+  | SerializedPlatformObject
+  | SerializedTransferPlaceholder;
 
 // Stamped instances use their implementation identity, including transfer placeholders.
 export type StructuredSerializeMemory = Map<unknown, SerializedRecord>;
 export type StructuredDeserializeMemory = Map<SerializedRecord, unknown>;
 
-export type PrimitiveSerializedRecord = {
+export type SerializedPrimitive = {
   type: 'primitive';
   value: undefined | null | boolean | number | bigint | string;
+  cluster: null;
 };
 
-export type BoxedPrimitiveSerializedRecord =
-  | { type: 'Boolean'; value: boolean; }
-  | { type: 'Number'; value: number; }
-  | { type: 'BigInt'; value: bigint; }
-  | { type: 'String'; value: string; };
+export type SerializedBoxedPrimitive =
+  | { type: 'Boolean'; value: boolean; cluster: AgentCluster | null; }
+  | { type: 'Number'; value: number; cluster: AgentCluster | null; }
+  | { type: 'BigInt'; value: bigint; cluster: AgentCluster | null; }
+  | { type: 'String'; value: string; cluster: AgentCluster | null; };
 
-export type DateSerializedRecord = {
+export type SerializedDate = {
   type: 'Date';
   value: number;
+  cluster: AgentCluster | null;
 };
 
-export type RegExpSerializedRecord = {
+export type SerializedRegExp = {
   type: 'RegExp';
   source: string;
   flags: string;
+  cluster: AgentCluster | null;
 };
 
-export type ArrayBufferSerializedRecord = {
+export type SerializedArrayBuffer = {
   type: 'ArrayBuffer' | 'ResizableArrayBuffer';
   bytes: Uint8Array;
   byteLength: number;
+  /** Present only for resizable buffers. */
   maxByteLength?: number;
+  cluster: AgentCluster | null;
 };
 
-export type SharedArrayBufferSerializedRecord = {
+export type SerializedSharedArrayBuffer = {
   type: 'SharedArrayBuffer' | 'GrowableSharedArrayBuffer';
   /** Host token for the inaccessible shared [[ArrayBufferData]] block. */
   buffer: SharedArrayBuffer;
   byteLength: number;
+  /** Present only for growable buffers. */
   maxByteLength?: number;
-  agentCluster: object;
+  cluster: AgentCluster | null;
 };
 
-export type ArrayBufferViewSerializedRecord = {
+export type SerializedArrayBufferView = {
   type: 'ArrayBufferView';
   constructor: BufferViewTypeName;
-  buffer: ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord |
-    TransferPlaceholderSerializedRecord;
+  buffer: SerializedArrayBuffer | SerializedSharedArrayBuffer | SerializedTransferPlaceholder;
   byteLength: number | 'auto';
   byteOffset: number;
   arrayLength?: number | 'auto';
+  cluster: AgentCluster | null;
 };
 
-export type MapSerializedRecord = {
+export type SerializedMap = {
   type: 'Map';
   entries: SerializedMapEntry[];
+  cluster: AgentCluster | null;
 };
 
 export type SerializedMapEntry = {
@@ -82,17 +90,19 @@ export type SerializedMapEntry = {
   value: SerializedRecord;
 };
 
-export type SetSerializedRecord = {
+export type SerializedSet = {
   type: 'Set';
   entries: SerializedRecord[];
+  cluster: AgentCluster | null;
 };
 
-export type ErrorSerializedRecord = {
+export type SerializedError = {
   type: 'Error';
   name: SerializedErrorName;
   message: string | undefined;
   stack: string;
   cause?: SerializedRecord;
+  cluster: AgentCluster | null;
 };
 
 export type SerializedErrorName = typeof serializedErrorNames[number];
@@ -103,15 +113,17 @@ export function isSerializedErrorName(
   return serializedErrorNames.some((name) => name === value);
 }
 
-export type ArraySerializedRecord = {
+export type SerializedArray = {
   type: 'Array';
   length: number;
   properties: SerializedProperty[];
+  cluster: AgentCluster | null;
 };
 
-export type ObjectSerializedRecord = {
+export type SerializedObject = {
   type: 'Object';
   properties: SerializedProperty[];
+  cluster: AgentCluster | null;
 };
 
 export type SerializedProperty = {
@@ -119,15 +131,17 @@ export type SerializedProperty = {
   value: SerializedRecord;
 };
 
-export type PlatformObjectSerializedRecord = {
+export type SerializedPlatformObject = {
   type: 'platform-object';
   interfaceName: string;
-  fields: StructuredDataRecord;
+  data: StructuredData;
+  cluster: AgentCluster | null;
 };
 
-/** Graph reference whose value is supplied by §2.7.8 transfer memory. */
-export type TransferPlaceholderSerializedRecord = {
+/** Graph reference whose value is supplied by transfer memory. */
+export type SerializedTransferPlaceholder = {
   type: 'transfer-placeholder';
+  cluster: AgentCluster | null;
 };
 
 export type TransferDataHolder =
@@ -136,22 +150,27 @@ export type TransferDataHolder =
 
 export type ArrayBufferTransferDataHolder = {
   type: 'ArrayBuffer' | 'ResizableArrayBuffer';
-  placeholder: TransferPlaceholderSerializedRecord;
+  placeholder: SerializedTransferPlaceholder;
   buffer: ArrayBuffer;
   byteLength: number;
+  /** Present only for resizable buffers. */
   maxByteLength?: number;
+  cluster: AgentCluster | null;
 };
 
 export type PlatformObjectTransferDataHolder = {
   type: 'platform-object';
-  placeholder: TransferPlaceholderSerializedRecord;
+  placeholder: SerializedTransferPlaceholder;
   interfaceName: string;
-  fields: StructuredDataRecord;
+  data: StructuredData;
+  cluster: AgentCluster | null;
 };
 
 export type StructuredSerializeWithTransferResult = {
   serialized: SerializedRecord;
   transferDataHolders: TransferDataHolder[];
+  interfaceNames: Set<string>;
+  cluster: AgentCluster | null;
 };
 
 export type StructuredDeserializeWithTransferResult = {
@@ -163,3 +182,14 @@ const serializedErrorNames = [
   'Error', 'EvalError', 'RangeError', 'ReferenceError', 'SyntaxError',
   'TypeError', 'URIError',
 ] as const;
+
+// https://html.spec.whatwg.org/multipage/structured-data.html#restrict-to-the-same-agent-cluster
+export function restrictToSameAgentCluster(
+  record: { cluster: AgentCluster | null; },
+  env: BrowletEnvironment,
+): void {
+  const cluster = env.realm.agent.agentCluster;
+  // An unassociated agent cannot supply a restriction: null would mean unrestricted.
+  if (cluster === null) throw new InternalError('Realm agent has no agent cluster');
+  record.cluster = cluster;
+}

@@ -31,7 +31,7 @@ Context and queue handles retain their shared lifetime owner in `vm.cc`.
 Factories that allocate in a context use `GetContext()` with the opaque callback
 data returned by `InitializeVm()`; they do not access the handle's stored state.
 
-The [standalone suite](test/) also covers lifetime, garbage collection, and runtime selection.
+The [native addon suite](test/) also covers lifetime, garbage collection, and runtime selection.
 
 ## Contexts, globals, and optional facilities
 
@@ -230,6 +230,11 @@ Addon changes also need the native suite on each supported base:
 ```powershell
 node scripts/with-node.mjs --base custom --runtime compat node --expose-gc --experimental-vm-modules --test "node-compat/test/*.cjs"
 ```
+
+Custom Node builds compile the patched V8 engine, which the native addon tests
+exercise. V8's own `deps/v8/test/cctest` suite is separate from Node's `cctest`
+executable and uses a GN/Ninja build with `depot_tools`; Node provides
+`tools/make-v8.sh` and `tools/test-v8.bat` for that setup.
 
 Capability-dependent tests use `itPassesWith(...)` from
 [`test/test-runtime.ts`](../test/test-runtime.ts), or its small `node:test`

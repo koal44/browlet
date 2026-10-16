@@ -1,153 +1,224 @@
 import { InternalError } from '../../../infra/internal-error';
 import {
   appendMapData, appendSetData, isAnyArrayBuffer, isObject, writeErrorStack,
+  type JSBufferView,
 } from '../../../js-engine/index';
 import {
-  DOMExceptionImpl, DOMExceptionNames, type BindingContext, type PlatformRecord,
+  DOMExceptionImpl, DOMExceptionNames, type BindingContext,
 } from '../../../web-idl/index';
 
-import type { ScriptingEnvironment } from '../environment';
-import type { BrowletRealm } from '../realm';
+import type { BrowletEnvironment } from '../../environment';
 
 import type {
-  ErrorSerializedRecord, SerializedErrorName, SerializedRecord,
-  StructuredDeserializeMemory,
+  SerializedArray, SerializedArrayBuffer, SerializedArrayBufferView,
+  SerializedError, SerializedErrorName, SerializedMap, SerializedObject,
+  SerializedPlatformObject, SerializedRecord, SerializedSet, StructuredDeserializeMemory,
 } from './records';
 
-/** HTML §2.7.6, StructuredDeserialize. */
+// https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
 // BINDING_INTEGRATION: reconstruct platform objects in the destination realm.
 export function structuredDeserialize(
   serialized: SerializedRecord,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
   memory: StructuredDeserializeMemory = new Map(),
 ): unknown {
-  if (memory.has(serialized)) return memory.get(serialized);
+  return new StructuredDeserializer(ctx, memory).deserialize(serialized);
+}
 
-  let value: unknown;
-  let deep = false;
-  let platformRecord: PlatformRecord | undefined;
-  const { realm } = ctx;
+/** One target-realm graph traversal, including nested interface deserialization steps. */
+class StructuredDeserializer {
+  #ctx: BindingContext<BrowletEnvironment>;
+  #memory: StructuredDeserializeMemory;
 
-  switch (serialized.type) {
-    case 'primitive':
-      value = serialized.value;
-      break;
-    case 'Boolean':
-      value = Reflect.construct(realm.intrinsics.boolean, [serialized.value]);
-      break;
-    case 'Number':
-      value = Reflect.construct(realm.intrinsics.number, [serialized.value]);
-      break;
-    case 'BigInt':
-      value = Reflect.apply(
-        realm.intrinsics.object,
-        undefined,
-        [serialized.value],
-      );
-      break;
-    case 'String':
-      value = Reflect.construct(realm.intrinsics.string, [serialized.value]);
-      break;
-    case 'Date':
-      value = Reflect.construct(realm.intrinsics.date, [serialized.value]);
-      break;
-    case 'RegExp':
-      value = Reflect.construct(
-        realm.intrinsics.regExp,
-        [serialized.source, serialized.flags],
-      );
-      break;
-    case 'SharedArrayBuffer':
-    case 'GrowableSharedArrayBuffer':
-      if (ctx.realm.agent.agentCluster !== serialized.agentCluster) {
-        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-      }
-      value = deserializeSharedArrayBuffer(serialized.buffer, realm);
-      break;
-    case 'ArrayBuffer':
-    case 'ResizableArrayBuffer':
-      value = deserializeArrayBuffer(serialized, realm);
-      break;
-    case 'ArrayBufferView': {
-      const buffer = structuredDeserialize(
-        serialized.buffer,
-        ctx,
-        memory,
-      );
-      if (!isAnyArrayBuffer(buffer)) {
-        throw new InternalError('An ArrayBufferView record has no backing buffer');
-      }
-      const length = serialized.constructor === 'DataView'
-        ? serialized.byteLength
-        : serialized.arrayLength;
-      if (length === undefined) {
-        throw new InternalError(`${serialized.constructor} has no serialized array length`);
-      }
-      value = realm.createView(
-        serialized.constructor,
-        buffer,
-        serialized.byteOffset,
-        length === 'auto' ? undefined : length,
-      );
-      break;
-    }
-    case 'Map': {
-      const value = new realm.intrinsics.map<unknown, unknown>();
-      memory.set(serialized, value);
-      for (const entry of serialized.entries) {
-        appendMapData(
-          value,
-          structuredDeserialize(entry.key, ctx, memory),
-          structuredDeserialize(entry.value, ctx, memory),
-        );
-      }
-      return value;
-    }
-    case 'Set': {
-      const value = new realm.intrinsics.set<unknown>();
-      memory.set(serialized, value);
-      for (const entry of serialized.entries) {
-        appendSetData(value, structuredDeserialize(entry, ctx, memory));
-      }
-      return value;
-    }
-    case 'Array':
-      value = Reflect.construct(realm.intrinsics.array, [serialized.length]);
-      deep = true;
-      break;
-    case 'Object':
-      value = realm.createOrdinaryObject(realm.intrinsics.objectPrototype);
-      deep = true;
-      break;
-    case 'Error': {
-      const value = deserializeError(serialized, realm);
-      memory.set(serialized, value);
-      deserializeErrorCause(serialized, value, ctx, memory);
-      return value;
-    }
-    case 'platform-object': {
-      platformRecord = ctx.createPlatformRecord(serialized.interfaceName);
-      if (!platformRecord) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-      value = platformRecord.platformObject;
-      deep = true;
-      break;
-    }
-    case 'transfer-placeholder':
-      throw new InternalError('Transfer placeholder has no received value');
+  constructor(ctx: BindingContext<BrowletEnvironment>, memory: StructuredDeserializeMemory) {
+    this.#ctx = ctx;
+    this.#memory = memory;
   }
 
-  memory.set(serialized, value);
-  if (!deep) return value;
-  if (!isObject(value)) {
-    throw new InternalError('A deep record has no object value');
+  deserialize(serialized: SerializedRecord): unknown {
+    if (this.#memory.has(serialized)) return this.#memory.get(serialized);
+    const { realm } = this.#ctx;
+    if (serialized.cluster !== null && serialized.cluster !== realm.agent.agentCluster) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    }
+
+    let value: unknown;
+    switch (serialized.type) {
+      case 'primitive':
+        return serialized.value;
+      case 'Boolean':
+        value = Reflect.construct(realm.intrinsics.boolean, [serialized.value]);
+        break;
+      case 'Number':
+        value = Reflect.construct(realm.intrinsics.number, [serialized.value]);
+        break;
+      case 'BigInt':
+        value = Reflect.apply(realm.intrinsics.object, undefined, [serialized.value]);
+        break;
+      case 'String':
+        value = Reflect.construct(realm.intrinsics.string, [serialized.value]);
+        break;
+      case 'Date':
+        value = Reflect.construct(realm.intrinsics.date, [serialized.value]);
+        break;
+      case 'RegExp':
+        value = Reflect.construct(realm.intrinsics.regExp, [serialized.source, serialized.flags]);
+        break;
+      case 'SharedArrayBuffer':
+      case 'GrowableSharedArrayBuffer':
+        value = this.#deserializeSharedArrayBuffer(serialized.buffer);
+        break;
+      case 'ArrayBuffer':
+      case 'ResizableArrayBuffer':
+        value = this.#deserializeArrayBuffer(serialized);
+        break;
+      case 'ArrayBufferView':
+        value = this.#deserializeBufferView(serialized);
+        break;
+      case 'Map':
+        return this.#deserializeMap(serialized);
+      case 'Set':
+        return this.#deserializeSet(serialized);
+      case 'Array':
+        return this.#deserializeProperties(serialized, new realm.intrinsics.array<unknown>(serialized.length));
+      case 'Object':
+        return this.#deserializeProperties(serialized, realm.createOrdinaryObject(realm.intrinsics.objectPrototype));
+      case 'Error':
+        return this.#deserializeError(serialized);
+      case 'platform-object':
+        return this.#deserializePlatformObject(serialized);
+      case 'transfer-placeholder':
+        throw new InternalError('Transfer placeholder has no received value');
+    }
+
+    this.#memory.set(serialized, value);
+    return value;
   }
 
-  if (serialized.type === 'Array' || serialized.type === 'Object') {
-    deserializeProperties(serialized.properties, value, ctx, memory);
-  } else if (serialized.type === 'platform-object') {
-    if (!platformRecord) {
-      throw new InternalError('A platform-object record was not created');
+  // StructuredDeserialize: SharedArrayBuffer and GrowableSharedArrayBuffer branches.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer {
+    const { realm } = this.#ctx;
+    const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
+    const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
+    if (!constructor) {
+      throw new InternalError('The target realm has no SharedArrayBuffer intrinsic');
     }
+    if (!Reflect.setPrototypeOf(value, constructor.prototype)) {
+      throw new InternalError('Could not apply the target SharedArrayBuffer prototype');
+    }
+    return value;
+  }
+
+  // StructuredDeserialize: ArrayBuffer and ResizableArrayBuffer branches.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeArrayBuffer(serialized: SerializedArrayBuffer): ArrayBuffer {
+    try {
+      return this.#ctx.realm.createArrayBuffer(
+        serialized.bytes,
+        serialized.maxByteLength,
+      );
+    } catch {
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    }
+  }
+
+  // StructuredDeserialize: the ArrayBufferView branch.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeBufferView(serialized: SerializedArrayBufferView): JSBufferView {
+    const buffer = this.deserialize(serialized.buffer);
+    if (!isAnyArrayBuffer(buffer)) {
+      throw new InternalError('An ArrayBufferView record has no backing buffer');
+    }
+    const length = serialized.constructor === 'DataView'
+      ? serialized.byteLength
+      : serialized.arrayLength;
+    if (length === undefined) {
+      throw new InternalError(`${serialized.constructor} has no serialized array length`);
+    }
+    return this.#ctx.realm.createView(
+      serialized.constructor, buffer, serialized.byteOffset,
+      length === 'auto' ? undefined : length,
+    );
+  }
+
+  // StructuredDeserialize: deep deserialization of [[MapData]].
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeMap(serialized: SerializedMap): Map<unknown, unknown> {
+    const value = new this.#ctx.realm.intrinsics.map<unknown, unknown>();
+    this.#memory.set(serialized, value);
+    for (const entry of serialized.entries) {
+      appendMapData(value, this.deserialize(entry.key), this.deserialize(entry.value));
+    }
+    return value;
+  }
+
+  // StructuredDeserialize: deep deserialization of [[SetData]].
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeSet(serialized: SerializedSet): Set<unknown> {
+    const value = new this.#ctx.realm.intrinsics.set<unknown>();
+    this.#memory.set(serialized, value);
+    for (const entry of serialized.entries) {
+      appendSetData(value, this.deserialize(entry));
+    }
+    return value;
+  }
+
+  // StructuredDeserialize: enumerable own-property deserialization.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeProperties(serialized: SerializedArray | SerializedObject, value: object): object {
+    this.#memory.set(serialized, value);
+    for (const entry of serialized.properties) {
+      const status = Reflect.defineProperty(value, entry.key, {
+        configurable: true,
+        enumerable: true,
+        value: this.deserialize(entry.value),
+        writable: true,
+      });
+      if (!status) throw new InternalError(`Could not deserialize property ${entry.key}`);
+    }
+    return value;
+  }
+
+  // StructuredDeserialize: [[ErrorData]] and its accompanying data.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializeError(serialized: SerializedError): Error {
+    const constructor = this.#getErrorConstructor(serialized.name);
+    const value = new constructor(serialized.message);
+    writeErrorStack(value, serialized.stack);
+    this.#memory.set(serialized, value);
+    if (serialized.cause === undefined) return value;
+    const status = Reflect.defineProperty(value, 'cause', {
+      configurable: true,
+      enumerable: false,
+      value: this.deserialize(serialized.cause),
+      writable: true,
+    });
+    if (!status) throw new InternalError('Could not restore serialized Error cause');
+    return value;
+  }
+
+  #getErrorConstructor(name: SerializedErrorName): ErrorConstructor {
+    const { intrinsics } = this.#ctx.realm;
+    switch (name) {
+      case 'EvalError': return intrinsics.evalError;
+      case 'RangeError': return intrinsics.rangeError;
+      case 'ReferenceError': return intrinsics.referenceError;
+      case 'SyntaxError': return intrinsics.syntaxError;
+      case 'TypeError': return intrinsics.typeError;
+      case 'URIError': return intrinsics.uriError;
+      default: return intrinsics.error;
+    }
+  }
+
+  // StructuredDeserialize: serializable platform objects.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
+  #deserializePlatformObject(serialized: SerializedPlatformObject): object {
+    const platformRecord = this.#ctx.createPlatformRecord(serialized.interfaceName);
+    if (!platformRecord) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    const value = platformRecord.platformObject;
+    this.#memory.set(serialized, value);
+    if (value === undefined) throw new InternalError('A platform-object record has no platform object');
     const steps = platformRecord.assembled.serialSteps;
     if (!steps) {
       throw new InternalError(
@@ -155,10 +226,10 @@ export function structuredDeserialize(
       );
     }
     platformRecord.deserializationSteps(
-      serialized.fields,
+      serialized.data,
       {
         unwrap: (platformObject, implClass) => {
-          const implementation = ctx.unwrap(platformObject, implClass);
+          const implementation = this.#ctx.unwrap(platformObject, implClass);
           if (!implementation) {
             throw new InternalError('Deserialized value does not implement the expected interface');
           }
@@ -168,115 +239,12 @@ export function structuredDeserialize(
           if (!isSerializedRecord(subSerialized)) {
             throw new InternalError('Sub-deserialization requires a serialized record');
           }
-          return structuredDeserialize(
-            subSerialized,
-            ctx,
-            memory,
-          );
+          return this.deserialize(subSerialized);
         },
       },
       steps,
     );
-  } else {
-    throw new InternalError(`Unsupported deep record ${serialized.type}`);
-  }
-
-  return value;
-}
-
-/** HTML §2.7.6, SharedArrayBuffer and GrowableSharedArrayBuffer branches. */
-function deserializeSharedArrayBuffer(
-  buffer: SharedArrayBuffer,
-  realm: BrowletRealm,
-): SharedArrayBuffer {
-  const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
-  const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
-  if (!constructor) {
-    throw new InternalError('The target realm has no SharedArrayBuffer intrinsic');
-  }
-  if (!Reflect.setPrototypeOf(value, constructor.prototype)) {
-    throw new InternalError('Could not apply the target SharedArrayBuffer prototype');
-  }
-  return value;
-}
-
-/** HTML §2.7.6, ArrayBuffer and ResizableArrayBuffer branches. */
-function deserializeArrayBuffer(
-  serialized: Extract<SerializedRecord, {
-    type: 'ArrayBuffer' | 'ResizableArrayBuffer';
-  }>,
-  realm: BrowletRealm,
-): ArrayBuffer {
-  try {
-    return realm.createArrayBuffer(
-      serialized.bytes,
-      serialized.maxByteLength,
-    );
-  } catch {
-    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-  }
-}
-
-/** HTML §2.7.6, enumerable own-property deserialization. */
-function deserializeProperties(
-  properties: Extract<SerializedRecord, {
-    type: 'Array' | 'Object';
-  }>['properties'],
-  value: object,
-  ctx: BindingContext<ScriptingEnvironment>,
-  memory: StructuredDeserializeMemory,
-): void {
-  for (const entry of properties) {
-    const status = Reflect.defineProperty(value, entry.key, {
-      configurable: true,
-      enumerable: true,
-      value: structuredDeserialize(entry.value, ctx, memory),
-      writable: true,
-    });
-    if (!status) throw new InternalError(`Could not deserialize property ${entry.key}`);
-  }
-}
-
-/** HTML §2.7.6, the [[ErrorData]] branch. */
-function deserializeError(
-  serialized: ErrorSerializedRecord,
-  realm: BrowletRealm,
-): Error {
-  const constructor = getErrorConstructor(serialized.name, realm);
-  const value = new constructor(serialized.message);
-  writeErrorStack(value, serialized.stack);
-  return value;
-}
-
-/** HTML §2.7.6, interesting accompanying [[ErrorData]]. */
-function deserializeErrorCause(
-  serialized: ErrorSerializedRecord,
-  value: Error,
-  ctx: BindingContext<ScriptingEnvironment>,
-  memory: StructuredDeserializeMemory,
-): void {
-  if (serialized.cause === undefined) return;
-  const status = Reflect.defineProperty(value, 'cause', {
-    configurable: true,
-    enumerable: false,
-    value: structuredDeserialize(serialized.cause, ctx, memory),
-    writable: true,
-  });
-  if (!status) throw new InternalError('Could not restore serialized Error cause');
-}
-
-function getErrorConstructor(
-  name: SerializedErrorName,
-  realm: BrowletRealm,
-): ErrorConstructor {
-  switch (name) {
-    case 'EvalError': return realm.intrinsics.evalError;
-    case 'RangeError': return realm.intrinsics.rangeError;
-    case 'ReferenceError': return realm.intrinsics.referenceError;
-    case 'SyntaxError': return realm.intrinsics.syntaxError;
-    case 'TypeError': return realm.intrinsics.typeError;
-    case 'URIError': return realm.intrinsics.uriError;
-    default: return realm.intrinsics.error;
+    return value;
   }
 }
 

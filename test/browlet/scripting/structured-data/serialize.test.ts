@@ -7,7 +7,8 @@ import {
   BindingWorld, defineInterface, impl, xattr, type BindingContext,
 } from '../../../../src/web-idl/index';
 import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
-import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
+import { createBrowletExecution } from '../../../../src/browlet/bindings';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import type {
   SerializedRecord,
@@ -26,7 +27,7 @@ describe('HTML structured serialization', () => {
 
     for (const value of primitives) {
       const serialized = structuredSerialize(value, ctx);
-      expect(serialized).toEqual({ type: 'primitive', value });
+      expect(serialized).toEqual({ type: 'primitive', value, cluster: null });
       if (Object.is(value, -0)) {
         expect(Object.is(serializedValue(serialized), -0)).toBe(true);
       }
@@ -47,22 +48,22 @@ describe('HTML structured serialization', () => {
     ]`, 'structured-serialize-builtins.js') as object[];
 
     expect(structuredSerialize(values[0], ctx)).toEqual({
-      type: 'Boolean', value: false,
+      type: 'Boolean', value: false, cluster: null,
     });
     const number = structuredSerialize(values[1], ctx);
     expect(number.type).toBe('Number');
     expect(Object.is(recordValue(number), -0)).toBe(true);
     expect(structuredSerialize(values[2], ctx)).toEqual({
-      type: 'BigInt', value: 2n,
+      type: 'BigInt', value: 2n, cluster: null,
     });
     expect(structuredSerialize(values[3], ctx)).toEqual({
-      type: 'String', value: 'text',
+      type: 'String', value: 'text', cluster: null,
     });
     expect(structuredSerialize(values[4], ctx)).toEqual({
-      type: 'Date', value: 1234,
+      type: 'Date', value: 1234, cluster: null,
     });
     expect(structuredSerialize(values[5], ctx)).toEqual({
-      type: 'RegExp', source: 'a+', flags: 'dgimsy',
+      type: 'RegExp', source: 'a+', flags: 'dgimsy', cluster: null,
     });
     expectDataCloneError(
       () => structuredSerialize(realm.evaluate(
@@ -83,13 +84,13 @@ describe('HTML structured serialization', () => {
     expect(structuredSerialize(map, ctx)).toMatchObject({
       type: 'Map',
       entries: [{
-        key: { type: 'primitive', value: 1 },
-        value: { type: 'primitive', value: 2 },
+        key: { type: 'primitive', value: 1, cluster: null },
+        value: { type: 'primitive', value: 2, cluster: null },
       }],
     });
     expect(structuredSerialize(set, ctx)).toMatchObject({
       type: 'Set',
-      entries: [{ type: 'primitive', value: 3 }],
+      entries: [{ type: 'primitive', value: 3, cluster: null }],
     });
     expect(structuredSerialize(buffer, ctx)).toMatchObject({
       type: 'ArrayBuffer', byteLength: 4,
@@ -218,7 +219,7 @@ describe('HTML structured serialization', () => {
       type: 'SharedArrayBuffer',
       buffer,
       byteLength: 4,
-      agentCluster,
+      cluster: agentCluster,
     });
     const growable = new SharedArrayBuffer(4, { maxByteLength: 8 });
     expect(structuredSerialize(growable, isolated)).toMatchObject({
@@ -226,7 +227,7 @@ describe('HTML structured serialization', () => {
       buffer: growable,
       byteLength: 4,
       maxByteLength: 8,
-      agentCluster,
+      cluster: agentCluster,
     });
     expectDataCloneError(() => structuredSerialize(buffer, unisolated));
     expectDataCloneError(() => structuredSerializeForStorage(buffer, isolated));
@@ -270,7 +271,7 @@ describe('HTML structured serialization', () => {
       length: 4,
       properties: [
         { key: '2' },
-        { key: 'extra', value: { type: 'primitive', value: 3 } },
+        { key: 'extra', value: { type: 'primitive', value: 3, cluster: null } },
       ],
     });
     if (serializedSparse.type !== 'Array') {
@@ -395,8 +396,9 @@ describe('HTML structured serialization', () => {
       type: 'Object',
       properties: [{
         key: 'visible',
-        value: { type: 'primitive', value: 2 },
+        value: { type: 'primitive', value: 2, cluster: null },
       }],
+      cluster: null,
     });
 
     const failure = Object.defineProperty({}, 'value', {
@@ -406,6 +408,29 @@ describe('HTML structured serialization', () => {
       },
     });
     expect(() => structuredSerialize(failure, ctx)).toThrow(expected);
+  });
+
+  it('reads getters once, skips deleted properties, and excludes newly added keys', () => {
+    const ctx = createContext();
+    let reads = 0;
+    const source: Record<string, unknown> = {};
+    Object.defineProperty(source, 'first', {
+      enumerable: true,
+      get() {
+        reads++;
+        delete source.removed;
+        source.added = 'late';
+        return 'first';
+      },
+    });
+    source.removed = 'removed';
+
+    expect(structuredSerialize(source, ctx)).toEqual({
+      type: 'Object',
+      properties: [{ key: 'first', value: { type: 'primitive', value: 'first', cluster: null } }],
+      cluster: null,
+    });
+    expect(reads).toBe(1);
   });
 
   it('rejects callable, proxy, and unsupported internal-slot objects', () => {
@@ -459,6 +484,7 @@ describe('HTML structured serialization', () => {
     expect(structuredSerialize(impostor, ctx)).toEqual({
       type: 'Object',
       properties: [],
+      cluster: null,
     });
   });
 
@@ -502,10 +528,10 @@ describe('HTML structured serialization', () => {
     if (serialized.type !== 'platform-object') {
       throw new Error('DOMException serialized to the wrong record');
     }
-    expect(serialized.fields.get('Name')).toBe('IndexSizeError');
-    expect(serialized.fields.get('Message')).toBe('message');
-    expect(serialized.fields.get('Stack')).toBe(source.stack);
-    expect(serialized.fields.has('ignored')).toBe(false);
+    expect(serialized.data.fields.Name).toBe('IndexSizeError');
+    expect(serialized.data.fields.Message).toBe('message');
+    expect(serialized.data.fields.Stack).toBe(source.stack);
+    expect(Object.hasOwn(serialized.data.fields, 'ignored')).toBe(false);
   });
 
   it('binds platform sub-serialization to the same memory and storage mode', () => {
@@ -526,15 +552,15 @@ describe('HTML structured serialization', () => {
       serialSteps: {
         serializationSteps(value, record, forStorage, context) {
           const container = value as ContainerImpl;
-          record.set('Child', context.subserialize(container.child));
-          record.set('ForStorage', forStorage);
+          record.fields.Child = context.subserialize(container.child);
+          record.fields.ForStorage = forStorage;
         },
         deserializationSteps() {},
       },
     });
-    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
+    const bindings = new BindingWorld<BrowletEnvironment>([containerIDL]);
     const realm = createManualRealm();
-    const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const ctx = bindings.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
     const container = ctx.createPlatformRecord(containerIDL.name)!;
     const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
     implInst.child = container.platformObject;
@@ -546,8 +572,8 @@ describe('HTML structured serialization', () => {
     if (serialized.type !== 'platform-object') {
       throw new Error('Container serialized to the wrong record');
     }
-    expect(serialized.fields.get('Child')).toBe(serialized);
-    expect(serialized.fields.get('ForStorage')).toBe(true);
+    expect(serialized.data.fields.Child).toBe(serialized);
+    expect(serialized.data.fields.ForStorage).toBe(true);
   });
 
   it('uses caller memory internally and fresh memory in each wrapper call', () => {
@@ -576,8 +602,8 @@ describe('HTML structured serialization', () => {
 function createContext(options: {
   agentCluster?: AgentCluster;
   crossOriginIsolated?: boolean;
-} = {}): BindingContext<ScriptingEnvironment> {
-  const bindings = new BindingWorld<ScriptingEnvironment>([]);
+} = {}): BindingContext<BrowletEnvironment> {
+  const bindings = new BindingWorld<BrowletEnvironment>([]);
   const realm = createManualRealm({
     crossOriginIsolated: options.crossOriginIsolated,
   });
@@ -585,7 +611,7 @@ function createContext(options: {
     options.crossOriginIsolated ? 'concrete' : 'none',
   );
   agentCluster.add(realm.agent);
-  const ctx = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
+  const ctx = bindings.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
   ctx.install(realm.globalObject);
   return ctx;
 }

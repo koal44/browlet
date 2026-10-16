@@ -3,7 +3,6 @@ export {
   SharedWorkerAgent, ServiceWorkerAgent, WorkletAgent, AgentCluster, type AgentClusterKey,
   type CrossOriginIsolationMode,
 } from './agents';
-export { EnvironmentRecord, type EnvironmentInit, type ScriptingEnvironment } from './environment';
 export {
   eventHandlerAttr, EventHandlerMap, eventHandlerNonNullIDL, eventHandlerIDL, type EventHandlerCallback,
 } from './event-handlers';

@@ -2,15 +2,14 @@ import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it, vi } from 'vitest';
 import { structuredSerialize } from '../../../../src/browlet/scripting/structured-data/serialize';
 import { structuredSerializeWithTransfer } from '../../../../src/browlet/scripting/structured-data/transfer';
-import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
-import {
-  createStructuredDataRecord,
-} from '../../../../src/browlet/scripting/structured-data/records';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
+import { createBrowletExecution } from '../../../../src/browlet/bindings';
 import {
   DetachedTransferableStamper,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
 import {
-  BindingWorld, defineInterface, impl, xattr, type StampedPlatformObject,
+  BindingWorld, defineDictionary, defineInterface, defineInterfaceMixin, definePartialInterface,
+  impl, xattr, StructuredData, type Definition, type StampedPlatformObject,
   type SerialSteps, type TransferSteps, type SerializationContext, type DeserializationContext,
 } from '../../../../src/web-idl/index';
 import { validateDefinitions } from '../../../../src/web-idl/assembly/index';
@@ -38,7 +37,7 @@ describe('HTML structured-data platform contracts', () => {
     if (!sourceBinding) throw new Error('DOMException was not projected');
     const steps = sourceBinding.assembled.serialSteps;
     if (!steps) throw new Error('DOMException is not registered as serializable');
-    const serialized = createStructuredDataRecord();
+    const serialized = new StructuredData();
 
     steps.serializationSteps(
       sourceBinding.implInst,
@@ -62,7 +61,7 @@ describe('HTML structured-data platform contracts', () => {
     expect(clone.name).toBe('IndexSizeError');
     expect(clone.message).toBe('some message');
     expect(clone.code).toBe(SecondDOMException.INDEX_SIZE_ERR);
-    expect(serialized.has('Stack')).toBe(false);
+    expect(Object.hasOwn(serialized.fields, 'Stack')).toBe(false);
     expect(Reflect.get(clone, 'custom')).toBeUndefined();
   });
 
@@ -85,7 +84,7 @@ describe('HTML structured-data platform contracts', () => {
     if (!steps) {
       throw new Error('QuotaExceededError is not registered as serializable');
     }
-    const serialized = createStructuredDataRecord();
+    const serialized = new StructuredData();
 
     steps.serializationSteps(
       sourceBinding.implInst,
@@ -145,6 +144,48 @@ describe('HTML structured-data platform contracts', () => {
     }
   });
 
+  it.each(['Serializable', 'Transferable'] as const)(
+    'rejects [%s] outside a primary interface', (name) => {
+      const primary = defineInterface({ name: 'Primary', members: [] });
+      const misplaced: Definition[] = [
+        definePartialInterface({ name: 'Primary', ...xattr(name), members: [] }),
+        defineInterfaceMixin({ name: 'Mixin', ...xattr(name), members: [] }),
+        defineDictionary({ name: 'Dictionary', ...xattr(name), members: [] }),
+      ];
+      for (const definition of misplaced) {
+        expect(() => validateDefinitions([primary, definition]))
+          .toThrow(`[${name}] requires a primary interface`);
+      }
+    },
+  );
+
+  it.each([['Serializable'], ['Transferable'], ['Serializable', 'Transferable']])(
+    'allows [SameAgentCluster] alongside %s', (...markers) => {
+      const definition = defineInterface({
+        name: 'Restricted', ...xattr(...markers, 'SameAgentCluster'), members: [],
+      });
+      expect(() => validateDefinitions([definition])).not.toThrow();
+    },
+  );
+
+  it.each<Definition>([
+    defineInterface({ name: 'Missing', ...xattr('SameAgentCluster'), members: [] }),
+    defineInterface({
+      name: 'Duplicate', ...xattr('Serializable', 'SameAgentCluster', 'SameAgentCluster'), members: [],
+    }),
+    defineInterface({
+      name: 'Malformed',
+      ...xattr('Transferable', { kind: 'arguments', name: 'SameAgentCluster', arguments: [] }), members: [],
+    }),
+    definePartialInterface({ name: 'Primary', ...xattr('SameAgentCluster'), members: [] }),
+    defineInterfaceMixin({ name: 'Mixin', ...xattr('SameAgentCluster'), members: [] }),
+    defineDictionary({ name: 'Dictionary', ...xattr('SameAgentCluster'), members: [] }),
+    defineInterface({ name: 'Derived', inherits: 'Primary', ...xattr('SameAgentCluster'), members: [] }),
+  ])('rejects misplaced or malformed [SameAgentCluster] on $name', (definition) => {
+    const primary = defineInterface({ name: 'Primary', ...xattr('Serializable'), members: [] });
+    expect(() => validateDefinitions([primary, definition])).toThrow(/SameAgentCluster/);
+  });
+
   it('does not inherit serialization or transfer permission from a parent interface', () => {
     class ParentImpl {}
     class ChildImpl extends ParentImpl {}
@@ -160,7 +201,8 @@ describe('HTML structured-data platform contracts', () => {
       name: 'Child', inherits: 'Parent', exposed: '*',
       implementation: impl(ChildImpl), members: [],
     });
-    const ctx = new BindingWorld<ScriptingEnvironment>([parent, child]).register(createManualRealm(), (ctx) => ({ realm: ctx.realm }));
+    const world = new BindingWorld<BrowletEnvironment>([parent, child]);
+    const ctx = world.register(createManualRealm(), (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
     const value = ctx.createPlatformRecord(child.name)!.platformObject;
 
     expect(() => structuredSerialize(value, ctx)).toThrow(expect.objectContaining({ name: 'DataCloneError' }));

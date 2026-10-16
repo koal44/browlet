@@ -103,14 +103,14 @@ const fileSerialSteps = {
   serializationSteps(value, serialized, forStorage) {
     blobSerialSteps.serializationSteps(value, serialized, forStorage);
     const state = value.getFileSerializationState();
-    serialized.set('Name', state.name);
-    serialized.set('LastModified', state.lastModified);
+    serialized.fields.Name = state.name;
+    serialized.fields.LastModified = state.lastModified;
   },
   deserializationSteps(serialized, value) {
     blobSerialSteps.deserializationSteps(serialized, value);
     value.setFileSerializationState({
-      lastModified: serialized.get('LastModified'),
-      name: serialized.get('Name'),
+      lastModified: serialized.fields.LastModified,
+      name: serialized.fields.Name,
     });
   },
 } satisfies SerialSteps<FileImpl, FileSerializedFields>;

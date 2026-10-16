@@ -50,10 +50,10 @@ const fileListSerialSteps = {
   serializationSteps(value, serialized, _forStorage, context) {
     const files = [];
     for (const file of value) files.push(context.subserialize(file, FileImpl));
-    serialized.set('Files', files);
+    serialized.fields.Files = files;
   },
   deserializationSteps(serialized, value, _targetRealm, context) {
-    const files = serialized.get('Files').map((serializedFile) => {
+    const files = serialized.fields.Files.map((serializedFile) => {
       const platformFile = context.subdeserialize(serializedFile);
       return context.unwrap(platformFile, FileImpl);
     });

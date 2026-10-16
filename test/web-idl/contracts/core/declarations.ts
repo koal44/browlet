@@ -43,11 +43,12 @@ op('clone', tsType(idlType.any, 'T'),
 );
 const serialSteps = {
   serializationSteps(value, record, _forStorage, context) {
-    record.set('Value', value.value);
+    record.fields.Value = value.value;
+    record.shouldRestrict = true;
     // @ts-expect-error Each field accepts only its declared value type.
-    record.set('Value', 'wrong');
+    record.fields.Value = 'wrong';
     // @ts-expect-error Field names come from this interface's record shape.
-    record.set('Missing', 1);
+    record.fields.Missing = 1;
     const nested = context.subserialize(value);
     context.subserialize(value, SavedValue);
     // @ts-expect-error The declared implementation must accept the nested value.
@@ -59,11 +60,11 @@ const serialSteps = {
   },
   deserializationSteps(record, value, targetRealm, context) {
     value.value = targetRealm.example;
-    value.value = record.get('Value');
+    value.value = record.fields.Value;
     // @ts-expect-error Reading a field retains its declared value type.
-    record.get('Value').toUpperCase();
+    record.fields.Value.toUpperCase();
     // @ts-expect-error The matching serializer defines the available fields.
-    record.get('Missing');
+    record.fields.Missing;
     context.unwrap(context.subdeserialize({}), SavedValue).value.toFixed();
     // @ts-expect-error An operation context does not expose Binding Context.
     context.getEnvironment();

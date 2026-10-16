@@ -5,7 +5,7 @@ import type { WindowImpl } from '../../../../src/browlet/browsing/window/window'
 import { createWindowEnvironment } from '../../../../src/browlet/bindings';
 import { getRelevantRealm } from '../../../support/browlet-binding';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import { EnvironmentRecord } from '../../../../src/browlet/scripting/environment';
+import { BrowletEnvironmentRecord } from '../../../../src/browlet/environment';
 import { WindowRealm } from '../../../../src/browlet/scripting/realm';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createOpaqueOrigin, type Origin, type TupleOrigin } from '../../../../src/url/origin';
@@ -185,7 +185,7 @@ describe('Secure Contexts: Window classification', () => {
     const creationURL = parseURL('http://example.test/').url!;
     const origin = obtainURLOrigin(creationURL);
     userAgent.trustworthyOrigins.push(tupleOriginFor('http://example.test/'));
-    const reservedEnv = new EnvironmentRecord({
+    const reservedEnv = new BrowletEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
@@ -238,7 +238,7 @@ describe('Secure Contexts: Web IDL exposure', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL(url).url!;
     const origin = obtainURLOrigin(creationURL);
-    const record = new EnvironmentRecord({
+    const record = new BrowletEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),

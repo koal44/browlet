@@ -240,7 +240,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
     op('queueMicrotask', idlType.undefined,
       [arg('callback', reference('VoidFunction'), onError('report'))],
     ),
-    // HTML §2.7.10 contributes the structured-cloning API to this mixin.
+    // https://html.spec.whatwg.org/multipage/structured-data.html#dom-structuredclone
     op('structuredClone', tsType(idlType.any, 'T'),
       [
         arg('value', tsType(idlType.any, 'T')),

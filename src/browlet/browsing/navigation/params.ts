@@ -3,10 +3,10 @@ import { type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index
 import type { FetchResponse, FetchRequest, FetchController, ReferrerPolicy } from '../../../fetch/index';
 
 import type { DOMHighResTimeStamp } from '../../timing/index';
-import type { EnvironmentRecord } from '../../scripting/index';
 import { PolicyContainer, OpenerPolicy, type SandboxingFlagSet } from '../policy/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
 import type { NavigationTimingType } from '../../performance/index';
+import type { BrowletEnvironmentRecord } from '../../environment';
 
 import type { UserNavigationInvolvement } from './navigable';
 
@@ -29,7 +29,7 @@ export class NavigationParams {
   /** Whether COOP requires changing the destination's browsing context group. */
   coopEnforcementResult: OpenerPolicyEnforcementResult = { needsBrowsingContextGroupSwitch: false };
   /** Environment reserved by Fetch before constructing the document's realm. */
-  reservedEnv: EnvironmentRecord | null = null;
+  reservedEnv: BrowletEnvironmentRecord | null = null;
   /** Origin selected for the new document. */
   origin: Origin;
   /** Response policies transferred to the new document. */

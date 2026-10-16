@@ -63,7 +63,7 @@ export {
   serializeDefinition, serializeDefinitions, serializeExtendedAttribute, serializeMember, serializeType,
 } from './serialize';
 
-export type {
-  SerialSteps, TransferSteps, StructuredDataRecord,
-  SerializationContext, DeserializationContext,
+export {
+  StructuredData, type SerialSteps, type TransferSteps,
+  type SerializationContext, type DeserializationContext,
 } from './structured-data';

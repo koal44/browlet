@@ -170,13 +170,13 @@ export function isDOMException(value: unknown, name: string): boolean {
 // PlatformRecord supplies the JavaScript binding's [[Stack]] alongside this implementation state.
 const domExceptionSerialSteps = {
   serializationSteps(value, serialized) {
-    serialized.set('Name', value.name);
-    serialized.set('Message', value.message);
+    serialized.fields.Name = value.name;
+    serialized.fields.Message = value.message;
   },
   deserializationSteps(serialized, value) {
     value.setExceptionState(
-      serialized.get('Message'),
-      serialized.get('Name'),
+      serialized.fields.Message,
+      serialized.fields.Name,
     );
   },
 } satisfies SerialSteps<DOMExceptionImpl, DOMExceptionSerializedFields>;
@@ -337,14 +337,14 @@ export class QuotaExceededErrorImpl extends DOMExceptionImpl {
 const quotaExceededErrorSerialSteps = {
   serializationSteps(value, serialized) {
     domExceptionSerialSteps.serializationSteps(value, serialized);
-    serialized.set('Quota', value.quota);
-    serialized.set('Requested', value.requested);
+    serialized.fields.Quota = value.quota;
+    serialized.fields.Requested = value.requested;
   },
   deserializationSteps(serialized, value) {
     domExceptionSerialSteps.deserializationSteps(serialized, value);
     value.setQuotaState(
-      serialized.get('Quota'),
-      serialized.get('Requested'),
+      serialized.fields.Quota,
+      serialized.fields.Requested,
     );
   },
 } satisfies SerialSteps<QuotaExceededErrorImpl, QuotaExceededErrorSerializedFields>;

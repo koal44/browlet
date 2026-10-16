@@ -168,6 +168,11 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return this.getConverter(type).createFrozenArray(values);
   }
 
+  /** Whether this realm exposes the named interface, without allocating a platform object. */
+  isInterfaceExposed(interfaceName: string): boolean {
+    return this.assembly.interfaces.get(interfaceName)?.isExposed(this.realm) ?? false;
+  }
+
   /** Create a platform object by interface name; return undefined if unknown or unexposed. */
   // https://webidl.spec.whatwg.org/#new
   createPlatformRecord(interfaceName: string): PlatformRecord | undefined {

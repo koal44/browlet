@@ -11,13 +11,13 @@ export type SerialSteps<
   /** Save implementation state, using the current operation for nested values. */
   serializationSteps(
     value: Impl,
-    serialized: StructuredDataRecord<Fields>,
+    serialized: StructuredData<Fields>,
     forStorage: boolean,
     context: SerializationContext,
   ): void;
   /** Restore an already-created implementation in the destination realm. */
   deserializationSteps(
-    serialized: StructuredDataRecord<Fields>,
+    serialized: StructuredData<Fields>,
     value: Impl,
     targetRealm: Realm,
     context: DeserializationContext,
@@ -31,18 +31,19 @@ export type TransferSteps<
   Fields extends object = Record<string, unknown>,
 > = {
   /** Move implementation state into the transfer record. */
-  transferSteps(value: Impl, dataHolder: StructuredDataRecord<Fields>): void;
+  transferSteps(value: Impl, dataHolder: StructuredData<Fields>): void;
   /** Restore transferred state into the destination implementation. */
-  transferReceivingSteps(dataHolder: StructuredDataRecord<Fields>, value: Impl): void;
+  transferReceivingSteps(dataHolder: StructuredData<Fields>, value: Impl): void;
 };
 
-/** Typed access to the Map populated by an interface's own serialization or transfer steps. */
-// Deserialization receives the completed record from the matching writer, not author input.
+/** Interface-owned data saved and restored by serialization or transfer steps. */
+// Deserialization receives completed data from the matching serializer, not author input.
 // Required fields must be written before completion; optional fields include undefined in Fields.
-export interface StructuredDataRecord<Fields extends object = Record<string, unknown>> {
-  get<Key extends keyof Fields>(name: Key): Fields[Key];
-  set<Key extends keyof Fields>(name: Key, value: Fields[Key]): void;
-  has(name: keyof Fields): boolean;
+export class StructuredData<Fields extends object = Record<string, unknown>> {
+  /** Interface-owned fields populated by serialization or transfer steps. */
+  fields = Object.create(null) as Fields;
+  /** Same-cluster requirement, initialized from the interface marker; steps may set it to true. */
+  shouldRestrict = false;
 }
 
 /** Nested serialization within one operation's shared identity memory. */

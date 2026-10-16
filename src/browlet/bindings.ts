@@ -18,7 +18,7 @@ import { fetchIDLDefinitions } from '../fetch/index';
 import type { Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
-  EventLoop, SandboxAgent, EnvironmentRecord, eventHandlerIDL, eventHandlerNonNullIDL,
+  EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
   BrowletRealm, WindowRealm, taskSources,
 } from './scripting/index';
 import { EventImpl } from './dom/events/index';
@@ -40,7 +40,7 @@ import { svgIDLDefinitions } from './dom/nodes/svg/index';
 import { domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
 import {
-  type WindowEnvironmentInit, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
+  type WindowEnvironmentInit, BrowletEnvironmentRecord, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
   type BrowletExecution,
 } from './environment';
 import {
@@ -81,7 +81,7 @@ export function createWindowEnvironment(
   // parent's full chain. A reserved environment already carries that decision.
   // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
   // https://w3c.github.io/webappsec-secure-contexts/#ancestors
-  const envRecord = reservedEnv ?? new EnvironmentRecord({
+  const envRecord = reservedEnv ?? new BrowletEnvironmentRecord({
     userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
     targetBrowsingContext: null,
     isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&

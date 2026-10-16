@@ -35,7 +35,7 @@ non-storage acquisition preserves opaque-origin identity and remains available
 when storage is disabled. Blob URL checks use the latter.
 
 The narrow `StorageEnvironment` interface in `environment.ts` is implemented by
-Browlet's `EnvironmentRecord` base class. Full `BrowletEnvironment` objects extend it;
+Browlet's `BrowletEnvironmentRecord` base class. Full `BrowletEnvironment` objects extend it;
 no adapter object is constructed. Settings supply their security origin;
 earlier records supply their creation URL.
 Its `StorageUserAgent` contract supplies `storageEnabled`, read at acquisition

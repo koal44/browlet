@@ -11,11 +11,10 @@ import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { DOMRealm, WindowDOMRealm } from '../dom/index';
-import type { BrowletEnvironment, WindowEnvironment } from '../environment';
+import type { BrowletEnvironment, BrowletEnvironmentRecord, WindowEnvironment } from '../environment';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
 
 import type { Agent, WindowAgent } from './agents';
-import type { EnvironmentRecord } from './environment';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 
@@ -49,7 +48,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   globalNames: ReadonlySet<string>;
   /** Whether this host permits changes to the global prototype chain. */
   isGlobalPrototypeChainMutable: boolean;
-  #envRecord: EnvironmentRecord | undefined;
+  #envRecord: BrowletEnvironmentRecord | undefined;
   #hostDefined: BrowletEnvironment | undefined;
 
   constructor(options: BrowletRealmOptions) {
@@ -119,7 +118,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   }
 
   /** Early security owner, replaced by the full environment when attached. */
-  get envRecord(): EnvironmentRecord | undefined {
+  get envRecord(): BrowletEnvironmentRecord | undefined {
     return this.#envRecord;
   }
 
@@ -309,10 +308,10 @@ export type BrowletRealmOptions = {
   crossOriginIsolated?: boolean;
   globalNames?: string[];
   isGlobalPrototypeChainMutable?: boolean;
-  envRecord?: EnvironmentRecord;
+  envRecord?: BrowletEnvironmentRecord;
 };
 
 export type WindowRealmOptions = Omit<BrowletRealmOptions, 'globalNames' | 'isGlobalPrototypeChainMutable'> & {
   agent: WindowAgent;
-  envRecord: EnvironmentRecord;
+  envRecord: BrowletEnvironmentRecord;
 };

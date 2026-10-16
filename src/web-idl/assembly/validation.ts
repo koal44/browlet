@@ -1,5 +1,7 @@
 import { InternalError } from '../../infra/index';
-import type { Definition, DictionaryDefinition, PrimaryInterfaceDefinition, WebIDLType } from '../core/index';
+import {
+  hasExtendedAttribute, type Definition, type DictionaryDefinition, type PrimaryInterfaceDefinition, type WebIDLType,
+} from '../core/index';
 
 import { assembleMember } from './member';
 import { DefinitionAssembly } from './assembly';
@@ -13,6 +15,13 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
   const declarations = definitions as Definition[];
   const definitionsByName = new Map<string, Definition>();
   for (const definition of declarations) {
+    if (definition.kind !== 'interface' && definition.kind !== 'proxy-object') {
+      for (const name of ['Serializable', 'Transferable', 'SameAgentCluster'] as const) {
+        if (hasExtendedAttribute(definition.extendedAttributes, name)) {
+          throw new InternalError(`[${name}] requires a primary interface`);
+        }
+      }
+    }
     switch (definition.kind) {
       case 'includes': case 'partial-interface': case 'partial-interface-mixin':
       case 'partial-dictionary': case 'partial-namespace': continue;
@@ -51,6 +60,7 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
         break;
       }
       case 'interface':
+        validateSameAgentCluster(definition);
         // https://html.spec.whatwg.org/multipage/structured-data.html#serializable-objects
         // https://html.spec.whatwg.org/multipage/structured-data.html#transferable-objects
         // Steps require exactly one marker; a marker alone can describe unfinished support.
@@ -83,6 +93,22 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
     if (definition.kind === 'interface-mixin' || definition.kind === 'partial-interface-mixin') {
       for (const member of definition.members) assembleMember(member, assembly);
     }
+  }
+}
+
+// https://html.spec.whatwg.org/multipage/structured-data.html#sameagentcluster
+function validateSameAgentCluster(definition: PrimaryInterfaceDefinition): void {
+  const attributes = definition.extendedAttributes ?? [];
+  const markers = attributes.filter(
+    (attribute) => attribute.kind !== 'raw' && attribute.name === 'SameAgentCluster',
+  );
+  if (markers.length === 0) return;
+  if (markers.length !== 1 || markers[0]?.kind !== 'no-arguments') {
+    throw new InternalError(`${definition.name} must declare exactly one [SameAgentCluster] marker`);
+  }
+  if (!attributes.some((attribute) => attribute.kind === 'no-arguments' &&
+    (attribute.name === 'Serializable' || attribute.name === 'Transferable'))) {
+    throw new InternalError(`${definition.name} requires [Serializable] or [Transferable] with [SameAgentCluster]`);
   }
 }
 

@@ -609,9 +609,12 @@ both the sandbox and Window paths.
 Interfaces attach HTML's `serialSteps` and `transferSteps` directly to their
 declarations. The steps live with the owning implementation and run for the exact
 primary interface; inherited state must be included explicitly. Both directions
-are required by each step type. Assembly validates the matching no-argument
-`Serializable` or `Transferable` marker. A marker without steps can still describe
+are required by each step type. Opt-in declaration validation checks the matching
+no-argument `Serializable` or `Transferable` marker. A marker without steps can still describe
 unfinished support, such as stream transfer; it does not enable the operation.
+`SameAgentCluster` is also declaration metadata, checked only on the exact primary
+interface. Validation requires a single no-argument marker alongside `Serializable`
+or `Transferable`; HTML enforces the restriction during serialization and transfer.
 
 The contracts contain interface-owned record fields and narrow nested-operation
 callbacks. A declaration's environment determines the deserialization target
@@ -621,11 +624,21 @@ construction. Steps do not capture a realm or Binding Context in the shared
 declaration, and standalone subsystems do not import HTML's implementation.
 
 Each provider can name its fields through `SerialSteps<Impl, Fields>` or
-`TransferSteps<Impl, Fields>`. The backing record remains a Map; its typed
-view checks field names and values. Deserialization receives the completed record
+`TransferSteps<Impl, Fields>`. `StructuredData<Fields>.fields` is a typed record
+with no prototype; providers read and assign its properties directly.
+Deserialization receives completed data
 from the matching serializer, not arbitrary author input. Required fields must
 be populated by that serializer; TypeScript does not prove that every path writes
 them. The HTML traversal keeps the interface-specific shape opaque.
+
+Both directions use the same `StructuredData` type. HTML initializes
+`data.shouldRestrict` from the primary interface's `SameAgentCluster` marker and
+applies that restriction before saving or transfer steps run. Those steps can set
+the flag to true to request a restriction for an individual object; HTML applies
+any newly requested restriction after they return, before checking storage or
+completing the transfer. Clearing the flag does not undo an applied restriction.
+The object retains no environment or callback;
+Web IDL does not import HTML's AgentCluster or BrowletEnvironment.
 
 HTML invokes `record.serializationSteps()` and `record.deserializationSteps()`
 to combine those implementation hooks with JavaScript binding state.
@@ -639,7 +652,9 @@ object. Core's hooks remain engine-independent. Stack access uses the existing
 One [`PlatformRecord`](binding/platform.ts) is privately stamped onto both an
 implementation and its eventual platform object. It retains the owning realm
 binding and assembled interface. `record.assembled` supplies its name and exact
-serialization and transfer steps. `ctx.createPlatformRecord(name)` resolves the
+serialization and transfer steps. `ctx.isInterfaceExposed(name)` checks exposure
+without allocation, allowing HTML to reject an entire message before receiving
+any transfers. `ctx.createPlatformRecord(name)` resolves the
 interface in its own world and creates the object, returning `undefined` when
 the interface is unknown or unexposed in that realm. The implementation keeps its
 class prototype and private state; public subclassing changes the platform prototype, not the

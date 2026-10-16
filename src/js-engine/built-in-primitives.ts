@@ -178,12 +178,13 @@ export function isFinalizationRegistryObject(value: unknown): value is Finalizat
 
 /*
  * ACCOMMODATION(node-v8-exotic-object-slots): Node exposes no predicates for
- * every V8 object kind. For a propertyless object, native structured cloning
- * can identify an unsupported exotic without traversing an author-controlled
- * property graph or advancing an iterator.
+ * every V8 object kind. For an object with no enumerable own string properties,
+ * native structured cloning can identify an unsupported exotic without
+ * traversing an author-controlled property graph or advancing an iterator.
  */
-export function nativeCloneRejectsPropertylessObject(value: object): boolean {
-  if (Object.keys(value).length !== 0) return false;
+/** Supply the current Object.keys(value) snapshot; populated objects bypass the probe. */
+export function nativeCloneRejectsPropertylessObject(value: object, keys: string[]): boolean {
+  if (keys.length !== 0) return false;
 
   try {
     nativeStructuredClone(value);

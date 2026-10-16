@@ -4,27 +4,38 @@ import {
   isArrayBufferView, isSharedArrayBuffer, isDetachedArrayBuffer, isObject,
 } from '../../../js-engine/index';
 import {
-  DOMExceptionImpl, DOMExceptionNames,
+  DOMExceptionImpl, DOMExceptionNames, StructuredData,
   type BindingContext, type StampedImplInstance, type TransferSteps,
 } from '../../../web-idl/index';
 
-import type { ScriptingEnvironment } from '../environment';
+import type { BrowletEnvironment } from '../../environment';
 
 import {
-  createStructuredDataRecord, type StructuredDeserializeWithTransferResult,
+  restrictToSameAgentCluster,
+  type PlatformObjectTransferDataHolder, type StructuredDeserializeWithTransferResult,
   type StructuredDeserializeMemory, type StructuredSerializeMemory,
   type StructuredSerializeWithTransferResult, type TransferDataHolder,
-  type TransferPlaceholderSerializedRecord,
+  type SerializedTransferPlaceholder,
 } from './records';
 import { structuredDeserialize } from './deserialize';
 import { structuredSerializeInternal } from './serialize';
 import { DetachedTransferableStamper } from './transferable';
 
-/** HTML §2.7.7, StructuredSerializeWithTransfer. */
+// https://html.spec.whatwg.org/multipage/structured-data.html#dom-structuredclone
+export function structuredClone(
+  value: unknown,
+  transferList: unknown[],
+  ctx: BindingContext<BrowletEnvironment>,
+): unknown {
+  const serialized = structuredSerializeWithTransfer(value, transferList, ctx);
+  return structuredDeserializeWithTransfer(serialized, ctx).deserialized;
+}
+
+// https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializewithtransfer
 export function structuredSerializeWithTransfer(
   value: unknown,
   transferList: unknown[],
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): StructuredSerializeWithTransferResult {
   const memory: StructuredSerializeMemory = new Map();
   const preparedTransfers: PreparedTransfer[] = [];
@@ -43,20 +54,38 @@ export function structuredSerializeWithTransfer(
     ctx,
     memory,
   );
-  const transferDataHolders: TransferDataHolder[] = [];
+  const result: StructuredSerializeWithTransferResult = {
+    serialized, transferDataHolders: [], interfaceNames: new Set(), cluster: null,
+  };
 
   for (const prepared of preparedTransfers) {
-    transferDataHolders.push(performTransfer(prepared, ctx));
+    const dataHolder = performTransfer(prepared, ctx);
+    result.transferDataHolders.push(dataHolder);
+    if (dataHolder.type === 'platform-object') result.interfaceNames.add(dataHolder.interfaceName);
+    if (dataHolder.cluster !== null) result.cluster = dataHolder.cluster;
   }
 
-  return { serialized, transferDataHolders };
+  // Transfer holders precede graph records in the specification's ordered memory.
+  // Our graph keeps separate placeholders; the holders above supply their metadata.
+  for (const record of memory.values()) {
+    if (record.type === 'platform-object') result.interfaceNames.add(record.interfaceName);
+    if (record.cluster !== null) result.cluster = record.cluster;
+  }
+  return result;
 }
 
-/** HTML §2.7.8, StructuredDeserializeWithTransfer. */
+// https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserializewithtransfer
 export function structuredDeserializeWithTransfer(
   result: StructuredSerializeWithTransferResult,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): StructuredDeserializeWithTransferResult {
+  if (result.cluster !== null && result.cluster !== ctx.realm.agent.agentCluster) {
+    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+  }
+  for (const interfaceName of result.interfaceNames) {
+    if (!ctx.isInterfaceExposed(interfaceName)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+  }
+
   const memory: StructuredDeserializeMemory = new Map();
   const transferredValues: unknown[] = [];
 
@@ -79,11 +108,12 @@ export function structuredDeserializeWithTransfer(
 // BINDING_INTEGRATION: resolve the source instance and its interface's transfer steps.
 function prepareTransfer(
   value: unknown,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): PreparedTransfer {
   if (!isObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-  const placeholder: TransferPlaceholderSerializedRecord = {
+  const placeholder: SerializedTransferPlaceholder = {
     type: 'transfer-placeholder',
+    cluster: null,
   };
   if (isArrayBuffer(value)) {
     return {
@@ -104,12 +134,13 @@ function prepareTransfer(
     interfaceName: record.assembled.name,
     placeholder,
     steps,
+    sameAgentCluster: record.assembled.hasExtendedAttribute('SameAgentCluster', false),
   };
 }
 
 function performTransfer(
   prepared: PreparedTransfer,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): TransferDataHolder {
   if (prepared.kind === 'ArrayBuffer') {
     if (isDetachedArrayBuffer(prepared.value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
@@ -123,27 +154,34 @@ function performTransfer(
       buffer: ctx.realm.transferArrayBuffer(prepared.value),
       byteLength,
       ...(maxByteLength === undefined ? {} : { maxByteLength }),
+      cluster: null,
     };
   }
 
   if (DetachedTransferableStamper.has(prepared.implInst)) {
     throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
   }
-  const fields = createStructuredDataRecord();
-  prepared.steps.transferSteps(prepared.implInst, fields);
-  DetachedTransferableStamper.stamp(prepared.implInst);
-  return {
+  const dataHolder: PlatformObjectTransferDataHolder = {
     type: 'platform-object',
     placeholder: prepared.placeholder,
     interfaceName: prepared.interfaceName,
-    fields,
+    data: new StructuredData(),
+    cluster: null,
   };
+  dataHolder.data.shouldRestrict = prepared.sameAgentCluster;
+  if (dataHolder.data.shouldRestrict) restrictToSameAgentCluster(dataHolder, ctx.getEnvironment());
+  prepared.steps.transferSteps(prepared.implInst, dataHolder.data);
+  if (dataHolder.data.shouldRestrict && dataHolder.cluster === null) {
+    restrictToSameAgentCluster(dataHolder, ctx.getEnvironment());
+  }
+  DetachedTransferableStamper.stamp(prepared.implInst);
+  return dataHolder;
 }
 
 // BINDING_INTEGRATION: construct and initialize the destination platform object.
 function receiveTransfer(
   dataHolder: TransferDataHolder,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): unknown {
   if (dataHolder.type === 'platform-object') {
     const platformRecord = ctx.createPlatformRecord(dataHolder.interfaceName);
@@ -155,7 +193,7 @@ function receiveTransfer(
       );
     }
     steps.transferReceivingSteps(
-      dataHolder.fields,
+      dataHolder.data,
       platformRecord.implInst,
     );
     return platformRecord.platformObject;
@@ -175,7 +213,7 @@ type PreparedTransfer = PreparedArrayBufferTransfer | PreparedPlatformTransfer;
 
 type PreparedArrayBufferTransfer = {
   kind: 'ArrayBuffer';
-  placeholder: TransferPlaceholderSerializedRecord;
+  placeholder: SerializedTransferPlaceholder;
   value: ArrayBuffer;
 };
 
@@ -183,6 +221,7 @@ type PreparedPlatformTransfer = {
   kind: 'platform-object';
   implInst: StampedImplInstance;
   interfaceName: string;
-  placeholder: TransferPlaceholderSerializedRecord;
+  placeholder: SerializedTransferPlaceholder;
   steps: TransferSteps;
+  sameAgentCluster: boolean;
 };

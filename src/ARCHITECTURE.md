@@ -81,14 +81,13 @@ views of existing owners, not a new environment object for each subsystem.
 | --- | --- |
 | [`StorageEnvironment`](storage/environment.ts) | UserAgent, creation URL, and an origin when available; usable before realm creation |
 | [`FetchEnvironmentRecord`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
-| HTML [`EnvironmentRecord`](browlet/scripting/environment.ts) | Concrete early browser state: identity, owner, creation/security state, readiness, and partition derivation |
+| HTML [`BrowletEnvironmentRecord`](browlet/environment.ts) | Concrete early browser state: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm` and `exec: RealmExecution` for a JavaScript execution owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort and HTML structured-data execution contracts on `exec` |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `exec: DOMExecution` for event allocation |
-| [`ScriptingEnvironment`](browlet/scripting/environment.ts) | Realm-only view for HTML algorithms such as structured data |
 | [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
-| [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends EnvironmentRecord and satisfies Scripting, JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
+| [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends BrowletEnvironmentRecord and satisfies JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
@@ -102,7 +101,7 @@ inherits the class and preserves the reservation's identity and security
 classification; it is not a wrapper around a second settings object.
 
 Interfaces do not provide method implementations. Shared browser behavior such
-as `determineNetworkPartitionKey()` lives directly on HTML's EnvironmentRecord.
+as `determineNetworkPartitionKey()` lives directly on HTML's BrowletEnvironmentRecord.
 Portable contracts describe that behavior without making Fetch depend on HTML.
 Use the same approach for other owners; introduce inheritance or a mixin only
 for an actual shared implementation, not to simulate multiple class inheritance.
@@ -253,16 +252,19 @@ contract their constructor requires, without adding another field or owner looku
 Global projection and global-scope mixin setup finish before consumers receive the Window environment.
 Document creation retains its own HTML initialization steps.
 
-The complete browser environment lives in [`browlet/environment.ts`](browlet/environment.ts),
-above the early record, realms, and event loops in Scripting. It constructs its
+The early browser record and complete environment live together in
+[`browlet/environment.ts`](browlet/environment.ts), above Scripting's realms and
+event loops. The complete environment constructs its
 own `InsecureRequestsPolicy` and calls Reporting's
 [`generateReport()`](browlet/reporting/generate.ts) with its live settings.
 These are owned state and a browser algorithm, not additional constructor dependencies.
 Reporting selects concrete report bodies; UserAgent owns outbound delivery.
 Generation remains a separate, higher-level Reporting entry because policy report
 bodies depend on the base classes exported by Reporting's shared barrel.
-Scripting's barrel exports the early record, not the complete browser environment;
-its realms and event loops retain only type references to that environment.
+Scripting's realms and event loops retain only type references to these browser
+environments. HTML structured-data algorithms use the full `BrowletEnvironment`;
+their standalone tests compose a real `SandboxEnvironment` with its execution
+facilities instead of supplying a separate realm-only environment view.
 
 `BrowletRealm.hostDefined` permits the absence of HTML settings; `BrowletRealm.env` requires
 them and throws if they are unattached. UserAgent composition creates its sandbox
@@ -275,7 +277,7 @@ standalone UserAgent unavailable; guarded accessors throw rather than return
 incorrectly typed nulls. Origins, API base URLs, policies, module maps, ancestry,
 time origins, and Window/Worker global-scope state also fail explicitly.
 Top-level associations and reporting/referrer sources are null. Window
-construction still requires a complete EnvironmentRecord.
+construction still requires a complete BrowletEnvironmentRecord.
 
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination
@@ -346,8 +348,14 @@ integration with `BINDING_INTEGRATION:`; unresolved implementation leakage uses
 
 Interface serialization and transfer steps live beside their implementations and
 attach to the Web IDL declaration through portable contracts. HTML supplies the
-active clone's traversal and identity memory; Binding supplies platform identity
-and target construction. These hooks need no separate capability registry.
+active clone's traversal, identity memory, and agent-cluster restrictions; Binding
+supplies platform identity, exposure queries, and target construction. Interface
+steps share a `StructuredData` object. HTML initializes its `shouldRestrict` boolean
+from the primary interface's `SameAgentCluster` marker and applies that restriction
+before the steps run. Steps can set the flag to request a conditional restriction;
+HTML applies any new restriction afterward, before checking storage or completing
+the transfer. The data retains no source environment or callback. These hooks need
+no separate capability registry.
 
 For example, Fetch owns request/response policy and transactions; HTTP owns
 reusable protocol syntax and cache rules; the UserAgent supplies transport and

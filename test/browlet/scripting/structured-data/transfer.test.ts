@@ -9,7 +9,8 @@ import {
   getBufferSourceCopy, getBufferSourceUnderlyingBuffer, isBufferSourceDetached,
 } from '../../../../src/js-engine/index';
 import type { BrowletRealm } from '../../../../src/browlet/scripting/realm';
-import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
+import { createBrowletExecution } from '../../../../src/browlet/bindings';
 import {
   structuredDeserializeWithTransfer, structuredSerializeWithTransfer,
 } from '../../../../src/browlet/scripting/structured-data/transfer';
@@ -202,18 +203,18 @@ describe('HTML structured transfer', () => {
       members: [],
       transferSteps: {
         transferSteps(value, dataHolder) {
-          dataHolder.set('Value', (value as TransferBoxImpl).value);
+          dataHolder.fields.Value = (value as TransferBoxImpl).value;
         },
         transferReceivingSteps(dataHolder, value) {
-          (value as TransferBoxImpl).value = dataHolder.get('Value') as string;
+          (value as TransferBoxImpl).value = dataHolder.fields.Value as string;
         },
       },
     });
-    const bindings = new BindingWorld<ScriptingEnvironment>([transferBoxIDL]);
+    const bindings = new BindingWorld<BrowletEnvironment>([transferBoxIDL]);
     const sourceRealm = createManualRealm({ globalNames: ['TransferTest'] });
     const targetRealm = createManualRealm({ globalNames: ['TransferTest'] });
-    const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
-    const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
+    const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+    const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
     const original = source.createPlatformRecord(transferBoxIDL.name)!;
     source.unwrap(original.platformObject, TransferBoxImpl)!.value = 'transferred';
     Object.freeze(original.implInst);
@@ -262,7 +263,7 @@ describe('HTML structured transfer', () => {
     expect(DetachedTransferableStamper.has(resolved!.implInst)).toBe(false);
 
     const hiddenRealm = createManualRealm();
-    const hiddenTarget = bindings.register(hiddenRealm, (ctx) => ({ realm: ctx.realm }));
+    const hiddenTarget = bindings.register(hiddenRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
     const hiddenOriginal = source.createPlatformRecord(transferBoxIDL.name)!;
     const hiddenSerialized = structuredSerializeWithTransfer(
       hiddenOriginal.platformObject,
@@ -277,16 +278,16 @@ describe('HTML structured transfer', () => {
 });
 
 function createContexts(): {
-  source: BindingContext<ScriptingEnvironment>;
+  source: BindingContext<BrowletEnvironment>;
   sourceRealm: BrowletRealm;
-  target: BindingContext<ScriptingEnvironment>;
+  target: BindingContext<BrowletEnvironment>;
   targetRealm: BrowletRealm;
 } {
-  const bindings = new BindingWorld<ScriptingEnvironment>([]);
+  const bindings = new BindingWorld<BrowletEnvironment>([]);
   const sourceRealm = createManualRealm();
   const targetRealm = createManualRealm();
-  const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
-  const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
+  const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+  const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
   return {
     source,
     sourceRealm,

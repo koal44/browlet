@@ -1,20 +1,20 @@
 import { InternalError } from '../infra/internal-error';
-import type { JSEnvironment, RealmExecution } from '../js-engine/index';
+import { randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
 import type { SelectletEnvironment } from '../selectlet/index';
 import type { StyleletEnvironment, StyleletExecution } from '../stylelet/index';
-import { areSameSite, serializeURL, type Origin, type URLParseResult, type URLRecord } from '../url/index';
 import {
-  FetchGroup, type FetchEnvironment, type FetchExecution,
+  areSameSite, obtainSite, obtainURLOrigin, serializeURL,
+  type Origin, type URLParseResult, type URLRecord,
+} from '../url/index';
+import {
+  FetchGroup, type FetchEnvironment, type FetchEnvironmentRecord, type FetchExecution,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
-  type RequestCredentials, type ResponseBodyInfo,
+  type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../fetch/index';
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
-import {
-  EnvironmentRecord, type ScriptingEnvironment, type EventLoop, type BrowletRealm, type WindowRealm,
-  type WindowAgent,
-} from './scripting/index';
+import type { EventLoop, BrowletRealm, WindowRealm, WindowAgent } from './scripting/index';
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { DocumentImpl, ModuleMap } from './dom/nodes/index';
@@ -22,8 +22,88 @@ import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import type { WindowImpl } from './browsing/window/index';
-import type { Traversable } from './browsing/navigation/index';
+import type { BrowsingContext, Traversable } from './browsing/navigation/index';
 import type { UserAgent } from './user-agent';
+
+/** Browser state shared by reserved records and full environments. */
+// https://html.spec.whatwg.org/multipage/webappapis.html#environment
+export class BrowletEnvironmentRecord implements FetchEnvironmentRecord {
+  /** Identity transferred to the full environment when a reservation is consumed. */
+  id: string;
+  /** Top-level creation URL, or null when the environment has none. */
+  topLevelCreationURL: URLRecord | null;
+  /** Top-level origin, or null until it can be determined. */
+  topLevelOrigin: Origin | null;
+  /** Navigation's target browsing context, when present. */
+  targetBrowsingContext: BrowsingContext | null;
+  /** Service worker controlling this environment, when present. */
+  activeServiceWorker: object | null;
+  /** Browser owner; null only for an internal sandbox constructed without one. */
+  #userAgent: UserAgent | null;
+  /** Creation URL; null only for internal sandboxes. */
+  #creationURL: URLRecord | null;
+  #isSecureContext: boolean;
+  #executionReady = false;
+
+  /** Null leaves browser-specific state unavailable for an internal sandbox. */
+  constructor(initialization: BrowletEnvironmentRecordInit | null) {
+    this.id = initialization?.id ?? randomUUID();
+    this.#userAgent = initialization?.userAgent ?? null;
+    this.#creationURL = initialization?.creationURL ?? null;
+    this.topLevelCreationURL = initialization?.topLevelCreationURL ?? null;
+    this.topLevelOrigin = initialization?.topLevelOrigin ?? null;
+    this.targetBrowsingContext = initialization?.targetBrowsingContext ?? null;
+    this.activeServiceWorker = initialization?.activeServiceWorker ?? null;
+    this.#isSecureContext = initialization?.isSecureContext ?? false;
+  }
+
+  /** Browser owner; unavailable in standalone sandboxes without a supplied owner. */
+  get userAgent(): UserAgent {
+    if (this.#userAgent === null) throw new InternalError('Environment has no UserAgent');
+    return this.#userAgent;
+  }
+
+  set userAgent(value: UserAgent) {
+    this.#userAgent = value;
+  }
+
+  /** Creation URL; internal sandboxes have none. */
+  get creationURL(): URLRecord {
+    if (this.#creationURL === null) throw new InternalError('Environment has no creation URL');
+    return this.#creationURL;
+  }
+
+  set creationURL(value: URLRecord) {
+    this.#creationURL = value;
+  }
+
+  /** Security classification fixed when the environment was created. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
+  get isSecureContext(): boolean {
+    return this.#isSecureContext;
+  }
+
+  /** Whether HTML has completed setup for script execution. */
+  get executionReady(): boolean {
+    return this.#executionReady;
+  }
+
+  /** Mark HTML setup complete. */
+  markExecutionReady(): void {
+    this.#executionReady = true;
+  }
+
+  /** Determine this environment's partition before or after a realm exists. */
+  // https://fetch.spec.whatwg.org/#determine-the-network-partition-key
+  determineNetworkPartitionKey(): NetworkPartitionKey {
+    let topLevelOrigin = this.topLevelOrigin;
+    if (topLevelOrigin === null) {
+      if (this.topLevelCreationURL === null) throw new InternalError('Fetch environment has no top-level origin or creation URL');
+      topLevelOrigin = obtainURLOrigin(this.topLevelCreationURL);
+    }
+    return [obtainSite(topLevelOrigin), null];
+  }
+}
 
 /** Engine, Fetch, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
 export interface BrowletExecution extends RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, StyleletExecution {
@@ -34,8 +114,8 @@ export interface BrowletExecution extends RealmExecution, FetchExecution, WebIDL
 /** Composed browser settings and execution for one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
 // its realm component is retained directly here.
-export abstract class BrowletEnvironment extends EnvironmentRecord implements
-  ScriptingEnvironment, JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
+export abstract class BrowletEnvironment extends BrowletEnvironmentRecord implements
+  JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
@@ -47,7 +127,7 @@ export abstract class BrowletEnvironment extends EnvironmentRecord implements
   /** Allocation, execution, and owner task delivery for this realm. */
   exec: BrowletExecution;
 
-  constructor(realm: BrowletRealm, record: EnvironmentRecord | null, exec: BrowletExecution) {
+  constructor(realm: BrowletRealm, record: BrowletEnvironmentRecord | null, exec: BrowletExecution) {
     super(record);
     this.exec = exec;
     this.timing = new EnvironmentTiming(this);
@@ -246,7 +326,7 @@ export class SandboxEnvironment extends BrowletEnvironment {
 export class WindowEnvironment extends BrowletEnvironment {
   declare realm: WindowRealm;
 
-  constructor(realm: WindowRealm, record: EnvironmentRecord, exec: BrowletExecution) {
+  constructor(realm: WindowRealm, record: BrowletEnvironmentRecord, exec: BrowletExecution) {
     super(realm, record, exec);
   }
 
@@ -357,6 +437,19 @@ export class WindowEnvironment extends BrowletEnvironment {
   }
 }
 
+/** State supplied when reserving an environment or transferring it into full settings. */
+export interface BrowletEnvironmentRecordInit {
+  /** Omitted for a fresh reservation; retained when constructing full settings. */
+  id?: string;
+  userAgent: UserAgent;
+  creationURL: URLRecord;
+  topLevelCreationURL: URLRecord | null;
+  topLevelOrigin: Origin | null;
+  targetBrowsingContext: BrowsingContext | null;
+  activeServiceWorker?: object | null;
+  isSecureContext: boolean;
+}
+
 /** Inputs selected by browsing algorithms before Window composition creates its realm. */
 export type WindowEnvironmentInit = {
   /** Agent whose event loop executes the new Window's work. */
@@ -374,7 +467,7 @@ export type WindowEnvironmentInit = {
   /** Top-level origin captured for partitioning and security decisions. */
   topLevelOrigin: Origin;
   /** Early environment record whose identity survives navigation setup. */
-  reservedEnv?: EnvironmentRecord | null;
+  reservedEnv?: BrowletEnvironmentRecord | null;
   /** Previous realm whose WindowProxy identity is reused for navigation. */
   previousRealm?: WindowRealm;
 };

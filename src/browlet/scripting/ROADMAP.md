@@ -17,7 +17,7 @@ Do not restart the completed task/timer foundation when adding these consumers.
 | Source | Current responsibility |
 | --- | --- |
 | `agents.ts` | Agent/cluster records, Window inventory, one EventLoop per Agent, observer creation counters, and batched MutationObserver/slot-change notification |
-| `environment.ts`, `realm.ts` | Early EnvironmentRecord state, relevant/incumbent ownership, and controlled script/callback entry; full browser settings live in [`../environment.ts`](../environment.ts) |
+| `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; early records and full browser settings live in [`../environment.ts`](../environment.ts) |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
@@ -26,11 +26,12 @@ Do not restart the completed task/timer foundation when adding these consumers.
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
 
 `createWindowEnvironment()` composes the same Window/realm/execution boundary
-for initial browsing and navigation. EnvironmentRecord supplies security,
+for initial browsing and navigation. BrowletEnvironmentRecord supplies security,
 navigation state, network partitioning, and the UserAgent before a realm exists.
-Full environments in `browlet/environment.ts` inherit that state and add the actual
-realm, exec, global, and browser policy/reporting operations. They sit above the
-scripting foundations and are not re-exported by Scripting's barrel.
+The record and full environments live in `browlet/environment.ts`; full environments
+inherit the record's state and add the actual realm, exec, global, and browser
+policy/reporting operations. They sit above the scripting foundations, which retain
+type-only references to them, and are not re-exported by Scripting's barrel.
 SandboxEnvironment supplies internal execution through the same binding
 contract without attaching HTML settings. Browser client fields that have no
 sandbox meaning currently throw; add them only with an actual consumer and

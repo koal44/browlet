@@ -21,7 +21,7 @@ import { PolicyContainer } from '../../../src/browlet/browsing/policy/container'
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
-import { EnvironmentRecord } from '../../../src/browlet/scripting/environment';
+import { BrowletEnvironmentRecord } from '../../../src/browlet/environment';
 import { BrowletEnvironment } from '../../../src/browlet/environment';
 import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/global-scope';
 import type { Task } from
@@ -301,7 +301,7 @@ function createTestRealm(
   const realm = createBrowletRealm(agent, {
     createGlobalObject: () => ({}),
   }, { globalNames: ['Worker'] });
-  const record = new EnvironmentRecord({
+  const record = new BrowletEnvironmentRecord({
     userAgent: new UserAgent(),
     isSecureContext: false,
     creationURL: requireURL(`https://${name}.test/`),

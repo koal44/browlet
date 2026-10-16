@@ -3,13 +3,14 @@ import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../../test-runtime';
 
 import {
-  BindingWorld, defineInterface, impl, xattr, type BindingContext,
+  BindingWorld, defineInterface, impl, xattr, StructuredData, type BindingContext,
 } from '../../../../src/web-idl/index';
 import {
   DOMExceptionImpl, isDOMException,
 } from '../../../../src/web-idl/core/dom-exception';
 import type { BrowletRealm } from '../../../../src/browlet/scripting/realm';
-import type { ScriptingEnvironment } from '../../../../src/browlet/scripting/environment';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
+import { createBrowletExecution } from '../../../../src/browlet/bindings';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   structuredDeserialize,
@@ -432,23 +433,20 @@ describe('HTML structured deserialization', () => {
       members: [],
       serialSteps: {
         serializationSteps(value, record, _forStorage, context) {
-          record.set(
-            'Child',
-            context.subserialize((value as ContainerImpl).child),
-          );
+          record.fields.Child = context.subserialize((value as ContainerImpl).child);
         },
         deserializationSteps(record, value, _targetRealm, context) {
           (value as ContainerImpl).child = context.subdeserialize(
-            record.get('Child'),
+            record.fields.Child,
           );
         },
       },
     });
-    const bindings = new BindingWorld<ScriptingEnvironment>([containerIDL]);
+    const bindings = new BindingWorld<BrowletEnvironment>([containerIDL]);
     const sourceRealm = createManualRealm();
     const targetRealm = createManualRealm();
-    const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
-    const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
+    const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+    const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
     const original = source.createPlatformRecord(containerIDL.name)!;
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
@@ -463,12 +461,13 @@ describe('HTML structured deserialization', () => {
     const { target } = createContexts();
     const missing: SerializedRecord = {
       type: 'platform-object',
-      fields: new Map(),
       interfaceName: 'MissingInterface',
+      data: new StructuredData(),
+      cluster: null,
     };
     expectDataCloneError(() => structuredDeserialize(missing, target));
 
-    const record: SerializedRecord = { type: 'Object', properties: [] };
+    const record: SerializedRecord = { type: 'Object', properties: [], cluster: null };
     const remembered = {};
     const memory = new Map<SerializedRecord, unknown>([[record, remembered]]);
     expect(structuredDeserialize(record, target, memory)).toBe(remembered);
@@ -478,16 +477,16 @@ describe('HTML structured deserialization', () => {
 function createContexts(options: {
   agentCluster?: AgentCluster;
 } = {}): {
-  source: BindingContext<ScriptingEnvironment>;
+  source: BindingContext<BrowletEnvironment>;
   sourceRealm: BrowletRealm;
-  target: BindingContext<ScriptingEnvironment>;
+  target: BindingContext<BrowletEnvironment>;
   targetRealm: BrowletRealm;
 } {
-  const bindings = new BindingWorld<ScriptingEnvironment>([]);
+  const bindings = new BindingWorld<BrowletEnvironment>([]);
   const sourceRealm = createManualRealm({ crossOriginIsolated: true });
   const targetRealm = createManualRealm({ crossOriginIsolated: true });
-  const source = bindings.register(sourceRealm, (ctx) => ({ realm: ctx.realm }));
-  const target = bindings.register(targetRealm, (ctx) => ({ realm: ctx.realm }));
+  const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+  const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
   source.install(sourceRealm.globalObject);
   target.install(targetRealm.globalObject);
   const agentCluster = options.agentCluster ?? new AgentCluster('concrete');
@@ -503,8 +502,8 @@ function createContexts(options: {
 
 function cloneValue(
   value: unknown,
-  source: BindingContext<ScriptingEnvironment>,
-  target: BindingContext<ScriptingEnvironment>,
+  source: BindingContext<BrowletEnvironment>,
+  target: BindingContext<BrowletEnvironment>,
 ): unknown {
   return structuredDeserialize(structuredSerialize(value, source), target);
 }

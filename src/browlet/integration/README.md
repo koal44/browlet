@@ -17,7 +17,7 @@ and structured data. Fetch delivery resolves the supplied destination global's
 BrowletRealm, which can differ from the execution owner's, and queues on HTML's networking
 task source. The live global and DOMException accessors remain at that composition
 boundary because global installation and interface registration finish later.
-The BrowletRealm initially reads security from an `EnvironmentRecord` instance.
+The BrowletRealm initially reads security from a `BrowletEnvironmentRecord` instance.
 Registration constructs the complete `WindowEnvironment` before global projection;
 it inherits the record state and adds `realm` and `exec`. The composition root
 then constructs Window with that environment, links it to the realm, and installs

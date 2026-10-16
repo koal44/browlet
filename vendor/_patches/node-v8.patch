@@ -2,7 +2,7 @@ Browlet V8 extensions for Node.js
 
 Upstream: https://github.com/nodejs/node.git
 Base: 6f41e415639b5ec3dd816e44945cc73b4d7651e3
-Source: v8-patches at 4695be8073d575c495936e4dbfeeb1094f435186 plus working-tree FinalizationRegistry predicate
+Source: v8-patches at 06cfa7ba581c509cdee1bcbfbe088d9154b1a520
 
 diff --git a/deps/v8/include/v8-array-buffer.h b/deps/v8/include/v8-array-buffer.h
 index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf47c4af7df 100644

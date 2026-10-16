@@ -4,7 +4,7 @@ import { UserAgent } from '../../src/browlet/user-agent';
 import { getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { Window } from '../../src/browlet/platform';
-import { EnvironmentRecord } from '../../src/browlet/scripting/environment';
+import { BrowletEnvironmentRecord } from '../../src/browlet/environment';
 import { type WindowEnvironment } from '../../src/browlet/environment';
 import { navigationAndTraversalTaskSource } from '../../src/browlet/scripting/tasks';
 import { utf8Decode } from '../../src/encoding/codecs/utf-8';
@@ -148,7 +148,7 @@ describe('Blob scheme responses and access', () => {
   it('uses the reserved environment before the client, including a reservation without a realm', async () => {
     const { operation, env } = createBlob();
     const other = createPolicyEnvironment('https://other.test/', undefined, env.userAgent);
-    const reserved = new EnvironmentRecord({
+    const reserved = new BrowletEnvironmentRecord({
       userAgent: env.userAgent, creationURL: copyURL(env.creationURL),
       topLevelOrigin: env.topLevelOrigin, topLevelCreationURL: env.topLevelCreationURL,
       targetBrowsingContext: null, isSecureContext: true,

@@ -10,7 +10,7 @@ import { Navigable, TopLevelTraversable } from '../../src/browlet/browsing/navig
 import { WindowAgent } from '../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../src/browlet/bindings';
 import { UserAgent } from '../../src/browlet/user-agent';
-import { EnvironmentRecord } from '../../src/browlet/scripting/environment';
+import { BrowletEnvironmentRecord } from '../../src/browlet/environment';
 import { StorageKey } from '../../src/storage/keys';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { determineRequestReferrer } from '../../src/browlet/browsing/policy/referrer-policy';
@@ -226,7 +226,7 @@ describe('network partition keys from browser environments', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL('https://a.example.com/').url!;
     const origin = obtainURLOrigin(creationURL);
-    const reservedEnv = new EnvironmentRecord({
+    const reservedEnv = new BrowletEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: null,
       targetBrowsingContext: null, isSecureContext: true,
     });
@@ -262,7 +262,7 @@ describe('storage keys from browser environments', () => {
   it('uses the creation URL of a reserved environment before any realm exists', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL('https://reserved.test/').url!;
-    const record = new EnvironmentRecord({
+    const record = new BrowletEnvironmentRecord({
       userAgent, creationURL, topLevelCreationURL: creationURL,
       topLevelOrigin: obtainURLOrigin(creationURL), targetBrowsingContext: null, isSecureContext: true,
     });
@@ -287,7 +287,7 @@ describe('storage keys from browser environments', () => {
 
 function createReservedEnvironment(url: string) {
   const creationURL = parseURL(url).url!;
-  return new EnvironmentRecord({
+  return new BrowletEnvironmentRecord({
     userAgent: new UserAgent(), creationURL, topLevelCreationURL: creationURL,
     topLevelOrigin: null, targetBrowsingContext: null, isSecureContext: true,
   });

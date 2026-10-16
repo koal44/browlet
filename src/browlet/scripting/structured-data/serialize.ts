@@ -16,199 +16,326 @@ import {
   readErrorStack, toString,
 } from '../../../js-engine/index';
 import {
-  DOMExceptionImpl, DOMExceptionNames, type BindingContext, type ImplementationClass,
+  DOMExceptionImpl, DOMExceptionNames, StructuredData,
+  type BindingContext, type ImplementationClass, type PlatformRecord,
 } from '../../../web-idl/index';
 
-import type { ScriptingEnvironment } from '../environment';
-import type { BrowletRealm } from '../realm';
+import type { BrowletEnvironment } from '../../environment';
 
 import {
-  createStructuredDataRecord, isSerializedErrorName,
-  type ArrayBufferSerializedRecord,
-  type ArrayBufferViewSerializedRecord,
-  type ErrorSerializedRecord, type MapSerializedRecord,
-  type ObjectSerializedRecord,
-  type SerializedRecord,
-  type SetSerializedRecord, type SharedArrayBufferSerializedRecord,
+  restrictToSameAgentCluster, isSerializedErrorName,
+  type SerializedArrayBuffer, type SerializedArrayBufferView,
+  type SerializedError, type SerializedMap, type SerializedArray,
+  type SerializedObject, type SerializedPlatformObject, type SerializedRecord,
+  type SerializedSet, type SerializedSharedArrayBuffer,
   type StructuredSerializeMemory,
 } from './records';
 import { DetachedTransferableStamper } from './transferable';
 
-/** HTML §2.7.4, StructuredSerialize. */
+// https://html.spec.whatwg.org/multipage/structured-data.html#structuredserialize
 export function structuredSerialize(
   value: unknown,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): SerializedRecord {
   return structuredSerializeInternal(value, false, ctx);
 }
 
-/** HTML §2.7.5, StructuredSerializeForStorage. */
+// https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeforstorage
 export function structuredSerializeForStorage(
   value: unknown,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
 ): SerializedRecord {
   return structuredSerializeInternal(value, true, ctx);
 }
 
-/** HTML §2.7.3, StructuredSerializeInternal. */
+// https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
 // BINDING_INTEGRATION: recognize stamped instances through either implementation or platform identity.
 export function structuredSerializeInternal(
   value: unknown,
   forStorage: boolean,
-  ctx: BindingContext<ScriptingEnvironment>,
+  ctx: BindingContext<BrowletEnvironment>,
   memory: StructuredSerializeMemory = new Map(),
 ): SerializedRecord {
-  const record = ctx.getObjectRecord(value);
-  const identity = record?.implInst ?? value;
-  if (memory.has(identity)) return memory.get(identity)!;
+  return new StructuredSerializer(forStorage, ctx, memory).serialize(value);
+}
 
-  if (isPrimitive(value)) return { type: 'primitive', value };
-  if (typeof value === 'symbol') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+/** One graph traversal, including all nested interface serialization steps. */
+class StructuredSerializer {
+  #forStorage: boolean;
+  #ctx: BindingContext<BrowletEnvironment>;
+  #memory: StructuredSerializeMemory;
 
-  if (!record && isProxyObject(value)) {
-    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+  constructor(
+    forStorage: boolean,
+    ctx: BindingContext<BrowletEnvironment>,
+    memory: StructuredSerializeMemory,
+  ) {
+    this.#forStorage = forStorage;
+    this.#ctx = ctx;
+    this.#memory = memory;
   }
-  let serialized: SerializedRecord;
 
-  if (hasBooleanData(value)) {
-    serialized = {
-      type: 'Boolean',
-      value: getBooleanData(value),
-    };
-  } else if (hasNumberData(value)) {
-    serialized = {
-      type: 'Number',
-      value: getNumberData(value),
-    };
-  } else if (hasBigIntData(value)) {
-    serialized = {
-      type: 'BigInt',
-      value: getBigIntData(value),
-    };
-  } else if (hasStringData(value)) {
-    serialized = {
-      type: 'String',
-      value: getStringData(value),
-    };
-  } else if (hasSymbolData(value)) {
-    throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-  } else if (hasDateValue(value)) {
-    serialized = {
-      type: 'Date',
-      value: getDateValue(value),
-    };
-  } else if (hasRegExpMatcher(value)) {
-    const { flags, source } = getRegExpData(value);
-    serialized = {
-      type: 'RegExp',
-      source,
-      flags,
-    };
-  } else {
-    if (isAnyArrayBuffer(value)) {
-      serialized = serializeBuffer(
-        value,
-        forStorage,
-        ctx,
-      );
+  serialize(value: unknown): SerializedRecord {
+    const record = this.#ctx.getObjectRecord(value);
+    const remembered = this.#memory.get(record?.implInst ?? value);
+    if (remembered !== undefined) return remembered;
+
+    const serialized = this.#serializeValue(value, record);
+    if (this.#forStorage && serialized.cluster !== null) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    }
+    return serialized;
+  }
+
+  #serializeValue(value: unknown, record: Readonly<PlatformRecord> | undefined): SerializedRecord {
+    if (isPrimitive(value)) return { type: 'primitive', value, cluster: null };
+    if (typeof value === 'symbol') throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    if (!record && isProxyObject(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+
+    let serialized: SerializedRecord;
+    if (hasBooleanData(value)) {
+      serialized = {
+        type: 'Boolean',
+        value: getBooleanData(value),
+        cluster: null,
+      };
+    } else if (hasNumberData(value)) {
+      serialized = {
+        type: 'Number',
+        value: getNumberData(value),
+        cluster: null,
+      };
+    } else if (hasBigIntData(value)) {
+      serialized = {
+        type: 'BigInt',
+        value: getBigIntData(value),
+        cluster: null,
+      };
+    } else if (hasStringData(value)) {
+      serialized = {
+        type: 'String',
+        value: getStringData(value),
+        cluster: null,
+      };
+    } else if (hasSymbolData(value)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    } else if (hasDateValue(value)) {
+      serialized = {
+        type: 'Date',
+        value: getDateValue(value),
+        cluster: null,
+      };
+    } else if (hasRegExpMatcher(value)) {
+      const { flags, source } = getRegExpData(value);
+      serialized = {
+        type: 'RegExp',
+        source,
+        flags,
+        cluster: null,
+      };
+    } else if (isAnyArrayBuffer(value)) {
+      serialized = this.#serializeBuffer(value);
     } else if (isArrayBufferView(value)) {
-      if (isArrayBufferViewOutOfBounds(value)) {
-        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-      }
-      const bufferSerialized = structuredSerializeInternal(
-        getArrayBufferViewBuffer(value),
-        forStorage,
-        ctx,
-        memory,
-      );
-      if (!isBufferSerializedRecord(bufferSerialized) &&
-        bufferSerialized.type !== 'transfer-placeholder') {
-        throw new InternalError('A buffer view did not serialize its backing buffer');
-      }
-      serialized = {
-        type: 'ArrayBufferView',
-        constructor: getBufferViewTypeName(value),
-        buffer: bufferSerialized,
-        byteOffset: getArrayBufferViewByteOffset(value),
-        ...serializeArrayBufferViewLengths(value),
-      };
+      serialized = this.#serializeBufferView(value);
     } else if (hasMapData(value)) {
-      serialized = { type: 'Map', entries: [] };
-      memory.set(identity, serialized);
-      serializeMapData(value, serialized, forStorage, ctx, memory);
-      return serialized;
+      return this.#serializeMap(value);
     } else if (hasSetData(value)) {
-      serialized = { type: 'Set', entries: [] };
-      memory.set(identity, serialized);
-      serializeSetData(value, serialized, forStorage, ctx, memory);
-      return serialized;
+      return this.#serializeSet(value);
     } else if (hasErrorData(value) && !record) {
-      serialized = serializeError(value, ctx.realm);
-      memory.set(identity, serialized);
-      serializeErrorCause(value, serialized, forStorage, ctx, memory);
-      return serialized;
+      return this.#serializeError(value);
     } else if (record) {
-      const steps = record.assembled.serialSteps;
-      if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-      if (DetachedTransferableStamper.has(record.implInst)) {
-        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-      }
-      serialized = {
-        type: 'platform-object',
-        interfaceName: record.assembled.name,
-        fields: createStructuredDataRecord(),
-      };
-      memory.set(identity, serialized);
-      record.serializationSteps(
-        serialized.fields,
-        forStorage,
-        {
-          subserialize: (subValue: unknown, implClass?: ImplementationClass) => {
-            if (implClass) {
-              // The typed overload supplies an implementation; its containing object selects
-              // the owner just as an interface-valued result does during projection.
-              record.associateWithOwner(implClass, subValue as object);
-            }
-            return structuredSerializeInternal(subValue, forStorage, ctx, memory);
-          },
-        },
-        steps,
-      );
-      return serialized;
+      return this.#serializePlatformObject(record);
     } else if (Array.isArray(value)) {
       const length = Reflect.getOwnPropertyDescriptor(value, 'length')?.value;
       if (typeof length !== 'number') {
         throw new InternalError('An Array exotic object has no numeric length');
       }
-      serialized = { type: 'Array', length, properties: [] };
+      return this.#serializeProperties(value, { type: 'Array', length, properties: [], cluster: null });
     } else if (typeof value === 'function') {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-    } else if (hasUnsupportedInternalSlots(value) ||
-      nativeCloneRejectsPropertylessObject(value)) {
+    } else if (hasUnsupportedInternalSlots(value)) {
       throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
     } else {
-      serialized = { type: 'Object', properties: [] };
+      const keys = Object.keys(value);
+      if (nativeCloneRejectsPropertylessObject(value, keys)) {
+        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+      }
+      return this.#serializeProperties(value, { type: 'Object', properties: [], cluster: null }, keys);
     }
+
+    this.#memory.set(record?.implInst ?? value, serialized);
+    return serialized;
   }
 
-  memory.set(identity, serialized);
-  if (serialized.type === 'Array' || serialized.type === 'Object') {
-    serializeProperties(
-      value,
-      serialized,
-      forStorage,
-      ctx,
-      memory,
+  // StructuredSerializeInternal: ArrayBuffer and SharedArrayBuffer branches.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializeBuffer(value: ArrayBufferLike): SerializedArrayBuffer | SerializedSharedArrayBuffer {
+    const byteLength = getArrayBufferByteLength(value);
+    const maxByteLength = getArrayBufferMaxByteLength(value);
+
+    if (isSharedArrayBuffer(value)) {
+      if (!this.#ctx.realm.crossOriginIsolated) {
+        throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+      }
+      const serialized: SerializedSharedArrayBuffer = maxByteLength === undefined
+        ? {
+          type: 'SharedArrayBuffer',
+          buffer: value,
+          byteLength,
+          cluster: null,
+        }
+        : {
+          type: 'GrowableSharedArrayBuffer',
+          buffer: value,
+          byteLength,
+          maxByteLength,
+          cluster: null,
+        };
+      restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
+      return serialized;
+    }
+
+    if (isDetachedArrayBuffer(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    const bytes = getBufferSourceCopy(value);
+    return maxByteLength === undefined
+      ? { type: 'ArrayBuffer', bytes, byteLength, cluster: null }
+      : {
+        type: 'ResizableArrayBuffer',
+        bytes,
+        byteLength,
+        maxByteLength,
+        cluster: null,
+      };
+  }
+
+  // StructuredSerializeInternal: the ArrayBufferView branch.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializeBufferView(value: JSBufferView): SerializedArrayBufferView {
+    if (isArrayBufferViewOutOfBounds(value)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    }
+    const bufferSerialized = this.serialize(getArrayBufferViewBuffer(value));
+    if (!isBufferSerializedRecord(bufferSerialized) &&
+      bufferSerialized.type !== 'transfer-placeholder') {
+      throw new InternalError('A buffer view did not serialize its backing buffer');
+    }
+    return {
+      type: 'ArrayBufferView',
+      constructor: getBufferViewTypeName(value),
+      buffer: bufferSerialized,
+      byteOffset: getArrayBufferViewByteOffset(value),
+      ...serializeArrayBufferViewLengths(value),
+      cluster: null,
+    };
+  }
+
+  // StructuredSerializeInternal: deep serialization of [[MapData]].
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializeMap(value: Map<unknown, unknown>): SerializedMap {
+    const serialized: SerializedMap = { type: 'Map', entries: [], cluster: null };
+    this.#memory.set(value, serialized);
+    const copiedEntries = copyMapData(value);
+    for (const [key, entryValue] of copiedEntries) {
+      serialized.entries.push({ key: this.serialize(key), value: this.serialize(entryValue) });
+    }
+    return serialized;
+  }
+
+  // StructuredSerializeInternal: deep serialization of [[SetData]].
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializeSet(value: Set<unknown>): SerializedSet {
+    const serialized: SerializedSet = { type: 'Set', entries: [], cluster: null };
+    this.#memory.set(value, serialized);
+    const copiedEntries = copySetData(value);
+    for (const entry of copiedEntries) {
+      serialized.entries.push(this.serialize(entry));
+    }
+    return serialized;
+  }
+
+  // StructuredSerializeInternal: [[ErrorData]] and its accompanying data.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializeError(value: Error): SerializedError {
+    const candidateName = Reflect.get(value, 'name', value) as unknown;
+    const name = isSerializedErrorName(candidateName) ? candidateName : 'Error';
+    const messageDescriptor = Reflect.getOwnPropertyDescriptor(value, 'message');
+    const message = messageDescriptor && 'value' in messageDescriptor
+      ? toString(messageDescriptor.value)
+      : undefined;
+    const stackValue = readErrorStack(value, this.#ctx.realm);
+    const stack = typeof stackValue === 'string' ? stackValue : '';
+    const serialized: SerializedError = { type: 'Error', name, message, stack, cluster: null };
+    this.#memory.set(value, serialized);
+
+    const descriptor = Reflect.getOwnPropertyDescriptor(value, 'cause');
+    if (descriptor && 'value' in descriptor) {
+      serialized.cause = this.serialize(descriptor.value);
+    }
+    return serialized;
+  }
+
+  // StructuredSerializeInternal: serializable platform objects.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializePlatformObject(record: Readonly<PlatformRecord>): SerializedPlatformObject {
+    const steps = record.assembled.serialSteps;
+    if (!steps) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    if (DetachedTransferableStamper.has(record.implInst)) {
+      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
+    }
+    const serialized: SerializedPlatformObject = {
+      type: 'platform-object',
+      interfaceName: record.assembled.name,
+      data: new StructuredData(),
+      cluster: null,
+    };
+    serialized.data.shouldRestrict = record.assembled.hasExtendedAttribute('SameAgentCluster', false);
+    if (serialized.data.shouldRestrict) {
+      restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
+    }
+    this.#memory.set(record.implInst, serialized);
+    record.serializationSteps(
+      serialized.data,
+      this.#forStorage,
+      {
+        subserialize: (value: unknown, implClass?: ImplementationClass) => {
+          if (implClass) {
+            // The typed overload supplies an implementation; its containing object selects
+            // the owner just as an interface-valued result does during projection.
+            record.associateWithOwner(implClass, value as object);
+          }
+          return this.serialize(value);
+        },
+      },
+      steps,
     );
+    if (serialized.data.shouldRestrict && serialized.cluster === null) {
+      restrictToSameAgentCluster(serialized, this.#ctx.getEnvironment());
+    }
+    return serialized;
   }
 
-  return serialized;
+  // StructuredSerializeInternal: enumerable own-property serialization.
+  // https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
+  #serializeProperties(
+    value: object,
+    serialized: SerializedObject | SerializedArray,
+    keys = Object.keys(value),
+  ): SerializedObject | SerializedArray {
+    this.#memory.set(value, serialized);
+    for (const key of keys) {
+      if (!Object.hasOwn(value, key)) continue;
+      const inputValue = Reflect.get(value, key, value) as unknown;
+      serialized.properties.push({ key, value: this.serialize(inputValue) });
+    }
+    return serialized;
+  }
 }
 
-/** HTML §2.7.3, ArrayBufferView [[ByteLength]] and [[ArrayLength]]. */
+// StructuredSerializeInternal: ArrayBufferView [[ByteLength]] and [[ArrayLength]].
+// https://html.spec.whatwg.org/multipage/structured-data.html#structuredserializeinternal
 function serializeArrayBufferViewLengths(
   value: JSBufferView,
-): Pick<ArrayBufferViewSerializedRecord, 'arrayLength' | 'byteLength'> {
+): Pick<SerializedArrayBufferView, 'arrayLength' | 'byteLength'> {
   if (isLengthTrackingArrayBufferView(value)) {
     return isDataView(value)
       ? { byteLength: 'auto' }
@@ -220,152 +347,6 @@ function serializeArrayBufferViewLengths(
       arrayLength: getTypedArrayLength(value),
       byteLength: getArrayBufferViewByteLength(value),
     };
-}
-
-/** HTML §2.7.3, ArrayBuffer and SharedArrayBuffer branches. */
-function serializeBuffer(
-  value: ArrayBufferLike,
-  forStorage: boolean,
-  ctx: BindingContext<ScriptingEnvironment>,
-): ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
-  const byteLength = getArrayBufferByteLength(value);
-  const maxByteLength = getArrayBufferMaxByteLength(value);
-
-  if (isSharedArrayBuffer(value)) {
-    if (!ctx.realm.crossOriginIsolated || forStorage) {
-      throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-    }
-    const agentCluster = ctx.realm.agent.agentCluster;
-    if (!agentCluster) throw new InternalError('Realm agent has no agent cluster');
-    return maxByteLength === undefined
-      ? {
-        type: 'SharedArrayBuffer',
-        buffer: value,
-        byteLength,
-        agentCluster,
-      }
-      : {
-        type: 'GrowableSharedArrayBuffer',
-        buffer: value,
-        byteLength,
-        maxByteLength,
-        agentCluster,
-      };
-  }
-
-  if (isDetachedArrayBuffer(value)) throw new DOMExceptionImpl('', DOMExceptionNames.dataClone);
-  const bytes = getBufferSourceCopy(value);
-  return maxByteLength === undefined
-    ? { type: 'ArrayBuffer', bytes, byteLength }
-    : {
-      type: 'ResizableArrayBuffer',
-      bytes,
-      byteLength,
-      maxByteLength,
-    };
-}
-
-/** HTML §2.7.3, deep serialization of [[MapData]]. */
-function serializeMapData(
-  value: Map<unknown, unknown>,
-  serialized: MapSerializedRecord,
-  forStorage: boolean,
-  ctx: BindingContext<ScriptingEnvironment>,
-  memory: StructuredSerializeMemory,
-): void {
-  const copiedEntries = copyMapData(value);
-  for (const [key, entryValue] of copiedEntries) {
-    serialized.entries.push({
-      key: structuredSerializeInternal(key, forStorage, ctx, memory),
-      value: structuredSerializeInternal(
-        entryValue,
-        forStorage,
-        ctx,
-        memory,
-      ),
-    });
-  }
-}
-
-/** HTML §2.7.3, deep serialization of [[SetData]]. */
-function serializeSetData(
-  value: Set<unknown>,
-  serialized: SetSerializedRecord,
-  forStorage: boolean,
-  ctx: BindingContext<ScriptingEnvironment>,
-  memory: StructuredSerializeMemory,
-): void {
-  const copiedEntries = copySetData(value);
-  for (const entry of copiedEntries) {
-    serialized.entries.push(structuredSerializeInternal(
-      entry,
-      forStorage,
-      ctx,
-      memory,
-    ));
-  }
-}
-
-/** HTML §2.7.3, enumerable own-property serialization. */
-function serializeProperties(
-  value: object,
-  serialized: ObjectSerializedRecord | Extract<SerializedRecord, {
-    type: 'Array';
-  }>,
-  forStorage: boolean,
-  ctx: BindingContext<ScriptingEnvironment>,
-  memory: StructuredSerializeMemory,
-): void {
-  const keys = Object.keys(value);
-  for (const key of keys) {
-    if (!Object.hasOwn(value, key)) continue;
-    const inputValue = Reflect.get(value, key, value) as unknown;
-    serialized.properties.push({
-      key,
-      value: structuredSerializeInternal(
-        inputValue,
-        forStorage,
-        ctx,
-        memory,
-      ),
-    });
-  }
-}
-
-/** HTML §2.7.3, the [[ErrorData]] branch. */
-function serializeError(
-  value: Error,
-  realm: BrowletRealm,
-): ErrorSerializedRecord {
-  const candidateName = Reflect.get(value, 'name', value) as unknown;
-  const name = isSerializedErrorName(candidateName)
-    ? candidateName
-    : 'Error';
-  const messageDescriptor = Reflect.getOwnPropertyDescriptor(value, 'message');
-  const message = messageDescriptor && 'value' in messageDescriptor
-    ? toString(messageDescriptor.value)
-    : undefined;
-  const stackValue = readErrorStack(value, realm);
-  const stack = typeof stackValue === 'string' ? stackValue : '';
-  return { type: 'Error', name, message, stack };
-}
-
-/** HTML §2.7.3, interesting accompanying [[ErrorData]]. */
-function serializeErrorCause(
-  value: Error,
-  serialized: ErrorSerializedRecord,
-  forStorage: boolean,
-  ctx: BindingContext<ScriptingEnvironment>,
-  memory: StructuredSerializeMemory,
-): void {
-  const descriptor = Reflect.getOwnPropertyDescriptor(value, 'cause');
-  if (!descriptor || !('value' in descriptor)) return;
-  serialized.cause = structuredSerializeInternal(
-    descriptor.value,
-    forStorage,
-    ctx,
-    memory,
-  );
 }
 
 function hasUnsupportedInternalSlots(value: object): boolean {
@@ -389,7 +370,7 @@ function hasUnsupportedInternalSlots(value: object): boolean {
 
 function isBufferSerializedRecord(
   value: SerializedRecord,
-): value is ArrayBufferSerializedRecord | SharedArrayBufferSerializedRecord {
+): value is SerializedArrayBuffer | SerializedSharedArrayBuffer {
   return value.type === 'ArrayBuffer' ||
     value.type === 'ResizableArrayBuffer' ||
     value.type === 'SharedArrayBuffer' ||

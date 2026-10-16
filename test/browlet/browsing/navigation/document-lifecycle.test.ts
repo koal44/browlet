@@ -12,7 +12,7 @@ import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/rea
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
 } from '../../../../src/browlet/scripting/agents';
-import { EnvironmentRecord } from '../../../../src/browlet/scripting/environment';
+import { BrowletEnvironmentRecord } from '../../../../src/browlet/environment';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
 import { createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/session-history';
@@ -138,7 +138,7 @@ describe('browsing context groups', () => {
     const origin = createOpaqueOrigin();
     const realm = new WindowRealm({
       agent: new WindowAgent(createManualEventLoop()),
-      envRecord: new EnvironmentRecord({
+      envRecord: new BrowletEnvironmentRecord({
         userAgent: new UserAgent(), creationURL,
         topLevelCreationURL: creationURL, topLevelOrigin: origin,
         targetBrowsingContext: null, isSecureContext: false,
@@ -404,7 +404,7 @@ describe('environment settings objects', () => {
     const origin = obtainURLOrigin(creationURL);
     const userAgent = new UserAgent();
     const reservedURL = requireURL('https://reserved.test/');
-    const reservedEnv = new EnvironmentRecord({
+    const reservedEnv = new BrowletEnvironmentRecord({
       userAgent, creationURL: reservedURL, topLevelCreationURL: reservedURL, topLevelOrigin: obtainURLOrigin(reservedURL),
       targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {}, isSecureContext: true,
     });

@@ -211,15 +211,15 @@ describe('Node/V8 built-in primitives', () => {
   it('keeps the native exotic probe narrow and non-consuming', () => {
     const iterator = [1, 2][Symbol.iterator]();
     expect(JSEngine.nativeCloneRejectsPropertylessObject(
-      iterator,
+      iterator, Object.keys(iterator),
     )).toBe(true);
     expect(iterator.next()).toEqual({ done: false, value: 1 });
-    expect(JSEngine.nativeCloneRejectsPropertylessObject({}))
+    expect(JSEngine.nativeCloneRejectsPropertylessObject({}, []))
       .toBe(false);
 
     const decorated = Object.assign([][Symbol.iterator](), { marker: true });
     expect(JSEngine.nativeCloneRejectsPropertylessObject(
-      decorated,
+      decorated, Object.keys(decorated),
     )).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 import { InternalError, Stamper, type ObservableArrayHandle } from '../../infra/index';
 import { isObject, readErrorStack, writeErrorStack } from '../../js-engine/index';
 import {
-  DOMExceptionImpl, DOMExceptionStamper, type ImplementationClass, type StructuredDataRecord,
+  DOMExceptionImpl, DOMExceptionStamper, type ImplementationClass, type StructuredData,
   type SerialSteps, type SerializationContext, type DeserializationContext,
 } from '../core/index';
 
@@ -57,23 +57,23 @@ export class PlatformRecord<T extends object = object> {
 
   /** Save a serializable interface's implementation state and engine-owned exception stack. */
   serializationSteps(
-    serialized: StructuredDataRecord, forStorage: boolean, context: SerializationContext, steps: SerialSteps,
+    serialized: StructuredData, forStorage: boolean, context: SerializationContext, steps: SerialSteps,
   ): void {
     steps.serializationSteps(this.implInst, serialized, forStorage, context);
     // Core owns name/message; the JavaScript binding supplies the native Error state.
     // https://webidl.spec.whatwg.org/#idl-DOMException
     if (DOMExceptionImpl.is(this.implInst)) {
       const stack = readErrorStack(this.project(), this.realm);
-      serialized.set('Stack', typeof stack === 'string' ? stack : '');
+      serialized.fields.Stack = typeof stack === 'string' ? stack : '';
     }
   }
 
   /** Restore a serializable interface's implementation state and stack in its destination realm. */
-  deserializationSteps(serialized: StructuredDataRecord, context: DeserializationContext, steps: SerialSteps): void {
+  deserializationSteps(serialized: StructuredData, context: DeserializationContext, steps: SerialSteps): void {
     steps.deserializationSteps(serialized, this.implInst, this.realm, context);
     if (DOMExceptionImpl.is(this.implInst)) {
-      const fields = serialized as StructuredDataRecord<{ Stack: string; }>;
-      writeErrorStack(this.project(), fields.get('Stack'));
+      const data = serialized as StructuredData<{ Stack: string; }>;
+      writeErrorStack(this.project(), data.fields.Stack);
     }
   }
 
