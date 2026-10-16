@@ -27,5 +27,6 @@ exports.isStringIterator = native.isStringIterator;
 exports.isRegExpStringIterator = native.isRegExpStringIterator;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;
 exports.createCollectionIterator = native.createCollectionIterator;
+exports.createHTMLDDA = native.createHTMLDDA;
 Object.assign(exports, require('./vm.cjs')(native));
 Object.assign(exports, require('./property-delegate.cjs')(native));

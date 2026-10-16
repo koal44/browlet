@@ -61,10 +61,18 @@ Local<Value> DelegateReceiver(const PropertyCallbackInfo<T>& info) {
 #endif
 }
 
+template <typename T>
+Local<Boolean> HasOwn(const PropertyCallbackInfo<T>& info, Local<Name> key) {
+  auto isolate = info.GetIsolate();
+  return Boolean::New(isolate, info.HolderV2()
+      ->HasRealNamedProperty(isolate->GetCurrentContext(), key).FromMaybe(false));
+}
+
 Intercepted Get(Local<Name> key, const PropertyCallbackInfo<Value>& info) {
   Local<Value> args[] = {key, DelegateReceiver(info)};
+  Local<Value> query[] = {key, HasOwn(info, key)};
   Local<Value> result;
-  if (!Call(info, "has", 1, args, &result)) return Intercepted::kNo;
+  if (!Call(info, "has", 2, query, &result)) return Intercepted::kNo;
   if (result.IsEmpty()) return Intercepted::kYes;
   if (!result->BooleanValue(info.GetIsolate())) return Intercepted::kNo;
   if (!Call(info, "get", 2, args, &result)) return Intercepted::kNo;
@@ -73,18 +81,18 @@ Intercepted Get(Local<Name> key, const PropertyCallbackInfo<Value>& info) {
 }
 
 Intercepted Descriptor(Local<Name> key, const PropertyCallbackInfo<Value>& info) {
-  Local<Value> args[] = {key};
+  Local<Value> args[] = {key, HasOwn(info, key)};
   Local<Value> result;
-  if (!Call(info, "descriptor", 1, args, &result)) return Intercepted::kNo;
+  if (!Call(info, "descriptor", 2, args, &result)) return Intercepted::kNo;
   if (!result.IsEmpty() && result->IsUndefined()) return Intercepted::kNo;
   if (!result.IsEmpty()) info.GetReturnValue().Set(result);
   return Intercepted::kYes;
 }
 
 Intercepted Query(Local<Name> key, const PropertyCallbackInfo<Integer>& info) {
-  Local<Value> args[] = {key};
+  Local<Value> args[] = {key, HasOwn(info, key)};
   Local<Value> result;
-  if (!Call(info, "query", 1, args, &result)) return Intercepted::kNo;
+  if (!Call(info, "query", 2, args, &result)) return Intercepted::kNo;
   if (!result.IsEmpty() && result->IsUndefined()) return Intercepted::kNo;
   if (!result.IsEmpty()) info.GetReturnValue().Set(result.As<Integer>());
   return Intercepted::kYes;
@@ -100,9 +108,10 @@ void Reject(const PropertyCallbackInfo<T>& info) {
 
 Intercepted Set(Local<Name> key, Local<Value> value,
                 const PropertyCallbackInfo<void>& info) {
-  Local<Value> args[] = {key, value, DelegateReceiver(info)};
+  Local<Value> args[] = {key, value, DelegateReceiver(info), HasOwn(info, key)};
   Local<Value> result;
-  if (!Call(info, "set", 3, args, &result)) return Intercepted::kNo;
+  if (!Call(info, "set", 4, args, &result)) return Intercepted::kNo;
+  if (!result.IsEmpty() && result->IsUndefined()) return Intercepted::kNo;
   if (!result.IsEmpty() && !result->BooleanValue(info.GetIsolate())) {
     info.GetReturnValue().SetFalse();
     Reject(info);
@@ -111,9 +120,10 @@ Intercepted Set(Local<Name> key, Local<Value> value,
 }
 
 Intercepted Delete(Local<Name> key, const PropertyCallbackInfo<Boolean>& info) {
-  Local<Value> args[] = {key};
+  Local<Value> args[] = {key, HasOwn(info, key)};
   Local<Value> result;
-  if (!Call(info, "delete", 1, args, &result)) return Intercepted::kNo;
+  if (!Call(info, "delete", 2, args, &result)) return Intercepted::kNo;
+  if (!result.IsEmpty() && result->IsUndefined()) return Intercepted::kNo;
   if (!result.IsEmpty()) {
     const bool success = result->BooleanValue(info.GetIsolate());
     info.GetReturnValue().Set(success);
@@ -138,9 +148,10 @@ Intercepted Define(Local<Name> key, const PropertyDescriptor& descriptor,
   if (descriptor.has_writable()) put("writable", Boolean::New(isolate, descriptor.writable()));
   if (descriptor.has_enumerable()) put("enumerable", Boolean::New(isolate, descriptor.enumerable()));
   if (descriptor.has_configurable()) put("configurable", Boolean::New(isolate, descriptor.configurable()));
-  Local<Value> args[] = {key, object};
+  Local<Value> args[] = {key, object, HasOwn(info, key)};
   Local<Value> result;
-  if (!Call(info, "define", 2, args, &result)) return Intercepted::kNo;
+  if (!Call(info, "define", 3, args, &result)) return Intercepted::kNo;
+  if (!result.IsEmpty() && result->IsUndefined()) return Intercepted::kNo;
   if (!result.IsEmpty() && !result->BooleanValue(isolate)) {
     info.GetReturnValue().SetFalse();
     Reject(info);

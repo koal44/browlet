@@ -20,8 +20,9 @@ the observable constraints of each runtime.
 | Realm identity and lookup | [realm.cc](addon/realm.cc); [realm tests](test/capabilities.test.cjs) |
 | Promise observation | [promise.cc](addon/promise.cc); [Promise tests](test/capabilities.test.cjs) |
 | Callback and job hooks | [host-hooks.cc](addon/host-hooks.cc), [JavaScript adapter](addon/host-hooks.cjs); [native hook tests](test/host-hooks.test.cjs), [HTML Promise jobs](../test/browlet/scripting/promise-jobs.test.ts) |
-| Native property interception | [property-delegate.cc](addon/property-delegate.cc), [JavaScript adapters](addon/property-delegate.cjs); [global property tests](test/capabilities.test.cjs) |
+| Native property interception | [property-delegate.cc](addon/property-delegate.cc), [JavaScript adapters](addon/property-delegate.cjs); [property tests](test/html-dda.test.cjs) |
 | Native value inspection and iteration | [iterators.cc](addon/iterators.cc), [array-buffer.cc](addon/array-buffer.cc); [iterator predicates](test/iterator-predicates.test.cjs), [buffer views](test/array-buffer.test.cjs), [collection iterators](test/collection-iterator.test.cjs) |
+| Callable, undetectable objects | [html-all-collection.cc](addon/html-all-collection.cc); [native object tests](test/html-dda.test.cjs) |
 
 [addon.cc](addon/addon.cc) registers the native modules;
 [index.cjs](addon/index.cjs) loads the binary and assembles the JavaScript API.
@@ -56,6 +57,8 @@ security token permits embedder access; it does not implement browser cross-orig
 
 | Optional operation | Availability and contract |
 | --- | --- |
+| `createHTMLDDA(context, call)` | Available with the addon on every supported base. Allocates a callable, non-constructible object with native `[[IsHTMLDDA]]` behavior in the supplied context. Invokes `call` with an undefined receiver and the original arguments; preserves its result or exception. |
+| `setPropertyHandlers(object, handlers)` | Attaches property algorithms to a native object allocated with interceptors. Accepts `has`, `get`, `set`, `getOwnPropertyDescriptor`, `defineProperty`, `deleteProperty`, and `ownKeys`; the addon translates descriptors and keys into V8's query/index protocols. |
 | `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |
 | `createCollectionIterator(context, kind, next)` | Requires `CollectionIterator::New`. Produces native Map/Set-branded iterators; the callback owns result conversion/allocation, V8 owns iteration lifecycle. |
 | `isLengthTrackingArrayBufferView(view)` | Requires `ArrayBufferView::IsLengthTracking()`. Reads auto/fixed length without mutation, including shared, detached, and out-of-bounds views. |
@@ -63,6 +66,32 @@ security token permits embedder access; it does not implement browser cross-orig
 | `setHostHooks(hooks)` | Requires the five V8 interception APIs below. Header detection controls whether the addon exports it. |
 
 Callback iterators have no table-backed entries for native debugger/Node previews.
+
+An HTMLDDA object must itself be exposed; an outer JavaScript Proxy loses its
+falsiness, `typeof "undefined"`, and loose equality with null/undefined. Set its
+platform prototype before exposure. Collection lookup and argument/result
+conversion remain in HTML and Web IDL, not the addon. Without this native
+capability, Browlet omits `Document.prototype.all`. The
+[collection roadmap](../src/browlet/html/collections/ROADMAP.md) records its
+remaining enumeration-order conflict with Web IDL.
+
+Use direct property handlers for HTMLDDA, not `setPropertyDelegate()`'s ordinary
+object forwarding. On V8, that forwarding's `Reflect.set()` can create a physical
+property on the native receiver while deletion targets the separate delegate.
+The direct handlers' `has`, `getOwnPropertyDescriptor`, `set`, `defineProperty`,
+and `deleteProperty` receive a final `hasOwn` boolean for physical properties,
+excluding intercepted properties. Mutation handlers return `undefined` to let V8
+perform the ordinary operation; false rejects it. Web IDL intercepts collection
+properties and lets V8 retain ordinary accessors and their original receivers.
+An optional `getPropertyAttributes` supplies V8's lookup flags independently of
+the public descriptor (default: `getOwnPropertyDescriptor`). Web IDL uses this
+to permit named-property assignment on a separate receiver while its public
+descriptor stays read-only and replacement on the collection remains rejected.
+The [property regressions](test/html-dda.test.cjs) cover both paths. The older
+global/prototype delegate adapter is unchanged. These interceptors are not a
+complete Proxy API: Node 26+ supplies the holder rather than the original
+property-access receiver; global handlers receive undefined. The collection path
+does not use that receiver argument.
 
 ## Host hooks
 
@@ -208,4 +237,9 @@ labels these cases `[expected failure]` because `node:test` has no strict
 expected-failure mode. Do not use capability-based skips or local replacements
 for this policy.
 
-Ordinary asynchronous completion remains required on every backend.
+Compat preflight independently requires the addon's baseline operations, so a
+missing required export cannot silently turn its tests into expected failures.
+Exposure assertions use the selected runtime's contract, rather than copying
+the implementation's capability flag. Engine-patch capabilities remain optional
+and are checked individually. Ordinary asynchronous completion remains required
+on every backend.

@@ -22,6 +22,18 @@ test('addon rejects a selected official base that differs from the running Node'
   assert.match(child.stderr, /NODE_BASE.*requires Node.*running/);
 });
 
+for (const method of ['createHTMLDDA', 'setPropertyHandlers']) {
+  test(`compat preflight rejects a missing required ${method} capability`, () => {
+    const child = spawnSync(process.execPath, ['-e', `
+      const compat = require(${JSON.stringify(resolve(__dirname, '../addon/index.cjs'))});
+      delete compat.${method};
+      require(${JSON.stringify(resolve(__dirname, 'check-addon.cjs'))});
+    `], { env: process.env, encoding: 'utf8' });
+    assert.equal(child.status, 1, 'capability loss must fail before tests can expect failure');
+    assert.match(child.stderr, new RegExp(`Missing required addon capability: ${method}`));
+  });
+}
+
 test('CLI overrides environment settings and preserves test arguments', () => {
   const { parseOptions } = require('../node-base.cjs');
   assert.deepEqual(parseOptions([

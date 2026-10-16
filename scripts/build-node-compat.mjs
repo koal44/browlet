@@ -24,7 +24,7 @@ try {
   const addon = resolve(root, 'node-compat/addon');
   const build = target.build;
   const sources = [
-    'addon.cc', 'array-buffer.cc', 'host-hooks.cc',
+    'addon.cc', 'array-buffer.cc', 'host-hooks.cc', 'html-all-collection.cc',
     'iterators.cc', 'promise.cc', 'property-delegate.cc', 'realm.cc', 'vm.cc',
   ].map(name => resolve(addon, name));
   const isolateHeader = target.includes.map(path => resolve(path, 'v8-isolate.h')).find(existsSync);

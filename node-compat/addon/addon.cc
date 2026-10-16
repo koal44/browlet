@@ -1,6 +1,7 @@
 #include <node.h>
 #include "array-buffer.h"
 #include "host-hooks.h"
+#include "html-all-collection.h"
 #include "iterators.h"
 #include "promise.h"
 #include "realm.h"
@@ -18,6 +19,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeHostHooks(exports, context);
   InitializePromise(exports);
   InitializeIterators(exports, context, vm_data);
+  InitializeHTMLAllCollection(exports, context, vm_data);
 }
 
 }  // namespace
