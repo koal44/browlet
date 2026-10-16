@@ -204,6 +204,109 @@ Public coverage is in `collections.test.ts`, `tree-mixins.test.ts`, and
 `selectors.test.ts`; implementation lookup tests exercise the same collection
 storage. MutationObserver, custom-element, and slot delivery remain outside 4F.
 
+## HTMLAllCollection
+
+[HTMLAllCollection](html-all-collection.ts) lives beside its owning Document and
+reuses [HTMLCollection](collections.ts) for live element membership. It supplies
+restricted name matching, name/index dispatch, and the cached, callable
+`document.all` platform object. Web IDL owns the reusable indexed/named binding
+algorithms. Public regressions are in
+[all.test.ts](../../../../test/browlet/html/collections/all.test.ts).
+
+### Native allocation and binding
+
+Ordinary legacy platforms use `LegacyPlatformObjectBinding.createObject()` and
+a JavaScript Proxy. Supplying an undetectable backing object to that path
+is insufficient: wrapping it loses the required falsiness, typeof and loose
+equality behavior.
+
+A focused probe on the configured custom Node 27 runtime used V8's testing
+intrinsic `%GetUndetectable()` and an otherwise empty Proxy around its result:
+
+| Value | Boolean | typeof | == null | Call result |
+| --- | --- | --- | --- | --- |
+| Native object | false | `undefined` | true | null |
+| Proxy around it | true | `function` | false | null |
+
+The intrinsic was used only to establish the engine boundary, not as a proposed
+production API. Blink's [binding generator](https://github.com/chromium/chromium/blob/main/third_party/blink/renderer/bindings/scripts/bind_gen/interface.py)
+configures `HTMLAllCollection` with V8's public `SetCallAsFunctionHandler()` and
+`MarkAsUndetectable()`. The compatibility addon now uses those public APIs in
+`createHTMLDDA(context, call)`, with native regressions for calls, special checks,
+realm ownership, direct property handlers, and garbage collection. No additional
+V8 patch is needed. The factory invokes supplied call steps without interpreting
+their arguments; HTML owns the collection's dispatch and conversion rules.
+
+Web IDL's `HTMLAllCollectionBinding` reuses its indexed/named algorithms through the addon's direct
+`setPropertyHandlers()` entry point. The older object-to-object delegate adapter
+can split assignment and deletion between the native receiver and the backing
+object; it is not the HTMLDDA path. The native callbacks now report physical own
+properties and let mutation handlers return undefined for ordinary V8 behavior.
+Web IDL intercepts collection properties; ordinary accessors and data properties
+remain on the actual platform object. This preserves alternate receivers even on
+Node 26+, whose property callbacks expose only the holder. No Node-version branch
+is needed in Web IDL. Native and binding regressions cover these receiver cases.
+HTML lookup/call steps remain in HTML, allocation in addon/JS Engine, and reusable
+indexed/named behavior in Web IDL.
+
+The declaration's `createHTMLAllCollection` hook is specific to this interface.
+Native allocation for other objects need not share its undetectable callable and
+property-handler contract. JS Engine's shared `isObject`/`isCallable` operations
+handle its misleading `typeof`. Web IDL conversion, callback boundaries and
+coercion use these predicates without separate author-value variants.
+Recognition relies on the native factory's guaranteed callability, without a
+temporary Proxy. Regressions cover callback conversion/results, overload and
+union selection, nested values, synchronous/asynchronous iterator methods,
+coercion, explicit unwrapping, interface projection, and stable platform identity.
+
+Eric approved omitting `Document.prototype.all` when the native capability is
+unavailable. Do not install a getter returning undefined or a truthy JavaScript
+collection substitute. This is an intentional backend limitation, not an optional
+HTML requirement. Native availability gates the exposed API; Node
+upstreaming is not a prerequisite for the addon-backed implementation.
+
+### Property enumeration order
+
+`SPEC_CLASH(htmlallcollection-property-order)`: Web IDL's
+[legacy [[OwnPropertyKeys]]](https://webidl.spec.whatwg.org/#legacy-platform-object-ownpropertykeys)
+orders indices, visible collection names, ordinary own string properties, and
+symbols. A live probe with a named element `entry` followed by an author-created
+`accessor` property produced these string-key suffixes:
+
+| Engine | Non-index own keys |
+| --- | --- |
+| Chromium | `accessor`, `entry` |
+| Firefox | `entry`, `accessor` |
+| WebKit | `entry`, `accessor` |
+
+Browlet currently follows V8/Chromium. Eric approved retaining this clash for the
+current slice and discussing an engine-level repair afterward. Native V8 merges
+ordinary string keys before intercepted names, regardless of the names returned
+by our handler. Keeping ordinary properties physical is what preserves accessor
+receivers; an outer Proxy would destroy [[IsHTMLDDA]]. Do not describe this order
+as spec-conforming. The focused collection and native tests retain the observed
+order; an engine repair must update them to the Web IDL order.
+
+### Assignment and separate receivers
+
+`SPEC_CLASH(htmlallcollection-assignment)`: Web IDL's
+[[Set]](https://webidl.spec.whatwg.org/#legacy-platform-object-set) ignores named
+properties when obtaining the descriptor for ordinary assignment, but retains
+indexed descriptors. For a collection containing a named element `entry`, a live
+probe gave the following `Reflect.set()` results:
+
+| Operation | Web IDL / Browlet | Chromium | Firefox / WebKit |
+| --- | --- | --- | --- |
+| Set `entry` on the collection | false | true (no replacement) | false |
+| Set `entry` with a separate ordinary receiver | true; receiver gets the value | false | true; receiver gets the value |
+| Set supported index `0` with a separate receiver | false | true | false |
+
+Browlet follows the written rule and Firefox/WebKit. V8's query flags are separate
+from the public property descriptor: the native binding permits named assignment
+to a separate receiver, while the public descriptor remains read-only and the
+collection's define handler rejects replacement. Indexed properties retain their
+read-only query flag. This works through the existing addon, without an engine patch.
+
 ## Foundational mutation spine
 
 | Source | Contract | Specification |
@@ -432,9 +535,11 @@ does not throw. This representation has been reviewed and accepted.
 | `ShadowRoot` and `Slottable` | Shadow style scopes, custom-element definition checks/registry exposure, and serialization/focus consumers | DOM §§4.2.2, 4.2.9, and 4.8 |
 | `CharacterData`, `Text`, and leaf nodes | Implemented for current DOM algorithms; ProcessingInstruction cloning gap recorded above | DOM §§4.6–4.7 and 4.10–4.14 |
 
-HTML's `HTMLAllCollection`, `HTMLFormControlsCollection`,
-`HTMLOptionsCollection`, `RadioNodeList`, and `DOMStringList` build upon this
-machinery but remain owned by `html/collections/`.
+HTML's `HTMLAllCollection` lives beside Document, with its native binding and
+compatibility evidence [recorded above](#htmlallcollection). Form and options
+collections stay with their concrete owners in [html/forms](html/forms/ROADMAP.md).
+The standalone [DOMStringList](../string-list.ts) needs no node-collection
+machinery; Document retains it for initialized ancestor origins.
 
 ## Behavioral coverage
 

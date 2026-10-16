@@ -71,7 +71,8 @@ describe('Browlet', () => {
     expect(getRelevantRealm(registry)).toBe(getRelevantRealm(document));
     expect(documentImpl.internalAncestorOriginObjectsList)
       .toEqual([]);
-    expect(documentImpl.ancestorOriginsList).toEqual([]);
+    expect(documentImpl.ancestorOriginsList?.length).toBe(0);
+    expect(documentImpl.ancestorOriginsList?.item(0)).toBeNull();
   });
 
   it('distinguishes invalid navigation input from an internal URL parser failure', async () => {

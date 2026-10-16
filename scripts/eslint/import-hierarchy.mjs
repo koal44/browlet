@@ -25,7 +25,7 @@ export const layers = [
   ['xhr'],
   ['fetch'],
   ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/style'],
-  ['browlet/html/microsyntaxes'],
+  ['browlet/html/microsyntaxes', 'browlet/dom/string-list'],
   ['browlet/dom/nodes/html/attributes'],
   ['browlet/scripting'],
   // Policy consumes event/report primitives; documents construct and retain policy state.

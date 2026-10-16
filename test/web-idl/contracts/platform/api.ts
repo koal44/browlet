@@ -27,6 +27,19 @@ new window.DOMTokenList();
 const location: Location = window.location;
 window.location = 'https://example.test/next';
 
+declare const strings: Platform.DOMStringList;
+const stringItem: string | null = strings.item(0);
+const hasString: boolean = strings.contains('value');
+// Indexed declaration types conservatively retain the nullable IDL getter result.
+const stringIndex: string | null | undefined = strings[0];
+const stringValues: IterableIterator<string | null> = strings[Symbol.iterator]();
+// @ts-expect-error length is readonly
+strings.length = 0;
+// @ts-expect-error indexed strings cannot be replaced
+strings[0] = 'replacement';
+// @ts-expect-error DOMStringList has no public constructor
+new window.DOMStringList();
+
 const walker: Platform.TreeWalker = document.createTreeWalker(node, window.NodeFilter.SHOW_ELEMENT,
   { acceptNode: (candidate) => candidate === element ? window.NodeFilter.FILTER_ACCEPT : window.NodeFilter.FILTER_SKIP });
 walker.currentNode = document;

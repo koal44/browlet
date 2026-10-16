@@ -72,7 +72,7 @@ falsiness, `typeof "undefined"`, and loose equality with null/undefined. Set its
 platform prototype before exposure. Collection lookup and argument/result
 conversion remain in HTML and Web IDL, not the addon. Without this native
 capability, Browlet omits `Document.prototype.all`. The
-[collection roadmap](../src/browlet/html/collections/ROADMAP.md) records its
+[nodes roadmap](../src/browlet/dom/nodes/ROADMAP.md#htmlallcollection) records its
 remaining enumeration-order conflict with Web IDL.
 
 Use direct property handlers for HTMLDDA, not `setPropertyDelegate()`'s ordinary

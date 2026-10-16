@@ -85,12 +85,13 @@ consolidates the implemented attributes and supplies numeric, URL, token, and
 element-reference rules. Minimal ElementInternals state and shadow-root access
 are present; attachment, ARIA, forms, and reaction delivery remain pending.
 §2.6.4.1 HTMLAllCollection and native `document.all` are implemented, with the
-[enumeration-order clash](browlet/html/collections/ROADMAP.md#property-enumeration-order)
+[enumeration-order clash](browlet/dom/nodes/ROADMAP.md#property-enumeration-order)
 retained for engine follow-up. §§2.6.4.2–2.6.4.3 form/options collections now have
 minimal concrete [form-control owners](browlet/dom/nodes/html/forms/ROADMAP.md).
 Form membership, radio grouping, automatic selection, and selectedcontent remain
 explicit stubs; three approved expected-failure tests expose the first three gaps.
-§2.6.5 follows with a real consumer.
+§2.6.5 supplies DOMStringList, now retained by Document ancestry initialization;
+nested ancestry and Location's relevant-document/security integration remain pending.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13
@@ -220,7 +221,7 @@ and inactive Document disposal are an HTML lifecycle task, not a Reporting fix.
 ## Later consumer gates
 
 **8: add coherent author API families.** Follow [elements](browlet/dom/nodes/html/ROADMAP.md),
-[collections](browlet/html/collections/ROADMAP.md),
+[collections](browlet/html/ROADMAP.md#collections-and-domstringlist),
 [DOM parsing](browlet/dom/parsing/ROADMAP.md), [sanitization](browlet/html/sanitization/ROADMAP.md),
 [interaction](browlet/interaction/ROADMAP.md), and [Navigator](browlet/navigator/ROADMAP.md).
 Build convenience APIs on completed mutation; fragment setters on real parsing;

@@ -137,7 +137,7 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   Web IDL, Firefox and WebKit put those names first. This ordering remains
   accepted pending an engine investigation. Ordinary accessors and alternate
   receivers are handled by V8 rather than forwarded to separate storage. See the
-  [collection roadmap](browlet/html/collections/ROADMAP.md) and
+  [nodes roadmap](browlet/dom/nodes/ROADMAP.md#htmlallcollection) and
   [native regressions](../node-compat/test/html-dda.test.cjs).
 - **Collection iterator branding:** With the patched engine's iterator factory,
   native Map/Set `next()` recognizes generated iterators. Otherwise proxy shells

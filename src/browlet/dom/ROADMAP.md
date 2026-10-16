@@ -57,6 +57,29 @@ dependencies without projecting placeholders for missing APIs.
 | DOM §10, security and privacy | The section states that DOM itself has no known considerations | No runtime module. External XPath/XSLT engines still need Browlet-controlled resource and host-I/O boundaries |
 | DOM §11, historical | No removed interfaces or members were found in Browlet source | Treat the list as an exclusion audit. Do not revive Mutation Events, Entity/Notation objects, DOM Level 3 configuration/user-data APIs, or removed node members |
 
+## DOMStringList
+
+HTML §2.6.5's [DOMStringList](string-list.ts) is a standalone string-list interface
+beside DOMTokenList. It depends only on Web IDL, with no tree or form dependency.
+Length, indexed reads, `item()`, and exact `contains()` membership use the associated
+list directly, preserving order, duplicates, and exact strings. Its owner supplies
+the list and determines whether it changes; replacing the owner's array variable
+does not replace the retained list. New APIs should use sequences instead.
+
+Document's ancestor-origins creation takes a fresh list of serialized origins and
+retains a DOMStringList over that snapshot. Current top-level initialization
+creates an empty list; nested ancestry still throws explicitly until its origin
+chain and referrer-policy rules are implemented. The
+[Window roadmap](../browsing/window/ROADMAP.md) records the separate
+`Location.ancestorOrigins` getter and security integration.
+
+Web IDL supplies conversion, readonly indexed properties, iteration, receiver
+checks, realm ownership, and the non-constructible Window/Worker interface object.
+The [string-list tests](../../../test/browlet/dom/string-list.test.ts) cover those
+contracts, retained-list updates, and Document list identity. Worker exposure is
+tested through Web IDL; actual Worker globals remain with the worker subsystem.
+No additional dependency is missing from §2.6.5 itself.
+
 ## DOMTokenList
 
 | Source | Contract | Specification |

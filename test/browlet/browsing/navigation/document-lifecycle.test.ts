@@ -351,7 +351,8 @@ describe('navigables', () => {
     expect(document.customElementRegistry).not.toBeNull();
     expect(document.internalAncestorOriginObjectsList)
       .toEqual([]);
-    expect(document.ancestorOriginsList).toEqual([]);
+    expect(document.ancestorOriginsList?.length).toBe(0);
+    expect(document.ancestorOriginsList?.item(0)).toBeNull();
     expect(document.readyForPostLoadTasks).toBe(true);
     expect(document.readyState).toBe('complete');
     expect(document.completelyLoadedTime).not.toBeNull();

@@ -46,7 +46,7 @@ removed when the owner algorithm is implemented. The passing cases establish the
 collection algorithms without claiming that the owner stubs work. Selectedcontent,
 cloning, and the rest of §4.10 still need their own coverage when implemented.
 
-See the [collection roadmap](../../../../html/collections/ROADMAP.md),
+See the [HTML collection overview](../../../../html/ROADMAP.md#collections-and-domstringlist),
 [form collection tests](../../../../../../test/browlet/html/collections/form-controls.test.ts),
 and [options tests](../../../../../../test/browlet/html/collections/options.test.ts).
 

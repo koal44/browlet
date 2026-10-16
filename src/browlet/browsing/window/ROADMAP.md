@@ -19,6 +19,14 @@
 | existing `window-proxy.ts` | Complete exotic internal methods and same-origin/cross-origin switching | HTML §7.2.3 |
 | existing `location.ts` | Complete navigation setters/methods, ancestor origins, and exotic internal methods | HTML §7.2.4 |
 
+HTML §2.6.5's `DOMStringList` is available, and Document's initialized ancestor
+origins retain that implementation. `Location.ancestorOrigins` is still absent:
+Location needs relevant-Document selection, its retained empty DOMStringList for
+a null Document, the entry settings object's origin-domain check, and the return
+of the Document's initialized list. Nested ancestry initialization separately
+needs the parent-origin chain and referrer-policy masking; it currently throws.
+Do not replace these missing paths with an empty list or omit the security check.
+
 Native context/global-proxy allocation and reuse are implemented through the
 compatibility addon. Stock Node retains a modeled fallback with documented
 [limitations](../../../LIMITATIONS.md); cross-origin security remains HTML work

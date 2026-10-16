@@ -18,6 +18,7 @@ import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import type { TreeScopeResolver } from '../../style/index';
+import { DOMStringListImpl } from '../string-list';
 import type { SpeculationRulesParseResult } from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
@@ -143,7 +144,7 @@ export class DocumentImpl extends NodeImpl {
   /** Ancestor origins retained for navigation, or null before selection. */
   internalAncestorOriginObjectsList: Origin[] | null = null;
   /** Serialized ancestor origins, or null before selection. */
-  ancestorOriginsList: string[] | null = null;
+  ancestorOriginsList: DOMStringListImpl | null = null;
   /** Whether this document was created from an iframe's srcdoc content. */
   // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#an-iframe-srcdoc-document
   isIframeSrcdocDocument = false;
@@ -623,7 +624,7 @@ export class DocumentImpl extends NodeImpl {
     // Store both results together. Top-level Documents have no ancestors;
     // referrer-policy masking enters with child navigables.
     this.internalAncestorOriginObjectsList = [];
-    this.ancestorOriginsList = [];
+    this.ancestorOriginsList = new DOMStringListImpl([]);
   }
 
   /** Populate the synchronously available element tree of an about:blank document. */

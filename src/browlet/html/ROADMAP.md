@@ -40,7 +40,7 @@ there is no catch-all `html/infra` module.
 | §2.4 URLs | `src/url` for URL semantics; Document, `<base>`, and `html/reflection/` for HTML integration |
 | §2.5 fetching resources | `dom/nodes/html/attributes/` for shared element attribute definitions below node implementations; `loader/` over the sibling `src/fetch` project for resource lifecycles; sniffing and parser encoding extraction retain their named dependencies |
 | §§2.6.1–2.6.3 reflection | `html/reflection/`, with reusable value parsing in `html/microsyntaxes/` |
-| §§2.6.4–2.6.5 collections | `dom/nodes/` and `dom/nodes/html/forms/` own implementations over shared live collections; `html/collections/` records scope and remaining work |
+| §§2.6.4–2.6.5 collections | `dom/nodes/` and `dom/nodes/html/forms/` own implementations over shared live collections; `dom/string-list.ts` supplies the independent DOMStringList interface |
 | §2.7 safe passing of structured data | `scripting/structured-data/` |
 
 ### Sections 2.1 and 2.2 audit
@@ -247,8 +247,8 @@ returns false as a provisional Resource Timing policy; wiring it into sniffing
 does not establish browser content support.
 
 The remaining shared attributes (§§2.5.6–2.5.9) and reflection (§§2.6.1–2.6.3)
-are covered below. The [collection roadmap](collections/ROADMAP.md) records the
-implemented HTMLAllCollection and the form/options slice's explicit owner stubs.
+are covered below. The [collection overview](#collections-and-domstringlist) links the implementations
+and their remaining owner dependencies.
 
 ### Section 2.5.6 nonce attributes
 
@@ -435,8 +435,24 @@ Minimal ElementInternals (§4.13.7) now provides internal defaults, separate
 associations, and shadow-root access. Attachment still needs custom-element
 definition/construction checks; reaction delivery (§4.13.6) remains provisional.
 This reflection slice does not add ARIA or form-associated internals.
-The subsequent [collections slice](collections/ROADMAP.md) has its own scope and
-remaining dependencies; §2.6.5 still waits for a real consumer.
+
+## Collections and DOMStringList
+
+Collection implementations live with the state and algorithms they use. Shared
+NodeList/HTMLCollection storage and live invalidation remain in
+[DOM node collections](../dom/nodes/collections.ts); specialized form collections
+retain their concrete element owners.
+
+| Section | Implementation and remaining work |
+| --- | --- |
+| §2.6.4.1 HTMLAllCollection | [Document-owned live collection](../dom/nodes/html-all-collection.ts) and native callable binding. The [nodes roadmap](../dom/nodes/ROADMAP.md#htmlallcollection) retains the unsupported-backend policy and browser/specification clashes. |
+| §2.6.4.2 HTMLFormControlsCollection and RadioNodeList | [Form collections](../dom/nodes/html/forms/form-controls-collection.ts) implement named lookup and radio values; form membership and radio-group exclusion remain explicit [owner dependencies](../dom/nodes/html/forms/ROADMAP.md#missing-owner-algorithms). |
+| §2.6.4.3 HTMLOptionsCollection | [Options collection](../dom/nodes/html/forms/options-collection.ts) implements length/indexed mutations, add/remove, and selected-index forwarding. Automatic selection, selectedcontent, mutation hooks, and custom-element reactions remain with the [owners](../dom/nodes/html/forms/ROADMAP.md#missing-owner-algorithms). |
+| §2.6.5 DOMStringList | [Independent string list](../dom/string-list.ts), retained by Document ancestry initialization. Its [DOM roadmap](../dom/ROADMAP.md#domstringlist) records the list contract; nested ancestry and [Location's getter/security integration](../browsing/window/ROADMAP.md) remain pending. |
+
+The three approved form-membership, radio-group, and automatic-selection
+regressions remain expected failures. These collection interfaces do not complete
+their consumers' HTML §4.10 algorithms.
 
 ## HTML section 3 ownership
 
@@ -448,7 +464,7 @@ must not become one oversized HTML Document module.
 | --- | --- |
 | §3.1.1 `Document` object | `dom/nodes/document.ts` for the implementation and co-located HTML partial declaration; policy, scripting, and navigation retain their contributed state |
 | §3.1.2 `DocumentOrShadowRoot` | DOM's mixin implementation; focus management supplies `activeElement` |
-| §3.1.3 ancestor origins | Document lifecycle and `browsing/window/location.ts`, using referrer policy, origin records, and `html/collections/` |
+| §3.1.3 ancestor origins | Document lifecycle and `browsing/window/location.ts`, using referrer policy, origin records, and `dom/string-list.ts` |
 | §3.1.4 resource metadata | Document accessors over URL, Fetch response metadata, cookies, and loader state |
 | §3.1.5 document loading status | `html/parser/`, `loader/`, `scripting/`, and `performance/` coordination |
 | §3.1.6 render blocking | `loader/` and `style/`, with the blocking set stored by Document |

@@ -1,5 +1,6 @@
 import type { Definition } from '../../web-idl/index';
 
+import { domStringListIDL } from './string-list';
 import {
   addEventListenerOptionsIDL, eventListenerIDL, eventListenerOptionsIDL, eventTargetIDL, customEventIDL,
   customEventInitIDL, eventIDL, eventInitIDL,
@@ -44,6 +45,7 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   nodeFilterIDL,
   nodeIteratorIDL,
   treeWalkerIDL,
+  domStringListIDL,
   domTokenListIDL,
 
   parentNodeIDL,

@@ -42,7 +42,7 @@ HTML's `HTMLAllCollection` supplies a dedicated allocation hook because a JavaSc
 Proxy cannot preserve `[[IsHTMLDDA]]`. JS Engine allocates the undetectable callable;
 HTML supplies its call steps; Web IDL's `HTMLAllCollectionBinding` adapts the shared
 indexed/named property algorithms to native handlers. Ordinary properties remain on the native object so V8
-preserves accessor receivers. The [collection roadmap](browlet/html/collections/ROADMAP.md)
+preserves accessor receivers. The [nodes roadmap](browlet/dom/nodes/ROADMAP.md#htmlallcollection)
 records the unsupported-backend policy and remaining enumeration-order clash.
 JS Engine's `isObject` and `isCallable` operations recognize this exceptional
 object wherever a runtime value needs classification. Recognition stays inside
@@ -506,6 +506,12 @@ HTML custom-element names and registry machinery live under
 `dom/nodes/html/custom-elements` with that same family. Parsing remains a separate
 consumer under `browlet/html/parser`;
 HTML's remaining roadmap-only areas keep their provisional locations.
+
+NodeList, HTMLCollection, and HTMLAllCollection stay with the node family; form
+and options collections stay beside their concrete element owners.
+[DOMStringList](browlet/dom/string-list.ts) is independent string storage below
+nodes, alongside the other standalone DOM interfaces. Its associated list's
+owner determines updates; Document ancestor origins retain a serialized snapshot.
 
 `NodeImpl` keeps raw link operations private, so subclasses and parser consumers
 use its ordered insertion/removal/adoption path and node-specific extension

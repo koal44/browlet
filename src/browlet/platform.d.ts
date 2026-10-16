@@ -930,6 +930,7 @@ export interface Window extends EventTarget {
   Range: RangeConstructor;
   NodeIterator: NodeIteratorConstructor;
   TreeWalker: TreeWalkerConstructor;
+  DOMStringList: DOMStringListConstructor;
   DOMTokenList: DOMTokenListConstructor;
   Node: NodeConstructor;
   HTMLCollection: HTMLCollectionConstructor;
@@ -1171,6 +1172,19 @@ export interface TreeWalker {
 export interface TreeWalkerConstructor {
   readonly prototype: TreeWalker;
   [Symbol.hasInstance](value: unknown): value is TreeWalker;
+}
+
+export interface DOMStringList {
+  readonly length: number;
+  item(index: number): string | null;
+  contains(string_: string): boolean;
+  readonly [index: number]: string | null | undefined;
+  [Symbol.iterator](): IterableIterator<string | null>;
+}
+
+export interface DOMStringListConstructor {
+  readonly prototype: DOMStringList;
+  [Symbol.hasInstance](value: unknown): value is DOMStringList;
 }
 
 export interface DOMTokenList {
