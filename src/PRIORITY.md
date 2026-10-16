@@ -84,7 +84,10 @@ The [§§2.6.1–2.6.3 reflection slice](browlet/html/reflection/ROADMAP.md) now
 consolidates the implemented attributes and supplies numeric, URL, token, and
 element-reference rules. Minimal ElementInternals state and shadow-root access
 are present; attachment, ARIA, forms, and reaction delivery remain pending.
-§§2.6.4–2.6.5 collections are the next bounded slice.
+§2.6.4.1 HTMLAllCollection and native `document.all` are implemented, with the
+[enumeration-order clash](browlet/html/collections/ROADMAP.md#property-enumeration-order)
+retained for engine follow-up. §§2.6.4.2–2.6.4.3 form/options collections remain
+next, with their missing form-control owners explicit; §2.6.5 follows with a real consumer.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

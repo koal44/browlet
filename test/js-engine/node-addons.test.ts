@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { NodeAPI } from '../../src/js-engine/node-addons';
+import { addon, NodeAPI } from '../../src/js-engine/node-addons';
 import { createContext, createMicrotaskQueue } from '../../src/js-engine/runtime';
+import { isCallable, isObject } from '../../src/js-engine/abstract-operations';
+import { itPassesWith } from '../test-runtime';
 
 describe('Node add-on API', () => {
   it('keeps availability per operation and throws when an absent operation is called', () => {
@@ -12,6 +14,23 @@ describe('Node add-on API', () => {
     expect(api.getMethod('createContextHandle')).toBeUndefined();
     expect(() => api.createContextHandle())
       .toThrow('Node backend does not provide createContextHandle');
+    expect(api.getMethod('createHTMLDDA')).toBeUndefined();
+    expect(() => api.createHTMLDDA(context, () => null))
+      .toThrow('Node backend does not provide createHTMLDDA');
+    expect(api.getMethod('setPropertyHandlers')).toBeUndefined();
+  });
+
+  itPassesWith('htmlDDA')('allocates an undetectable callable through the native backend', () => {
+    const context = createContext(createMicrotaskQueue());
+    const result = {};
+    const value = addon.createHTMLDDA(context, () => result);
+    expect(Boolean(value)).toBe(false);
+    expect(typeof value).toBe('undefined');
+    expect(value).not.toBe(undefined);
+    expect(value()).toBe(result);
+    expect(isObject(value)).toBe(true);
+    expect(isCallable(value)).toBe(true);
+    expect(addon.getMethod('setPropertyHandlers')).toBeTypeOf('function');
   });
 
   it('retains the loaded function and its backend receiver', () => {

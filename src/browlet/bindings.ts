@@ -33,7 +33,7 @@ import {
 } from './browsing/policy/csp/index';
 import { trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/index';
 import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
-import { DocumentImpl, htmlDocumentIDL, ElementImpl } from './dom/nodes/index';
+import { DocumentImpl, htmlDocumentIDL, ElementImpl, htmlAllCollectionIDL } from './dom/nodes/index';
 import { htmlIDLDefinitions } from './dom/nodes/html/index';
 import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
 import { svgIDLDefinitions } from './dom/nodes/svg/index';
@@ -231,6 +231,7 @@ function projectWindow(
 /** Declarations combined by Browlet's binding world, also available for development validation. */
 export const browletDefinitions = [
   htmlDocumentIDL,
+  htmlAllCollectionIDL,
   ...htmlIDLDefinitions,
   ...svgIDLDefinitions,
   ...mathMLIDLDefinitions,

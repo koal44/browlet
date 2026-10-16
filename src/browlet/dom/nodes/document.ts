@@ -2,7 +2,7 @@ import type { InternalPromise, InternalPromiseWithResolvers } from '../../../inf
 import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import { InternalError } from '../../../infra/internal-error';
-import type { JSEnvironment } from '../../../js-engine/index';
+import { addon, type JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, union,
@@ -37,6 +37,7 @@ import type {
 } from '../../browsing/navigation/index';
 
 import type { HTMLCollectionImpl, NodeListImpl } from './collections';
+import { HTMLAllCollectionImpl } from './html-all-collection';
 import { AttrImpl } from './attribute';
 import { CDATASectionImpl } from './cdata-section';
 import { CommentImpl } from './comment';
@@ -198,6 +199,8 @@ export class DocumentImpl extends NodeImpl {
   #nodeFactory: DOMNodeFactory;
   /** Stable factory object associated with this document. */
   #implementation: DOMImplementationImpl | undefined;
+  /** Cached live collection returned by document.all. */
+  #all: HTMLAllCollectionImpl | undefined;
   /** Parser input callback installed while document.write() is permitted. */
   #writer: DocumentWriter | undefined;
 
@@ -337,6 +340,12 @@ export class DocumentImpl extends NodeImpl {
 
   get children(): HTMLCollectionImpl {
     return this.#parentNodeMixin.children;
+  }
+
+  /** Stable live collection of all descendant elements, independent of native platform support. */
+  // https://html.spec.whatwg.org/#dom-document-all
+  get all(): HTMLAllCollectionImpl {
+    return this.#all ??= new HTMLAllCollectionImpl(this);
   }
 
   get firstElementChild(): ElementImpl | null {
@@ -1409,13 +1418,19 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
  *   [LegacyLenientThis] attribute EventHandler onreadystatechange;
  *   attribute EventHandler onvisibilitychange;
  *
- *   // also has obsolete members
+ *   // obsolete members (HTML §16.2)
+ *   [SameObject] readonly attribute HTMLAllCollection all;
  * };
  * Document includes GlobalEventHandlers;
  */
 export const htmlDocumentIDL = definePartialInterface({
   name: 'Document',
   members: [
+    // Without native [[IsHTMLDDA]], omit the API instead of exposing a truthy substitute.
+    // https://html.spec.whatwg.org/#dom-document-all
+    roAttr('all', reference('HTMLAllCollection'), {
+      ...xattr('SameObject'), enabled: addon.supportsHTMLDDA,
+    }),
     roAttr('head', nullable(reference('HTMLHeadElement'))),
     roAttr('body', nullable(reference('HTMLElement'))),
     op('write', idlType.undefined, [

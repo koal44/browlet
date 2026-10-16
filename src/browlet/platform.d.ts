@@ -438,6 +438,19 @@ export interface QuotaExceededErrorConstructor extends Ctor<DOMExceptionConstruc
   new (message?: string, options?: QuotaExceededErrorOptions): QuotaExceededError;
 }
 
+export interface HTMLAllCollection {
+  readonly length: number;
+  namedItem(name: string): HTMLCollection | Element | null;
+  item(nameOrIndex?: string): HTMLCollection | Element | null;
+  readonly [index: number]: Element | undefined;
+  [Symbol.iterator](): IterableIterator<Element>;
+}
+
+export interface HTMLAllCollectionConstructor {
+  readonly prototype: HTMLAllCollection;
+  [Symbol.hasInstance](value: unknown): value is HTMLAllCollection;
+}
+
 export interface CustomElementRegistry {
 
 }
@@ -796,6 +809,7 @@ export interface Window extends EventTarget {
   fetch(input: Request | string, init?: RequestInit): Promise<Response>;
   DOMException: DOMExceptionConstructor;
   QuotaExceededError: QuotaExceededErrorConstructor;
+  HTMLAllCollection: HTMLAllCollectionConstructor;
   CustomElementRegistry: CustomElementRegistryConstructor;
   ElementInternals: ElementInternalsConstructor;
   HTMLElement: HTMLElementConstructor;
@@ -1416,6 +1430,7 @@ export interface Document extends Node {
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: NodeFilter | null): NodeIterator;
   createTreeWalker(root: Node, whatToShow?: number, filter?: NodeFilter | null): TreeWalker;
+  readonly all: HTMLAllCollection;
   readonly head: HTMLHeadElement | null;
   readonly body: HTMLElement | null;
   write(...text: Array<string>): void;

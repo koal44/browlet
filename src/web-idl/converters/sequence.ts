@@ -21,7 +21,7 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
     return (value) => {
       if (!isObject(value)) this.throwTypeError(`A ${description} value must be an object`);
       const method = getMethod(value, Symbol.iterator, this.realm);
-      if (!method) this.throwTypeError('Value is not iterable');
+      if (method === undefined) this.throwTypeError('Value is not iterable');
       return this.readIterable(value, method);
     };
   }
@@ -40,7 +40,7 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
     const iterator = Reflect.apply(iteratorMethod, iterable, []);
     if (!isObject(iterator)) this.throwTypeError('Iterator method did not return an object');
     const nextMethod = getMethod(iterator, 'next', this.realm);
-    if (!nextMethod) this.throwTypeError('Iterator has no next method');
+    if (nextMethod === undefined) this.throwTypeError('Iterator has no next method');
     const sequence: IDLSequence<IDLValue<Type['elementType']>> = [];
     while (true) {
       const result = Reflect.apply(nextMethod, iterator, []);

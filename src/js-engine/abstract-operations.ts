@@ -4,14 +4,16 @@ import type { JSMethod, JSRealm } from './realm';
 
 /** Selected ECMAScript abstract operations shared by higher specifications. */
 
+/** Recognize ECMAScript Object values, including callable and undetectable objects. */
 export function isObject(value: unknown): value is object {
   return value !== null && (
-    typeof value === 'object' || typeof value === 'function'
+    typeof value === 'object' || typeof value === 'function' || isHTMLAllCollection(value)
   );
 }
 
+/** Test callability without invoking or wrapping the value. */
 export function isCallable(value: unknown): value is JSMethod {
-  return typeof value === 'function';
+  return typeof value === 'function' || isHTMLAllCollection(value);
 }
 
 export function isConstructor(
@@ -190,6 +192,15 @@ export function toString(value: unknown): string {
     throw new TypeError('Cannot convert a Symbol value to a string');
   }
   return String(primitive);
+}
+
+// https://tc39.es/ecma262/#sec-IsHTMLDDA-internal-slot
+// HTMLAllCollection is the only supported undetectable object. Its native factory
+// always installs [[Call]], so recognition also establishes callability. No author
+// property access, Proxy allocation, or native round trip is needed here.
+function isHTMLAllCollection(value: unknown): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- TypeScript does not model [[IsHTMLDDA]].
+  return typeof value === 'undefined' && value !== undefined;
 }
 
 function dataDescriptor(value: unknown): PropertyDescriptor {

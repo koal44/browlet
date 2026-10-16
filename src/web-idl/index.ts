@@ -23,6 +23,7 @@ declare module './core/types' {
   interface DeclarationHooks<Env, Impl extends object, Values extends unknown[]> {
     'argument-resolve': BindingHook<Env, void, [method: BindingContext<Env & WebIDLEnvironment>], unknown>;
     'initialize-implementation': BindingHook<Env, undefined, [value: Impl], void>;
+    'html-all-collection-create': BindingHook<Env, undefined, [value: Impl], object>;
     'constructor-create': BindingHook<Env, undefined, Values, object>;
     'constructor-invoke': BindingHook<Env, object, Values, void>;
     'attribute-get': BindingHook<Env, object | null, [], unknown>;

@@ -17,10 +17,11 @@ export function matchesExposure(
   ) return false;
   if (hasExtendedAttribute(construct.extendedAttributes, 'CrossOriginIsolated') && !realm.crossOriginIsolated) return false;
   if (hasExtendedAttribute(construct.extendedAttributes, 'SecureContext') && !realm.secureContext) return false;
-  return true;
+  return construct.enabled !== false;
 }
 
 type Exposable = {
   exposed?: Exposed;
   extendedAttributes?: ExtendedAttribute[];
+  enabled?: boolean;
 };

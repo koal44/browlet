@@ -2,6 +2,7 @@ export { AsyncIterableBinding, type AsyncIteratorSteps } from './async-iterable'
 export { CallbackBinding } from './callback';
 export { MaplikeBinding, SetlikeBinding } from './collection';
 export { GlobalPlatformObjectBinding } from './global';
+export { HTMLAllCollectionBinding } from './html-all-collection';
 export { ImplementationBinding, type BoundConstruct, type IDLMember } from './implementation';
 export { SynchronousIterableBinding, type ValuePair, type ValuePairsSteps } from './iterable';
 export {

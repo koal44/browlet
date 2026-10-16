@@ -130,6 +130,15 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 
 ## Web IDL boundaries
 
+- **`document.all`:** Available with the addon on each supported base, including
+  callable lookup and native falsiness. Without it, `Document.prototype.all` is
+  omitted. `SPEC_CLASH(htmlallcollection-property-order)`: native V8/Chromium
+  enumeration puts ordinary own string properties before collection names;
+  Web IDL, Firefox and WebKit put those names first. This ordering remains
+  accepted pending an engine investigation. Ordinary accessors and alternate
+  receivers are handled by V8 rather than forwarded to separate storage. See the
+  [collection roadmap](browlet/html/collections/ROADMAP.md) and
+  [native regressions](../node-compat/test/html-dda.test.cjs).
 - **Collection iterator branding:** With the patched engine's iterator factory,
   native Map/Set `next()` recognizes generated iterators. Otherwise proxy shells
   preserve ordinary iteration, prototypes, and live results but fail borrowed

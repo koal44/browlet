@@ -566,6 +566,26 @@ its WindowProxy handle and public identity. These definitions install no global
 or prototype and emit no IDL declaration text. Using JavaScript's `Proxy` alone
 does not need this declaration: legacy indexed/named objects and observable arrays
 keep their existing binding machinery.
+
+HTMLAllCollection's implementation declaration supplies
+`createHTMLAllCollection(context, implementation)` for its `[[IsHTMLDDA]]` identity;
+an outer JavaScript Proxy would lose its falsiness. This hook is specific to
+HTMLAllCollection, rather than a general native-object allocation contract.
+`HTMLAllCollectionBinding` installs the existing indexed/named algorithms through
+native property handlers, then RealmBinding associates the same identity
+record as ordinary platform objects. Ordinary own properties stay on the native
+object, preserving accessor and alternate-receiver behavior. A member's optional
+`enabled` flag gates backend-dependent exposure without removing its declaration
+from generated types. Without the native capability, HTML omits `Document.prototype.all`.
+
+JS Engine's shared `isObject` and `isCallable` operations classify runtime values,
+including HTMLAllCollection. Web IDL uses these same predicates for author input,
+callback and iterator results, and internal values that need classification.
+Union conversion distinguishes objects through `isObject` before examining
+primitive types; it does not assign HTMLAllCollection a synthetic `typeof` label.
+The native HTMLAllCollection factory guarantees callability; recognition needs no
+temporary Proxy and does not invoke author code.
+
 `world.register(realm, createEnvironment)` returns the realm's binding through its
 public `BindingContext` type. Repeated registration returns the same object without
 calling the factory again; `world.getBindingContext(realm)` only looks it up.

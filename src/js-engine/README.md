@@ -47,7 +47,10 @@ and tracks resizing where applicable. The view's realm does not change the
 buffer's identity.
 
 Engine predicates accept unknown inputs and preserve their native kind in the
-type system. Buffer and built-in state operations take already validated values;
+type system. `isObject` and `isCallable` include the native HTMLAllCollection
+despite its misleading `typeof`; recognition does not allocate or invoke author
+code. There are no separate predicates for author and implementation values.
+Buffer and built-in state operations take already validated values;
 keep that type after Web IDL conversion or a brand check. A known kind does not
 guarantee that its backing storage remains attached or in bounds. View allocation
 also preserves the backing buffer type, including shared storage.

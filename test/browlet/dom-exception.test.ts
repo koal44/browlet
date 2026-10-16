@@ -2,10 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { unwrap, project } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-
-const errorIsErrorTest = typeof Reflect.get(Error, 'isError') === 'function'
-  ? it
-  : it.fails;
+import { itPassesWith } from '../test-runtime';
 
 describe('Browlet DOMException binding', () => {
   it('creates Error-like platform objects in their binding realm', () => {
@@ -71,7 +68,7 @@ describe('Browlet DOMException binding', () => {
   });
 
   // V8 currently exposes stack on instances; the inherited accessor is a host capability.
-  it.skipIf(!Reflect.getOwnPropertyDescriptor(Error.prototype, 'stack')?.get)(
+  itPassesWith('errorStackAccessor')(
     'uses the inherited Error stack accessor when the engine provides it', () => {
       const browlet = createBrowlet();
       const DOMException_ = getConstructor<typeof DOMException>(
@@ -92,7 +89,7 @@ describe('Browlet DOMException binding', () => {
     },
   );
 
-  errorIsErrorTest(
+  itPassesWith('errorIsError')(
     'is recognized by the realm Error.isError operation',
     () => {
       const browlet = createBrowlet();

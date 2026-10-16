@@ -20,11 +20,11 @@ export class AsyncSequenceConverter<Type extends IDLAsyncSequenceType = IDLAsync
       }
 
       const asyncMethod = getMethod(value, Symbol.asyncIterator, realm);
-      if (asyncMethod) {
+      if (asyncMethod !== undefined) {
         return new IDLAsyncSequence(value, type.elementType, asyncMethod, 'async');
       }
       const syncMethod = getMethod(value, Symbol.iterator, realm);
-      if (!syncMethod) {
+      if (syncMethod === undefined) {
         throw new realm.intrinsics.typeError('Value is not asynchronously iterable');
       }
       return new IDLAsyncSequence(value, type.elementType, syncMethod, 'sync');

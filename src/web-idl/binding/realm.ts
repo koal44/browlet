@@ -24,7 +24,7 @@ import {
 
 import {
   AsyncIterableBinding, CallbackBinding, MaplikeBinding, SetlikeBinding, GlobalPlatformObjectBinding,
-  ImplementationBinding, SynchronousIterableBinding, LegacyPlatformObjectBinding, ObservableArrayBinding,
+  ImplementationBinding, SynchronousIterableBinding, LegacyPlatformObjectBinding, HTMLAllCollectionBinding, ObservableArrayBinding,
   invalidReceiver, type BoundConstruct, type IDLMember, type ConstructorBehavior, type MemberBinding,
   type MemberOwner,
 } from './realm/index';
@@ -511,6 +511,14 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       );
     }
     let backingObject: object;
+    const createHTMLAllCollection = assembled.primary.implementation?.createHTMLAllCollection;
+    if (createHTMLAllCollection) {
+      backingObject = createHTMLAllCollection.call(undefined, this, implInst);
+      Object.setPrototypeOf(backingObject, prototype);
+      return new HTMLAllCollectionBinding(this).createObject(
+        backingObject, implInst, this.getImplementationBinding(assembled).getLegacyPropertyMetadata(),
+      );
+    }
     if (implInst instanceof DOMExceptionImpl) {
       // https://webidl.spec.whatwg.org/#js-DOMException-specialness
       backingObject = new this.realm.intrinsics.error();

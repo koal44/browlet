@@ -330,6 +330,7 @@ describe('Browlet DOM binding', () => {
     expect(ownKeys(getPrototype(browlet, 'Document'))).toEqual([
       'adoptedStyleSheets',
       'adoptNode',
+      ...(process.env.NODE_RUNTIME === 'compat' ? ['all'] : []),
       'append',
       'body',
       'characterSet',

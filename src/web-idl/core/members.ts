@@ -71,6 +71,8 @@ export type AttributeMember<Env = unknown> = {
   exposed?: Exposed;
   /** Extended attributes applying to this attribute. */
   extendedAttributes?: ExtendedAttribute[];
+  /** Backend capability gate; the declaration remains available to generated types. */
+  enabled?: boolean;
 
   // Project metadata: member steps, returned function creation, and callback exception policy.
   /** Read the implementation value using the owner's context; `this` is the implementation or null for static access. */

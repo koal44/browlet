@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/index';
-import { getBufferTypeName, getMethod, hasStringData, isObject, type JSMethod } from '../../../js-engine/index';
+import { getBufferTypeName, getMethod, hasStringData, isCallable, isObject, type JSMethod } from '../../../js-engine/index';
 
 import { compileSteps } from '../../compiler';
 import type { IDLType, AssembledArgument, AssembledCallable, AssembledOverloads, OverloadGroup } from '../../assembly/index';
@@ -113,7 +113,7 @@ export function resolveOverload<Callable extends AssembledCallable>(
     i++;
   }
 
-  if (i === distinguishingIndex && method) {
+  if (i === distinguishingIndex && method !== undefined) {
     const type = selected.getArgument(i)!.type;
     const candidate = type.candidates.array;
     if (!candidate) {
@@ -213,7 +213,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
     }
   }
 
-  if (typeof value === 'function') {
+  if (isCallable(value)) {
     matches = candidates.filter((callable) => {
       const branches = callable.getArgument(index)!.type.candidates;
       return branches.callbackFunction || branches.hasObject;
@@ -233,18 +233,18 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
         Symbol.asyncIterator,
         binding.realm,
       );
-      const syncMethod = asyncMethod
+      const syncMethod = asyncMethod !== undefined
         ? undefined
         : getMethod(value, Symbol.iterator, binding.realm);
       const iteratorMethod = asyncMethod ?? syncMethod;
-      if (iteratorMethod) {
+      if (iteratorMethod !== undefined) {
         matches = candidates.filter((callable) =>
           !!callable.getArgument(index)!.type.candidates.asyncSequence);
         if (matches.length > 0) {
           return {
             asyncSequenceMethod: {
               method: iteratorMethod,
-              type: asyncMethod ? 'async' : 'sync',
+              type: asyncMethod !== undefined ? 'async' : 'sync',
             },
             candidates: matches,
           };
@@ -260,7 +260,7 @@ function resolveDistinguishingArgument<Callable extends AssembledCallable>(
         Symbol.iterator,
         binding.realm,
       );
-      if (iteratorMethod) {
+      if (iteratorMethod !== undefined) {
         matches = candidates.filter((callable) =>
           !!callable.getArgument(index)!.type.candidates.array);
         if (matches.length > 0) {

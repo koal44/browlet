@@ -5,6 +5,7 @@ import {
   ordinarySetWithOwnDescriptor, toBigInt, toNumber, toPrimitive, toString,
 } from '../../src/js-engine/index';
 import { SyntaxError as InternalSyntaxError, TypeError as InternalTypeError } from '../../src/infra/exceptions';
+import { itPassesWith } from '../test-runtime';
 
 describe('ECMAScript abstract operations', () => {
   it('recognizes ECMAScript Object values', () => {
@@ -30,6 +31,13 @@ describe('ECMAScript abstract operations', () => {
       .toThrow(realm.intrinsics.typeError);
     expect(() => getMethod(null, 'method', realm))
       .toThrow(realm.intrinsics.typeError);
+  });
+
+  itPassesWith('htmlDDA')('preserves an undetectable receiver through GetV', () => {
+    const realm = new JSRealm();
+    const value = realm.createHTMLDDA(() => null);
+    Object.defineProperty(value, 'probe', { get(this: unknown) { return this; } });
+    expect(getV(value, 'probe', realm)).toBe(value);
   });
 
   it('preserves GetV receivers for proxies and primitives boxed in another realm', () => {

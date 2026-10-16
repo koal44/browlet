@@ -79,7 +79,7 @@ export class PlatformRecord<T extends object = object> {
 
   /** Attach a fresh or validated platform object and initialize its per-object binding state. */
   attachPlatformObject(platformObject: object): StampedPlatformObject {
-    if (this.platformObject) {
+    if (this.platformObject !== undefined) {
       throw new InternalError('Implementation object is already associated with another owner or platform object');
     }
     this.platformObject = PlatformObjectStamper.stamp(platformObject, this);

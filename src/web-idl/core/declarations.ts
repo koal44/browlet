@@ -38,6 +38,8 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
     constructWith?: InjectedArgument<Env>[];
     /** Initialize the implementation before stamping or projection; inherited hooks run first. */
     initializeImplementation?: DeclarationHook<'initialize-implementation', Env, Impl>;
+    /** Allocate HTMLAllCollection's undetectable callable; Binding installs its native property handlers. */
+    createHTMLAllCollection?: DeclarationHook<'html-all-collection-create', Env, Impl>;
   };
 
   /** TypeScript parameters shared by the generated instance's members and inferred by its constructors. */

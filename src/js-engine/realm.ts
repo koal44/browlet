@@ -9,6 +9,7 @@ import {
   type RuntimeBuffers,
 } from './buffers';
 import { isObject } from './abstract-operations';
+import { addon } from './node-addons';
 import {
   associateContext, associateGlobalRealm, associateObjectRealm,
   createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
@@ -339,6 +340,11 @@ export class JSRealm {
     }
     associateObjectRealm(object, this);
     return object;
+  }
+
+  /** Allocate a callable [[IsHTMLDDA]] object directly in this realm. */
+  createHTMLDDA(call: JSFunction): object {
+    return addon.createHTMLDDA(this.#context, call);
   }
 
   /** Parse JSON with this realm's captured intrinsic and allocation prototypes. */

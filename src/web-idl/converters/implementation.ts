@@ -1,6 +1,7 @@
 import {
   endOfIteration, type AsyncIterator, type InternalPromise, type PromiseResultType,
 } from '../../infra/index';
+import { isObject } from '../../js-engine/index';
 import type { CallbackExceptionBehavior, ImplementationClass } from '../core/index';
 
 import { compileSteps } from '../compiler';
@@ -65,7 +66,7 @@ export class ImplementationConverter {
     const classes = options.implClasses;
     if (!classes?.length || options.callbackDictionary) return convert;
     return (value, context, callbackThis) => {
-      if (value !== null && (typeof value === 'object' || typeof value === 'function') &&
+      if (isObject(value) &&
         !(value instanceof IDLDictionary) && !IDLAsyncSequence.is(value) && !IDLPromise.is(value)) {
         for (const implClass of classes) {
           const impl = context.unwrap(value, implClass);

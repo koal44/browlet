@@ -91,7 +91,7 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
         returnResult = this.record.invokeAsAsync('return', [reason], this.record.syncRealm).promise;
       } else {
         const returnMethod = getMethod(this.record.iterator, 'return', realm);
-        if (!returnMethod) return IDLPromise.fromJS(undefined, undefinedType, realm);
+        if (returnMethod === undefined) return IDLPromise.fromJS(undefined, undefinedType, realm);
         returnResult = Reflect.apply(returnMethod, this.record.iterator, [reason]);
       }
     } catch (exception) {
@@ -134,7 +134,7 @@ class IteratorRecord {
       throw new realm.intrinsics.typeError('Iterator method did not return an object');
     }
     const nextMethod = getMethod(iterator, 'next', realm);
-    if (!nextMethod) {
+    if (nextMethod === undefined) {
       throw new realm.intrinsics.typeError('Iterator has no next method');
     }
     return new IteratorRecord(iterator, nextMethod);
@@ -146,7 +146,7 @@ class IteratorRecord {
   invokeAsAsync(operation: 'next' | 'return', args: unknown[], realm: WebIDLRealm): IDLPromise {
     try {
       const method = operation === 'next' ? this.nextMethod : getMethod(this.iterator, 'return', realm);
-      if (!method) {
+      if (method === undefined) {
         return IDLPromise.fromJS(realm.createIteratorResultObject(args[0], true), anyType, realm);
       }
       const result = Reflect.apply(method, this.iterator, args);

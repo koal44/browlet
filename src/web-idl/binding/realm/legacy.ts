@@ -200,7 +200,7 @@ export class LegacyPlatformObjectBinding {
     }
 
     if (properties.indexed && isArrayIndex(property)) {
-      const descriptor = this.#getIndexedProperty(
+      const descriptor = this.getIndexedProperty(
         implementation,
         property,
         properties.indexed,
@@ -211,14 +211,14 @@ export class LegacyPlatformObjectBinding {
     if (
       properties.named &&
       !ignoreNamedProperties &&
-      this.#namedPropertyVisible(
+      this.namedPropertyVisible(
         target,
         implementation,
         property,
         properties.named,
       )
     ) {
-      return this.#getNamedProperty(
+      return this.getNamedProperty(
         implementation,
         property,
         properties.named,
@@ -229,14 +229,14 @@ export class LegacyPlatformObjectBinding {
 
   // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: indexed property
   // steps.
-  #getIndexedProperty(
+  protected getIndexedProperty(
     target: object,
     property: string,
     properties: IndexedProperties,
   ): PropertyDescriptor | undefined {
     const index = toArrayIndex(property);
     const { steps } = properties;
-    if ('supportsIndex' in steps && !this.#supportsIndex(target, index, properties)) return;
+    if ('supportsIndex' in steps && !this.supportsIndex(target, index, properties)) return;
 
     const value = this.#getIndexedValue(target, index, properties);
     if ('unsupportedValue' in steps && value === steps.unsupportedValue) return;
@@ -250,7 +250,7 @@ export class LegacyPlatformObjectBinding {
 
   // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: named property
   // steps.
-  #getNamedProperty(
+  protected getNamedProperty(
     target: object,
     property: string,
     properties: NamedProperties,
@@ -323,6 +323,20 @@ export class LegacyPlatformObjectBinding {
     descriptor: PropertyDescriptor,
     properties: LegacyPropertyMetadata,
   ): boolean {
+    return this.defineVirtualProperty(
+      implementation, property, descriptor, properties,
+      Reflect.getOwnPropertyDescriptor(target, property) !== undefined,
+    ) ?? Reflect.defineProperty(target, property, descriptor);
+  }
+
+  // Shared special-property cases; undefined delegates ordinary definition to the backend.
+  protected defineVirtualProperty(
+    implementation: object,
+    property: string | symbol,
+    descriptor: PropertyDescriptor,
+    properties: LegacyPropertyMetadata,
+    hasOwn: boolean,
+  ): boolean | undefined {
     if (
       properties.indexed &&
       typeof property === 'string' &&
@@ -346,13 +360,13 @@ export class LegacyPlatformObjectBinding {
       typeof property === 'string' &&
       !named.unforgeableNames.has(property)
     ) {
-      const creating = !this.#getSupportedNames(
+      const creating = !this.getSupportedNames(
         implementation,
         named,
       ).has(property);
       if (
         named.overrideBuiltIns ||
-        !Reflect.getOwnPropertyDescriptor(target, property)
+        !hasOwn
       ) {
         if (!creating && !named.setter) return false;
         if (named.setter) {
@@ -367,7 +381,7 @@ export class LegacyPlatformObjectBinding {
         }
       }
     }
-    return Reflect.defineProperty(target, property, descriptor);
+    return undefined;
   }
 
   // Web IDL §3.9.4 [[Delete]].
@@ -382,7 +396,7 @@ export class LegacyPlatformObjectBinding {
       typeof property === 'string' &&
       isArrayIndex(property)
     ) {
-      return !this.#supportsIndex(
+      return !this.supportsIndex(
         implementation,
         toArrayIndex(property),
         properties.indexed,
@@ -391,7 +405,7 @@ export class LegacyPlatformObjectBinding {
     if (
       properties.named &&
       typeof property === 'string' &&
-      this.#namedPropertyVisible(
+      this.namedPropertyVisible(
         target,
         implementation,
         property,
@@ -417,18 +431,18 @@ export class LegacyPlatformObjectBinding {
     const keys = new Set<string | symbol>();
     if (properties.indexed) {
       const indices = [
-        ...this.#getSupportedIndices(implementation, properties.indexed),
+        ...this.getSupportedIndices(implementation, properties.indexed),
       ];
       indices.sort((left, right) => left - right);
       for (const index of indices) keys.add(String(index));
     }
     if (properties.named) {
-      const names = this.#getSupportedNames(
+      const names = this.getSupportedNames(
         implementation,
         properties.named,
       );
       for (const name of names) {
-        if (this.#namedPropertyVisible(
+        if (this.namedPropertyVisible(
           target,
           implementation,
           name,
@@ -472,7 +486,7 @@ export class LegacyPlatformObjectBinding {
     if (!setter) throw new InternalError('Indexed property has no setter');
 
     const index = toArrayIndex(property);
-    const creating = !this.#supportsIndex(
+    const creating = !this.supportsIndex(
       target,
       index,
       properties,
@@ -507,7 +521,7 @@ export class LegacyPlatformObjectBinding {
     const { setter } = properties;
     if (!setter) throw new InternalError('Named property has no setter');
 
-    const creating = !this.#getSupportedNames(target, properties).has(property);
+    const creating = !this.getSupportedNames(target, properties).has(property);
     const converted = setter.convert(value);
     if (setter.named) {
       const steps = setter.binding?.operationSteps;
@@ -552,15 +566,16 @@ export class LegacyPlatformObjectBinding {
   }
 
   // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
-  #namedPropertyVisible(
+  protected namedPropertyVisible(
     target: object,
     implementation: object,
     property: string,
     properties: NamedProperties,
-    supportedNames = this.#getSupportedNames(implementation, properties),
+    supportedNames = this.getSupportedNames(implementation, properties),
+    hasOwn = Reflect.getOwnPropertyDescriptor(target, property) !== undefined,
   ): boolean {
     if (!supportedNames.has(property)) return false;
-    if (Reflect.getOwnPropertyDescriptor(target, property)) return false;
+    if (hasOwn) return false;
     if (properties.overrideBuiltIns) return true;
 
     let prototype = Reflect.getPrototypeOf(target);
@@ -593,7 +608,7 @@ export class LegacyPlatformObjectBinding {
   }
 
   // Project adapter for Web IDL §2.5.6.1 Indexed properties — query the interface's supported property indices.
-  #supportsIndex(
+  protected supportsIndex(
     implementation: object,
     index: number,
     properties: IndexedProperties,
@@ -606,7 +621,7 @@ export class LegacyPlatformObjectBinding {
   }
 
   // Project delegate to Web IDL §2.5.6.1 Indexed properties — enumerate supported property indices.
-  #getSupportedIndices(
+  protected getSupportedIndices(
     target: object,
     properties: IndexedProperties,
   ): Iterable<number> {
@@ -618,7 +633,7 @@ export class LegacyPlatformObjectBinding {
   }
 
   // Project delegate to Web IDL §2.5.6.2 Named properties — the interface's supported property names.
-  #getSupportedNames(
+  protected getSupportedNames(
     target: object,
     properties: NamedProperties,
   ): ReadonlySet<string> {
@@ -691,12 +706,12 @@ type PropertySetter = {
 };
 
 // Web IDL §3.9.7 Abstract operations — determine if a property name is an array index.
-function isArrayIndex(property: string): boolean {
+export function isArrayIndex(property: string): boolean {
   const index = toArrayIndex(property);
   return index !== 2 ** 32 - 1 && String(index) === property;
 }
 
 // Project delegate to ECMAScript §7.1.9 ToUint32 for an array-index property name.
-function toArrayIndex(property: string): number {
+export function toArrayIndex(property: string): number {
   return Number(property) >>> 0;
 }

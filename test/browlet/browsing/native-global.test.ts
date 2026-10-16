@@ -1,5 +1,6 @@
 import { createManualEventLoop } from '../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
+import { itPassesWith } from '../../test-runtime';
 
 import { unwrap, project } from '../../support/browlet-binding';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
@@ -14,8 +15,8 @@ import { createOpaqueOrigin } from '../../../src/url/origin';
 import type { StampedPlatformObject } from '../../../src/web-idl/index';
 
 // Native allocation belongs to the addon; plain Node has no equivalent API.
-describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window allocation', () => {
-  it('binds real Window and EventTarget members without changing WindowImpl identity', () => {
+describe('Window global allocation', () => {
+  itPassesWith('nativeGlobals')('binds real Window and EventTarget members without changing WindowImpl identity', () => {
     const fixture = createNativeWindow();
     const { realm, window, platformWindow, document, context } = fixture;
     const proxy = context.windowProxy.platform;
@@ -53,7 +54,7 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     `, 'immutability.js')).toBe(true);
   });
 
-  it('retains per-Window records when the native proxy is reused', () => {
+  itPassesWith('nativeGlobals')('retains per-Window records when the native proxy is reused', () => {
     const first = createNativeWindow();
     const handle = first.context.windowProxy;
     const proxy = handle.platform;
@@ -89,7 +90,7 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
       .toBe(true);
   });
 
-  it('preserves global declarations, descriptors, deletion and missing-name errors', () => {
+  itPassesWith('nativeGlobals')('preserves global declarations, descriptors, deletion and missing-name errors', () => {
     const { realm, platformWindow } = createNativeWindow();
     expect(realm.evaluate(`
       var declared = 7;
@@ -129,7 +130,7 @@ describe.skipIf(process.env.BROWLET_NODE_ADDON === undefined)('native Window all
     `, 'descriptor-prototype.js')).toBe(12);
   });
 
-  it('uses Web IDL named properties through the native prototype', () => {
+  it('uses Web IDL named properties through the Window prototype', () => {
     const { realm } = createNativeWindow();
     expect(realm.evaluate(`
       const root = document.createElement('html');

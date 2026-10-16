@@ -12,22 +12,26 @@ import type { JSJobCallback, NodeContext } from './runtime';
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
   #methods: Partial<AddonMethods> = {};
+  /** Whether this backend supports native document.all allocation and property handling. */
+  supportsHTMLDDA: boolean;
 
-  /** Requires the V8 iterator-factory patch. */
+  // Requires the V8 iterator-factory patch.
   createCollectionIterator: <Value>(
     context: NodeContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
   ) => MapIterator<Value> | SetIterator<Value>;
   createContextHandle: (options?: AddonContextOptions) => AddonContextHandle;
+  /** Allocate the callable, undetectable object used for document.all; attach properties with setPropertyHandlers. */
+  createHTMLDDA: <Result>(context: NodeContext, call: JSFunction<Result>) => JSFunction<Result>;
   createMicrotaskQueue: () => AddonMicrotaskQueueHandle;
   getFunctionRealm: (value: JSFunction) => object;
   getRealm: (value: object) => object;
-  /** Require the V8 iterator-brand predicates. */
+  // Require the V8 iterator-brand predicates.
   isArrayIterator: (value: unknown) => boolean;
   isStringIterator: (value: unknown) => boolean;
   isRegExpStringIterator: (value: unknown) => boolean;
-  /** Requires the V8 length-tracking patch. */
+  // Requires the V8 length-tracking patch.
   isLengthTrackingArrayBufferView: (view: ArrayBufferView) => boolean;
-  /** Legacy Node patch for making an existing object's prototype immutable. */
+  // Legacy Node patch for making an existing object's prototype immutable.
   makePrototypeImmutable: (object: object) => void;
   observePromise: (
     promise: Promise<unknown>, realmAnchor: JSFunction | PromiseConstructor,
@@ -37,13 +41,15 @@ export class NodeAPI {
     source: string, context: NodeContext, options?: ContextEvaluationOptions,
   ) => unknown;
   setGlobalObject: (context: NodeContext, object: object) => void;
-  /** Requires the V8 host-hook patches. */
+  // Requires the V8 host-hook patches.
   setHostHooks: <HostDefined>(hooks: AddonHostHooks<HostDefined>) => void;
   setPropertyDelegate: (object: object, delegate: object) => void;
+  setPropertyHandlers: (object: object, handlers: AddonPropertyHandlers) => void;
 
   constructor(backend: object) {
     this.createCollectionIterator = this.#loadMethod(backend, 'createCollectionIterator');
     this.createContextHandle = this.#loadMethod(backend, 'createContextHandle');
+    this.createHTMLDDA = this.#loadMethod(backend, 'createHTMLDDA');
     this.createMicrotaskQueue = this.#loadMethod(backend, 'createMicrotaskQueue');
     this.getFunctionRealm = this.#loadMethod(backend, 'getFunctionRealm');
     this.getRealm = this.#loadMethod(backend, 'getRealm');
@@ -57,6 +63,9 @@ export class NodeAPI {
     this.setGlobalObject = this.#loadMethod(backend, 'setGlobalObject');
     this.setHostHooks = this.#loadMethod(backend, 'setHostHooks');
     this.setPropertyDelegate = this.#loadMethod(backend, 'setPropertyDelegate');
+    this.setPropertyHandlers = this.#loadMethod(backend, 'setPropertyHandlers');
+    this.supportsHTMLDDA = this.getMethod('createHTMLDDA') !== undefined &&
+      this.getMethod('setPropertyHandlers') !== undefined;
   }
 
   /** Only supplied methods appear here; unsupported-call stubs do not. */
@@ -81,7 +90,35 @@ export class NodeAPI {
 export const addon = new NodeAPI(loadNodeApi());
 
 // Derive the cached signatures from the public calls rather than listing them twice.
-type AddonMethods = Omit<NodeAPI, 'getMethod'>;
+type AddonMethods = Omit<NodeAPI, 'getMethod' | 'supportsHTMLDDA'>;
+
+/**
+ * Supply intercepted properties for a native object.
+ * `hasOwn` reports an ordinary own property already stored on that object,
+ * excluding properties supplied by these handlers.
+ */
+// Used for HTMLAllCollection (document.all), whose falsiness an outer Proxy would lose.
+export type AddonPropertyHandlers = {
+  /** Whether get handles this key; false continues ordinary lookup. */
+  has(key: string | symbol, hasOwn: boolean): boolean;
+  // For get/set, Node 24 supplies the receiver, Node 26+ supplies the holder,
+  // and global callbacks supply undefined to use their bound target.
+  /** Read an intercepted value after has returns true. */
+  get(key: string | symbol, receiver: object | undefined): unknown;
+  /** Assign a value: true succeeds, false rejects, and undefined leaves ordinary assignment to V8. */
+  set(key: string | symbol, value: unknown, receiver: object | undefined, hasOwn: boolean): boolean | undefined;
+  /** Describe an intercepted own property; undefined lets V8 inspect ordinary properties. */
+  getOwnPropertyDescriptor(key: string | symbol, hasOwn: boolean): PropertyDescriptor | undefined;
+  /** Supply lookup flags through a descriptor; defaults to getOwnPropertyDescriptor. */
+  // V8 consults these flags during assignment, so they may differ from the public descriptor.
+  getPropertyAttributes?(key: string | symbol, hasOwn: boolean): PropertyDescriptor | undefined;
+  /** Define a property: true succeeds, false rejects, and undefined leaves ordinary definition to V8. */
+  defineProperty(key: string | symbol, descriptor: PropertyDescriptor, hasOwn: boolean): boolean | undefined;
+  /** Delete a property: true succeeds, false rejects, and undefined leaves ordinary deletion to V8. */
+  deleteProperty(key: string | symbol, hasOwn: boolean): boolean | undefined;
+  /** List intercepted own keys; V8 also includes ordinary own keys. */
+  ownKeys(): (string | symbol)[];
+};
 
 export type AddonMicrotaskQueueHandle = {
   enqueueMicrotask(steps: () => void): void;

@@ -1,5 +1,5 @@
 import { InternalError } from '../../infra/index';
-import { isObject } from '../../js-engine/index';
+import { isCallable, isObject } from '../../js-engine/index';
 
 import type { WebIDLRealm } from '../environment';
 import type {
@@ -16,7 +16,7 @@ export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = ID
   protected createInputSteps(): ConversionSteps<IDLCallbackFunction> {
     const assembled = this.type.assembled;
     return (value) => {
-      if (typeof value !== 'function') {
+      if (!isCallable(value)) {
         return this.throwTypeError(`${assembled.primary.name} is not callable`);
       }
       return new IDLCallbackFunction(
@@ -27,7 +27,7 @@ export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = ID
 
   protected override createOutputSteps(): ConversionSteps<object> {
     return (value) => {
-      if (typeof value === 'function') return CallbackFunctionStamper.getObject(value);
+      if (isCallable(value)) return CallbackFunctionStamper.getObject(value);
       if (IDLCallbackFunction.is(value)) return value.object;
       throw new InternalError(`IDL callback function ${this.type.assembled.primary.name} is not callable`);
     };

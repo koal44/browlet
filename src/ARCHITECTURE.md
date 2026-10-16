@@ -38,6 +38,17 @@ isolated-world or separate-runtime consumer.
 Each registered realm has one `RealmBinding`. `BindingContext` is its public type,
 exposing boundary operations without adding another object or lifecycle.
 
+HTML's `HTMLAllCollection` supplies a dedicated allocation hook because a JavaScript
+Proxy cannot preserve `[[IsHTMLDDA]]`. JS Engine allocates the undetectable callable;
+HTML supplies its call steps; Web IDL's `HTMLAllCollectionBinding` adapts the shared
+indexed/named property algorithms to native handlers. Ordinary properties remain on the native object so V8
+preserves accessor receivers. The [collection roadmap](browlet/html/collections/ROADMAP.md)
+records the unsupported-backend policy and remaining enumeration-order clash.
+JS Engine's `isObject` and `isCallable` operations recognize this exceptional
+object wherever a runtime value needs classification. Recognition stays inside
+these shared predicates and never creates a temporary Proxy. Web IDL uses the
+same operations for conversion, callbacks and coercion.
+
 Binding applies a private DOMException stamp during platform-object initialization
 so Core can recognize exceptions without importing Binding's identity record.
 The shared record still owns the implementation/platform association and realm.
