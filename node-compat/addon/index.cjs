@@ -25,6 +25,7 @@ exports.observePromise = native.observePromise;
 exports.isArrayIterator = native.isArrayIterator;
 exports.isStringIterator = native.isStringIterator;
 exports.isRegExpStringIterator = native.isRegExpStringIterator;
+exports.isWeakRef = native.isWeakRef;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;
 exports.createCollectionIterator = native.createCollectionIterator;
 exports.createHTMLDDA = native.createHTMLDDA;

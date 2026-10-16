@@ -147,6 +147,32 @@ describe('Node/V8 built-in primitives', () => {
     expect(trapRan).toBe(false);
   });
 
+  it('recognizes WeakRef brands across realms and rejects impostors without author code', () => {
+    const realm = new JSEngine.JSRealm();
+    const foreign = realm.evaluate('new WeakRef({})', 'weak-ref-brand.js') as object;
+    const fail = (): never => { throw new Error('author code ran'); };
+    for (const value of [new WeakRef({}), foreign]) {
+      Object.defineProperty(value, 'deref', { get: fail });
+      Object.setPrototypeOf(value, new Proxy({}, {
+        get: fail, getPrototypeOf: fail, ownKeys: fail,
+      }));
+      Object.freeze(value);
+      expect(JSEngine.isWeakRefObject(value)).toBe(true);
+    }
+
+    const reference = new WeakRef({});
+    const revoked = Proxy.revocable(reference, {});
+    revoked.revoke();
+    for (const value of [
+      undefined, null, false, 1, 1n, 'text', Symbol(), () => {}, {},
+      new FinalizationRegistry(() => {}), Object.create(WeakRef.prototype),
+      new Proxy(reference, { get: fail, getPrototypeOf: fail, ownKeys: fail }),
+      revoked.proxy,
+    ]) {
+      expect(JSEngine.isWeakRefObject(value)).toBe(false);
+    }
+  });
+
   it('keeps the native exotic probe narrow and non-consuming', () => {
     const iterator = [1, 2][Symbol.iterator]();
     expect(JSEngine.nativeCloneRejectsPropertylessObject(

@@ -9,7 +9,7 @@ const compat = require('../addon/index.cjs');
 // Losing one must not turn its regressions into expected failures.
 for (const method of [
   'createContextHandle', 'createHTMLDDA', 'createMicrotaskQueue', 'getFunctionRealm',
-  'getRealm', 'isContext', 'observePromise', 'runInContext', 'setGlobalObject',
+  'getRealm', 'isContext', 'isWeakRef', 'observePromise', 'runInContext', 'setGlobalObject',
   'setPropertyDelegate', 'setPropertyHandlers',
 ]) {
   assert.equal(typeof compat[method], 'function', `Missing required addon capability: ${method}`);

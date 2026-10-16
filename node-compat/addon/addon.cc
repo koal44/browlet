@@ -3,6 +3,7 @@
 #include "host-hooks.h"
 #include "html-all-collection.h"
 #include "iterators.h"
+#include "object-types.h"
 #include "promise.h"
 #include "realm.h"
 #include "vm.h"
@@ -18,6 +19,7 @@ void Initialize(v8::Local<v8::Object> exports, v8::Local<v8::Value>,
   InitializeRealm(exports, context);
   InitializeHostHooks(exports, context);
   InitializePromise(exports);
+  InitializeObjectTypes(exports);
   InitializeIterators(exports, context, vm_data);
   InitializeHTMLAllCollection(exports, context, vm_data);
 }

@@ -31,6 +31,8 @@ export class NodeAPI {
   isRegExpStringIterator: (value: unknown) => boolean;
   // Requires the V8 length-tracking patch.
   isLengthTrackingArrayBufferView: (view: ArrayBufferView) => boolean;
+  /** Recognize a genuine WeakRef without dereferencing its target. */
+  isWeakRef: (value: unknown) => boolean;
   // Legacy Node patch for making an existing object's prototype immutable.
   makePrototypeImmutable: (object: object) => void;
   observePromise: (
@@ -57,6 +59,7 @@ export class NodeAPI {
     this.isStringIterator = this.#loadMethod(backend, 'isStringIterator');
     this.isRegExpStringIterator = this.#loadMethod(backend, 'isRegExpStringIterator');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
+    this.isWeakRef = this.#loadMethod(backend, 'isWeakRef');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');
     this.observePromise = this.#loadMethod(backend, 'observePromise');
     this.runInContext = this.#loadMethod(backend, 'runInContext');

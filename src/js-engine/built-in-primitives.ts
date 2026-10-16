@@ -153,6 +153,9 @@ export function writeErrorStack(value: object, stack: string): void {
 }
 
 export function isWeakRefObject(value: unknown): value is WeakRef<object> {
+  if (nativeIsWeakRef) return nativeIsWeakRef(value);
+  // Without the addon, probing the captured intrinsic also keeps a live target
+  // alive for the current job. The native predicate only checks the object's brand.
   if (!weakRefDeref) return false;
   try {
     Reflect.apply(weakRefDeref, value, []);
@@ -258,6 +261,7 @@ const setIteratorNext = Reflect.get(
   'next',
 ) as (this: SetIterator<unknown>) => IteratorResult<unknown>;
 
+const nativeIsWeakRef = addon.getMethod('isWeakRef');
 const weakRefDeref = typeof WeakRef === 'undefined'
   ? undefined
   : Reflect.get(

@@ -18,6 +18,9 @@ describe('Node add-on API', () => {
     expect(() => api.createHTMLDDA(context, () => null))
       .toThrow('Node backend does not provide createHTMLDDA');
     expect(api.getMethod('setPropertyHandlers')).toBeUndefined();
+    expect(api.getMethod('isWeakRef')).toBeUndefined();
+    expect(() => api.isWeakRef({}))
+      .toThrow('Node backend does not provide isWeakRef');
   });
 
   itPassesWith('htmlDDA')('allocates an undetectable callable through the native backend', () => {
