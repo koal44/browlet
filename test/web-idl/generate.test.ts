@@ -404,6 +404,73 @@ describe('platform declaration generation', () => {
     `)).toEqual([]);
   });
 
+  it('keeps ordinary inheritance when redeclared members have the same generated signatures', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'ReportBody', members: [
+          op('toJSON', idlType.object, [], xattr('Default')),
+          roAttr('count', idlType.unsignedShort),
+        ],
+      }),
+      defineInterface({
+        name: 'SpecificReportBody', inherits: 'ReportBody', members: [
+          op('toJSON', idlType.object, [], xattr('Default')),
+          roAttr('count', idlType.unsignedLong),
+        ],
+      }),
+    ]);
+    const source = generatePlatformTypes(assembly);
+    expect(source).toContain('interface SpecificReportBody extends ReportBody {');
+    expect(compile(source, `
+      import type { ReportBody, SpecificReportBody } from './platform';
+      declare const report: SpecificReportBody;
+      const parent: ReportBody = report;
+      const json: object = report.toJSON();
+      const count: number = report.count;
+    `)).toEqual([]);
+  });
+
+  it('allows an inherited method to be shadowed with a wider return type', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Base', members: [op('lookup', idlType.DOMString)] }),
+      defineInterface({
+        name: 'Child', inherits: 'Base',
+        members: [op('lookup', nullable(union(idlType.DOMString, idlType.long)))],
+      }),
+    ]);
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Child, ChildConstructor } from './platform';
+      declare const child: Child;
+      declare const Child: ChildConstructor;
+      const value: string | number | null = child.lookup();
+      const prototypeValue: string | number | null = Child.prototype.lookup();
+      declare const candidate: unknown;
+      if (candidate instanceof Child) {
+        const narrowed: string | number | null = candidate.lookup();
+      }
+      // @ts-expect-error shadowing replaces the original return type
+      const text: string = child.lookup();
+    `)).toEqual([]);
+  });
+
+  it('preserves an inherited iterable element type instead of the nullable indexed getter result', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'Base', members: [
+          op('item', nullable(idlType.DOMString), [arg('index', idlType.unsignedLong)], { special: 'getter' }),
+          iter(idlType.DOMString),
+        ],
+      }),
+      defineInterface({ name: 'Child', inherits: 'Base', members: [attr('value', idlType.DOMString)] }),
+    ]);
+    expect(compile(generatePlatformTypes(assembly), `
+      import type { Child } from './platform';
+      declare const child: Child;
+      const values: string[] = [...child];
+      const indexed: string | null | undefined = child[0];
+    `)).toEqual([]);
+  });
+
   it('emits collection and iterator surfaces while respecting explicit methods', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({ name: 'MapView', members: [maplike(idlType.DOMString, idlType.long)] }),

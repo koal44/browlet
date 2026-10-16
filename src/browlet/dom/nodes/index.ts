@@ -4,7 +4,9 @@ export {
   characterDataIncludesNonDocumentTypeChildNodeIDL,
 } from './character-data';
 export { ChildNodeMixin, childNodeIDL } from './child-node';
-export { HTMLCollectionImpl, htmlCollectionIDL, NodeListImpl, nodeListIDL } from './collections';
+export {
+  HTMLCollectionImpl, htmlCollectionIDL, NodeListImpl, nodeListIDL, type LiveCollectionSource,
+} from './collections';
 export { HTMLAllCollectionImpl, htmlAllCollectionIDL } from './html-all-collection';
 export { CommentImpl, commentIDL } from './comment';
 export { CDATASectionImpl, cdataSectionIDL } from './cdata-section';

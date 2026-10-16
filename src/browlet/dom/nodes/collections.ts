@@ -6,19 +6,19 @@ import {
 
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
-import type { NodeImpl } from './node';
+import { NodeImpl } from './node';
 
 /** Shared storage for snapshots and lazily refreshed live collections. */
 abstract class NodeCollection<T extends NodeImpl> implements Iterable<T> {
   /** Numeric properties belong to the platform object; implementations use item(). */
   [index: number]: undefined;
 
-  #source: { root: NodeImpl; collect(): T[]; } | null;
+  #source: LiveCollectionSource<T> | null;
   #items: T[];
   #document: DocumentImpl | null = null;
   #version = -1;
 
-  constructor(source: T[] | { root: NodeImpl; collect(): T[]; }) {
+  constructor(source: T[] | LiveCollectionSource<T>) {
     this.#source = Array.isArray(source) ? null : source;
     this.#items = Array.isArray(source) ? source : [];
   }
@@ -58,11 +58,17 @@ abstract class NodeCollection<T extends NodeImpl> implements Iterable<T> {
   }
 }
 
-/** Live children of a node, or a static result whose supplied array this list owns. */
+/** Owner-supplied membership, refreshed after tree/attribute changes or adoption of the root. */
+export type LiveCollectionSource<T extends NodeImpl> = {
+  root: NodeImpl;
+  collect(): T[];
+};
+
+/** Live children, an owner's filtered live view, or a static result whose array this list owns. */
 // https://dom.spec.whatwg.org/#interface-nodelist
 export class NodeListImpl extends NodeCollection<NodeImpl> {
-  constructor(source: NodeImpl | NodeImpl[]) {
-    super(Array.isArray(source) ? source : {
+  constructor(source: NodeImpl | NodeImpl[] | LiveCollectionSource<NodeImpl>) {
+    super(!NodeImpl.is(source) ? source : {
       root: source,
       collect() {
         const nodes: NodeImpl[] = [];
@@ -101,15 +107,19 @@ export const nodeListIDL = defineInterface({
 /** Live element view, rooted in an ordinary tree and filtered in tree order. */
 // https://dom.spec.whatwg.org/#interface-htmlcollection
 export class HTMLCollectionImpl extends NodeCollection<ElementImpl> {
-  constructor(root: NodeImpl, matches: (element: ElementImpl) => boolean, childrenOnly = false) {
-    super({
-      root,
+  constructor(
+    source: NodeImpl | LiveCollectionSource<ElementImpl>,
+    matches: (element: ElementImpl) => boolean = () => true,
+    childrenOnly = false,
+  ) {
+    super(!NodeImpl.is(source) ? source : {
+      root: source,
       collect() {
         const elements: ElementImpl[] = [];
         for (
-          let node = root.firstChild;
+          let node = source.firstChild;
           node;
-          node = childrenOnly ? node.nextSibling : node.nextDescendant(root)
+          node = childrenOnly ? node.nextSibling : node.nextDescendant(source)
         ) {
           if (node.isElement() && matches(node)) elements.push(node);
         }

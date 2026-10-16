@@ -15,9 +15,11 @@ script-result union remain §4.12.1 work. `[CEReactions]` entry/exit and callbac
 delivery remain with custom elements; link fetching remains §4.2.4 work.
 Other empty element classes should wait for a concrete consumer.
 
-`web-idl.ts` retains a declaration-only `HTMLFormElement` type for FormData's
-constructor signature. It has no implementation or Window exposure; move that
-declaration into the form module when its behavior is implemented.
+The [forms collection slice](forms/ROADMAP.md) adds minimal concrete form,
+input, select, option, and optgroup implementations for HTML §§2.6.4.2–2.6.4.3.
+Their co-located IDL fragments are exposed; `HTMLFormElement` replaces the old
+declaration-only FormData identity. Form-owner association, radio-group updates,
+automatic selection, and selectedcontent remain explicit owner stubs.
 
 ## Early platform slice
 

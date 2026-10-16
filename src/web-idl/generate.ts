@@ -76,8 +76,8 @@ class PlatformTypeGenerator {
     const blocks = [
       '// Generated from Web IDL declarations. Do not edit by hand.',
       '// Platform types only; importing this module does not install or export runtime objects.',
-      '/** Inherit constructor properties without inheriting construction signatures. */\n' +
-      `type ${this.#ctorTypeName}<T> = { [K in keyof T]: T[K] };`,
+      '/** Inherit static properties; each interface supplies its own construction, prototype, and brand. */\n' +
+      `type ${this.#ctorTypeName}<T> = Omit<T, 'prototype' | typeof Symbol.hasInstance>;`,
     ];
     for (const [name, assembled] of this.#assembly.enumerations) {
       blocks.push(`export type ${this.#name(name)} = ${assembled.primary.values.map(quote).join(' | ')};`);
@@ -149,23 +149,44 @@ class PlatformTypeGenerator {
     // A derived setter can make an inherited indexed getter writable.
     let indexedGetter: IDLOperation | undefined;
     let indexedSetter: IDLOperation | undefined;
+    let inheritsCollection = false;
+    const inheritedMembers = new Map<string, string[]>();
     for (const ancestor of assembled.getInheritanceChain()) {
+      const ancestorMembers = new Map<string, string[]>();
       for (const entry of ancestor.members) {
         const member = entry.member;
         if (!this.#exposed(ancestor.primary) || !this.#exposed(entry.source) || !this.#exposed(member)) continue;
+        if (ancestor !== assembled) {
+          if ('name' in member && member.name && !('static' in member && member.static)) {
+            const signatures = ancestorMembers.get(member.name) ?? [];
+            signatures.push(...this.#member(member));
+            ancestorMembers.set(member.name, signatures);
+          }
+          if (member.kind === 'iterable' || member.kind === 'async-iterable' || member.kind === 'maplike' || member.kind === 'setlike') {
+            inheritsCollection = true;
+          }
+        }
         if (member.kind !== 'operation' || member.arguments[0]?.type.kind !== 'integer') continue;
         if (member.special === 'getter') indexedGetter = member;
         if (member.special === 'setter') indexedSetter = member;
       }
+      // A nearer ancestor replaces the whole overload set for a property.
+      for (const [name, signatures] of ancestorMembers) inheritedMembers.set(name, signatures);
     }
     if (indexedGetter) {
       members.push(`${indexedSetter ? '' : 'readonly '}[index: number]: ${this.#type(indexedGetter.returns, 'output')} | undefined;`);
-      if (!collection) members.push(`[Symbol.iterator](): IterableIterator<${this.#type(indexedGetter.returns, 'output')}>;`);
+      if (!collection && !inheritsCollection) members.push(`[Symbol.iterator](): IterableIterator<${this.#type(indexedGetter.returns, 'output')}>;`);
     }
     if (collection) members.push(...this.#collection(collection, ownNames));
     if (assembled.isGlobal()) members.push(...this.#globals(assembled));
     const parent = assembled.parentAssembled;
-    const blocks = [this.#interface(name + this.#typeParameters(parameters), members, parent && this.#name(parent.name))];
+    let inheritedInstance = parent && this.#name(parent.name);
+    const shadowed = [...ownNames].filter((name) =>
+      inheritedMembers.get(name)?.some((signature) => !members.includes(signature)));
+    if (inheritedInstance && shadowed.length) {
+      inheritedInstance = `Omit<${inheritedInstance}, ${shadowed.map(quote).join(' | ')}>`;
+    }
+    const blocks = [this.#interface(name + this.#typeParameters(parameters), members, inheritedInstance)];
     const objectName = this.#objects.get(assembled);
     if (objectName) {
       // The constructor object is shared by every instantiation; only construction infers type arguments.

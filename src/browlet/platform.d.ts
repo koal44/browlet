@@ -2,8 +2,8 @@
 
 // Platform types only; importing this module does not install or export runtime objects.
 
-/** Inherit constructor properties without inheriting construction signatures. */
-type Ctor<T> = { [K in keyof T]: T[K] };
+/** Inherit static properties; each interface supplies its own construction, prototype, and brand. */
+type Ctor<T> = Omit<T, 'prototype' | typeof Symbol.hasInstance>;
 
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
@@ -606,12 +606,87 @@ export interface HTMLVideoElementConstructor extends Ctor<HTMLMediaElementConstr
 }
 
 export interface HTMLFormElement extends HTMLElement {
-
+  readonly elements: HTMLFormControlsCollection;
 }
 
 export interface HTMLFormElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLFormElement;
   [Symbol.hasInstance](value: unknown): value is HTMLFormElement;
+}
+
+export interface HTMLInputElement extends HTMLElement {
+  type: string;
+  defaultChecked: boolean;
+  checked: boolean;
+}
+
+export interface HTMLInputElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLInputElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLInputElement;
+}
+
+export interface HTMLSelectElement extends HTMLElement {
+  readonly options: HTMLOptionsCollection;
+  selectedIndex: number;
+}
+
+export interface HTMLSelectElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLSelectElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLSelectElement;
+}
+
+export interface HTMLOptionElement extends HTMLElement {
+  defaultSelected: boolean;
+  selected: boolean;
+}
+
+export interface HTMLOptionElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLOptionElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLOptionElement;
+}
+
+export interface HTMLOptGroupElement extends HTMLElement {
+
+}
+
+export interface HTMLOptGroupElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLOptGroupElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLOptGroupElement;
+}
+
+export interface HTMLFormControlsCollection extends Omit<HTMLCollection, "namedItem"> {
+  namedItem(name: string): RadioNodeList | Element | null;
+  readonly [index: number]: Element | null | undefined;
+  [Symbol.iterator](): IterableIterator<Element | null>;
+}
+
+export interface HTMLFormControlsCollectionConstructor extends Ctor<HTMLCollectionConstructor> {
+  readonly prototype: HTMLFormControlsCollection;
+  [Symbol.hasInstance](value: unknown): value is HTMLFormControlsCollection;
+}
+
+export interface RadioNodeList extends NodeList {
+  value: string;
+  readonly [index: number]: Node | null | undefined;
+}
+
+export interface RadioNodeListConstructor extends Ctor<NodeListConstructor> {
+  readonly prototype: RadioNodeList;
+  [Symbol.hasInstance](value: unknown): value is RadioNodeList;
+}
+
+export interface HTMLOptionsCollection extends Omit<HTMLCollection, "length"> {
+  length: number;
+  add(element: HTMLOptionElement | HTMLOptGroupElement, before?: HTMLElement | number | null): void;
+  remove(index: number): void;
+  selectedIndex: number;
+  [index: number]: Element | null | undefined;
+  [Symbol.iterator](): IterableIterator<Element | null>;
+}
+
+export interface HTMLOptionsCollectionConstructor extends Ctor<HTMLCollectionConstructor> {
+  readonly prototype: HTMLOptionsCollection;
+  [Symbol.hasInstance](value: unknown): value is HTMLOptionsCollection;
 }
 
 export interface SVGElement extends Element {
@@ -826,6 +901,13 @@ export interface Window extends EventTarget {
   HTMLAudioElement: HTMLAudioElementConstructor;
   HTMLVideoElement: HTMLVideoElementConstructor;
   HTMLFormElement: HTMLFormElementConstructor;
+  HTMLInputElement: HTMLInputElementConstructor;
+  HTMLSelectElement: HTMLSelectElementConstructor;
+  HTMLOptionElement: HTMLOptionElementConstructor;
+  HTMLOptGroupElement: HTMLOptGroupElementConstructor;
+  HTMLFormControlsCollection: HTMLFormControlsCollectionConstructor;
+  RadioNodeList: RadioNodeListConstructor;
+  HTMLOptionsCollection: HTMLOptionsCollectionConstructor;
   SVGElement: SVGElementConstructor;
   SVGStyleElement: SVGStyleElementConstructor;
   MathMLElement: MathMLElementConstructor;

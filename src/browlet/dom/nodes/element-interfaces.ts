@@ -12,6 +12,10 @@ import {
   htmlImageElementInterface, htmlIFrameElementInterface, htmlAudioElementInterface, htmlVideoElementInterface,
 } from './html/embedded/index';
 import {
+  htmlFormElementInterface, htmlInputElementInterface, htmlSelectElementInterface,
+  htmlOptionElementInterface, htmlOptGroupElementInterface,
+} from './html/forms/index';
+import {
   htmlHeadElementInterface, htmlBaseElementInterface, htmlLinkElementInterface, htmlStyleElementInterface,
 } from './html/metadata/index';
 import { mathMLElementInterface } from './mathml/index';
@@ -53,6 +57,11 @@ const elementInterfaces = compileElementInterfaces([
   htmlIFrameElementInterface,
   htmlAudioElementInterface,
   htmlVideoElementInterface,
+  htmlFormElementInterface,
+  htmlInputElementInterface,
+  htmlSelectElementInterface,
+  htmlOptionElementInterface,
+  htmlOptGroupElementInterface,
   svgStyleElementInterface,
 ]);
 

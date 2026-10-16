@@ -8,6 +8,84 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 import { installTestBindings } from '../../../support/web-idl-binding';
 
 describe('Web IDL legacy property registration', () => {
+  it.each([true, false])('uses an explicit anonymous setter binding (indexed: %s)', (indexed) => {
+    class CollectionImpl {
+      values = new Map<string, number>([['0', 1]]);
+
+      item(key: number | string): number | null {
+        return this.values.get(String(key)) ?? null;
+      }
+    }
+    const keyType = indexed ? idlType.unsignedLong : idlType.DOMString;
+    const definition = defineInterface({
+      name: 'Collection', exposed: '*', implementation: impl(CollectionImpl),
+      members: [
+        ctor(),
+        op('item', nullable(idlType.long),
+          [arg('key', keyType)],
+          indexed
+            ? indexedGetter((collection: CollectionImpl) => [...collection.values.keys()].map(Number), { unsupportedValue: null })
+            : namedGetter((collection: CollectionImpl) => new Set(collection.values.keys())),
+        ),
+        op(undefined, idlType.undefined,
+          [arg('key', keyType), arg('value', idlType.long)],
+          {
+            special: 'setter',
+            invoke(_context, key, value) {
+              (this as CollectionImpl).values.set(String(key), value);
+            },
+          },
+        ),
+      ],
+    });
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Collection = Reflect.get(globalObject, 'Collection') as new() => object;
+    const collection = new Collection();
+    const newKey = indexed ? '2' : 'next';
+    expect(Reflect.set(collection, '0', '4')).toBe(true);
+    expect(Reflect.set(collection, newKey, '5')).toBe(true);
+    expect(Reflect.get(collection, '0')).toBe(4);
+    expect(Reflect.get(collection, newKey)).toBe(5);
+    expect(Reflect.defineProperty(collection, newKey, { value: 6 })).toBe(true);
+    expect(Reflect.get(collection, newKey)).toBe(6);
+  });
+
+  it('uses an explicit anonymous deleter binding and preserves its failure result', () => {
+    class CollectionImpl {
+      values = new Map<string, number>([['removed', 1], ['retained', 2]]);
+
+      item(name: string): number | null {
+        return this.values.get(name) ?? null;
+      }
+    }
+    const definition = defineInterface({
+      name: 'Collection', exposed: '*', implementation: impl(CollectionImpl),
+      members: [
+        ctor(),
+        op('item', nullable(idlType.long),
+          [arg('name', idlType.DOMString)],
+          namedGetter((collection: CollectionImpl) => new Set(collection.values.keys())),
+        ),
+        op(undefined, idlType.boolean,
+          [arg('name', idlType.DOMString)],
+          {
+            special: 'deleter',
+            invoke(_context, name) {
+              return name !== 'retained' && (this as CollectionImpl).values.delete(name);
+            },
+          },
+        ),
+      ],
+    });
+    const { globalObject } = installTestBindings(new BindingWorld([definition]));
+    const Collection = Reflect.get(globalObject, 'Collection') as new() => object;
+    const collection = new Collection();
+    expect(Reflect.deleteProperty(collection, 'removed')).toBe(true);
+    expect(Reflect.has(collection, 'removed')).toBe(false);
+    expect(Reflect.deleteProperty(collection, 'retained')).toBe(false);
+    expect(Reflect.get(collection, 'retained')).toBe(2);
+  });
+
   it.each([null, undefined])('uses an explicit %s result for unsupported indices', (unsupportedValue) => {
     class CollectionImpl {
       item(index: number): string | null | undefined {

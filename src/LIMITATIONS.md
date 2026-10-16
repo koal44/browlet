@@ -172,6 +172,13 @@ values are intentional [binding contracts](web-idl/README.md), not missing APIs.
 
 ## Live DOM mutation
 
+Form and options collections have minimal concrete form/input/select/option/
+optgroup owners. Form membership currently throws because form-owner association
+is missing; radio-group exclusion, automatic selection, and selectedcontent
+updates remain no-op stubs. The [forms roadmap](browlet/dom/nodes/html/forms/ROADMAP.md)
+records those boundaries and the three approved expected-failure regressions. Their
+exposed interfaces are implemented fragments, not complete HTML form controls.
+
 Public tree collections and selector APIs are available. Selectors requiring
 unimplemented HTML state (focus/editing, form controls, media, or custom-element
 state) still reach explicit missing host operations in the DOM adapter. These

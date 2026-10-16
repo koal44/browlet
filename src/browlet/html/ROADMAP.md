@@ -40,7 +40,7 @@ there is no catch-all `html/infra` module.
 | §2.4 URLs | `src/url` for URL semantics; Document, `<base>`, and `html/reflection/` for HTML integration |
 | §2.5 fetching resources | `dom/nodes/html/attributes/` for shared element attribute definitions below node implementations; `loader/` over the sibling `src/fetch` project for resource lifecycles; sniffing and parser encoding extraction retain their named dependencies |
 | §§2.6.1–2.6.3 reflection | `html/reflection/`, with reusable value parsing in `html/microsyntaxes/` |
-| §§2.6.4–2.6.5 collections | `html/collections/` over DOM live-collection machinery |
+| §§2.6.4–2.6.5 collections | `dom/nodes/` and `dom/nodes/html/forms/` own implementations over shared live collections; `html/collections/` records scope and remaining work |
 | §2.7 safe passing of structured data | `scripting/structured-data/` |
 
 ### Sections 2.1 and 2.2 audit
@@ -246,8 +246,9 @@ consumer, not that selection layer. `UserAgent.supportsMIMEType()` currently
 returns false as a provisional Resource Timing policy; wiring it into sniffing
 does not establish browser content support.
 
-The remaining shared attributes (§§2.5.6–2.5.9) are covered below. The bounded
-§§2.6.1–2.6.3 reflection slice follows them; §§2.6.4–2.6.5 collections remain next.
+The remaining shared attributes (§§2.5.6–2.5.9) and reflection (§§2.6.1–2.6.3)
+are covered below. The [collection roadmap](collections/ROADMAP.md) records the
+implemented HTMLAllCollection and the form/options slice's explicit owner stubs.
 
 ### Section 2.5.6 nonce attributes
 
@@ -433,8 +434,9 @@ double-with-fallback specification gap are recorded there.
 Minimal ElementInternals (§4.13.7) now provides internal defaults, separate
 associations, and shadow-root access. Attachment still needs custom-element
 definition/construction checks; reaction delivery (§4.13.6) remains provisional.
-This slice does not add ARIA or form-associated internals, and does not advance
-§§2.6.4–2.6.5 collections.
+This reflection slice does not add ARIA or form-associated internals.
+The subsequent [collections slice](collections/ROADMAP.md) has its own scope and
+remaining dependencies; §2.6.5 still waits for a real consumer.
 
 ## HTML section 3 ownership
 

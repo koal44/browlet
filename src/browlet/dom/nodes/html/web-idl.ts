@@ -1,4 +1,4 @@
-import { defineInterface, type Definition } from '../../../../web-idl/index';
+import type { Definition } from '../../../../web-idl/index';
 
 import { htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 import {
@@ -16,6 +16,10 @@ import { customElementRegistryIDL, elementInternalsIDL } from './custom-elements
 import {
   htmlImageElementIDL, htmlIFrameElementIDL, htmlMediaElementIDL, htmlAudioElementIDL, htmlVideoElementIDL,
 } from './embedded/index';
+import {
+  htmlFormElementIDL, htmlInputElementIDL, htmlSelectElementIDL, htmlOptionElementIDL, htmlOptGroupElementIDL,
+  htmlFormControlsCollectionIDL, radioNodeListIDL, htmlOptionsCollectionIDL,
+} from './forms/index';
 
 export const htmlIDLDefinitions: Definition[] = [
   htmlOrSVGOrMathMLElementIDL,
@@ -39,8 +43,12 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlMediaElementIDL,
   htmlAudioElementIDL,
   htmlVideoElementIDL,
-  // FormData references this type before form behavior or Window exposure exists.
-  // TODO: Move the declaration into forms/form.ts when implementing HTML forms.
-  // https://html.spec.whatwg.org/multipage/forms.html#htmlformelement
-  defineInterface({ name: 'HTMLFormElement', inherits: 'HTMLElement', members: [] }),
+  htmlFormElementIDL,
+  htmlInputElementIDL,
+  htmlSelectElementIDL,
+  htmlOptionElementIDL,
+  htmlOptGroupElementIDL,
+  htmlFormControlsCollectionIDL,
+  radioNodeListIDL,
+  htmlOptionsCollectionIDL,
 ];

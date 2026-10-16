@@ -2,14 +2,15 @@
 
 HTML §2.6 defines collection interfaces beyond the DOM Standard's `NodeList`
 and `HTMLCollection`. Reuse the DOM collection machinery. `HTMLAllCollection`
-lives beside `DocumentImpl` and the live DOM collections in `dom/nodes`, avoiding
-a reverse dependency from the document into higher HTML consumers.
+lives beside `DocumentImpl` and the live DOM collections in `dom/nodes`. Form and
+options collections live beside their element owners in `dom/nodes/html/forms`,
+avoiding reverse dependencies from those owners into higher HTML consumers.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | [`../../dom/nodes/html-all-collection.ts`](../../dom/nodes/html-all-collection.ts) (implemented) | `HTMLAllCollection`, indexed/named lookup, callable behavior, and `document.all` | HTML §2.6.4.1 |
-| `form-controls.ts` | `HTMLFormControlsCollection` and `RadioNodeList` | HTML §2.6.4.2 |
-| `options.ts` | `HTMLOptionsCollection` indexed setter/add/remove behavior | HTML §2.6.4.3 |
+| [`../../dom/nodes/html/forms/form-controls-collection.ts`](../../dom/nodes/html/forms/form-controls-collection.ts) | `HTMLFormControlsCollection` and `RadioNodeList`; form membership and radio grouping remain stubbed | HTML §2.6.4.2 |
+| [`../../dom/nodes/html/forms/options-collection.ts`](../../dom/nodes/html/forms/options-collection.ts) | `HTMLOptionsCollection` mutations; automatic selection and selectedcontent remain stubbed on their owners | HTML §2.6.4.3 |
 | `dom-string-list.ts` | Read-only indexed string-list surface over its owner's associated list | HTML §2.6.5 |
 | Web IDL native property binding (implemented) | Reuse legacy indexed/named algorithms; the HTMLAllCollection declaration supplies its HTML-owned call steps | HTML §2.6 and Web IDL legacy platform objects |
 
@@ -35,22 +36,27 @@ explicitly approved.
 ## Section 2.6.4 dependency audit — 2026-10-14
 
 The reflection slice is committed. All three collection subsections have been
-read. Native allocation, HTMLAllCollection and its binding are implemented;
-form and options collections remain pending. §2.6.5 `DOMStringList` is outside this slice.
+read. Native allocation, HTMLAllCollection and its binding are implemented.
+Form and options collection algorithms now have concrete element owners, with
+the missing §4.10 algorithms recorded in the [forms roadmap](../../dom/nodes/html/forms/ROADMAP.md).
+§2.6.5 `DOMStringList` is outside this slice.
 
 | Section | Existing foundation | Missing work and dependencies |
 | --- | --- | --- |
 | §2.6.4.1 `HTMLAllCollection` | Implemented live all-element view, restricted name matching, name/index dispatch, cached `document.all`, and native callable, undetectable platform identity | The property-order clash below remains; without the addon the attribute is deliberately absent. |
-| §2.6.4.2 `HTMLFormControlsCollection` | Live `HTMLCollection` filtering and supported names/indices | Multiple matches return a live `RadioNodeList`; the shared `NodeListImpl` currently accepts only child nodes or a static array, so it needs a filtered live source. Real `form.elements` membership needs listed-element classification and form-owner association, including controls outside the form subtree. |
-| §2.6.4.2 `RadioNodeList` | NodeList binding, tree order, content-attribute access | An input implementation with Radio Button state and checkedness, including radio-group updates. The collection must use that owner rather than approximate checkedness with the `checked` content attribute. |
-| §2.6.4.3 `HTMLOptionsCollection` | DOM append, fragment insertion, replacement/removal, ancestry checks, and legacy indexed setters | Select/option/optgroup implementations; the select's list of options and selected-index algorithms; option construction and selection updates. Collection algorithms cover length changes, indexed assignment, add/remove, names and indices, and delegation of selectedIndex. `[CEReactions]` remains an existing dependency. |
+| §2.6.4.2 `HTMLFormControlsCollection` | Owner-supplied live membership, supported names/indices, and live `RadioNodeList` for multiple matches; inherited HTMLCollection platform behavior | `form.elements` membership needs listed-element classification and form-owner association, including controls outside the form subtree. Its owner method explicitly throws pending that work. |
+| §2.6.4.2 `RadioNodeList` | NodeList binding and live filtering; value uses concrete input type state and checkedness | Radio-group exclusion remains an explicit input-owned stub, with an approved expected-failure regression. |
+| §2.6.4.3 `HTMLOptionsCollection` | Length changes, indexed assignment, add/remove, names/indices, selected-index delegation; select-owned option list and explicit selection changes; concrete option/optgroup construction | Automatic selectedness, option reset notifications, selectedcontent, and their mutation hooks remain explicit owner stubs. `[CEReactions]` remains an existing dependency. |
 
-`HTMLFormElement` is currently a declaration-only identity for FormData.
-`form`, `input`, `select`, `option`, and `optgroup` still construct generic
-`HTMLElementImpl` objects. Adding their names to collection filters would not
-supply their required state. The form and selection algorithms belong to
-[HTML §4.10](https://html.spec.whatwg.org/multipage/forms.html), with collection
-code calling those owners and leaving missing dependencies explicit.
+`HTMLFormElement` now replaces the old declaration-only FormData identity.
+`form`, `input`, `select`, `option`, and `optgroup` construct their respective
+implementations and expose their implemented IDL fragments. The form and
+selection algorithms belong to [HTML §4.10](https://html.spec.whatwg.org/multipage/forms.html).
+Three approved expected-failure tests retain the required membership, radio-group,
+and automatic-selection behavior. An unexpected pass fails the test so its marker
+can be removed. The collection algorithms are ready for this slice; full §2.6.4
+behavior still depends on those owners, reaction delivery, and the native ordering
+repair below. This is not completion of §4.10.
 
 ### Native allocation and binding
 

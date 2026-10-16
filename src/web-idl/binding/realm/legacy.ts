@@ -120,7 +120,6 @@ export class LegacyPlatformObjectBinding {
       const deleter = assembled.findSpecialOperation('deleter', 'DOMString');
       named = {
         deleter: deleter && {
-          named: Boolean(deleter.name),
           binding: this.#binding.getMemberBinding(assembled, deleter),
           returnsBoolean: deleter.returns.kind === 'boolean',
         },
@@ -467,7 +466,6 @@ export class LegacyPlatformObjectBinding {
     if (!setter) return;
     const argument = setter.arguments[1];
     return {
-      named: Boolean(setter.name),
       binding: this.#binding.getMemberBinding(assembled, setter),
       convert: argument ? this.#binding.getConverter(argument.type).getJSToIDLSteps() : () => {
         throw new InternalError('Legacy property setter has no value argument');
@@ -493,21 +491,14 @@ export class LegacyPlatformObjectBinding {
     );
     const converted = setter.convert(value);
 
-    if (setter.named) {
-      const steps = setter.binding?.operationSteps;
-      if (!steps) {
-        throw new InternalError('Missing indexed property setter implementation');
-      }
-      steps(this.#getReceiverRecord(target), [index, converted]);
+    const operationSteps = setter.binding?.operationSteps;
+    if (operationSteps) {
+      operationSteps(this.#getReceiverRecord(target), [index, converted]);
       return;
     }
 
     const steps = creating ? properties.steps.setNew : properties.steps.setExisting;
-    if (!steps) {
-      throw new InternalError(
-        `Missing indexed property ${creating ? 'new' : 'existing'} setter implementation`,
-      );
-    }
+    if (!steps) throw new InternalError('Missing indexed property setter implementation');
     Reflect.apply(steps, target, [index, converted]);
   }
 
@@ -523,22 +514,15 @@ export class LegacyPlatformObjectBinding {
 
     const creating = !this.getSupportedNames(target, properties).has(property);
     const converted = setter.convert(value);
-    if (setter.named) {
-      const steps = setter.binding?.operationSteps;
-      if (!steps) {
-        throw new InternalError('Missing named property setter implementation');
-      }
-      steps(this.#getReceiverRecord(target), [property, converted]);
+    const operationSteps = setter.binding?.operationSteps;
+    if (operationSteps) {
+      operationSteps(this.#getReceiverRecord(target), [property, converted]);
       return;
     }
 
     // eslint-disable-next-line @typescript-eslint/unbound-method -- named setter steps use the implementation as their specified this value
     const steps = creating ? properties.steps.setNew : properties.steps.setExisting;
-    if (!steps) {
-      throw new InternalError(
-        `Missing named property ${creating ? 'new' : 'existing'} setter implementation`,
-      );
-    }
+    if (!steps) throw new InternalError('Missing named property setter implementation');
     Reflect.apply(steps, target, [property, converted]);
   }
 
@@ -550,19 +534,16 @@ export class LegacyPlatformObjectBinding {
   ): boolean {
     const { deleter } = properties;
     if (!deleter) throw new InternalError('Named property has no deleter');
-    if (!deleter.named) {
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- named deleter steps use the implementation as their specified this value
-      const steps = properties.steps.deleteExisting;
-      if (!steps) {
-        throw new InternalError('Missing anonymous named property deleter implementation');
-      }
-      return Reflect.apply(steps, target, [property]);
+    const operationSteps = deleter.binding?.operationSteps;
+    if (operationSteps) {
+      const result = operationSteps(this.#getReceiverRecord(target), [property]);
+      return !deleter.returnsBoolean || result !== false;
     }
 
-    const steps = deleter.binding?.operationSteps;
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- named deleter steps use the implementation as their specified this value
+    const steps = properties.steps.deleteExisting;
     if (!steps) throw new InternalError('Missing named property deleter implementation');
-    const result = steps(this.#getReceiverRecord(target), [property]);
-    return !deleter.returnsBoolean || result !== false;
+    return Reflect.apply(steps, target, [property]);
   }
 
   // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
@@ -684,7 +665,6 @@ type IndexedProperties = {
 
 type NamedProperties = {
   deleter: {
-    named: boolean;
     binding: MemberBinding | undefined;
     returnsBoolean: boolean;
   } | undefined;
@@ -698,9 +678,8 @@ type NamedProperties = {
   unforgeableNames: Set<string>;
 };
 
-/** Setter invocation and input conversion, selected before any incoming value is observed. */
+/** Setter binding and conversion of the assigned JavaScript value. */
 type PropertySetter = {
-  named: boolean;
   binding: MemberBinding | undefined;
   convert: ConversionSteps;
 };

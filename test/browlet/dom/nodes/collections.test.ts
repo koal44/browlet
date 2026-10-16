@@ -1,8 +1,49 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
+import { HTML_NAMESPACE } from '../../../../src/infra/index';
+import { HTMLCollectionImpl, NodeListImpl } from '../../../../src/browlet/dom/nodes/collections';
 import { createTestDocument } from '../../../support/dom';
 
 describe('DOM collections', () => {
+  it('refreshes owner-supplied membership and filtered lists through mutations and adoption', () => {
+    const document = createTestDocument();
+    const owner = document.createElement('form');
+    const first = document.createElementNS(HTML_NAMESPACE, 'input');
+    const second = document.createElementNS(HTML_NAMESPACE, 'input');
+    owner.appendChild(first);
+    owner.appendChild(second);
+    first.setAttribute('name', 'group');
+    second.setAttribute('name', 'group');
+    let collections = 0;
+    const elements = new HTMLCollectionImpl({
+      root: owner,
+      collect() {
+        collections++;
+        return [...owner.children];
+      },
+    });
+    const named = new NodeListImpl({
+      root: owner,
+      collect: () => [...elements].filter((element) => element.getAttributeNS(null, 'name') === 'group'),
+    });
+    expect(Array.from(named)).toEqual([first, second]);
+    expect(elements.length).toBe(2);
+    expect(collections).toBe(1);
+
+    second.setAttribute('name', 'other');
+    expect(Array.from(named)).toEqual([first]);
+    expect(elements.namedItem('other')).toBe(second);
+    expect(collections).toBe(2);
+
+    const otherDocument = createTestDocument();
+    otherDocument.adoptNode(owner);
+    first.remove();
+    expect(elements.item(0)).toBe(second);
+    expect(named.length).toBe(0);
+    second.setAttribute('name', 'group');
+    expect(named.item(0)).toBe(second);
+  });
+
   it('exposes stable live child lists with Web IDL indices and realm prototypes', async () => {
     const browser = new Browlet({ route: () => '' });
     expect(await browser.evaluate(() => {
