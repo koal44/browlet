@@ -33,6 +33,8 @@ export class NodeAPI {
   isLengthTrackingArrayBufferView: (view: ArrayBufferView) => boolean;
   /** Recognize a genuine WeakRef without dereferencing its target. */
   isWeakRef: (value: unknown) => boolean;
+  // Requires the V8 FinalizationRegistry predicate patch.
+  isFinalizationRegistry: (value: unknown) => boolean;
   // Legacy Node patch for making an existing object's prototype immutable.
   makePrototypeImmutable: (object: object) => void;
   observePromise: (
@@ -60,6 +62,7 @@ export class NodeAPI {
     this.isRegExpStringIterator = this.#loadMethod(backend, 'isRegExpStringIterator');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
     this.isWeakRef = this.#loadMethod(backend, 'isWeakRef');
+    this.isFinalizationRegistry = this.#loadMethod(backend, 'isFinalizationRegistry');
     this.makePrototypeImmutable = this.#loadMethod(backend, 'makePrototypeImmutable');
     this.observePromise = this.#loadMethod(backend, 'observePromise');
     this.runInContext = this.#loadMethod(backend, 'runInContext');

@@ -21,6 +21,9 @@ describe('Node add-on API', () => {
     expect(api.getMethod('isWeakRef')).toBeUndefined();
     expect(() => api.isWeakRef({}))
       .toThrow('Node backend does not provide isWeakRef');
+    expect(api.getMethod('isFinalizationRegistry')).toBeUndefined();
+    expect(() => api.isFinalizationRegistry({}))
+      .toThrow('Node backend does not provide isFinalizationRegistry');
   });
 
   itPassesWith('htmlDDA')('allocates an undetectable callable through the native backend', () => {
@@ -34,6 +37,12 @@ describe('Node add-on API', () => {
     expect(isObject(value)).toBe(true);
     expect(isCallable(value)).toBe(true);
     expect(addon.getMethod('setPropertyHandlers')).toBeTypeOf('function');
+  });
+
+  itPassesWith('finalizationRegistryPredicate')('recognizes a registry through the native backend', () => {
+    expect(addon.getMethod('isFinalizationRegistry')).toBeTypeOf('function');
+    expect(addon.isFinalizationRegistry(new FinalizationRegistry(() => {}))).toBe(true);
+    expect(addon.isFinalizationRegistry({})).toBe(false);
   });
 
   it('retains the loaded function and its backend receiver', () => {

@@ -7,8 +7,8 @@ the scheduling and browser policy applied through those engine facilities.
 Stock Node runs through JS Engine's fallback paths. On supported official Node
 builds, the addon supplies explicit queues, native contexts and globals, realm
 lookup, and Promise observation. The [V8 patch set](../vendor/_patches/node-v8.patch)
-adds callback/job hooks, native collection iterators, and further iterator and
-buffer-view inspection. The patch includes engine regressions and records its
+adds callback/job hooks, native collection iterators, and further object, iterator,
+and buffer-view inspection. The patch includes engine regressions and records its
 upstream Node revision. [Known limitations](../src/LIMITATIONS.md) describes
 the observable constraints of each runtime.
 
@@ -59,6 +59,7 @@ security token permits embedder access; it does not implement browser cross-orig
 | Optional operation | Availability and contract |
 | --- | --- |
 | `isWeakRef(value)` | Available with the addon on every supported base. Uses V8's existing `Value::IsWeakRef()` without reading properties or dereferencing the target; proxies and prototype impostors return false. No engine patch is required. |
+| `isFinalizationRegistry(value)` | Requires `Value::IsFinalizationRegistry()`. Checks the native brand without reading properties or changing registered entries; proxies and prototype impostors return false. JS Engine retains its captured-`unregister` fallback where unavailable. |
 | `createHTMLDDA(context, call)` | Available with the addon on every supported base. Allocates a callable, non-constructible object with native `[[IsHTMLDDA]]` behavior in the supplied context. Invokes `call` with an undefined receiver and the original arguments; preserves its result or exception. |
 | `setPropertyHandlers(object, handlers)` | Attaches property algorithms to a native object allocated with interceptors. Accepts `has`, `get`, `set`, `getOwnPropertyDescriptor`, `defineProperty`, `deleteProperty`, and `ownKeys`; the addon translates descriptors and keys into V8's query/index protocols. |
 | `observePromise(promise, realmAnchor, fulfilled?, rejected?)` | Native `Promise::Then` in the observer's realm. Node 26/custom bypass author `then`, `constructor`, and species; Node 24 still consults `constructor`. A derived Promise is allocated and discarded by Browlet. |

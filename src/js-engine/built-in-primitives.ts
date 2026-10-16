@@ -166,6 +166,7 @@ export function isWeakRefObject(value: unknown): value is WeakRef<object> {
 }
 
 export function isFinalizationRegistryObject(value: unknown): value is FinalizationRegistry<unknown> {
+  if (nativeIsFinalizationRegistry) return nativeIsFinalizationRegistry(value);
   if (!finalizationRegistryUnregister) return false;
   try {
     Reflect.apply(finalizationRegistryUnregister, value, [brandProbe]);
@@ -262,6 +263,7 @@ const setIteratorNext = Reflect.get(
 ) as (this: SetIterator<unknown>) => IteratorResult<unknown>;
 
 const nativeIsWeakRef = addon.getMethod('isWeakRef');
+const nativeIsFinalizationRegistry = addon.getMethod('isFinalizationRegistry');
 const weakRefDeref = typeof WeakRef === 'undefined'
   ? undefined
   : Reflect.get(

@@ -22,6 +22,7 @@ Only terms requiring a new embedding boundary belong in this plan.
 | Promise and job hooks | Custom engine/addon captures registrations and supplies make/call plus Promise, generic, and timeout enqueue; HTML consumes all five |
 | Portable execution | Implementations retain `env`; internal Promise continuations keep their owner and Node work keeps its native queue |
 | Buffers and collection iterators | Native length-mode query and callback iterators are available with the corresponding V8 patches |
+| Object-brand checks | Native WeakRef and patched FinalizationRegistry predicates; captured-intrinsic fallbacks where unavailable |
 
 These foundations enabled Fetch. Finishing every engine hook is not a
 prerequisite for returning to HTML. Script records, browser security, and full
@@ -84,7 +85,6 @@ Implement these with their consuming feature, rather than adding inert hooks:
 | Kept-object cleanup control | Native checkpoints already clear kept objects; resolve HTML's [ordering and Agent isolation questions](../browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint) |
 | `HostSystemUTCEpochNanoseconds` | Temporal's relevant-settings clock; the current host clock does not install this engine hook |
 | Active function and arbitrary execution stack | Custom-element construction and script context; only controlled entries/NewTarget are currently visible |
-| FinalizationRegistry brand predicate | Structured serialization still probes the captured `unregister` intrinsic, throwing for ordinary objects. Expose V8's internal brand through a public predicate and the addon; retain the fallback where unavailable. See the [Pip handoff](../../scratch/FINALIZATION-REGISTRY-PREDICATE.md). This is separate from cleanup-job scheduling. |
 | Exact Promise primitives | Patch V8 to expose reaction attachment without a result Promise, then use it in the addon's `observePromise`; expose the existing `MarkAsHandled` API and remove constructor/species fallbacks |
 | Buffer and exotic internal slots | Non-destructive detach-key checks and exact exotic/Error state needed by structured data |
 

@@ -173,6 +173,41 @@ describe('Node/V8 built-in primitives', () => {
     }
   });
 
+  it('recognizes FinalizationRegistry brands without author code or unregistering entries', () => {
+    const realm = new JSEngine.JSRealm();
+    const foreign = realm.evaluate('new FinalizationRegistry(() => {})', 'registry-brand.js') as object;
+    const fail = (): never => { throw new Error('author code ran'); };
+    const target = {}, token = {};
+    for (const value of [new FinalizationRegistry(fail), foreign]) {
+      expect(JSEngine.isFinalizationRegistryObject(value)).toBe(true);
+      FinalizationRegistry.prototype.register.call(value, target, 'held', token);
+      for (const key of ['unregister', 'constructor', Symbol.toStringTag]) {
+        Object.defineProperty(value, key, { get: fail });
+      }
+      Object.setPrototypeOf(value, new Proxy({}, {
+        get: fail, getPrototypeOf: fail, ownKeys: fail,
+      }));
+      Object.freeze(value);
+      expect(JSEngine.isFinalizationRegistryObject(value)).toBe(true);
+      expect(FinalizationRegistry.prototype.unregister.call(value, token)).toBe(true);
+      expect(FinalizationRegistry.prototype.unregister.call(value, token)).toBe(false);
+    }
+
+    const registry = new FinalizationRegistry(fail);
+    Object.setPrototypeOf(registry, null);
+    expect(JSEngine.isFinalizationRegistryObject(registry)).toBe(true);
+    const revoked = Proxy.revocable(registry, {});
+    revoked.revoke();
+    for (const value of [
+      undefined, null, false, 1, 1n, 'text', Symbol(), () => {}, [], {},
+      new WeakRef({}), new WeakMap(), new WeakSet(),
+      Object.create(FinalizationRegistry.prototype), { [Symbol.toStringTag]: 'FinalizationRegistry' },
+      new Proxy(registry, { get: fail, getPrototypeOf: fail, ownKeys: fail }), revoked.proxy,
+    ]) {
+      expect(JSEngine.isFinalizationRegistryObject(value)).toBe(false);
+    }
+  });
+
   it('keeps the native exotic probe narrow and non-consuming', () => {
     const iterator = [1, 2][Symbol.iterator]();
     expect(JSEngine.nativeCloneRejectsPropertylessObject(

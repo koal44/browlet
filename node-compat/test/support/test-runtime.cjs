@@ -19,6 +19,7 @@ exports.itPassesWith = function itPassesWith(...requirements) {
 
 const supported = {
   collectionIterators: typeof compat.createCollectionIterator === 'function',
+  finalizationRegistryPredicate: typeof compat.isFinalizationRegistry === 'function',
   hostHooks: typeof compat.setHostHooks === 'function',
   iteratorPredicates: typeof compat.isArrayIterator === 'function' &&
     typeof compat.isStringIterator === 'function' && typeof compat.isRegExpStringIterator === 'function',

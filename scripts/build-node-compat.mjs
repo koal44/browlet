@@ -40,6 +40,7 @@ try {
   const valueHeader = readFileSync(resolve(dirname(isolateHeader), 'v8-value.h'), 'utf8');
   const iteratorPredicates = ['IsArrayIterator', 'IsStringIterator', 'IsRegExpStringIterator']
     .every(name => valueHeader.includes(`bool ${name}() const;`));
+  const finalizationRegistryPredicate = valueHeader.includes('bool IsFinalizationRegistry() const;');
   const environment = windows ? compilerEnvironment() : process.env;
   const compiler = windows
     ? run('where.exe', ['cl.exe'], { env: environment }).split(/\r?\n/u)[0]
@@ -50,6 +51,7 @@ try {
     ...(lengthTracking ? ['NODE_COMPAT_ARRAY_BUFFER_LENGTH_TRACKING'] : []),
     ...(collectionIterators ? ['NODE_COMPAT_COLLECTION_ITERATORS'] : []),
     ...(iteratorPredicates ? ['NODE_COMPAT_ITERATOR_PREDICATES'] : []),
+    ...(finalizationRegistryPredicate ? ['NODE_COMPAT_FINALIZATION_REGISTRY_PREDICATE'] : []),
   ];
 
   // Include the developer prompt's SDK paths so the editor can use

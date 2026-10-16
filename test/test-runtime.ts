@@ -15,6 +15,7 @@ const supported = {
   errorIsError: typeof Reflect.get(Error, 'isError') === 'function',
   errorStackAccessor: !!Reflect.getOwnPropertyDescriptor(Error.prototype, 'stack')?.get,
   explicitQueues: !!addon.getMethod('createMicrotaskQueue'),
+  finalizationRegistryPredicate: !!addon.getMethod('isFinalizationRegistry'),
   functionRealms: !!addon.getMethod('getFunctionRealm'),
   htmlDDA: addon.supportsHTMLDDA,
   hostHooks: !!setHostHooks,

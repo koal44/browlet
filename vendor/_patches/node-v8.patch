@@ -2,7 +2,7 @@ Browlet V8 extensions for Node.js
 
 Upstream: https://github.com/nodejs/node.git
 Base: 6f41e415639b5ec3dd816e44945cc73b4d7651e3
-Source: v8-patches at 4695be8073d575c495936e4dbfeeb1094f435186
+Source: v8-patches at 4695be8073d575c495936e4dbfeeb1094f435186 plus working-tree FinalizationRegistry predicate
 
 diff --git a/deps/v8/include/v8-array-buffer.h b/deps/v8/include/v8-array-buffer.h
 index f70c6dd57b36b0ed8352bd6738998f5c838a80ba..981a1ef2c1b0b50d767c1e2778d8eaf47c4af7df 100644
@@ -271,7 +271,7 @@ index b1f85e6e50ec7e564853bbdaea954d950fb04324..6fd0ed8973ab46ab817674553ef1cffd
  enum PromiseRejectEvent {
    kPromiseRejectWithNoHandler = 0,
 diff --git a/deps/v8/include/v8-value.h b/deps/v8/include/v8-value.h
-index c2fd021ed23ff6b2e6c84c871ab3f7fb24807708..e199519c7388c5896a7f4dbed9217be870fe44f8 100644
+index c2fd021ed23ff6b2e6c84c871ab3f7fb24807708..03149f0f67cfb934ee267ac1018389213af9cb3a 100644
 --- a/deps/v8/include/v8-value.h
 +++ b/deps/v8/include/v8-value.h
 @@ -226,6 +226,21 @@ class V8_EXPORT Value : public Data {
@@ -296,11 +296,31 @@ index c2fd021ed23ff6b2e6c84c871ab3f7fb24807708..e199519c7388c5896a7f4dbed9217be8
    /**
     * Returns true if this value is a Map Iterator.
     */
+@@ -251,6 +266,11 @@ class V8_EXPORT Value : public Data {
+    */
+   bool IsWeakRef() const;
+ 
++  /**
++   * Returns true if this value is a FinalizationRegistry.
++   */
++  bool IsFinalizationRegistry() const;
++
+   /**
+    * Returns true if this value is an ArrayBuffer.
+    */
 diff --git a/deps/v8/src/api/api.cc b/deps/v8/src/api/api.cc
-index 48da5b35b8721e319ba6e3743c013a3092a06606..24209cc7d20112e04dc38fa482da457ee51a0406 100644
+index 48da5b35b8721e319ba6e3743c013a3092a06606..a3c76232ac77c3b5f50d6da8c4319058b2fc962b 100644
 --- a/deps/v8/src/api/api.cc
 +++ b/deps/v8/src/api/api.cc
-@@ -3856,6 +3856,18 @@ bool Value::IsGeneratorObject() const {
+@@ -3796,6 +3796,7 @@ bool Value::IsWasmNull() const { return false; }
+ VALUE_IS_SPECIFIC_TYPE(WeakMap, JSWeakMap)
+ VALUE_IS_SPECIFIC_TYPE(WeakSet, JSWeakSet)
+ VALUE_IS_SPECIFIC_TYPE(WeakRef, JSWeakRef)
++VALUE_IS_SPECIFIC_TYPE(FinalizationRegistry, JSFinalizationRegistry)
+ 
+ #undef VALUE_IS_SPECIFIC_TYPE
+ 
+@@ -3856,6 +3857,18 @@ bool Value::IsGeneratorObject() const {
    return IsJSGeneratorObject(*Utils::OpenDirectHandle(this));
  }
  
@@ -319,7 +339,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..24209cc7d20112e04dc38fa482da457e
  bool Value::IsMapIterator() const {
    return IsJSMapIterator(*Utils::OpenDirectHandle(this));
  }
-@@ -8366,6 +8378,15 @@ void v8::TypecheckWitness::Update(Local<Value> baseline) {
+@@ -8366,6 +8379,15 @@ void v8::TypecheckWitness::Update(Local<Value> baseline) {
  #endif
  }
  
@@ -335,7 +355,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..24209cc7d20112e04dc38fa482da457e
  Local<v8::Map> v8::Map::New(Isolate* v8_isolate) {
    i::Isolate* i_isolate = reinterpret_cast<i::Isolate*>(v8_isolate);
    ApiRuntimeCallStatsScope rcs_scope(i_isolate, RCCId::kAPI_Map_New);
-@@ -9249,6 +9270,10 @@ v8::MemorySpan<uint8_t> v8::ArrayBufferView::GetContents(
+@@ -9249,6 +9271,10 @@ v8::MemorySpan<uint8_t> v8::ArrayBufferView::GetContents(
            data_view->GetByteLength()};
  }
  
@@ -346,7 +366,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..24209cc7d20112e04dc38fa482da457e
  bool v8::ArrayBufferView::HasBuffer() const {
    auto self = Utils::OpenDirectHandle(this);
    if (!IsJSTypedArray(*self)) return true;
-@@ -9789,9 +9814,16 @@ v8::Local<v8::Context> Isolate::GetIncumbentContext() {
+@@ -9789,9 +9815,16 @@ v8::Local<v8::Context> Isolate::GetIncumbentContext() {
  }
  
  v8::MaybeLocal<v8::Data> Isolate::GetCurrentHostDefinedOptions() {
@@ -364,7 +384,7 @@ index 48da5b35b8721e319ba6e3743c013a3092a06606..24209cc7d20112e04dc38fa482da457e
    return ToApiHandle<Data>(
        i::direct_handle(script->host_defined_options(), i_isolate));
  }
-@@ -10534,6 +10566,36 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
+@@ -10534,6 +10567,36 @@ void Isolate::SetPromiseRejectCallback(PromiseRejectCallback callback) {
    i_isolate->SetPromiseRejectCallback(callback);
  }
  
@@ -2452,7 +2472,7 @@ index e66b216f0751f1bd089428d66f4ae1097ab09bb9..25f09bdbbca0ce938fc7d9fd0a89cfa3
    const char* source = "new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9])";
    uint8_t expected[]{1, 2, 3, 4, 5, 6, 7, 8, 9};
 diff --git a/deps/v8/test/cctest/test-api.cc b/deps/v8/test/cctest/test-api.cc
-index 9b5fdd3cfd9669420294d88dba5b8f03e6e1b1e1..460fbaa8bec1e094343c69b72af79b9e4c3d4aee 100644
+index 9b5fdd3cfd9669420294d88dba5b8f03e6e1b1e1..fa954f62a1babf78fbf1ebea228c443ae05b9649 100644
 --- a/deps/v8/test/cctest/test-api.cc
 +++ b/deps/v8/test/cctest/test-api.cc
 @@ -1863,6 +1863,61 @@ THREADED_TEST(IsGeneratorFunctionOrObject) {
@@ -2517,7 +2537,73 @@ index 9b5fdd3cfd9669420294d88dba5b8f03e6e1b1e1..460fbaa8bec1e094343c69b72af79b9e
  THREADED_TEST(IsAsyncFunction) {
    LocalContext env;
    v8::Isolate* isolate = env.isolate();
-@@ -25653,6 +25708,45 @@ THREADED_TEST(TestGetCurrentHostDefinedOptions) {
+@@ -1932,6 +1987,65 @@ THREADED_TEST(IsMapOrSet) {
+ }
+ 
+ 
++THREADED_TEST(IsFinalizationRegistry) {
++  LocalContext env;
++  v8::HandleScope scope(env.isolate());
++
++  auto registries = CompileRun(R"(
++    var fail = () => { throw new Error('Author code ran'); };
++    var unregister = FinalizationRegistry.prototype.unregister;
++    var target = {}, token = {};
++    var registered = new FinalizationRegistry(fail);
++    registered.register(target, 'held', token);
++    var registries = [new FinalizationRegistry(fail), registered];
++    var proxy = new Proxy(registered, {
++      get: fail, getPrototypeOf: fail, ownKeys: fail
++    });
++    var revoked = Proxy.revocable(registered, {});
++    revoked.revoke();
++    registries;
++  )").As<v8::Array>();
++  for (uint32_t i = 0; i < registries->Length(); ++i) {
++    CHECK(registries->Get(env.local(), i)
++              .ToLocalChecked()
++              ->IsFinalizationRegistry());
++  }
++  CHECK(CompileRun(R"(
++    Object.defineProperties(registered, {
++      unregister: { get: fail },
++      constructor: { get: fail },
++      [Symbol.toStringTag]: { get: fail }
++    });
++    Object.setPrototypeOf(registered, new Proxy({}, {
++      get: fail, getPrototypeOf: fail, ownKeys: fail
++    }));
++    Object.freeze(registered);
++  )")->IsFinalizationRegistry());
++  CHECK(CompileRun("Object.setPrototypeOf(new FinalizationRegistry(fail), null)")
++            ->IsFinalizationRegistry());
++  CHECK(CompileRun("unregister.call(registered, token)")->IsTrue());
++  CHECK(CompileRun("unregister.call(registered, token)")->IsFalse());
++
++  auto others = CompileRun(R"(
++    [undefined, null, true, 1, 1n, 'text', Symbol(), () => {}, [], {},
++     new WeakRef(target), new WeakMap(), new WeakSet(),
++     Object.create(FinalizationRegistry.prototype),
++     { [Symbol.toStringTag]: 'FinalizationRegistry' }, proxy, revoked.proxy]
++  )").As<v8::Array>();
++  for (uint32_t i = 0; i < others->Length(); ++i) {
++    CHECK(!others->Get(env.local(), i)
++               .ToLocalChecked()
++               ->IsFinalizationRegistry());
++  }
++  {
++    LocalContext other;
++    auto registry = CompileRun("new FinalizationRegistry(() => {})");
++    v8::Context::Scope original(env.local());
++    CHECK(registry->IsFinalizationRegistry());
++  }
++}
++
++
+ THREADED_TEST(StringObject) {
+   LocalContext env;
+   v8::HandleScope scope(env.isolate());
+@@ -25653,6 +25767,45 @@ THREADED_TEST(TestGetCurrentHostDefinedOptions) {
    }
  }
  
@@ -2563,7 +2649,7 @@ index 9b5fdd3cfd9669420294d88dba5b8f03e6e1b1e1..460fbaa8bec1e094343c69b72af79b9e
  TEST(NewStringRangeError) {
    // This test uses a lot of memory and fails with flaky OOM when run
    // with --stress-incremental-marking on TSAN.
-@@ -25723,6 +25817,109 @@ TEST(SealHandleScopeNested) {
+@@ -25723,6 +25876,109 @@ TEST(SealHandleScopeNested) {
    }
  }
  
