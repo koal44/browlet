@@ -1,5 +1,6 @@
 import * as vm from 'node:vm';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { MessageChannel, moveMessagePortToContext, receiveMessageOnPort } from 'node:worker_threads';
 
 import { Stamper } from '../infra/stamper';
 import { TypeError } from '../infra/exceptions';
@@ -15,7 +16,7 @@ import type {
   JSFunction, JSIteratorResult, JSRealm,
 } from './realm';
 
-const getNativeRealm = addon.getMethod('getRealm');
+const getNativeRealm = addon.getRealm;
 
 export function createMicrotaskQueue(): JSMicrotaskQueue {
   return jsRuntime.createMicrotaskQueue();
@@ -41,9 +42,26 @@ export function bindAsyncContext<T>(steps: () => T): () => T {
 
 /** Undefined when the selected backend cannot inspect the view's length mode. */
 export function getNativeArrayBufferViewLengthTracking(value: ArrayBufferView): boolean | undefined {
-  return addon.getMethod('isLengthTrackingArrayBufferView')
-    ? addon.isLengthTrackingArrayBufferView(value)
-    : undefined;
+  return addon.isLengthTrackingArrayBufferView?.(value);
+}
+
+/** Allocate a new buffer object in the context without copying its shared storage. */
+export function cloneSharedArrayBuffer(buffer: SharedArrayBuffer, context: NodeContext): SharedArrayBuffer {
+  const clone = addon.cloneSharedArrayBuffer;
+  if (clone) return clone(buffer, context);
+
+  // Stock Node receives a message in the port's creation context. Posting queues
+  // it synchronously, so no event listener, worker, or retained port is needed.
+  const channel = new MessageChannel();
+  let receiver = channel.port2;
+  try {
+    receiver = moveMessagePortToContext(receiver, context);
+    channel.port1.postMessage(buffer);
+    return receiveMessageOnPort(receiver)!.message as SharedArrayBuffer;
+  } finally {
+    channel.port1.close();
+    receiver.close();
+  }
 }
 
 export function observePromise(
@@ -52,7 +70,7 @@ export function observePromise(
   onFulfilled: JSFunction | undefined,
   onRejected: JSFunction | undefined,
 ): void {
-  if (addon.getMethod('observePromise')) {
+  if (addon.observePromise) {
     void addon.observePromise(
       promise, realm.intrinsics.promise.constructor, onFulfilled, onRejected,
     );
@@ -66,9 +84,10 @@ export function observePromise(
   }
 }
 
-export const setHostHooks = addon.getMethod('setHostHooks') && getNativeRealm
+const setNativeHostHooks = addon.setHostHooks;
+export const setHostHooks = setNativeHostHooks && getNativeRealm
   ? <HostDefined>(hooks: JSHostHooks<HostDefined>): void => {
-    addon.setHostHooks({
+    setNativeHostHooks({
       makeJobCallback: (callback, registration) => hooks.makeJobCallback(callback, {
         incumbent: registration.incumbent === null ? null :
           RealmStamper.get(registration.incumbent) ?? null,
@@ -105,7 +124,7 @@ export function createContext(
     : undefined;
   const options = handle ? { microtaskQueue: handle } : undefined;
 
-  if (addon.getMethod('createContextHandle') && addon.getMethod('runInContext')) {
+  if (addon.createContextHandle && addon.runInContext) {
     const context: unknown = addon.createContextHandle({
       ...options, reuseGlobalProxyFrom, globalPrototypeChain,
     });
@@ -139,9 +158,7 @@ export function createCollectionIterator<Value>(
   kind: CollectionIteratorKind,
   next: () => JSIteratorResult<Value>,
 ): MapIterator<Value> | SetIterator<Value> | undefined {
-  return addon.getMethod('createCollectionIterator')
-    ? addon.createCollectionIterator(context, kind, next)
-    : undefined;
+  return addon.createCollectionIterator?.(context, kind, next);
 }
 
 export function getContextGlobalAllocation(context: NodeContext): GlobalAllocation | undefined {
@@ -155,10 +172,16 @@ export function getContextGlobalAllocation(context: NodeContext): GlobalAllocati
 }
 
 export function setPropertyDelegate(object: object, delegate: object): void {
+  if (!addon.setPropertyDelegate) {
+    throw new InternalError('Node backend does not provide setPropertyDelegate');
+  }
   addon.setPropertyDelegate(object, delegate);
 }
 
 export function setGlobalObject(context: NodeContext, object: object): void {
+  if (!addon.setGlobalObject) {
+    throw new InternalError('Node backend does not provide setGlobalObject');
+  }
   addon.setGlobalObject(context, object);
 }
 
@@ -170,8 +193,7 @@ export function detachContext(context: NodeContext): GlobalProxy {
 }
 
 export function makePrototypeImmutable(object: object): void {
-  if (!addon.getMethod('makePrototypeImmutable')) return;
-  addon.makePrototypeImmutable(object);
+  addon.makePrototypeImmutable?.(object);
 }
 
 export function runInContext(
@@ -179,7 +201,7 @@ export function runInContext(
   context: NodeContext,
   options?: ContextEvaluationOptions,
 ): unknown {
-  if (addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
+  if (addon.createContextHandle && addon.runInContext &&
     isAddonContextHandle(context)) {
     return addon.runInContext(source, context, options);
   }
@@ -223,7 +245,7 @@ class JSRuntime {
       ? (value: object): JSRealm | undefined =>
         this.#globalRealms.get(value) ?? RealmStamper.get(getNativeRealm(value))
       : (value: object): JSRealm | undefined => this.#getFallbackRealm(value);
-    const getFunctionRealm = addon.getMethod('getFunctionRealm');
+    const getFunctionRealm = addon.getFunctionRealm;
 
     this.getAssociatedRealm = getFunctionRealm
       ? (value) => {
@@ -242,7 +264,7 @@ class JSRuntime {
   }
 
   createMicrotaskQueue(): JSMicrotaskQueue {
-    if (!addon.getMethod('createMicrotaskQueue')) {
+    if (!addon.createMicrotaskQueue) {
       return this.#ambientMicrotaskQueue;
     }
 

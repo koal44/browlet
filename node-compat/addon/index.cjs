@@ -28,6 +28,7 @@ exports.isRegExpStringIterator = native.isRegExpStringIterator;
 exports.isWeakRef = native.isWeakRef;
 exports.isFinalizationRegistry = native.isFinalizationRegistry;
 exports.isLengthTrackingArrayBufferView = native.isLengthTrackingArrayBufferView;
+exports.cloneSharedArrayBuffer = native.cloneSharedArrayBuffer;
 exports.createCollectionIterator = native.createCollectionIterator;
 exports.createHTMLDDA = native.createHTMLDDA;
 Object.assign(exports, require('./vm.cjs')(native));

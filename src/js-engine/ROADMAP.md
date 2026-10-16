@@ -22,6 +22,7 @@ Only terms requiring a new embedding boundary belong in this plan.
 | Promise and job hooks | Custom engine/addon captures registrations and supplies make/call plus Promise, generic, and timeout enqueue; HTML consumes all five |
 | Portable execution | Implementations retain `env`; internal Promise continuations keep their owner and Node work keeps its native queue |
 | Buffers and collection iterators | Native length-mode query and callback iterators are available with the corresponding V8 patches |
+| Shared-buffer allocation | Destination-realm objects share the existing backing store through the addon or stock Node's temporary MessagePort path |
 | Object-brand checks | Native WeakRef and patched FinalizationRegistry predicates; captured-intrinsic fallbacks where unavailable |
 
 These foundations enabled Fetch. Finishing every engine hook is not a

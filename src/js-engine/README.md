@@ -46,6 +46,13 @@ typed arrays and bytes for DataView. Omitted length uses the remaining range
 and tracks resizing where applicable. The view's realm does not change the
 buffer's identity.
 
+`JSRealm.cloneSharedArrayBuffer()` allocates a distinct object in the destination
+realm while sharing the original backing store, including its growability.
+The addon enters that context and uses V8's shared-store constructor. Stock Node
+uses a temporary [MessagePort moved into the context](https://nodejs.org/api/worker_threads.html#workermovemessageporttocontextport-contextifiedsandbox),
+receives synchronously, and closes both ports. Neither path changes prototypes
+after allocation or retains a channel on the realm.
+
 Engine predicates accept unknown inputs and preserve their native kind in the
 type system. `isObject` and `isCallable` include the native HTMLAllCollection
 despite its misleading `typeof`; recognition does not allocate or invoke author
@@ -70,9 +77,11 @@ on `JSRealm`. Hosts subclass JSRealm to add policy. Node workers load independen
 module instances. Do not add per-Agent or per-BindingWorld realm registries:
 values can cross those boundaries synchronously within an isolate.
 
-`NodeAPI.getMethod(name)` reports actual availability; calling an unavailable
-typed operation throws. Backend selection is configured before loading the
-module. Native facilities and build instructions belong to
+`NodeAPI` exposes supplied operations as bound functions and leaves unavailable
+operations `undefined`. Callers check those properties directly to select a
+fallback; native-only entry points report unsupported operations explicitly.
+Backend selection is configured before loading the module. Native facilities and
+build instructions belong to
 [Node compatibility](../../node-compat/README.md).
 
 With native lookup, ordinary objects use their creation context and function

@@ -34,8 +34,35 @@ rejection, exact-primary metadata, conditional restriction, cyclic/nested graphs
 interface-name ordering, and untouched buffer holders after rejection. They first
 reproduced the missing restrictions and late receiving failures. Existing
 agent-cluster identity supplies the dependency; MessagePort and workers were not
-prerequisites for this update. Resume the remaining
-§2.7 audit afterward; this checkpoint does not certify the whole current section.
+prerequisites for this update. The remaining audit below records the other
+subsections and the shared-buffer allocation fix it prompted.
+
+## Remaining section 2.7 audit
+
+The October 16 pass compared every subsection with the published
+[HTML section](https://html.spec.whatwg.org/multipage/structured-data.html),
+whose current revision includes the cluster changes absent from the local checkout.
+This is a source and focused-regression audit, not complete WPT certification.
+
+| Subsections | Assessment |
+| --- | --- |
+| §§2.7.1–2.7.2, serializable and transferable objects | Exact-primary hooks, nested memory, detached state, and target exposure are covered. Fixed development validation accepting these markers on partial interfaces, mixins, and dictionaries; both regressions failed before the fix. Actual platform transfer still needs MessagePort. |
+| §2.7.3, same-agent-cluster restriction | The preceding implementation and its regressions cover annotations, conditional restriction, storage rejection, and receiving preflight. |
+| §§2.7.4–2.7.6, serialization and storage | Audited supported value families, key/entry snapshots, getter order, cycles, buffer/view metadata, and the final storage check. Unsupported exotic brands and exact Error slots retain the engine limits below. |
+| §2.7.7, deserialization | Reconstruction, nested identity, exposure, and target prototypes are covered. Fixed SharedArrayBuffer allocation in the wrong native realm; the regression now covers fixed and growable buffers and repeated graph references. |
+| §§2.7.8–2.7.9, transfer | Validation and graph traversal precede transfer effects; receiving checks cluster and exposure first. ArrayBuffer transfer uses the captured target-realm intrinsic. Sequential partial transfers remain the previously reviewed behavior. |
+| §2.7.10, other specification consumers | Fetch abort and Streams tee use the shared operations. Synchronous author calls retain their script entry; asynchronous tee delivery uses realm-owned Promise observation and the HTML job hooks. Worker, messaging, and history integrations remain with their owning features. |
+| §2.7.11, public API | The global mixin uses the receiver's environment for reconstruction; the borrowed-method regression covers that realm choice. Replaced the stale section-number comment with the algorithm URL. |
+
+The shared-buffer regression exposed that Node's host `structuredClone()` plus
+prototype replacement did not change the native creation realm. Deserialization
+now delegates to [JSRealm allocation](../../../js-engine/README.md#environments-and-allocation):
+the addon allocates over the retained backing store in the destination context;
+stock Node uses synchronous receipt through a temporary port in that context.
+[Native tests](../../../../node-compat/test/array-buffer.test.cjs) verify creation
+realm for both mechanisms, and HTML tests retain shared writes, growth, and graph
+identity checks. The engine and platform-consumer limits below remain outside
+this focused fix.
 
 ## Current ownership
 

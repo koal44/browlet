@@ -11,44 +11,45 @@ import type { JSJobCallback, NodeContext } from './runtime';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
-  #methods: Partial<AddonMethods> = {};
   /** Whether this backend supports native document.all allocation and property handling. */
   supportsHTMLDDA: boolean;
 
   // Requires the V8 iterator-factory patch.
-  createCollectionIterator: <Value>(
+  createCollectionIterator?: <Value>(
     context: NodeContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
   ) => MapIterator<Value> | SetIterator<Value>;
-  createContextHandle: (options?: AddonContextOptions) => AddonContextHandle;
+  createContextHandle?: (options?: AddonContextOptions) => AddonContextHandle;
   /** Allocate the callable, undetectable object used for document.all; attach properties with setPropertyHandlers. */
-  createHTMLDDA: <Result>(context: NodeContext, call: JSFunction<Result>) => JSFunction<Result>;
-  createMicrotaskQueue: () => AddonMicrotaskQueueHandle;
-  getFunctionRealm: (value: JSFunction) => object;
-  getRealm: (value: object) => object;
+  createHTMLDDA?: <Result>(context: NodeContext, call: JSFunction<Result>) => JSFunction<Result>;
+  createMicrotaskQueue?: () => AddonMicrotaskQueueHandle;
+  getFunctionRealm?: (value: JSFunction) => object;
+  getRealm?: (value: object) => object;
   // Require the V8 iterator-brand predicates.
-  isArrayIterator: (value: unknown) => boolean;
-  isStringIterator: (value: unknown) => boolean;
-  isRegExpStringIterator: (value: unknown) => boolean;
+  isArrayIterator?: (value: unknown) => boolean;
+  isStringIterator?: (value: unknown) => boolean;
+  isRegExpStringIterator?: (value: unknown) => boolean;
+  /** Allocate in the destination context while retaining the source's shared backing store. */
+  cloneSharedArrayBuffer?: (buffer: SharedArrayBuffer, context: NodeContext) => SharedArrayBuffer;
   // Requires the V8 length-tracking patch.
-  isLengthTrackingArrayBufferView: (view: ArrayBufferView) => boolean;
+  isLengthTrackingArrayBufferView?: (view: ArrayBufferView) => boolean;
   /** Recognize a genuine WeakRef without dereferencing its target. */
-  isWeakRef: (value: unknown) => boolean;
+  isWeakRef?: (value: unknown) => boolean;
   // Requires the V8 FinalizationRegistry predicate patch.
-  isFinalizationRegistry: (value: unknown) => boolean;
+  isFinalizationRegistry?: (value: unknown) => boolean;
   // Legacy Node patch for making an existing object's prototype immutable.
-  makePrototypeImmutable: (object: object) => void;
-  observePromise: (
+  makePrototypeImmutable?: (object: object) => void;
+  observePromise?: (
     promise: Promise<unknown>, realmAnchor: JSFunction | PromiseConstructor,
     onFulfilled?: JSFunction, onRejected?: JSFunction,
   ) => Promise<unknown>;
-  runInContext: (
+  runInContext?: (
     source: string, context: NodeContext, options?: ContextEvaluationOptions,
   ) => unknown;
-  setGlobalObject: (context: NodeContext, object: object) => void;
+  setGlobalObject?: (context: NodeContext, object: object) => void;
   // Requires the V8 host-hook patches.
-  setHostHooks: <HostDefined>(hooks: AddonHostHooks<HostDefined>) => void;
-  setPropertyDelegate: (object: object, delegate: object) => void;
-  setPropertyHandlers: (object: object, handlers: AddonPropertyHandlers) => void;
+  setHostHooks?: <HostDefined>(hooks: AddonHostHooks<HostDefined>) => void;
+  setPropertyDelegate?: (object: object, delegate: object) => void;
+  setPropertyHandlers?: (object: object, handlers: AddonPropertyHandlers) => void;
 
   constructor(backend: object) {
     this.createCollectionIterator = this.#loadMethod(backend, 'createCollectionIterator');
@@ -60,6 +61,7 @@ export class NodeAPI {
     this.isArrayIterator = this.#loadMethod(backend, 'isArrayIterator');
     this.isStringIterator = this.#loadMethod(backend, 'isStringIterator');
     this.isRegExpStringIterator = this.#loadMethod(backend, 'isRegExpStringIterator');
+    this.cloneSharedArrayBuffer = this.#loadMethod(backend, 'cloneSharedArrayBuffer');
     this.isLengthTrackingArrayBufferView = this.#loadMethod(backend, 'isLengthTrackingArrayBufferView');
     this.isWeakRef = this.#loadMethod(backend, 'isWeakRef');
     this.isFinalizationRegistry = this.#loadMethod(backend, 'isFinalizationRegistry');
@@ -70,33 +72,23 @@ export class NodeAPI {
     this.setHostHooks = this.#loadMethod(backend, 'setHostHooks');
     this.setPropertyDelegate = this.#loadMethod(backend, 'setPropertyDelegate');
     this.setPropertyHandlers = this.#loadMethod(backend, 'setPropertyHandlers');
-    this.supportsHTMLDDA = this.getMethod('createHTMLDDA') !== undefined &&
-      this.getMethod('setPropertyHandlers') !== undefined;
-  }
-
-  /** Only supplied methods appear here; unsupported-call stubs do not. */
-  getMethod<Name extends keyof AddonMethods>(name: Name): AddonMethods[Name] | undefined {
-    return this.#methods[name];
+    this.supportsHTMLDDA = this.createHTMLDDA !== undefined && this.setPropertyHandlers !== undefined;
   }
 
   #loadMethod<Name extends keyof AddonMethods>(backend: object, name: Name): AddonMethods[Name] {
     const method: unknown = Reflect.get(backend, name);
-    if (method === undefined) {
-      return () => { throw new InternalError(`Node backend does not provide ${name}`); };
-    }
+    if (method === undefined) return undefined;
     if (typeof method !== 'function') {
       throw new InternalError(`Node backend ${name} is not callable`);
     }
-    const bound = method.bind(backend) as AddonMethods[Name];
-    this.#methods[name] = bound;
-    return bound;
+    return method.bind(backend) as AddonMethods[Name];
   }
 }
 
 export const addon = new NodeAPI(loadNodeApi());
 
-// Derive the cached signatures from the public calls rather than listing them twice.
-type AddonMethods = Omit<NodeAPI, 'getMethod' | 'supportsHTMLDDA'>;
+// Derive the operation signatures from the public properties rather than listing them twice.
+type AddonMethods = Omit<NodeAPI, 'supportsHTMLDDA'>;
 
 /**
  * Supply intercepted properties for a native object.

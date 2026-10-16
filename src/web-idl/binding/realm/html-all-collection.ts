@@ -1,3 +1,4 @@
+import { InternalError } from '../../../infra/internal-error';
 import { addon } from '../../../js-engine/index';
 
 import {
@@ -12,6 +13,9 @@ export class HTMLAllCollectionBinding extends LegacyPlatformObjectBinding {
     object: object, implementation: object, properties: LegacyPropertyMetadata | null,
   ): object {
     if (!properties) return object;
+    if (!addon.setPropertyHandlers) {
+      throw new InternalError('Node backend does not provide setPropertyHandlers');
+    }
     const getProperty = (property: string | symbol, hasOwn: boolean): PropertyDescriptor | undefined => {
       if (typeof property === 'symbol') return;
       if (properties.indexed && isArrayIndex(property)) {

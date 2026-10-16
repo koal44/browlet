@@ -8,7 +8,7 @@ const compat = require('../addon/index.cjs');
 // Compat promises these facilities independently of the test capability gates.
 // Losing one must not turn its regressions into expected failures.
 for (const method of [
-  'createContextHandle', 'createHTMLDDA', 'createMicrotaskQueue', 'getFunctionRealm',
+  'cloneSharedArrayBuffer', 'createContextHandle', 'createHTMLDDA', 'createMicrotaskQueue', 'getFunctionRealm',
   'getRealm', 'isContext', 'isWeakRef', 'observePromise', 'runInContext', 'setGlobalObject',
   'setPropertyDelegate', 'setPropertyHandlers',
 ]) {

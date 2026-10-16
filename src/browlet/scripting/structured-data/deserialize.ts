@@ -66,7 +66,7 @@ class StructuredDeserializer {
         break;
       case 'SharedArrayBuffer':
       case 'GrowableSharedArrayBuffer':
-        value = this.#deserializeSharedArrayBuffer(serialized.buffer);
+        value = realm.cloneSharedArrayBuffer(serialized.buffer);
         break;
       case 'ArrayBuffer':
       case 'ResizableArrayBuffer':
@@ -92,21 +92,6 @@ class StructuredDeserializer {
     }
 
     this.#memory.set(serialized, value);
-    return value;
-  }
-
-  // StructuredDeserialize: SharedArrayBuffer and GrowableSharedArrayBuffer branches.
-  // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
-  #deserializeSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer {
-    const { realm } = this.#ctx;
-    const value = realm.intrinsics.bufferSource.cloneSharedArrayBuffer(buffer);
-    const constructor = realm.intrinsics.bufferSource.sharedArrayBuffer;
-    if (!constructor) {
-      throw new InternalError('The target realm has no SharedArrayBuffer intrinsic');
-    }
-    if (!Reflect.setPrototypeOf(value, constructor.prototype)) {
-      throw new InternalError('Could not apply the target SharedArrayBuffer prototype');
-    }
     return value;
   }
 

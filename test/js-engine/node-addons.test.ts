@@ -1,32 +1,26 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 import { addon, NodeAPI } from '../../src/js-engine/node-addons';
 import { createContext, createMicrotaskQueue } from '../../src/js-engine/runtime';
 import { isCallable, isObject } from '../../src/js-engine/abstract-operations';
 import { itPassesWith } from '../test-runtime';
 
 describe('Node add-on API', () => {
-  it('keeps availability per operation and throws when an absent operation is called', () => {
+  it('leaves unavailable operations undefined', () => {
     const api = new NodeAPI({ runInContext: (source: string) => source });
     const context = createContext(createMicrotaskQueue());
 
-    expect(api.getMethod('runInContext')).toBe(api.runInContext);
+    assert(api.runInContext);
     expect(api.runInContext('source', context)).toBe('source');
-    expect(api.getMethod('createContextHandle')).toBeUndefined();
-    expect(() => api.createContextHandle())
-      .toThrow('Node backend does not provide createContextHandle');
-    expect(api.getMethod('createHTMLDDA')).toBeUndefined();
-    expect(() => api.createHTMLDDA(context, () => null))
-      .toThrow('Node backend does not provide createHTMLDDA');
-    expect(api.getMethod('setPropertyHandlers')).toBeUndefined();
-    expect(api.getMethod('isWeakRef')).toBeUndefined();
-    expect(() => api.isWeakRef({}))
-      .toThrow('Node backend does not provide isWeakRef');
-    expect(api.getMethod('isFinalizationRegistry')).toBeUndefined();
-    expect(() => api.isFinalizationRegistry({}))
-      .toThrow('Node backend does not provide isFinalizationRegistry');
+    expect(api.createContextHandle).toBeUndefined();
+    expect(api.createHTMLDDA).toBeUndefined();
+    expect(api.setPropertyHandlers).toBeUndefined();
+    expect(api.isWeakRef).toBeUndefined();
+    expect(api.isFinalizationRegistry).toBeUndefined();
+    expect(api.supportsHTMLDDA).toBe(false);
   });
 
   itPassesWith('htmlDDA')('allocates an undetectable callable through the native backend', () => {
+    assert(addon.createHTMLDDA);
     const context = createContext(createMicrotaskQueue());
     const result = {};
     const value = addon.createHTMLDDA(context, () => result);
@@ -36,11 +30,11 @@ describe('Node add-on API', () => {
     expect(value()).toBe(result);
     expect(isObject(value)).toBe(true);
     expect(isCallable(value)).toBe(true);
-    expect(addon.getMethod('setPropertyHandlers')).toBeTypeOf('function');
+    expect(addon.setPropertyHandlers).toBeTypeOf('function');
   });
 
   itPassesWith('finalizationRegistryPredicate')('recognizes a registry through the native backend', () => {
-    expect(addon.getMethod('isFinalizationRegistry')).toBeTypeOf('function');
+    assert(addon.isFinalizationRegistry);
     expect(addon.isFinalizationRegistry(new FinalizationRegistry(() => {}))).toBe(true);
     expect(addon.isFinalizationRegistry({})).toBe(false);
   });
@@ -55,7 +49,8 @@ describe('Node add-on API', () => {
     const getRealm = api.getRealm;
     backend.getRealm = () => ({});
 
-    expect(api.getMethod('getRealm')).toBe(getRealm);
+    assert(getRealm);
+    expect(api.getRealm).toBe(getRealm);
     expect(getRealm(backend)).toBe(realm);
   });
 

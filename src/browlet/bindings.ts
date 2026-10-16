@@ -88,8 +88,8 @@ export function createWindowEnvironment(
       (parent === null || parent.isSecureContext),
   });
   const useAddonGlobals = !!(
-    addon.getMethod('createContextHandle') && addon.getMethod('runInContext') &&
-    addon.getMethod('setPropertyDelegate') && addon.getMethod('setGlobalObject')
+    addon.createContextHandle && addon.runInContext &&
+    addon.setPropertyDelegate && addon.setGlobalObject
   );
   if (useAddonGlobals) previousRealm?.detachGlobal();
   const realm = new WindowRealm({

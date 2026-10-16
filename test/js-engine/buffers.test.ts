@@ -3,7 +3,7 @@ import { assert, describe, expect, expectTypeOf, it } from 'vitest';
 import { TypeError as InfraTypeError } from '../../src/infra/exceptions';
 import { InternalError } from '../../src/infra/internal-error';
 import {
-  getArrayBufferByteLength, getArrayBufferMaxByteLength,
+  getArrayBufferByteLength, getArrayBufferMaxByteLength, getAssociatedRealm,
   getArrayBufferViewBuffer, getArrayBufferViewByteLength, getArrayBufferViewByteOffset,
   getArrayBufferViewElementSize, getBufferSourceByteLength, getBufferSourceCopy,
   getBufferSourceUnderlyingBuffer, getBufferSourceView, getBufferTypeName, getTypedArrayLength,
@@ -387,6 +387,35 @@ describe('Realm buffer creation and transfer', () => {
     if (!SharedArrayBuffer_) throw new Error('Missing SharedArrayBuffer intrinsic');
     expect(buffer).toBeInstanceOf(SharedArrayBuffer_);
     expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 2]));
+  });
+
+  it.each([false, true])('clones shared storage into the target realm (growable=%s)', (growable) => {
+    const source = new JSRealm();
+    const target = new JSRealm();
+    const buffer = source.createSharedArrayBuffer([1, 2], growable ? 4 : undefined);
+    const constructor = target.intrinsics.bufferSource.sharedArrayBuffer;
+    assert(constructor);
+    Reflect.set(target.globalObject, 'SharedArrayBuffer', () => { throw new Error('replaced constructor'); });
+    for (const name of ['constructor', 'byteLength', 'maxByteLength', 'growable']) {
+      Object.defineProperty(buffer, name, { get() { throw new Error(name); } });
+    }
+
+    const clone = target.cloneSharedArrayBuffer(buffer);
+    expect(clone === buffer).toBe(false);
+    expect(getAssociatedRealm(clone)).toBe(target);
+    expect(Object.getPrototypeOf(clone)).toBe(constructor.prototype);
+    expect(clone.byteLength).toBe(2);
+    expect(clone.maxByteLength).toBe(growable ? 4 : 2);
+    expect(clone.growable).toBe(growable);
+    expect(getBufferSourceCopy(clone)).toEqual(Uint8Array.from([1, 2]));
+    new Uint8Array(clone)[0] = 17;
+    expect(new Uint8Array(buffer)[0]).toBe(17);
+    new Uint8Array(buffer)[1] = 23;
+    expect(new Uint8Array(clone)[1]).toBe(23);
+    if (growable) {
+      clone.grow(4);
+      expect(getArrayBufferByteLength(buffer)).toBe(4);
+    }
   });
 
   it.each([0, 1])('rejects %i-byte writes to detached storage with an exception request', (byteCount) => {

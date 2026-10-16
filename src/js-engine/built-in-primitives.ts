@@ -16,7 +16,7 @@ import type { JSRealm } from './realm';
  */
 
 export const isArgumentsObject: (value: unknown) => value is IArguments = nodeTypes.isArgumentsObject;
-export const isArrayIteratorObject = addon.getMethod('isArrayIterator');
+export const isArrayIteratorObject = addon.isArrayIterator;
 export const hasBigIntData: (value: unknown) => value is BigInt = nodeTypes.isBigIntObject;
 export const hasBooleanData: (value: unknown) => value is Boolean = nodeTypes.isBooleanObject;
 export const isCryptoKeyObject: (value: unknown) => boolean = nodeTypes.isCryptoKey;
@@ -32,10 +32,10 @@ export const hasNumberData: (value: unknown) => value is Number = nodeTypes.isNu
 export const isPromiseObject: (value: unknown) => value is Promise<unknown> = nodeTypes.isPromise;
 export const isProxyObject: (value: unknown) => boolean = nodeTypes.isProxy;
 export const hasRegExpMatcher: (value: unknown) => value is RegExp = nodeTypes.isRegExp;
-export const isRegExpStringIteratorObject = addon.getMethod('isRegExpStringIterator');
+export const isRegExpStringIteratorObject = addon.isRegExpStringIterator;
 export const hasSetData: (value: unknown) => value is Set<unknown> = nodeTypes.isSet;
 export const hasStringData: (value: unknown) => value is String = nodeTypes.isStringObject;
-export const isStringIteratorObject = addon.getMethod('isStringIterator');
+export const isStringIteratorObject = addon.isStringIterator;
 export const hasSymbolData: (value: unknown) => value is Symbol = nodeTypes.isSymbolObject;
 export const isWeakMapObject: (value: unknown) => value is WeakMap<object, unknown> = nodeTypes.isWeakMap;
 export const isWeakSetObject: (value: unknown) => value is WeakSet<object> = nodeTypes.isWeakSet;
@@ -263,8 +263,8 @@ const setIteratorNext = Reflect.get(
   'next',
 ) as (this: SetIterator<unknown>) => IteratorResult<unknown>;
 
-const nativeIsWeakRef = addon.getMethod('isWeakRef');
-const nativeIsFinalizationRegistry = addon.getMethod('isFinalizationRegistry');
+const nativeIsWeakRef = addon.isWeakRef;
+const nativeIsFinalizationRegistry = addon.isFinalizationRegistry;
 const weakRefDeref = typeof WeakRef === 'undefined'
   ? undefined
   : Reflect.get(

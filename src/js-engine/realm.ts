@@ -11,7 +11,7 @@ import {
 import { isObject } from './abstract-operations';
 import { addon } from './node-addons';
 import {
-  associateContext, associateGlobalRealm, associateObjectRealm,
+  associateContext, associateGlobalRealm, associateObjectRealm, cloneSharedArrayBuffer,
   createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
   getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
@@ -171,7 +171,6 @@ export class JSRealm {
           ArrayBuffer_.prototype,
           'transfer',
         ),
-        cloneSharedArrayBuffer: (buffer) => structuredClone(buffer),
         sharedArrayBuffer: Reflect.get(
           this.#globalProxy,
           'SharedArrayBuffer',
@@ -344,6 +343,9 @@ export class JSRealm {
 
   /** Allocate a callable [[IsHTMLDDA]] object directly in this realm. */
   createHTMLDDA(call: JSFunction): object {
+    if (!addon.createHTMLDDA) {
+      throw new InternalError('Node backend does not provide createHTMLDDA');
+    }
     return addon.createHTMLDDA(this.#context, call);
   }
 
@@ -463,6 +465,11 @@ export class JSRealm {
     );
     writeArrayBuffer(buffer, bytes);
     return buffer;
+  }
+
+  /** Allocate a new buffer object in this realm while sharing the source's storage and growth. */
+  cloneSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer {
+    return cloneSharedArrayBuffer(buffer, this.#context);
   }
 
   /** Copy bytes into a new realm-owned view and non-shared backing buffer. */
@@ -686,7 +693,6 @@ export type JSIntrinsics = {
   bufferSource: {
     arrayBuffer: ArrayBufferConstructor;
     arrayBufferTransfer: (this: ArrayBuffer, newLength?: number) => ArrayBuffer;
-    cloneSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer;
     sharedArrayBuffer?: SharedArrayBufferConstructor;
     views: Partial<Record<JSBufferViewName, BufferViewConstructor>>;
   };

@@ -2,6 +2,7 @@ import { createManualRealm } from '../../../support/browlet-agent';
 import { describe, expect, it } from 'vitest';
 import { itPassesWith } from '../../../test-runtime';
 
+import { getAssociatedRealm } from '../../../../src/js-engine/index';
 import {
   BindingWorld, defineInterface, impl, xattr, StructuredData, type BindingContext,
 } from '../../../../src/web-idl/index';
@@ -180,31 +181,24 @@ describe('HTML structured deserialization', () => {
     expectDataCloneError(() => structuredDeserialize(serialized, otherCluster));
   });
 
-  it('creates SharedArrayBuffer wrappers with target-realm behavior', () => {
+  it.each([false, true])('creates shared buffers in the target realm and preserves graph identity (growable=%s)', (growable) => {
     const agentCluster = new AgentCluster('concrete');
     const { source, sourceRealm, target, targetRealm } = createContexts({
       agentCluster,
     });
-    const buffer = sourceRealm.evaluate(
-      'new SharedArrayBuffer(4)',
-      'shared-buffer-target-realm.js',
-    ) as SharedArrayBuffer;
-    const clone = cloneValue(buffer, source, target) as SharedArrayBuffer;
-    const TargetSharedArrayBuffer = targetRealm.evaluate(
-      'SharedArrayBuffer',
-      'target-shared-buffer-constructor.js',
-    ) as SharedArrayBufferConstructor;
-    const SourceSharedArrayBuffer = sourceRealm.evaluate(
-      'SharedArrayBuffer',
-      'source-shared-buffer-constructor.js',
-    ) as SharedArrayBufferConstructor;
+    const buffer = sourceRealm.createSharedArrayBuffer([1, 2, 3, 4], growable ? 8 : undefined);
+    const graph = { buffer, again: buffer, view: sourceRealm.createView('Uint8Array', buffer, 0, 1) };
+    const copy = cloneValue(graph, source, target) as typeof graph;
+    const clone = copy.buffer;
+    const TargetSharedArrayBuffer = targetRealm.intrinsics.bufferSource.sharedArrayBuffer!;
+    const SourceSharedArrayBuffer = sourceRealm.intrinsics.bufferSource.sharedArrayBuffer!;
 
-    expect(Object.getPrototypeOf(clone)).toBe(targetRealm.evaluate(
-      'SharedArrayBuffer.prototype',
-      'target-shared-buffer-prototype.js',
-    ));
+    expect(copy.again).toBe(clone);
+    expect(copy.view.buffer).toBe(clone);
+    expect(Object.getPrototypeOf(clone)).toBe(TargetSharedArrayBuffer.prototype);
     expect(clone).toBeInstanceOf(TargetSharedArrayBuffer);
     expect(clone).not.toBeInstanceOf(SourceSharedArrayBuffer);
+    expect(getAssociatedRealm(clone)).toBe(targetRealm);
 
     const slice = clone.slice(0, 1);
     expect(slice).toBeInstanceOf(TargetSharedArrayBuffer);

@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it, vi } from 'vitest';
+import { assert, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { InternalError } from '../../src/infra/internal-error';
 import {
@@ -12,6 +12,7 @@ describe('JavaScript runtime', () => {
   itPassesWith('explicitQueues')(
     'reuses a detached global proxy in a replacement Realm',
     () => {
+      assert(addon.getRealm);
       const microtaskQueue = createMicrotaskQueue();
       const first = new JSRealm(microtaskQueue);
       const firstObject = first.intrinsics.object;
