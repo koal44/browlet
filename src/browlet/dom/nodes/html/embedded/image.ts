@@ -3,7 +3,7 @@ import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '
 
 import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
 
-import { HTMLElementImpl } from '../html-element';
+import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Image loading policy and the continuation retained while loading is deferred. */
 // https://html.spec.whatwg.org/multipage/embedded-content.html#the-img-element
@@ -14,8 +14,14 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
   // PROVISIONAL: revisit callbacks versus retained load state when the loader exists; see loader/ROADMAP.md.
   lazyLoadResumptionSteps: (() => void) | null = null;
 
+  override readonly isAllNamedElement = true;
+
   static is(value: unknown): value is HTMLImageElementImpl {
     return value instanceof HTMLImageElementImpl;
+  }
+
+  override getDocumentNamedItemType(): DocumentNamedItemType {
+    return 'name-or-id-with-name';
   }
 
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */

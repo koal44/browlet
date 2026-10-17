@@ -2,20 +2,32 @@ import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
 import { loadingAttribute } from '../attributes/index';
+import type { Navigable } from '../../../../browsing/navigation/index';
 
-import { HTMLElementImpl } from '../html-element';
+import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Iframe loading policy and the continuation retained while navigation is deferred. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-iframe-element
 // PROVISIONAL: child navigables, src/srcdoc processing, and the remaining iframe API are not implemented.
 export class HTMLIFrameElementImpl extends HTMLElementImpl {
+  /** Child navigation destination, or null before creation and after destruction. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
+  // TODO(HTML child navigation): create/destroy the child and maintain this association.
+  contentNavigable: Navigable | null = null;
+
   /** Suspended navigation steps, installed by iframe attribute processing. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained navigation state when loading exists; see loader/ROADMAP.md.
   lazyLoadResumptionSteps: (() => void) | null = null;
 
+  override readonly isAllNamedElement = true;
+
   static is(value: unknown): value is HTMLIFrameElementImpl {
     return value instanceof HTMLIFrameElementImpl;
+  }
+
+  override getDocumentNamedItemType(): DocumentNamedItemType {
+    return 'name';
   }
 
   /** Lazy loading is disabled without scripting, even for an explicit lazy attribute. */

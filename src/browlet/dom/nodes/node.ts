@@ -855,6 +855,9 @@ export abstract class NodeImpl extends EventTargetImpl {
       this.signalSlotChange();
     }
     node.getRoot().assignSlottablesForTree();
+    oldParent.childrenMoved();
+    // Validation narrows this to a parent union; access the protected hook through Node.
+    if (this !== oldParent) (this as NodeImpl).childrenMoved();
     for (let descendant: NodeImpl | null = node; descendant;
       descendant = descendant.nextShadowIncludingDescendant(node)) {
       descendant.movingSteps(descendant === node, oldParent);
@@ -1077,6 +1080,10 @@ export abstract class NodeImpl extends EventTargetImpl {
   // https://dom.spec.whatwg.org/#concept-node-children-changed-ext
   protected childrenChanged(): void {}
 
+  /** Refresh parent state after a child moves in, out, or within this node. */
+  // Internal notification: moves do not run the specification's children-changed steps.
+  protected childrenMoved(): void {}
+
   /** Unlink an attached node after the DOM's pre-removal steps have run. */
   #removeTreeNode(): void {
     const parent = this.#parent;
@@ -1101,6 +1108,7 @@ export abstract class NodeImpl extends EventTargetImpl {
     this.#previousSibling = null;
     this.#nextSibling = null;
     this.nodeDocument.collectionVersion++;
+    if (parent.isDocument() && this.isElement()) parent.updateDocumentElement();
   }
 
   /** Link an already-adopted, detached node without running DOM participants. */
@@ -1130,6 +1138,7 @@ export abstract class NodeImpl extends EventTargetImpl {
       this.#lastChild = node;
     }
     this.nodeDocument.collectionVersion++;
+    if (this.isDocument() && node.isElement()) this.updateDocumentElement();
   }
 }
 

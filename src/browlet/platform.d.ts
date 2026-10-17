@@ -496,6 +496,15 @@ export interface HTMLUnknownElementConstructor extends Ctor<HTMLElementConstruct
   [Symbol.hasInstance](value: unknown): value is HTMLUnknownElement;
 }
 
+export interface HTMLHtmlElement extends HTMLElement {
+
+}
+
+export interface HTMLHtmlElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLHtmlElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLHtmlElement;
+}
+
 export interface HTMLScriptElement extends HTMLElement {
   get blocking(): DOMTokenList;
   set blocking(value: string);
@@ -530,6 +539,15 @@ export interface HTMLHeadElementConstructor extends Ctor<HTMLElementConstructor>
   [Symbol.hasInstance](value: unknown): value is HTMLHeadElement;
 }
 
+export interface HTMLTitleElement extends HTMLElement {
+  text: string;
+}
+
+export interface HTMLTitleElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTitleElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTitleElement;
+}
+
 export interface HTMLBaseElement extends HTMLElement {
   href: string;
   target: string;
@@ -538,6 +556,15 @@ export interface HTMLBaseElement extends HTMLElement {
 export interface HTMLBaseElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLBaseElement;
   [Symbol.hasInstance](value: unknown): value is HTMLBaseElement;
+}
+
+export interface HTMLMetaElement extends HTMLElement {
+
+}
+
+export interface HTMLMetaElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLMetaElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLMetaElement;
 }
 
 export interface HTMLStyleElement extends HTMLElement {
@@ -565,6 +592,33 @@ export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor>
   [Symbol.hasInstance](value: unknown): value is HTMLLinkElement;
 }
 
+export interface HTMLBodyElement extends HTMLElement {
+
+}
+
+export interface HTMLBodyElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLBodyElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLBodyElement;
+}
+
+export interface HTMLHRElement extends HTMLElement {
+
+}
+
+export interface HTMLHRElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLHRElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLHRElement;
+}
+
+export interface HTMLAnchorElement extends HTMLElement {
+
+}
+
+export interface HTMLAnchorElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLAnchorElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLAnchorElement;
+}
+
 export interface HTMLImageElement extends HTMLElement {
   loading: string;
   fetchPriority: string;
@@ -582,6 +636,24 @@ export interface HTMLIFrameElement extends HTMLElement {
 export interface HTMLIFrameElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLIFrameElement;
   [Symbol.hasInstance](value: unknown): value is HTMLIFrameElement;
+}
+
+export interface HTMLEmbedElement extends HTMLElement {
+
+}
+
+export interface HTMLEmbedElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLEmbedElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLEmbedElement;
+}
+
+export interface HTMLObjectElement extends HTMLElement {
+
+}
+
+export interface HTMLObjectElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLObjectElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLObjectElement;
 }
 
 export interface HTMLMediaElement extends HTMLElement {
@@ -611,6 +683,24 @@ export interface HTMLVideoElementConstructor extends Ctor<HTMLMediaElementConstr
   [Symbol.hasInstance](value: unknown): value is HTMLVideoElement;
 }
 
+export interface HTMLMapElement extends HTMLElement {
+
+}
+
+export interface HTMLMapElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLMapElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLMapElement;
+}
+
+export interface HTMLAreaElement extends HTMLElement {
+
+}
+
+export interface HTMLAreaElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLAreaElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLAreaElement;
+}
+
 export interface HTMLFormElement extends HTMLElement {
   readonly elements: HTMLFormControlsCollection;
 }
@@ -629,6 +719,15 @@ export interface HTMLInputElement extends HTMLElement {
 export interface HTMLInputElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLInputElement;
   [Symbol.hasInstance](value: unknown): value is HTMLInputElement;
+}
+
+export interface HTMLButtonElement extends HTMLElement {
+
+}
+
+export interface HTMLButtonElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLButtonElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLButtonElement;
 }
 
 export interface HTMLSelectElement extends HTMLElement {
@@ -658,6 +757,24 @@ export interface HTMLOptGroupElement extends HTMLElement {
 export interface HTMLOptGroupElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLOptGroupElement;
   [Symbol.hasInstance](value: unknown): value is HTMLOptGroupElement;
+}
+
+export interface HTMLDataListElement extends HTMLElement {
+
+}
+
+export interface HTMLDataListElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDataListElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDataListElement;
+}
+
+export interface HTMLTextAreaElement extends HTMLElement {
+
+}
+
+export interface HTMLTextAreaElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTextAreaElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTextAreaElement;
 }
 
 export interface HTMLFormControlsCollection extends Omit<HTMLCollection, "namedItem"> {
@@ -704,6 +821,24 @@ export interface HTMLDialogElementConstructor extends Ctor<HTMLElementConstructo
   [Symbol.hasInstance](value: unknown): value is HTMLDialogElement;
 }
 
+export interface HTMLFrameSetElement extends HTMLElement {
+
+}
+
+export interface HTMLFrameSetElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLFrameSetElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLFrameSetElement;
+}
+
+export interface HTMLFrameElement extends HTMLElement {
+
+}
+
+export interface HTMLFrameElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLFrameElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLFrameElement;
+}
+
 export interface SVGElement extends Element {
   /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
   get style(): object;
@@ -714,6 +849,24 @@ export interface SVGElement extends Element {
 export interface SVGElementConstructor extends Ctor<ElementConstructor> {
   readonly prototype: SVGElement;
   [Symbol.hasInstance](value: unknown): value is SVGElement;
+}
+
+export interface SVGGraphicsElement extends SVGElement {
+
+}
+
+export interface SVGGraphicsElementConstructor extends Ctor<SVGElementConstructor> {
+  readonly prototype: SVGGraphicsElement;
+  [Symbol.hasInstance](value: unknown): value is SVGGraphicsElement;
+}
+
+export interface SVGSVGElement extends SVGGraphicsElement {
+
+}
+
+export interface SVGSVGElementConstructor extends Ctor<SVGGraphicsElementConstructor> {
+  readonly prototype: SVGSVGElement;
+  [Symbol.hasInstance](value: unknown): value is SVGSVGElement;
 }
 
 export interface SVGStyleElement extends SVGElement {
@@ -732,6 +885,15 @@ export interface SVGScriptElement extends SVGElement {
 export interface SVGScriptElementConstructor extends Ctor<SVGElementConstructor> {
   readonly prototype: SVGScriptElement;
   [Symbol.hasInstance](value: unknown): value is SVGScriptElement;
+}
+
+export interface SVGTitleElement extends SVGElement {
+
+}
+
+export interface SVGTitleElementConstructor extends Ctor<SVGElementConstructor> {
+  readonly prototype: SVGTitleElement;
+  [Symbol.hasInstance](value: unknown): value is SVGTitleElement;
 }
 
 export interface MathMLElement extends Element {
@@ -913,29 +1075,47 @@ export interface Window extends EventTarget {
   ElementInternals: ElementInternalsConstructor;
   HTMLElement: HTMLElementConstructor;
   HTMLUnknownElement: HTMLUnknownElementConstructor;
+  HTMLHtmlElement: HTMLHtmlElementConstructor;
   HTMLScriptElement: HTMLScriptElementConstructor;
   HTMLSlotElement: HTMLSlotElementConstructor;
   HTMLHeadElement: HTMLHeadElementConstructor;
+  HTMLTitleElement: HTMLTitleElementConstructor;
   HTMLBaseElement: HTMLBaseElementConstructor;
+  HTMLMetaElement: HTMLMetaElementConstructor;
   HTMLStyleElement: HTMLStyleElementConstructor;
   HTMLLinkElement: HTMLLinkElementConstructor;
+  HTMLBodyElement: HTMLBodyElementConstructor;
+  HTMLHRElement: HTMLHRElementConstructor;
+  HTMLAnchorElement: HTMLAnchorElementConstructor;
   HTMLImageElement: HTMLImageElementConstructor;
   HTMLIFrameElement: HTMLIFrameElementConstructor;
+  HTMLEmbedElement: HTMLEmbedElementConstructor;
+  HTMLObjectElement: HTMLObjectElementConstructor;
   HTMLMediaElement: HTMLMediaElementConstructor;
   HTMLAudioElement: HTMLAudioElementConstructor;
   HTMLVideoElement: HTMLVideoElementConstructor;
+  HTMLMapElement: HTMLMapElementConstructor;
+  HTMLAreaElement: HTMLAreaElementConstructor;
   HTMLFormElement: HTMLFormElementConstructor;
   HTMLInputElement: HTMLInputElementConstructor;
+  HTMLButtonElement: HTMLButtonElementConstructor;
   HTMLSelectElement: HTMLSelectElementConstructor;
   HTMLOptionElement: HTMLOptionElementConstructor;
   HTMLOptGroupElement: HTMLOptGroupElementConstructor;
+  HTMLDataListElement: HTMLDataListElementConstructor;
+  HTMLTextAreaElement: HTMLTextAreaElementConstructor;
   HTMLFormControlsCollection: HTMLFormControlsCollectionConstructor;
   RadioNodeList: RadioNodeListConstructor;
   HTMLOptionsCollection: HTMLOptionsCollectionConstructor;
   HTMLDialogElement: HTMLDialogElementConstructor;
+  HTMLFrameSetElement: HTMLFrameSetElementConstructor;
+  HTMLFrameElement: HTMLFrameElementConstructor;
   SVGElement: SVGElementConstructor;
+  SVGGraphicsElement: SVGGraphicsElementConstructor;
+  SVGSVGElement: SVGSVGElementConstructor;
   SVGStyleElement: SVGStyleElementConstructor;
   SVGScriptElement: SVGScriptElementConstructor;
+  SVGTitleElement: SVGTitleElementConstructor;
   MathMLElement: MathMLElementConstructor;
   Origin: OriginConstructor;
   Location: LocationConstructor;
@@ -1557,8 +1737,17 @@ export interface Document extends Node {
   cookie: string;
   readonly lastModified: string;
   readonly readyState: DocumentReadyState;
-  readonly body: HTMLElement | null;
+  title: string;
+  body: HTMLElement | null;
   readonly head: HTMLHeadElement | null;
+  readonly images: HTMLCollection;
+  readonly embeds: HTMLCollection;
+  readonly plugins: HTMLCollection;
+  readonly links: HTMLCollection;
+  readonly forms: HTMLCollection;
+  readonly scripts: HTMLCollection;
+  getElementsByName(elementName: string): NodeList;
+  readonly currentScript: HTMLScriptElement | SVGScriptElement | null;
   write(...text: Array<string>): void;
   readonly defaultView: WindowProxy | null;
   onreadystatechange: EventHandlerNonNull | null;

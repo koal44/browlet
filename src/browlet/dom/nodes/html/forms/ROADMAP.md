@@ -6,6 +6,11 @@ the owners of the required state, not complete implementations of HTML §4.10.
 The collection algorithms call those owners; unfinished owner algorithms remain
 explicit stubs.
 
+The element-identity audit adds `button`, `textarea`, and `datalist` registrations.
+Button/textarea participate in `document.all` name eligibility; datalist and the
+concrete HR element delimit select option traversal. Their full APIs and owner
+algorithms remain missing, as recorded in the [element roadmap](../ROADMAP.md).
+
 ## Present behavior
 
 - `HTMLFormControlsCollection` consumes an owner-supplied live source. Named

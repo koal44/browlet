@@ -288,6 +288,15 @@ their HTML consumers; complete referrer-policy precedence is not implemented.
 Browlet's existing parser callback still evaluates data-block scripts such as `application/json` as
 JavaScript; an approved expected-failure regression retains that limitation.
 
+Document's [tree accessors](browlet/html/ROADMAP.md#section-317-dom-tree-accessors)
+include title/body mutation, live collections, name lookup, and named properties.
+`currentScript` has retained state and readonly projection, but the provisional
+script handler does not set/restore it yet. Minimal object/embed implementations
+supply exposure; object loading must select fallback state. Iframe retains a
+content navigable only when supplied internally; automatic child navigation and
+public contentWindow/contentDocument remain absent. Named-property regressions
+use those explicit state inputs, not simulated successful resource loads.
+
 Document's [render-blocking mechanism](browlet/html/ROADMAP.md#section-316-render-blocking)
 now supplies eligibility, a configurable five-second cutoff, element lifecycle
 cleanup, and rendering-opportunity filtering. The element loading/preparation

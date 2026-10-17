@@ -274,6 +274,9 @@ describe('navigables', () => {
     expect(traversable.activeDocument).toBeNull();
     expect(traversable.activeBrowsingContext).toBeNull();
     expect(traversable.activeWindow).toBeNull();
+    expect(() => traversable.activeWindowProxy).toThrow(
+      new InternalError('An active WindowProxy needs a browsing context'),
+    );
     expect(document.isFullyActive()).toBe(false);
 
     traversable.activeSessionHistoryEntry = initialEntry;

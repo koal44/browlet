@@ -14,6 +14,8 @@ export function findElementById(root: NodeImpl, id: string): ElementImpl | null 
 }
 
 /** Find the first matching descendant element; the root itself is excluded. */
+export function findElement<T extends ElementImpl>(root: NodeImpl, matches: (element: ElementImpl) => element is T): T | null;
+export function findElement(root: NodeImpl, matches: (element: ElementImpl) => boolean): ElementImpl | null;
 export function findElement(root: NodeImpl, matches: (element: ElementImpl) => boolean): ElementImpl | null {
   for (let node = root.firstChild; node; node = node.nextDescendant(root)) {
     if (node.isElement() && matches(node)) return node;

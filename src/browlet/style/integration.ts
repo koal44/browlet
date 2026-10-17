@@ -97,7 +97,7 @@ export class LinkStyleMixin {
 
     // External links remain unassociated until Browlet exposes a response-
     // bearing resource loader to HTML's linked-resource processing model.
-    if (this.#owner.localName === 'link') return;
+    if (!this.#options.children) return;
 
     if (type !== '' && type !== 'text/css') {
       return;

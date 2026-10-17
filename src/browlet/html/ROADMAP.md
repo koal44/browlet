@@ -494,14 +494,14 @@ to the existing `all`, `head`, read-only `body`, `write`, and `defaultView` surf
 | §3.1.4 resource metadata | Referrer, non-HTTP access to the shared cookie store, retained response modification time, and local-time `lastModified` formatting | File navigation must supply filesystem modification times. The source-only route has no response headers; its modification time remains unknown. Cookie-averse browser differences are recorded below. |
 | §3.1.5 loading status | Readiness-update algorithm, `readystatechange` dispatch/handler, HTML/XML parser lifecycle contract, load/unload timing records, and redirect flag | XML parser implementation and previous-document unload capture remain missing. Existing HTML routes use the shared transitions; full §13 completion scheduling remains provisional. |
 | §3.1.6 render blocking | Document blocking set, HTML-content/body eligibility, timeout predicate, element block/unblock operations, disconnection/attribute cleanup, and rendering-opportunity filtering | Element preparation/loading must register and release actual pending work and populate Fetch request flags. Production rendering remains unfinished; script-blocking stylesheets remain a separate mechanism. |
-| §3.1.7 tree accessors | `head` and `body` getters, DOM tree/mutation algorithms, reusable live collections and Web IDL named-property machinery | `title`, the `body` setter, document collections and aliases, `getElementsByName`, `currentScript`, and Document named properties are missing. Named-property handling also needs embed/object exposure and child-navigable behavior. `dir` is defined with the later global attribute. |
+| §3.1.7 tree accessors | HTML/SVG title, head/body accessors, stable live collections and plugins alias, live name lookup, currentScript state, and Document named properties with object/embed exposure | Object loading must update fallback state; child navigation must populate iframe content navigables; script execution must maintain currentScript. `dir` is defined with the later global attribute. Browser disagreements are recorded below. |
 
 The audit first reproduced two omissions in
 [`document.test.ts`](../../../test/browlet/dom/nodes/document.test.ts): both factory
 flags remained false, and cloning lost the inherited base URI. The §3.1.1 slice
 fixes both and retains the regressions, including shallow and deep cloning.
 
-Continue with §3.1.7. For the later slices, preserve the existing boundaries: Document owns its state,
+Continue with §3.2. For the later slices, preserve the existing boundaries: Document owns its state,
 focus supplies active-element behavior, navigation supplies ancestry, loaders
 consume render-blocking state, and Web IDL projects the resulting interfaces.
 
@@ -537,11 +537,11 @@ are all its members and contributions, with the current implementation boundary:
 | `referrer` | Implemented projection over existing Document state. |
 | `cookie`, `lastModified` | Implemented §3.1.4 accessors over the shared cookie store and retained source metadata; file metadata awaits its loader. |
 | `readyState` | Implemented projection and §3.1.5 readiness-update algorithm. |
-| Anonymous named getter and `LegacyOverrideBuiltIns` | Missing §3.1.7 selection/exposure rules and their Web IDL declaration. |
-| `title`, `body`, `head` | Head/body getters exist. Title and body setter remain §3.1.7; body is still readonly in executable IDL. |
+| Anonymous named getter and `LegacyOverrideBuiltIns` | Implemented §3.1.7 selection/exposure, projection, and live collection identity; child/fallback producers remain explicit. |
+| `title`, `body`, `head` | Implemented §3.1.7 HTML/SVG title, head/body getters, and body replacement/adoption. |
 | `dir` | Missing §3.2.6 global-attribute forwarding. |
-| `images`, `embeds`, `plugins`, `links`, `forms`, `scripts`, `getElementsByName` | Missing §3.1.7 consumers of the existing live collection machinery; preserve SameObject requirements and the embeds/plugins alias. |
-| `currentScript` | Missing §3.1.7 state/getter and §4.12 script-execution maintenance; both concrete script types now exist. |
+| `images`, `embeds`, `plugins`, `links`, `forms`, `scripts`, `getElementsByName` | Implemented live collection consumers, including SameObject attributes and exact embeds/plugins identity. |
+| `currentScript` | Implemented initially-null state and readonly projection for either script type; §4.12 script execution must set/restore it. |
 | Both `open` overloads, `close`, `write`, `writeln` | §8.4 remains pending. Existing write only forwards DOMStrings to an active parser callback; TrustedHTML conversion, policy enforcement, and the complete insertion lifecycle are absent. The three-argument open overload also needs Window navigation. |
 | `defaultView` | Implemented through the associated browsing context's stable WindowProxy. |
 | `hasFocus`, `designMode` | Missing §6 focus management and editing behavior. |
@@ -870,6 +870,77 @@ potential versus actual blockers, attribute changes, subtree/shadow removal,
 browsing-context detachment, adoption, state-preserving moves, and independent
 script-blocking state.
 Rendering-producer and document-destruction tests cover the connected consumers.
+
+### Section 3.1.7 DOM tree accessors
+
+[`DocumentImpl`](../dom/nodes/document.ts) implements the
+[tree accessors](https://html.spec.whatwg.org/multipage/dom.html#dom-tree-accessors)
+using the existing mutation and live-collection machinery:
+
+| Requirement | Implementation and dependency boundary |
+| --- | --- |
+| HTML, head, and title elements | The document element is cached as root children are linked/unlinked, before mutation participants run. Head/body continue scanning only direct children of a concrete HTMLHtmlElement. The separate HTML title query finds the first HTML title anywhere in the ordinary document tree without maintaining another cache. Minimal html/body/frameset and SVG root interfaces supply identity; their remaining APIs stay with their element owners. |
+| `title` | Retains one selected HTML/SVG title and its normalized child text. Concrete HTMLTitleElement/SVGTitleElement implementations notify Document through their insertion/removal/moving and child-change hooks; Node's general `childrenMoved()` notification updates both parents after state-preserving moves. Root changes also refresh selection. SVG selects only direct title children. Document setters and HTMLTitleElement.text preserve raw text and use DOM replacement. No head/root is invented; unrelated root namespaces ignore writes. |
+| `body` | Reject null and non-body/frameset elements, preserve same-body identity, replace/adopt an existing body, otherwise append to the document element or throw without one. A foreign root can receive an HTML body without satisfying the getter's HTML-root rule. |
+| Collections | Stable live images/embeds/links/forms/scripts; plugins is exactly embeds. Only eligible HTML descendants in the ordinary tree qualify. Link href presence includes empty values, but excludes namespaced href attributes. |
+| `getElementsByName` | Live NodeList matching the exact name attribute on any HTML element, including the root; empty and case-sensitive values are preserved. No shadow-tree traversal. |
+| `currentScript` | Initially null, retains HTMLScriptElementImpl or SVGScriptElementImpl, and projects the most recently assigned value. §4.12 execution must set/restore it for nested classic scripts and supply null for modules/shadow-tree execution. The provisional parser callback does not yet do this. |
+| Document names | Ordered, duplicate-free supported names; name/ID eligibility and object/embed exposure; single element or iframe WindowProxy; stable live HTMLCollection for multiple matches; LegacyOverrideBuiltIns applied by existing Web IDL machinery. The implementation returns concrete implementations/handles; its IDL object binding performs projection. |
+| Object/embed exposure | Minimal concrete element classes implement the §3.1.7 exposure predicate. Object resource selection must update `showsFallbackContent`; changing it invalidates live collections. Initial false represents no selected fallback, not a completed resource load. Other §4.8 object/embed APIs, loading, and rendering remain absent. |
+| Iframe WindowProxy | Initially-null `contentNavigable` is the explicit child-navigation dependency. Named access consumes its active WindowProxy once supplied. Automatic child creation/destruction, container association, and iframe contentWindow/contentDocument remain unimplemented. |
+| `dir` | The section only refers to §3.2.6's global directionality attribute; its reflection/forwarding remains explicitly deferred there. |
+
+The title/body declarations retain `[CEReactions]`; custom-element reaction
+delivery remains the shared missing binding dependency.
+
+Approved 2026-10-16: follow HTML's written named-property rules despite the
+following disagreements in Chromium 149.0.7827.55, Firefox 151.0, and Windows
+WebKit 26.5. The local
+`scratch/DOCUMENT-TREE-ACCESSORS-PROBE.mjs` preserves the focused probe; its
+expectations remain the specification results, including the disagreeing cases.
+
+- `SPEC_CLASH(document-named-scope)`: Chromium, Firefox, and WebKit omit these
+  properties on an XMLDocument containing HTML elements. Chromium also omits
+  them on `createHTMLDocument()` results. HTML defines them for Document without
+  either exclusion; Browlet includes them.
+- `SPEC_CLASH(document-named-order)`: HTML orders names by tree order, ID before
+  name for each element. Chromium agrees for the simple form/image probe;
+  Firefox uses identifier-map order and WebKit sorts alphabetically. Browlet
+  uses the specified order and recomputes after mutations.
+- `SPEC_CLASH(document-named-iframe)`: without a content navigable, HTML and
+  WebKit return the iframe element. Firefox returns undefined; Chromium's
+  detached-document omission also prevents the detached probe from resolving it.
+- `SPEC_CLASH(document-named-object-exposure)`: in the synchronous probe with
+  an object containing an embed, Chromium/WebKit suppress the object and expose
+  the embed; Firefox exposes both. HTML makes object exposure depend on fallback
+  state and forbids an exposed object ancestor for either descendant. Browlet
+  follows that state-sensitive rule. The loading algorithm that selects the
+  state remains unfinished, so this is not a claim of equivalent resource loading.
+
+Inspected source owners: [Blink HTMLObjectElement::IsExposed](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/html/html_object_element.cc)
+recursively checks typed object ancestors and ignores fallback state when checking
+typed object/embed descendants. [Gecko's eligibility filters](https://searchfox.org/mozilla-central/source/dom/html/nsGenericHTMLElement.h)
+explicitly omit the exposure condition when registering document names.
+[WebKit's name collection](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLNameCollection.cpp)
+also uses element types without ancestor/fallback checks in the inspected source;
+that path does not explain the Windows WebKit probe's suppression above.
+[WebKit HTMLDocument](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLDocument.cpp)
+documents its alphabetical ordering divergence. Source inspection and the recorded
+browser runs are separate evidence; neither replaces HTML as the chosen rule.
+
+Browlet checks object ancestors in one upward walk. Every object ancestor of an
+object/embed already has that object/embed descendant, so a fallback ancestor
+cannot be exposed. If any non-fallback object ancestor exists, the outermost one
+is exposed. This avoids recursively rediscovering the same ancestors.
+[`exposure.test.ts`](../../../test/browlet/dom/nodes/html/embedded/exposure.test.ts)
+covers nested fallback transitions, foreign-namespace descendants, and a linear
+traversal budget; the former recursion made 81,919 parent reads at depth 16.
+
+[`document-tree-accessors.test.ts`](../../../test/browlet/dom/nodes/document-tree-accessors.test.ts)
+covers the accessors, whitespace, namespace/attribute eligibility, mutation and
+adoption, shadow exclusion, collection identity/liveness, named overrides/order,
+object fallback transitions, and both script identities. Its iframe test connects
+a real existing navigable at the missing child-navigation seam.
 
 ## HTML section 4 ownership
 

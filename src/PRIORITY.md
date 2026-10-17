@@ -111,7 +111,11 @@ timing records. XML parsing, unload capture, and complete parser/load scheduling
 remain explicit dependencies. The [§3.1.6 mechanism](browlet/html/ROADMAP.md#section-316-render-blocking)
 adds Document's blocking set, eligibility and timeout checks, element cleanup,
 and rendering-opportunity filtering. Resource loaders and production rendering
-remain separate dependencies. Continue with §3.1.7's DOM tree accessors.
+remain separate dependencies. The [§3.1.7 accessors](browlet/html/ROADMAP.md#section-317-dom-tree-accessors)
+add HTML/SVG title, body replacement, live collections/name lookup, currentScript
+state, and Document named properties. Object fallback selection, iframe child
+navigation, and script-execution producers remain explicit dependencies.
+Continue with §3.2's elements, one subsection at a time.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

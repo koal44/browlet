@@ -6,6 +6,39 @@ import { createTestDocument } from '../../../support/dom';
 import { itPassesWith } from '../../../test-runtime';
 
 describe('HTMLAllCollection implementation', () => {
+  it('accepts names only on all-named HTML elements, while accepting IDs in every namespace', () => {
+    const document = createTestDocument().implementation.createHTMLDocument();
+    const tags = [
+      'a', 'button', 'embed', 'form', 'frame', 'frameset', 'iframe', 'img',
+      'input', 'map', 'meta', 'object', 'select', 'textarea',
+    ];
+    const elements = tags.map((tag) => {
+      const element = document.createElement(tag);
+      element.setAttribute('name', `${tag}Name`);
+      document.body!.appendChild(element);
+      return element;
+    });
+    const all = document.all;
+    for (let index = 0; index < tags.length; index++) {
+      expect(all.namedItem(`${tags[index]}Name`)).toBe(elements[index]);
+    }
+    expect([...all.getSupportedPropertyNames()]).toEqual(tags.map((tag) => `${tag}Name`));
+
+    for (const element of [
+      document.createElement('area'), document.createElement('div'),
+      document.createElementNS('urn:example', 'form'),
+    ]) {
+      element.setAttribute('name', 'excludedName');
+      element.setAttribute('id', 'includedID');
+      document.body!.appendChild(element);
+      expect(all.namedItem('excludedName')).toBeNull();
+      expect(all.namedItem('includedID')).toBe(element);
+      expect(all.getSupportedPropertyNames().has('excludedName')).toBe(false);
+      expect(all.getSupportedPropertyNames().has('includedID')).toBe(true);
+      element.remove();
+    }
+  });
+
   it('retains a live document view and live multiple-name results', () => {
     const document = createTestDocument();
     const root = document.createElement('main');

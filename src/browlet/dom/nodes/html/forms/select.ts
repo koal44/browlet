@@ -3,6 +3,9 @@ import { attr, defineInterface, idlType, impl, reference, roAttr, xattr } from '
 
 import type { NodeImpl } from '../../node';
 import { HTMLElementImpl } from '../html-element';
+import { HTMLHRElementImpl } from '../grouping/index';
+import { HTMLDataListElementImpl } from './data-list';
+import { HTMLOptGroupElementImpl } from './optgroup';
 import { HTMLOptionElementImpl } from './option';
 import { HTMLOptionsCollectionImpl } from './options-collection';
 
@@ -11,6 +14,8 @@ import { HTMLOptionsCollectionImpl } from './options-collection';
 // PROVISIONAL: automatic selectedness, form association, selectedcontent, and the remaining API await §4.10.
 export class HTMLSelectElementImpl extends HTMLElementImpl {
   #options: HTMLOptionsCollectionImpl | undefined;
+
+  override readonly isAllNamedElement = true;
 
   static is(value: unknown): value is HTMLSelectElementImpl {
     return value instanceof HTMLSelectElementImpl;
@@ -44,17 +49,17 @@ export class HTMLSelectElementImpl extends HTMLElementImpl {
     const options: HTMLOptionElementImpl[] = [];
     let node: NodeImpl | null = this.firstChild;
     while (node !== null) {
-      if (HTMLOptionElementImpl.is(node)) options.push(node);
-      let skipChildren = false;
-      if (node.isElement() && node.namespaceURI === HTML_NAMESPACE) {
-        const name = node.localName;
-        skipChildren = name === 'select' || name === 'hr' || name === 'option' || name === 'datalist';
-        if (name === 'optgroup') {
-          for (let ancestor = node.parentNode; ancestor !== this && ancestor !== null; ancestor = ancestor.parentNode) {
-            if (ancestor.isElement() && ancestor.namespaceURI === HTML_NAMESPACE && ancestor.localName === 'optgroup') {
-              skipChildren = true;
-              break;
-            }
+      let skipChildren = node instanceof HTMLSelectElementImpl || node instanceof HTMLHRElementImpl ||
+        node instanceof HTMLDataListElementImpl;
+      if (HTMLOptionElementImpl.is(node)) {
+        options.push(node);
+        skipChildren = true;
+      }
+      if (node instanceof HTMLOptGroupElementImpl) {
+        for (let ancestor = node.parentNode; ancestor !== this && ancestor !== null; ancestor = ancestor.parentNode) {
+          if (ancestor instanceof HTMLOptGroupElementImpl) {
+            skipChildren = true;
+            break;
           }
         }
       }

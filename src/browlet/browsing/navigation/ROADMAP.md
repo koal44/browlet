@@ -57,6 +57,12 @@ ancestry initialization before activation, or uses the embedder's node document
 before an initial navigable exists. Do not substitute the parent navigable's
 active document for the embedding element's node document.
 
+`HTMLIFrameElementImpl.contentNavigable` now retains the initially-null child
+association for Document named access. Child creation/destruction must populate
+and clear it alongside the container relationship. `Navigable.activeWindowProxy`
+provides the active document's stable proxy once that relationship exists;
+the field and accessor alone do not create nested browsing contexts.
+
 The [resource metadata slice](../../html/ROADMAP.md#section-314-resource-metadata)
 retains `Document.cookieURL` independently of the document and base URLs.
 `NavigationParams.cookieURL` starts with the response URL. Initial blank creation

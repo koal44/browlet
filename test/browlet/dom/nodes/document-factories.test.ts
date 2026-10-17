@@ -118,6 +118,34 @@ describe('Document factories', () => {
     expect(element.ownerDocument).toBe(second.window.document);
   });
 
+  it('preserves concrete HTML identities through creation and cloning, excluding foreign names', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const elements = [
+        ['html', HTMLHtmlElement], ['body', HTMLBodyElement], ['frameset', HTMLFrameSetElement],
+        ['frame', HTMLFrameElement], ['a', HTMLAnchorElement], ['area', HTMLAreaElement],
+        ['map', HTMLMapElement], ['hr', HTMLHRElement], ['datalist', HTMLDataListElement],
+        ['button', HTMLButtonElement], ['textarea', HTMLTextAreaElement], ['meta', HTMLMetaElement],
+      ] as const;
+      return elements.map(([name, constructor]) => {
+        const element = document.createElement(name);
+        return [element instanceof constructor, element.cloneNode() instanceof constructor,
+          document.createElementNS('urn:other', name) instanceof constructor];
+      });
+    })).toEqual(Array(12).fill([true, true, false]));
+  });
+
+  it('gives SVG roots their graphics inheritance without treating foreign svg names as roots', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      const foreign = document.createElementNS('urn:other', 'svg');
+      return [svg instanceof SVGSVGElement, svg instanceof SVGGraphicsElement, svg instanceof SVGElement,
+        svg.cloneNode() instanceof SVGSVGElement, foreign instanceof SVGSVGElement,
+        Object.getPrototypeOf(SVGSVGElement.prototype) === SVGGraphicsElement.prototype];
+    })).toEqual([true, true, true, true, false, true]);
+  });
+
   it('validates XML leaf construction and preserves CDATA identity through Text operations', async () => {
     const browser = new Browlet({ route: () => '' });
     expect(await browser.evaluate(() => {

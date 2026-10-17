@@ -30,6 +30,48 @@ with list membership, focus, top-layer/inertness, close watchers, and dialog
 events. Do not equate the list with every element that happens to have an `open`
 attribute or claim that creating a dialog implements its opening lifecycle.
 
+The [Document §3.1.7 slice](../../../html/ROADMAP.md#section-317-dom-tree-accessors)
+adds concrete [`HTMLEmbedElementImpl`](embedded/embed.ts) and
+[`HTMLObjectElementImpl`](embedded/object.ts) for named-property exposure.
+Object loading must update `showsFallbackContent`; its setter invalidates live
+collections, but no resource selection/fallback activation happens automatically.
+Their remaining attributes, constructors, loading, and rendering belong to
+§§4.8.6–4.8.7. Iframe now retains an initially-null `contentNavigable`; child
+navigation must create, associate, and clear it. Document also retains nullable
+`currentScript`; §4.12 execution must set/restore it, including null for module
+and shadow-tree execution. These state holders do not implement their producers.
+
+Document accessors, named collections, image-map lookup, and select traversal now
+use concrete element identities instead of namespace/local-name tests. HTML
+elements declare their fixed `isAllNamedElement` eligibility. Document named
+lookup shares `getDocumentNamedItemType()` with HTMLElement's
+`matchesDocumentName()`, reevaluating object/embed exposure; image IDs additionally
+require a nonempty name. Attribute values remain live.
+The remaining identity dependencies are registered as minimal implementations:
+
+| Elements | Owner | Missing behavior |
+| --- | --- | --- |
+| `html`, `body` | `document/html.ts`, `sections/body.ts` | HTML construction, body WindowEventHandlers, and obsolete reflected members |
+| `a`, `area` | `text/anchor.ts`, `embedded/area.ts` | Hyperlink mixins, reflected attributes, navigation/activation, and area geometry |
+| `map` | `embedded/map.ts` | Name reflection and the areas collection; lookup already returns HTMLMapElementImpl |
+| `hr` | `grouping/hr.ts` | HTML construction and obsolete reflected members |
+| `datalist`, `button`, `textarea` | `forms/` | Datalist options/suggestions; button and textarea form association, reflection, validation, editing/commands, and activation |
+| `meta` | `metadata/meta.ts` | Reflected attributes and metadata/pragma processing |
+| `frame`, `frameset` | `legacy/` | Reflected attributes, frame navigation/layout, and frameset WindowEventHandlers |
+
+These identity fragments expose their interfaces but do not add HTML constructors
+or stand in for the missing APIs. Their consuming algorithms can nevertheless use
+the actual implementation types now. Namespace/name handling remains appropriate
+in element creation, tag-name APIs, and generic namespace algorithms.
+
+[`HTMLTitleElementImpl`](metadata/title.ts) owns title mutation notifications and
+its raw child-text `text` attribute. Document retains the selected HTML/SVG title
+and normalized text; the separate `htmlTitleElement` lookup is uncached. State-preserving
+child moves use Node's general parent notification without rerunning ordinary
+children-changed steps. HTML construction and `[CEReactions]` still depend on the
+shared custom-element machinery; presenting the title and its directionality in
+browser UI remains outside this document-accessor slice.
+
 ## Early platform slice
 
 Implement these in dependency order before filling out the element catalog.

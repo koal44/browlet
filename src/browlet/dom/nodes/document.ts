@@ -1,11 +1,12 @@
 import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/promises';
 import { asciiLower } from '../../../infra/ascii';
-import { HTML_NAMESPACE } from '../../../infra/index';
+import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../infra/index';
+import { stripAndCollapseASCIIWhitespace } from '../../../infra/strings';
 import { InternalError } from '../../../infra/internal-error';
 import { addon, isomorphicDecode, isomorphicEncode, type JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, attr, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, definePartialInterface,
-  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, onError, op, roAttr, reference, union,
+  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, namedGetter, nullable, onError, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
 } from '../../../web-idl/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
@@ -44,7 +45,7 @@ import type {
 } from '../../browsing/navigation/index';
 import type { FocusableArea } from '../../interaction/index';
 
-import type { HTMLCollectionImpl, NodeListImpl } from './collections';
+import { HTMLCollectionImpl, NodeListImpl } from './collections';
 import { HTMLAllCollectionImpl } from './html-all-collection';
 import { AttrImpl } from './attribute';
 import { CDATASectionImpl } from './cdata-section';
@@ -67,11 +68,18 @@ import {
   findElementsByTagNameNS,
 } from './lookups';
 import { getElementConstructor } from './element-interfaces';
-import { HTMLBaseElementImpl, HTMLHeadElementImpl } from './html/metadata/index';
+import { HTMLBaseElementImpl, HTMLHeadElementImpl, HTMLTitleElementImpl } from './html/metadata/index';
 import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
+import { HTMLHtmlElementImpl } from './html/document/index';
+import { HTMLBodyElementImpl } from './html/sections/index';
+import { HTMLFrameSetElementImpl } from './html/legacy/index';
+import { HTMLAnchorElementImpl } from './html/text/index';
 import {
-  HTMLVideoElementImpl, type HTMLImageElementImpl, type HTMLIFrameElementImpl, type HTMLMediaElementImpl,
+  HTMLAreaElementImpl, HTMLEmbedElementImpl, HTMLIFrameElementImpl, HTMLImageElementImpl,
+  HTMLVideoElementImpl, type HTMLMediaElementImpl,
 } from './html/embedded/index';
+import { HTMLFormElementImpl } from './html/forms/index';
+import { SVGSVGElementImpl, SVGTitleElementImpl, type SVGScriptElementImpl } from './svg/index';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 import type { HTMLDialogElementImpl } from './html/interactive/index';
 
@@ -195,6 +203,10 @@ export class DocumentImpl extends NodeImpl {
   /** Elements whose pending work delays rendering, independently of script-blocking stylesheets. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-element-set
   renderBlockingElements = new Set<ElementImpl>();
+  /** Classic script currently executing in this document's tree, or null outside its execution. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-currentscript
+  // TODO(HTML §4.12.1): script execution must set/restore this, including null for modules and shadow trees.
+  currentScript: HTMLScriptElementImpl | SVGScriptElementImpl | null = null;
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
@@ -202,15 +214,21 @@ export class DocumentImpl extends NodeImpl {
   #relevantGlobalObject: WindowImpl | null = null;
   /** First base element with an href attribute, whose frozen URL supplies the base. */
   #firstBaseElement: HTMLBaseElementImpl | null = null;
+  /** First element child, maintained before tree mutation participants run. */
+  #documentElement: ElementImpl | null = null;
+  /** Selected HTML or SVG title whose child text supplies the document title. */
+  #titleElement: HTMLTitleElementImpl | SVGTitleElementImpl | null = null;
+  /** Normalized text of the selected title, refreshed by mutation hooks. */
+  #title = '';
   /** One internal observer shared by this document's deferred images, frames, and media. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-intersection-observer
   #lazyLoadIntersectionObserver: IntersectionObserverImpl | null = null;
   /** Internal subscribers notified when navigation changes this document's activity. */
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   /** Lazily created style engine for this document. */
-  #stylelet: Stylelet | undefined;
+  #stylelet?: Stylelet;
   /** Selector parsing and compilation caches shared by queries in this document. */
-  #selectlet: Selectlet<NodeImpl, ElementImpl, DocumentImpl, DocumentFragmentImpl> | undefined;
+  #selectlet?: Selectlet<NodeImpl, ElementImpl, DocumentImpl, DocumentFragmentImpl>;
   /** Focus and style-sheet behavior shared with shadow roots. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   /** Live child collection and element-child navigation. */
@@ -226,11 +244,19 @@ export class DocumentImpl extends NodeImpl {
   /** Node allocator selected when the document is created. */
   #nodeFactory: DOMNodeFactory;
   /** Stable factory object associated with this document. */
-  #implementation: DOMImplementationImpl | undefined;
+  #implementation?: DOMImplementationImpl;
   /** Cached live collection returned by document.all. */
-  #all: HTMLAllCollectionImpl | undefined;
+  #all?: HTMLAllCollectionImpl;
+  /** Stable live collections exposed by the document's tree accessors. */
+  #images?: HTMLCollectionImpl;
+  #embeds?: HTMLCollectionImpl;
+  #links?: HTMLCollectionImpl;
+  #forms?: HTMLCollectionImpl;
+  #scripts?: HTMLCollectionImpl;
+  /** Retains identity when a named property matches multiple elements. */
+  #namedCollections = new Map<string, HTMLCollectionImpl>();
   /** Parser input callback installed while document.write() is permitted. */
-  #writer: DocumentWriter | undefined;
+  #writer?: DocumentWriter;
   /** Document event-handler attributes and their registered listeners. */
   #eventHandlers = new EventHandlerMap(this, [{ name: 'onreadystatechange', type: 'readystatechange' }]);
 
@@ -418,19 +444,35 @@ export class DocumentImpl extends NodeImpl {
   /** First element child of the document, or null before one is inserted. */
   // https://dom.spec.whatwg.org/#dom-document-documentelement
   get documentElement(): ElementImpl | null {
-    for (let child = this.firstChild; child; child = child.nextSibling) {
-      if (child.isElement()) return child;
-    }
-
-    return null;
+    return this.#documentElement;
   }
 
+  /** Refresh the root after an element is linked to or unlinked from this document. */
+  updateDocumentElement(): void {
+    let root: ElementImpl | null = null;
+    for (let child = this.firstChild; child; child = child.nextSibling) {
+      if (child.isElement()) {
+        root = child;
+        break;
+      }
+    }
+    if (root === this.#documentElement) return;
+    this.#documentElement = root;
+    this.updateTitleElement();
+  }
+
+  /** Document element when it is an HTML html element. */
+  // https://html.spec.whatwg.org/multipage/dom.html#the-html-element-2
+  get htmlElement(): HTMLHtmlElementImpl | null {
+    const root = this.documentElement;
+    return root instanceof HTMLHtmlElementImpl ? root : null;
+  }
+
+  /** First head child of the document's HTML html element. */
   // https://html.spec.whatwg.org/#dom-document-head
   get head(): HTMLHeadElementImpl | null {
-    const html = this.documentElement;
-    if (!HTMLElementImpl.is(html) || html.localName !== 'html') {
-      return null;
-    }
+    const html = this.htmlElement;
+    if (html === null) return null;
 
     for (let child = html.firstChild; child; child = child.nextSibling) {
       if (HTMLHeadElementImpl.is(child)) return child;
@@ -439,24 +481,191 @@ export class DocumentImpl extends NodeImpl {
     return null;
   }
 
+  /** First HTML title element in the ordinary document tree, including outside head. */
+  // https://html.spec.whatwg.org/multipage/dom.html#the-title-element-2
+  get htmlTitleElement(): HTMLTitleElementImpl | null {
+    return findElement(this, (element) => HTMLTitleElementImpl.is(element));
+  }
+
+  /** Title text with ASCII whitespace stripped and collapsed. */
+  // https://html.spec.whatwg.org/multipage/dom.html#document.title
+  get title(): string {
+    return this.#title;
+  }
+
+  set title(value: string) {
+    const root = this.documentElement;
+    let title: ElementImpl | null = this.#titleElement;
+    if (root instanceof SVGSVGElementImpl) {
+      if (title === null) {
+        title = this.createElementNode('title', SVG_NAMESPACE);
+        root.insertBefore(title, root.firstChild);
+      }
+    } else if (root?.namespaceURI === HTML_NAMESPACE) {
+      if (title === null) {
+        const head = this.head;
+        if (head === null) return;
+        title = this.createElementNode('title', HTML_NAMESPACE);
+        head.appendChild(title);
+      }
+    } else {
+      return;
+    }
+    title.stringReplaceAll(value);
+  }
+
+  /** Refresh title selection after a title element moves, or the document root changes. */
+  updateTitleElement(changedTitle?: HTMLTitleElementImpl | SVGTitleElementImpl): void {
+    if (changedTitle !== undefined && changedTitle !== this.#titleElement && changedTitle.getRoot() !== this) return;
+    const root = this.#documentElement;
+    const title = root instanceof SVGSVGElementImpl
+      ? this.#getSVGTitle(root)
+      : this.htmlTitleElement;
+    if (title === this.#titleElement) return;
+    this.#titleElement = title;
+    this.#title = stripAndCollapseASCIIWhitespace(title?.getChildTextContent() ?? '');
+  }
+
+  /** Refresh normalized text when the selected title's direct children change. */
+  updateTitleText(element: HTMLTitleElementImpl | SVGTitleElementImpl): void {
+    if (element !== this.#titleElement) return;
+    this.#title = stripAndCollapseASCIIWhitespace(element.getChildTextContent());
+  }
+
+  #getSVGTitle(root: SVGSVGElementImpl): SVGTitleElementImpl | null {
+    for (let child = root.firstChild; child; child = child.nextSibling) {
+      if (SVGTitleElementImpl.is(child)) return child;
+    }
+    return null;
+  }
+
   /** First body or frameset child of an HTML document element. */
   // https://html.spec.whatwg.org/#dom-document-body
-  get body(): HTMLElementImpl | null {
-    const html = this.documentElement;
-    if (!HTMLElementImpl.is(html) || html.localName !== 'html') {
-      return null;
-    }
+  get body(): HTMLBodyElementImpl | HTMLFrameSetElementImpl | null {
+    const html = this.htmlElement;
+    if (html === null) return null;
 
     for (let child = html.firstChild; child; child = child.nextSibling) {
-      if (
-        HTMLElementImpl.is(child) &&
-        (child.localName === 'body' || child.localName === 'frameset')
-      ) {
+      if (child instanceof HTMLBodyElementImpl || child instanceof HTMLFrameSetElementImpl) {
         return child;
       }
     }
 
     return null;
+  }
+
+  set body(value: HTMLElementImpl | null) {
+    if (!(value instanceof HTMLBodyElementImpl) && !(value instanceof HTMLFrameSetElementImpl)) {
+      throw new DOMExceptionImpl('Document body must be an HTML body or frameset', DOMExceptionNames.hierarchyRequest);
+    }
+    const body = this.body;
+    if (body === value) return;
+    if (body !== null) {
+      body.parentNode!.replaceChild(value, body);
+      return;
+    }
+    const root = this.documentElement;
+    if (root === null) {
+      throw new DOMExceptionImpl('Document has no document element', DOMExceptionNames.hierarchyRequest);
+    }
+    root.appendChild(value);
+  }
+
+  /** Live HTML img descendants in tree order. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-images
+  get images(): HTMLCollectionImpl {
+    return this.#images ??= new HTMLCollectionImpl(this,
+      (element) => element instanceof HTMLImageElementImpl);
+  }
+
+  /** Live HTML embed descendants, regardless of named-property exposure. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-embeds
+  get embeds(): HTMLCollectionImpl {
+    return this.#embeds ??= new HTMLCollectionImpl(this,
+      (element) => element instanceof HTMLEmbedElementImpl);
+  }
+
+  /** Legacy alias for the same embeds collection. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-plugins
+  get plugins(): HTMLCollectionImpl {
+    return this.embeds;
+  }
+
+  /** Live HTML a/area descendants with an href content attribute, including an empty one. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-links
+  get links(): HTMLCollectionImpl {
+    return this.#links ??= new HTMLCollectionImpl(this, (element) =>
+      (element instanceof HTMLAnchorElementImpl || element instanceof HTMLAreaElementImpl) &&
+      element.hasAttributeNS(null, 'href'));
+  }
+
+  /** Live HTML form descendants in tree order. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-forms
+  get forms(): HTMLCollectionImpl {
+    return this.#forms ??= new HTMLCollectionImpl(this,
+      (element) => element instanceof HTMLFormElementImpl);
+  }
+
+  /** Live HTML script descendants; SVG scripts do not belong to this collection. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-scripts
+  get scripts(): HTMLCollectionImpl {
+    return this.#scripts ??= new HTMLCollectionImpl(this,
+      (element) => element instanceof HTMLScriptElementImpl);
+  }
+
+  /** Live HTML descendants with exactly this name content attribute. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-getelementsbyname
+  getElementsByName(name: string): NodeListImpl {
+    return new NodeListImpl({
+      root: this,
+      collect: () => {
+        const elements: ElementImpl[] = [];
+        for (let node = this.firstChild; node; node = node.nextDescendant(this)) {
+          if (node instanceof HTMLElementImpl && node.getAttributeNS(null, 'name') === name) {
+            elements.push(node);
+          }
+        }
+        return elements;
+      },
+    });
+  }
+
+  /** Nonempty names contributed by eligible elements, in tree order with each ID first. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem-which
+  // SPEC_CLASH(document-named-scope): follow HTML on XML and detached documents; browsers restrict these cases.
+  // SPEC_CLASH(document-named-order): follow HTML's tree/ID-first order; Gecko/WebKit enumeration differs.
+  getSupportedPropertyNames(): ReadonlySet<string> {
+    const names = new Set<string>();
+    for (let node = this.firstChild; node; node = node.nextDescendant(this)) {
+      if (!(node instanceof HTMLElementImpl)) continue;
+      const type = node.getDocumentNamedItemType();
+      if (type === 'none') continue;
+      const name = node.getAttributeNS(null, 'name');
+      if (type === 'name-or-id' || (type === 'name-or-id-with-name' && name)) {
+        const id = node.getAttributeNS(null, 'id');
+        if (id) names.add(id);
+      }
+      if (name) names.add(name);
+    }
+    return names;
+  }
+
+  /** Resolve a supported name to one element, its child WindowProxy, or a stable live collection. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem
+  getNamedProperty(name: string): ElementImpl | WindowProxyHandle | HTMLCollectionImpl {
+    let elements = this.#namedCollections.get(name);
+    if (elements === undefined) {
+      elements = new HTMLCollectionImpl(this, (element) =>
+        element instanceof HTMLElementImpl && element.matchesDocumentName(name));
+      this.#namedCollections.set(name, elements);
+    }
+    if (elements.length !== 1) return elements;
+    const element = elements.item(0)!;
+    if (element instanceof HTMLIFrameElementImpl && element.contentNavigable !== null) {
+      return element.contentNavigable.activeWindowProxy;
+    }
+    // SPEC_CLASH(document-named-iframe): HTML returns the iframe without a child navigable; Gecko returns undefined.
+    return element;
   }
 
   /** Focusable area currently designated by HTML focus management. */
@@ -1672,7 +1881,7 @@ export const htmlOrSVGScriptElementIDL = defineTypedef({
  */
 export const htmlDocumentIDL = definePartialInterface({
   name: 'Document',
-  // TODO(HTML §3.1.7): LegacyOverrideBuiltIns accompanies Document's named getter.
+  ...xattr('LegacyOverrideBuiltIns'),
   // The complete member/dependency inventory is in html/ROADMAP.md#section-311-document-state-and-declarations.
   members: [
     // TODO(HTML §§8.5–8.6): parseHTMLUnsafe and parseHTML need parser/sanitizer option types and algorithms.
@@ -1682,10 +1891,27 @@ export const htmlDocumentIDL = definePartialInterface({
     roAttr('lastModified', idlType.DOMString),
     roAttr('readyState', reference('DocumentReadyState')),
 
-    // TODO(HTML §3.1.7): named getter, title, body setter, collections, getElementsByName, and currentScript.
+    op(undefined, idlType.object,
+      [arg('name', idlType.DOMString)],
+      {
+        ...namedGetter((document: DocumentImpl) => document.getSupportedPropertyNames()),
+        invoke(context, name) {
+          return context.implToJS((this as DocumentImpl).getNamedProperty(name), documentNamedValueType);
+        },
+      },
+    ),
+    attr('title', idlType.DOMString, xattr('CEReactions')),
     // TODO(HTML §3.2.6): dir forwards to the document element's directionality attribute.
-    roAttr('body', nullable(reference('HTMLElement'))),
+    attr('body', nullable(reference('HTMLElement')), xattr('CEReactions')),
     roAttr('head', nullable(reference('HTMLHeadElement'))),
+    roAttr('images', reference('HTMLCollection'), xattr('SameObject')),
+    roAttr('embeds', reference('HTMLCollection'), xattr('SameObject')),
+    roAttr('plugins', reference('HTMLCollection'), xattr('SameObject')),
+    roAttr('links', reference('HTMLCollection'), xattr('SameObject')),
+    roAttr('forms', reference('HTMLCollection'), xattr('SameObject')),
+    roAttr('scripts', reference('HTMLCollection'), xattr('SameObject')),
+    op('getElementsByName', reference('NodeList'), [arg('elementName', idlType.DOMString)]),
+    roAttr('currentScript', nullable(reference('HTMLOrSVGScriptElement'))),
 
     // TODO(HTML §8.4): open, close, and writeln; complete write's TrustedHTML conversion and insertion steps.
     op('write', idlType.undefined, [
@@ -1705,6 +1931,9 @@ export const htmlDocumentIDL = definePartialInterface({
     }),
   ],
 });
+
+// The IDL result is object; this boundary conversion projects each permitted implementation result.
+const documentNamedValueType = union(reference('Element'), reference('HTMLCollection'), reference('WindowProxy'));
 
 /** Converted element-creation options supported by the current declaration. */
 export type ElementCreationOptionsRecord = {

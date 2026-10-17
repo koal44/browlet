@@ -9,7 +9,7 @@ import { CSPList } from '../policy/csp/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
-import type { WindowImpl } from '../window/index';
+import type { WindowImpl, WindowProxyHandle } from '../window/index';
 import type { ResourceReader } from '../../loader/index';
 import type { UserAgent } from '../../user-agent';
 
@@ -90,6 +90,14 @@ export class Navigable {
 
   get activeWindow(): WindowImpl | null {
     return this.activeBrowsingContext?.activeWindow ?? null;
+  }
+
+  /** WindowProxy of this navigable's active document; requires an active browsing context. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-wp
+  get activeWindowProxy(): WindowProxyHandle {
+    const browsingContext = this.activeBrowsingContext;
+    if (browsingContext === null) throw new InternalError('An active WindowProxy needs a browsing context');
+    return browsingContext.windowProxy;
   }
 
   /** Nearest inclusive ancestor that owns session-history traversal. */

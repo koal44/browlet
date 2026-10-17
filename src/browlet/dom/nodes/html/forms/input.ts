@@ -16,6 +16,8 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/#concept-input-dirty-checkedness-flag
   dirtyCheckedness = false;
 
+  override readonly isAllNamedElement = true;
+
   static is(value: unknown): value is HTMLInputElementImpl {
     return value instanceof HTMLInputElementImpl;
   }

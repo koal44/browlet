@@ -1,4 +1,3 @@
-import { HTML_NAMESPACE } from '../../../infra/index';
 import {
   arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op,
   reference, roAttr, union, xattr,
@@ -7,6 +6,7 @@ import {
 import { HTMLCollectionImpl } from './collections';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
+import { HTMLElementImpl } from './html/index';
 
 /** Live view of every descendant element of a document, including legacy named lookup. */
 // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#the-htmlallcollection-interface
@@ -32,7 +32,7 @@ export class HTMLAllCollectionImpl {
     for (const element of this.#elements) {
       const id = element.getAttributeNS(null, 'id');
       if (id) names.add(id);
-      if (isAllNamedElement(element)) {
+      if (element instanceof HTMLElementImpl && element.isAllNamedElement) {
         const name = element.getAttributeNS(null, 'name');
         if (name) names.add(name);
       }
@@ -52,7 +52,7 @@ export class HTMLAllCollectionImpl {
     if (name === '') return null;
     const matches = new HTMLCollectionImpl(this.#document, (element) =>
       element.getAttributeNS(null, 'id') === name ||
-      (isAllNamedElement(element) && element.getAttributeNS(null, 'name') === name));
+      (element instanceof HTMLElementImpl && element.isAllNamedElement && element.getAttributeNS(null, 'name') === name));
     const length = matches.length;
     return length === 0 ? null : length === 1 ? matches.item(0) : matches;
   }
@@ -115,13 +115,3 @@ export const htmlAllCollectionIDL = defineInterface({
 });
 
 const allItemType = nullable(union(reference('HTMLCollection'), reference('Element')));
-
-// https://html.spec.whatwg.org/#all-named-elements
-const allNamedElements = new Set([
-  'a', 'button', 'embed', 'form', 'frame', 'frameset', 'iframe', 'img', 'input',
-  'map', 'meta', 'object', 'select', 'textarea',
-]);
-
-function isAllNamedElement(element: ElementImpl): boolean {
-  return element.namespaceURI === HTML_NAMESPACE && allNamedElements.has(element.localName);
-}

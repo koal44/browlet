@@ -11,6 +11,10 @@ export class HTMLElementImpl extends ElementImpl {
   /** Common HTML, SVG, and MathML state and attribute behavior. */
   #htmlOrSVGOrMathMLElementMixin = new HTMLOrSVGOrMathMLElementMixin(this);
 
+  /** Fixed eligibility for name-based document.all lookup; ID lookup does not use this flag. */
+  // https://html.spec.whatwg.org/#all-named-elements
+  readonly isAllNamedElement: boolean = false;
+
   static is(value: unknown): value is HTMLElementImpl {
     return value instanceof HTMLElementImpl;
   }
@@ -22,6 +26,23 @@ export class HTMLElementImpl extends ElementImpl {
 
   get style(): CSSStyleDeclarationImpl {
     return this.getInlineStyle();
+  }
+
+  /** Current participation in Document named-property lookup, including exposure rules. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem-filter
+  getDocumentNamedItemType(): DocumentNamedItemType {
+    return 'none';
+  }
+
+  /** Whether this element matches a supported Document named property. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-nameditem-filter
+  matchesDocumentName(name: string): boolean {
+    const type = this.getDocumentNamedItemType();
+    if (type === 'none') return false;
+    const elementName = this.getAttributeNS(null, 'name');
+    return elementName === name ||
+      ((type === 'name-or-id' || (type === 'name-or-id-with-name' && !!elementName)) &&
+        this.getAttributeNS(null, 'id') === name);
   }
 
   override attributeChanged(
@@ -43,6 +64,9 @@ export class HTMLElementImpl extends ElementImpl {
     copy.nonce = this.nonce;
   }
 }
+
+/** Name/ID eligibility; name-or-id-with-name requires a nonempty name before an ID can match. */
+export type DocumentNamedItemType = 'none' | 'name' | 'name-or-id' | 'name-or-id-with-name';
 
 /*
  * [Exposed=Window]

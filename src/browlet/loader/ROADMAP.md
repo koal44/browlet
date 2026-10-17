@@ -15,6 +15,12 @@ the getter uses the current time. A future local-file loader must populate
 `Document.lastModificationTime` from filesystem metadata; this getter does not
 read files itself. See the [resource metadata slice](../html/ROADMAP.md#section-314-resource-metadata).
 
+Document retains the §3.1.7 `currentScript` state and projects either script
+interface. The §4.12 execution algorithms must set it for classic scripts in a
+document tree, clear it for modules/shadow-tree execution, and restore the old
+value after execution, including exceptions/nesting. The provisional parser
+script callback does not maintain this state yet.
+
 | Source / planned source | Contract | Specification |
 | --- | --- | --- |
 | `Navigable.loadHTMLDocument()` in `browsing/navigation/` | Document creation and streamed HTML load coordination using this directory's ResourceReader; encoding-restart byte retention remains pending | HTML §§7.4–7.5 and 13.2.3 |

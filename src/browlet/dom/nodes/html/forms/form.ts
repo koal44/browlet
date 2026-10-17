@@ -2,7 +2,7 @@ import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import { defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
 import type { ElementImpl } from '../../element';
-import { HTMLElementImpl } from '../html-element';
+import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 
 /** Form identity and ownership of its stable controls collection. */
@@ -10,6 +10,8 @@ import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 // PROVISIONAL: form-owner association, listed controls, submission/reset, and the remaining API await §4.10.
 export class HTMLFormElementImpl extends HTMLElementImpl {
   #elements: HTMLFormControlsCollectionImpl | undefined;
+
+  override readonly isAllNamedElement = true;
 
   static is(value: unknown): value is HTMLFormElementImpl {
     return value instanceof HTMLFormElementImpl;
@@ -21,6 +23,10 @@ export class HTMLFormElementImpl extends HTMLElementImpl {
       root: this,
       collect: () => this.getListedElements(),
     });
+  }
+
+  override getDocumentNamedItemType(): DocumentNamedItemType {
+    return 'name';
   }
 
   /** Listed elements whose form owner is this form, in tree order, excluding image inputs. */
