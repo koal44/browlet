@@ -1,14 +1,7 @@
-export {
-  HTMLElementImpl, htmlElementIDL, htmlElementInterface, htmlElementIncludesElementCSSInlineStyleIDL,
-} from './html-element';
-export {
-  HTMLUnknownElementImpl, htmlUnknownElementIDL, htmlUnknownElementInterface,
-} from './html-unknown-element';
-export {
-  HTMLScriptElementImpl, htmlScriptElementIDL, htmlScriptElementInterface, type ScriptElementType,
-} from './script';
+export { HTMLElementImpl, htmlElementIDL, htmlElementIncludesElementCSSInlineStyleIDL } from './html-element';
+export { HTMLUnknownElementImpl, htmlUnknownElementIDL } from './html-unknown-element';
+export { HTMLScriptElementImpl, htmlScriptElementIDL, type ScriptElementType } from './script';
 export { htmlIDLDefinitions } from './web-idl';
 export {
-  HTMLSlotElementImpl, htmlSlotElementIDL, htmlSlotElementInterface,
-  type AssignedNodesOptions, assignedNodesOptionsIDL,
+  HTMLSlotElementImpl, htmlSlotElementIDL, type AssignedNodesOptions, assignedNodesOptionsIDL,
 } from './slot';

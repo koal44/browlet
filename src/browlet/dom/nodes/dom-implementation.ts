@@ -40,6 +40,8 @@ export class DOMImplementationImpl {
     document.origin = this.#document.origin;
     document.contentType = namespace === HTML_NAMESPACE ? 'application/xhtml+xml'
       : namespace === SVG_NAMESPACE ? 'image/svg+xml' : 'application/xml';
+    // https://html.spec.whatwg.org/multipage/dom.html#documents
+    document.readyForPostLoadTasks = true;
     return document;
   }
 
@@ -57,6 +59,8 @@ export class DOMImplementationImpl {
     }
     html.appendChild(document.createElementNode('body', HTML_NAMESPACE));
     document.origin = this.#document.origin;
+    // https://html.spec.whatwg.org/multipage/dom.html#documents
+    document.readyForPostLoadTasks = true;
     return document;
   }
 

@@ -25,6 +25,19 @@ export type URLRecord = {
   blobURLEntry: BlobURLEntry | null;
 };
 
+/** Frozen about:blank template; use copyURL() when retaining mutable URL state. */
+export const aboutBlankURL: Readonly<URLRecord> = Object.freeze({
+  scheme: 'about',
+  username: '',
+  password: '',
+  host: null,
+  port: null,
+  path: 'blank',
+  query: null,
+  fragment: null,
+  blobURLEntry: null,
+});
+
 export type URLParseResult = {
   url: URLRecord | null;
   validationErrors: URLValidationError[];

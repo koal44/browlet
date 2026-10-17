@@ -1,6 +1,6 @@
 import { InternalError } from '../../../infra/internal-error';
 import {
-  serializeSite, createOpaqueOrigin, serializeOrigin, type Origin, parseURL, serializeURL,
+  aboutBlankURL, serializeSite, copyURL, createOpaqueOrigin, serializeOrigin, type Origin, serializeURL,
   type URLRecord,
 } from '../../../url/index';
 
@@ -60,6 +60,8 @@ export class BrowsingContext {
     const unsafeContextCreationTime = unsafeSharedCurrentTime();
     const creatorOrigin = creator?.origin ?? null;
     const creatorBaseURL = creator?.getBaseURL() ?? null;
+    const creatorCookieURL = creator?.cookieURL ?? null;
+    const parentDocument = embedder?.nodeDocument ?? null;
 
     if (creator !== null) {
       // https://html.spec.whatwg.org/multipage/document-sequences.html#creator-browsing-context
@@ -75,8 +77,7 @@ export class BrowsingContext {
       : creatorOrigin;
     const permissionsPolicy = PermissionsPolicy.create(embedder, origin);
     const agent = obtainSimilarOriginWindowAgent(origin, group, false);
-    const aboutBlankURL = parseURL('about:blank').url;
-    if (aboutBlankURL === null) throw new InternalError('Could not parse about:blank');
+    const creationURL = copyURL(aboutBlankURL);
     if (embedder !== null) {
       // TODO: inherit top-level creation URL and origin from embedder.env and
       // select the iframe referrer policy for ancestry initialization below.
@@ -84,10 +85,10 @@ export class BrowsingContext {
     }
     const env = group.userAgent.createWindowEnvironment({
       agent, userAgent: group.userAgent,
-      creationURL: aboutBlankURL,
+      creationURL,
       origin,
       parent: null,
-      topLevelCreationURL: aboutBlankURL,
+      topLevelCreationURL: creationURL,
       topLevelOrigin: origin,
     });
     const { window, realm } = env;
@@ -106,12 +107,15 @@ export class BrowsingContext {
     );
     document.isInitialAboutBlank = true;
     document.aboutBaseURL = creatorBaseURL;
+    // SPEC_CLASH(document-cookie-averse): initial blank documents inherit the creator's cookie lookup URL.
+    // https://github.com/whatwg/html/issues/332
+    document.cookieURL = copyURL(creatorCookieURL ?? creationURL);
     document.allowDeclarativeShadowRoots = true;
     document.customElementRegistry = new CustomElementRegistryImpl();
 
     // https://html.spec.whatwg.org/multipage/browsers.html#determining-the-iframe-element-referrer-policy
     // There is no embedding iframe for the supported top-level creation path.
-    document.initializeAncestry('');
+    document.initializeAncestry('', parentDocument);
 
     // https://html.spec.whatwg.org/multipage/document-sequences.html#creating-a-new-browsing-context
     // TODO: for a non-null creator, set the referrer from its URL, clone its policy

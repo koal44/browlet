@@ -47,6 +47,7 @@ export const layers = [
   // Navigation composes resource consumption with document creation and parsing.
   ['browlet/loader'],
   ['browlet/browsing/navigation'],
+  ['browlet/interaction'],
   ['browlet/integration/network', 'browlet/integration/xhr', 'browlet/integration/web-idl'],
   ['browlet/integration/file'],
   ['browlet/integration'],

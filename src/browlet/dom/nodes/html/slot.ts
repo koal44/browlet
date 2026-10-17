@@ -5,7 +5,7 @@ import {
   op, reference, reflect, sequence, union, xattr,
 } from '../../../../web-idl/index';
 
-import { defineElementInterface, type ElementImpl } from '../element';
+import type { ElementImpl } from '../element';
 import type { TextImpl } from '../text';
 import { HTMLElementImpl } from './html-element';
 
@@ -154,6 +154,8 @@ export const htmlSlotElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLSlotElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['slot'],
   members: [
     attr('name', idlType.DOMString, xattr('CEReactions', reflect())),
     op('assignedNodes', sequence(reference('Node')),
@@ -179,10 +181,4 @@ export type AssignedNodesOptions = {
 export const assignedNodesOptionsIDL = defineDictionary({
   name: 'AssignedNodesOptions',
   members: [dictMember('flatten', idlType.boolean, { default: false })],
-});
-
-export const htmlSlotElementInterface = defineElementInterface({
-  definition: htmlSlotElementIDL,
-  namespaceURI: HTML_NAMESPACE,
-  localNames: ['slot'],
 });

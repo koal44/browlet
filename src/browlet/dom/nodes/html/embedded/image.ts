@@ -3,7 +3,6 @@ import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '
 
 import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Image loading policy and the continuation retained while loading is deferred. */
@@ -50,15 +49,11 @@ export const htmlImageElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLImageElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['img'],
   members: [
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
     attr('fetchPriority', idlType.DOMString, xattr('CEReactions', reflectEnumerated(fetchPriorityAttribute))),
   ],
-});
-
-export const htmlImageElementInterface = defineElementInterface({
-  definition: htmlImageElementIDL,
-  localNames: ['img'],
-  namespaceURI: HTML_NAMESPACE,
 });

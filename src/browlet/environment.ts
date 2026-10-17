@@ -4,7 +4,7 @@ import type { WebIDLExecution } from '../web-idl/core/index';
 import type { SelectletEnvironment } from '../selectlet/index';
 import type { StyleletEnvironment, StyleletExecution } from '../stylelet/index';
 import {
-  areSameSite, obtainSite, obtainURLOrigin, serializeURL,
+  obtainSite, obtainURLOrigin, serializeURL,
   type Origin, type URLParseResult, type URLRecord,
 } from '../url/index';
 import {
@@ -364,18 +364,10 @@ export class WindowEnvironment extends BrowletEnvironment {
     return this.window.getAssociatedDocument().origin;
   }
 
-  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+  /** Cookie-site ancestry exposed to Fetch through its environment contract. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-has-cross-site-ancestor
   get hasCrossSiteAncestor(): boolean {
-    let document = this.window.getAssociatedDocument();
-    const navigable = document.getNodeNavigable();
-    // A detached/inactive Document has no current ancestor chain to establish a cookie site.
-    if (navigable === null) return true;
-    for (let parent = navigable.parent; parent !== null; parent = parent.parent) {
-      const parentDocument = parent.activeDocument;
-      if (parentDocument === null || !areSameSite(parentDocument.origin, document.origin)) return true;
-      document = parentDocument;
-    }
-    return false;
+    return this.window.getAssociatedDocument().hasCrossSiteAncestor;
   }
 
   get policyContainer(): PolicyContainer {

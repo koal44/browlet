@@ -13,7 +13,7 @@ import {
 } from '../attributes/index';
 import type { BrowletEnvironment } from '../../../../environment';
 
-import { defineElementInterface, type ElementCreationContext } from '../../element';
+import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';
 import { HTMLElementImpl } from '../html-element';
 
@@ -94,6 +94,8 @@ export const htmlLinkElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLLinkElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['link'],
   members: [
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
     attr('crossOrigin', nullable(idlType.DOMString), xattr('CEReactions', reflectEnumerated(corsSettingsAttribute))),
@@ -103,12 +105,6 @@ export const htmlLinkElementIDL = defineInterface({
     ),
     attr('fetchPriority', idlType.DOMString, xattr('CEReactions', reflectEnumerated(fetchPriorityAttribute))),
   ],
-});
-
-export const htmlLinkElementInterface = defineElementInterface({
-  definition: htmlLinkElementIDL,
-  localNames: ['link'],
-  namespaceURI: HTML_NAMESPACE,
 });
 
 /*

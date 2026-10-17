@@ -2,7 +2,7 @@ import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
-import { defineElementInterface, ElementImpl } from '../element';
+import { ElementImpl } from '../element';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 
 /** Base implementation for elements in the HTML namespace. */
@@ -90,12 +90,8 @@ export const htmlElementIDL = defineInterface({
   inherits: 'Element',
   exposed: 'Window',
   implementation: impl(HTMLElementImpl),
-  members: [],
-});
-
-export const htmlElementInterface = defineElementInterface({
-  definition: htmlElementIDL,
   namespaceURI: HTML_NAMESPACE,
+  members: [],
 });
 
 /*

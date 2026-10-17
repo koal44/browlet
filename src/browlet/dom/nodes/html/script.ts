@@ -11,7 +11,6 @@ import {
 import type { SpeculationRulesParseResult } from '../../../scripting/index';
 import type { WindowImpl } from '../../../browsing/window/index';
 
-import { defineElementInterface } from '../element';
 import type { DocumentImpl } from '../document';
 import { HTMLElementImpl } from './html-element';
 
@@ -90,6 +89,8 @@ export const htmlScriptElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLScriptElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['script'],
   members: [
     roAttr('blocking', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
@@ -100,12 +101,6 @@ export const htmlScriptElementIDL = defineInterface({
     attr('referrerPolicy', idlType.DOMString, xattr('CEReactions', reflectEnumerated(referrerPolicyAttribute))),
     attr('fetchPriority', idlType.DOMString, xattr('CEReactions', reflectEnumerated(fetchPriorityAttribute))),
   ],
-});
-
-export const htmlScriptElementInterface = defineElementInterface({
-  definition: htmlScriptElementIDL,
-  localNames: ['script'],
-  namespaceURI: HTML_NAMESPACE,
 });
 
 /** Kind of content selected by script-element preparation; null is separate unprepared state. */

@@ -15,10 +15,11 @@ export {
   DocumentFragmentImpl, documentFragmentIDL, documentFragmentIncludesParentNodeIDL,
   documentFragmentIncludesNonElementParentNodeIDL,
 } from './document-fragment';
-export { DocumentOrShadowRootMixin, documentOrShadowRootIDL } from './document-or-shadow-root';
+export { documentOrShadowRootIDL, htmlDocumentOrShadowRootIDL } from './document-or-shadow-root';
 export { DocumentTypeImpl, documentTypeIDL, documentTypeIncludesChildNodeIDL } from './document-type';
 export {
   createDocument, type DocumentConstructionOptions, DocumentImpl, documentIDL, htmlDocumentIDL,
+  documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
   XMLDocumentImpl, xmlDocumentIDL, type ImportNodeOptions, importNodeOptionsIDL,
   type ElementCreationOptionsRecord, elementCreationOptionsIDL, documentIncludesParentNodeIDL,
   documentIncludesNonElementParentNodeIDL,
@@ -27,9 +28,9 @@ export {
   type ModuleMapKey, type ModuleMapEntry, type DocumentLoadTimingInfo,
 } from './document';
 export {
-  defineElementInterface, ElementImpl, elementIDL, elementInterface, elementIncludesParentNodeIDL,
-  elementIncludesChildNodeIDL, elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesSlottableIDL,
-  type ElementCreationContext, type ElementInterface, type ShadowRootInit, shadowRootInitIDL,
+  ElementImpl, elementIDL, elementIncludesParentNodeIDL, elementIncludesChildNodeIDL,
+  elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesSlottableIDL, type ElementCreationContext,
+  type ShadowRootInit, shadowRootInitIDL,
 } from './element';
 export {
   findElementById, findElement, findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,

@@ -17,7 +17,7 @@ import { determineRequestReferrer } from '../../src/browlet/browsing/policy/refe
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { networkPartitionKeysEqual } from '../../src/fetch/transport';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
+import { copyURL, obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
 
 describe('Window environment cross-site ancestry', () => {
   it('has no cross-site ancestor in a top-level window', () => {
@@ -87,6 +87,30 @@ describe('Fetch cookies through Window settings', () => {
     const isolated = new FetchRequest(url, other.env, other.env.userAgent);
     isolated.appendCookieHeader();
     expect(isolated.headerList.get('Cookie')).toBeNull();
+  });
+});
+
+describe('Document cookies and SameSite ancestry', () => {
+  it('shares the live ancestor query with Fetch for non-HTTP reads and writes', () => {
+    const top = createEnvironment('https://a.example.com/');
+    const sameSite = createEnvironment('https://b.example.com/', top.navigable);
+    const middle = createEnvironment('https://other.test/', top.navigable);
+    const crossSite = createEnvironment('https://b.example.com/', middle.navigable);
+    sameSite.document.cookie = 'strict=1; SameSite=Strict; Secure';
+    sameSite.document.cookie = 'lax=2; SameSite=Lax; Secure';
+    sameSite.document.cookie = 'default=3; Secure';
+    sameSite.document.cookie = 'none=4; SameSite=None; Secure';
+
+    expect(sameSite.document.cookie).toBe('strict=1; lax=2; default=3; none=4');
+    expect(crossSite.document.cookie).toBe('none=4');
+    crossSite.document.cookie = 'strict=overwritten; SameSite=Strict; Secure';
+    crossSite.document.cookie = 'default=overwritten; Secure';
+    crossSite.document.cookie = 'none=updated; SameSite=None; Secure';
+    expect(crossSite.document.cookie).toBe('none=updated');
+    expect(sameSite.document.cookie).toBe('strict=1; lax=2; default=3; none=updated');
+
+    middle.document.origin = top.document.origin;
+    expect(crossSite.document.cookie).toBe('strict=1; lax=2; default=3; none=updated');
   });
 });
 
@@ -311,6 +335,7 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   document.type = 'html';
   document.contentType = 'text/html';
   document.url = creationURL;
+  document.cookieURL = copyURL(creationURL);
   document.origin = origin;
   document.browsingContext = new BrowsingContext(proxy);
   window.setAssociatedDocument(document);

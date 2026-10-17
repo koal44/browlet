@@ -3,7 +3,6 @@ import { attr, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr
 
 import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Input type and checkedness needed by RadioNodeList. */
@@ -82,15 +81,11 @@ export const htmlInputElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLInputElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['input'],
   members: [
     attr('type', idlType.DOMString, xattr('CEReactions', reflectEnumerated(inputTypeAttribute))),
     attr('defaultChecked', idlType.boolean, xattr('CEReactions', reflect({ name: 'checked' }))),
     attr('checked', idlType.boolean),
   ],
-});
-
-export const htmlInputElementInterface = defineElementInterface({
-  definition: htmlInputElementIDL,
-  localNames: ['input'],
-  namespaceURI: HTML_NAMESPACE,
 });

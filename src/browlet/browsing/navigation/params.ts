@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/internal-error';
-import { type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
+import { copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
 import type { FetchResponse, FetchRequest, FetchController, ReferrerPolicy } from '../../../fetch/index';
 
 import type { DOMHighResTimeStamp } from '../../timing/index';
@@ -44,6 +44,10 @@ export class NavigationParams {
   navigationTimingType: NavigationTimingType = 'navigate';
   /** Inherited base for an about:blank or srcdoc document, when applicable. */
   aboutBaseURL: URLRecord | null = null;
+  /** Cookie lookup URL selected for the destination document. */
+  // https://github.com/whatwg/html/issues/332
+  // TODO: local-URL navigation must capture the initiator's (blank) or embedder's (srcdoc) cookie URL.
+  cookieURL: URLRecord;
   /** User involvement passed to history finalization. */
   userInvolvement: UserNavigationInvolvement = 'browser UI';
   /** Start of a supplied-response navigation, used when no Fetch controller exists. */
@@ -56,6 +60,7 @@ export class NavigationParams {
   ) {
     this.response = response;
     this.origin = obtainURLOrigin(this.url);
+    this.cookieURL = copyURL(this.url);
     this.finalSandboxingFlagSet = finalSandboxingFlagSet;
     this.#startTime = startTime;
   }

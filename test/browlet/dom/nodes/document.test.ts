@@ -46,6 +46,44 @@ describe('Document', () => {
     expect(document.loadTimingInfo.navigationStartTime)
       .toBe(0);
     expect(document.isInitialAboutBlank).toBe(false);
+    expect(document.referrer).toBe('');
+    expect(document.currentDocumentReadiness).toBe('complete');
+    expect(document.duringLoadingNavigationID).toBeNull();
+    expect(document.aboutBaseURL).toBeNull();
+    expect(document.bfcacheBlockingDetails.size).toBe(0);
+    expect(document.openDialogs).toEqual([]);
+  });
+
+  it('allocates an independent mutable about:blank URL for each document', () => {
+    const first = createTestDocument();
+    const second = first.createDocumentNode();
+
+    expect(second.url).not.toBe(first.url);
+    first.url.fragment = 'first';
+    expect(first.URL).toBe('about:blank#first');
+    expect(second.URL).toBe('about:blank');
+    expect(first.createDocumentNode().URL).toBe('about:blank');
+  });
+
+  it('allocates independent document policy, module, and dialog state', () => {
+    const first = createTestDocument();
+    const second = first.createDocumentNode();
+
+    expect(second.policyContainer).not.toBe(first.policyContainer);
+    expect(second.permissionsPolicy).not.toBe(first.permissionsPolicy);
+    expect(second.openerPolicy).not.toBe(first.openerPolicy);
+    expect(second.moduleMap).not.toBe(first.moduleMap);
+    expect(second.moduleMap.entries).not.toBe(first.moduleMap.entries);
+    expect(second.bfcacheBlockingDetails).not.toBe(first.bfcacheBlockingDetails);
+    expect(second.openDialogs).not.toBe(first.openDialogs);
+  });
+
+  it('makes DOMImplementation-created documents ready for post-load tasks immediately', () => {
+    const document = createTestDocument();
+    const xml = document.implementation.createDocument(null, '', null);
+    const html = document.implementation.createHTMLDocument();
+
+    expect([xml.readyForPostLoadTasks, html.readyForPostLoadTasks]).toEqual([true, true]);
   });
 
   it('initializes an empty CSP list once the document origin is known', () => {
@@ -103,6 +141,13 @@ describe('Document', () => {
       document.url = documentURL(url);
       expect(document.baseURI).toBe(url);
     }
+  });
+
+  it.each([false, true])('preserves the inherited about base URL when cloning a document (subtree=%s)', (subtree) => {
+    const document = createTestDocument();
+    document.aboutBaseURL = documentURL('https://example.test/parent/');
+
+    expect(document.cloneNode(subtree).baseURI).toBe('https://example.test/parent/');
   });
 
   it('uses an iframe srcdoc document\'s inherited base independently of its current URL', () => {

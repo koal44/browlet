@@ -6,7 +6,7 @@ import { LinkStyleMixin } from '../../../../style/index';
 import { getBlockingTokens, blockingAttribute } from '../attributes/index';
 import type { BrowletEnvironment } from '../../../../environment';
 
-import { defineElementInterface, type ElementCreationContext } from '../../element';
+import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';
 import { HTMLElementImpl } from '../html-element';
 
@@ -71,17 +71,13 @@ export const htmlStyleElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLStyleElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['style'],
   members: [
     roAttr('blocking', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
     ),
   ],
-});
-
-export const htmlStyleElementInterface = defineElementInterface({
-  definition: htmlStyleElementIDL,
-  localNames: ['style'],
-  namespaceURI: HTML_NAMESPACE,
 });
 
 /*

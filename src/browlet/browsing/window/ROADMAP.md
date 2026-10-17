@@ -23,8 +23,11 @@ HTML §2.6.5's `DOMStringList` is available, and Document's initialized ancestor
 origins retain that implementation. `Location.ancestorOrigins` is still absent:
 Location needs relevant-Document selection, its retained empty DOMStringList for
 a null Document, the entry settings object's origin-domain check, and the return
-of the Document's initialized list. Nested ancestry initialization separately
-needs the parent-origin chain and referrer-policy masking; it currently throws.
+of the Document's initialized list. Document now implements the parent-origin
+chain and referrer-policy masking in [§3.1.3](../../html/ROADMAP.md#section-313-ancestor-origins).
+Child navigation still needs its container association before it can initialize
+those lists in production; ancestry initialization itself accepts the parent
+document before activation.
 Do not replace these missing paths with an empty list or omit the security check.
 
 Native context/global-proxy allocation and reuse are implemented through the

@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Option selection state owned independently of its selected content attribute. */
@@ -52,14 +51,10 @@ export const htmlOptionElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLOptionElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['option'],
   members: [
     attr('defaultSelected', idlType.boolean, xattr('CEReactions', reflect({ name: 'selected' }))),
     attr('selected', idlType.boolean),
   ],
-});
-
-export const htmlOptionElementInterface = defineElementInterface({
-  definition: htmlOptionElementIDL,
-  localNames: ['option'],
-  namespaceURI: HTML_NAMESPACE,
 });

@@ -3,7 +3,6 @@ import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '
 
 import { loadingAttribute } from '../attributes/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Iframe loading policy and the continuation retained while navigation is deferred. */
@@ -49,14 +48,10 @@ export const htmlIFrameElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLIFrameElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['iframe'],
   members: [
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
   ],
-});
-
-export const htmlIFrameElementInterface = defineElementInterface({
-  definition: htmlIFrameElementIDL,
-  localNames: ['iframe'],
-  namespaceURI: HTML_NAMESPACE,
 });

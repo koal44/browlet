@@ -20,6 +20,7 @@ import {
   htmlFormElementIDL, htmlInputElementIDL, htmlSelectElementIDL, htmlOptionElementIDL, htmlOptGroupElementIDL,
   htmlFormControlsCollectionIDL, radioNodeListIDL, htmlOptionsCollectionIDL,
 } from './forms/index';
+import { htmlDialogElementIDL } from './interactive/index';
 
 export const htmlIDLDefinitions: Definition[] = [
   htmlOrSVGOrMathMLElementIDL,
@@ -51,4 +52,5 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlFormControlsCollectionIDL,
   radioNodeListIDL,
   htmlOptionsCollectionIDL,
+  htmlDialogElementIDL,
 ];

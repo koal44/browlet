@@ -2,7 +2,6 @@ import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, defineInterface, idlType, impl, reflect, reflectSetter, xattr } from '../../../../../web-idl/index';
 import { serializeURL, type URLRecord } from '../../../../../url/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Supplies the document base URL and default navigation target. */
@@ -82,14 +81,10 @@ export const htmlBaseElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLBaseElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['base'],
   members: [
     attr('href', idlType.USVString, xattr('CEReactions', reflectSetter())),
     attr('target', idlType.DOMString, xattr('CEReactions', reflect())),
   ],
-});
-
-export const htmlBaseElementInterface = defineElementInterface({
-  definition: htmlBaseElementIDL,
-  localNames: ['base'],
-  namespaceURI: HTML_NAMESPACE,
 });

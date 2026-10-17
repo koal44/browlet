@@ -13,7 +13,7 @@ See [README.md](README.md) for current contracts and module ownership.
 | Partial-response retention/combination and local evaluation of authored preconditions | [Fetch cache](../fetch/ROADMAP.md#http-cache). Range and authored-conditional requests currently use the network. Reuse the tested helpers marked UNUSED in headers.ts when this work begins. |
 | Same-origin Location/Content-Location invalidation targets | Fetch currently invalidates the request URI and all variants. Extend URI selection under RFC 9111 §4.4. |
 | Qualified no-cache and must-understand storage | Extend cache.ts only alongside matching Fetch storage support; conservative handling remains valid. |
-| Document cookie access | HTML supplies non-HTTP access and live browser context to the existing store. |
+| Document cookie access | Implemented by HTML over this store; third-party policy and cookie-averse browser differences stay with their owners. |
 | Session-only cookies, additional third-party restrictions, persistence, and CHIPS | Explicit browser policy/storage work. The reviewed layered draft does not define Partitioned processing. |
 | Proxy authentication | Requires a configured proxy/tunnel transport, proxy identity, and proof credentials do not leak to the origin. The current direct transport declines proxy prompts. |
 | Other authentication schemes, Retry-After scheduling, or trailer consumers | Add only with a concrete consumer and its scheme/retry/transport contract. Parsing a header does not enable the behavior. |
@@ -146,8 +146,10 @@ and Gecko CookieParser::GetExpiry/CookieCommons::MaybeCapExpiry.
 UserAgent.cookiesEnabled suppresses sending and storage without deleting the jar.
 Third-party access is permitted subject to SameSite; stronger restrictions and
 session-only policy remain explicit future work. Cookie isSecure follows the
-request's HTTPS scheme, independently of BrowletEnvironment.isSecureContext. Document
-access, actual iframe/worker lifecycle, and CHIPS need their respective owners.
+request's HTTPS scheme, independently of BrowletEnvironment.isSecureContext.
+[Document access](../browlet/html/ROADMAP.md#section-314-resource-metadata) uses the same
+store with HttpOnly access disabled and live ancestor-site policy. Actual
+iframe/worker lifecycle and CHIPS still need their respective owners.
 
 ## Transport boundary and evidence
 

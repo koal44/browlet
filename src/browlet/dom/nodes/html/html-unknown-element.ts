@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
-import { defineElementInterface } from '../element';
 import { HTMLElementImpl } from './html-element';
 
 /** Represents an unrecognized HTML element name. */
@@ -23,10 +22,6 @@ export const htmlUnknownElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLUnknownElementImpl),
-  members: [],
-});
-
-export const htmlUnknownElementInterface = defineElementInterface({
-  definition: htmlUnknownElementIDL,
   namespaceURI: HTML_NAMESPACE,
+  members: [],
 });

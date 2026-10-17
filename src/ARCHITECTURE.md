@@ -449,6 +449,13 @@ Embedded HTML element classes participate in the cooperating node implementation
 family, including element selection and Web IDL declaration collection. The earlier
 separate layer contained only image-map lookup; it no longer describes this family.
 
+Element declarations carry optional `namespaceURI` and `localNames` metadata.
+The node family's element lookup derives namespace/name-to-implementation mappings
+from the existing HTML, SVG, and MathML declaration collections, independently of
+BindingWorld. Document selects a constructor and uses its existing node factory
+for allocation. Namespace and unknown-name fallbacks remain element-selection
+rules; there are no companion element-interface declarations or registration list.
+
 `dom/nodes/html/attributes/` owns shared HTML element attribute definitions and
 closely related state rules. This directory sits above microsyntaxes and below
 node implementations in the dependency hierarchy despite its physical location.

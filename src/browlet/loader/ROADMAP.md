@@ -9,6 +9,12 @@ response, header, body, cancellation, and fetch-algorithm semantics. This
 directory supplies HTML settings, policy, task, navigation, and element inputs;
 it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 
+Document creation retains a valid response `Last-Modified` date for
+`document.lastModified`. The source-only route supplies no such metadata, so
+the getter uses the current time. A future local-file loader must populate
+`Document.lastModificationTime` from filesystem metadata; this getter does not
+read files itself. See the [resource metadata slice](../html/ROADMAP.md#section-314-resource-metadata).
+
 | Source / planned source | Contract | Specification |
 | --- | --- | --- |
 | `Navigable.loadHTMLDocument()` in `browsing/navigation/` | Document creation and streamed HTML load coordination using this directory's ResourceReader; encoding-restart byte retention remains pending | HTML §§7.4–7.5 and 13.2.3 |

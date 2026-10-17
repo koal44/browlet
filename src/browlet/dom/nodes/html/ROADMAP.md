@@ -21,6 +21,15 @@ Their co-located IDL fragments are exposed; `HTMLFormElement` replaces the old
 declaration-only FormData identity. Form-owner association, radio-group updates,
 automatic selection, and selectedcontent remain explicit owner stubs.
 
+The [Document §3.1.1 slice](../../../html/ROADMAP.md#section-311-document-state-and-declarations)
+adds [`HTMLDialogElementImpl`](interactive/dialog.ts) so Document's `openDialogs`
+list retains concrete dialogs. Only element selection and platform identity are
+present. HTML construction, `open`, `returnValue`, `closedBy`, `show()`,
+`showModal()`, `close()`, and `requestClose()` remain §4.11.4 dependencies, along
+with list membership, focus, top-layer/inertness, close watchers, and dialog
+events. Do not equate the list with every element that happens to have an `open`
+attribute or claim that creating a dialog implements its opening lifecycle.
+
 ## Early platform slice
 
 Implement these in dependency order before filling out the element catalog.

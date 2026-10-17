@@ -44,6 +44,10 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
 
   /** TypeScript parameters shared by the generated instance's members and inferred by its constructors. */
   typeParameters?: TypeParameter[];
+  /** Element namespace used by the host's element-constructor lookup; not part of IDL syntax. */
+  namespaceURI?: string;
+  /** Element local names selecting this interface's implementation within its namespace. */
+  localNames?: string[];
 };
 
 /** Declare an interface; `Env` describes the environment required by its binding hooks. */

@@ -5,7 +5,7 @@ import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
 import { LinkStyleMixin } from '../../../style/index';
 import type { BrowletEnvironment } from '../../../environment';
 
-import { defineElementInterface, type ElementCreationContext } from '../element';
+import type { ElementCreationContext } from '../element';
 import { SVGElementImpl } from './element';
 
 /** Associates inline SVG stylesheet text with its tree scope. */
@@ -47,13 +47,9 @@ export const svgStyleElementIDL = defineInterface({
   inherits: 'SVGElement',
   exposed: 'Window',
   implementation: impl(SVGStyleElementImpl),
-  members: [],
-});
-
-export const svgStyleElementInterface = defineElementInterface({
-  definition: svgStyleElementIDL,
-  localNames: ['style'],
   namespaceURI: SVG_NAMESPACE,
+  localNames: ['style'],
+  members: [],
 });
 
 /*

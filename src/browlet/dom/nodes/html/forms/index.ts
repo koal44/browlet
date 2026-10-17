@@ -1,8 +1,8 @@
-export { HTMLFormElementImpl, htmlFormElementIDL, htmlFormElementInterface } from './form';
-export { HTMLInputElementImpl, htmlInputElementIDL, htmlInputElementInterface } from './input';
-export { HTMLSelectElementImpl, htmlSelectElementIDL, htmlSelectElementInterface } from './select';
-export { HTMLOptionElementImpl, htmlOptionElementIDL, htmlOptionElementInterface } from './option';
-export { HTMLOptGroupElementImpl, htmlOptGroupElementIDL, htmlOptGroupElementInterface } from './optgroup';
+export { HTMLFormElementImpl, htmlFormElementIDL } from './form';
+export { HTMLInputElementImpl, htmlInputElementIDL } from './input';
+export { HTMLSelectElementImpl, htmlSelectElementIDL } from './select';
+export { HTMLOptionElementImpl, htmlOptionElementIDL } from './option';
+export { HTMLOptGroupElementImpl, htmlOptGroupElementIDL } from './optgroup';
 export {
   HTMLFormControlsCollectionImpl, htmlFormControlsCollectionIDL, RadioNodeListImpl, radioNodeListIDL,
 } from './form-controls-collection';

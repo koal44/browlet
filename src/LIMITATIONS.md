@@ -184,6 +184,13 @@ unimplemented HTML state (focus/editing, form controls, media, or custom-element
 state) still reach explicit missing host operations in the DOM adapter. These
 are recorded in the [4F scope](browlet/dom/nodes/ROADMAP.md#collections-tree-mixins-and-selectors-4f).
 
+Document and ShadowRoot expose `activeElement`, but reading it currently throws
+at the explicit `Document.focusedArea` dependency. The getter's retargeting and
+fallback steps are implemented; document focus state and its lifecycle are not.
+The [interaction roadmap](browlet/interaction/ROADMAP.md#focused-area-dependency)
+records the remaining work. Getter tests supply focus state explicitly and do
+not establish end-to-end focus support.
+
 Element attribute setters, Attr attachment, and attached `Attr.value`,
 `nodeValue`, and `textContent` writes enforce Trusted Types. Their common change
 path delivers mutation records through the same observer machinery as structural
@@ -244,6 +251,16 @@ explicit standard content-handler list used for sink metadata.
 
 ## HTML integration gates
 
+- **Document metadata depends on the loader's inputs.** Response-based document
+  creation retains `Last-Modified`; the source-only route has no response date
+  and local-file modification metadata is not connected. Unknown dates use the
+  current local time. Document cookies share Fetch's store and use a captured
+  cookie URL. Inherited about:blank/srcdoc access requires the missing iframe
+  and navigation-initiator producers to supply that URL; history recreation
+  must preserve it too. Sandboxed inherited srcdoc throws, following
+  Chromium/Firefox rather than WebKit. See the
+  [resource metadata audit](browlet/html/ROADMAP.md#section-314-resource-metadata).
+
 - **Lazy loading is scaffolding, not operational resource loading.** Basic
   image/iframe/audio/video classes expose `loading` and retained continuations,
   and Document now uses an internal observer scaffold with real registrations
@@ -298,8 +315,12 @@ route also remains. Neither establishes full HTML navigation, encoding restart,
 script readiness, Link/preload processing, load-event ordering, or public timing
 entries. Fragment and `javascript:` navigation still need their specified paths.
 
-Nested/auxiliary creation stops at explicit missing creator-state and ancestry
-helpers. Policy inheritance, child navigation, history disposal, and storage-shed
+Nested/auxiliary creation stops at explicit missing creator-state and container
+associations. Ancestor-origin calculation and referrer-policy masking accept
+the known parent document before activation; they do not complete those
+[child-navigation dependencies](browlet/html/ROADMAP.md#section-313-ancestor-origins).
+`Location.ancestorOrigins` remains absent until relevant-document selection and
+its security check are implemented. Policy inheritance, child navigation, history disposal, and storage-shed
 cloning remain with [browsing](browlet/browsing/ROADMAP.md) and
 [navigation](browlet/browsing/navigation/ROADMAP.md). Custom-element registry
 identity is present; reactions and upgrade behavior remain with

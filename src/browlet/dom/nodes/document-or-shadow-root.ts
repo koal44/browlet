@@ -1,40 +1,48 @@
 import {
-  defineInterfaceMixin, nullable, roAttr, reference,
+  defineInterfaceMixin, definePartialInterfaceMixin, nullable, roAttr, reference,
 } from '../../../web-idl/index';
-import type { TreeScope, CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
+import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
 
-import type { CustomElementRegistryImpl } from './html/custom-elements/index';
+import type { DocumentImpl } from './document';
+import type { ElementImpl } from './element';
+import type { ShadowRootImpl } from './shadow-root';
 
-/** Registry access and style-sheet ownership shared by documents and shadow roots. */
+/** Focus and style-sheet behavior shared by documents and shadow roots. */
 // https://dom.spec.whatwg.org/#mixin-documentorshadowroot
 export class DocumentOrShadowRootMixin {
-  /** Access to the includer's registry and lazily initialized style scope. */
-  #options: DocumentOrShadowRootMixinOptions;
+  /** Document or shadow root including this mixin. */
+  #root: DocumentImpl | ShadowRootImpl;
 
-  constructor(options: DocumentOrShadowRootMixinOptions) {
-    this.#options = options;
+  constructor(root: DocumentImpl | ShadowRootImpl) {
+    this.#root = root;
   }
 
-  /** Registry currently associated with the containing document or shadow root. */
-  // https://dom.spec.whatwg.org/#dom-documentorshadowroot-customelementregistry
-  get customElementRegistry(): CustomElementRegistryImpl | null {
-    return this.#options.getCustomElementRegistry();
+  /** Focused area's element visible from this tree, with the document's body/root fallback. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#dom-document-activeelement
+  get activeElement(): ElementImpl | null {
+    const root = this.#root;
+    const anchor = root.nodeDocument.focusedArea.domAnchor;
+    // A focus anchor is a Document or Element; retargeting can only replace it with a shadow host.
+    const candidate = anchor.retargetAgainst(root) as DocumentImpl | ElementImpl;
+    if (candidate.getRoot() !== root) return null;
+    if (!candidate.isDocument()) return candidate;
+    return candidate.body ?? candidate.documentElement;
   }
 
   /** Sheets supplied by style and link nodes in this tree scope. */
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-stylesheets
   get styleSheets(): StyleSheetListImpl {
-    return this.#options.getStyleScope().styleSheets;
+    return this.#root.getStyleScope().styleSheets;
   }
 
   /** Constructed sheets adopted by this tree scope. */
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-adoptedstylesheets
   get adoptedStyleSheets(): CSSStyleSheetImpl[] {
-    return this.#options.getStyleScope().adoptedStyleSheets;
+    return this.#root.getStyleScope().adoptedStyleSheets;
   }
 
   set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
-    this.#options.getStyleScope().setAdoptedStyleSheets(styleSheets);
+    this.#root.getStyleScope().setAdoptedStyleSheets(styleSheets);
   }
 }
 
@@ -48,9 +56,13 @@ export const documentOrShadowRootIDL = defineInterfaceMixin({
   members: [roAttr('customElementRegistry', nullable(reference('CustomElementRegistry')))],
 });
 
-type DocumentOrShadowRootMixinOptions = {
-  /** Read the includer's current custom element registry. */
-  getCustomElementRegistry(): CustomElementRegistryImpl | null;
-  /** Initialize or retrieve the tree scope used for CSSOM operations. */
-  getStyleScope(): TreeScope;
-};
+/*
+ * partial interface mixin DocumentOrShadowRoot {
+ *   readonly attribute Element? activeElement;
+ * };
+ */
+// https://html.spec.whatwg.org/multipage/dom.html#the-documentorshadowroot-interface
+export const htmlDocumentOrShadowRootIDL = definePartialInterfaceMixin({
+  name: 'DocumentOrShadowRoot',
+  members: [roAttr('activeElement', nullable(reference('Element')))],
+});

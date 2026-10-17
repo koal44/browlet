@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { defineInterface, impl } from '../../../../../web-idl/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLMediaElementImpl } from './media';
 
 /** Video element's media and independent poster-loading continuations. */
@@ -39,11 +38,7 @@ export const htmlVideoElementIDL = defineInterface({
   inherits: 'HTMLMediaElement',
   exposed: 'Window',
   implementation: impl(HTMLVideoElementImpl),
-  members: [],
-});
-
-export const htmlVideoElementInterface = defineElementInterface({
-  definition: htmlVideoElementIDL,
-  localNames: ['video'],
   namespaceURI: HTML_NAMESPACE,
+  localNames: ['video'],
+  members: [],
 });

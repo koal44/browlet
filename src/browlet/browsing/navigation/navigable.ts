@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/internal-error';
-import { areSameOrigin, areSameOriginDomain, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
+import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
@@ -107,8 +107,15 @@ export class Navigable {
   /** The element embedding this navigable, or null when it has no container. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container
   get container(): ElementImpl | null {
-    // PROVISIONAL: connect the container's content navigable when child navigables are implemented.
+    // TODO: connect the container's content navigable when child navigables are implemented.
+    if (this.parent !== null) throw new InternalError('Child navigable container association is not implemented');
     return null;
+  }
+
+  /** Node document of the embedding element, or null without a container. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#nav-container-document
+  get containerDocument(): DocumentImpl | null {
+    return this.container?.nodeDocument ?? null;
   }
 
   allowedToPerformNavigationOrHistoryUpdate(): 'allowed' | 'blocked' {
@@ -226,11 +233,12 @@ export class Navigable {
     document.url = creationURL;
     document.currentDocumentReadiness = 'loading';
     document.aboutBaseURL = params.aboutBaseURL;
+    document.cookieURL = copyURL(params.cookieURL);
     document.allowDeclarativeShadowRoots = true;
     document.customElementRegistry = new CustomElementRegistryImpl();
 
     window.setAssociatedDocument(document);
-    document.initializeAncestry(params.iframeReferrerPolicy);
+    document.initializeAncestry(params.iframeReferrerPolicy, this.containerDocument);
     document.initializeInsecureRequestsPolicy();
     document.initializeCSP();
     document.initializeReferrer(params.request);

@@ -7,6 +7,7 @@ import {
 import {
   svgStyleElementIDL, svgStyleElementIncludesLinkStyleIDL,
 } from './style-element';
+import { svgScriptElementIDL } from './script-element';
 
 export const svgIDLDefinitions: Definition[] = [
   svgElementIDL,
@@ -14,4 +15,5 @@ export const svgIDLDefinitions: Definition[] = [
   svgElementIncludesHTMLOrSVGOrMathMLElementIDL,
   svgStyleElementIDL,
   svgStyleElementIncludesLinkStyleIDL,
+  svgScriptElementIDL,
 ];

@@ -5,6 +5,8 @@
 - `element.ts`: `SVGElement` base identity and inline-style integration.
 - `style-element.ts`: `SVGStyleElement` and document tree-scope style-sheet
   association.
+- `script-element.ts`: concrete `SVGScriptElement` identity required by HTML
+  §3.1.1's `HTMLOrSVGScriptElement` typedef. This does not prepare or execute scripts.
 - `web-idl.ts`: SVG contributions to Browlet's final Web IDL assembly.
 
 ## Missing
@@ -14,6 +16,9 @@
   elements required by Selectlet/Stylelet scenarios.
 - [ ] Add SVG animated value types, geometry, presentation-attribute
   reflection, and SVG-specific event/CSSOM integration from SVG 2.
+- [ ] Complete SVGScriptElement's `type` and `crossOrigin` attributes,
+  `SVGURIReference`/animated `href` dependency, and SVG script preparation,
+  loading, and execution. HTML's `currentScript` consumer is still pending.
 - [ ] Complete HTML foreign-content parser adjustments for SVG names and
   attributes (HTML §13.2.6, foreign-content rules).
 

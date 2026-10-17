@@ -91,7 +91,21 @@ minimal concrete [form-control owners](browlet/dom/nodes/html/forms/ROADMAP.md).
 Form membership, radio grouping, automatic selection, and selectedcontent remain
 explicit stubs; three approved expected-failure tests expose the first three gaps.
 §2.6.5 supplies DOMStringList, now retained by Document ancestry initialization;
-nested ancestry and Location's relevant-document/security integration remain pending.
+child navigation and Location's relevant-document/security integration remain pending.
+The [§3.1.1 slice](browlet/html/ROADMAP.md#section-311-document-state-and-declarations)
+supplies Document's required initial state, inherited-base cloning hook, and
+declared types, with minimal dialog/SVG-script identities and readonly
+referrer/readiness projection. Its complete member inventory keeps later
+algorithms explicit. The [§3.1.2 contribution](browlet/html/ROADMAP.md#section-312-documentorshadowroot-contribution)
+adds the active-element declaration and getter while leaving Document's focused
+area as an explicit throwing dependency on §6.6. The
+[§3.1.3 slice](browlet/html/ROADMAP.md#section-313-ancestor-origins) supplies
+ancestor-origin lists and policy masking, with explicit parent input before
+activation and child-navigation dependencies recorded. The
+[§3.1.4 slice](browlet/html/ROADMAP.md#section-314-resource-metadata) adds Document cookie
+access and response modification dates; local-file metadata remains a loader dependency,
+and inherited cookie URLs still need iframe/initiator and history-restoration producers.
+Continue subsection by subsection with §3.1.5's loading status.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

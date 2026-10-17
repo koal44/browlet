@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/internal-error';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType, impl, reference, roAttr,
 } from '../../../web-idl/index';
-import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
+import type { TreeScope, CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
 
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import type { EventImpl, EventTargetImpl } from '../events/index';
@@ -40,7 +40,7 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   /** Whether adoption must preserve an explicitly absent registry. */
   keepCustomElementRegistryNull = false;
 
-  /** Registry and style-sheet behavior shared with documents. */
+  /** Focus and style-sheet behavior shared with documents. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   /** IDL handler registration shares the ordinary event listener ordering. */
   #eventHandlers = new EventHandlerMap(this, [{ name: 'onslotchange', type: 'slotchange' }]);
@@ -48,12 +48,7 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   constructor(host: ElementImpl, mode: ShadowRootMode, env: DOMEnvironment) {
     super(host.nodeDocument, host, env);
     this.mode = mode;
-    this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
-      getCustomElementRegistry: () => this.customElementRegistry,
-      getStyleScope() {
-        throw new InternalError('Shadow-root style scopes are not implemented');
-      },
-    });
+    this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin(this);
   }
 
   static is(value: unknown): value is ShadowRootImpl {
@@ -69,6 +64,11 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
     this.#eventHandlers.set('onslotchange', callback);
   }
 
+  /** Focused element visible within this shadow tree. */
+  get activeElement(): ElementImpl | null {
+    return this.#documentOrShadowRootMixin.activeElement;
+  }
+
   get styleSheets(): StyleSheetListImpl {
     return this.#documentOrShadowRootMixin.styleSheets;
   }
@@ -79,6 +79,12 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
     this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
+  }
+
+  /** Initialize or retrieve the style scope for this shadow tree. */
+  getStyleScope(): TreeScope {
+    // TODO: create and retain the shadow tree's style scope.
+    throw new InternalError('Shadow-root style scopes are not implemented');
   }
 
   override getShadowRootHost(): ElementImpl {

@@ -44,6 +44,28 @@ download/POST handling, nested navigables, reload, traversal, unloading,
 ongoing-navigation cancellation, and full history-step application (HTML
 §7.4).
 
+Document implements [§3.1.3 ancestor-origin snapshots](../../html/ROADMAP.md#section-313-ancestor-origins).
+Child navigation must supply the navigable/container association, fully-active
+ancestry, and iframe referrer policy. `Navigable.container` throws for children
+until that association exists. Creation passes the known container document to
+ancestry initialization before activation, or uses the embedder's node document
+before an initial navigable exists. Do not substitute the parent navigable's
+active document for the embedding element's node document.
+
+The [resource metadata slice](../../html/ROADMAP.md#section-314-resource-metadata)
+retains `Document.cookieURL` independently of the document and base URLs.
+`NavigationParams.cookieURL` starts with the response URL. Initial blank creation
+copies the creator's cookie URL once creator support exists; srcdoc navigation
+must capture the embedder's cookie URL, and later blank navigation must capture
+the initiator's. Supply those inputs with inherited origin/base/policy state,
+including the cookie URL when sandboxing makes the origin opaque. That allows
+the cookie accessor to throw rather than silently deny sandboxed srcdoc access.
+Do not recover the URL from an origin or consult the live parent on each access.
+History restoration must retain it when recreating a Document, while
+push/replace-state and fragment changes leave it alone. See
+[WHATWG HTML #332](https://github.com/whatwg/html/issues/332) and the approved
+clashes in the metadata audit.
+
 Navigation/form request construction must set Fetch's `isFormSubmission` for
 GET and POST forms, so Upgrade Insecure Requests can distinguish cross-origin
 forms from ordinary links. At both navigation-download and hyperlink-download

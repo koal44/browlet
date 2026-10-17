@@ -477,6 +477,302 @@ must not become one oversized HTML Document module.
 | §3.2.8 bidirectional requirements | Style/layout integration over Unicode bidirectional processing |
 | §3.2.9 ARIA and accessibility APIs | A future `accessibility/` domain consuming semantic element state and the rendered tree |
 
+### Section 3.1 audit (2026-10-16)
+
+Compared the implementation and executable declarations with the current
+[HTML Documents section](https://html.spec.whatwg.org/multipage/dom.html#documents).
+The HTML IDL comment in `document.ts` is an inventory, not evidence that those
+members are implemented. The §3.1.1 slice below adds `referrer` and `readyState`
+to the existing `all`, `head`, read-only `body`, `write`, and `defaultView` surface.
+
+| Section | Present | Missing or incomplete |
+| --- | --- | --- |
+| §3.1 opening requirements | Document URL/origin/referrer state; both DOMImplementation factories now set the post-load-ready flag | URL and origin changes during later navigation/history/domain algorithms remain with those owners. |
+| §3.1.1 Document | Required initial state, about-base-URL cloning hook, declaration types, and concrete dialog/SVG-script identities | Dialog lifecycle and the remaining HTML partial members are explicitly assigned below. |
+| §3.1.2 DocumentOrShadowRoot | HTML partial declaration and shared `activeElement` getter, including retargeting and body/document-element fallback; Selectlet uses the same getter | `Document.focusedArea` is an explicit throwing dependency until §6.6 supplies focus state and its lifecycle. |
+| §3.1.3 ancestor origins | Both list-creation algorithms, referrer-policy masking, retained string snapshots, and explicit parent input before activation | Child navigable/container association and fully-active ancestry remain explicit dependencies. `Location.ancestorOrigins` still needs its §7.2.4 relevant-document/security behavior. |
+| §3.1.4 resource metadata | Referrer, non-HTTP access to the shared cookie store, retained response modification time, and local-time `lastModified` formatting | File navigation must supply filesystem modification times. The source-only route has no response headers; its modification time remains unknown. Cookie-averse browser differences are recorded below. |
+| §3.1.5 loading status | Projected readiness state, load timing fields, redirect flag, provisional parser/local-route completion | No common readiness-update operation, `readystatechange` dispatch/handler, or previous-document unload timing field. Existing completion paths assign readiness directly; full parser/load milestones remain provisional. |
+| §3.1.6 render blocking | Potentially-render-blocking element predicates from §2.5.8 | No Document blocking set, eligibility/timeout predicate, or block/unblock lifecycle. The existing script-blocking stylesheet set is separate. |
+| §3.1.7 tree accessors | `head` and `body` getters, DOM tree/mutation algorithms, reusable live collections and Web IDL named-property machinery | `title`, the `body` setter, document collections and aliases, `getElementsByName`, `currentScript`, and Document named properties are missing. Named-property handling also needs embed/object exposure and child-navigable behavior. `dir` is defined with the later global attribute. |
+
+The audit first reproduced two omissions in
+[`document.test.ts`](../../../test/browlet/dom/nodes/document.test.ts): both factory
+flags remained false, and cloning lost the inherited base URI. The §3.1.1 slice
+fixes both and retains the regressions, including shallow and deep cloning.
+
+Continue with §3.1.5. For the later slices, preserve the existing boundaries: Document owns its state,
+focus supplies active-element behavior, navigation supplies ancestry, loaders
+consume render-blocking state, and Web IDL projects the resulting interfaces.
+
+### Section 3.1.1 Document state and declarations
+
+[`DocumentImpl`](../dom/nodes/document.ts) now accounts for every initial-state
+item in [§3.1.1](https://html.spec.whatwg.org/multipage/dom.html#the-document-object):
+policy container, permissions policy, module map, opener policy,
+`isInitialAboutBlank`, `duringLoadingNavigationID`, `aboutBaseURL`,
+`bfcacheBlockingDetails`, and `openDialogs`. Mutable containers are allocated per
+document. HTML's cloning extension copies `aboutBaseURL` through Node's existing
+cloning hook; navigation, policy, and dialog state are not copied by that hook.
+The opening §3.1 factory requirement is applied in `DOMImplementation`, leaving
+generic Document allocation's post-load-ready default unchanged.
+
+Both Document enums and `HTMLOrSVGScriptElement` are registered declarations.
+The existing referrer and readiness implementation state is now projected as
+readonly attributes. Complete readiness transitions remain §3.1.5 work.
+The minimal [`HTMLDialogElementImpl`](../dom/nodes/html/interactive/dialog.ts)
+and [`SVGScriptElementImpl`](../dom/nodes/svg/script-element.ts) supply concrete
+implementation/platform identities for the list and typedef. Their specialized
+APIs and lifecycle algorithms remain explicit TODOs; introducing these identities
+does not implement dialog opening or SVG script execution.
+
+The full copied Document IDL remains beside its executable declaration. These
+are all its members and contributions, with the current implementation boundary:
+
+| Members or contribution | State and next owner |
+| --- | --- |
+| `DocumentReadyState`, `DocumentVisibilityState`, `HTMLOrSVGScriptElement` | Registered in this slice; SVG script's remaining URI/attribute/execution dependencies are in its [roadmap](../dom/nodes/svg/ROADMAP.md). |
+| `parseHTMLUnsafe`, `parseHTML` | Missing §8.5 parsing and §8.6 sanitization algorithms. `ParseHTMLUnsafeOptions`, `TrustedHTMLParserOptions`, and `SetHTMLOptions` remain undeclared dependencies. TrustedHTML values already exist; parser-specific policy/options processing does not. |
+| `location`, `domain` | Missing §7.2 relevant-document, navigation, and origin/security behavior. Existing Location is still a URL snapshot; retain PutForwards/LegacyUnforgeable requirements when connecting it. |
+| `referrer` | Implemented projection over existing Document state. |
+| `cookie`, `lastModified` | Implemented §3.1.4 accessors over the shared cookie store and retained source metadata; file metadata awaits its loader. |
+| `readyState` | Implemented projection; readiness events and transitions remain §3.1.5. |
+| Anonymous named getter and `LegacyOverrideBuiltIns` | Missing §3.1.7 selection/exposure rules and their Web IDL declaration. |
+| `title`, `body`, `head` | Head/body getters exist. Title and body setter remain §3.1.7; body is still readonly in executable IDL. |
+| `dir` | Missing §3.2.6 global-attribute forwarding. |
+| `images`, `embeds`, `plugins`, `links`, `forms`, `scripts`, `getElementsByName` | Missing §3.1.7 consumers of the existing live collection machinery; preserve SameObject requirements and the embeds/plugins alias. |
+| `currentScript` | Missing §3.1.7 state/getter and §4.12 script-execution maintenance; both concrete script types now exist. |
+| Both `open` overloads, `close`, `write`, `writeln` | §8.4 remains pending. Existing write only forwards DOMStrings to an active parser callback; TrustedHTML conversion, policy enforcement, and the complete insertion lifecycle are absent. The three-argument open overload also needs Window navigation. |
+| `defaultView` | Implemented through the associated browsing context's stable WindowProxy. |
+| `hasFocus`, `designMode` | Missing §6 focus management and editing behavior. |
+| `execCommand`, `queryCommandEnabled`, `queryCommandIndeterm`, `queryCommandState`, `queryCommandSupported`, `queryCommandValue` | Missing editing-command subsystem referenced by HTML; no substitute return values are exposed. |
+| `hidden`, `visibilityState` | Missing Document accessors and visibility-change integration; the enum alone supplies no visibility behavior. |
+| `onreadystatechange`, `onvisibilitychange`, `GlobalEventHandlers` | Missing Document handler members/mixin integration. Shared EventHandler conversion already exists; dispatch and ownership need the relevant loading/visibility/event-handler algorithms. |
+| Obsolete members | `all` is implemented with the recorded native capability gate. The remaining obsolete surface belongs to §16.2. |
+
+`[CEReactions]` on these declarations still depends on custom-element reaction
+delivery. The missing Document members are listed at the declaration site and
+above; they are not enabled through placeholder getters that return defaults.
+This slice completes the subsection's state and type prerequisites, not the
+later chapters' APIs collected in its IDL block.
+
+### Section 3.1.2 DocumentOrShadowRoot contribution
+
+The [HTML partial mixin](https://html.spec.whatwg.org/multipage/dom.html#the-documentorshadowroot-interface)
+lives beside DOM's primary declaration and its shared implementation. Document
+and ShadowRoot forward `activeElement` to that mixin. The
+[getter algorithm](https://html.spec.whatwg.org/multipage/interaction.html#dom-document-activeelement)
+reads the node document's focused area's DOM anchor, reuses DOM retargeting,
+checks the resulting tree root, and applies the document body/root fallback.
+The selector adapter reads the same implementation getter.
+
+`interaction/focus.ts` supplies only the `FocusableArea` DOM-anchor contract.
+`Document.focusedArea` deliberately throws until the focus subsystem can supply
+its state. Initialization, focusing/unfocusing, removal fixup, focus events,
+focusable subparts, and cross-document focus chains remain §6.6 work, tracked in
+the [interaction roadmap](../interaction/ROADMAP.md#focused-area-dependency).
+There is no provisional body-as-focus state or independent active-element cache.
+
+The focused tests supply that missing focus state while retaining real DOM
+trees, retargeting, and platform bindings. They cover both includers, nested
+open/closed shadow roots, unrelated trees, body/frameset/root fallbacks, XML
+documents, adoption, selector access, and borrowed getters. These are getter
+tests, not evidence that author `focus()`/`blur()` or ordinary active-element
+reads work before the dependency is implemented.
+
+### Section 3.1.3 ancestor origins
+
+Document's `initializeAncestry()` now performs both
+[list-creation algorithms](https://html.spec.whatwg.org/multipage/dom.html#ancestor-origins).
+It starts from the container document's retained origin objects, applies the
+iframe referrer policy, and creates a separate DOMStringList of serialized
+origins. The string list is a creation-time snapshot; later ancestry or origin
+changes do not update it. Top-level documents receive distinct empty lists.
+
+`no-referrer` masks the immediate parent and its consecutive same-origin
+ancestors. `same-origin` does so only when parent and child origins differ.
+Each new mask uses a fresh opaque origin. Masking stops at the first different
+origin, and previously masked entries remain opaque. Other referrer policies
+need no extra treatment here; the specification relies on mixed-content checks
+elsewhere. Same-origin comparisons ignore `document.domain` relaxation.
+
+`Document.containerDocument` and `Navigable.containerDocument` follow the
+specified lookups through the embedding element, rather than substituting the
+parent navigable's current document. Child navigable/container association is
+still an explicit throwing dependency in `Navigable.container`; child creation,
+iframe policy selection, and fully-active ancestry remain navigation work.
+The algorithm's fully-active-parent assertion is a caller precondition.
+HTML also reads an unused `container` local; the implementation notes that
+step rather than performing a redundant lookup.
+
+SPEC_CLASH(ancestor-origins-before-activation): the
+[document creation steps](https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object)
+request ancestry before the new document is the navigable's active document,
+but the [container-document lookup](https://html.spec.whatwg.org/multipage/document-sequences.html#doc-container-document)
+uses [node navigable](https://html.spec.whatwg.org/multipage/document-sequences.html#node-navigable),
+which requires that active-document identity. Initial child creation also runs
+before its navigable is initialized. Browlet therefore accepts the parent
+document explicitly: Navigable passes `this.containerDocument`, while initial
+browsing-context creation uses the embedder's node document. This reviewed
+signature adjustment preserves creation and activation order. The conflict is
+our reading of those definitions, not a confirmed upstream issue or evidence of
+deliberately different behavior. Revisit the comment when the specification
+clarifies the lookup; child-container association remains unfinished separately.
+
+SPEC_CLASH(ancestor-origin-policy-masking): Browlet follows HTML's referrer-policy
+masking. Local source inspection on 2026-10-16 found that
+[Blink's Location getter](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/frame/location.cc)
+and [WebKit's Location getter](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/page/Location.cpp)
+collect unmasked ancestor origins. Gecko's
+[normal-navigation implementation](https://searchfox.org/mozilla-central/source/docshell/base/CanonicalBrowsingContext.cpp)
+uses the known browsing context and the new document's supplied origin to apply
+both masking policies, with an additional
+[initial about:blank special case](https://searchfox.org/mozilla-central/source/docshell/base/nsDocShell.cpp).
+These are source observations, not a live-browser interoperability run.
+
+The focused tests cover all four specification examples, every referrer-policy
+value, opaque identity, origin-domain distinctions, snapshots, container
+ownership after parent navigation, and creation before activation or navigable
+initialization. They supply only the missing container
+association and fully-active child state. `Location.ancestorOrigins` remains
+absent pending its [§7.2.4 integration](../browsing/window/ROADMAP.md); these tests
+do not claim working iframe navigation or public Location access.
+
+### Section 3.1.4 resource metadata
+
+[`DocumentImpl`](../dom/nodes/document.ts) implements the
+[resource metadata accessors](https://html.spec.whatwg.org/multipage/dom.html#resource-metadata-management).
+`referrer` continues to expose the value retained during document creation.
+`cookie` uses a document-owned cookie URL captured at creation,
+and delegates parsing, selection, replacement, and eviction to the UserAgent's
+existing HTTP cookie store. Non-HTTP access excludes HttpOnly cookies and
+cannot create or replace them. The Web IDL setter converts to USVString;
+HTML then encodes UTF-8 bytes for the store and decodes returned bytes without
+stripping a BOM. `cookiesEnabled`, Secure, expiry, domain/path, and SameSite
+rules apply through the existing policy and store.
+
+Document owns the live `hasCrossSiteAncestor` query previously implemented
+by WindowEnvironment; the environment forwards to its associated document.
+This is the query defined by HTML's
+[Window settings setup](https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object),
+exposed as the settings object's
+[has cross-site ancestor](https://html.spec.whatwg.org/multipage/webappapis.html#concept-settings-object-has-cross-site-ancestor).
+Fetch still consumes that environment property when selecting SameSite cookies;
+Document shares the ancestor walk for its non-HTTP API.
+Non-HTTP reads permit Strict/Lax/default cookies only in a same-site context,
+and writes use the same condition for accepting them. Cross-site access can
+use Secure SameSite=None cookies. This supplies the browser inputs expected by
+the [layered cookie algorithms](https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.6),
+consistent with [non-HTTP retrieval](https://datatracker.ietf.org/doc/html/draft-ietf-httpbis-rfc6265bis-21#section-5.8.2).
+HTML's [COOKIES reference](https://html.spec.whatwg.org/multipage/references.html#refsCOOKIES)
+still points to RFC 6265. The `6265bis` revision supplies supporting SameSite
+detail; it is not the source of HTML's environment property.
+The HTTP roadmap retains the existing third-party-policy and CHIPS boundaries;
+this slice does not implement iframe navigation.
+
+SPEC_CLASH(document-cookie-averse): approved 2026-10-16, use an inherited cookie
+URL for about:blank/srcdoc, matching Chromium 149.0.7827.55, Firefox 151.0, and
+Windows WebKit 26.5. HTML's literal current-document-URL rule would deny access.
+Detached documents and documents without an HTTP(S) cookie URL still return
+empty and ignore writes. Chromium additionally throws for initial opaque blank
+and data: documents; Browlet retains HTML/Firefox/WebKit's empty/no-op behavior
+when there is no inherited cookie URL. The local
+`scratch/RESOURCE-METADATA-PROBE.mjs` records these cases.
+Relevant source owners are [Blink Document](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/dom/document.cc),
+[Gecko Document](https://searchfox.org/mozilla-central/source/dom/base/Document.cpp),
+and [WebKit Document](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/dom/Document.cpp).
+
+The retained evidence for the approved choice and any future upstream report:
+
+- [WHATWG HTML #332](https://github.com/whatwg/html/issues/332) has tracked this
+  exact disagreement since November 2015 and remains open. In the originating
+  [Mozilla bug](https://bugzilla.mozilla.org/show_bug.cgi?id=1223885#c7), the
+  discussion favored fixing the specification, citing iframe compatibility;
+  Mozilla closed the browser bug as invalid. These documents already inherit
+  their creator's origin, so their cookie access was not judged a same-origin
+  policy violation.
+- Browsers inherit a lookup URL, not a snapshot of cookies. Blink and WebKit
+  retain a document cookie URL; Gecko uses the URI retained by its principal.
+  This retains the scheme, host, and path needed by cookie selection. An origin
+  alone has no path, and the document's base URL can be changed by author markup.
+  See [the implementer explanation](https://github.com/whatwg/html/issues/332#issuecomment-156138064)
+  and [Blink's current initialization](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/dom/document_init.cc).
+- [Policy-container work](https://github.com/whatwg/html/issues/4926#issuecomment-740644312)
+  explicitly deferred cookie URL integration. A
+  [2024 WebKit fix](https://github.com/WebKit/WebKit/commit/4973ae3a5e854e1e056dedcbced9c1db450bc6f0)
+  also adopted the inherited cookie URL for Cookie Store API access from
+  about:blank/srcdoc frames. This is maintained behavior, not just an old accident.
+- The local `scratch/COOKIE-INHERITANCE-PROBE.mjs` confirms the common behavior
+  in Chromium 149.0.7827.55, Firefox 151.0, and Windows WebKit 26.5. From a
+  parent at `/a/page`, both inherited frames read `/a` cookies, see subsequent
+  shared-store updates, and use `/a` as the default path for writes. A `<base>`
+  pointing at `/unrelated/` does not alter this. A separate `/b/check` document
+  cannot see those path-scoped writes.
+- The cookie URL is copied when creating a document. It is independent of
+  `baseURI`, `document.domain`, subsequent URL mutation, and the creator's later
+  navigation; cookie contents remain live in the shared store. Initial blank
+  and srcdoc creation use creator/embedder provenance; later about:blank
+  navigations need the initiator. Blink still records incomplete initiator
+  handling in [bug 1176291](https://crbug.com/1176291).
+
+`NavigationParams.cookieURL` carries the selected URL into document creation,
+defaulting to the response URL for ordinary navigation. Missing iframe and
+initiator navigation must supply the inherited cookie URL together with their
+origin/base/policy inputs. Initial blank creation includes the creator copy,
+but still throws at its existing creator/embedder dependency gates. The source
+route has no initiator and does not guess one from the departing document.
+History restoration must preserve the captured cookie URL if it recreates a
+Document; that integration remains with navigation. These are explicit gaps,
+not claims that iframe loading or History APIs work.
+
+SPEC_CLASH(document-cookie-url-history): approved 2026-10-16, preserve the captured
+cookie URL. The same probe found that all three
+engines retain `/a` cookie access after `history.replaceState()` changes the
+parent's document URL to `/b/after`; the existing blank/srcdoc children retain
+it too. HTML's literal current-document-URL rule would select `/b` cookies for
+the parent. Browlet follows the browsers.
+
+SPEC_CLASH(document-cookie-sandbox): approved 2026-10-16, throw SecurityError for
+sandboxed srcdoc with an inherited HTTP(S) cookie URL and an opaque origin.
+With `sandbox="allow-scripts"`
+and no `allow-same-origin`, Chromium and Firefox throw SecurityError for both
+accessors. Windows WebKit returns empty and ignores writes, consistent with
+HTML's literal cookie-averse-before-opaque-origin ordering. HTML's introductory
+description says sandboxed opaque documents throw, so its own prose and detailed
+steps disagree here too. All three engines deny cookie access. The probe retains
+a failing SecurityError expectation for WebKit; its exit status is nonzero.
+Browlet follows Chromium/Firefox's exception behavior and can revisit this
+separately from inherited cookie access.
+
+Response integration parses `Last-Modified` once into optional Unix milliseconds.
+It reuses HTTP's `parseHTTPDate()`. Cookie Expires parsing remains in HTTP's
+`parseCookieDate()` and needs no new HTML parser. HTML's date microsyntaxes use
+ISO-style input forms, while HTTP's date serializer emits UTC IMF-fixdate;
+neither produces this accessor's required local `MM/DD/YYYY hh:mm:ss` format.
+The getter formats local calendar components with ASCII padding and reads the
+current time on each access when the date is unknown. The current local timezone
+comes from the host Date implementation. The source-only route has no response
+date; a future file loader must provide filesystem modification time through
+`lastModificationTime`. No filesystem read is hidden in the getter.
+
+SPEC_CLASH(document-last-modified-timezone): approved 2026-10-16, preserve Date's
+historical local-time conversion. On Windows in Pacific time, the response date
+`Sun, 06 Nov 1994 08:49:37 GMT` produced `11/06/1994 00:49:37` in Chromium
+149.0.7827.55 but `11/06/1994 01:49:37` in Firefox 151.0 and WebKit 26.5.
+All three browsers' JavaScript Date objects reported `00:49:37 GMT-0800` for
+that instant. The difference persisted without a Playwright timezone override.
+This is observed Windows behavior, not a claim about all Gecko/WebKit platforms;
+the test preserves the source instant after local formatting and parsing.
+
+[`resource-metadata.test.ts`](../../../test/browlet/dom/nodes/resource-metadata.test.ts)
+covers the projected accessors, Fetch sharing, policy checks, UTF-8 bytes,
+cookie URL inheritance and independence, sandbox exceptions, exception realms,
+response retention, and date formatting. The inheritance tests supply the
+missing navigation inputs explicitly; the History regression applies its URL
+mutation directly until the public API exists.
+The existing environment tests also exercise non-HTTP reads and writes through
+real document ancestry, including a live transition from cross-site to same-site.
+
 ## HTML section 4 ownership
 
 Section 4 defines every HTML element, but only a small subset is prerequisite

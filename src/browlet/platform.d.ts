@@ -5,6 +5,10 @@
 /** Inherit static properties; each interface supplies its own construction, prototype, and brand. */
 type Ctor<T> = Omit<T, 'prototype' | typeof Symbol.hasInstance>;
 
+export type DocumentReadyState = "loading" | "interactive" | "complete";
+
+export type DocumentVisibilityState = "visible" | "hidden";
+
 export type SecurityPolicyViolationEventDisposition = "enforce" | "report";
 
 export type ShadowRootMode = "open" | "closed";
@@ -40,6 +44,8 @@ export type ArrayBufferView = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> |
 export type BufferSource = Int8Array<ArrayBuffer> | Int16Array<ArrayBuffer> | Int32Array<ArrayBuffer> | Uint8Array<ArrayBuffer> | Uint16Array<ArrayBuffer> | Uint32Array<ArrayBuffer> | Uint8ClampedArray<ArrayBuffer> | BigInt64Array<ArrayBuffer> | BigUint64Array<ArrayBuffer> | Float16Array<ArrayBuffer> | Float32Array<ArrayBuffer> | Float64Array<ArrayBuffer> | DataView<ArrayBuffer> | ArrayBuffer;
 
 export type AllowSharedBufferSource = ArrayBuffer | SharedArrayBuffer | Int8Array<ArrayBufferLike> | Int16Array<ArrayBufferLike> | Int32Array<ArrayBufferLike> | Uint8Array<ArrayBufferLike> | Uint16Array<ArrayBufferLike> | Uint32Array<ArrayBufferLike> | Uint8ClampedArray<ArrayBufferLike> | BigInt64Array<ArrayBufferLike> | BigUint64Array<ArrayBufferLike> | Float16Array<ArrayBufferLike> | Float32Array<ArrayBufferLike> | Float64Array<ArrayBufferLike> | DataView<ArrayBufferLike>;
+
+export type HTMLOrSVGScriptElement = HTMLScriptElement | SVGScriptElement;
 
 export type ReportList = Iterable<Report>;
 
@@ -689,6 +695,15 @@ export interface HTMLOptionsCollectionConstructor extends Ctor<HTMLCollectionCon
   [Symbol.hasInstance](value: unknown): value is HTMLOptionsCollection;
 }
 
+export interface HTMLDialogElement extends HTMLElement {
+
+}
+
+export interface HTMLDialogElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDialogElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDialogElement;
+}
+
 export interface SVGElement extends Element {
   /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
   get style(): object;
@@ -708,6 +723,15 @@ export interface SVGStyleElement extends SVGElement {
 export interface SVGStyleElementConstructor extends Ctor<SVGElementConstructor> {
   readonly prototype: SVGStyleElement;
   [Symbol.hasInstance](value: unknown): value is SVGStyleElement;
+}
+
+export interface SVGScriptElement extends SVGElement {
+
+}
+
+export interface SVGScriptElementConstructor extends Ctor<SVGElementConstructor> {
+  readonly prototype: SVGScriptElement;
+  [Symbol.hasInstance](value: unknown): value is SVGScriptElement;
 }
 
 export interface MathMLElement extends Element {
@@ -908,8 +932,10 @@ export interface Window extends EventTarget {
   HTMLFormControlsCollection: HTMLFormControlsCollectionConstructor;
   RadioNodeList: RadioNodeListConstructor;
   HTMLOptionsCollection: HTMLOptionsCollectionConstructor;
+  HTMLDialogElement: HTMLDialogElementConstructor;
   SVGElement: SVGElementConstructor;
   SVGStyleElement: SVGStyleElementConstructor;
+  SVGScriptElement: SVGScriptElementConstructor;
   MathMLElement: MathMLElementConstructor;
   Origin: OriginConstructor;
   Location: LocationConstructor;
@@ -1488,6 +1514,7 @@ export interface ShadowRoot extends DocumentFragment {
   readonly host: Element;
   onslotchange: EventHandlerNonNull | null;
   readonly customElementRegistry: CustomElementRegistry | null;
+  readonly activeElement: Element | null;
   readonly styleSheets: object;
   adoptedStyleSheets: any;
 }
@@ -1526,11 +1553,15 @@ export interface Document extends Node {
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: NodeFilter | null): NodeIterator;
   createTreeWalker(root: Node, whatToShow?: number, filter?: NodeFilter | null): TreeWalker;
-  readonly all: HTMLAllCollection;
-  readonly head: HTMLHeadElement | null;
+  readonly referrer: string;
+  cookie: string;
+  readonly lastModified: string;
+  readonly readyState: DocumentReadyState;
   readonly body: HTMLElement | null;
+  readonly head: HTMLHeadElement | null;
   write(...text: Array<string>): void;
   readonly defaultView: WindowProxy | null;
+  readonly all: HTMLAllCollection;
   readonly children: HTMLCollection;
   readonly firstElementChild: Element | null;
   readonly lastElementChild: Element | null;
@@ -1543,6 +1574,7 @@ export interface Document extends Node {
   querySelectorAll(selectors: string): NodeList;
   getElementById(elementId: string): Element | null;
   readonly customElementRegistry: CustomElementRegistry | null;
+  readonly activeElement: Element | null;
   readonly styleSheets: object;
   adoptedStyleSheets: any;
 }

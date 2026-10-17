@@ -1,7 +1,7 @@
 import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import { defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
-import { defineElementInterface, type ElementImpl } from '../../element';
+import type { ElementImpl } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 
@@ -40,11 +40,7 @@ export const htmlFormElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLFormElementImpl),
-  members: [roAttr('elements', reference(HTMLFormControlsCollectionImpl), xattr('SameObject'))],
-});
-
-export const htmlFormElementInterface = defineElementInterface({
-  definition: htmlFormElementIDL,
-  localNames: ['form'],
   namespaceURI: HTML_NAMESPACE,
+  localNames: ['form'],
+  members: [roAttr('elements', reference(HTMLFormControlsCollectionImpl), xattr('SameObject'))],
 });

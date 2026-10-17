@@ -372,6 +372,8 @@ describe('Browlet DOM binding', () => {
       'prepend',
       'querySelector',
       'querySelectorAll',
+      'readyState',
+      'referrer',
       'replaceChildren',
       'styleSheets',
       Symbol.unscopables,

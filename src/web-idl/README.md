@@ -107,6 +107,11 @@ type helpers describe the boundary. `serializeDefinitions()` emits IDL syntax.
 `defineInterface()` produces a `PrimaryInterfaceDefinition`; its partials and
 included mixins are combined into an `AssembledInterface` during assembly.
 
+An interface may also carry `namespaceURI` and `localNames` for element creation.
+These are project metadata, omitted from serialized IDL. Browlet derives its
+element-constructor lookup from the declaration collections outside BindingWorld;
+generic assembly and binding do not interpret element names.
+
 Normal assembly trusts declarations. Call `validateDefinitions()` from
 `assembly/index.ts` during development or tests to check duplicate primary names,
 orphan partials or includes, inheritance and typedef cycles, serialization markers,

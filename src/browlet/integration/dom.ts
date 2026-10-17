@@ -68,7 +68,7 @@ export const browletDOM: DOMOperations<
 
   designMode: () => unavailable('document editing mode'),
   hasFocus: () => unavailable('document focus'),
-  activeElement: () => unavailable('the active element'),
+  activeElement: (document) => document.activeElement,
   isDefined: () => unavailable('custom element definitions'),
   hasCustomState: () => unavailable('custom element states'),
   listen(document, type, listener) {

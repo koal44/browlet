@@ -2,7 +2,7 @@ import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
-import { defineElementInterface, ElementImpl } from '../element';
+import { ElementImpl } from '../element';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 
 /** Base implementation for elements in the SVG namespace. */
@@ -61,12 +61,8 @@ export const svgElementIDL = defineInterface({
   inherits: 'Element',
   exposed: 'Window',
   implementation: impl(SVGElementImpl),
-  members: [],
-});
-
-export const svgElementInterface = defineElementInterface({
-  definition: svgElementIDL,
   namespaceURI: SVG_NAMESPACE,
+  members: [],
 });
 
 /*

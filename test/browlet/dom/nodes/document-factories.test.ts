@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
+import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { unwrap } from '../../../support/browlet-binding';
 
 describe('Document factories', () => {
   it('creates detached XML and HTML documents through a stable DOMImplementation', async () => {
@@ -15,10 +17,28 @@ describe('Document factories', () => {
         xml instanceof XMLDocument, xml.documentElement.nodeName, xml.contentType, xml.URL, xml.defaultView,
         xml.doctype === doctype, doctype.ownerDocument === xml, doctype.publicId, doctype.systemId,
         html instanceof Document, html instanceof XMLDocument, html.contentType, html.characterSet,
+        xml.readyState, html.readyState, xml.referrer, html.referrer,
         html.compatMode, html.doctype!.name, html.documentElement.nodeName, html.head.textContent,
         html.body.nodeName, untitled.head.childNodes.length, emptyTitle.head.firstChild!.firstChild!.nodeValue];
     })).toEqual([true, true, true, 'p:root', 'application/xml', 'about:blank', null, true, true,
-      'public', 'system', true, false, 'text/html', 'UTF-8', 'CSS1Compat', 'html', 'HTML', '<title>', 'BODY', 0, '']);
+      'public', 'system', true, false, 'text/html', 'UTF-8', 'complete', 'complete', '', '',
+      'CSS1Compat', 'html', 'HTML', '<title>', 'BODY', 0, '']);
+  });
+
+  it('projects retained referrer and readiness state as readonly attributes', () => {
+    const browser = new Browlet({ route: () => '' });
+    const document = browser.window.document;
+    const implementation = unwrap<DocumentImpl>(document);
+    implementation.referrer = 'https://referrer.test/';
+    implementation.currentDocumentReadiness = 'interactive';
+
+    expect(document.referrer).toBe('https://referrer.test/');
+    expect(document.readyState).toBe('interactive');
+    for (const name of ['referrer', 'readyState']) {
+      const descriptor = Object.getOwnPropertyDescriptor(browser.window.Document.prototype, name);
+      expect(typeof descriptor?.get).toBe('function');
+      expect(typeof descriptor?.set).toBe('undefined');
+    }
   });
 
   it('selects XHTML and SVG content types and preserves the receiver realm when borrowed', () => {
@@ -64,6 +84,38 @@ describe('Document factories', () => {
       return [errors, element.namespaceURI, element.localName, element instanceof HTMLElement,
         document.createElement('MiXeD').localName];
     })).toEqual([Array(4).fill('InvalidCharacterError'), null, 'MiXeD', false, 'mixed']);
+  });
+
+  it('selects specialized elements and namespace fallbacks without changing name casing', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const html = 'http://www.w3.org/1999/xhtml';
+      const svg = 'http://www.w3.org/2000/svg';
+      const mathml = 'http://www.w3.org/1998/Math/MathML';
+      const names: [string, string][] = [
+        [html, 'script'], [svg, 'script'], [html, 'style'], [svg, 'style'],
+        [html, 'dialog'], [html, 'div'], [html, 'custom-widget'], [html, 'unknown'],
+        [html, 'applet'], [html, 'SCRIPT'], [svg, 'unknown'], [mathml, 'mi'],
+        ['', 'dialog'], ['urn:other', 'dialog'],
+      ];
+      return names.map(([namespace, name]) =>
+        document.createElementNS(namespace, name).constructor.name,
+      );
+    })).toEqual([
+      'HTMLScriptElement', 'SVGScriptElement', 'HTMLStyleElement', 'SVGStyleElement',
+      'HTMLDialogElement', 'HTMLElement', 'HTMLElement', 'HTMLUnknownElement',
+      'HTMLUnknownElement', 'HTMLUnknownElement', 'SVGElement', 'MathMLElement',
+      'Element', 'Element',
+    ]);
+  });
+
+  it('constructs a selected element in the receiver document realm when the factory is borrowed', () => {
+    const first = new Browlet({ route: () => '' });
+    const second = new Browlet({ route: () => '' });
+    const element = first.window.document.createElement.call(second.window.document, 'dialog');
+    expect(element).toBeInstanceOf(second.window.HTMLDialogElement);
+    expect(element).not.toBeInstanceOf(first.window.HTMLDialogElement);
+    expect(element.ownerDocument).toBe(second.window.document);
   });
 
   it('validates XML leaf construction and preserves CDATA identity through Text operations', async () => {

@@ -1,108 +1,66 @@
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../infra/index';
-import { InternalError } from '../../../infra/internal-error';
 
-import { elementInterface, type ElementInterface } from './element';
+import { ElementImpl } from './element';
 import {
-  htmlElementInterface, htmlUnknownElementInterface, htmlScriptElementInterface, htmlSlotElementInterface,
+  HTMLElementImpl, HTMLUnknownElementImpl, htmlIDLDefinitions,
 } from './html/index';
 import { isValidCustomElementName } from './html/custom-elements/index';
-import {
-  htmlImageElementInterface, htmlIFrameElementInterface, htmlAudioElementInterface, htmlVideoElementInterface,
-} from './html/embedded/index';
-import {
-  htmlFormElementInterface, htmlInputElementInterface, htmlSelectElementInterface,
-  htmlOptionElementInterface, htmlOptGroupElementInterface,
-} from './html/forms/index';
-import {
-  htmlHeadElementInterface, htmlBaseElementInterface, htmlLinkElementInterface, htmlStyleElementInterface,
-} from './html/metadata/index';
-import { mathMLElementInterface } from './mathml/index';
-import { svgElementInterface, svgStyleElementInterface } from './svg/index';
+import { MathMLElementImpl, mathMLIDLDefinitions } from './mathml/index';
+import { SVGElementImpl, svgIDLDefinitions } from './svg/index';
 
 /** Select an element's implementation, including namespace and unknown-name fallbacks. */
-export function resolveElementInterface(
+export function getElementConstructor(
   namespaceURI: string,
   localName: string,
-): ElementInterface {
-  const exact = elementInterfaces.get(namespaceURI, localName);
+): typeof ElementImpl {
+  const exact = elementConstructors.get(namespaceURI)?.get(localName);
   if (exact) return exact;
 
   if (namespaceURI === HTML_NAMESPACE) {
     if (legacyUnknownHTMLLocalNames.has(localName)) {
-      return htmlUnknownElementInterface;
+      return HTMLUnknownElementImpl;
     }
     if (
       knownHTMLLocalNames.has(localName) ||
       isValidCustomElementName(localName)
     ) {
-      return htmlElementInterface;
+      return HTMLElementImpl;
     }
-    return htmlUnknownElementInterface;
+    return HTMLUnknownElementImpl;
   }
-  if (namespaceURI === SVG_NAMESPACE) return svgElementInterface;
-  if (namespaceURI === MATHML_NAMESPACE) return mathMLElementInterface;
-  return elementInterface;
+  if (namespaceURI === SVG_NAMESPACE) return SVGElementImpl;
+  if (namespaceURI === MATHML_NAMESPACE) return MathMLElementImpl;
+  return ElementImpl;
 }
 
-const elementInterfaces = compileElementInterfaces([
-  htmlScriptElementInterface,
-  htmlSlotElementInterface,
-  htmlHeadElementInterface,
-  htmlBaseElementInterface,
-  htmlLinkElementInterface,
-  htmlStyleElementInterface,
-  htmlImageElementInterface,
-  htmlIFrameElementInterface,
-  htmlAudioElementInterface,
-  htmlVideoElementInterface,
-  htmlFormElementInterface,
-  htmlInputElementInterface,
-  htmlSelectElementInterface,
-  htmlOptionElementInterface,
-  htmlOptGroupElementInterface,
-  svgStyleElementInterface,
-]);
+const elementConstructors = collectElementConstructors();
 
-function compileElementInterfaces(
-  interfaces: ElementInterface[],
-): ElementInterfaceRegistry {
-  const namespaces = new Map<string, Map<string, ElementInterface>>();
+function collectElementConstructors(): Map<string, Map<string, typeof ElementImpl>> {
+  const namespaces = new Map<string, Map<string, typeof ElementImpl>>();
 
-  for (const elementInterface of interfaces) {
-    let localNames = namespaces.get(elementInterface.namespaceURI);
+  for (const definition of [...htmlIDLDefinitions, ...svgIDLDefinitions, ...mathMLIDLDefinitions]) {
+    if (definition.kind !== 'interface' || definition.localNames === undefined) continue;
+    // Declaration tests require a namespace, an Element implementation, and unique names.
+    const namespaceURI = definition.namespaceURI!;
+    const implementation = definition.implementation!.implClass as typeof ElementImpl;
+    let localNames = namespaces.get(namespaceURI);
     if (!localNames) {
       localNames = new Map();
-      namespaces.set(elementInterface.namespaceURI, localNames);
+      namespaces.set(namespaceURI, localNames);
     }
-
-    for (const localName of elementInterface.localNames) {
-      const existing = localNames.get(localName);
-      if (existing) {
-        throw new InternalError(
-          `Element ${elementInterface.namespaceURI} ${localName} is declared by ` +
-          `${existing.definition.name} and ${elementInterface.definition.name}`,
-        );
-      }
-      localNames.set(localName, elementInterface);
-    }
+    for (const localName of definition.localNames) localNames.set(localName, implementation);
   }
 
-  return {
-    get(namespaceURI, localName) {
-      return namespaces.get(namespaceURI)?.get(localName);
-    },
-  };
+  return namespaces;
 }
 
-type ElementInterfaceRegistry = {
-  get(namespaceURI: string, localName: string): ElementInterface | undefined;
-};
-
 // https://html.spec.whatwg.org/multipage/dom.html#elements-in-the-dom
-// Known HTML names receive HTMLElement until their dedicated implementation
-// exists; exact contributions override this fallback in the interface table.
+// PROVISIONAL(element registration): transitional fallback until every HTML name
+// is registered. Missing dedicated implementations receive HTMLElement; names
+// that use HTMLElement by design belong in its localNames. Exact registrations
+// take precedence; remove this set once both groups are fully registered.
 const knownHTMLLocalNames = new Set([
   'a', 'abbr', 'acronym', 'address', 'applet', 'area', 'article', 'aside',
   'audio', 'b', 'base', 'basefont', 'bdi', 'bdo', 'bgsound', 'big',
@@ -124,6 +82,7 @@ const knownHTMLLocalNames = new Set([
   'track', 'tt', 'u', 'ul', 'var', 'video', 'wbr', 'xmp',
 ]);
 
+// These obsolete names require HTMLUnknownElement; they are not missing implementations.
 const legacyUnknownHTMLLocalNames = new Set([
   'applet', 'bgsound', 'blink', 'isindex', 'keygen', 'multicol', 'nextid',
   'spacer',

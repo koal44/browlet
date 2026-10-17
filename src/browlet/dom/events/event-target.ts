@@ -139,6 +139,32 @@ export class EventTargetImpl {
     );
   }
 
+  /** Return this target as visible against another target, without modifying either. */
+  // https://dom.spec.whatwg.org/#retarget
+  retargetAgainst(against: EventTargetImpl): EventTargetImpl {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias -- Follow the target through its shadow hosts.
+    let target: EventTargetImpl = this;
+
+    while (target.isNode()) {
+      const root = target.getTreeRoot();
+      if (root === null) return target;
+
+      const host = root.getShadowRootHost();
+      if (host === null) return target;
+
+      if (
+        against.isNode() &&
+        against.hasShadowIncludingInclusiveAncestor(root)
+      ) {
+        return target;
+      }
+
+      target = host;
+    }
+
+    return target;
+  }
+
   getTreeRoot(): EventTargetImpl | null {
     return null;
   }
@@ -222,7 +248,7 @@ export class EventTargetImpl {
       ? target.getLegacyTargetOverride()
       : target;
     let activationTarget: EventTargetImpl | null = null;
-    let relatedTarget = retarget(event.relatedTarget, target);
+    let relatedTarget = event.relatedTarget?.retargetAgainst(target) ?? null;
     let clearTargets = false;
 
     if (
@@ -230,7 +256,7 @@ export class EventTargetImpl {
       target === event.relatedTarget
     ) {
       let touchTargets = event.touchTargetList
-        .map((touchTarget) => retarget(touchTarget, target));
+        .map((touchTarget) => touchTarget?.retargetAgainst(target) ?? null);
       event.appendToPath(target, targetOverride, relatedTarget, touchTargets, false);
 
       const isActivationEvent = MouseEventImpl.is(event) &&
@@ -265,10 +291,10 @@ export class EventTargetImpl {
           slottable = parent;
         }
 
-        relatedTarget = retarget(event.relatedTarget, parent);
+        relatedTarget = event.relatedTarget?.retargetAgainst(parent) ?? null;
         const parentForRetarget = parent;
         touchTargets = event.touchTargetList
-          .map((touchTarget) => retarget(touchTarget, parentForRetarget));
+          .map((touchTarget) => touchTarget?.retargetAgainst(parentForRetarget) ?? null);
 
         const targetRoot = target.getTreeRoot();
         const sameShadowIncludingTree = parent.isWindow() || (
@@ -605,34 +631,6 @@ export const addEventListenerOptionsIDL = defineDictionary({
     dictMember('signal', reference('AbortSignal')),
   ],
 });
-
-/** Return the visible target across shadow boundaries without modifying either argument. */
-// https://dom.spec.whatwg.org/#retarget
-function retarget(
-  initialTarget: EventTargetImpl | null,
-  against: EventTargetImpl,
-): EventTargetImpl | null {
-  let target = initialTarget;
-
-  while (target !== null && target.isNode()) {
-    const root = target.getTreeRoot();
-    if (root === null) return target;
-
-    const host = root.getShadowRootHost();
-    if (host === null) return target;
-
-    if (
-      against.isNode() &&
-      against.hasShadowIncludingInclusiveAncestor(root)
-    ) {
-      return target;
-    }
-
-    target = host;
-  }
-
-  return target;
-}
 
 type EventListenerCallback = (this: EventTargetImpl, event: EventImpl) => void;
 

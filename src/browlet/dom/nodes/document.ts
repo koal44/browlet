@@ -2,17 +2,22 @@ import type { InternalPromise, InternalPromiseWithResolvers } from '../../../inf
 import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import { InternalError } from '../../../infra/internal-error';
-import { addon, type JSEnvironment } from '../../../js-engine/index';
+import { addon, isomorphicDecode, isomorphicEncode, type JSEnvironment } from '../../../js-engine/index';
 import {
-  arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface, definePartialInterface,
-  dictMember, emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, union,
+  arg, atArg, attr, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, definePartialInterface,
+  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
 } from '../../../web-idl/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import {
   Stylelet, lengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
-import { createOpaqueOrigin, type Origin, parseURL, serializeURL, type URLRecord } from '../../../url/index';
+import { utf8DecodeWithoutBOM, utf8Encode } from '../../../encoding/index';
+import {
+  aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
+  type Origin, type URLRecord,
+} from '../../../url/index';
+import { HTTPCookie, parseHTTPDate, type CookieHost } from '../../../http/index';
 import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
@@ -36,6 +41,7 @@ import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index'
 import type {
   BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
 } from '../../browsing/navigation/index';
+import type { FocusableArea } from '../../interaction/index';
 
 import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import { HTMLAllCollectionImpl } from './html-all-collection';
@@ -59,13 +65,14 @@ import {
   findElement, findElementById, findElementsByClassName, findElementsByTagName,
   findElementsByTagNameNS,
 } from './lookups';
-import { resolveElementInterface } from './element-interfaces';
+import { getElementConstructor } from './element-interfaces';
 import { HTMLBaseElementImpl, HTMLHeadElementImpl } from './html/metadata/index';
 import { HTMLElementImpl, HTMLScriptElementImpl } from './html/index';
 import {
   HTMLVideoElementImpl, type HTMLImageElementImpl, type HTMLIFrameElementImpl, type HTMLMediaElementImpl,
 } from './html/embedded/index';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
+import type { HTMLDialogElementImpl } from './html/interactive/index';
 
 /** Create a document in env with optional binding-owned node allocation. */
 export function createDocument(
@@ -88,7 +95,7 @@ export class DocumentImpl extends NodeImpl {
   declare env: BrowletEnvironment;
   /** The document's URL record, independent of its base URL. */
   // https://dom.spec.whatwg.org/#concept-document-url
-  url = parseDocumentURL('about:blank');
+  url = copyURL(aboutBlankURL);
   /** Origin used by the document's security and same-origin checks. */
   origin: Origin = createOpaqueOrigin();
   /** Whether DOM operations use HTML or XML rules. */
@@ -105,6 +112,10 @@ export class DocumentImpl extends NodeImpl {
   browsingContext: BrowsingContext | null = null;
   /** Inherited fallback base for about:blank and iframe srcdoc documents. */
   aboutBaseURL: URLRecord | null = null;
+  /** Cookie lookup URL captured at creation, including inherited scheme, host, and path. */
+  // https://github.com/whatwg/html/issues/332
+  // SPEC_CLASH(document-cookie-url-history): retain this URL across same-document URL changes, matching browsers.
+  cookieURL = copyURL(this.url);
   /** Loading state exposed by readyState. */
   currentDocumentReadiness: DocumentReadyState = 'complete';
   /** Whether this document may be retained for restoration from session history. */
@@ -112,6 +123,10 @@ export class DocumentImpl extends NodeImpl {
   salvageable = true;
   /** Reasons recorded when this document becomes ineligible for restoration. */
   bfcacheBlockingDetails = new Set<NotRestoredReasonDetails>();
+  /** Open dialogs in the order maintained by dialog opening and closing steps. */
+  // https://html.spec.whatwg.org/multipage/dom.html#open-dialogs-list
+  // TODO(HTML §4.11.4): dialog lifecycle steps must maintain membership.
+  openDialogs: HTMLDialogElementImpl[] = [];
   /** Whether load abortion has stopped this document's active parser. */
   activeParserWasAborted = false;
   /** Parser currently consuming this document, or null when none is registered. */
@@ -133,6 +148,8 @@ export class DocumentImpl extends NodeImpl {
   policyContainer = new PolicyContainer();
   /** HTTP status of the resource that created this Document; zero when there was no response. */
   httpStatus = 0;
+  /** Source modification time in Unix milliseconds, when supplied by the loader. */
+  lastModificationTime?: number;
   /** Permissions policy controlling features in this document. */
   permissionsPolicy = new PermissionsPolicy();
   /** Cross-origin opener policy selected for this document. */
@@ -184,7 +201,7 @@ export class DocumentImpl extends NodeImpl {
   #stylelet: Stylelet | undefined;
   /** Selector parsing and compilation caches shared by queries in this document. */
   #selectlet: Selectlet<NodeImpl, ElementImpl, DocumentImpl, DocumentFragmentImpl> | undefined;
-  /** Registry and style-sheet access shared with shadow roots. */
+  /** Focus and style-sheet behavior shared with shadow roots. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   /** Live child collection and element-child navigation. */
   #parentNodeMixin: ParentNodeMixin;
@@ -214,10 +231,7 @@ export class DocumentImpl extends NodeImpl {
     if (env.realm.isWindow()) this.#relevantGlobalObject = env.realm.windowImplementation;
     this.#nodeFactory = nodeFactory;
     this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
-    this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin({
-      getCustomElementRegistry: () => this.customElementRegistry,
-      getStyleScope: () => this.getCSSEngine().documentScope,
-    });
+    this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin(this);
     this.#parentNodeMixin = new ParentNodeMixin(this);
   }
 
@@ -260,6 +274,79 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): WindowProxyHandle | null {
     return this.browsingContext?.windowProxy ?? null;
+  }
+
+  /** Whether this document cannot participate in the document.cookie API. */
+  // https://html.spec.whatwg.org/multipage/dom.html#cookie-averse-document-object
+  // SPEC_CLASH(document-cookie-averse): use the inherited cookie URL, matching browsers and WHATWG HTML #332.
+  get isCookieAverse(): boolean {
+    return this.browsingContext === null || this.cookieURL.scheme !== 'http' && this.cookieURL.scheme !== 'https';
+  }
+
+  /** Whether the live ancestor chain prevents establishing a same-site cookie context. */
+  // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+  // Implements the "has cross-site ancestor" query shared by Fetch settings and document.cookie.
+  get hasCrossSiteAncestor(): boolean {
+    const navigable = this.getNodeNavigable();
+    // A detached/inactive Document has no current ancestor chain to establish a cookie site.
+    if (navigable === null) return true;
+    const origin = this.origin;
+    for (let parent = navigable.parent; parent !== null; parent = parent.parent) {
+      const parentDocument = parent.activeDocument;
+      if (parentDocument === null || !areSameSite(parentDocument.origin, origin)) return true;
+    }
+    return false;
+  }
+
+  /** Read cookies for the retained cookie URL, excluding HttpOnly cookies. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-cookie
+  get cookie(): string {
+    if (this.isCookieAverse) return '';
+    // SPEC_CLASH(document-cookie-sandbox): throw for opaque inherited srcdoc, as in Chromium/Firefox; WebKit silently denies it.
+    if (this.origin.kind === 'opaque') {
+      throw new DOMExceptionImpl('An opaque-origin document cannot access cookies', DOMExceptionNames.security);
+    }
+    const { userAgent } = this.env;
+    if (!userAgent.cookiesEnabled) return '';
+    const { scheme, host, path } = this.cookieURL;
+    // HTTP(S) URLs have a domain/IP host and a non-opaque path.
+    const cookies = userAgent.cookieStore.retrieveCookies(
+      scheme === 'https', host as CookieHost, path, false, this.hasCrossSiteAncestor ? 'none' : 'strict-or-less',
+    );
+    return utf8DecodeWithoutBOM(isomorphicEncode(HTTPCookie.serialize(cookies)));
+  }
+
+  /** Process one non-HTTP cookie assignment against the retained cookie URL. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-cookie
+  set cookie(value: string) {
+    if (this.isCookieAverse) return;
+    // SPEC_CLASH(document-cookie-sandbox): throw for opaque inherited srcdoc, as in Chromium/Firefox; WebKit silently denies it.
+    if (this.origin.kind === 'opaque') {
+      throw new DOMExceptionImpl('An opaque-origin document cannot access cookies', DOMExceptionNames.security);
+    }
+    const { userAgent } = this.env;
+    if (!userAgent.cookiesEnabled) return;
+    const { scheme, host, path } = this.cookieURL;
+    // HTTP(S) URLs have a domain/IP host and a non-opaque path.
+    userAgent.cookieStore.parseAndStoreCookie(
+      isomorphicDecode(utf8Encode(value)), scheme === 'https', host as CookieHost, path as string[],
+      false, false, !this.hasCrossSiteAncestor,
+    );
+    userAgent.cookieStore.garbageCollectCookies(host as CookieHost);
+  }
+
+  /** Source modification date in local time; unknown dates use the current time. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-lastmodified
+  // SPEC_CLASH(document-last-modified-timezone): use Date's historical local offset; Windows Gecko/WebKit can disagree.
+  get lastModified(): string {
+    const date = new Date(this.lastModificationTime ?? Date.now());
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const year = String(date.getFullYear()).padStart(4, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;
   }
 
   // https://html.spec.whatwg.org/#dom-document-readystate
@@ -325,6 +412,18 @@ export class DocumentImpl extends NodeImpl {
     }
 
     return null;
+  }
+
+  /** Focusable area currently designated by HTML focus management. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#focused-area-of-the-document
+  get focusedArea(): FocusableArea {
+    // TODO(HTML §6.6): initialize focus state and maintain it through focus updates and fixup.
+    throw new InternalError('Document focused area is not implemented');
+  }
+
+  /** Focused element visible from this document's tree. */
+  get activeElement(): ElementImpl | null {
+    return this.#documentOrShadowRootMixin.activeElement;
   }
 
   get styleSheets(): StyleSheetListImpl {
@@ -434,6 +533,12 @@ export class DocumentImpl extends NodeImpl {
     copy.allowDeclarativeShadowRoots = this.allowDeclarativeShadowRoots;
     if (this.customElementRegistry?.isScoped) copy.customElementRegistry = this.customElementRegistry;
     return copy;
+  }
+
+  // https://html.spec.whatwg.org/multipage/dom.html#the-document-object
+  protected override cloningSteps(copy: DocumentImpl, subtree: boolean): void {
+    super.cloningSteps(copy, subtree);
+    copy.aboutBaseURL = this.aboutBaseURL;
   }
 
   /** Validate XML-only CDATA construction; later data mutations need not preserve XML syntax. */
@@ -611,20 +716,40 @@ export class DocumentImpl extends NodeImpl {
   // HTML document lifecycle
   // ---------------------------------------------------------------------
 
-  /** Initialize both ancestor-origin lists during initial creation or navigation. */
+  /** Initialize both ancestor-origin lists using the creation caller's container document. */
   // https://html.spec.whatwg.org/multipage/dom.html#internal-ancestor-origin-objects-list-creation-steps
   // https://html.spec.whatwg.org/multipage/dom.html#ancestor-origins-list-creation-steps
-  initializeAncestry(_referrerPolicy: ReferrerPolicy): void {
-    // The new Document is not active yet, so getNodeNavigable() cannot select
-    // its destination. An initial top-level context has no navigable yet.
-    const navigable = this.browsingContext?.navigable;
-    if (navigable && !navigable.isTopLevelTraversable) {
-      throw new InternalError('Nested Document ancestry is not implemented');
+  initializeAncestry(referrerPolicy: ReferrerPolicy, parentDocument: DocumentImpl | null): void {
+    // SPEC_CLASH(ancestor-origins-before-activation): HTML creates ancestry before activation, but its container lookup requires an active document.
+    // The creation caller already knows the container document; passing it preserves activation timing.
+    this.internalAncestorOriginObjectsList = this.#createAncestorOriginObjects(referrerPolicy, parentDocument);
+    this.ancestorOriginsList = new DOMStringListImpl(this.internalAncestorOriginObjectsList.map(serializeOrigin));
+  }
+
+  /** Collect the parent's retained ancestry, masking the origins withheld by iframe policy. */
+  // https://html.spec.whatwg.org/multipage/dom.html#internal-ancestor-origin-objects-list-creation-steps
+  #createAncestorOriginObjects(referrerPolicy: ReferrerPolicy, parentDocument: DocumentImpl | null): Origin[] {
+    const output: Origin[] = [];
+    if (parentDocument === null) return output;
+
+    // Assert: the parent document is fully active and its ancestry was initialized.
+    const ancestorOrigins = parentDocument.internalAncestorOriginObjectsList;
+    if (ancestorOrigins === null) throw new InternalError('Parent Document ancestry has not been initialized');
+    // The specification also reads the navigable's container here, but never uses that local.
+    // SPEC_CLASH(ancestor-origin-policy-masking): follow HTML's masking, also implemented by Gecko; Blink and WebKit expose the unmasked origins.
+    let masked = referrerPolicy === 'no-referrer' ||
+      (referrerPolicy === 'same-origin' && !areSameOrigin(parentDocument.origin, this.origin));
+    output.push(masked ? createOpaqueOrigin() : parentDocument.origin);
+
+    for (const origin of ancestorOrigins) {
+      if (masked && areSameOrigin(origin, parentDocument.origin)) {
+        output.push(createOpaqueOrigin());
+        continue;
+      }
+      output.push(origin);
+      masked = false;
     }
-    // Store both results together. Top-level Documents have no ancestors;
-    // referrer-policy masking enters with child navigables.
-    this.internalAncestorOriginObjectsList = [];
-    this.ancestorOriginsList = new DOMStringListImpl([]);
+    return output;
   }
 
   /** Populate the synchronously available element tree of an about:blank document. */
@@ -835,6 +960,9 @@ export class DocumentImpl extends NodeImpl {
   processResponseIntegrations(navigationParams: NavigationParams): void {
     const response = navigationParams.response;
     this.httpStatus = response.status;
+    const lastModified = response.headerList.get('Last-Modified');
+    this.lastModificationTime = lastModified === null ? undefined : parseHTTPDate(lastModified, Date.now()) ?? undefined;
+    // TODO(file loading): supply filesystem modification times when local-file navigation exists.
     this.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
     if (response.headerList.get('Refresh') !== null) {
       throw new InternalError('Refresh response processing is not implemented');
@@ -988,6 +1116,12 @@ export class DocumentImpl extends NodeImpl {
     return navigable?.activeDocument === this ? navigable : null;
   }
 
+  /** Document containing this active document's navigable container, or null without one. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#doc-container-document
+  get containerDocument(): DocumentImpl | null {
+    return this.getNodeNavigable()?.containerDocument ?? null;
+  }
+
   /** Whether this document is active throughout its navigable ancestry. */
   // https://html.spec.whatwg.org/#fully-active
   isFullyActive(): boolean {
@@ -1066,6 +1200,11 @@ export class DocumentImpl extends NodeImpl {
     return this.#stylelet ??= new Stylelet(this, { env: this.env });
   }
 
+  /** Initialize or retrieve the style scope for this document's tree. */
+  getStyleScope(): TreeScope {
+    return this.getCSSEngine().documentScope;
+  }
+
   /** Temporarily route document.write() to a parser while the callback runs. */
   withWriter<T>(writer: DocumentWriter, callback: () => T): T {
     const previousWriter = this.#writer;
@@ -1083,9 +1222,9 @@ export class DocumentImpl extends NodeImpl {
     localName: string, namespaceURI: string, prefix: string | null = null,
     isValue: string | null = null, registry: CustomElementRegistryImpl | null = this.customElementRegistry,
   ): ElementImpl {
-    const elementInterface = resolveElementInterface(namespaceURI, localName);
+    const implementation = getElementConstructor(namespaceURI, localName);
     const element = this.#nodeFactory.constructNode<ElementImpl>(
-      elementInterface.implementation,
+      implementation,
       [{
         document: this,
         localName,
@@ -1362,14 +1501,42 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
   ],
 });
 
+/** Loading stage exposed by the document's readyState attribute. */
+export type DocumentReadyState = 'loading' | 'interactive' | 'complete';
+
 /*
  * enum DocumentReadyState { "loading", "interactive", "complete" };
+ */
+export const documentReadyStateIDL = defineEnumeration({
+  name: 'DocumentReadyState',
+  values: ['loading', 'interactive', 'complete'] satisfies DocumentReadyState[],
+});
+
+/** Visibility reported for a document or its traversable. */
+// https://html.spec.whatwg.org/multipage/interaction.html#document-visibility
+export type DocumentVisibilityState = 'hidden' | 'visible';
+
+/*
  * enum DocumentVisibilityState { "visible", "hidden" };
+ */
+export const documentVisibilityStateIDL = defineEnumeration({
+  name: 'DocumentVisibilityState',
+  values: ['visible', 'hidden'] satisfies DocumentVisibilityState[],
+});
+
+/*
  * typedef (HTMLScriptElement or SVGScriptElement) HTMLOrSVGScriptElement;
- *
+ */
+export const htmlOrSVGScriptElementIDL = defineTypedef({
+  name: 'HTMLOrSVGScriptElement',
+  type: union(reference('HTMLScriptElement'), reference('SVGScriptElement')),
+});
+
+/*
  * [LegacyOverrideBuiltIns]
  * partial interface Document {
- *   static Document parseHTMLUnsafe((TrustedHTML or DOMString) html, optional ParseHTMLUnsafeOptions options = {});
+ *   static Document parseHTMLUnsafe((TrustedHTML or DOMString) html,
+ *                                  optional (ParseHTMLUnsafeOptions or TrustedHTMLParserOptions) options = {});
  *   static Document parseHTML(DOMString html, optional SetHTMLOptions options = {});
  *
  *   // resource metadata management
@@ -1426,18 +1593,34 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
  */
 export const htmlDocumentIDL = definePartialInterface({
   name: 'Document',
+  // TODO(HTML §3.1.7): LegacyOverrideBuiltIns accompanies Document's named getter.
+  // The complete member/dependency inventory is in html/ROADMAP.md#section-311-document-state-and-declarations.
   members: [
+    // TODO(HTML §§8.5–8.6): parseHTMLUnsafe and parseHTML need parser/sanitizer option types and algorithms.
+    // TODO(HTML §7.2): location and domain need relevant-document navigation/security algorithms.
+    roAttr('referrer', idlType.USVString),
+    attr('cookie', idlType.USVString),
+    roAttr('lastModified', idlType.DOMString),
+    roAttr('readyState', reference('DocumentReadyState')),
+
+    // TODO(HTML §3.1.7): named getter, title, body setter, collections, getElementsByName, and currentScript.
+    // TODO(HTML §3.2.6): dir forwards to the document element's directionality attribute.
+    roAttr('body', nullable(reference('HTMLElement'))),
+    roAttr('head', nullable(reference('HTMLHeadElement'))),
+
+    // TODO(HTML §8.4): open, close, and writeln; complete write's TrustedHTML conversion and insertion steps.
+    op('write', idlType.undefined, [
+      arg('text', idlType.DOMString, { variadic: true }),
+    ]),
+    roAttr('defaultView', nullable(reference('WindowProxy'))),
+    // TODO(HTML §6): hasFocus, designMode, editing commands, hidden, and visibilityState.
+    // TODO(HTML §8.1): onreadystatechange, onvisibilitychange, and GlobalEventHandlers.
+
     // Without native [[IsHTMLDDA]], omit the API instead of exposing a truthy substitute.
     // https://html.spec.whatwg.org/#dom-document-all
     roAttr('all', reference('HTMLAllCollection'), {
       ...xattr('SameObject'), enabled: addon.supportsHTMLDDA,
     }),
-    roAttr('head', nullable(reference('HTMLHeadElement'))),
-    roAttr('body', nullable(reference('HTMLElement'))),
-    op('write', idlType.undefined, [
-      arg('text', idlType.DOMString, { variadic: true }),
-    ]),
-    roAttr('defaultView', nullable(reference('WindowProxy'))),
   ],
 });
 
@@ -1526,7 +1709,7 @@ class DocumentTreeScopeResolver implements TreeScopeResolver {
 
   resolve(root: NodeImpl): TreeScope | null {
     return root === this.#document
-      ? this.#document.getCSSEngine().documentScope
+      ? this.#document.getStyleScope()
       : null;
   }
 }
@@ -1552,13 +1735,6 @@ export const directDOMNodeFactory: DOMNodeFactory = {
 
 /** Active parser input used by document.write(). */
 export type DocumentWriter = (markup: string) => void;
-
-/** Loading stage exposed by the document's readyState attribute. */
-export type DocumentReadyState = 'loading' | 'interactive' | 'complete';
-
-/** Visibility reported for a document or its traversable. */
-// https://html.spec.whatwg.org/multipage/interaction.html#document-visibility
-export type DocumentVisibilityState = 'hidden' | 'visible';
 
 /** Selects HTML or XML rules for document operations. */
 // https://dom.spec.whatwg.org/#concept-document-type
@@ -1612,9 +1788,3 @@ type FullyActiveStateObserver = (fullyActive: boolean) => void;
 
 /** The HTML element families that can retain a lazy-loading continuation. */
 type LazyLoadingElement = HTMLImageElementImpl | HTMLIFrameElementImpl | HTMLMediaElementImpl;
-
-function parseDocumentURL(input: string): URLRecord {
-  const url = parseURL(input).url;
-  if (url === null) throw new InternalError(`Could not parse document URL ${input}`);
-  return url;
-}

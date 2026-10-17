@@ -1,7 +1,3 @@
-export {
-  SVGElementImpl, svgElementIDL, svgElementInterface, svgElementIncludesElementCSSInlineStyleIDL,
-} from './element';
-export {
-  SVGStyleElementImpl, svgStyleElementIDL, svgStyleElementInterface, svgStyleElementIncludesLinkStyleIDL,
-} from './style-element';
+export { SVGElementImpl, svgElementIDL, svgElementIncludesElementCSSInlineStyleIDL } from './element';
+export { SVGStyleElementImpl, svgStyleElementIDL, svgStyleElementIncludesLinkStyleIDL } from './style-element';
 export { svgIDLDefinitions } from './web-idl';

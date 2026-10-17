@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { defineInterface, impl } from '../../../../../web-idl/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Contains document metadata before the body. */
@@ -23,11 +22,7 @@ export const htmlHeadElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLHeadElementImpl),
-  members: [],
-});
-
-export const htmlHeadElementInterface = defineElementInterface({
-  definition: htmlHeadElementIDL,
-  localNames: ['head'],
   namespaceURI: HTML_NAMESPACE,
+  localNames: ['head'],
+  members: [],
 });

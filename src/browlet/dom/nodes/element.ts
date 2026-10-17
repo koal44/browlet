@@ -5,7 +5,6 @@ import {
   arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
   nullable, op, reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-  type PrimaryInterfaceDefinition,
 } from '../../../web-idl/index';
 import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 
@@ -847,30 +846,6 @@ const shadowHostNames = new Set([
   'header', 'main', 'nav', 'p', 'section', 'span',
 ]);
 
-/** Associate an element declaration with its constructor and matching names. */
-export function defineElementInterface(
-  options: ElementInterfaceOptions,
-): ElementInterface {
-  const implClass = options.definition.implementation?.implClass;
-  if (!implClass) {
-    throw new InternalError(
-      `Element interface ${options.definition.name} has no implementation`,
-    );
-  }
-
-  return {
-    definition: options.definition,
-    implementation: implClass as ElementImplementation,
-    localNames: options.localNames ?? [],
-    namespaceURI: options.namespaceURI,
-  };
-}
-
-export const elementInterface = defineElementInterface({
-  definition: elementIDL,
-  namespaceURI: '',
-});
-
 /*
  * Element includes ParentNode;
  */
@@ -915,26 +890,3 @@ export type ElementCreationContext = {
 
 /** DOM's construction and upgrade states for an element. */
 export type CustomElementState = 'undefined' | 'failed' | 'uncustomized' | 'precustomized' | 'custom';
-
-/** Declaration and constructor selected for an element's namespace and name. */
-export type ElementInterface = {
-  /** Platform interface projected for this element implementation. */
-  definition: PrimaryInterfaceDefinition;
-  /** Constructor used by the document's node factory. */
-  implementation: ElementImplementation;
-  /** Local names handled by this interface within its namespace. */
-  localNames: string[];
-  /** Namespace in which these names select the interface. */
-  namespaceURI: string;
-};
-
-type ElementInterfaceOptions = {
-  definition: PrimaryInterfaceDefinition;
-  localNames?: string[];
-  namespaceURI: string;
-};
-
-type ElementImplementation = abstract new (
-  context: ElementCreationContext,
-  env: BrowletEnvironment,
-) => ElementImpl;

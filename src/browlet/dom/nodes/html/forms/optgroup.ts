@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { defineInterface, impl } from '../../../../../web-idl/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLElementImpl } from '../html-element';
 
 /** Optgroup identity used by the options collection's add operation. */
@@ -18,11 +17,7 @@ export const htmlOptGroupElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLOptGroupElementImpl),
-  members: [],
-});
-
-export const htmlOptGroupElementInterface = defineElementInterface({
-  definition: htmlOptGroupElementIDL,
-  localNames: ['optgroup'],
   namespaceURI: HTML_NAMESPACE,
+  localNames: ['optgroup'],
+  members: [],
 });

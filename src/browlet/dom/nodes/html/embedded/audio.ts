@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { defineInterface, impl } from '../../../../../web-idl/index';
 
-import { defineElementInterface } from '../../element';
 import { HTMLMediaElementImpl } from './media';
 
 /** Audio element's shared media-loading state. */
@@ -24,11 +23,7 @@ export const htmlAudioElementIDL = defineInterface({
   inherits: 'HTMLMediaElement',
   exposed: 'Window',
   implementation: impl(HTMLAudioElementImpl),
-  members: [],
-});
-
-export const htmlAudioElementInterface = defineElementInterface({
-  definition: htmlAudioElementIDL,
-  localNames: ['audio'],
   namespaceURI: HTML_NAMESPACE,
+  localNames: ['audio'],
+  members: [],
 });

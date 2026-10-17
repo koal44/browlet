@@ -1,7 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, defineInterface, idlType, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
-import { defineElementInterface } from '../../element';
 import type { NodeImpl } from '../../node';
 import { HTMLElementImpl } from '../html-element';
 import { HTMLOptionElementImpl } from './option';
@@ -108,14 +107,10 @@ export const htmlSelectElementIDL = defineInterface({
   inherits: 'HTMLElement',
   exposed: 'Window',
   implementation: impl(HTMLSelectElementImpl),
+  namespaceURI: HTML_NAMESPACE,
+  localNames: ['select'],
   members: [
     roAttr('options', reference(HTMLOptionsCollectionImpl), xattr('SameObject')),
     attr('selectedIndex', idlType.long),
   ],
-});
-
-export const htmlSelectElementInterface = defineElementInterface({
-  definition: htmlSelectElementIDL,
-  localNames: ['select'],
-  namespaceURI: HTML_NAMESPACE,
 });

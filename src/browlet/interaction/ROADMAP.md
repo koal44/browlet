@@ -59,6 +59,24 @@ not acquire their state. Likewise, `VisibilityStateEntry` uses the shared
 Performance timeline while the visibility transition itself remains an HTML
 lifecycle concern.
 
+## Focused-area dependency
+
+HTML §3.1.2 exposes `DocumentOrShadowRoot.activeElement`; its implementation
+follows the [§6.6 getter](https://html.spec.whatwg.org/multipage/interaction.html#dom-document-activeelement)
+in the DOM mixin. `focus.ts` currently describes only the focused area's DOM
+anchor, which can be a Document (viewport) or an Element (including a control
+subpart). It does not yet model the focusable area kinds or their lifecycles.
+
+`Document.focusedArea` is an explicit throwing dependency. Replace that stub
+with the shared focus state when implementing initialization, focusing and
+unfocusing, removal/inertness fixup, focus events, and the navigable focus chain.
+Keep the focused area distinct from the top-level traversable's system focus:
+an inactive document can retain its focused area. `activeElement`, `hasFocus`,
+selector state, and focus APIs must consume that same model.
+
+The active-element tests supply only this missing state. Ordinary public
+`activeElement` reads still throw, and no focus/blur API has been approximated.
+
 ## Removal condition
 
 Burn this file once visibility, activation, focus, and inertness have shared
