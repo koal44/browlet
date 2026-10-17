@@ -383,6 +383,10 @@ export class ElementImpl extends NodeImpl {
     this.#elementAssociations?.clear(localName);
     if (localName === 'slot') this.#slottableMixin.attributeChanged(this, oldValue, newValue);
     if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
+    // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism
+    if (localName === 'blocking' && this.isRenderBlocking() && !this.isPotentiallyRenderBlocking()) {
+      this.unblockRendering();
+    }
     this.linkStyleMixin?.attributeChanged(localName);
   }
 
@@ -624,6 +628,25 @@ export class ElementImpl extends NodeImpl {
     return false;
   }
 
+  /** Whether this element currently contributes to its document's rendering delay. */
+  // https://html.spec.whatwg.org/multipage/dom.html#render-blocking
+  isRenderBlocking(): boolean {
+    return this.nodeDocument.renderBlockingElements.has(this) && this.nodeDocument.isRenderBlocked();
+  }
+
+  /** Register pending work when the document still accepts rendering blockers. */
+  // https://html.spec.whatwg.org/multipage/dom.html#block-rendering
+  blockRendering(): void {
+    const document = this.nodeDocument;
+    if (document.allowsAddingRenderBlockingElements()) document.renderBlockingElements.add(this);
+  }
+
+  /** Release this element's pending rendering dependency. */
+  // https://html.spec.whatwg.org/multipage/dom.html#unblock-rendering
+  unblockRendering(): void {
+    this.nodeDocument.renderBlockingElements.delete(this);
+  }
+
   /** Defer child-dependent style processing while the parser populates this element. */
   beginParsingChildren(): void {
     this.linkStyleMixin?.beginParsingChildren();
@@ -655,6 +678,9 @@ export class ElementImpl extends NodeImpl {
   }
 
   protected override removingSteps(): void {
+    // Removing steps run after disconnection, including for shadow-tree descendants.
+    // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism
+    if (this.isRenderBlocking()) this.unblockRendering();
     this.linkStyleMixin?.update();
   }
 

@@ -44,10 +44,10 @@ Fetch already resolves an empty request policy from its policy container.
 
 Link/style/script now expose `blocking` token lists and
 `isPotentiallyRenderBlocking()`. Their loaders must still enter Document's
-unimplemented [render-blocking mechanism](https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism),
+implemented [render-blocking mechanism](../html/ROADMAP.md#section-316-render-blocking),
 propagate the actual blocked state to Fetch, and release blockers at the specified
-completion/failure points. Disconnection and loss of blocking eligibility also
-need that Document mechanism. The existing script-blocking stylesheet set is
+completion/failure points. Disconnection and loss of blocking eligibility now
+release blockers through the shared Element paths. The script-blocking stylesheet set is
 separate. Script's implicit predicate reads prepared `scriptType`; preparation
 must supply that state rather than using the raw `type` attribute as a shortcut.
 See the [§2.5.8 audit](../html/ROADMAP.md#section-258-blocking-attributes).

@@ -101,6 +101,9 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   lazyLoadScrollMargin: IntersectionObserverMargin = [
     percentageLiteral(100), percentageLiteral(100), percentageLiteral(100), percentageLiteral(100),
   ];
+  /** Render-blocking cutoff in milliseconds from the relevant global's time origin. */
+  // https://html.spec.whatwg.org/multipage/dom.html#render-blocked
+  renderBlockingTimeout = 5000;
   /** Maximum age of queued reports in milliseconds; Reporting suggests about two days. */
   maxReportAge = 2 * 24 * 60 * 60 * 1000;
   /** Reporting endpoints are retired after exceeding this consecutive-failure count. */

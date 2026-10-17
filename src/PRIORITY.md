@@ -77,8 +77,8 @@ provisional no-session result; scoped automation overrides remain unfinished.
 and cloning across HTML, SVG, and MathML. Policy delivery and script/style loading
 remain separate consumers. §2.5.8 adds link/style/script `blocking` token lists
 and potential-render-blocking predicates, including parser-origin state.
-Script preparation and Document's actual render-blocking mechanism remain
-explicit dependencies. §2.5.9 adds shared fetch-priority states and image/link/script
+Script preparation and resource-loading integration remain explicit dependencies.
+§2.5.9 adds shared fetch-priority states and image/link/script
 reflection; element loaders and actual network prioritization remain pending.
 The [§§2.6.1–2.6.3 reflection slice](browlet/html/reflection/ROADMAP.md) now
 consolidates the implemented attributes and supplies numeric, URL, token, and
@@ -105,7 +105,13 @@ activation and child-navigation dependencies recorded. The
 [§3.1.4 slice](browlet/html/ROADMAP.md#section-314-resource-metadata) adds Document cookie
 access and response modification dates; local-file metadata remains a loader dependency,
 and inherited cookie URLs still need iframe/initiator and history-restoration producers.
-Continue subsection by subsection with §3.1.5's loading status.
+The [§3.1.5 slice](browlet/html/ROADMAP.md#section-315-document-loading-status)
+adds readiness transitions/events, parser lifecycle state, and load/unload
+timing records. XML parsing, unload capture, and complete parser/load scheduling
+remain explicit dependencies. The [§3.1.6 mechanism](browlet/html/ROADMAP.md#section-316-render-blocking)
+adds Document's blocking set, eligibility and timeout checks, element cleanup,
+and rendering-opportunity filtering. Resource loaders and production rendering
+remain separate dependencies. Continue with §3.1.7's DOM tree accessors.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13

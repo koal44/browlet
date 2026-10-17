@@ -5,7 +5,7 @@ import { InternalError } from '../../../infra/internal-error';
 import { addon, isomorphicDecode, isomorphicEncode, type JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, attr, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, definePartialInterface,
-  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, union,
+  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, onError, op, roAttr, reference, union,
   DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
 } from '../../../web-idl/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
@@ -24,7 +24,7 @@ import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import type { TreeScopeResolver } from '../../style/index';
 import { DOMStringListImpl } from '../string-list';
-import type { SpeculationRulesParseResult } from '../../scripting/index';
+import { EventHandlerMap, type EventHandlerCallback, type SpeculationRulesParseResult } from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
@@ -37,6 +37,7 @@ import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } f
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 import type { BrowletEnvironment } from '../../environment';
+import type { DocumentParser } from '../../html/parser/index';
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type {
   BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
@@ -108,8 +109,6 @@ export class DocumentImpl extends NodeImpl {
   contentType = 'application/xml';
   /** Encoding name exposed by characterSet and its legacy aliases. */
   encoding = 'UTF-8';
-  /** Associated browsing context, or null for a detached document. */
-  browsingContext: BrowsingContext | null = null;
   /** Inherited fallback base for about:blank and iframe srcdoc documents. */
   aboutBaseURL: URLRecord | null = null;
   /** Cookie lookup URL captured at creation, including inherited scheme, host, and path. */
@@ -129,9 +128,8 @@ export class DocumentImpl extends NodeImpl {
   openDialogs: HTMLDialogElementImpl[] = [];
   /** Whether load abortion has stopped this document's active parser. */
   activeParserWasAborted = false;
-  /** Parser currently consuming this document, or null when none is registered. */
-  // PROVISIONAL: full parser abort/lifecycle steps remain in the HTML parser roadmap.
-  activeParser: { abort(): void; } | null = null;
+  /** Associated parser, retained through readiness timing and released when loading finishes. */
+  parser: DocumentParser | null = null;
   /** Worker globals whose owner sets contain this document. */
   // PROVISIONAL: worker creation and ownership registration are not implemented.
   ownedWorkers: { ownerSet: Set<DocumentImpl>; }[] = [];
@@ -181,13 +179,25 @@ export class DocumentImpl extends NodeImpl {
     loadEventStartTime: 0,
     loadEventEndTime: 0,
   };
+  /** Unload timestamps inherited from the document replaced by this navigation. */
+  // https://html.spec.whatwg.org/multipage/dom.html#previous-document-unload-timing
+  // TODO(HTML navigation): capture and pass the departing document's unload timing.
+  previousDocumentUnloadTiming: DocumentUnloadTimingInfo = {
+    unloadEventStartTime: 0,
+    unloadEventEndTime: 0,
+  };
   /** Retained navigation inputs; public Performance entry creation is provisional. */
   navigationTimingEntry?: NavigationTimingRecord;
   /** Completion timestamp, or null until the document is completely loaded. */
   completelyLoadedTime: number | null = null;
   /** Whether tasks that depend on loading completion may proceed. */
   readyForPostLoadTasks = false;
+  /** Elements whose pending work delays rendering, independently of script-blocking stylesheets. */
+  // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-element-set
+  renderBlockingElements = new Set<ElementImpl>();
 
+  /** Associated browsing context, or null for a detached document. */
+  #browsingContext: BrowsingContext | null = null;
   /** Relevant Window of the construction realm, retained independently of document activity. */
   #relevantGlobalObject: WindowImpl | null = null;
   /** First base element with an href attribute, whose frozen URL supplies the base. */
@@ -221,6 +231,8 @@ export class DocumentImpl extends NodeImpl {
   #all: HTMLAllCollectionImpl | undefined;
   /** Parser input callback installed while document.write() is permitted. */
   #writer: DocumentWriter | undefined;
+  /** Document event-handler attributes and their registered listeners. */
+  #eventHandlers = new EventHandlerMap(this, [{ name: 'onreadystatechange', type: 'readystatechange' }]);
 
   constructor(
     nodeFactory: DOMNodeFactory = directDOMNodeFactory,
@@ -268,6 +280,22 @@ export class DocumentImpl extends NodeImpl {
   /** Legacy alias of characterSet. */
   get inputEncoding(): string {
     return this.characterSet;
+  }
+
+  /** Associated browsing context; detaching releases connected rendering blockers. */
+  get browsingContext(): BrowsingContext | null {
+    return this.#browsingContext;
+  }
+
+  // https://html.spec.whatwg.org/multipage/infrastructure.html#becomes-browsing-context-disconnected
+  set browsingContext(context: BrowsingContext | null) {
+    const disconnected = this.#browsingContext !== null && context === null;
+    this.#browsingContext = context;
+    if (disconnected && this.isRenderBlocked()) {
+      for (const element of this.renderBlockingElements) {
+        if (element.isConnected) element.unblockRendering();
+      }
+    }
   }
 
   /** Associated WindowProxy handle, or null without a browsing context. */
@@ -352,6 +380,23 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/#dom-document-readystate
   get readyState(): DocumentReadyState {
     return this.currentDocumentReadiness;
+  }
+
+  /** The associated parser while it has neither stopped nor been aborted. */
+  // https://html.spec.whatwg.org/multipage/dom.html#active-parser
+  get activeParser(): DocumentParser | null {
+    const parser = this.parser;
+    return parser === null || parser.stopped ? null : parser;
+  }
+
+  /** Callback invoked when this document's readiness changes. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#handler-onreadystatechange
+  get onreadystatechange(): EventHandlerCallback | null {
+    return this.#eventHandlers.get('onreadystatechange');
+  }
+
+  set onreadystatechange(value: EventHandlerCallback | null) {
+    this.#eventHandlers.set('onreadystatechange', value);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-compatmode
@@ -778,7 +823,27 @@ export class DocumentImpl extends NodeImpl {
     env.markExecutionReady();
   }
 
-  /** Finish the loading milestones and load event for Browlet's local route. */
+  /** Change readiness, record the first HTML parsing milestones, and notify listeners synchronously. */
+  // https://html.spec.whatwg.org/multipage/dom.html#update-the-current-document-readiness
+  updateCurrentDocumentReadiness(readinessValue: DocumentReadyState): void {
+    if (this.currentDocumentReadiness === readinessValue) return;
+    this.currentDocumentReadiness = readinessValue;
+
+    if (this.parser?.kind === 'html') {
+      const now = this.env.timing.currentHighResolutionTime().toTimestamp();
+      const timing = this.loadTimingInfo;
+      if (readinessValue === 'complete' && timing.domCompleteTime === 0) {
+        timing.domCompleteTime = now;
+      } else if (readinessValue === 'interactive' && timing.domInteractiveTime === 0) {
+        timing.domInteractiveTime = now;
+      }
+    }
+
+    this.fireEvent('readystatechange');
+  }
+
+  /** Finish the loading milestones and events for Browlet's existing document routes. */
+  // https://html.spec.whatwg.org/multipage/parsing.html#stop-parsing
   finishLoading(): void {
     const browsingContext = this.browsingContext;
     if (browsingContext === null) {
@@ -789,18 +854,19 @@ export class DocumentImpl extends NodeImpl {
       throw new InternalError('Only an active Document can finish loading');
     }
 
-    // PROVISIONAL: the local route completes these parser/loading phases together.
+    // PROVISIONAL: these phases still run together; deferred scripts, load-event
+    // delays, and separate DOM-manipulation tasks await the full parser lifecycle.
     const env = this.env;
-    const now = env.timing.currentHighResolutionTime().toTimestamp();
     const timing = this.loadTimingInfo;
-    timing.domInteractiveTime = now;
-    timing.domContentLoadedEventStartTime = now;
-    timing.domContentLoadedEventEndTime = now;
-    timing.domCompleteTime = now;
-    timing.loadEventStartTime = now;
-    this.currentDocumentReadiness = 'complete';
+    const parser = this.parser;
+    timing.domContentLoadedEventStartTime = env.timing.currentHighResolutionTime().toTimestamp();
+    this.fireEvent('DOMContentLoaded', undefined, (event) => { event.bubbles = true; });
+    timing.domContentLoadedEventEndTime = env.timing.currentHighResolutionTime().toTimestamp();
+    this.updateCurrentDocumentReadiness('complete');
+    parser?.detach();
+    timing.loadEventStartTime = env.timing.currentHighResolutionTime().toTimestamp();
     this.readyForPostLoadTasks = true;
-    window.fireEvent('load');
+    window.fireEvent('load', undefined, undefined, true);
     timing.loadEventEndTime = env.timing.currentHighResolutionTime().toTimestamp();
     this.completelyFinishLoading();
   }
@@ -813,6 +879,19 @@ export class DocumentImpl extends NodeImpl {
     }
     this.completelyLoadedTime = currentCoarsenedWallTime().milliseconds;
     // PROVISIONAL: container/iframe load completion enters with child navigables.
+  }
+
+  /** Only HTML content without a body or frameset may acquire new rendering blockers. */
+  // https://html.spec.whatwg.org/multipage/dom.html#allows-adding-render-blocking-elements
+  allowsAddingRenderBlockingElements(): boolean {
+    return this.contentType === 'text/html' && this.body === null;
+  }
+
+  /** Hold rendering for the initial body or pending elements until the user-agent cutoff. */
+  // https://html.spec.whatwg.org/multipage/dom.html#render-blocked
+  isRenderBlocked(): boolean {
+    if (this.renderBlockingElements.size === 0 && !this.allowsAddingRenderBlockingElements()) return false;
+    return this.env.timing.currentHighResolutionTime().milliseconds <= this.env.userAgent.renderBlockingTimeout;
   }
 
   /** Destroy an active document from a task on its owning event loop. */
@@ -1614,7 +1693,10 @@ export const htmlDocumentIDL = definePartialInterface({
     ]),
     roAttr('defaultView', nullable(reference('WindowProxy'))),
     // TODO(HTML §6): hasFocus, designMode, editing commands, hidden, and visibilityState.
-    // TODO(HTML §8.1): onreadystatechange, onvisibilitychange, and GlobalEventHandlers.
+    attr('onreadystatechange', reference('EventHandler'), {
+      ...xattr('LegacyLenientThis'), ...onError('report'),
+    }),
+    // TODO(HTML §§6, 8.1): onvisibilitychange and GlobalEventHandlers.
 
     // Without native [[IsHTMLDDA]], omit the API instead of exposing a truthy substitute.
     // https://html.spec.whatwg.org/#dom-document-all
@@ -1765,11 +1847,11 @@ export type ModuleMapEntry = {
   value: unknown;
 };
 
-/** Absolute loading timestamps, with zero for milestones not yet reached. */
+/** Loading milestones, with zero for those not yet reached. */
 // https://html.spec.whatwg.org/#document-load-timing-info
 export type DocumentLoadTimingInfo = {
   /** Start of the navigation that created this document. */
-  navigationStartTime: DOMHighResTimeStamp;
+  navigationStartTime: number;
   /** Transition to interactive readiness. */
   domInteractiveTime: DOMHighResTimeStamp;
   /** Start of DOMContentLoaded dispatch. */
@@ -1782,6 +1864,15 @@ export type DocumentLoadTimingInfo = {
   loadEventStartTime: DOMHighResTimeStamp;
   /** Completion of Window load-event dispatch. */
   loadEventEndTime: DOMHighResTimeStamp;
+};
+
+/** Unload-event milestones from the preceding document, initially zero. */
+// https://html.spec.whatwg.org/multipage/dom.html#document-unload-timing-info
+export type DocumentUnloadTimingInfo = {
+  /** Start of unload-event dispatch. */
+  unloadEventStartTime: DOMHighResTimeStamp;
+  /** Completion of unload-event dispatch. */
+  unloadEventEndTime: DOMHighResTimeStamp;
 };
 
 type FullyActiveStateObserver = (fullyActive: boolean) => void;

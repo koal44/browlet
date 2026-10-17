@@ -96,7 +96,7 @@ export class WindowRenderingProducer {
       if (
         navigable === null ||
         !this.#host.hasRenderingOpportunity(navigable) ||
-        filters?.isRenderBlocked?.(document) === true ||
+        document.isRenderBlocked() ||
         filters?.hasHiddenVisibilityState?.(document) === true ||
         filters?.isRenderingSuppressedForViewTransitions?.(document) === true ||
         filters?.shouldSkipRendering?.(document) === true
@@ -140,10 +140,13 @@ export type RenderingUpdateContext = {
   unsafeStyleAndLayoutStartTime: UnsafeMoment | null;
 };
 
+// Provisional queries for missing rendering owners. Replace document-state
+// callbacks with direct queries as visibility, view transitions, and animation
+// frames are implemented. Visual-effect and skip decisions belong to rendering
+// and scheduling policy; display opportunities still require host input.
 export type RenderingDocumentFilters = {
   hasAnimationFrameCallbacks?: DocumentPredicate;
   hasHiddenVisibilityState?: DocumentPredicate;
-  isRenderBlocked?: DocumentPredicate;
   isRenderingSuppressedForViewTransitions?: DocumentPredicate;
   shouldSkipRendering?: DocumentPredicate;
   wouldRenderingHaveVisibleEffect?: DocumentPredicate;

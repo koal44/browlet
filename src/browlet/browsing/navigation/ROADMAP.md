@@ -44,6 +44,11 @@ download/POST handling, nested navigables, reload, traversal, unloading,
 ongoing-navigation cancellation, and full history-step application (HTML
 §7.4).
 
+Document now retains the §3.1.5 `previousDocumentUnloadTiming` record with zero
+defaults. The unloading/navigation algorithms must capture the old document's
+unload-event start/end times and supply them to the destination document;
+allocation of the record does not implement that producer.
+
 Document implements [§3.1.3 ancestor-origin snapshots](../../html/ROADMAP.md#section-313-ancestor-origins).
 Child navigation must supply the navigable/container association, fully-active
 ancestry, and iframe referrer policy. `Navigable.container` throws for children

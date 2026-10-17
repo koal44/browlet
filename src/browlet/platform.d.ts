@@ -1561,6 +1561,7 @@ export interface Document extends Node {
   readonly head: HTMLHeadElement | null;
   write(...text: Array<string>): void;
   readonly defaultView: WindowProxy | null;
+  onreadystatechange: EventHandlerNonNull | null;
   readonly all: HTMLAllCollection;
   readonly children: HTMLCollection;
   readonly firstElementChild: Element | null;

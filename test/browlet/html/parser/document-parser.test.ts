@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { InternalPromise } from '../../../../src/infra/promises';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { getBindingContext, getRelevantRealm } from '../../../support/browlet-binding';
+import { createManualUserAgent } from '../../../support/browlet-agent';
 import { TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { networkingTaskSource } from '../../../../src/browlet/scripting/tasks';
 import { FetchBody } from '../../../../src/fetch/body';
@@ -14,7 +15,7 @@ import { ReadableStreamImpl } from '../../../../src/streams/index';
 
 import {
   HTMLDocumentParser,
-} from '../../../../src/browlet/html/parser/document-parser';
+} from '../../../../src/browlet/html/parser/html-document-parser';
 import { HTMLLinkElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/link';
 import { HTMLStyleElementImpl } from '../../../../src/browlet/dom/nodes/html/metadata/style';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
@@ -173,6 +174,31 @@ describe('HTMLDocumentParser', () => {
     expect(document.getElementById('after') !== null).toBe(!reject);
     expect(errors).toEqual(reject ? [failure] : []);
   });
+
+  it('does not resume readiness changes when aborted after EOF queues completion', async () => {
+    const { document, realm, drain } = createParserDocument(createManualUserAgent());
+    drain();
+    document.currentDocumentReadiness = 'loading';
+    const parser = new HTMLDocumentParser(document, () => {});
+    const readiness: string[] = [];
+    document.addEventListener('readystatechange', () => { readiness.push(document.readyState); });
+    let complete = false;
+    const errors: unknown[] = [];
+    parser.parse('<p id="parsed">done</p>')
+      .observe(() => { complete = true; }, (error) => { errors.push(error); });
+
+    await inNodeTask(() => { realm.agent.eventLoop.runTaskTurn(); });
+    await expect.poll(() => realm.agent.eventLoop.hasRunnableTasks()).toBe(true);
+    expect(document.getElementById('parsed')).not.toBeNull();
+    expect(document.readyState).toBe('loading');
+    parser.abort();
+    await inNodeTask(drain);
+
+    expect(readiness).toEqual(['interactive', 'complete']);
+    expect(document.readyState).toBe('complete');
+    expect(complete).toBe(false);
+    expect(errors).toMatchObject([{ name: 'AbortError' }]);
+  });
 });
 
 describe('HTMLDocumentParser response bytes', () => {
@@ -242,8 +268,9 @@ describe('HTMLDocumentParser response bytes', () => {
     stream.enqueueChunk(utf8Encode(waiting === 'script'
       ? '<script></script><main id="after"></main>' : '<p></p>'));
     const parser = new HTMLDocumentParser(document, () => ready.promise);
-    document.activeParser = parser;
     document.currentDocumentReadiness = 'loading';
+    const readiness: string[] = [];
+    document.addEventListener('readystatechange', () => { readiness.push(document.readyState); });
     let firstInput = false;
     let complete = false;
     const errors: unknown[] = [];
@@ -265,6 +292,8 @@ describe('HTMLDocumentParser response bytes', () => {
     expect(stream.locked).toBe(false);
     expect(complete).toBe(false);
     expect(document.activeParser).toBeNull();
+    expect(document.parser).toBeNull();
+    expect(readiness).toEqual(['interactive', 'complete']);
     expect(document.readyState).toBe('complete');
     expect(document.getElementById('after')).toBeNull();
   });
@@ -286,8 +315,8 @@ function inNodeTask(steps: () => void): Promise<void> {
   });
 }
 
-function createParserDocument() {
-  const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
+function createParserDocument(userAgent = new UserAgent()) {
+  const traversable = TopLevelTraversable.create(userAgent, null, '');
   const document = traversable.activeDocument;
   if (document === null) throw new Error('Expected an active document');
   while (document.firstChild) document.removeChild(document.firstChild);

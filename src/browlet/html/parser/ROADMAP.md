@@ -19,7 +19,8 @@
   still populate its prepared type and clear/restore that parser association.
   This small hook does not implement force-async, already-started, or the
   adjusted-current-element/intended-parent creation requirements below.
-- `document-parser.ts` enters and resumes parsing through HTML networking tasks.
+- `document-parser.ts` owns the shared document association and stopped state;
+  `html-document-parser.ts` enters and resumes HTML parsing through networking tasks.
   It uses `document.env` for execution and the event loop; stylesheet waits and
   script-handler completion use `InternalPromise`. Node's stream-finished callback
   only queues document finalization back into HTML. `Browlet.navigate()` keeps
@@ -30,6 +31,11 @@
   body's execution owner; parsing, the first-input callback, and EOF run on the
   Document's networking tasks. `abort()` cancels the reader, destroys the
   parse5 stream, and suppresses pending input/script continuations.
+- The streaming parser registers itself with Document. EOF marks it stopped
+  and updates readiness to interactive; abort updates interactive then complete.
+  The association survives stopping long enough for Document's HTML-specific
+  readiness timestamps, then completion or abortion releases the parser.
+  XML parsing still needs its own implementation of this Document lifecycle contract.
 
 This is enough for Browlet's current document shell, but it is not yet a
 general HTML parser integration. In particular, the tree adapter's
@@ -74,8 +80,17 @@ cancellation, and replay of the MIME-sniffed prefix; the parser still schedules
 input and completion in its Document's environment. Complete HTML encoding selection needs the
 byte prescan, meta processing, encoding confidence, and retained bytes for restart without
 refetching. The current decoder does not retain a whole-body copy for that
-future mechanism. Abort still needs the specified readiness events,
-open-element cleanup, and speculative-parser lifecycle.
+future mechanism. Abort now delivers the specified readiness changes; it still
+needs open-element cleanup and speculative-parser lifecycle integration.
+
+Document's provisional `finishLoading()` dispatches DOMContentLoaded, changes
+readiness to complete, and dispatches Window load with its legacy Document
+target. It records timestamps around the actual event dispatches. These phases
+still run together: the full stop-parsing algorithm must supply separate
+DOM-manipulation tasks, deferred/async script waits, load-event delays, Service
+Worker client-message enablement, BiDi notifications, pageshow, printing, and
+navigation-timing delivery. The synchronous tree-only `parseHTMLDocument()`
+convenience does not claim those navigation milestones.
 
 The shared `extractMetaEncoding()` string algorithm is implemented in
 [`microsyntaxes/meta-encoding.ts`](../microsyntaxes/meta-encoding.ts), below both
@@ -108,7 +123,7 @@ disposal and the remaining lifecycle work.
 | `encoding.ts` | Byte-stream decoding, encoding sniffing, `<meta>` extraction, confidence, and navigation restart without a second network fetch | HTML §§2.1.7, 2.5.3, and 13.2 |
 | `script-runner.ts` | Parser-inserted scripts, pause/resume, nesting level, pending parsing-blocking script | HTML §§13.2.2 and 13.2.6.4 |
 | `dynamic-markup.ts` | `document.open()`, `close()`, `write()`, and `writeln()` over the active parser, including reentrancy, destructive-write guards, and script insertion points | HTML §8.4 |
-| Existing `document-parser.ts` and `DocumentImpl` | Stop/abort parsing, readiness changes, deferred scripts, `DOMContentLoaded`, load-event delay, and final completion | HTML §13.2, "The end" |
+| Existing `html-document-parser.ts` and `DocumentImpl` | Stop/abort parsing, readiness changes, deferred scripts, `DOMContentLoaded`, load-event delay, and final completion | HTML §13.2, "The end" |
 | `preload-scanner.ts` only after ordinary loading works | Optional speculative resource discovery without semantic tree mutation | HTML §13.2, "Speculative HTML parsing" |
 
 parse5 continues to own tokenization, tree construction, insertion modes,
@@ -155,7 +170,7 @@ runs. With no active speculative parser, it first performs a microtask
 checkpoint when the JavaScript execution-context stack is empty. Only after
 preparing the script does it spin the event loop when a style sheet blocks
 scripts or the script is not ready.
-`document-parser.ts` now explicitly requests the conditional checkpoint and
+`html-document-parser.ts` now explicitly requests the conditional checkpoint and
 resumes synchronous handlers in the current task. A blocked stylesheet wait or
 an internal asynchronous script result resumes through a later networking task.
 The stylesheet condition is checked again before execution, since a new blocker

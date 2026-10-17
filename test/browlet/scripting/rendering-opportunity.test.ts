@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createManualUserAgent } from '../../support/browlet-agent';
 
 import { getRelevantRealm } from '../../support/browlet-binding';
@@ -14,8 +14,10 @@ import {
 } from '../../../src/browlet/scripting/tasks';
 import { WindowAgent } from '../../../src/browlet/scripting/agents';
 import {
-  monotonicClock, UnsafeMoment,
+  Duration, monotonicClock, UnsafeMoment,
 } from '../../../src/browlet/timing/clock';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('Window rendering producer', () => {
   it('queues an ordered rendering update on its event loop', () => {
@@ -109,6 +111,59 @@ describe('Window rendering producer', () => {
     agent.eventLoop.runTaskTurn();
 
     expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
+  });
+
+  it('consults Document render blocking before running any rendering phase', () => {
+    const { agent, document, navigable } = createWindowFixture();
+    document.body!.remove();
+    vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
+    const manualHost = createManualRenderingHost(Array.from({ length: 6 }, (_, i) =>
+      new UnsafeMoment(monotonicClock, i + 1)));
+    const updateRenderingAndUserInterface = vi.fn();
+    const producer = new WindowRenderingProducer(agent, manualHost.host, { updateRenderingAndUserInterface });
+    producer.start();
+
+    manualHost.signal([navigable]);
+    agent.eventLoop.runTaskTurn();
+    expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
+
+    const script = document.head!.appendChild(document.createElement('script'));
+    script.blockRendering();
+    document.documentElement!.appendChild(document.createElement('body'));
+    manualHost.signal([navigable]);
+    agent.eventLoop.runTaskTurn();
+    expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
+
+    script.unblockRendering();
+    manualHost.signal([navigable]);
+    agent.eventLoop.runTaskTurn();
+    expect(updateRenderingAndUserInterface).toHaveBeenCalledOnce();
+    producer.stop();
+  });
+
+  it('resumes rendering after the cutoff even while a resource remains pending', () => {
+    const { agent, document, navigable } = createWindowFixture();
+    document.body!.remove();
+    const script = document.head!.appendChild(document.createElement('script'));
+    script.blockRendering();
+    document.documentElement!.appendChild(document.createElement('body'));
+    const now = vi.spyOn(document.env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(5000));
+    const manualHost = createManualRenderingHost(Array.from({ length: 4 }, (_, i) =>
+      new UnsafeMoment(monotonicClock, i + 1)));
+    const updateRenderingAndUserInterface = vi.fn();
+    const producer = new WindowRenderingProducer(agent, manualHost.host, { updateRenderingAndUserInterface });
+    producer.start();
+
+    manualHost.signal([navigable]);
+    agent.eventLoop.runTaskTurn();
+    expect(updateRenderingAndUserInterface).not.toHaveBeenCalled();
+
+    now.mockReturnValue(new Duration(5001));
+    manualHost.signal([navigable]);
+    agent.eventLoop.runTaskTurn();
+    expect(updateRenderingAndUserInterface).toHaveBeenCalledOnce();
+    expect(document.renderBlockingElements.has(script)).toBe(true);
+    producer.stop();
   });
 
   it('stops observing without queueing another rendering task', () => {

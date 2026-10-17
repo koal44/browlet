@@ -21,7 +21,7 @@ Do not restart the completed task/timer foundation when adding these consumers.
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
-| `rendering-opportunity.ts` | Independent opportunity producer and ordered rendering pipeline seams |
+| `rendering-opportunity.ts` | Independent opportunity producer, Document render-blocking filter, and ordered rendering pipeline seams |
 | `speculation-rules.ts` | Provisional parse-result record shared by HTML scripts, Document parsing, and Window updates; no rule-set parsing or registration yet |
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
 

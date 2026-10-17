@@ -50,6 +50,11 @@
   contribution.
 - [x] Keep style-sheet fetching and HTML `<link>` processing in `loader/` and
   HTML; keep semantic sheet/declaration mutation in Stylelet.
+- [ ] Connect HTML style/link processing and critical-resource completion to
+  `Element.blockRendering()`/`unblockRendering()`. Document's
+  [§3.1.6 mechanism](../html/ROADMAP.md#section-316-render-blocking) and shared
+  disconnection/attribute cleanup are implemented; the current inline sheet
+  association does not supply the complete resource-loading lifecycle.
 - [ ] Finish projecting `CSSStyleSheet` and the CSSOM objects it exposes through
   the active host's Web IDL binding. Stylelet retains their implementation
   state and mutation behavior. Verify the declared API surface as well as

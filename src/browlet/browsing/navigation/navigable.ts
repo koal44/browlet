@@ -169,7 +169,6 @@ export class Navigable {
       document,
       (element, write) => document.waitForScriptsMayRun().then(() => handleScript(element, write)),
     );
-    document.activeParser = parser;
     // PROVISIONAL(HTML bytes): BOM/transport decoding works; full encoding
     // selection and replay for restart remain with the parser integration.
     const parsing = parser.parseBytes(
@@ -178,12 +177,10 @@ export class Navigable {
     );
     parsing.observe(
       () => env.exec.queueTask('network', () => {
-        document.activeParser = null;
         document.finishLoading();
       }),
       () => env.exec.queueTask('network', () => {
         document.abort();
-        document.activeParser = null;
       }),
     );
     return document;

@@ -1,12 +1,16 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { ReportingObserverImpl } from '../../../src/browlet/reporting/observer';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { navigationAndTraversalTaskSource, networkingTaskSource } from '../../../src/browlet/scripting/tasks';
+import { HTMLDocumentParser } from '../../../src/browlet/html/parser/html-document-parser';
+import { Duration } from '../../../src/browlet/timing/clock';
 import { BlobImpl } from '../../../src/file/blob';
 import { parseURL } from '../../../src/url/index';
+
+afterEach(() => vi.restoreAllMocks());
 
 describe('Document destruction', () => {
   it.each(['destroy', 'abort'] as const)('requires the owning event-loop task for %s', (operation) => {
@@ -94,6 +98,22 @@ describe('Document destruction', () => {
     expect(otherDocument.browsingContext).not.toBeNull();
   });
 
+  it('unblocks connected elements when destroying their browsing context', () => {
+    const { document, env } = createDocument();
+    document.body!.remove();
+    const script = document.head!.appendChild(document.createElement('script'));
+    script.blockRendering();
+    vi.spyOn(env.timing, 'currentHighResolutionTime').mockReturnValue(new Duration(0));
+    expect(script.isRenderBlocking()).toBe(true);
+
+    env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.destroy(); });
+    env.responsibleEventLoop.runTaskTurn();
+
+    expect(document.browsingContext).toBeNull();
+    expect(script.isConnected).toBe(true);
+    expect(document.renderBlockingElements.size).toBe(0);
+  });
+
   it('revokes only the destroyed document\'s Blob URLs from the shared user-agent store', () => {
     const userAgent = new UserAgent();
     const first = createDocument(userAgent);
@@ -114,9 +134,8 @@ describe('Document destruction', () => {
 
   it('aborts a registered parser and reports the canceled navigation without destroying the document', () => {
     const { document, traversable, env } = createDocument();
-    const abort = vi.fn();
+    const abort = vi.spyOn(new HTMLDocumentParser(document, () => {}), 'abort');
     const notifyAborted = vi.spyOn(env.userAgent, 'webDriverBiDiNavigationAborted');
-    document.activeParser = { abort };
     document.duringLoadingNavigationID = 'navigation-1';
 
     env.realm.queueGlobalTask(navigationAndTraversalTaskSource, () => { document.abort(); });

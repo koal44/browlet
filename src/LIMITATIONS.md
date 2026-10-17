@@ -288,6 +288,13 @@ their HTML consumers; complete referrer-policy precedence is not implemented.
 Browlet's existing parser callback still evaluates data-block scripts such as `application/json` as
 JavaScript; an approved expected-failure regression retains that limitation.
 
+Document's [render-blocking mechanism](browlet/html/ROADMAP.md#section-316-render-blocking)
+now supplies eligibility, a configurable five-second cutoff, element lifecycle
+cleanup, and rendering-opportunity filtering. The element loading/preparation
+algorithms still need to register and release pending work and populate Fetch
+request flags. Setting `blocking="render"` alone does not start resource loading;
+production rendering opportunities, layout, and display remain unfinished.
+
 Image/link/script `fetchPriority` reflects the shared attribute state. Element
 loaders do not yet transfer these hints into requests, and UserAgent's Fetch
 priority-selection hook still has no transport scheduler. Setting the attribute
@@ -314,6 +321,13 @@ element processing. The synchronous source-text
 route also remains. Neither establishes full HTML navigation, encoding restart,
 script readiness, Link/preload processing, load-event ordering, or public timing
 entries. Fragment and `javascript:` navigation still need their specified paths.
+
+Document readiness changes and `readystatechange` now run through the shared
+§3.1.5 algorithm. Existing HTML routes deliver DOMContentLoaded and load with
+their corresponding timestamps, but still combine phases that §13 queues
+separately and do not wait for all load-delaying resources. XML parsing and
+previous-document unload timing capture remain missing; see the
+[loading-status audit](browlet/html/ROADMAP.md#section-315-document-loading-status).
 
 Nested/auxiliary creation stops at explicit missing creator-state and container
 associations. Ancestor-origin calculation and referrer-policy masking accept

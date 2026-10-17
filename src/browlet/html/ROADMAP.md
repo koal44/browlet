@@ -338,9 +338,9 @@ implement automation override selection or make real lazy loading operational.
 
 ### Section 2.5.8 blocking attributes
 
-The attribute and potential-blocking decisions are implemented. This does not
-implement rendering waits: §3.1.6's Document mechanism and the element loading
-algorithms are separate dependencies, listed explicitly below.
+The attribute and potential-blocking decisions are implemented. The Document
+mechanism is now supplied by [§3.1.6](#section-316-render-blocking); resource-loading
+integration remains a separate dependency, listed explicitly below.
 
 | Requirement | Implementation and boundary |
 | --- | --- |
@@ -350,7 +350,7 @@ algorithms are separate dependencies, listed explicitly below.
 | Implicit stylesheet blocking | Style and stylesheet-link elements retain the document whose parser created them. They qualify while that document remains their node document; link additionally requires the ASCII-insensitive `stylesheet` relationship. Parser completion and detachment do not by themselves end potential eligibility. Clones/imports do not copy parser origin. |
 | Implicit script blocking | A script must have prepared type `classic`, a non-null parser document, and no null-namespace `async` or `defer` attribute. `scriptType` stores the prepared type separately from the raw attribute. The parser supplies its document, but script preparation must populate the type and perform its specified parser-document clearing/restoration. The current ad hoc script handler still does neither preparation nor render blocking. |
 | Parser integration | `HTMLTreeAdapter` calls each element's `initializeFromParser()` before adding attributes or inserting the element. The default hook needs no state; link/style/script retain their own association. XML and fragment parsing must enter the appropriate creation path when those consumers exist. This does not complete intended-parent, custom-element, force-async, or other script parser flags. |
-| Actual rendering dependency | Document's §3.1.6 render-blocking element set, HTML-content/body eligibility, and timeout predicate remain unimplemented. Element loading/preparation must add eligible blockers and remove them on completion, failure, disconnection, or loss of eligibility; Fetch request flags and rendering opportunities must consume that state. The existing script-blocking stylesheet set is a different mechanism. No successful rendering wait or load is synthesized here. |
+| Actual rendering dependency | §3.1.6 supplies Document's blocking set, HTML-content/body eligibility, timeout predicate, disconnection/attribute cleanup, and rendering-opportunity filtering. Element loading/preparation must still add eligible blockers, remove them on completion/failure, and propagate actual blocking into Fetch request flags. The script-blocking stylesheet set is separate. |
 
 **SPEC_CLASH(blocking-token-case): case-insensitive interpretation.**
 [HTML §2.5.8](https://html.spec.whatwg.org/multipage/urls-and-fetching.html#blocking-tokens-set)
@@ -466,7 +466,7 @@ must not become one oversized HTML Document module.
 | §3.1.2 `DocumentOrShadowRoot` | DOM's mixin implementation; focus management supplies `activeElement` |
 | §3.1.3 ancestor origins | Document lifecycle and `browsing/window/location.ts`, using referrer policy, origin records, and `dom/string-list.ts` |
 | §3.1.4 resource metadata | Document accessors over URL, Fetch response metadata, cookies, and loader state |
-| §3.1.5 document loading status | `html/parser/`, `loader/`, `scripting/`, and `performance/` coordination |
+| §3.1.5 document loading status | Document owns readiness and timing records; `html/parser/` and navigation drive transitions, while `performance/` exposes timing |
 | §3.1.6 render blocking | `loader/` and `style/`, with the blocking set stored by Document |
 | §3.1.7 DOM tree accessors | `dom/nodes/document.ts`, HTML element implementations, and live collection machinery |
 | §§3.2.1 and 3.2.4–3.2.5 semantics, definitions, and content models | Element metadata, conformance tests, and accessibility; most authoring requirements create no runtime algorithm |
@@ -492,8 +492,8 @@ to the existing `all`, `head`, read-only `body`, `write`, and `defaultView` surf
 | §3.1.2 DocumentOrShadowRoot | HTML partial declaration and shared `activeElement` getter, including retargeting and body/document-element fallback; Selectlet uses the same getter | `Document.focusedArea` is an explicit throwing dependency until §6.6 supplies focus state and its lifecycle. |
 | §3.1.3 ancestor origins | Both list-creation algorithms, referrer-policy masking, retained string snapshots, and explicit parent input before activation | Child navigable/container association and fully-active ancestry remain explicit dependencies. `Location.ancestorOrigins` still needs its §7.2.4 relevant-document/security behavior. |
 | §3.1.4 resource metadata | Referrer, non-HTTP access to the shared cookie store, retained response modification time, and local-time `lastModified` formatting | File navigation must supply filesystem modification times. The source-only route has no response headers; its modification time remains unknown. Cookie-averse browser differences are recorded below. |
-| §3.1.5 loading status | Projected readiness state, load timing fields, redirect flag, provisional parser/local-route completion | No common readiness-update operation, `readystatechange` dispatch/handler, or previous-document unload timing field. Existing completion paths assign readiness directly; full parser/load milestones remain provisional. |
-| §3.1.6 render blocking | Potentially-render-blocking element predicates from §2.5.8 | No Document blocking set, eligibility/timeout predicate, or block/unblock lifecycle. The existing script-blocking stylesheet set is separate. |
+| §3.1.5 loading status | Readiness-update algorithm, `readystatechange` dispatch/handler, HTML/XML parser lifecycle contract, load/unload timing records, and redirect flag | XML parser implementation and previous-document unload capture remain missing. Existing HTML routes use the shared transitions; full §13 completion scheduling remains provisional. |
+| §3.1.6 render blocking | Document blocking set, HTML-content/body eligibility, timeout predicate, element block/unblock operations, disconnection/attribute cleanup, and rendering-opportunity filtering | Element preparation/loading must register and release actual pending work and populate Fetch request flags. Production rendering remains unfinished; script-blocking stylesheets remain a separate mechanism. |
 | §3.1.7 tree accessors | `head` and `body` getters, DOM tree/mutation algorithms, reusable live collections and Web IDL named-property machinery | `title`, the `body` setter, document collections and aliases, `getElementsByName`, `currentScript`, and Document named properties are missing. Named-property handling also needs embed/object exposure and child-navigable behavior. `dir` is defined with the later global attribute. |
 
 The audit first reproduced two omissions in
@@ -501,7 +501,7 @@ The audit first reproduced two omissions in
 flags remained false, and cloning lost the inherited base URI. The §3.1.1 slice
 fixes both and retains the regressions, including shallow and deep cloning.
 
-Continue with §3.1.5. For the later slices, preserve the existing boundaries: Document owns its state,
+Continue with §3.1.7. For the later slices, preserve the existing boundaries: Document owns its state,
 focus supplies active-element behavior, navigation supplies ancestry, loaders
 consume render-blocking state, and Web IDL projects the resulting interfaces.
 
@@ -519,7 +519,7 @@ generic Document allocation's post-load-ready default unchanged.
 
 Both Document enums and `HTMLOrSVGScriptElement` are registered declarations.
 The existing referrer and readiness implementation state is now projected as
-readonly attributes. Complete readiness transitions remain §3.1.5 work.
+readonly attributes. The §3.1.5 slice below supplies readiness transitions.
 The minimal [`HTMLDialogElementImpl`](../dom/nodes/html/interactive/dialog.ts)
 and [`SVGScriptElementImpl`](../dom/nodes/svg/script-element.ts) supply concrete
 implementation/platform identities for the list and typedef. Their specialized
@@ -536,7 +536,7 @@ are all its members and contributions, with the current implementation boundary:
 | `location`, `domain` | Missing §7.2 relevant-document, navigation, and origin/security behavior. Existing Location is still a URL snapshot; retain PutForwards/LegacyUnforgeable requirements when connecting it. |
 | `referrer` | Implemented projection over existing Document state. |
 | `cookie`, `lastModified` | Implemented §3.1.4 accessors over the shared cookie store and retained source metadata; file metadata awaits its loader. |
-| `readyState` | Implemented projection; readiness events and transitions remain §3.1.5. |
+| `readyState` | Implemented projection and §3.1.5 readiness-update algorithm. |
 | Anonymous named getter and `LegacyOverrideBuiltIns` | Missing §3.1.7 selection/exposure rules and their Web IDL declaration. |
 | `title`, `body`, `head` | Head/body getters exist. Title and body setter remain §3.1.7; body is still readonly in executable IDL. |
 | `dir` | Missing §3.2.6 global-attribute forwarding. |
@@ -547,7 +547,8 @@ are all its members and contributions, with the current implementation boundary:
 | `hasFocus`, `designMode` | Missing §6 focus management and editing behavior. |
 | `execCommand`, `queryCommandEnabled`, `queryCommandIndeterm`, `queryCommandState`, `queryCommandSupported`, `queryCommandValue` | Missing editing-command subsystem referenced by HTML; no substitute return values are exposed. |
 | `hidden`, `visibilityState` | Missing Document accessors and visibility-change integration; the enum alone supplies no visibility behavior. |
-| `onreadystatechange`, `onvisibilitychange`, `GlobalEventHandlers` | Missing Document handler members/mixin integration. Shared EventHandler conversion already exists; dispatch and ownership need the relevant loading/visibility/event-handler algorithms. |
+| `onreadystatechange` | Implemented with shared EventHandler conversion/storage and `LegacyLenientThis`. |
+| `onvisibilitychange`, `GlobalEventHandlers` | Missing Document handler members/mixin integration; dispatch and ownership need the relevant visibility/event-handler algorithms. |
 | Obsolete members | `all` is implemented with the recorded native capability gate. The remaining obsolete surface belongs to §16.2. |
 
 `[CEReactions]` on these declarations still depends on custom-element reaction
@@ -772,6 +773,103 @@ missing navigation inputs explicitly; the History regression applies its URL
 mutation directly until the public API exists.
 The existing environment tests also exercise non-HTTP reads and writes through
 real document ancestry, including a live transition from cross-site to same-site.
+
+### Section 3.1.5 document loading status
+
+[`DocumentImpl`](../dom/nodes/document.ts) implements the
+[readiness-update algorithm](https://html.spec.whatwg.org/multipage/dom.html#update-the-current-document-readiness):
+unchanged values do nothing; a change stores the new value, records the first
+interactive/complete timestamp for an associated HTML parser, and synchronously
+fires a trusted `readystatechange` event. `onreadystatechange` uses the existing
+event-handler machinery and preserves its declared `LegacyLenientThis` behavior.
+Fresh documents remain complete; navigation initialization still assigns loading
+before exposing the new document, as the specification requires.
+
+The associated `parser` is distinct from `activeParser`, which is null once the
+parser stops or aborts. The parser-owned `DocumentParser` base class retains the
+document, stopped state, and association lifecycle, with a kind distinguishing
+HTML from XML and an abstract abortion operation. `HTMLDocumentParser` retains
+its association through the completion timestamps. Completion
+or abortion releases it afterward so Document does not keep parse5's input and
+script callback alive. The XML implementation is an explicit missing dependency;
+the lifecycle contract alone does not provide XML parsing.
+
+Both load and previous-document unload records have the specified zero defaults,
+and the cross-origin-redirect flag retains its false default. Navigation must
+still capture the departing document's unload timestamps and supply them to the
+new document. Performance entry exposure remains with the
+[performance roadmap](../performance/ROADMAP.md).
+
+The source and Fetch HTML routes now report interactive at parsing completion,
+then `DOMContentLoaded`, complete, and Window load with Document as its target.
+This connects the existing provisional completion path; it does not complete
+[§13's stop-parsing algorithm](https://html.spec.whatwg.org/multipage/parsing.html#stop-parsing).
+Separate DOM-manipulation tasks, deferred/async script waits, load-event delays,
+Service Worker client-message enablement, BiDi notifications, pageshow, printing,
+and navigation-timing delivery remain in the [parser roadmap](parser/ROADMAP.md).
+Abort emits the two readiness changes but still lacks open-element cleanup and
+speculative-parser integration. The synchronous tree-only parsing convenience
+does not implement the navigation lifecycle.
+
+[`loading-status.test.ts`](../../../test/browlet/dom/nodes/loading-status.test.ts)
+retains the original failure: a navigated page observed only loading, with
+neither readiness notification. It covers defaults, synchronous event delivery,
+first-write timing, stopped/HTML/XML parser distinctions, handler conversion,
+and event order. Its load-target regression also failed before enabling DOM's
+existing legacy target override. Parser tests cover readiness during abortion,
+including an EOF/abort race where queued completion previously restored
+interactive readiness after abortion. The stopped state rejects that stale
+completion without restarting the loading lifecycle.
+
+### Section 3.1.6 render blocking
+
+[HTML §3.1.6](https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism)
+now lives on Document and Element. Document owns `renderBlockingElements`,
+admits new blockers only for exact `text/html` content without a body/frameset,
+and tests both pending work/body eligibility and the high-resolution-time cutoff.
+Elements expose `isRenderBlocking()`, `blockRendering()`, and `unblockRendering()`.
+Block admission deliberately does not repeat potential eligibility: the resource
+algorithm decides when to invoke it. Attribute assignment alone does not start work.
+
+The shared Element attribute/removal paths release blockers when a blocking
+attribute loses potential eligibility or removal disconnects the element,
+including descendants inside shadow trees. State-preserving moves do not release
+them; adoption removes the old-document dependency before changing ownership.
+The Document browsing-context setter releases connected blockers when the context
+changes from non-null to null, as required by
+[browsing-context disconnection](https://html.spec.whatwg.org/multipage/infrastructure.html#becomes-browsing-context-disconnected).
+Document destruction and other detach paths share this cleanup through assignment.
+
+`UserAgent.renderBlockingTimeout` defaults to 5000 milliseconds from the relevant
+global's time origin. This is an implementation-defined policy, not a new timer
+started for each resource. The cutoff is inclusive; expiration changes whether
+rendering is blocked without clearing pending resource membership. Completion can
+still call `unblockRendering()` afterward. Rendering opportunities consult this
+Document predicate directly, replacing their provisional injected filter.
+
+The five-second value is informed by WebKit's
+[`IncrementalRenderingSuppressionTimeout`](https://github.com/WebKit/WebKit/blob/main/Source/WTF/Scripts/Preferences/UnifiedWebPreferences.yaml)
+and [Document suppression timer](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/dom/Document.cpp).
+WebKit starts its timer when suppression begins; Browlet follows HTML's stated
+global-clock comparison. The other inspected engines use different mechanisms:
+[Blink's resource manager](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/loader/render_blocking_resource_manager.cc)
+has font-specific timers, while [Gecko's paint suppression](https://searchfox.org/mozilla-central/source/layout/base/PresShell.cpp)
+uses an initial-paint delay. These are not evidence of one shared timeout policy.
+
+Script preparation, linked-resource processing (including `rel=expect`), and
+stylesheet critical-resource loading still need their specified block/unblock
+calls and Fetch request flags. Neither the ad hoc parser script handler nor
+the current inline stylesheet association claims those loading algorithms.
+The [loader](../loader/ROADMAP.md), [style integration](../style/ROADMAP.md), and
+[rendering pipeline](../scripting/ROADMAP.md#deferred-processing-model-tails)
+retain those dependencies, including real rendering opportunities and display.
+
+[`render-blocking.test.ts`](../../../test/browlet/dom/nodes/render-blocking.test.ts)
+covers admission, body/frameset and namespace handling, cutoff boundaries,
+potential versus actual blockers, attribute changes, subtree/shadow removal,
+browsing-context detachment, adoption, state-preserving moves, and independent
+script-blocking state.
+Rendering-producer and document-destruction tests cover the connected consumers.
 
 ## HTML section 4 ownership
 

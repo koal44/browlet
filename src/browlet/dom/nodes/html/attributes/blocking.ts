@@ -10,9 +10,8 @@ const possibleBlockingTokens: ReadonlySet<string> = new Set<BlockingToken>(['ren
 /** Attribute definition shared by internal token-list callers and reflected bindings. */
 export const blockingAttribute: TokenListAttribute = { name: 'blocking', supportedTokens: possibleBlockingTokens };
 
-// TODO(render blocking): Document's HTML §3.1.6 mechanism must consume the element predicates,
-// including unblocking on disconnection and on blocking-attribute changes that end eligibility.
-// Loader/preparation entry and completion, request flags, and the rendering timeout remain with those owners.
+// TODO(HTML resource loading): call Element.blockRendering()/unblockRendering() at the
+// specified preparation/completion steps and propagate actual blocking into Fetch request flags.
 
 /** Interpret a supported element's blocking attribute without changing its author-visible token list. */
 // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#blocking-tokens-set
