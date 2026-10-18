@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../src/browlet/browlet';
 import type { WindowProxy } from '../../src/browlet/platform';
+import { itPassesWith } from '../test-runtime';
 
 describe('Browlet evaluation bridge', () => {
   it('evaluates source and functions in the page and awaits their results', async () => {
@@ -193,6 +194,36 @@ describe('Browlet evaluation bridge', () => {
     await expect(browlet.evaluate(() => document)).rejects.toThrow('live objects require handles');
     await expect(browlet.evaluate(() => () => 1)).rejects.toThrow('Functions and proxies');
     await expect(browlet.evaluate((value) => value, () => 1)).rejects.toThrow('Functions and proxies');
+  });
+
+  it('rejects proxy arguments before inspecting their properties', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    let inspected = false;
+    const value = new Proxy({}, {
+      getPrototypeOf() { inspected = true; return Object.prototype; },
+      ownKeys() { inspected = true; return []; },
+    });
+    await expect(browlet.evaluate((input) => input, value)).rejects.toThrow('live objects require handles');
+    expect(inspected).toBe(false);
+    const revoked = Proxy.revocable({}, {});
+    revoked.revoke();
+    await expect(browlet.evaluate((input) => input, revoked.proxy)).rejects.toThrow('live objects require handles');
+  });
+
+  itPassesWith('htmlDDA')('rejects document.all as evaluation data', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    // A failed rejection must not send the undetectable object to Vitest's formatter.
+    await expect(browlet.evaluate(() => document.all).then(() => 'live value escaped'))
+      .rejects.toThrow('live objects require handles');
+    await expect(browlet.evaluate(() => ({ collection: document.all })).then(() => 'live value escaped'))
+      .rejects.toThrow('live objects require handles');
+    let called = false;
+    await browlet.exposeFunction('host', () => { called = true; });
+    await expect(browlet.evaluate(() => {
+      const host = Reflect.get(globalThis, 'host') as (value: unknown) => Promise<void>;
+      return host(document.all);
+    })).rejects.toThrow('live objects require handles');
+    expect(called).toBe(false);
   });
 
   it('does not carry closures into the page', async () => {

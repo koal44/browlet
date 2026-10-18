@@ -75,9 +75,10 @@ describe('document.all exposure', () => {
 });
 
 describe('native document.all', () => {
-  itPassesWith('htmlDDA')('retains a falsy document.all identity and rejects attaching another platform object', async () => {
+  itPassesWith('htmlDDA')('retains a falsy document.all identity and rejects attaching another platform object', () => {
     const browser = new Browlet({ route: () => '' });
-    const all: unknown = await browser.evaluate(() => document.all);
+    // Identity checks need the live platform object; evaluate() copies data.
+    const all: unknown = browser.document.all;
     expect(Boolean(all)).toBe(false);
     expect(all === undefined).toBe(false);
     const record = getPlatformRecord(all)!;
@@ -85,7 +86,7 @@ describe('native document.all', () => {
     expect(record.project()).toBe(all);
     expect(() => record.attachPlatformObject({})).toThrow('already associated');
     expect(record.project()).toBe(all);
-    expect(await browser.evaluate(() => document.all)).toBe(all);
+    expect(browser.document.all).toBe(all);
   });
 
   itPassesWith('htmlDDA')('rejects document.all returned by an author primitive-conversion hook', async () => {

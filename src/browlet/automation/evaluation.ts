@@ -4,7 +4,7 @@ import { Script } from 'node:vm';
 import type { TaskHandle } from '../../infra/execution';
 import {
   type JSRealm, copyMapData, copySetData, getDateValue, getRegExpData,
-  hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isProxyObject,
+  hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isCallable, isObject, isProxyObject,
 } from '../../js-engine/index';
 import { idlType } from '../../web-idl/index';
 
@@ -137,15 +137,15 @@ export class PageEvaluation {
 function copyEvaluationValue(
   value: unknown, realm?: JSRealm, memory = new Map<object, unknown>(),
 ): unknown {
-  if (value === null || (typeof value !== 'object' && typeof value !== 'function')) {
+  if (!isObject(value)) {
     // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
     if (typeof value === 'symbol') throw new TypeError('Symbols cannot cross the evaluation boundary');
     return value;
   }
   if (memory.has(value)) return memory.get(value);
-  if (typeof value === 'function' || isProxyObject(value)) {
+  if (isCallable(value) || isProxyObject(value)) {
     // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
-    throw new TypeError('Functions and proxies cannot cross the evaluation boundary');
+    throw new TypeError('Functions and proxies cannot cross the evaluation boundary; live objects require handles');
   }
 
   let copy: object;
