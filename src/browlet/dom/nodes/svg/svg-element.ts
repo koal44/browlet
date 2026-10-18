@@ -1,8 +1,8 @@
 import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
-import { ElementTag } from '../element-tag';
-import { ContentCategory } from '../html/content-model';
+import { ElementTag, ContentCategory } from '../element-definitions/index';
+
 import { SVGGraphicsElementImpl } from './graphics-element';
 
 /** SVG-root identity used by Document title selection. */

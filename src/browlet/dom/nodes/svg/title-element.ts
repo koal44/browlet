@@ -1,8 +1,9 @@
 import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
+import { ElementTag } from '../element-definitions/index';
+
 import type { NodeImpl } from '../node';
-import { ElementTag } from '../element-tag';
 import { SVGElementImpl } from './element';
 
 /** Supplies the document title when it is a direct child of the SVG document root. */

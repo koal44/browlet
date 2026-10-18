@@ -1,7 +1,7 @@
 import { assert, describe, expect, it } from 'vitest';
 
 import { HTMLElementImpl } from '../../../../../src/browlet/dom/nodes/html/html-element';
-import { SanitizationCategory } from '../../../../../src/browlet/dom/nodes/html/sanitization';
+import { SanitizationCategory } from '../../../../../src/browlet/dom/nodes/element-definitions/sanitization';
 import { HTML_NAMESPACE } from '../../../../../src/infra/index';
 import { createTestDocument } from '../../../../support/dom';
 

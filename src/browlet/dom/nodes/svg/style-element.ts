@@ -2,11 +2,11 @@ import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import type { CSSStyleSheetImpl } from '../../../../stylelet/index';
 
+import { ElementTag } from '../element-definitions/index';
 import { LinkStyleMixin } from '../../../style/index';
 import type { BrowletEnvironment } from '../../../environment';
 
 import type { ElementCreationContext } from '../element';
-import { ElementTag } from '../element-tag';
 import { SVGElementImpl } from './element';
 
 /** Associates inline SVG stylesheet text with its tree scope. */

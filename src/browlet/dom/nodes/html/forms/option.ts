@@ -1,7 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
 
 /** Option selection state owned independently of its selected content attribute. */

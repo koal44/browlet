@@ -9,6 +9,7 @@ import {
 import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
 
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
+import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
 import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
 import type { EventImpl } from '../events/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
@@ -18,8 +19,6 @@ import { ElementAssociations, type ElementConstructor } from '../../html/reflect
 import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
-import { ElementTag } from './element-tag';
-import type { ContentCategory } from './html/content-model';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
@@ -64,6 +63,8 @@ export class ElementImpl extends NodeImpl {
   /** Fixed HTML content-category memberships; undefined means the inventory is unfinished. */
   // https://html.spec.whatwg.org/multipage/dom.html#kinds-of-content
   declare categories?: ContentCategory[];
+  /** Content requirements shared through the prototype; undefined means the model is unfinished. */
+  declare contentModel?: ContentModel;
   /** Stable live view of this element's attribute list. */
   attributes: NamedNodeMapImpl;
   /** Element name without a namespace prefix. */
@@ -226,6 +227,33 @@ export class ElementImpl extends NodeImpl {
       throw new InternalError(`Content categories for ${this.localName} are not implemented`);
     }
     return categories.includes(category);
+  }
+
+  /** Content requirements for this element; conditional models can override this query. */
+  getContentModel(): ContentModel {
+    const model = this.contentModel;
+    if (model === undefined) {
+      throw new InternalError(`Content model for ${this.localName} is not implemented`);
+    }
+    return model;
+  }
+
+  /** Whether the current children satisfy "nothing", independently of the element's declared model or voidness. */
+  // https://html.spec.whatwg.org/multipage/dom.html#concept-content-nothing
+  matchesNothingContentModel(): boolean {
+    for (let child = this.firstChild; child !== null; child = child.nextSibling) {
+      if (!child.isIgnoredHTMLContent()) return false;
+    }
+    return true;
+  }
+
+  /** Whether the current children satisfy the text-only content model. */
+  // https://html.spec.whatwg.org/multipage/dom.html#text-content
+  matchesTextContentModel(): boolean {
+    for (let child = this.firstChild; child !== null; child = child.nextSibling) {
+      if (!child.isText() && !child.isIgnoredHTMLContent()) return false;
+    }
+    return true;
   }
 
   /** Read this element's associated target or target list, narrowed to the supplied implementation constructors. */

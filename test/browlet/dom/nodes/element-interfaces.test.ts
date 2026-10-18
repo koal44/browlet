@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { browletDefinitions } from '../../../../src/browlet/bindings';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
-import { ElementTag } from '../../../../src/browlet/dom/nodes/element-tag';
+import { ElementTag } from '../../../../src/browlet/dom/nodes/element-definitions/element-tag';
 import { HTMLArticleElementImpl } from '../../../../src/browlet/dom/nodes/html/sections/article';
 import { HTMLQElementImpl } from '../../../../src/browlet/dom/nodes/html/grouping/quote';
 import { HTMLTableHeaderCellElementImpl } from '../../../../src/browlet/dom/nodes/html/tables/cell';

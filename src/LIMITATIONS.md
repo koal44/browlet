@@ -269,6 +269,12 @@ explicit standard content-handler list used for sink metadata.
   The [constructor slice](browlet/html/ROADMAP.md#section-323-html-element-constructors)
   records those dependencies and the approved non-extensible-upgrade clash.
 
+- **Content-model queries cover only the recorded models.** Contextual transparency
+  and paragraph discovery are implementation queries; unfinished model shapes,
+  container definitions, and foreign contexts throw when needed. They do not
+  validate DOM insertion or provide layout/editing behavior. See the
+  [transparency/paragraph scope](browlet/html/ROADMAP.md#sections-3253-and-3254-transparency-and-paragraphs).
+
 - **Document metadata depends on the loader's inputs.** Response-based document
   creation retains `Last-Modified`; the source-only route has no response date
   and local-file modification metadata is not connected. Unknown dates use the

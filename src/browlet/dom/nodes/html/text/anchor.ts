@@ -1,10 +1,11 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import {
+  ElementTag, ContentCategory, transparentContent, SanitizationCategory,
+} from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
-import { SanitizationCategory } from '../sanitization';
 
 /** Anchor identity used by link and named collections. */
 // https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-a-element
@@ -15,7 +16,7 @@ export class HTMLAnchorElementImpl extends HTMLElementImpl {
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
     this.prototype.contentModel = {
-      children: [{ kind: 'transparent' }],
+      childRules: [transparentContent],
       forbiddenDescendants: [
         { kind: 'category', category: ContentCategory.Interactive },
         { kind: 'element', implementation: HTMLAnchorElementImpl },

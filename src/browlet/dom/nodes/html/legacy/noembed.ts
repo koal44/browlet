@@ -1,4 +1,5 @@
-import { ElementTag } from '../../element-tag';
+import { ElementTag } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
 
 /** The noembed element, exposed through HTMLElement. */

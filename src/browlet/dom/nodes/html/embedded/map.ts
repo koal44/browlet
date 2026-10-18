@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** Image-map identity used by map lookup and named collections. */
 // https://html.spec.whatwg.org/multipage/image-maps.html#the-map-element
@@ -13,6 +13,7 @@ export class HTMLMapElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [transparentContent] };
   }
 
   override readonly isAllNamedElement = true;

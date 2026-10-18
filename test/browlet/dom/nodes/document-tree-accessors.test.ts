@@ -7,7 +7,7 @@ import type { HTMLElementImpl } from '../../../../src/browlet/dom/nodes/html/htm
 import type { HTMLIFrameElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/iframe';
 import type { HTMLObjectElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/object';
 import type { HTMLEmbedElementImpl } from '../../../../src/browlet/dom/nodes/html/embedded/embed';
-import type { HTMLScriptElementImpl } from '../../../../src/browlet/dom/nodes/html/script';
+import type { HTMLScriptElementImpl } from '../../../../src/browlet/dom/nodes/html/scripting/script';
 import type { SVGScriptElementImpl } from '../../../../src/browlet/dom/nodes/svg/script-element';
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../../src/infra/index';
 import { createTestDocument } from '../../../support/dom';

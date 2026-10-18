@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { HTML_NAMESPACE } from '../../../../../src/infra/index';
 import { Browlet } from '../../../../../src/browlet/browlet';
 import { getBlockingTokens } from '../../../../../src/browlet/dom/nodes/html/attributes/blocking';
-import { HTMLScriptElementImpl } from '../../../../../src/browlet/dom/nodes/html/script';
+import { HTMLScriptElementImpl } from '../../../../../src/browlet/dom/nodes/html/scripting/script';
 import { createTestDocument, parseTestDocument } from '../../../../support/dom';
 
 describe.each(['link', 'style', 'script'] as const)('%s.blocking', (tag) => {

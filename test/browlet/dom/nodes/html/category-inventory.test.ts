@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { HTML_NAMESPACE } from '../../../../../src/infra/index';
-import { ContentCategory } from '../../../../../src/browlet/dom/nodes/html/content-model';
+import { ContentCategory } from '../../../../../src/browlet/dom/nodes/element-definitions/content-model';
 import { createTestDocument } from '../../../../support/dom';
 
 // Category-first expectations from §3.2.5.2 and the form-category tables.

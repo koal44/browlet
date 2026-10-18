@@ -1,6 +1,6 @@
 import { assert, describe, expect, it } from 'vitest';
 
-import { ElementTag } from '../../../../src/browlet/dom/nodes/element-tag';
+import { ElementTag } from '../../../../src/browlet/dom/nodes/element-definitions/element-tag';
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../../src/infra/index';
 import { createTestDocument } from '../../../support/dom';
 

@@ -1093,7 +1093,7 @@ supply conditional memberships, as on area and selectedcontent. Content-model
 validation and sanitizer behavior retain their separate consumers.
 
 Content models now retain inspectable child rules and separate descendant
-restrictions in [`content-model.ts`](../dom/nodes/html/content-model.ts). Rules
+restrictions in [`content-model.ts`](../dom/nodes/element-definitions/content-model.ts). Rules
 describe one category member or element, ordered sequences, bounded repetition,
 empty content, and transparent content at a position within a sequence. Descendant
 restrictions identify a category, implementation, or namespace-less attribute.
@@ -1119,7 +1119,7 @@ contract; source markup still undergoes its parser's character processing.
 
 ### Section 3.2.5 preamble and nothing content model
 
-`HTMLElementImpl.matchesNothingContentModel()` checks its current DOM children
+`ElementImpl.matchesNothingContentModel()` checks its current DOM children
 for the "nothing" requirement. `NodeImpl.isIgnoredHTMLContent()` in
 [`node.ts`](../dom/nodes/node.ts) excludes comments,
 processing instructions, and inter-element whitespace: empty Text or Text
@@ -1187,7 +1187,7 @@ The remaining dependencies are deliberately explicit:
 
 The phrasing subsection also defines text-only contents and authored character
 validity. `textContent` describes the text rule, and
-`HTMLElementImpl.matchesTextContentModel()` checks current children while ignoring
+`ElementImpl.matchesTextContentModel()` checks current children while ignoring
 the excluded node kinds. `isValidHTMLText()` checks scalar values, noncharacters,
 and disallowed controls for text or attribute values. These are conformance
 queries; DOM strings are retained unchanged. Consumers applying the character
@@ -1232,6 +1232,89 @@ tests cover live attribute/tree/text changes, namespace lookalikes, foreign-root
 identities, and the explicit dependency stubs. No cache or DOM mutation validator
 is installed by this slice.
 
+### Sections 3.2.5.3 and 3.2.5.4 transparency and paragraphs
+
+`resolveContentModelTransparency(element)` in
+[`content-model.ts`](../dom/nodes/element-definitions/content-model.ts) resolves
+transparent portions from the current parent context while
+`ElementImpl.getContentModel()` retains the declaration. Internal position
+matching selects the admitting portion, rather than copying the parent's whole
+sequence. Nested transparent elements follow the context outward; an orphan
+uses flow content. Own and inherited descendant restrictions
+are retained. `ContentModel.childRules` contains the independent `ChildRule`
+requirements; `forbiddenDescendants` retains its prohibition meaning. No
+prototype metadata or DOM nodes are changed.
+
+Position matching currently handles homogeneous unbounded repetitions and fixed
+single-node prefixes followed by such a repetition, including details' summary
+followed by flow content. General sequences, bounded/compound repetitions, and
+ambiguous positions need the future matcher. Ruby's model remains unfinished;
+its example must not receive the whole ruby model or a permissive flow fallback.
+Non-element parent contexts and intersections nested inside a sequence/repetition
+also remain explicit throwing dependencies. Foreign elements use the same
+ElementImpl model contract; their missing models still throw. Independent
+top-level child rules are retained when resolving transparency.
+
+The small model inventory now includes ins/del, map, object, body, div, section, header,
+li, h1–h6, em, and span alongside the earlier examples. Div's ordinary flow model
+switches to transparent inside select/optgroup/option ancestry. Its direct-child
+dl model remains a throwing dependency, taking precedence over that ancestry.
+Media's mixed models, noscript's scripting-dependent model, and the remaining
+element definitions stay with their owners.
+
+`getParagraphs(document: DocumentImpl)` in
+[`paragraphs.ts`](../dom/nodes/element-definitions/paragraphs.ts) returns snapshot
+records for the whole document: an explicit p element or the original first/last
+nodes of an implicit run. The signature excludes arbitrary element roots, which
+could truncate a paragraph spanning a/ins/del/map boundaries. Element traversal
+stays private and receives elements retained in the paragraph view, including
+when the document element itself must be flattened. Body's flow model allows
+paragraphs formed by its direct phrasing content. The query has no production
+caller yet. It does not create live Ranges or retain a cache; callers recompute
+after mutations. Results list an outer run before its nested paragraphs and
+otherwise follow the view's tree order.
+
+The view removes exactly a, ins, del, and map. It preserves embedded objects as
+members of outer runs while also inspecting their fallback children, so the
+specification's five overlapping paragraphs are represented. Comments and
+processing instructions do not split runs. Text whitespace remains in a run's
+boundaries but cannot qualify a paragraph by itself; embedded-only runs likewise
+do not qualify. Empty p elements still form explicit paragraphs.
+
+Child collection preserves `ElementImpl | TextImpl`, so category queries need
+no repeated node-kind narrowing. Each child is classified as phrasing once;
+significance checks stop when a run qualifies. Explicit p elements only recurse
+to discover nested paragraphs, without classifying their children for implicit
+runs. Leaves avoid allocating child arrays. The bounded child array remains:
+it keeps flattened boundaries and outer-before-inner ordering straightforward.
+
+Paragraph discovery derives the container decision from the effective model
+through `modelAllowsImplicitParagraphs(model)`, rather than a second inventory.
+Flow, phrasing, text, empty, fixed-element, repetition, and sequence rules supply
+the bounded cases. Intersecting requirements
+and other category mixtures remain explicit dependencies. Missing container
+models or category inventories, including foreign content, throw when needed. The
+query does not implement layout, editing, automatic insertion checks, or the
+optional conformance-checker warning for overlapping paragraphs.
+
+A focused local source review on 2026-10-18 found editing paragraph traversal,
+not a directly reusable implementation of this definition:
+[Blink](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/editing/position_units_paragraph.cc)
+and [WebKit](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/editing/VisibleUnits.cpp)
+walk nodes to find rendered paragraph boundaries, using layout objects,
+visibility, line breaks, and editing boundaries.
+[Gecko](https://searchfox.org/mozilla-central/source/editor/libeditor/HTMLEditUtils.cpp)
+also uses editing block/inline classification and computed display styles.
+Those are different questions from HTML's paragraph view; their criteria are
+not substituted for content-category or content-model queries here.
+
+The transparency and paragraph tests cover current-parent changes, orphan and
+nested resolution, sequence-position selection, explicit dependencies, wrapper
+spans, ignored nodes, whitespace, and the specification's fallback example.
+Paragraph regressions also enforce the document-only parameter type, preserve a
+complete run spanning an anchor, and cover empty documents and a flattened
+document element.
+
 ## HTML section 4 ownership
 
 Section 4 defines every HTML element, but only a small subset is prerequisite
@@ -1244,7 +1327,7 @@ records that early slice and the complete element-family inventory.
 | §§4.3–4.7 semantic, grouping, text, links, and edits | `dom/nodes/html/sections/`, `grouping/`, and `text/`; hyperlink activation crosses into `browsing/navigation/` |
 | §4.8 embedded content | `dom/nodes/html/embedded/`; `iframe` delegates nested navigables to `browsing/`, while image and media resource work delegates to `loader/` |
 | §§4.9–4.11 tables, forms, and interactive elements | Corresponding `dom/nodes/html/` areas, with form infrastructure retained under `forms/` and focus/input under the future `interaction/` domain |
-| §4.12 scripting elements and canvas | `dom/nodes/html/script.ts`, `slot.ts`, and `scripting/` for template/canvas; script execution belongs to `scripting/` and loading to `loader/`; canvas rendering is a later graphics subsystem |
+| §4.12 scripting elements and canvas | `dom/nodes/html/scripting/` owns script, noscript, template, slot, and canvas elements; script execution belongs to `scripting/` and loading to `loader/`; canvas rendering is a later graphics subsystem |
 | §4.13 custom elements | `dom/nodes/html/custom-elements/`, integrated with DOM mutations and Web IDL `[CEReactions]` |
 
 Element interfaces do not own the subsystems they expose. In particular,

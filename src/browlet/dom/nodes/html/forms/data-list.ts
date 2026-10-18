@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** Suggestion-list identity used by select option traversal. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#the-datalist-element

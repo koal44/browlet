@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, phrasingContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory, phrasingContent  } from '../content-model';
 
 /** Paragraph element identity. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#htmlparagraphelement
@@ -14,7 +14,7 @@ export class HTMLParagraphElementImpl extends HTMLElementImpl {
       ContentCategory.Flow, ContentCategory.Palpable,
     ];
     // https://html.spec.whatwg.org/multipage/grouping-content.html#the-p-element
-    this.prototype.contentModel = { children: [phrasingContent] };
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 
   override canOmitEndTag(): boolean {

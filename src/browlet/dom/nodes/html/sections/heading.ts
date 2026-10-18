@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, phrasingContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** The h1 element, exposed through HTMLHeadingElement. */
 // https://html.spec.whatwg.org/multipage/sections.html#the-h1,-h2,-h3,-h4,-h5,-and-h6-elements
@@ -14,6 +14,7 @@ export class HTMLH1ElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Heading, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 
@@ -26,6 +27,7 @@ export class HTMLH2ElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Heading, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 
@@ -38,6 +40,7 @@ export class HTMLH3ElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Heading, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 
@@ -50,6 +53,7 @@ export class HTMLH4ElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Heading, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 
@@ -62,6 +66,7 @@ export class HTMLH5ElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Heading, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 
@@ -74,6 +79,7 @@ export class HTMLH6ElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Heading, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 

@@ -1,15 +1,15 @@
-import { HTML_NAMESPACE } from '../../../../infra/index';
-import { WeakOrderedSet } from '../../../../infra/collections';
+import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { WeakOrderedSet } from '../../../../../infra/collections';
 import {
   arg, attr, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, op,
   reference, reflect, sequence, union, xattr,
-} from '../../../../web-idl/index';
+} from '../../../../../web-idl/index';
 
-import type { ElementImpl } from '../element';
-import type { TextImpl } from '../text';
-import { ElementTag } from '../element-tag';
-import { HTMLElementImpl } from './html-element';
-import { ContentCategory } from './content-model';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
+import type { ElementImpl } from '../../element';
+import type { TextImpl } from '../../text';
+import { HTMLElementImpl } from '../html-element';
 
 /** Named/manual assignment, flattened fallback content, and slot-change signaling. */
 // https://html.spec.whatwg.org/multipage/scripting.html#the-slot-element

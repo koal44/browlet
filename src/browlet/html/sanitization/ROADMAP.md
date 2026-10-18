@@ -23,7 +23,7 @@ default attribute allowances, and navigating URL attributes identified by
 [HTML §3.2.4](https://html.spec.whatwg.org/multipage/dom.html#concept-element-sanitization).
 Prototype `sanitization` records on the tag-specific implementations now cover
 article, a, script, and form. Their definitions live in
-[`dom/nodes/html/sanitization.ts`](../../dom/nodes/html/sanitization.ts), independently
+[`dom/nodes/element-definitions/sanitization.ts`](../../dom/nodes/element-definitions/sanitization.ts), independently
 of the HTMLElement implementation. Their numeric category distinguishes `Default`,
 `Unsafe`, and `Uncategorized`; omitted attribute lists mean no element-specific
 entries. The lists contain namespace-less HTML names. An absent record means

@@ -2,11 +2,11 @@ import { asciiWhitespacePattern } from '../../../../infra/index';
 import { InternalError } from '../../../../infra/internal-error';
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
+import { ContentCategory, type ElementSanitization } from '../element-definitions/index';
+
 import { ElementImpl } from '../element';
 import type { NodeImpl } from '../node';
 import { HTMLOrSVGOrMathMLElementMixin } from '../html-or-svg-or-mathml-element';
-import { ContentCategory, type ContentModel } from './content-model';
-import type { ElementSanitization } from './sanitization';
 
 /** Base implementation for elements in the HTML namespace. */
 // https://html.spec.whatwg.org/multipage/dom.html#htmlelement
@@ -14,9 +14,6 @@ export class HTMLElementImpl extends ElementImpl {
   /** Fixed eligibility for name-based document.all lookup; ID lookup does not use this flag. */
   // https://html.spec.whatwg.org/#all-named-elements
   readonly isAllNamedElement: boolean = false;
-
-  /** Content requirements shared through the prototype; undefined means the model is unfinished. */
-  declare contentModel?: ContentModel;
 
   /** Attribute names shared through the prototype; undefined means unfinished, [] means globals only. */
   declare contentAttributes?: string[];
@@ -73,33 +70,6 @@ export class HTMLElementImpl extends ElementImpl {
     if (!this.isAutonomousCustomElement()) return false;
     // TODO: §4.13 must populate the form-associated definition state.
     throw new InternalError('Custom-element form association is not implemented');
-  }
-
-  /** Content requirements for this element; conditional models can override this query. */
-  getContentModel(): ContentModel {
-    const model = this.contentModel;
-    if (model === undefined) {
-      throw new InternalError(`Content model for ${this.localName} is not implemented`);
-    }
-    return model;
-  }
-
-  /** Whether the current children satisfy "nothing", independently of the element's declared model or voidness. */
-  // https://html.spec.whatwg.org/multipage/dom.html#concept-content-nothing
-  matchesNothingContentModel(): boolean {
-    for (let child = this.firstChild; child !== null; child = child.nextSibling) {
-      if (!child.isIgnoredHTMLContent()) return false;
-    }
-    return true;
-  }
-
-  /** Whether the current children satisfy the text-only content model. */
-  // https://html.spec.whatwg.org/multipage/dom.html#text-content
-  matchesTextContentModel(): boolean {
-    for (let child = this.firstChild; child !== null; child = child.nextSibling) {
-      if (!child.isText() && !child.isIgnoredHTMLContent()) return false;
-    }
-    return true;
   }
 
   /**

@@ -1,8 +1,8 @@
 import { InternalError } from '../../../../../infra/internal-error';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** The main element, exposed through HTMLElement. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#the-main-element

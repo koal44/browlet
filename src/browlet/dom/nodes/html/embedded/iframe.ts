@@ -1,11 +1,10 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute } from '../attributes/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
 
-import { ElementTag } from '../../element-tag';
-import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Iframe loading policy and the continuation retained while navigation is deferred. */

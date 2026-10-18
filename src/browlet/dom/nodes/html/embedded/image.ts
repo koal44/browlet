@@ -1,10 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
 
-import { ElementTag } from '../../element-tag';
-import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Image loading policy and the continuation retained while loading is deferred. */

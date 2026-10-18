@@ -106,7 +106,7 @@ completes script preparation or replaces the existing source-string route.
 The source-route callback in `Browlet` currently evaluates every encountered
 script as JavaScript, ignoring its `type`. A JSON data block therefore throws
 instead of remaining inert. The approved expected failure in
-[`script.test.ts`](../../../../test/browlet/dom/nodes/html/script.test.ts)
+[`script.test.ts`](../../../../test/browlet/dom/nodes/html/scripting/script.test.ts)
 retains this concrete preparation gap; the basic `HTMLScriptElementImpl` added
 for base-URL notifications does not fix it.
 

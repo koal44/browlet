@@ -32,7 +32,7 @@ export {
   elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesSlottableIDL, type ElementCreationContext,
   type ShadowRootInit, shadowRootInitIDL,
 } from './element';
-export { ElementTag } from './element-tag';
+export { ElementTag } from './element-definitions/index';
 export {
   findElementById, findElement, findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';

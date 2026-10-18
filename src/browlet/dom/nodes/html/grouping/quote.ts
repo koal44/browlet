@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, flowContent, phrasingContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory, flowContent, phrasingContent } from '../content-model';
 
 /** The blockquote element, exposed through HTMLQuoteElement. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#the-blockquote-element
@@ -12,7 +12,7 @@ export class HTMLBlockQuoteElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLBlockquote;
     this.prototype.categories = [ContentCategory.Flow, ContentCategory.Palpable];
-    this.prototype.contentModel = { children: [flowContent] };
+    this.prototype.contentModel = { childRules: [flowContent] };
     this.prototype.contentAttributes = ['cite'];
   }
 }
@@ -26,7 +26,7 @@ export class HTMLQElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
-    this.prototype.contentModel = { children: [phrasingContent] };
+    this.prototype.contentModel = { childRules: [phrasingContent] };
     this.prototype.contentAttributes = ['cite'];
   }
 }

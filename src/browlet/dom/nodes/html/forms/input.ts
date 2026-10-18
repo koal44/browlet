@@ -3,11 +3,10 @@ import {
   attr, ctor, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr,
 } from '../../../../../web-idl/index';
 
+import { ElementTag, ContentCategory, emptyContent } from '../../element-definitions/index';
 import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';
 
-import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory, emptyContent } from '../content-model';
 
 /** Input type and checkedness needed by RadioNodeList. */
 // https://html.spec.whatwg.org/multipage/input.html#htmlinputelement
@@ -20,7 +19,7 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
       ContentCategory.AutocapitalizeAndAutocorrectInheriting,
     ];
     // https://html.spec.whatwg.org/multipage/input.html#the-input-element
-    this.prototype.contentModel = { children: [emptyContent] };
+    this.prototype.contentModel = { childRules: [emptyContent] };
   }
 
   /** Internal checkedness, independent of the checked content attribute. */

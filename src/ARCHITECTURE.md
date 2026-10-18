@@ -378,6 +378,13 @@ needs an explicit home, rather than making the containing barrel appear to be
 lower level. Review that ownership before substituting deep imports merely to
 remove a lint error. `browlet/no-ancestor-barrel-imports` enforces this boundary.
 
+Directory depth does not establish dependency direction. A component can keep a
+shared base and its higher-level collector in the same directory: HTML's concrete
+elements import `../html-element` at runtime, while the local `web-idl.ts` imports
+those concrete elements to assemble declarations. Importing that directory's
+index would also reach the collector. Type-only upward references concern the
+reviewed dependency layers, not the number of `..` segments in an import.
+
 `browlet/browsing` groups three components with separate named entry points:
 `navigation`, `window`, and `policy`. Navigation owns browsing contexts,
 navigables, document creation, and session-history state. Window owns Window,
@@ -456,7 +463,8 @@ Shared-interface tags list their concrete classes in `implementation`, each with
 a static `localName`; the interface supplies their namespace. Small families live
 beside their interface declaration, without empty intervening implementation
 classes. The 51 tags exposing HTMLElement stay in their topic folders, while
-`html/html-element-definition.ts` imports them above the shared `HTMLElementImpl`.
+`html/web-idl.ts` declares their shared interface above `HTMLElementImpl` and
+collects the complete HTML declaration set.
 That base remains the implementation for autonomous custom elements, and
 `HTMLUnknownElementImpl` remains the unknown-name fallback. Assembly links each
 class to one public interface; all automatic instance members use property lookup
@@ -470,6 +478,16 @@ rules. Declaration tests check that each specialized constructor is registered
 for its tag. Typed class references remain available when one declared class
 covers every implementation; unrelated classes can reference the same implementation
 array used by their declaration, preserving the union of their instance types.
+
+`dom/nodes/element-definitions/` owns the shared tag IDs, content categories and model
+rules, and sanitization metadata types. It sits below the node implementations
+and retains only type imports of supplied nodes. Text, HTML, SVG, and MathML
+consume this vocabulary; tag-specific values remain on the concrete prototypes.
+ElementImpl exposes each element's categories, declared content model, and small
+child-content queries. The definitions folder owns transparency resolution in
+`content-model.ts` and paragraph discovery in `paragraphs.ts`, using supplied
+nodes through type-only imports. HTML attribute permission and tag omission stay
+on HTMLElementImpl; sanitization policy stays with the sanitizer.
 
 `dom/nodes/html/attributes/` owns shared HTML element attribute definitions and
 closely related state rules. This directory sits above microsyntaxes and below

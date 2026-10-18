@@ -3,7 +3,7 @@
 The HTML element-interface catalog is registered. Many dedicated classes still
 provide only identity and inherited behavior; the §3.2.2 inventory below records
 their unfinished APIs and lifecycle dependencies.
-[`script.ts`](script.ts) is an approved provisional addition for the §2.4.3
+[`scripting/script.ts`](scripting/script.ts) is an approved provisional addition for the §2.4.3
 base-change response: element/interface selection, initially uninitialized result
 state, and the script's relevant Window are present. Link and script now expose
 `crossOrigin` and `referrerPolicy` reflection using the shared HTML §§2.5.4–2.5.5
@@ -85,7 +85,7 @@ q and blockquote expose HTMLQuoteElement, and the eight legacy unknown names
 expose HTMLUnknownElement. Arbitrary custom names and unrecognized names retain
 the generic HTMLElement and HTMLUnknownElement fallbacks.
 
-The dependency-free [`ElementTag`](../element-tag.ts) enum identifies namespaced
+The dependency-free [`ElementTag`](../element-definitions/element-tag.ts) enum identifies namespaced
 tags numerically. Each concrete HTML and SVG class assigns `tag` to its prototype
 in a static initialization block. ElementImpl declares the instance type without
 emitting a field, so instances inherit the shared value. Existing registration
@@ -105,7 +105,7 @@ The same arrangement covers headings, edits, table columns/cells/sections,
 pre/listing/xmp, and the obsolete unknown-name elements. Empty shared bases and
 the separately maintained constructor table have been removed.
 The 51 tags exposing HTMLElement remain in their topic folders.
-[`html-element-definition.ts`](html-element-definition.ts) collects their
+The local [`web-idl.ts`](web-idl.ts) declares their shared interface and collects
 implementations above the low-level [`HTMLElementImpl`](html-element.ts), avoiding
 a cycle between that base and its subclasses. The HTMLElement and
 HTMLUnknownElement fallbacks remain real implementations for arbitrary names.
@@ -130,10 +130,11 @@ attributes to their implementation prototypes. Queries depending on attributes o
 tree context belong to instances. Missing information remains explicit rather
 than receiving permissive defaults.
 
-The concrete prototypes hold `categories`, `contentModel`, `contentAttributes`, and `sanitization`,
-initialized once alongside `tag`. ElementImpl declares categories for HTML and
-foreign elements; HTMLElementImpl declares the other metadata. These declarations
-emit no fields, so instances inherit the shared arrays and model objects.
+The concrete prototypes hold `categories`, `contentModel`, `contentAttributes`,
+and `sanitization`, initialized once alongside `tag`. ElementImpl declares
+categories and content models for HTML and foreign elements; HTMLElementImpl
+declares attribute and sanitizer metadata. These declarations emit no fields,
+so instances inherit the shared arrays and model objects.
 Queries read them directly from the receiver.
 
 The category inventory covers all 113 current HTML tag identities, with instance
@@ -144,18 +145,25 @@ elements' form association remain throwing dependencies. The obsolete identities
 remain unclassified. The [HTML category roadmap](../../../html/ROADMAP.md#section-3252-kinds-of-content)
 records the complete scope, foreign/Text integration, and source discrepancies.
 
-[`content-model.ts`](content-model.ts) owns `ContentCategory` and shared descriptions
+[`content-model.ts`](../element-definitions/content-model.ts) owns `ContentCategory` and shared descriptions
 of empty, text, category, element, sequence, repetition, and transparent content, plus descendant
 restrictions. Prototype `contentModel` definitions and `getContentModel()` cover p,
-blockquote, q, input, details, and a. Undefined models are explicit dependencies;
-an empty model is a known requirement. `HTMLElementImpl.matchesNothingContentModel()`
+blockquote, q, input, details, and a. The transparency/paragraph slice adds ins/del,
+map, object, body, div, section, header, li, h1–h6, em, and span. Undefined models are explicit dependencies;
+an empty model is a known requirement. `ElementImpl.matchesNothingContentModel()`
 checks that requirement against the current children, excluding comments, processing
 instructions, and empty or ASCII-whitespace Text through `NodeImpl.isIgnoredHTMLContent()`.
 Text's `isInterElementWhitespace()` reads current data, including CDATA sections;
 non-ASCII whitespace remains content. The ignored nodes stay in the DOM.
-The general evaluator, conditional models, additional rule forms, and remaining
-element inventory belong to later slices. DOM insertion and parsing do not
-consult these descriptions.
+`content-model.ts` resolves supported transparent positions through
+`resolveContentModelTransparency(element)`. [`paragraphs.ts`](../element-definitions/paragraphs.ts)
+owns `getParagraphs(document: DocumentImpl)`, which discovers explicit and implicit
+paragraphs across the whole document; element traversal stays private. Both use
+the common ElementImpl model contract; namespace-specific missing models remain explicit. The
+[transparency/paragraph roadmap](../../../html/ROADMAP.md#sections-3253-and-3254-transparency-and-paragraphs)
+records the supported model shapes and explicit dependencies. The general
+evaluator, remaining conditional models/rule forms, and element inventory belong
+to later slices. DOM insertion and parsing do not consult these descriptions.
 
 Each optionally tagged element overrides `canOmitStartTag()` or `canOmitEndTag()`
 for HTML §13.1.2.4; the base class permits neither omission. The methods read
@@ -199,7 +207,7 @@ conformance rules remain for their defining sections.
 
 Prototype `sanitization` records cover article, a, script, and form. They contain a
 numeric `SanitizationCategory` and optional lists of default attributes and
-navigating URL attributes, defined in [`sanitization.ts`](sanitization.ts).
+navigating URL attributes, defined in [`sanitization.ts`](../element-definitions/sanitization.ts).
 Names in both lists identify namespace-less HTML
 attributes; omitted lists mean no element-specific entries. An absent record is
 unfinished inventory, distinct from the specified `Uncategorized` category.
@@ -343,7 +351,7 @@ responses, WindowProxy identity, origins, sandboxing, and permissions.
 | `tables/table.ts`, `caption.ts`, `section.ts`, `row.ts`, `cell.ts`, `col.ts` | Table model interfaces | HTML §4.9 |
 | `forms/form.ts`, `label.ts`, `input.ts`, `button.ts`, `select.ts`, `data-list.ts`, `optgroup.ts`, `option.ts`, `text-area.ts`, `output.ts`, `progress.ts`, `meter.ts`, `fieldset.ts`, `legend.ts`, `selected-content.ts` | Form controls, validation, submission, and form association | HTML §4.10 |
 | `interactive/details.ts`, `dialog.ts` | Interactive elements | HTML §4.11 |
-| `script.ts`, `slot.ts`, `scripting/template.ts`, `scripting/canvas.ts` | Script-supporting elements and canvas | HTML §4.12 |
+| `scripting/` | Script, noscript, template, slot, and canvas elements | HTML §4.12 |
 | `legacy/` contributions coordinated by `html/legacy/` | `HTMLMarqueeElement`, `HTMLFrameSetElement`, `HTMLFrameElement`, `HTMLDirectoryElement`, `HTMLFontElement`, `HTMLParamElement`, and obsolete generic elements | HTML §16 |
 
 ## Supporting interfaces exposed by section 4
@@ -357,7 +365,7 @@ They belong with their consuming subsystem rather than in one miscellaneous
 | `text/hyperlink.ts` | `HyperlinkElementUtils` and `HTMLHyperlinkElementUtils`, shared by `a` and `area` | Add with the first complete anchor implementation |
 | `embedded/media.ts` with [`media/`](../../../media/ROADMAP.md) support types | HTMLMediaElement stays with elements; MediaError, TimeRanges, tracks/lists, and media state belong to the shared media area | Deferred to the media roadmap; Blob URL integration proceeds independently with Blob support |
 | `forms/` | `ValidityState`, `SelectionMode`, `SubmitEvent`, `FormDataEvent`, and their dictionaries; consume rather than redefine the external `FormData` API | Add with form association, validation, and submission |
-| `slot.ts` | `AssignedNodesOptions` | Present beside slot behavior; it does not require a runtime class |
+| `scripting/slot.ts` | `AssignedNodesOptions` | Present beside slot behavior; it does not require a runtime class |
 | `canvas/` | Canvas and offscreen rendering contexts, state/path/style mixins, gradients, patterns, text metrics, `Path2D`, callbacks, dictionaries, and enums | Separate later graphics slice; do not bury it in `canvas.ts` |
 | `dom/nodes/html/custom-elements/` | `ElementInternals`, `CustomStateSet`, validity flags, definitions, registry, and constructor callback | Add through the custom-elements roadmap and `[CEReactions]` work |
 

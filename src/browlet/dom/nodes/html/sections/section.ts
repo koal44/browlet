@@ -1,6 +1,6 @@
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, flowContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** The section element, exposed through HTMLElement. */
 // https://html.spec.whatwg.org/multipage/sections.html#the-section-element
@@ -11,5 +11,6 @@ export class HTMLSectionElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Sectioning, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [flowContent] };
   }
 }

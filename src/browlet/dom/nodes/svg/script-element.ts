@@ -1,7 +1,8 @@
 import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
-import { ElementTag } from '../element-tag';
+import { ElementTag } from '../element-definitions/index';
+
 import { SVGElementImpl } from './element';
 
 /** Concrete SVG script identity used by HTML's HTMLOrSVGScriptElement typedef. */

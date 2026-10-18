@@ -312,7 +312,7 @@ read-only query flag. This works through the existing addon, without an engine p
 | Source | Contract | Specification |
 | --- | --- | --- |
 | `node.ts` | Pre-insert validity, insert, append, replace, replace-all, move, pre-remove, remove, adoption, and their specified extension points | DOM §4.2.3, `#mutation-algorithms`; §4.5, `#concept-node-adopt` |
-| `slottable.ts` and `html/slot.ts` | Slottable state and finding/assigning its slot; the slot owns its assigned-node list and change signaling | DOM §4.2.2, `#shadow-trees` |
+| `slottable.ts` and `html/scripting/slot.ts` | Slottable state and finding/assigning its slot; the slot owns its assigned-node list and change signaling | DOM §4.2.2, `#shadow-trees` |
 
 Public node methods and HTML/XML parser adapters must enter through this
 spine. Raw tree operations remain private storage primitives; they must not
@@ -422,7 +422,7 @@ a detached node does not retain it. Public sequence conversion returns fresh
 arrays; implementation state stays with its slot. Insertion, removal, moves, and
 null-namespace name changes enter the same assignment algorithms.
 
-Public coverage in `shadow-root.test.ts` and `html/slot.test.ts` includes
+Public coverage in `shadow-root.test.ts` and `html/scripting/slot.test.ts` includes
 attachment errors/defaults, declarative reuse, adopted-document allocation,
 closed exposure, event retargeting, ordinary-tree query boundaries, named/manual
 assignment, fallback flattening, attribute changes, moves, and observer-before-slot

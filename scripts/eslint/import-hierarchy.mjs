@@ -24,7 +24,7 @@ export const layers = [
   ['file'],
   ['xhr'],
   ['fetch'],
-  ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/style'],
+  ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/dom/nodes/element-definitions', 'browlet/style'],
   ['browlet/html/microsyntaxes', 'browlet/dom/string-list'],
   ['browlet/dom/nodes/html/attributes'],
   ['browlet/scripting'],

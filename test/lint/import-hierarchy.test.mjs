@@ -20,6 +20,9 @@ tester.run('dependency-direction', direction, {
     { filename, code: "import { helper } from '../../../../scripts/helper';" },
     { filename: sourceFile('browlet/dom/events/event'), code: "import { EventTargetImpl } from './event-target';" },
     { filename: sourceFile('browlet/dom/nodes/document'), code: "import { HTMLElementImpl } from './html/index';" },
+    { filename: sourceFile('browlet/dom/nodes/html/scripting/script'), code: "import { HTMLElementImpl } from '../html-element';" },
+    { filename: sourceFile('browlet/dom/nodes/element'), code: "import { ContentCategory } from './element-definitions/index';" },
+    { filename: sourceFile('browlet/dom/nodes/element-definitions/content-model'), code: "import type { ElementImpl } from '../element';" },
     { filename: sourceFile('web-idl/assembly/assembly'), code: "import type { WebIDLRealm } from '../environment';" },
     { filename, code: "import type { Window } from '../../platform.d.ts';" },
     { filename: sourceFile('browlet/user-agent'), code: "import { createWindowEnvironment } from './bindings';" },
@@ -36,6 +39,11 @@ tester.run('dependency-direction', direction, {
     { filename, code: "import type { Helper } from '../../../new-subsystem/index';" },
   ],
   invalid: [
+    {
+      filename: sourceFile('browlet/dom/nodes/element-definitions/content-model'),
+      code: "import { ElementImpl } from '../element';",
+      errors: [{ messageId: 'upward', data: { owner: 'browlet/dom/nodes/element-definitions', target: 'browlet/dom/nodes' } }],
+    },
     {
       filename: sourceFile('browlet/browsing/window/window'),
       code: "import { Navigable } from '../navigation/index';",

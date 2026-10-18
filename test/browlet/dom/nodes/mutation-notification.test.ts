@@ -3,7 +3,7 @@ import { createWindowEnvironment } from '../../../../src/browlet/bindings';
 import { BrowsingContext, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/index';
 import type { WindowRealm } from '../../../../src/browlet/scripting/realm';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
-import type { HTMLSlotElementImpl } from '../../../../src/browlet/dom/nodes/html/slot';
+import type { HTMLSlotElementImpl } from '../../../../src/browlet/dom/nodes/html/scripting/slot';
 import type { MutationObserverImpl } from '../../../../src/browlet/dom/nodes/mutation-observer';
 import { createManualUserAgent } from '../../../support/browlet-agent';
 import { getRelevantRealm, unwrap } from '../../../support/browlet-binding';

@@ -7,6 +7,7 @@ import {
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
 import { splitOnAsciiWhitespace } from '../../../infra/index';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { LinkStyleMixin } from '../../../../style/index';
 import {
   corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, blockingAttribute,
@@ -16,9 +17,7 @@ import type { BrowletEnvironment } from '../../../../environment';
 
 import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';
-import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** Represents an external resource link and its stylesheet association. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-link-element

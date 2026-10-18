@@ -1,6 +1,7 @@
 import { isAsciiWhitespace } from '../../../infra/index';
 import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr } from '../../../web-idl/index';
 
+import { ContentCategory } from './element-definitions/index';
 import type { EventImpl } from '../events/index';
 import { RangeImpl } from '../ranges/index';
 import type { DOMEnvironment } from '../environment';
@@ -10,7 +11,6 @@ import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { SlottableMixin, slottableIDL } from './slottable';
-import { ContentCategory } from './html/content-model';
 import type { HTMLSlotElementImpl } from './html/index';
 
 /** Text content in a document tree, with slot assignment for shadow trees. */

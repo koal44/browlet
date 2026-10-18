@@ -1,22 +1,20 @@
-import { HTML_NAMESPACE } from '../../../../infra/index';
-import { InternalError } from '../../../../infra/internal-error';
+import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { InternalError } from '../../../../../infra/internal-error';
 import {
   attr, ctor, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr,
   xattr,
-} from '../../../../web-idl/index';
+} from '../../../../../web-idl/index';
 
+import { ElementTag, ContentCategory, SanitizationCategory } from '../../element-definitions/index';
 import {
   corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, blockingAttribute,
   fetchPriorityAttribute,
-} from './attributes/index';
-import type { SpeculationRulesParseResult } from '../../../scripting/index';
-import type { WindowImpl } from '../../../browsing/window/index';
+} from '../attributes/index';
+import type { SpeculationRulesParseResult } from '../../../../scripting/index';
+import type { WindowImpl } from '../../../../browsing/window/index';
 
-import type { DocumentImpl } from '../document';
-import { ElementTag } from '../element-tag';
-import { HTMLElementImpl } from './html-element';
-import { ContentCategory } from './content-model';
-import { SanitizationCategory } from './sanitization';
+import type { DocumentImpl } from '../../document';
+import { HTMLElementImpl } from '../html-element';
 
 /** Represents a script's fetch attributes and prepared result. */
 // https://html.spec.whatwg.org/multipage/scripting.html#the-script-element

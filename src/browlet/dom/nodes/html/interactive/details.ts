@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, flowContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory, flowContent  } from '../content-model';
 import { HTMLSummaryElementImpl } from './summary';
 
 /** Disclosure element identity. */
@@ -16,7 +16,7 @@ export class HTMLDetailsElementImpl extends HTMLElementImpl {
     ];
     // https://html.spec.whatwg.org/multipage/interactive-elements.html#the-details-element
     this.prototype.contentModel = {
-      children: [
+      childRules: [
         {
           kind: 'sequence',
           rules: [

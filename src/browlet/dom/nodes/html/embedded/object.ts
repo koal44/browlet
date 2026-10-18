@@ -1,8 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
-import { ContentCategory } from '../content-model';
+import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import { HTMLEmbedElementImpl } from './embed';
 
@@ -15,6 +15,7 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
       ContentCategory.FormAssociated, ContentCategory.Listed,
     ];
+    this.prototype.contentModel = { childRules: [transparentContent] };
   }
 
   override readonly isAllNamedElement = true;

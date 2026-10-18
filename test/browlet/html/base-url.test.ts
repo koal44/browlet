@@ -4,7 +4,7 @@ import { HTML_NAMESPACE } from '../../../src/infra/index';
 import { parseURL } from '../../../src/url/index';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLBaseElementImpl } from '../../../src/browlet/dom/nodes/html/metadata/base';
-import { HTMLScriptElementImpl } from '../../../src/browlet/dom/nodes/html/script';
+import { HTMLScriptElementImpl } from '../../../src/browlet/dom/nodes/html/scripting/script';
 import { createTestDocument } from '../../support/dom';
 
 afterEach(() => vi.restoreAllMocks());

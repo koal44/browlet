@@ -1,7 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
-import { ElementTag } from '../element-tag';
+import { ElementTag } from '../element-definitions/index';
+
 import { HTMLElementImpl } from './html-element';
 
 /** Represents an unrecognized HTML element name. */

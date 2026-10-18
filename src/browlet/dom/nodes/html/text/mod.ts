@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** The del element, exposed through HTMLModElement. */
 // https://html.spec.whatwg.org/multipage/edits.html#the-del-element
@@ -14,6 +14,7 @@ export class HTMLDelElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [transparentContent] };
   }
 }
 
@@ -26,6 +27,7 @@ export class HTMLInsElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [transparentContent] };
   }
 }
 

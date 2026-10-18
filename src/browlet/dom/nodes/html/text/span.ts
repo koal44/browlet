@@ -1,9 +1,9 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, phrasingContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** Span element identity. */
 // https://html.spec.whatwg.org/multipage/text-level-semantics.html#htmlspanelement
@@ -13,6 +13,7 @@ export class HTMLSpanElementImpl extends HTMLElementImpl {
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
+    this.prototype.contentModel = { childRules: [phrasingContent] };
   }
 }
 

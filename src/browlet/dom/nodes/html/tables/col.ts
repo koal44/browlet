@@ -1,7 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
 
 /** The col element, exposed through HTMLTableColElement. */

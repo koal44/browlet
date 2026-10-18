@@ -1,8 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
-import { ContentCategory } from '../content-model';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
 import { HTMLMediaElementImpl } from './media';
 
 /** Video element's media and independent poster-loading continuations. */

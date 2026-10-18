@@ -4,15 +4,14 @@ import {
 } from '../../../../../web-idl/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
 import { LinkStyleMixin } from '../../../../style/index';
 import { getBlockingTokens, blockingAttribute } from '../attributes/index';
 import type { BrowletEnvironment } from '../../../../environment';
 
 import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';
-import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** Associates inline HTML stylesheet text with its tree scope. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-style-element

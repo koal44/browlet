@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
-import { HTML_NAMESPACE } from '../../../../../src/infra/index';
-import { Browlet } from '../../../../../src/browlet/browlet';
-import { HTMLScriptElementImpl } from '../../../../../src/browlet/dom/nodes/html/script';
-import { createTestDocument } from '../../../../support/dom';
-import { unwrap } from '../../../../support/browlet-binding';
+import { HTML_NAMESPACE } from '../../../../../../src/infra/index';
+import { Browlet } from '../../../../../../src/browlet/browlet';
+import { HTMLScriptElementImpl } from '../../../../../../src/browlet/dom/nodes/html/scripting/script';
+import { createTestDocument } from '../../../../../support/dom';
+import { unwrap } from '../../../../../support/browlet-binding';
 
 describe('HTMLScriptElement basics', () => {
   it('projects parsed and created scripts with their own HTML interface', async () => {

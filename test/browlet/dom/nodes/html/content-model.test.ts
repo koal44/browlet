@@ -2,8 +2,7 @@ import { assert, describe, expect, it } from 'vitest';
 
 import {
   ContentCategory, isValidHTMLText, textContent,
-} from '../../../../../src/browlet/dom/nodes/html/content-model';
-import { HTMLElementImpl } from '../../../../../src/browlet/dom/nodes/html/html-element';
+} from '../../../../../src/browlet/dom/nodes/element-definitions/content-model';
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../../../src/infra/index';
 import { createTestDocument } from '../../../../support/dom';
 
@@ -13,9 +12,6 @@ describe('HTML content-model descriptions', () => {
     const quote = document.createElementNS(HTML_NAMESPACE, 'q');
     const anotherQuote = document.createElementNS(HTML_NAMESPACE, 'q');
     const blockquote = document.createElementNS(HTML_NAMESPACE, 'blockquote');
-    assert(quote instanceof HTMLElementImpl);
-    assert(anotherQuote instanceof HTMLElementImpl);
-    assert(blockquote instanceof HTMLElementImpl);
 
     const phrasing = quote.getContentModel();
     const flow = blockquote.getContentModel();
@@ -23,8 +19,8 @@ describe('HTML content-model descriptions', () => {
     expect(Object.hasOwn(quote, 'contentModel')).toBe(false);
     expect(Object.hasOwn(anotherQuote, 'contentModel')).toBe(false);
     expect(flow).not.toBe(phrasing);
-    const [phrasingRule] = phrasing.children;
-    const [flowRule] = flow.children;
+    const [phrasingRule] = phrasing.childRules;
+    const [flowRule] = flow.childRules;
     assert(phrasingRule?.kind === 'repeat');
     assert(flowRule?.kind === 'repeat');
     assert(phrasingRule.rule.kind === 'category');
@@ -37,15 +33,30 @@ describe('HTML content-model descriptions', () => {
     const document = createTestDocument();
     const input = document.createElementNS(HTML_NAMESPACE, 'input');
     const unfinished = document.createElementNS(HTML_NAMESPACE, 'article');
-    assert(input instanceof HTMLElementImpl);
-    assert(unfinished instanceof HTMLElementImpl);
-    expect(input.getContentModel().children[0]?.kind).toBe('empty');
+    expect(input.getContentModel().childRules[0]?.kind).toBe('empty');
     expect(() => unfinished.getContentModel()).toThrow('Content model for article is not implemented');
 
     const child = document.createElementNS(HTML_NAMESPACE, 'q');
     input.appendChild(child);
     expect(child.parentNode).toBe(input);
-    expect(input.getContentModel().children[0]?.kind).toBe('empty');
+    expect(input.getContentModel().childRules[0]?.kind).toBe('empty');
+  });
+
+  it('provides model descriptions and child-content queries on non-HTML elements', () => {
+    const document = createTestDocument();
+    const element = document.createElementNS('urn:example', 'container');
+    expect(() => element.getContentModel()).toThrow('Content model for container is not implemented');
+    element.contentModel = { childRules: [textContent] };
+    expect(element.getContentModel()).toBe(element.contentModel);
+    expect(element.matchesNothingContentModel()).toBe(true);
+    expect(element.matchesTextContentModel()).toBe(true);
+
+    const text = document.createTextNode('text');
+    element.appendChild(text);
+    expect(element.matchesNothingContentModel()).toBe(false);
+    expect(element.matchesTextContentModel()).toBe(true);
+    element.appendChild(document.createElementNS(HTML_NAMESPACE, 'span'));
+    expect(element.matchesTextContentModel()).toBe(false);
   });
 });
 
@@ -63,7 +74,6 @@ describe('HTML nothing content model', () => {
   ])('classifies text %j as nothing: %s', (data, expected) => {
     const document = createTestDocument();
     const input = document.createElementNS(HTML_NAMESPACE, 'input');
-    assert(input instanceof HTMLElementImpl);
     const text = document.createTextNode(data);
     input.appendChild(text);
 
@@ -77,7 +87,6 @@ describe('HTML nothing content model', () => {
   it('ignores comments and processing instructions without removing them from the DOM', () => {
     const document = createTestDocument();
     const input = document.createElementNS(HTML_NAMESPACE, 'input');
-    assert(input instanceof HTMLElementImpl);
     const comment = document.createComment('not whitespace');
     const instruction = document.createProcessingInstruction('example', 'also not whitespace');
     input.appendChild(comment);
@@ -94,7 +103,6 @@ describe('HTML nothing content model', () => {
   it('reads current Text and CDATA data after mutations', () => {
     const document = createTestDocument();
     const input = document.createElementNS(HTML_NAMESPACE, 'input');
-    assert(input instanceof HTMLElementImpl);
     const text = document.createTextNode('');
     const cdata = document.createCDATASection(' \n');
     input.appendChild(text);
@@ -116,7 +124,6 @@ describe('HTML nothing content model', () => {
     const document = createTestDocument();
     for (const localName of ['input', 'p']) {
       const parent = document.createElementNS(HTML_NAMESPACE, localName);
-      assert(parent instanceof HTMLElementImpl);
       expect(parent.parentNode).toBeNull();
       expect(parent.matchesNothingContentModel()).toBe(true);
 
@@ -137,7 +144,6 @@ describe('HTML text content', () => {
   it('describes and checks text-only contents without enforcing character validity during DOM mutation', () => {
     const document = createTestDocument();
     const element = document.createElementNS(HTML_NAMESPACE, 'title');
-    assert(element instanceof HTMLElementImpl);
     expect(textContent).toEqual({ kind: 'text' });
     expect(element.matchesTextContentModel()).toBe(true);
     element.appendChild(document.createComment('comment'));

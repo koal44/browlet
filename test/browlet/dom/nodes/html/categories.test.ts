@@ -1,9 +1,9 @@
 import { assert, describe, expect, it } from 'vitest';
 
-import { ContentCategory } from '../../../../../src/browlet/dom/nodes/html/content-model';
+import { ContentCategory } from '../../../../../src/browlet/dom/nodes/element-definitions/content-model';
 import { HTMLElementImpl } from '../../../../../src/browlet/dom/nodes/html/html-element';
 import { MathMLMathElementImpl } from '../../../../../src/browlet/dom/nodes/mathml/element';
-import { ElementTag } from '../../../../../src/browlet/dom/nodes/element-tag';
+import { ElementTag } from '../../../../../src/browlet/dom/nodes/element-definitions/element-tag';
 import { HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE } from '../../../../../src/infra/index';
 import { createTestDocument } from '../../../../support/dom';
 

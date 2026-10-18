@@ -1,10 +1,10 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
 import type { NodeImpl } from '../../node';
-import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 import { HTMLHRElementImpl } from '../grouping/index';
 import { HTMLDataListElementImpl } from './data-list';
 import { HTMLOptGroupElementImpl } from './optgroup';

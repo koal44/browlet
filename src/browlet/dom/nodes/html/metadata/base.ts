@@ -4,9 +4,9 @@ import {
 } from '../../../../../web-idl/index';
 import { serializeURL, type URLRecord } from '../../../../../url/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** Supplies the document base URL and default navigation target. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-base-element

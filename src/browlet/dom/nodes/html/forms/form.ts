@@ -1,11 +1,10 @@
 import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag, ContentCategory, SanitizationCategory } from '../../element-definitions/index';
+
 import type { ElementImpl } from '../../element';
-import { ElementTag } from '../../element-tag';
-import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
-import { SanitizationCategory } from '../sanitization';
 import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 
 /** Form identity and ownership of its stable controls collection. */

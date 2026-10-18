@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { Browlet } from '../../../../../src/browlet/browlet';
-import type { HTMLSlotElement as PlatformSlotElement } from '../../../../../src/browlet/platform';
-import { getRelevantRealm, unwrap } from '../../../../support/browlet-binding';
-import { collectGarbage } from '../../../../support/garbage-collection';
+import { Browlet } from '../../../../../../src/browlet/browlet';
+import type { HTMLSlotElement as PlatformSlotElement } from '../../../../../../src/browlet/platform';
+import { getRelevantRealm, unwrap } from '../../../../../support/browlet-binding';
+import { collectGarbage } from '../../../../../support/garbage-collection';
 
 describe('HTMLSlotElement', () => {
   it('assigns only direct element/text children, by exact name and tree order', async () => {

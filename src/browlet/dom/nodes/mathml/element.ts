@@ -2,9 +2,9 @@ import { MATHML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
+import { ElementTag, ContentCategory } from '../element-definitions/index';
+
 import { ElementImpl } from '../element';
-import { ElementTag } from '../element-tag';
-import { ContentCategory } from '../html/content-model';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 
 /** Base implementation for elements in the MathML namespace. */

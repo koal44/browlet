@@ -1,7 +1,6 @@
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory, SanitizationCategory } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
-import { SanitizationCategory } from '../sanitization';
 
 /** The article element, exposed through HTMLElement. */
 // https://html.spec.whatwg.org/multipage/sections.html#the-article-element

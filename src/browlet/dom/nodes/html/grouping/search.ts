@@ -1,6 +1,6 @@
-import { ElementTag } from '../../element-tag';
+import { ElementTag, ContentCategory } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
-import { ContentCategory } from '../content-model';
 
 /** The search element, exposed through HTMLElement. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#the-search-element

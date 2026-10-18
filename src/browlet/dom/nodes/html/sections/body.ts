@@ -1,7 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
-import { ElementTag } from '../../element-tag';
+import { ElementTag, flowContent } from '../../element-definitions/index';
+
 import { HTMLElementImpl } from '../html-element';
 
 /** Document-body identity used by Document tree accessors. */
@@ -10,6 +11,7 @@ export class HTMLBodyElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLBody;
     this.prototype.categories = [];
+    this.prototype.contentModel = { childRules: [flowContent] };
   }
 
   override canOmitStartTag(_previousEndTagOmitted: boolean): boolean {
