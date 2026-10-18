@@ -3,10 +3,10 @@ import type { DOMParentNode as ParentNode } from '../../infra/index';
 import type { NthElementIndexMap, NthOfTypeParentMap } from './runtime';
 
 export class RuntimeCache {
-  #treeVersion: number | undefined;
 
   nthElement?: WeakMap<ParentNode, NthElementIndexMap>;
   nthOfType?: WeakMap<ParentNode, NthOfTypeParentMap>;
+  #treeVersion: number | undefined;
 
   sync(treeVersion: number | undefined): void {
     if (treeVersion === undefined) {

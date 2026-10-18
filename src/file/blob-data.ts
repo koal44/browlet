@@ -24,10 +24,6 @@ export class BlobData {
     }
   }
 
-  get size(): number {
-    return this.#size;
-  }
-
   static empty(): BlobData {
     return new BlobData([]);
   }
@@ -58,6 +54,10 @@ export class BlobData {
     const segments: BlobSegment[] = [];
     for (const part of parts) segments.push(...part.#segments);
     return new BlobData(segments);
+  }
+
+  get size(): number {
+    return this.#size;
   }
 
   slice(start: number, length: number): BlobData {

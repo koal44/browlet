@@ -15,6 +15,15 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
     return this.#element ??= this.forType(this.type.elementType);
   }
 
+  /** Enter conversion using the iterator method already selected by overload or union resolution. */
+  // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
+  jsToIDLIterable<ValueType extends IDLSequenceType | IDLFrozenArrayType>(
+    this: SequenceConverter<ValueType>, iterable: object, iteratorMethod: JSMethod,
+  ): IDLValue<ValueType> {
+    try { return this.readIterable(iterable, iteratorMethod) as IDLValue<ValueType>; }
+    catch (error) { return this.throwConversionError(error); }
+  }
+
   // https://webidl.spec.whatwg.org/#es-sequence
   protected createInputSteps(): ConversionSteps<readonly unknown[]> {
     const description = this.type.kind === 'frozen-array' ? 'frozen array' : 'sequence';
@@ -24,15 +33,6 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
       if (method === undefined) this.throwTypeError('Value is not iterable');
       return this.readIterable(value, method);
     };
-  }
-
-  /** Enter conversion using the iterator method already selected by overload or union resolution. */
-  // https://webidl.spec.whatwg.org/#create-sequence-from-iterable
-  jsToIDLIterable<ValueType extends IDLSequenceType | IDLFrozenArrayType>(
-    this: SequenceConverter<ValueType>, iterable: object, iteratorMethod: JSMethod,
-  ): IDLValue<ValueType> {
-    try { return this.readIterable(iterable, iteratorMethod) as IDLValue<ValueType>; }
-    catch (error) { return this.throwConversionError(error); }
   }
 
   protected readIterable(iterable: object, iteratorMethod: JSMethod): readonly unknown[] {

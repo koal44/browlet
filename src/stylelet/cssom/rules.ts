@@ -28,14 +28,6 @@ export class CSSStyleRuleImpl extends CSSRuleImpl {
     return this.#cssRules;
   }
 
-  insertRule(_rule: string, _index?: number): number {
-    return notImplemented('CSSStyleRule.insertRule');
-  }
-
-  deleteRule(_index: number): void {
-    return notImplemented('CSSStyleRule.deleteRule');
-  }
-
   get cssText(): string {
     return notImplemented('CSSStyleRule.cssText');
   }
@@ -54,6 +46,14 @@ export class CSSStyleRuleImpl extends CSSRuleImpl {
 
   get styleMap(): StylePropertyMapImpl {
     return notImplemented('CSSStyleRule.styleMap');
+  }
+
+  insertRule(_rule: string, _index?: number): number {
+    return notImplemented('CSSStyleRule.insertRule');
+  }
+
+  deleteRule(_index: number): void {
+    return notImplemented('CSSStyleRule.deleteRule');
   }
 }
 

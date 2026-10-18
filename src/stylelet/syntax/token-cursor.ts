@@ -33,10 +33,10 @@ export type TryConsumer<T> =
 export type TryConsumerResult<T> = T | null;
 
 export class TokenCursor<Value extends Token = ComponentValue> {
+  context: unknown;
   #input: Value[];
   #i: number;
   #source?: TokenSource;
-  context: unknown;
 
   constructor(
     input: Value[],

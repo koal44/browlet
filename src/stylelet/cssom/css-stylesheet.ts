@@ -115,6 +115,17 @@ export class CSSStyleSheetImpl
     return this.#rules;
   }
 
+  get interpretedStyleSheet(): InterpretedStyleSheet {
+    return this.#interpretedStyleSheet;
+  }
+
+  // Deprecated CSSStyleSheet members ----------------------------------------
+
+  /** @deprecated Use cssRules instead. */
+  get rules(): CSSRuleListImpl {
+    return this.cssRules;
+  }
+
   insertRule(rule: string, index = 0): number {
     this.#assertOriginClean();
     this.#assertModificationAllowed();
@@ -211,10 +222,6 @@ export class CSSStyleSheetImpl
     this.#replaceInterpretedStyleSheet(this.#parseRules(text));
   }
 
-  get interpretedStyleSheet(): InterpretedStyleSheet {
-    return this.#interpretedStyleSheet;
-  }
-
   isAlternate(): boolean {
     return this.#alternate;
   }
@@ -235,13 +242,6 @@ export class CSSStyleSheetImpl
 
   setAssociatedTitle(title: string): void {
     this.setTitle(title);
-  }
-
-  // Deprecated CSSStyleSheet members ----------------------------------------
-
-  /** @deprecated Use cssRules instead. */
-  get rules(): CSSRuleListImpl {
-    return this.cssRules;
   }
 
   /** @deprecated Use insertRule() instead. */

@@ -116,6 +116,35 @@ export class WritableStreamImpl {
     return this.state.writer !== undefined;
   }
 
+  /** IsWritableStreamWritable. */
+  get isWritable(): boolean {
+    return this.state.state === 'writable';
+  }
+
+  /** WritableStreamCloseQueuedOrInFlight. */
+  get closeQueuedOrInFlight(): boolean {
+    const { state } = this;
+    return state.closeRequest !== undefined ||
+      state.inFlightCloseRequest !== undefined;
+  }
+
+  /** Streams §9.2, get a specification-created writable stream's signal. */
+  get signal(): AbortSignal {
+    return this.controller.signal;
+  }
+
+  /** WritableStreamHasOperationMarkedInFlight. */
+  get hasOperationInFlight(): boolean {
+    return this.state.inFlightWriteRequest !== undefined ||
+      this.state.inFlightCloseRequest !== undefined;
+  }
+
+  get controller(): WritableStreamDefaultControllerImpl {
+    const controller = this.state.controller;
+    if (!controller) throw new InternalError('WritableStream has no controller');
+    return controller;
+  }
+
   /** Streams §5.2.4, abort(reason). */
   abort(reason?: unknown): InternalPromise<void> {
     if (this.locked) {
@@ -144,39 +173,6 @@ export class WritableStreamImpl {
   /** AcquireWritableStreamDefaultWriter. */
   getWriter(): WritableStreamDefaultWriterImpl {
     return new WritableStreamDefaultWriterImpl(this);
-  }
-
-  /** IsWritableStreamWritable. */
-  get isWritable(): boolean {
-    return this.state.state === 'writable';
-  }
-
-  /** WritableStreamCloseQueuedOrInFlight. */
-  get closeQueuedOrInFlight(): boolean {
-    const { state } = this;
-    return state.closeRequest !== undefined ||
-      state.inFlightCloseRequest !== undefined;
-  }
-
-  /** Streams §9.2, get a specification-created writable stream's signal. */
-  get signal(): AbortSignal {
-    return this.controller.signal;
-  }
-
-  /** WritableStreamHasOperationMarkedInFlight. */
-  get hasOperationInFlight(): boolean {
-    return this.state.inFlightWriteRequest !== undefined ||
-      this.state.inFlightCloseRequest !== undefined;
-  }
-
-  #isFinished(): boolean {
-    return this.state.state === 'closed' || this.state.state === 'errored';
-  }
-
-  get controller(): WritableStreamDefaultControllerImpl {
-    const controller = this.state.controller;
-    if (!controller) throw new InternalError('WritableStream has no controller');
-    return controller;
   }
 
   /** Streams §5.5.2, WritableStreamAbort. */
@@ -372,6 +368,10 @@ export class WritableStreamImpl {
   error(error: unknown): void {
     this.controller.error(error);
   }
+
+  #isFinished(): boolean {
+    return this.state.state === 'closed' || this.state.state === 'errored';
+  }
 }
 
 type WritableStreamState = {
@@ -515,14 +515,6 @@ export class WritableStreamDefaultControllerImpl {
     return this.state.abortController.signal;
   }
 
-  /** WritableStreamDefaultControllerErrorIfNeeded. */
-  error(error?: unknown): void {
-    const { stream } = this.state;
-    if (stream.state.state === 'writable') {
-      this.errorInternal(error);
-    }
-  }
-
   /** WritableStreamDefaultControllerGetBackpressure. */
   get backpressure(): boolean {
     return this.desiredSize <= 0;
@@ -532,6 +524,14 @@ export class WritableStreamDefaultControllerImpl {
   get desiredSize(): number {
     const { state } = this;
     return state.strategyHighWaterMark - state.queue.totalSize;
+  }
+
+  /** WritableStreamDefaultControllerErrorIfNeeded. */
+  error(error?: unknown): void {
+    const { stream } = this.state;
+    if (stream.state.state === 'writable') {
+      this.errorInternal(error);
+    }
   }
 
   /** Streams §5.5.4, SetUpWritableStreamDefaultControllerFromUnderlyingSink. */
@@ -821,6 +821,13 @@ export class WritableStreamDefaultWriterImpl {
     return this.state.readyPromise.promise;
   }
 
+  /** RequireWriterStream. */
+  get stream(): WritableStreamImpl {
+    const { stream } = this.state;
+    if (!stream) throw new InternalError('WritableStream writer has been released');
+    return stream;
+  }
+
   /** Streams §5.3.3, abort(reason). */
   abort(reason?: unknown): InternalPromise<void> {
     if (!this.state.stream) {
@@ -854,13 +861,6 @@ export class WritableStreamDefaultWriterImpl {
       return this.state.Promise.reject(defaultWriterLockException('write to'), idlType.undefined);
     }
     return this.writeInternal(chunk, env);
-  }
-
-  /** RequireWriterStream. */
-  get stream(): WritableStreamImpl {
-    const { stream } = this.state;
-    if (!stream) throw new InternalError('WritableStream writer has been released');
-    return stream;
   }
 
   /** SetUpWritableStreamDefaultWriter. */

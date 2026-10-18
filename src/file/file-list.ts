@@ -19,6 +19,10 @@ export class FileListImpl {
     this.#files = [...files];
   }
 
+  static is(value: unknown): value is FileListImpl {
+    return value !== null && typeof value === 'object' && #files in value;
+  }
+
   get length(): number {
     return this.#files.length;
   }
@@ -37,10 +41,6 @@ export class FileListImpl {
 
   replace(files: Iterable<FileImpl>): void {
     this.#files = [...files];
-  }
-
-  static is(value: unknown): value is FileListImpl {
-    return value !== null && typeof value === 'object' && #files in value;
   }
 }
 

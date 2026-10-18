@@ -28,6 +28,19 @@ export class NodeIteratorImpl extends NodeTraverser {
     iterators.add(new WeakRef(this));
   }
 
+  /** Notify only iterators rooted above the removal; roots inside it keep their own subtree. */
+  // https://dom.spec.whatwg.org/#nodeiterator-pre-removing-steps
+  static preRemove(node: NodeImpl): void {
+    for (let ancestor = node.parentNode; ancestor; ancestor = ancestor.parentNode) {
+      const iterators = this.#byRoot.get(ancestor);
+      if (!iterators) continue;
+      for (const iterator of iterators.values()) {
+        iterator.#adjustPointer(iterator.#reference, node);
+        if (iterator.#candidate !== null) iterator.#adjustPointer(iterator.#candidate, node);
+      }
+    }
+  }
+
   get referenceNode(): NodeImpl {
     return this.#reference.node;
   }
@@ -49,19 +62,6 @@ export class NodeIteratorImpl extends NodeTraverser {
   /** Compatibility operation; the iterator remains active. */
   // https://dom.spec.whatwg.org/#dom-nodeiterator-detach
   detach(): void {}
-
-  /** Notify only iterators rooted above the removal; roots inside it keep their own subtree. */
-  // https://dom.spec.whatwg.org/#nodeiterator-pre-removing-steps
-  static preRemove(node: NodeImpl): void {
-    for (let ancestor = node.parentNode; ancestor; ancestor = ancestor.parentNode) {
-      const iterators = this.#byRoot.get(ancestor);
-      if (!iterators) continue;
-      for (const iterator of iterators.values()) {
-        iterator.#adjustPointer(iterator.#reference, node);
-        if (iterator.#candidate !== null) iterator.#adjustPointer(iterator.#candidate, node);
-      }
-    }
-  }
 
   // https://dom.spec.whatwg.org/#concept-nodeiterator-traverse
   #traverse(next: boolean): NodeImpl | null {

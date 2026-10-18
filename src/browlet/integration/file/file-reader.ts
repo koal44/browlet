@@ -20,11 +20,11 @@ import { ProgressEventImpl } from '../xhr/index';
 export class FileReaderImpl extends EventTargetImpl {
   /** Owner supplying file-reading task delivery and realm allocation. */
   declare env: BrowletEnvironment;
-  #state: FileReaderState = 'empty';
   /** Packaged contents of the completed read, or null before completion. */
   result: string | ArrayBuffer | null = null;
   /** Retained File API failure, or null before a read fails. */
   error: DOMExceptionImpl | null = null;
+  #state: FileReaderState = 'empty';
   /** Identity and pending tasks of the read that may still deliver events. */
   #operation: FileReadOperation | null = null;
   #eventHandlers = new EventHandlerMap(this, [
@@ -38,50 +38,6 @@ export class FileReaderImpl extends EventTargetImpl {
 
   constructor(env: BrowletEnvironment) {
     super(env);
-  }
-
-  readAsArrayBuffer(blob: BlobImpl): void {
-    this.#read(blob, 'ArrayBuffer');
-  }
-
-  readAsBinaryString(blob: BlobImpl): void {
-    this.#read(blob, 'BinaryString');
-  }
-
-  readAsText(
-    blob: BlobImpl,
-    encoding?: string,
-  ): void {
-    this.#read(blob, 'Text', encoding);
-  }
-
-  readAsDataURL(blob: BlobImpl): void {
-    this.#read(blob, 'DataURL');
-  }
-
-  /** Cancel the current read and deliver its abort and loadend events. */
-  // https://w3c.github.io/FileAPI/#abort
-  abort(): void {
-    this.result = null;
-    if (!this.#isLoading()) return;
-
-    const operation = this.#operation;
-    if (operation === null) {
-      throw new InternalError('A loading FileReader has no active read operation');
-    }
-
-    this.#state = 'done';
-    this.#operation = null;
-    for (const task of operation.tasks) task.remove();
-    operation.tasks.clear();
-    operation.cancel();
-
-    // The current draft does not set error to AbortError. Blink, Gecko, and
-    // WebKit do; keep the normative state until that divergence is resolved.
-    ProgressEventImpl.fire('abort', this, operation.loaded, operation.total);
-    if (!this.#isLoading()) {
-      ProgressEventImpl.fire('loadend', this, operation.loaded, operation.total);
-    }
   }
 
   /** Numeric File API state corresponding to the internal read lifecycle. */
@@ -139,6 +95,50 @@ export class FileReaderImpl extends EventTargetImpl {
 
   set onloadend(callback: EventHandlerCallback | null) {
     this.#eventHandlers.set('onloadend', callback);
+  }
+
+  readAsArrayBuffer(blob: BlobImpl): void {
+    this.#read(blob, 'ArrayBuffer');
+  }
+
+  readAsBinaryString(blob: BlobImpl): void {
+    this.#read(blob, 'BinaryString');
+  }
+
+  readAsText(
+    blob: BlobImpl,
+    encoding?: string,
+  ): void {
+    this.#read(blob, 'Text', encoding);
+  }
+
+  readAsDataURL(blob: BlobImpl): void {
+    this.#read(blob, 'DataURL');
+  }
+
+  /** Cancel the current read and deliver its abort and loadend events. */
+  // https://w3c.github.io/FileAPI/#abort
+  abort(): void {
+    this.result = null;
+    if (!this.#isLoading()) return;
+
+    const operation = this.#operation;
+    if (operation === null) {
+      throw new InternalError('A loading FileReader has no active read operation');
+    }
+
+    this.#state = 'done';
+    this.#operation = null;
+    for (const task of operation.tasks) task.remove();
+    operation.tasks.clear();
+    operation.cancel();
+
+    // The current draft does not set error to AbortError. Blink, Gecko, and
+    // WebKit do; keep the normative state until that divergence is resolved.
+    ProgressEventImpl.fire('abort', this, operation.loaded, operation.total);
+    if (!this.#isLoading()) {
+      ProgressEventImpl.fire('loadend', this, operation.loaded, operation.total);
+    }
   }
 
   // https://w3c.github.io/FileAPI/#readOperation

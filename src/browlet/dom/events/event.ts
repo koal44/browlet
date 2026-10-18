@@ -78,6 +78,26 @@ export class EventImpl {
     return this.target;
   }
 
+  /** @deprecated Legacy propagation flag; assigning false cannot clear it. */
+  // https://dom.spec.whatwg.org/#dom-event-cancelbubble
+  get cancelBubble(): boolean {
+    return this.propagationStopped;
+  }
+
+  set cancelBubble(value: boolean) {
+    if (value) this.propagationStopped = true;
+  }
+
+  /** @deprecated False when canceled; assigning false requests cancellation. */
+  // https://dom.spec.whatwg.org/#dom-event-returnvalue
+  get returnValue(): boolean {
+    return !this.defaultPrevented;
+  }
+
+  set returnValue(value: boolean) {
+    if (!value) this.#setCanceled();
+  }
+
   /** Return dispatch targets visible from the current listener's shadow-tree position. */
   // https://dom.spec.whatwg.org/#dom-event-composedpath
   composedPath(): EventTargetImpl[] {
@@ -166,31 +186,11 @@ export class EventImpl {
     this.propagationStopped = true;
   }
 
-  /** @deprecated Legacy propagation flag; assigning false cannot clear it. */
-  // https://dom.spec.whatwg.org/#dom-event-cancelbubble
-  get cancelBubble(): boolean {
-    return this.propagationStopped;
-  }
-
-  set cancelBubble(value: boolean) {
-    if (value) this.propagationStopped = true;
-  }
-
   /** Stop propagation and skip remaining listeners on the current target. */
   // https://dom.spec.whatwg.org/#dom-event-stopimmediatepropagation
   stopImmediatePropagation(): void {
     this.propagationStopped = true;
     this.immediatePropagationStopped = true;
-  }
-
-  /** @deprecated False when canceled; assigning false requests cancellation. */
-  // https://dom.spec.whatwg.org/#dom-event-returnvalue
-  get returnValue(): boolean {
-    return !this.defaultPrevented;
-  }
-
-  set returnValue(value: boolean) {
-    if (!value) this.#setCanceled();
   }
 
   /** Cancel a cancelable event unless the current listener is passive. */

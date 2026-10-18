@@ -35,11 +35,6 @@ export class DocumentFragmentImpl extends NodeImpl {
     return value instanceof DocumentFragmentImpl;
   }
 
-  // https://dom.spec.whatwg.org/#dom-nonelementparentnode-getelementbyid
-  getElementById(id: string): ElementImpl | null {
-    return findElementById(this, id);
-  }
-
   get children(): HTMLCollectionImpl {
     return this.#parentNodeMixin.children;
   }
@@ -54,6 +49,11 @@ export class DocumentFragmentImpl extends NodeImpl {
 
   get childElementCount(): number {
     return this.#parentNodeMixin.childElementCount;
+  }
+
+  // https://dom.spec.whatwg.org/#dom-nonelementparentnode-getelementbyid
+  getElementById(id: string): ElementImpl | null {
+    return findElementById(this, id);
   }
 
   prepend(...nodes: (NodeImpl | string)[]): void {

@@ -40,6 +40,16 @@ export class DOMTokenListImpl {
     return this.#tokens.length;
   }
 
+  /** Raw attribute spelling; token operations alone normalize whitespace and duplicates. */
+  // https://dom.spec.whatwg.org/#dom-domtokenlist-value
+  get value(): string {
+    return this.#element.getAttributeNS(null, this.#attributeName) ?? '';
+  }
+
+  set value(value: string) {
+    this.#element.setAttributeValue(this.#attributeName, value);
+  }
+
   /** Return a token by position, or null outside the set. */
   // https://dom.spec.whatwg.org/#dom-domtokenlist-item
   item(index: number): string | null {
@@ -116,16 +126,6 @@ export class DOMTokenListImpl {
   supports(token: string): boolean {
     if (this.#supportedTokens === null) throw new TypeError('This attribute has no supported tokens');
     return this.#supportedTokens.has(asciiLower(token));
-  }
-
-  /** Raw attribute spelling; token operations alone normalize whitespace and duplicates. */
-  // https://dom.spec.whatwg.org/#dom-domtokenlist-value
-  get value(): string {
-    return this.#element.getAttributeNS(null, this.#attributeName) ?? '';
-  }
-
-  set value(value: string) {
-    this.#element.setAttributeValue(this.#attributeName, value);
   }
 
   /** Synchronize tokens from the selected attribute's current value; null clears the list. */

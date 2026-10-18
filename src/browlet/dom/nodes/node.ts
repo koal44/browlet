@@ -33,8 +33,7 @@ import type { HTMLSlotElementImpl } from './html/index';
 export abstract class NodeImpl extends EventTargetImpl {
   /** Assign a stable ordering only to nodes used in disconnected comparisons. */
   static #nextDisconnectedOrder = 0;
-  /** Lazily assigned implementation-specific position among disconnected nodes. */
-  #disconnectedOrder: number | undefined;
+
   /** Node kind used by the DOM's type-specific algorithms. */
   nodeType: NodeType;
   /** Associated document; a document node refers to itself. */
@@ -43,6 +42,9 @@ export abstract class NodeImpl extends EventTargetImpl {
   /** Persistent and transient observer associations for this node. */
   // https://dom.spec.whatwg.org/#registered-observer-list
   registeredObserverList: RegisteredObserver[] = [];
+
+  /** Lazily assigned implementation-specific position among disconnected nodes. */
+  #disconnectedOrder: number | undefined;
 
   /** Stable live view, allocated only when childNodes is requested. */
   #childNodes: NodeListImpl | undefined;
@@ -110,12 +112,6 @@ export abstract class NodeImpl extends EventTargetImpl {
     return this.isDocument() ? null : this.nodeDocument;
   }
 
-  /** Return the tree root, crossing shadow hosts when composed is true. */
-  // https://dom.spec.whatwg.org/#dom-node-getrootnode
-  getRootNode(options?: GetRootNodeOptionsRecord): NodeImpl {
-    return options?.composed ? this.getShadowIncludingRoot() : this.getRoot();
-  }
-
   // https://dom.spec.whatwg.org/#dom-node-parentnode
   get parentNode(): NodeImpl | null {
     return this.#parent;
@@ -173,6 +169,12 @@ export abstract class NodeImpl extends EventTargetImpl {
   set textContent(value: string | null) {
     if (this.isElement() || this.isDocumentFragment()) this.stringReplaceAll(value ?? '');
     else this.nodeValue = value;
+  }
+
+  /** Return the tree root, crossing shadow hosts when composed is true. */
+  // https://dom.spec.whatwg.org/#dom-node-getrootnode
+  getRootNode(options?: GetRootNodeOptionsRecord): NodeImpl {
+    return options?.composed ? this.getShadowIncludingRoot() : this.getRoot();
   }
 
   /** Remove empty exclusive Text descendants and merge adjacent ones, preserving live ranges. */

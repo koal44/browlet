@@ -13,13 +13,13 @@ import type { BrowletEnvironment } from '../environment';
 export class EventLoop {
   /** Engine queue shared by this Agent's realms, using the selected backend. */
   microtaskQueue = createMicrotaskQueue();
+  /** Most recent rendering opportunity reported by the host. */
+  lastRenderOpportunityTime: UnsafeMoment | null = null;
   // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
   #backupIncumbentEnvironmentStack: BrowletEnvironment[] = [];
   #jsExecutionContextStack: TrackedExecutionContext[] = [];
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
-  /** Most recent rendering opportunity reported by the host. */
-  lastRenderOpportunityTime: UnsafeMoment | null = null;
   #performingMicrotaskCheckpoint = false;
   #init: EventLoopInit;
   #turnRequested = false;

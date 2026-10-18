@@ -355,14 +355,14 @@ export class ResponseImpl {
   get statusText(): string { return this.#response.statusMessage; }
   get headers(): HeadersImpl { return this.#headers; }
 
+  get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
+  get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
+
   // https://fetch.spec.whatwg.org/#dom-response-clone
   clone(): ResponseImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Response body is disturbed or locked');
     return new ResponseImpl(this.#response.clone(), this.#headers.guard, this.#env);
   }
-
-  get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
-  get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
   arrayBuffer(): InternalPromise<ArrayBuffer> { return this.#bodyMixin.arrayBuffer(); }
   blob(): InternalPromise<BlobImpl> { return this.#bodyMixin.blob(); }
   bytes(): InternalPromise<Uint8Array> { return this.#bodyMixin.bytes(); }

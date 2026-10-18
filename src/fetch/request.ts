@@ -583,6 +583,9 @@ export class RequestImpl {
   get signal(): AbortSignal { return this.#signal; }
   get duplex(): RequestDuplex { return 'half'; }
 
+  get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
+  get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
+
   // https://fetch.spec.whatwg.org/#dom-request-clone
   clone(): RequestImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Request body is disturbed or locked');
@@ -590,9 +593,6 @@ export class RequestImpl {
     const signal = this.#env.exec.createDependentAbortSignal([this.#signal]);
     return new RequestImpl(request, this.#headers.guard, signal, this.#env);
   }
-
-  get body(): ReadableStreamImpl | null { return this.#bodyMixin.body; }
-  get bodyUsed(): boolean { return this.#bodyMixin.bodyUsed; }
   arrayBuffer(): InternalPromise<ArrayBuffer> { return this.#bodyMixin.arrayBuffer(); }
   blob(): InternalPromise<BlobImpl> { return this.#bodyMixin.blob(); }
   bytes(): InternalPromise<Uint8Array> { return this.#bodyMixin.bytes(); }

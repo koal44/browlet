@@ -19,7 +19,6 @@ import type { Navigable } from './navigable';
 /** Retains a WindowProxy and the sequence of documents presented through it. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context
 export class BrowsingContext {
-  #windowProxy: WindowProxyHandle | undefined;
   /** Sandbox restrictions inherited when this context was opened as a popup. */
   popupSandboxingFlagSet = new SandboxingFlagSet();
   /** Browsing context that opened this one, if it retains an opener. */
@@ -38,6 +37,8 @@ export class BrowsingContext {
   insecureRequestsPolicy = new InsecureRequestsPolicy();
   /** Group whose membership is maintained by append() and remove(). */
   group: BrowsingContextGroup | null = null;
+
+  #windowProxy: WindowProxyHandle | undefined;
 
   // A navigable can present a series of browsing contexts. This inverse link
   // lets Document activity follow the existing Document -> browsing context
@@ -273,6 +274,12 @@ class AgentClusterMap {
   // browsing context group until Browlet implements cluster collection.
   #values = new Map<string | symbol, AgentCluster>();
 
+  static #getKey(key: AgentClusterKey): string | symbol {
+    if (Array.isArray(key)) return `site:${serializeSite(key)}`;
+    if (key.kind === 'opaque') return key.identity;
+    return `origin:${serializeOrigin(key)}`;
+  }
+
   get(key: AgentClusterKey): AgentCluster | undefined {
     return this.#values.get(AgentClusterMap.#getKey(key));
   }
@@ -284,17 +291,17 @@ class AgentClusterMap {
   values(): MapIterator<AgentCluster> {
     return this.#values.values();
   }
-
-  static #getKey(key: AgentClusterKey): string | symbol {
-    if (Array.isArray(key)) return `site:${serializeSite(key)}`;
-    if (key.kind === 'opaque') return key.identity;
-    return `origin:${serializeOrigin(key)}`;
-  }
 }
 
 /** Remembers each origin's initial cluster key using origin value equality. */
 class HistoricalAgentClusterKeyMap {
   #values = new Map<string | symbol, AgentClusterKey>();
+
+  static #getKey(origin: Origin): string | symbol {
+    return origin.kind === 'opaque'
+      ? origin.identity
+      : serializeOrigin(origin);
+  }
 
   get(origin: Origin): AgentClusterKey | undefined {
     return this.#values.get(HistoricalAgentClusterKeyMap.#getKey(origin));
@@ -306,11 +313,5 @@ class HistoricalAgentClusterKeyMap {
 
   set(origin: Origin, key: AgentClusterKey): void {
     this.#values.set(HistoricalAgentClusterKeyMap.#getKey(origin), key);
-  }
-
-  static #getKey(origin: Origin): string | symbol {
-    return origin.kind === 'opaque'
-      ? origin.identity
-      : serializeOrigin(origin);
   }
 }

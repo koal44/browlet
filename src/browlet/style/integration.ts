@@ -26,11 +26,11 @@ export class ElementCSSInlineStyleMixin {
 // https://drafts.csswg.org/cssom/#the-linkstyle-interface
 // The declaration lives in Stylelet; Browlet owns the DOM association behavior.
 export class LinkStyleMixin {
+  /** Associated sheet, or null while detached or unsupported. */
+  sheet: CSSStyleSheetImpl | null = null;
   #owner;
   #options;
   #treeScopeResolver;
-  /** Associated sheet, or null while detached or unsupported. */
-  sheet: CSSStyleSheetImpl | null = null;
   #scope: TreeScope | null = null;
   #deferred = false;
 

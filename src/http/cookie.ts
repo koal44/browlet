@@ -39,72 +39,10 @@ export class HTTPCookie {
     this.path = path;
   }
 
-  /** Whether the expiry timestamp is in the past. Session cookies return false. */
-  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
-  get isExpired(): boolean {
-    return this.expiryTime !== null && this.expiryTime < Date.now();
-  }
-
-  /** Whether the cookie is Secure, host-only, and has an explicit root Path attribute. */
-  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
-  get isHostPrefixCompatible(): boolean {
-    return this.secure && this.hostOnly && this.hasPathAttribute &&
-      Array.isArray(this.path) && this.path.length === 1 && this.path[0] === '';
-  }
-
-  /** Whether both the Secure and HttpOnly flags are set. */
-  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
-  get isHttpPrefixCompatible(): boolean {
-    return this.secure && this.httpOnly;
-  }
-
-  /** The serialized path length, including the slash before each URL path segment. */
-  get pathLength(): number {
-    if (typeof this.path === 'string') return this.path.length;
-    let length = 0;
-    for (const segment of this.path) length += segment.length + 1;
-    return length;
-  }
-
-  /** Whether the assigned host is itself a public suffix; absent or failed hosts return false. */
-  get hasPublicSuffixHost(): boolean {
-    const host = this.host;
-    if (host === undefined || host === null) return false;
-    const suffix = obtainPublicSuffix(host);
-    return suffix !== null && hostsEqual(host, suffix);
-  }
-
-  /** Test domain scope; the store applies host-only restrictions separately. */
-  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.2
-  matchesDomain(host: CookieHost): boolean {
-    const cookieHost = this.host;
-    if (cookieHost === undefined || cookieHost === null) return false;
-    return hostsEqual(host, cookieHost) ||
-      host.kind === 'domain' && cookieHost.kind === 'domain' &&
-      host.value.endsWith(cookieHost.value) && host.value[host.value.length - cookieHost.value.length - 1] === '.';
-  }
-
   /** Returns a new default cookie path derived from a non-empty request URL path list. */
   // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.3
   static getDefaultPath(path: string[]): string[] {
     return path.length > 1 ? path.slice(0, -1) : [''];
-  }
-
-  /** Tests whether the request path falls within this cookie's path scope. Opaque cookie paths never match. */
-  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.4
-  matchesPath(requestPath: string[]): boolean {
-    const cookiePath = this.path;
-    if (!Array.isArray(cookiePath)) return false;
-    if (requestPath.length === cookiePath.length &&
-      requestPath.every((segment, i) => segment === cookiePath[i])) return true;
-
-    let prefixLength = cookiePath.length;
-    if (cookiePath[prefixLength - 1] === '') prefixLength--;
-    if (prefixLength >= requestPath.length) return false;
-    for (let i = 0; i < prefixLength; i++) {
-      if (requestPath[i] !== cookiePath[i]) return false;
-    }
-    return true;
   }
 
   /**
@@ -195,6 +133,68 @@ export class HTTPCookie {
       output += cookie.value;
     }
     return output;
+  }
+
+  /** Whether the expiry timestamp is in the past. Session cookies return false. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
+  get isExpired(): boolean {
+    return this.expiryTime !== null && this.expiryTime < Date.now();
+  }
+
+  /** Whether the cookie is Secure, host-only, and has an explicit root Path attribute. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
+  get isHostPrefixCompatible(): boolean {
+    return this.secure && this.hostOnly && this.hasPathAttribute &&
+      Array.isArray(this.path) && this.path.length === 1 && this.path[0] === '';
+  }
+
+  /** Whether both the Secure and HttpOnly flags are set. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.1.2.1
+  get isHttpPrefixCompatible(): boolean {
+    return this.secure && this.httpOnly;
+  }
+
+  /** The serialized path length, including the slash before each URL path segment. */
+  get pathLength(): number {
+    if (typeof this.path === 'string') return this.path.length;
+    let length = 0;
+    for (const segment of this.path) length += segment.length + 1;
+    return length;
+  }
+
+  /** Whether the assigned host is itself a public suffix; absent or failed hosts return false. */
+  get hasPublicSuffixHost(): boolean {
+    const host = this.host;
+    if (host === undefined || host === null) return false;
+    const suffix = obtainPublicSuffix(host);
+    return suffix !== null && hostsEqual(host, suffix);
+  }
+
+  /** Test domain scope; the store applies host-only restrictions separately. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.2
+  matchesDomain(host: CookieHost): boolean {
+    const cookieHost = this.host;
+    if (cookieHost === undefined || cookieHost === null) return false;
+    return hostsEqual(host, cookieHost) ||
+      host.kind === 'domain' && cookieHost.kind === 'domain' &&
+      host.value.endsWith(cookieHost.value) && host.value[host.value.length - cookieHost.value.length - 1] === '.';
+  }
+
+  /** Tests whether the request path falls within this cookie's path scope. Opaque cookie paths never match. */
+  // https://httpwg.org/http-extensions/draft-ietf-httpbis-layered-cookies.html#section-5.3.4
+  matchesPath(requestPath: string[]): boolean {
+    const cookiePath = this.path;
+    if (!Array.isArray(cookiePath)) return false;
+    if (requestPath.length === cookiePath.length &&
+      requestPath.every((segment, i) => segment === cookiePath[i])) return true;
+
+    let prefixLength = cookiePath.length;
+    if (cookiePath[prefixLength - 1] === '') prefixLength--;
+    if (prefixLength >= requestPath.length) return false;
+    for (let i = 0; i < prefixLength; i++) {
+      if (requestPath[i] !== cookiePath[i]) return false;
+    }
+    return true;
   }
 }
 

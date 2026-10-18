@@ -61,6 +61,13 @@ export class FormDataImpl {
     }
   }
 
+  /** Adopt parsed entries without running HTML's entry-creation algorithm again. */
+  static fromEntries(entries: FormDataEntry[], env: FileEnvironment): FormDataImpl {
+    const formData = new FormDataImpl(undefined, null, env);
+    formData.#entryList = entries;
+    return formData;
+  }
+
   append(
     name: ScalarValueString,
     value: BlobImpl | ScalarValueString,
@@ -107,13 +114,6 @@ export class FormDataImpl {
     for (let index = this.#entryList.length - 1; index > first; index--) {
       if (this.#entryList[index]![0] === name) this.#entryList.splice(index, 1);
     }
-  }
-
-  /** Adopt parsed entries without running HTML's entry-creation algorithm again. */
-  static fromEntries(entries: FormDataEntry[], env: FileEnvironment): FormDataImpl {
-    const formData = new FormDataImpl(undefined, null, env);
-    formData.#entryList = entries;
-    return formData;
   }
 
   /** XHR §4 — value pairs to iterate over; also used by Fetch BodyInit extraction. */

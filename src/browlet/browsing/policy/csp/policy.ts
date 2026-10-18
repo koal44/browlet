@@ -96,6 +96,15 @@ export class ContentSecurityPolicy {
     return new CSPViolation(this, requestDirective, request.url, env);
   }
 
+  /** Copy directive data without sharing mutable maps or value lists. */
+  clone(): ContentSecurityPolicy {
+    const copy = new ContentSecurityPolicy(this.source, this.disposition);
+    copy.serialized = this.serialized;
+    copy.parsingWarnings = [...this.parsingWarnings];
+    copy.directives = this.directives.clone();
+    return copy;
+  }
+
   // https://w3c.github.io/webappsec-csp/#does-resource-hint-violate-policy
   #getViolatedResourceHintDirective(request: FetchRequest, selfOrigin: Origin): 'default-src' | undefined {
     if (!this.directives.has('default-src')) return undefined;
@@ -177,15 +186,6 @@ export class ContentSecurityPolicy {
     // branch after completion, preserving the consumer's body and skipping errors.
     // TODO: Reuse loader/SRI completed bytes or digests when those consumers exist.
     response.body.clone().readAll(reportBytes, () => {}, env.exec.global);
-  }
-
-  /** Copy directive data without sharing mutable maps or value lists. */
-  clone(): ContentSecurityPolicy {
-    const copy = new ContentSecurityPolicy(this.source, this.disposition);
-    copy.serialized = this.serialized;
-    copy.parsingWarnings = [...this.parsingWarnings];
-    copy.directives = this.directives.clone();
-    return copy;
   }
 }
 

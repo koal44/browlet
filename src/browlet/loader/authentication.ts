@@ -11,8 +11,6 @@ import type { UserAgent } from '../user-agent';
 
 /** Session credentials and authentication prompts owned by one user agent. */
 export class HTTPAuthenticationStore implements HTTPAuthentication {
-  /** The host may answer asynchronously; null declines the challenge. */
-  onPrompt: AuthenticationPrompt = () => null;
   #userAgent: UserAgent;
   #origins = new Map<string, Map<string, CachedCredentials>>();
   #generation = 0;
@@ -23,6 +21,9 @@ export class HTTPAuthenticationStore implements HTTPAuthentication {
 
   /** Credential-clear generation used to reject results from older prompts. */
   get generation(): number { return this.#generation; }
+
+  /** The host may answer asynchronously; null declines the challenge. */
+  onPrompt: AuthenticationPrompt = () => null;
 
   // RFC 9110 §11.5; RFC 7617 §2.2.
   find(url: URLRecord, realm?: string): AuthenticationEntry | null {

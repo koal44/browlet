@@ -35,15 +35,6 @@ export class ReportImpl {
     this.userAgent = userAgent;
   }
 
-  /** Copy outbound data without retaining the observer body or binding-owned identity. */
-  cloneForDelivery(): ReportImpl {
-    const data: unknown = JSON.parse(JSON.stringify(this.data));
-    const copy = new ReportImpl(data, this.type, this.destination, this.url, this.origin, this.userAgent);
-    copy.timestamp = this.timestamp;
-    copy.attempts = this.attempts;
-    return copy;
-  }
-
   /** Serialize reports without changing delivery bookkeeping. */
   // https://w3c.github.io/reporting/#serialize-reports
   // Reviewed departure: attempts advance when delivery begins, not when data is inspected.
@@ -56,6 +47,15 @@ export class ReportImpl {
       user_agent: report.userAgent,
       body: report.data,
     }))));
+  }
+
+  /** Copy outbound data without retaining the observer body or binding-owned identity. */
+  cloneForDelivery(): ReportImpl {
+    const data: unknown = JSON.parse(JSON.stringify(this.data));
+    const copy = new ReportImpl(data, this.type, this.destination, this.url, this.origin, this.userAgent);
+    copy.timestamp = this.timestamp;
+    copy.attempts = this.attempts;
+    return copy;
   }
 }
 

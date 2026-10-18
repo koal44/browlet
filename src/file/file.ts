@@ -41,15 +41,6 @@ export class FileImpl extends BlobImpl {
     this.#lastModified = options.lastModified ?? Date.now();
   }
 
-  get name(): string {
-    return this.#name;
-  }
-
-  get lastModified(): number {
-    if (this.#lastModified !== null) return this.#lastModified;
-    return Date.now();
-  }
-
   /** File API §4, create a File from host-selected storage. */
   static fromHost(
     source: BlobByteSource,
@@ -69,6 +60,19 @@ export class FileImpl extends BlobImpl {
     return file;
   }
 
+  static is(value: unknown): value is FileImpl {
+    return value !== null && typeof value === 'object' && #name in value;
+  }
+
+  get name(): string {
+    return this.#name;
+  }
+
+  get lastModified(): number {
+    if (this.#lastModified !== null) return this.#lastModified;
+    return Date.now();
+  }
+
   getFileSerializationState(): FileSerializationState {
     return {
       lastModified: this.lastModified,
@@ -81,10 +85,6 @@ export class FileImpl extends BlobImpl {
   ): void {
     this.#lastModified = state.lastModified;
     this.#name = state.name;
-  }
-
-  static is(value: unknown): value is FileImpl {
-    return value !== null && typeof value === 'object' && #name in value;
   }
 }
 

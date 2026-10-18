@@ -28,19 +28,6 @@ export class CSPDirectives extends Map<string, CSPDirectiveValue> {
     }
   }
 
-  /** Get the policy's first present fallback; an empty directive still stops fallback. */
-  // https://w3c.github.io/webappsec-csp/#should-directive-execute
-  getFetchDirective(requestDirective: CSPFetchDirectiveName): CSPFetchDirectiveName | undefined {
-    return CSPDirectives.#getFetchFallbackList(requestDirective).find((name) => this.has(name));
-  }
-
-  /** Copy the directive map and each mutable token list. */
-  clone(): CSPDirectives {
-    const copy = new CSPDirectives();
-    for (const [name, value] of this) copy.set(name, new CSPDirectiveValue(value.tokens.slice()));
-    return copy;
-  }
-
   // https://w3c.github.io/webappsec-csp/#directive-fallback-list
   static #getFetchFallbackList(name: CSPFetchDirectiveName): CSPFetchDirectiveName[] {
     switch (name) {
@@ -52,6 +39,19 @@ export class CSPDirectives extends Map<string, CSPDirectiveValue> {
       case 'media-src': case 'font-src': case 'img-src': return [name, 'default-src'];
       default: return [];
     }
+  }
+
+  /** Get the policy's first present fallback; an empty directive still stops fallback. */
+  // https://w3c.github.io/webappsec-csp/#should-directive-execute
+  getFetchDirective(requestDirective: CSPFetchDirectiveName): CSPFetchDirectiveName | undefined {
+    return CSPDirectives.#getFetchFallbackList(requestDirective).find((name) => this.has(name));
+  }
+
+  /** Copy the directive map and each mutable token list. */
+  clone(): CSPDirectives {
+    const copy = new CSPDirectives();
+    for (const [name, value] of this) copy.set(name, new CSPDirectiveValue(value.tokens.slice()));
+    return copy;
   }
 }
 

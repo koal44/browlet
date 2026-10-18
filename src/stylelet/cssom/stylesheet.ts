@@ -19,6 +19,7 @@ import type { StyleletEnvironment } from '../environment';
  * };
  */
 export abstract class StyleSheetImpl {
+  protected env: StyleletEnvironment;
   #type: CSSOMString;
   #location: string | null;
   #ownerNode: DOMElement | DOMProcessingInstruction | null;
@@ -26,7 +27,6 @@ export abstract class StyleSheetImpl {
   #title: string;
   #media: MediaListImpl;
   #disabled: boolean;
-  protected env: StyleletEnvironment;
 
   protected constructor(env: StyleletEnvironment) {
     if (new.target === StyleSheetImpl) {

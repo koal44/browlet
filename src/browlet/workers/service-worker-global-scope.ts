@@ -10,13 +10,13 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl
   /** Event types recorded as handled by this service worker. */
   protected abstract eventTypesToHandle: ReadonlySet<string>;
 
-  protected abstract isServiceWorkerEventType(type: string): boolean;
-  protected abstract reportWarning(message: string): void;
-
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
   getFetchEventListenerCallbacks(): EventListenerValue[] {
     return this.getEventListenerCallbacks('fetch');
   }
+
+  protected abstract isServiceWorkerEventType(type: string): boolean;
+  protected abstract reportWarning(message: string): void;
 
   protected override addingEventListener(type: string): void {
     if (

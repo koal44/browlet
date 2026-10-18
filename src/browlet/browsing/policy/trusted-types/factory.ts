@@ -16,15 +16,15 @@ import { getTrustedTypeDataForAttribute } from './sinks';
 /** One global's policy creation history, default policy, and empty trusted values. */
 // https://w3c.github.io/trusted-types/dist/spec/#trustedtypepolicyfactory
 export class TrustedTypePolicyFactoryImpl {
-  /** Environment whose policies apply, including when methods are borrowed across realms. */
-  #env: BrowletEnvironment;
-  /** Successful policy names; rejected creation attempts do not reserve a name. */
-  #createdPolicyNames = new Set<string>();
   /** The single policy named "default", or null before its creation. */
   defaultPolicy: TrustedTypePolicyImpl | null = null;
   /** Stable empty values owned by this factory. */
   readonly emptyHTML = new TrustedHTMLImpl('');
   readonly emptyScript = new TrustedScriptImpl('');
+  /** Environment whose policies apply, including when methods are borrowed across realms. */
+  #env: BrowletEnvironment;
+  /** Successful policy names; rejected creation attempts do not reserve a name. */
+  #createdPolicyNames = new Set<string>();
 
   constructor(env: BrowletEnvironment) {
     this.#env = env;

@@ -156,6 +156,18 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentRecord implem
     return false;
   }
 
+  abstract get apiBaseURL(): URLRecord;
+  abstract get moduleMap(): ModuleMap;
+  abstract get origin(): Origin;
+  abstract get hasCrossSiteAncestor(): boolean;
+  abstract get policyContainer(): PolicyContainer;
+  abstract get crossOriginIsolatedCapability(): boolean;
+  abstract get timeOrigin(): Moment;
+
+  get responsibleEventLoop(): EventLoop {
+    return this.realm.agent.eventLoop;
+  }
+
   /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */
   relativeHighResolutionTime(time: number): number {
     return this.timing.relativeHighResolutionTime(new UnsafeMoment(monotonicClock, time)).milliseconds;
@@ -215,21 +227,9 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentRecord implem
     return this.userAgent.webDriverBiDiScriptingIsEnabled(this);
   }
 
-  abstract get apiBaseURL(): URLRecord;
-  abstract get moduleMap(): ModuleMap;
-  abstract get origin(): Origin;
-  abstract get hasCrossSiteAncestor(): boolean;
-  abstract get policyContainer(): PolicyContainer;
-  abstract get crossOriginIsolatedCapability(): boolean;
-  abstract get timeOrigin(): Moment;
-
   /** Document or worker URL for reports, or null for other kinds of global. */
   // https://w3c.github.io/webappsec-subresource-integrity/#report-violations
   abstract getReportingSource(): URLRecord | null;
-
-  get responsibleEventLoop(): EventLoop {
-    return this.realm.agent.eventLoop;
-  }
 
   /** Source URL for requests using this client's referrer. */
   // https://w3c.github.io/webappsec-referrer-policy/#determine-requests-referrer
@@ -343,15 +343,6 @@ export class WindowEnvironment extends BrowletEnvironment {
     return this.window.getAssociatedDocument().getNodeNavigable()?.parent === null;
   }
 
-  override consumePreloadedResource(
-    _url: URLRecord, _destination: Destination, _mode: FetchMode, _credentialsMode: RequestCredentials,
-    _integrityMetadata: string, _onResponseAvailable: (response: FetchResponse) => void,
-  ): boolean {
-    // PROVISIONAL(HTML preload): no Document preload map is populated yet.
-    // Match its keys and integrity metadata, then arrange response notification when implemented.
-    return false;
-  }
-
   get apiBaseURL(): URLRecord {
     return this.window.getAssociatedDocument().getBaseURL();
   }
@@ -374,17 +365,6 @@ export class WindowEnvironment extends BrowletEnvironment {
     return this.window.getAssociatedDocument().policyContainer;
   }
 
-  /** A trustworthy Window ancestor also prohibits mixed content, regardless of this origin. */
-  override prohibitsMixedSecurityContexts(): boolean {
-    if (super.prohibitsMixedSecurityContexts()) return true;
-    const navigable = this.window.getAssociatedDocument().getNodeNavigable();
-    for (let ancestor = navigable?.parent ?? null; ancestor !== null; ancestor = ancestor.parent) {
-      const document = ancestor.activeDocument;
-      if (document !== null && this.userAgent.isOriginPotentiallyTrustworthy(document.origin)) return true;
-    }
-    return false;
-  }
-
   get crossOriginIsolatedCapability(): boolean {
     const mode = this.realm.agent.agentCluster?.crossOriginIsolationMode;
     if (mode !== 'concrete') return false;
@@ -400,6 +380,26 @@ export class WindowEnvironment extends BrowletEnvironment {
       monotonicClock,
       this.window.getAssociatedDocument().loadTimingInfo.navigationStartTime,
     );
+  }
+
+  override consumePreloadedResource(
+    _url: URLRecord, _destination: Destination, _mode: FetchMode, _credentialsMode: RequestCredentials,
+    _integrityMetadata: string, _onResponseAvailable: (response: FetchResponse) => void,
+  ): boolean {
+    // PROVISIONAL(HTML preload): no Document preload map is populated yet.
+    // Match its keys and integrity metadata, then arrange response notification when implemented.
+    return false;
+  }
+
+  /** A trustworthy Window ancestor also prohibits mixed content, regardless of this origin. */
+  override prohibitsMixedSecurityContexts(): boolean {
+    if (super.prohibitsMixedSecurityContexts()) return true;
+    const navigable = this.window.getAssociatedDocument().getNodeNavigable();
+    for (let ancestor = navigable?.parent ?? null; ancestor !== null; ancestor = ancestor.parent) {
+      const document = ancestor.activeDocument;
+      if (document !== null && this.userAgent.isOriginPotentiallyTrustworthy(document.origin)) return true;
+    }
+    return false;
   }
 
   override getWindowOrWorkerGlobalScopeMixin(): WindowOrWorkerGlobalScopeMixin {

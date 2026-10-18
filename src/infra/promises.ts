@@ -18,9 +18,6 @@ export class InternalPromise<T> {
     this.#read = read ?? this;
   }
 
-  /** Whether the backing signals completion while an implementation value is stored separately. */
-  get usesInternalStorage(): boolean { return typeof this.#read !== 'function'; }
-
   static withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
     // eslint-disable-next-line @typescript-eslint/no-this-alias -- Detached resolvers retain their allocation constructor.
     const P = this;
@@ -98,6 +95,9 @@ export class InternalPromise<T> {
     });
     return result.promise;
   }
+
+  /** Whether the backing signals completion while an implementation value is stored separately. */
+  get usesInternalStorage(): boolean { return typeof this.#read !== 'function'; }
 
   then(fulfill?: (value: T) => T | InternalPromise<T>,
     reject?: (reason: unknown) => T | InternalPromise<T>): InternalPromise<T>;

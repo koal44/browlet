@@ -153,6 +153,59 @@ export class ElementImpl extends NodeImpl {
     return this.getAttributeTokenList(classAttribute);
   }
 
+  /** Read the live list without bypassing attribute mutation steps. */
+  get attributeList(): readonly AttrImpl[] {
+    return this.#attributeList;
+  }
+
+  /** Reflect the null-namespace slot attribute through the shared mutation path. */
+  get slot(): string {
+    return this.getAttributeNS(null, 'slot') ?? '';
+  }
+
+  set slot(value: string) {
+    this.setAttributeValue('slot', value);
+  }
+
+  get children(): HTMLCollectionImpl {
+    return this.#parentNodeMixin.children;
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
+  }
+
+  get previousElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
+  }
+
+  get nextElementSibling(): ElementImpl | null {
+    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
+  }
+
+  /** Author-facing slot lookup excludes closed shadow roots. */
+  // https://dom.spec.whatwg.org/#dom-slotable-assignedslot
+  get assignedSlot(): HTMLSlotElementImpl | null {
+    return this.#slottableMixin.findSlot(this, true);
+  }
+
+  /** Explicit assignment owner, retained weakly even while this node is detached. */
+  get manualSlotAssignment(): WeakRef<HTMLSlotElementImpl> | null {
+    return this.#slottableMixin.manualSlotAssignment;
+  }
+
+  set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
+    this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
   /** Obtain the stable token list associated with a null-namespace attribute. */
   // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#reflect
   getAttributeTokenList(attribute: TokenListAttribute): DOMTokenListImpl {
@@ -197,11 +250,6 @@ export class ElementImpl extends NodeImpl {
     }
     this.setAttributeValue(name, '');
     (this.#elementAssociations ??= new ElementAssociations()).set(name, value);
-  }
-
-  /** Read the live list without bypassing attribute mutation steps. */
-  get attributeList(): readonly AttrImpl[] {
-    return this.#attributeList;
   }
 
   // https://dom.spec.whatwg.org/#dom-element-hasattributes
@@ -416,15 +464,6 @@ export class ElementImpl extends NodeImpl {
     this.linkStyleMixin?.attributeChanged(localName);
   }
 
-  /** Reflect the null-namespace slot attribute through the shared mutation path. */
-  get slot(): string {
-    return this.getAttributeNS(null, 'slot') ?? '';
-  }
-
-  set slot(value: string) {
-    this.setAttributeValue('slot', value);
-  }
-
   /** Attach a shadow tree using the converted options and this node's document registry. */
   // https://dom.spec.whatwg.org/#dom-element-attachshadow
   attachShadow(init: ShadowRootInit): ShadowRootImpl {
@@ -528,22 +567,6 @@ export class ElementImpl extends NodeImpl {
     }
   }
 
-  get children(): HTMLCollectionImpl {
-    return this.#parentNodeMixin.children;
-  }
-
-  get firstElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.firstElementChild;
-  }
-
-  get lastElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.lastElementChild;
-  }
-
-  get childElementCount(): number {
-    return this.#parentNodeMixin.childElementCount;
-  }
-
   prepend(...nodes: (NodeImpl | string)[]): void {
     this.#parentNodeMixin.prepend(...nodes);
   }
@@ -568,14 +591,6 @@ export class ElementImpl extends NodeImpl {
     return this.#parentNodeMixin.querySelectorAll(selectors);
   }
 
-  get previousElementSibling(): ElementImpl | null {
-    return this.#nonDocumentTypeChildNodeMixin.previousElementSibling;
-  }
-
-  get nextElementSibling(): ElementImpl | null {
-    return this.#nonDocumentTypeChildNodeMixin.nextElementSibling;
-  }
-
   before(...nodes: (NodeImpl | string)[]): void {
     this.#childNodeMixin.before(...nodes);
   }
@@ -590,21 +605,6 @@ export class ElementImpl extends NodeImpl {
 
   remove(): void {
     this.#childNodeMixin.remove();
-  }
-
-  /** Author-facing slot lookup excludes closed shadow roots. */
-  // https://dom.spec.whatwg.org/#dom-slotable-assignedslot
-  get assignedSlot(): HTMLSlotElementImpl | null {
-    return this.#slottableMixin.findSlot(this, true);
-  }
-
-  /** Explicit assignment owner, retained weakly even while this node is detached. */
-  get manualSlotAssignment(): WeakRef<HTMLSlotElementImpl> | null {
-    return this.#slottableMixin.manualSlotAssignment;
-  }
-
-  set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
-    this.#slottableMixin.manualSlotAssignment = slot;
   }
 
   /** Stable weak identity used by slots' manual assignment sets. */

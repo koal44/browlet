@@ -21,8 +21,6 @@ import type { ContentSecurityPolicy, CSPDisposition } from './policy';
 export class CSPViolation {
   /** Environment whose policy was violated. Worker construction awaits its global implementation. */
   env: BrowletEnvironment;
-  /** Protected Document retained for queued event targeting. */
-  #document: DocumentImpl;
   /** Protected resource URL captured when the violation occurs. */
   url: URLRecord;
   /** HTTP status of the protected resource, not the rejected subresource. */
@@ -45,6 +43,8 @@ export class CSPViolation {
   element: ElementImpl | null = null;
   /** Authorized excerpt of violating inline code, otherwise empty. */
   sample = '';
+  /** Protected Document retained for queued event targeting. */
+  #document: DocumentImpl;
 
   // https://w3c.github.io/webappsec-csp/#create-violation-for-global
   // Require the resource at construction instead of exposing a partially populated violation.

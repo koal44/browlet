@@ -144,6 +144,164 @@ export class LegacyPlatformObjectBinding {
       (type.name === 'DOMString' || (operation.special !== 'deleter' && type.name === 'unsigned long'));
   }
 
+  // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: indexed property
+  // steps.
+  protected getIndexedProperty(
+    target: object,
+    property: string,
+    properties: IndexedProperties,
+  ): PropertyDescriptor | undefined {
+    const index = toArrayIndex(property);
+    const { steps } = properties;
+    if ('supportsIndex' in steps && !this.supportsIndex(target, index, properties)) return;
+
+    const value = this.#getIndexedValue(target, index, properties);
+    if ('unsupportedValue' in steps && value === steps.unsupportedValue) return;
+    return {
+      configurable: true,
+      enumerable: true,
+      value: properties.convertResult(value),
+      writable: properties.setter !== undefined,
+    };
+  }
+
+  // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: named property
+  // steps.
+  protected getNamedProperty(
+    target: object,
+    property: string,
+    properties: NamedProperties,
+  ): PropertyDescriptor {
+    const steps = properties.getter.operationSteps;
+    if (!steps) {
+      throw new InternalError('Missing named property getter implementation');
+    }
+    const value = steps(this.#getReceiverRecord(target), [property]);
+    return {
+      configurable: true,
+      enumerable: !properties.unenumerable,
+      value: properties.convertResult(value),
+      writable: properties.setter !== undefined,
+    };
+  }
+
+  // Shared special-property cases; undefined delegates ordinary definition to the backend.
+  protected defineVirtualProperty(
+    implementation: object,
+    property: string | symbol,
+    descriptor: PropertyDescriptor,
+    properties: LegacyPropertyMetadata,
+    hasOwn: boolean,
+  ): boolean | undefined {
+    if (
+      properties.indexed &&
+      typeof property === 'string' &&
+      isArrayIndex(property)
+    ) {
+      if (!isDataDescriptor(descriptor) || !properties.indexed.setter) {
+        return false;
+      }
+      this.#invokeIndexedSetter(
+        implementation,
+        property,
+        descriptor.value,
+        properties.indexed,
+      );
+      return true;
+    }
+
+    const named = properties.named;
+    if (
+      named &&
+      typeof property === 'string' &&
+      !named.unforgeableNames.has(property)
+    ) {
+      const creating = !this.getSupportedNames(
+        implementation,
+        named,
+      ).has(property);
+      if (
+        named.overrideBuiltIns ||
+        !hasOwn
+      ) {
+        if (!creating && !named.setter) return false;
+        if (named.setter) {
+          if (!isDataDescriptor(descriptor)) return false;
+          this.#invokeNamedSetter(
+            implementation,
+            property,
+            descriptor.value,
+            named,
+          );
+          return true;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
+  protected namedPropertyVisible(
+    target: object,
+    implementation: object,
+    property: string,
+    properties: NamedProperties,
+    supportedNames = this.getSupportedNames(implementation, properties),
+    hasOwn = Reflect.getOwnPropertyDescriptor(target, property) !== undefined,
+  ): boolean {
+    if (!supportedNames.has(property)) return false;
+    if (hasOwn) return false;
+    if (properties.overrideBuiltIns) return true;
+
+    let prototype = Reflect.getPrototypeOf(target);
+    while (prototype) {
+      if (
+        !isNamedPropertiesObject(prototype) &&
+        Reflect.getOwnPropertyDescriptor(prototype, property)
+      ) return false;
+      prototype = Reflect.getPrototypeOf(prototype);
+    }
+    return true;
+  }
+
+  // Project adapter for Web IDL §2.5.6.1 Indexed properties — query the interface's supported property indices.
+  protected supportsIndex(
+    implementation: object,
+    index: number,
+    properties: IndexedProperties,
+  ): boolean {
+    const { steps } = properties;
+    return 'supportsIndex' in steps ?
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- support steps use the implementation as their specified this value
+      Reflect.apply(steps.supportsIndex, implementation, [index]) :
+      this.#getIndexedValue(implementation, index, properties) !== steps.unsupportedValue;
+  }
+
+  // Project delegate to Web IDL §2.5.6.1 Indexed properties — enumerate supported property indices.
+  protected getSupportedIndices(
+    target: object,
+    properties: IndexedProperties,
+  ): Iterable<number> {
+    return Reflect.apply(
+      properties.steps.getSupportedPropertyIndices,
+      target,
+      [],
+    );
+  }
+
+  // Project delegate to Web IDL §2.5.6.2 Named properties — the interface's supported property names.
+  protected getSupportedNames(
+    target: object,
+    properties: NamedProperties,
+  ): ReadonlySet<string> {
+    return Reflect.apply(
+      // eslint-disable-next-line @typescript-eslint/unbound-method -- supported-name steps use the implementation as their specified this value
+      properties.steps.getSupportedPropertyNames,
+      target,
+      [],
+    );
+  }
+
   // Project Proxy adapter for ECMAScript §10.1.8.1 OrdinaryGet with legacy [[GetOwnProperty]].
   #get(
     target: object,
@@ -226,47 +384,6 @@ export class LegacyPlatformObjectBinding {
     return Reflect.getOwnPropertyDescriptor(target, property);
   }
 
-  // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: indexed property
-  // steps.
-  protected getIndexedProperty(
-    target: object,
-    property: string,
-    properties: IndexedProperties,
-  ): PropertyDescriptor | undefined {
-    const index = toArrayIndex(property);
-    const { steps } = properties;
-    if ('supportsIndex' in steps && !this.supportsIndex(target, index, properties)) return;
-
-    const value = this.#getIndexedValue(target, index, properties);
-    if ('unsupportedValue' in steps && value === steps.unsupportedValue) return;
-    return {
-      configurable: true,
-      enumerable: true,
-      value: properties.convertResult(value),
-      writable: properties.setter !== undefined,
-    };
-  }
-
-  // Extracted from Web IDL §3.9.7 Abstract operations — LegacyPlatformObjectGetOwnProperty: named property
-  // steps.
-  protected getNamedProperty(
-    target: object,
-    property: string,
-    properties: NamedProperties,
-  ): PropertyDescriptor {
-    const steps = properties.getter.operationSteps;
-    if (!steps) {
-      throw new InternalError('Missing named property getter implementation');
-    }
-    const value = steps(this.#getReceiverRecord(target), [property]);
-    return {
-      configurable: true,
-      enumerable: !properties.unenumerable,
-      value: properties.convertResult(value),
-      writable: properties.setter !== undefined,
-    };
-  }
-
   // Web IDL §3.9.2 [[Set]].
   #set(
     target: object,
@@ -326,61 +443,6 @@ export class LegacyPlatformObjectBinding {
       implementation, property, descriptor, properties,
       Reflect.getOwnPropertyDescriptor(target, property) !== undefined,
     ) ?? Reflect.defineProperty(target, property, descriptor);
-  }
-
-  // Shared special-property cases; undefined delegates ordinary definition to the backend.
-  protected defineVirtualProperty(
-    implementation: object,
-    property: string | symbol,
-    descriptor: PropertyDescriptor,
-    properties: LegacyPropertyMetadata,
-    hasOwn: boolean,
-  ): boolean | undefined {
-    if (
-      properties.indexed &&
-      typeof property === 'string' &&
-      isArrayIndex(property)
-    ) {
-      if (!isDataDescriptor(descriptor) || !properties.indexed.setter) {
-        return false;
-      }
-      this.#invokeIndexedSetter(
-        implementation,
-        property,
-        descriptor.value,
-        properties.indexed,
-      );
-      return true;
-    }
-
-    const named = properties.named;
-    if (
-      named &&
-      typeof property === 'string' &&
-      !named.unforgeableNames.has(property)
-    ) {
-      const creating = !this.getSupportedNames(
-        implementation,
-        named,
-      ).has(property);
-      if (
-        named.overrideBuiltIns ||
-        !hasOwn
-      ) {
-        if (!creating && !named.setter) return false;
-        if (named.setter) {
-          if (!isDataDescriptor(descriptor)) return false;
-          this.#invokeNamedSetter(
-            implementation,
-            property,
-            descriptor.value,
-            named,
-          );
-          return true;
-        }
-      }
-    }
-    return undefined;
   }
 
   // Web IDL §3.9.4 [[Delete]].
@@ -546,30 +608,6 @@ export class LegacyPlatformObjectBinding {
     return Reflect.apply(steps, target, [property]);
   }
 
-  // Web IDL §3.9.7 Abstract operations — named property visibility algorithm.
-  protected namedPropertyVisible(
-    target: object,
-    implementation: object,
-    property: string,
-    properties: NamedProperties,
-    supportedNames = this.getSupportedNames(implementation, properties),
-    hasOwn = Reflect.getOwnPropertyDescriptor(target, property) !== undefined,
-  ): boolean {
-    if (!supportedNames.has(property)) return false;
-    if (hasOwn) return false;
-    if (properties.overrideBuiltIns) return true;
-
-    let prototype = Reflect.getPrototypeOf(target);
-    while (prototype) {
-      if (
-        !isNamedPropertiesObject(prototype) &&
-        Reflect.getOwnPropertyDescriptor(prototype, property)
-      ) return false;
-      prototype = Reflect.getPrototypeOf(prototype);
-    }
-    return true;
-  }
-
   // Project delegate to Web IDL §2.5.6.1 Indexed properties — determine the value of an indexed property.
   #getIndexedValue(
     implementation: object,
@@ -586,44 +624,6 @@ export class LegacyPlatformObjectBinding {
     const record = getImplementationRecord(implInst);
     if (!record) throw new InternalError('Legacy object implementation is not associated');
     return record;
-  }
-
-  // Project adapter for Web IDL §2.5.6.1 Indexed properties — query the interface's supported property indices.
-  protected supportsIndex(
-    implementation: object,
-    index: number,
-    properties: IndexedProperties,
-  ): boolean {
-    const { steps } = properties;
-    return 'supportsIndex' in steps ?
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- support steps use the implementation as their specified this value
-      Reflect.apply(steps.supportsIndex, implementation, [index]) :
-      this.#getIndexedValue(implementation, index, properties) !== steps.unsupportedValue;
-  }
-
-  // Project delegate to Web IDL §2.5.6.1 Indexed properties — enumerate supported property indices.
-  protected getSupportedIndices(
-    target: object,
-    properties: IndexedProperties,
-  ): Iterable<number> {
-    return Reflect.apply(
-      properties.steps.getSupportedPropertyIndices,
-      target,
-      [],
-    );
-  }
-
-  // Project delegate to Web IDL §2.5.6.2 Named properties — the interface's supported property names.
-  protected getSupportedNames(
-    target: object,
-    properties: NamedProperties,
-  ): ReadonlySet<string> {
-    return Reflect.apply(
-      // eslint-disable-next-line @typescript-eslint/unbound-method -- supported-name steps use the implementation as their specified this value
-      properties.steps.getSupportedPropertyNames,
-      target,
-      [],
-    );
   }
 }
 

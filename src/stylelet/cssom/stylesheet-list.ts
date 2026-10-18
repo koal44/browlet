@@ -14,12 +14,12 @@ export class StyleSheetListImpl<
 
   #styleSheets: T[] = [];
 
-  item(index: number): T | null {
-    return this.#styleSheets[index] ?? null;
-  }
-
   get length(): number {
     return this.#styleSheets.length;
+  }
+
+  item(index: number): T | null {
+    return this.#styleSheets[index] ?? null;
   }
 
   [Symbol.iterator](): ArrayIterator<T> {

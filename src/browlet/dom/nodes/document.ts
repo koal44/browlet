@@ -447,20 +447,6 @@ export class DocumentImpl extends NodeImpl {
     return this.#documentElement;
   }
 
-  /** Refresh the root after an element is linked to or unlinked from this document. */
-  updateDocumentElement(): void {
-    let root: ElementImpl | null = null;
-    for (let child = this.firstChild; child; child = child.nextSibling) {
-      if (child.isElement()) {
-        root = child;
-        break;
-      }
-    }
-    if (root === this.#documentElement) return;
-    this.#documentElement = root;
-    this.updateTitleElement();
-  }
-
   /** Document element when it is an HTML html element. */
   // https://html.spec.whatwg.org/multipage/dom.html#the-html-element-2
   get htmlElement(): HTMLHtmlElementImpl | null {
@@ -512,31 +498,6 @@ export class DocumentImpl extends NodeImpl {
       return;
     }
     title.stringReplaceAll(value);
-  }
-
-  /** Refresh title selection after a title element moves, or the document root changes. */
-  updateTitleElement(changedTitle?: HTMLTitleElementImpl | SVGTitleElementImpl): void {
-    if (changedTitle !== undefined && changedTitle !== this.#titleElement && changedTitle.getRoot() !== this) return;
-    const root = this.#documentElement;
-    const title = root instanceof SVGSVGElementImpl
-      ? this.#getSVGTitle(root)
-      : this.htmlTitleElement;
-    if (title === this.#titleElement) return;
-    this.#titleElement = title;
-    this.#title = stripAndCollapseASCIIWhitespace(title?.getChildTextContent() ?? '');
-  }
-
-  /** Refresh normalized text when the selected title's direct children change. */
-  updateTitleText(element: HTMLTitleElementImpl | SVGTitleElementImpl): void {
-    if (element !== this.#titleElement) return;
-    this.#title = stripAndCollapseASCIIWhitespace(element.getChildTextContent());
-  }
-
-  #getSVGTitle(root: SVGSVGElementImpl): SVGTitleElementImpl | null {
-    for (let child = root.firstChild; child; child = child.nextSibling) {
-      if (SVGTitleElementImpl.is(child)) return child;
-    }
-    return null;
   }
 
   /** First body or frameset child of an HTML document element. */
@@ -613,6 +574,96 @@ export class DocumentImpl extends NodeImpl {
       (element) => element instanceof HTMLScriptElementImpl);
   }
 
+  /** Focusable area currently designated by HTML focus management. */
+  // https://html.spec.whatwg.org/multipage/interaction.html#focused-area-of-the-document
+  get focusedArea(): FocusableArea {
+    // TODO(HTML §6.6): initialize focus state and maintain it through focus updates and fixup.
+    throw new InternalError('Document focused area is not implemented');
+  }
+
+  /** Focused element visible from this document's tree. */
+  get activeElement(): ElementImpl | null {
+    return this.#documentOrShadowRootMixin.activeElement;
+  }
+
+  get styleSheets(): StyleSheetListImpl {
+    return this.#documentOrShadowRootMixin.styleSheets;
+  }
+
+  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
+    return this.#documentOrShadowRootMixin.adoptedStyleSheets;
+  }
+
+  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
+    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
+  }
+
+  get children(): HTMLCollectionImpl {
+    return this.#parentNodeMixin.children;
+  }
+
+  /** Stable live collection of all descendant elements, independent of native platform support. */
+  // https://html.spec.whatwg.org/#dom-document-all
+  get all(): HTMLAllCollectionImpl {
+    return this.#all ??= new HTMLAllCollectionImpl(this);
+  }
+
+  get firstElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.firstElementChild;
+  }
+
+  get lastElementChild(): ElementImpl | null {
+    return this.#parentNodeMixin.lastElementChild;
+  }
+
+  get childElementCount(): number {
+    return this.#parentNodeMixin.childElementCount;
+  }
+
+  /** Stable DOM factory object; the associated document selects origin and allocation realm. */
+  // https://dom.spec.whatwg.org/#dom-document-implementation
+  get implementation(): DOMImplementationImpl {
+    return this.#implementation ??= new DOMImplementationImpl(this, this.env);
+  }
+
+  /** Document containing this active document's navigable container, or null without one. */
+  // https://html.spec.whatwg.org/multipage/document-sequences.html#doc-container-document
+  get containerDocument(): DocumentImpl | null {
+    return this.getNodeNavigable()?.containerDocument ?? null;
+  }
+
+  /** Refresh the root after an element is linked to or unlinked from this document. */
+  updateDocumentElement(): void {
+    let root: ElementImpl | null = null;
+    for (let child = this.firstChild; child; child = child.nextSibling) {
+      if (child.isElement()) {
+        root = child;
+        break;
+      }
+    }
+    if (root === this.#documentElement) return;
+    this.#documentElement = root;
+    this.updateTitleElement();
+  }
+
+  /** Refresh title selection after a title element moves, or the document root changes. */
+  updateTitleElement(changedTitle?: HTMLTitleElementImpl | SVGTitleElementImpl): void {
+    if (changedTitle !== undefined && changedTitle !== this.#titleElement && changedTitle.getRoot() !== this) return;
+    const root = this.#documentElement;
+    const title = root instanceof SVGSVGElementImpl
+      ? this.#getSVGTitle(root)
+      : this.htmlTitleElement;
+    if (title === this.#titleElement) return;
+    this.#titleElement = title;
+    this.#title = stripAndCollapseASCIIWhitespace(title?.getChildTextContent() ?? '');
+  }
+
+  /** Refresh normalized text when the selected title's direct children change. */
+  updateTitleText(element: HTMLTitleElementImpl | SVGTitleElementImpl): void {
+    if (element !== this.#titleElement) return;
+    this.#title = stripAndCollapseASCIIWhitespace(element.getChildTextContent());
+  }
+
   /** Live HTML descendants with exactly this name content attribute. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-getelementsbyname
   getElementsByName(name: string): NodeListImpl {
@@ -668,52 +719,6 @@ export class DocumentImpl extends NodeImpl {
     return element;
   }
 
-  /** Focusable area currently designated by HTML focus management. */
-  // https://html.spec.whatwg.org/multipage/interaction.html#focused-area-of-the-document
-  get focusedArea(): FocusableArea {
-    // TODO(HTML §6.6): initialize focus state and maintain it through focus updates and fixup.
-    throw new InternalError('Document focused area is not implemented');
-  }
-
-  /** Focused element visible from this document's tree. */
-  get activeElement(): ElementImpl | null {
-    return this.#documentOrShadowRootMixin.activeElement;
-  }
-
-  get styleSheets(): StyleSheetListImpl {
-    return this.#documentOrShadowRootMixin.styleSheets;
-  }
-
-  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
-    return this.#documentOrShadowRootMixin.adoptedStyleSheets;
-  }
-
-  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
-    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
-  }
-
-  get children(): HTMLCollectionImpl {
-    return this.#parentNodeMixin.children;
-  }
-
-  /** Stable live collection of all descendant elements, independent of native platform support. */
-  // https://html.spec.whatwg.org/#dom-document-all
-  get all(): HTMLAllCollectionImpl {
-    return this.#all ??= new HTMLAllCollectionImpl(this);
-  }
-
-  get firstElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.firstElementChild;
-  }
-
-  get lastElementChild(): ElementImpl | null {
-    return this.#parentNodeMixin.lastElementChild;
-  }
-
-  get childElementCount(): number {
-    return this.#parentNodeMixin.childElementCount;
-  }
-
   prepend(...nodes: (NodeImpl | string)[]): void {
     this.#parentNodeMixin.prepend(...nodes);
   }
@@ -763,12 +768,6 @@ export class DocumentImpl extends NodeImpl {
     return this.createElementNode(localName, namespace ?? '', prefix, isValue, registry);
   }
 
-  /** Stable DOM factory object; the associated document selects origin and allocation realm. */
-  // https://dom.spec.whatwg.org/#dom-document-implementation
-  get implementation(): DOMImplementationImpl {
-    return this.#implementation ??= new DOMImplementationImpl(this, this.env);
-  }
-
   /** Create a detached Document or XMLDocument through this document's allocator. */
   createDocumentNode(xml = false): DocumentImpl {
     return this.#nodeFactory.constructNode(xml ? XMLDocumentImpl : DocumentImpl, [this.#nodeFactory, this.env]);
@@ -787,12 +786,6 @@ export class DocumentImpl extends NodeImpl {
     copy.allowDeclarativeShadowRoots = this.allowDeclarativeShadowRoots;
     if (this.customElementRegistry?.isScoped) copy.customElementRegistry = this.customElementRegistry;
     return copy;
-  }
-
-  // https://html.spec.whatwg.org/multipage/dom.html#the-document-object
-  protected override cloningSteps(copy: DocumentImpl, subtree: boolean): void {
-    super.cloningSteps(copy, subtree);
-    copy.aboutBaseURL = this.aboutBaseURL;
   }
 
   /** Validate XML-only CDATA construction; later data mutations need not preserve XML syntax. */
@@ -978,32 +971,6 @@ export class DocumentImpl extends NodeImpl {
     // The creation caller already knows the container document; passing it preserves activation timing.
     this.internalAncestorOriginObjectsList = this.#createAncestorOriginObjects(referrerPolicy, parentDocument);
     this.ancestorOriginsList = new DOMStringListImpl(this.internalAncestorOriginObjectsList.map(serializeOrigin));
-  }
-
-  /** Collect the parent's retained ancestry, masking the origins withheld by iframe policy. */
-  // https://html.spec.whatwg.org/multipage/dom.html#internal-ancestor-origin-objects-list-creation-steps
-  #createAncestorOriginObjects(referrerPolicy: ReferrerPolicy, parentDocument: DocumentImpl | null): Origin[] {
-    const output: Origin[] = [];
-    if (parentDocument === null) return output;
-
-    // Assert: the parent document is fully active and its ancestry was initialized.
-    const ancestorOrigins = parentDocument.internalAncestorOriginObjectsList;
-    if (ancestorOrigins === null) throw new InternalError('Parent Document ancestry has not been initialized');
-    // The specification also reads the navigable's container here, but never uses that local.
-    // SPEC_CLASH(ancestor-origin-policy-masking): follow HTML's masking, also implemented by Gecko; Blink and WebKit expose the unmasked origins.
-    let masked = referrerPolicy === 'no-referrer' ||
-      (referrerPolicy === 'same-origin' && !areSameOrigin(parentDocument.origin, this.origin));
-    output.push(masked ? createOpaqueOrigin() : parentDocument.origin);
-
-    for (const origin of ancestorOrigins) {
-      if (masked && areSameOrigin(origin, parentDocument.origin)) {
-        output.push(createOpaqueOrigin());
-        continue;
-      }
-      output.push(origin);
-      masked = false;
-    }
-    return output;
   }
 
   /** Populate the synchronously available element tree of an about:blank document. */
@@ -1404,12 +1371,6 @@ export class DocumentImpl extends NodeImpl {
     return navigable?.activeDocument === this ? navigable : null;
   }
 
-  /** Document containing this active document's navigable container, or null without one. */
-  // https://html.spec.whatwg.org/multipage/document-sequences.html#doc-container-document
-  get containerDocument(): DocumentImpl | null {
-    return this.getNodeNavigable()?.containerDocument ?? null;
-  }
-
   /** Whether this document is active throughout its navigable ancestry. */
   // https://html.spec.whatwg.org/#fully-active
   isFullyActive(): boolean {
@@ -1600,6 +1561,45 @@ export class DocumentImpl extends NodeImpl {
         this.waitForScriptBlockingStyleSheets(env),
       );
     }, idlType.undefined);
+  }
+
+  // https://html.spec.whatwg.org/multipage/dom.html#the-document-object
+  protected override cloningSteps(copy: DocumentImpl, subtree: boolean): void {
+    super.cloningSteps(copy, subtree);
+    copy.aboutBaseURL = this.aboutBaseURL;
+  }
+
+  #getSVGTitle(root: SVGSVGElementImpl): SVGTitleElementImpl | null {
+    for (let child = root.firstChild; child; child = child.nextSibling) {
+      if (SVGTitleElementImpl.is(child)) return child;
+    }
+    return null;
+  }
+
+  /** Collect the parent's retained ancestry, masking the origins withheld by iframe policy. */
+  // https://html.spec.whatwg.org/multipage/dom.html#internal-ancestor-origin-objects-list-creation-steps
+  #createAncestorOriginObjects(referrerPolicy: ReferrerPolicy, parentDocument: DocumentImpl | null): Origin[] {
+    const output: Origin[] = [];
+    if (parentDocument === null) return output;
+
+    // Assert: the parent document is fully active and its ancestry was initialized.
+    const ancestorOrigins = parentDocument.internalAncestorOriginObjectsList;
+    if (ancestorOrigins === null) throw new InternalError('Parent Document ancestry has not been initialized');
+    // The specification also reads the navigable's container here, but never uses that local.
+    // SPEC_CLASH(ancestor-origin-policy-masking): follow HTML's masking, also implemented by Gecko; Blink and WebKit expose the unmasked origins.
+    let masked = referrerPolicy === 'no-referrer' ||
+      (referrerPolicy === 'same-origin' && !areSameOrigin(parentDocument.origin, this.origin));
+    output.push(masked ? createOpaqueOrigin() : parentDocument.origin);
+
+    for (const origin of ancestorOrigins) {
+      if (masked && areSameOrigin(origin, parentDocument.origin)) {
+        output.push(createOpaqueOrigin());
+        continue;
+      }
+      output.push(origin);
+      masked = false;
+    }
+    return output;
   }
 
   /** Resume intersecting resources using the observer's internal, unprojected entries. */

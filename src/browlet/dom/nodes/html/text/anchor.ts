@@ -9,8 +9,6 @@ import { SanitizationCategory } from '../sanitization';
 /** Anchor identity used by link and named collections. */
 // https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-a-element
 export class HTMLAnchorElementImpl extends HTMLElementImpl {
-  override readonly isAllNamedElement = true;
-
   static {
     this.prototype.tag = ElementTag.HTMLA;
     this.prototype.categories = [
@@ -33,6 +31,8 @@ export class HTMLAnchorElementImpl extends HTMLElementImpl {
       navigatingURLAttributes: ['href'],
     };
   }
+
+  override readonly isAllNamedElement = true;
 
   override hasCategory(category: ContentCategory): boolean {
     if (category === ContentCategory.Interactive) return this.hasAttributeNS(null, 'href');

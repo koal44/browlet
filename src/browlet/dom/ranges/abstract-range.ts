@@ -26,12 +26,6 @@ export class AbstractRangeImpl {
     this.endOffset = endOffset;
   }
 
-  /** Whether both endpoints identify the same position. */
-  // https://dom.spec.whatwg.org/#range-collapsed
-  get collapsed(): boolean {
-    return this.startContainer === this.endContainer && this.startOffset === this.endOffset;
-  }
-
   /** Compare two boundary points in the same ordinary tree without allocating point objects. */
   // https://dom.spec.whatwg.org/#concept-range-bp-position
   static compareBoundaryPoints(
@@ -47,6 +41,12 @@ export class AbstractRangeImpl {
       if (child.getIndex() < offsetA) return 1;
     }
     return -1;
+  }
+
+  /** Whether both endpoints identify the same position. */
+  // https://dom.spec.whatwg.org/#range-collapsed
+  get collapsed(): boolean {
+    return this.startContainer === this.endContainer && this.startOffset === this.endOffset;
   }
 }
 

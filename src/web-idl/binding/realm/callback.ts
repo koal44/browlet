@@ -149,17 +149,6 @@ export class CallbackInvoker {
     });
   }
 
-  // https://webidl.spec.whatwg.org/#es-invoking-callback-functions
-  #validateExceptionBehavior(exceptionBehavior: CallbackExceptionBehavior | undefined): void {
-    if (this.returnsPromise) {
-      if (exceptionBehavior) throw new InternalError('A promise callback cannot have exception behavior');
-    } else if (!exceptionBehavior) {
-      throw new InternalError('A non-promise callback requires exception behavior');
-    } else if (exceptionBehavior === 'report' && !this.canReportExceptions) {
-      throw new InternalError('Only undefined- and any-returning callbacks can report exceptions');
-    }
-  }
-
   /** Convert IDL arguments to author values, omitting trailing missing arguments. */
   // https://webidl.spec.whatwg.org/#js-user-objects
   // Argument types come from the assembled callable used to prepare this invoker.
@@ -200,6 +189,17 @@ export class CallbackInvoker {
     const promise = this.jsToIDLResult(rejected);
     if (!IDLPromise.is(promise)) throw new InternalError('Promise callback did not produce an IDL promise');
     return promise;
+  }
+
+  // https://webidl.spec.whatwg.org/#es-invoking-callback-functions
+  #validateExceptionBehavior(exceptionBehavior: CallbackExceptionBehavior | undefined): void {
+    if (this.returnsPromise) {
+      if (exceptionBehavior) throw new InternalError('A promise callback cannot have exception behavior');
+    } else if (!exceptionBehavior) {
+      throw new InternalError('A non-promise callback requires exception behavior');
+    } else if (exceptionBehavior === 'report' && !this.canReportExceptions) {
+      throw new InternalError('Only undefined- and any-returning callbacks can report exceptions');
+    }
   }
 }
 

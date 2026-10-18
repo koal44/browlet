@@ -7,11 +7,11 @@ import { HTMLElementImpl } from '../html-element';
 /** Legacy frame identity used by named collections. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#frame
 export class HTMLFrameElementImpl extends HTMLElementImpl {
-  override readonly isAllNamedElement = true;
-
   static {
     this.prototype.tag = ElementTag.HTMLFrame;
   }
+
+  override readonly isAllNamedElement = true;
 }
 
 /*

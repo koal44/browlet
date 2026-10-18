@@ -332,36 +332,6 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     return result.promise;
   }
 
-  /** Retain copied reports and their original endpoint configuration until delivery finishes. */
-  #queueReportDelivery(
-    endpoint: ReportingEndpoint, origin: Origin, reports: ReportImpl[],
-    configuration: ReportingEndpoint[],
-  ): void {
-    this.queueReportingTask(() => {
-      if (!this.reportDeliveryEnabled) return;
-      if (endpoint.failures > this.maxReportingEndpointFailures) {
-        const index = configuration.indexOf(endpoint);
-        if (index !== -1) configuration.splice(index, 1);
-      }
-      if (!configuration.includes(endpoint)) return;
-      const cutoff = Date.now() - this.maxReportAge;
-      const currentReports = reports.filter((report) => report.timestamp >= cutoff);
-      if (currentReports.length === 0) return;
-      this.attemptReportDelivery(endpoint, origin, currentReports).observe((result) => {
-        if (result === 'success') {
-          endpoint.failures = 0;
-        } else if (result === 'remove-endpoint') {
-          const index = configuration.indexOf(endpoint);
-          if (index !== -1) configuration.splice(index, 1);
-        } else {
-          endpoint.failures++;
-        }
-        // The draft leaves retries unresolved. Finishing this callback releases
-        // the attempt; later reports may still use a surviving endpoint.
-      }, (error) => { throw error; });
-    });
-  }
-
   /** Whether automation permits scripting for the given environment. */
   // https://w3c.github.io/webdriver-bidi/#webdriver-bidi-scripting-is-enabled
   webDriverBiDiScriptingIsEnabled(_env: BrowletEnvironment): boolean {
@@ -460,6 +430,36 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     if (url.scheme === 'about' && (url.path === 'blank' || url.path === 'srcdoc')) return true;
     if (url.scheme === 'data') return true;
     return this.isOriginPotentiallyTrustworthy(obtainURLOrigin(url));
+  }
+
+  /** Retain copied reports and their original endpoint configuration until delivery finishes. */
+  #queueReportDelivery(
+    endpoint: ReportingEndpoint, origin: Origin, reports: ReportImpl[],
+    configuration: ReportingEndpoint[],
+  ): void {
+    this.queueReportingTask(() => {
+      if (!this.reportDeliveryEnabled) return;
+      if (endpoint.failures > this.maxReportingEndpointFailures) {
+        const index = configuration.indexOf(endpoint);
+        if (index !== -1) configuration.splice(index, 1);
+      }
+      if (!configuration.includes(endpoint)) return;
+      const cutoff = Date.now() - this.maxReportAge;
+      const currentReports = reports.filter((report) => report.timestamp >= cutoff);
+      if (currentReports.length === 0) return;
+      this.attemptReportDelivery(endpoint, origin, currentReports).observe((result) => {
+        if (result === 'success') {
+          endpoint.failures = 0;
+        } else if (result === 'remove-endpoint') {
+          const index = configuration.indexOf(endpoint);
+          if (index !== -1) configuration.splice(index, 1);
+        } else {
+          endpoint.failures++;
+        }
+        // The draft leaves retries unresolved. Finishing this callback releases
+        // the attempt; later reports may still use a surviving endpoint.
+      }, (error) => { throw error; });
+    });
   }
 }
 

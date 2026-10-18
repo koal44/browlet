@@ -403,29 +403,6 @@ export class JSRealm {
       StampedIterator<MapIterator<Value> | SetIterator<Value>>;
   }
 
-  #nextCollectionIterator(receiver: unknown, kind: CollectionIteratorKind): JSIteratorResult {
-    const record = isObject(receiver) ? IteratorStamper.get(receiver) : undefined;
-    if (!record || record.kind !== kind) {
-      throw new this.intrinsics.typeError('Illegal invocation');
-    }
-    if (record.running) throw new this.intrinsics.typeError('Iterator is already running');
-    if (record.next !== undefined) {
-      record.running = true;
-      try {
-        const next = record.next;
-        const result = next();
-        if (!result.done) return result;
-        record.next = undefined;
-      } catch (error) {
-        record.next = undefined;
-        throw error;
-      } finally {
-        record.running = false;
-      }
-    }
-    return this.createIteratorResultObject(undefined, true);
-  }
-
   /** Supply realm-owned allocation to implementation producers. */
   createRuntimeBuffers(): RuntimeBuffers {
     return {
@@ -594,6 +571,29 @@ export class JSRealm {
   protected makeHostGlobalPrototypeImmutable(): void {
     if (this.#globalAllocation !== undefined) return;
     makePrototypeImmutable(this.#globalProxy);
+  }
+
+  #nextCollectionIterator(receiver: unknown, kind: CollectionIteratorKind): JSIteratorResult {
+    const record = isObject(receiver) ? IteratorStamper.get(receiver) : undefined;
+    if (!record || record.kind !== kind) {
+      throw new this.intrinsics.typeError('Illegal invocation');
+    }
+    if (record.running) throw new this.intrinsics.typeError('Iterator is already running');
+    if (record.next !== undefined) {
+      record.running = true;
+      try {
+        const next = record.next;
+        const result = next();
+        if (!result.done) return result;
+        record.next = undefined;
+      } catch (error) {
+        record.next = undefined;
+        throw error;
+      } finally {
+        record.running = false;
+      }
+    }
+    return this.createIteratorResultObject(undefined, true);
   }
 
   #installDefaultGlobalBindings(): void {

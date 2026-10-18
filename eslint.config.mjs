@@ -223,6 +223,32 @@ export default defineConfig(
 
   {
     files: ['src/**/*.{ts,js,mjs,cjs}'],
+    plugins: { '@typescript-eslint': tseslint.plugin },
+    rules: {
+      '@typescript-eslint/member-ordering': ['error', {
+        default: {
+          memberTypes: [
+            ['static-field', 'static-initialization'],
+            'public-field',
+            'protected-field',
+            ['private-field', '#private-field'],
+            'constructor',
+            'static-method',
+            ['get', 'set'],
+            'public-method',
+            'protected-method',
+            ['private-method', '#private-method'],
+          ],
+        },
+        interfaces: 'never',
+        typeLiterals: 'never',
+      }],
+      'grouped-accessor-pairs': 'error',
+    },
+  },
+
+  {
+    files: ['src/**/*.{ts,js,mjs,cjs}'],
     ignores: ['src/web-idl/**'],
     rules: {
       'no-restricted-imports': ['error', {

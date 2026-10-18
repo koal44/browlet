@@ -12,15 +12,6 @@ import { ContentCategory, emptyContent } from '../content-model';
 /** Input type and checkedness needed by RadioNodeList. */
 // https://html.spec.whatwg.org/multipage/input.html#htmlinputelement
 export class HTMLInputElementImpl extends HTMLElementImpl {
-  /** Internal checkedness, independent of the checked content attribute. */
-  // https://html.spec.whatwg.org/#concept-fe-checked
-  checkedness = false;
-  /** Whether author interaction has detached checkedness from the default. */
-  // https://html.spec.whatwg.org/#concept-input-dirty-checkedness-flag
-  dirtyCheckedness = false;
-
-  override readonly isAllNamedElement = true;
-
   static {
     this.prototype.tag = ElementTag.HTMLInput;
     this.prototype.categories = [
@@ -31,6 +22,15 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
     // https://html.spec.whatwg.org/multipage/input.html#the-input-element
     this.prototype.contentModel = { children: [emptyContent] };
   }
+
+  /** Internal checkedness, independent of the checked content attribute. */
+  // https://html.spec.whatwg.org/#concept-fe-checked
+  checkedness = false;
+  /** Whether author interaction has detached checkedness from the default. */
+  // https://html.spec.whatwg.org/#concept-input-dirty-checkedness-flag
+  dirtyCheckedness = false;
+
+  override readonly isAllNamedElement = true;
 
   static is(value: unknown): value is HTMLInputElementImpl {
     return value instanceof HTMLInputElementImpl;

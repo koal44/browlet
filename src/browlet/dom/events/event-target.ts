@@ -16,10 +16,10 @@ import { MouseEventImpl } from './ui-event';
 /** Owns listener registrations and delivers events through the dispatch path. */
 // https://dom.spec.whatwg.org/#interface-eventtarget
 export class EventTargetImpl {
-  /** Registrations in insertion order, including their signal cleanup handles. */
-  #eventListenerList: EventListenerRecord[] = [];
   /** Environment that owns this target's event allocations. */
   env: DOMEnvironment;
+  /** Registrations in insertion order, including their signal cleanup handles. */
+  #eventListenerList: EventListenerRecord[] = [];
 
   constructor(env: DOMEnvironment) {
     this.env = env;
@@ -701,10 +701,6 @@ export class EventListenerValue {
     this.#invoke = invoke;
   }
 
-  invoke(event: EventImpl, currentTarget: EventTargetImpl): void {
-    this.#invoke(event, currentTarget);
-  }
-
   static from(callback: EventListenerValue | EventListenerCallback): EventListenerValue {
     if (callback instanceof EventListenerValue) return callback;
 
@@ -719,5 +715,9 @@ export class EventListenerValue {
   static same(left: EventListenerValue | null, right: EventListenerValue | null): boolean {
     if (left === null || right === null) return left === right;
     return left.object === right.object;
+  }
+
+  invoke(event: EventImpl, currentTarget: EventTargetImpl): void {
+    this.#invoke(event, currentTarget);
   }
 }

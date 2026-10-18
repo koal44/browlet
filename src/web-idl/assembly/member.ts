@@ -177,20 +177,6 @@ export class OverloadGroup<Callable extends AssembledCallable> {
       callable.getArgument(distinguishingIndex)!.type.candidates.interfaces.some((type) => type.kind === 'proxy-object'));
   }
 
-  /** Retain interface and object matches for this concrete interface; proxy matches remain value-dependent. */
-  getInterfaceCandidates(assembled: AssembledInterface): Callable[] {
-    let candidates = this.#candidatesByInterface.get(assembled);
-    if (!candidates) {
-      candidates = this.callables.filter((callable) => {
-        const branches = callable.getArgument(this.distinguishingIndex)!.type.candidates;
-        return branches.hasObject || branches.interfaces.some((type) =>
-          type.kind === 'interface' && assembled.implements(type.assembled));
-      });
-      this.#candidatesByInterface.set(assembled, candidates);
-    }
-    return candidates;
-  }
-
   /** Retain every match in declaration order; callers must not modify these lists. */
   get primitiveCandidates(): PrimitiveOverloadCandidates<Callable> {
     if (this.#primitiveCandidates) return this.#primitiveCandidates;
@@ -207,6 +193,20 @@ export class OverloadGroup<Callable extends AssembledCallable> {
       if (branches.hasSymbol) candidates.symbol.push(callable);
     }
     return this.#primitiveCandidates = candidates;
+  }
+
+  /** Retain interface and object matches for this concrete interface; proxy matches remain value-dependent. */
+  getInterfaceCandidates(assembled: AssembledInterface): Callable[] {
+    let candidates = this.#candidatesByInterface.get(assembled);
+    if (!candidates) {
+      candidates = this.callables.filter((callable) => {
+        const branches = callable.getArgument(this.distinguishingIndex)!.type.candidates;
+        return branches.hasObject || branches.interfaces.some((type) =>
+          type.kind === 'interface' && assembled.implements(type.assembled));
+      });
+      this.#candidatesByInterface.set(assembled, candidates);
+    }
+    return candidates;
   }
 }
 

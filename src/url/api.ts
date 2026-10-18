@@ -71,6 +71,14 @@ export class URLImpl {
     return parseAPIURL(url, base) !== null;
   }
 
+  static fromRecord(record: URLRecord): URLImpl {
+    return new URLImpl(record);
+  }
+
+  static is(value: unknown): value is URLImpl {
+    return value !== null && typeof value === 'object' && #url in value;
+  }
+
   get href(): string {
     return serializeURL(this.#url);
   }
@@ -204,14 +212,6 @@ export class URLImpl {
 
   toString(): string {
     return serializeURL(this.#url);
-  }
-
-  static fromRecord(record: URLRecord): URLImpl {
-    return new URLImpl(record);
-  }
-
-  static is(value: unknown): value is URLImpl {
-    return value !== null && typeof value === 'object' && #url in value;
   }
 
   setQuery(query: string | null): void {

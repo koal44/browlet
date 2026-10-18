@@ -91,6 +91,14 @@ export class TransformStreamImpl {
     return controller;
   }
 
+  get #controller(): TransformStreamDefaultControllerImpl {
+    return requireStateMember(this.state.controller, 'controller');
+  }
+
+  get #writableController() {
+    return requireStateMember(this.writable.state.controller, 'writable controller');
+  }
+
   /** Streams §9.3.1, set up a newly-created transform stream. */
   setUp(
     transformAlgorithm: (chunk: unknown) => InternalPromise<void> | void,
@@ -141,14 +149,6 @@ export class TransformStreamImpl {
     this.state.backpressureChange?.resolve();
     this.state.backpressureChange = this.env.exec.Promise.withResolvers(idlType.undefined);
     this.state.backpressure = backpressure;
-  }
-
-  get #controller(): TransformStreamDefaultControllerImpl {
-    return requireStateMember(this.state.controller, 'controller');
-  }
-
-  get #writableController() {
-    return requireStateMember(this.writable.state.controller, 'writable controller');
   }
 
   #initialize(

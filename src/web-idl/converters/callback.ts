@@ -12,6 +12,21 @@ import { Converter, type ConversionSteps } from './converter';
 
 /** Capture an author function's realm and callback context for later invocation. */
 export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = IDLCallbackFunctionType> extends Converter<Type> {
+
+  /** Prepare the nullable legacy attribute rule without altering the shared ordinary converter. */
+  // https://webidl.spec.whatwg.org/#js-to-nullable
+  static createAttributeSteps(converter: Converter, assembled: AssembledCallbackFunction): ConversionSteps {
+    return (value) => {
+      if (!isObject(value)) return null;
+      try {
+        return new IDLCallbackFunction(
+          assembled, value, getCallbackRealm(value, converter.realm), converter.realm.callbacks.captureContext(), converter.binding.callbacks,
+        );
+      } catch (error) {
+        return converter.throwConversionError(error);
+      }
+    };
+  }
   // https://webidl.spec.whatwg.org/#es-callback-function
   protected createInputSteps(): ConversionSteps<IDLCallbackFunction> {
     const assembled = this.type.assembled;
@@ -30,21 +45,6 @@ export class CallbackFunctionConverter<Type extends IDLCallbackFunctionType = ID
       if (isCallable(value)) return CallbackFunctionStamper.getObject(value);
       if (IDLCallbackFunction.is(value)) return value.object;
       throw new InternalError(`IDL callback function ${this.type.assembled.primary.name} is not callable`);
-    };
-  }
-
-  /** Prepare the nullable legacy attribute rule without altering the shared ordinary converter. */
-  // https://webidl.spec.whatwg.org/#js-to-nullable
-  static createAttributeSteps(converter: Converter, assembled: AssembledCallbackFunction): ConversionSteps {
-    return (value) => {
-      if (!isObject(value)) return null;
-      try {
-        return new IDLCallbackFunction(
-          assembled, value, getCallbackRealm(value, converter.realm), converter.realm.callbacks.captureContext(), converter.binding.callbacks,
-        );
-      } catch (error) {
-        return converter.throwConversionError(error);
-      }
     };
   }
 }

@@ -87,6 +87,10 @@ export class CSSStyleDeclarationImpl {
     return this.#parentRule;
   }
 
+  get declarations(): readonly PropertyDeclaration[] {
+    return this.#declarations;
+  }
+
   item(index: number): string {
     return this.#declarations[index]?.name ?? '';
   }
@@ -152,10 +156,6 @@ export class CSSStyleDeclarationImpl {
 
   [Symbol.iterator](): ArrayIterator<string> {
     return this.#declarations.map(({ name }) => name)[Symbol.iterator]();
-  }
-
-  get declarations(): readonly PropertyDeclaration[] {
-    return this.#declarations;
   }
 
   attributeChanged(

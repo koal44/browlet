@@ -17,16 +17,16 @@ export class PerformanceImpl extends EventTargetImpl {
     this.#timing = timing;
   }
 
-  /** Elapsed high-resolution time since this environment's origin. */
-  // https://w3c.github.io/hr-time/#dom-performance-now
-  now(): DOMHighResTimeStamp {
-    return this.#timing.currentHighResolutionTime().toTimestamp();
-  }
-
   /** Environment time origin expressed relative to the Unix epoch. */
   // https://w3c.github.io/hr-time/#dom-performance-timeorigin
   get timeOrigin(): DOMHighResTimeStamp {
     return this.#timing.getTimeOriginTimestamp().toTimestamp();
+  }
+
+  /** Elapsed high-resolution time since this environment's origin. */
+  // https://w3c.github.io/hr-time/#dom-performance-now
+  now(): DOMHighResTimeStamp {
+    return this.#timing.currentHighResolutionTime().toTimestamp();
   }
 }
 

@@ -25,12 +25,12 @@ import type { WindowProxyHandle } from './window-proxy';
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
 export class WindowImpl extends EventTargetImpl {
   declare env: WindowEnvironment;
-  /** Current associated document, attached by document construction. */
-  #document: DocumentImpl | null = null;
   /** Event currently being invoked in this Window, restored after each listener. @deprecated */
   event: EventImpl | undefined = undefined;
   /** Stable Location object; Web IDL forwards author assignments to its href. */
   readonly location: LocationImpl;
+  /** Current associated document, attached by document construction. */
+  #document: DocumentImpl | null = null;
   /** Shared global facilities installed during environment composition. */
   #globalScopeMixin: WindowOrWorkerGlobalScopeMixin | null = null;
 

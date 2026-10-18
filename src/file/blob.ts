@@ -59,12 +59,33 @@ export class BlobImpl {
     this.#type = normalizeBlobType(options.type ?? '');
   }
 
+  static create(
+    data: BlobData,
+    type: string,
+    snapshotState: BlobSnapshotState,
+    env: FileEnvironment,
+  ): BlobImpl {
+    const blob = new BlobImpl([], {}, env);
+    blob.#data = data;
+    blob.#snapshotState = snapshotState;
+    blob.#type = type;
+    return blob;
+  }
+
+  static is(value: unknown): value is BlobImpl {
+    return value !== null && typeof value === 'object' && #data in value;
+  }
+
   get size(): number {
     return this.#data.size;
   }
 
   get type(): string {
     return this.#type;
+  }
+
+  get data(): BlobData {
+    return this.#data;
   }
 
   /** File API §2, slice blob. */
@@ -114,31 +135,6 @@ export class BlobImpl {
     return this.#read().then((bytes) => this.#env.exec.buffers.copyUint8Array(bytes));
   }
 
-  /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
-  #read(): InternalPromise<Uint8Array> {
-    const result = this.#env.exec.Promise.withResolvers(idlType.Uint8Array);
-    const reader = this.stream().getDefaultReader();
-    reader.readAllBytes(result.resolve, result.reject);
-    return result.promise;
-  }
-
-  get data(): BlobData {
-    return this.#data;
-  }
-
-  static create(
-    data: BlobData,
-    type: string,
-    snapshotState: BlobSnapshotState,
-    env: FileEnvironment,
-  ): BlobImpl {
-    const blob = new BlobImpl([], {}, env);
-    blob.#data = data;
-    blob.#snapshotState = snapshotState;
-    blob.#type = type;
-    return blob;
-  }
-
   getSerializationState(): BlobSerializationState {
     return {
       data: this.#data,
@@ -155,8 +151,12 @@ export class BlobImpl {
     this.#type = state.type;
   }
 
-  static is(value: unknown): value is BlobImpl {
-    return value !== null && typeof value === 'object' && #data in value;
+  /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
+  #read(): InternalPromise<Uint8Array> {
+    const result = this.#env.exec.Promise.withResolvers(idlType.Uint8Array);
+    const reader = this.stream().getDefaultReader();
+    reader.readAllBytes(result.resolve, result.reject);
+    return result.promise;
   }
 
   // File API, process blob parts: https://w3c.github.io/FileAPI/#process-blob-parts

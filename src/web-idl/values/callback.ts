@@ -8,18 +8,18 @@ import type { CallbackBinding } from '../binding/realm/callback';
 
 /** An author callback object with its declaration, realm, and captured callback context. */
 export class IDLCallbackInterface<Realm extends WebIDLRealm = WebIDLRealm> {
-  /** Private identity tested without invoking author Proxy traps. */
-  #brand = undefined;
   /** Declared operations and optional implementation adapter. */
   assembled: AssembledCallbackInterface;
-  /** Shared binding that converts and invokes this value's operations. */
-  #binding: CallbackBinding;
   /** Host context captured at conversion and restored during invocation. */
   callbackContext: object;
   /** Original author object, preserved for identity and dynamic method lookup. */
   object: object;
   /** Callback realm, which owns argument allocation and return-conversion failures. */
   realm: Realm;
+  /** Private identity tested without invoking author Proxy traps. */
+  #brand = undefined;
+  /** Shared binding that converts and invokes this value's operations. */
+  #binding: CallbackBinding;
 
   constructor(
     assembled: AssembledCallbackInterface,
@@ -53,12 +53,8 @@ export class IDLCallbackInterface<Realm extends WebIDLRealm = WebIDLRealm> {
 
 /** An author function with its declaration, realm, and captured invocation context. */
 export class IDLCallbackFunction {
-  /** Private identity tested without invoking author Proxy traps. */
-  #brand = undefined;
   /** Declared argument and return conversions. */
   assembled: AssembledCallbackFunction;
-  /** Shared binding that prepares and invokes this value's callback contract. */
-  #binding: CallbackBinding;
   /** Host context captured at conversion and restored during invocation. */
   callbackContext: object;
   /** Original author object; legacy callbacks may be non-callable. */
@@ -67,6 +63,10 @@ export class IDLCallbackFunction {
   realm: WebIDLRealm;
   /** Reused implementation callable for this conversion's captured context. */
   boundCallback?: StampedCallbackFunction;
+  /** Private identity tested without invoking author Proxy traps. */
+  #brand = undefined;
+  /** Shared binding that prepares and invokes this value's callback contract. */
+  #binding: CallbackBinding;
 
   constructor(
     assembled: AssembledCallbackFunction,

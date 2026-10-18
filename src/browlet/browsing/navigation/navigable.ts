@@ -27,11 +27,12 @@ export class Navigable {
   parent: Navigable | null;
   /** History entry selected by the latest navigation or traversal. */
   currentSessionHistoryEntry: SessionHistoryEntry;
-  #activeSessionHistoryEntry: SessionHistoryEntry;
   /** Whether closing this navigable has begun. */
   isClosing = false;
   /** Whether its navigation is delaying the container document's load event. */
   isDelayingLoadEvents = false;
+
+  #activeSessionHistoryEntry: SessionHistoryEntry;
 
   /** Create the initial history entry and associate its Document with this navigable. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#initialize-the-navigable

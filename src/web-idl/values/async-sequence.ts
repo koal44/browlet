@@ -9,8 +9,6 @@ import type { IDLValue } from './value';
 
 /** An iterable with the captured method and type needed to open its sequence. */
 export class IDLAsyncSequence<Element extends IDLType = IDLType> {
-  /** Private identity tested without inspecting author iterable properties. */
-  #brand = undefined;
   /** Original author iterable, preserved for identity and invocation. */
   object: object;
   /** Declared conversion applied to each yielded value. */
@@ -19,6 +17,8 @@ export class IDLAsyncSequence<Element extends IDLType = IDLType> {
   method: JSMethod;
   /** Whether opening needs an async-from-sync iterator. */
   iteratorType: AsyncSequenceIteratorType;
+  /** Private identity tested without inspecting author iterable properties. */
+  #brand = undefined;
 
   constructor(object: object, elementType: Element, method: JSMethod, iteratorType: AsyncSequenceIteratorType) {
     this.object = object;

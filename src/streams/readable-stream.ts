@@ -190,95 +190,6 @@ export class ReadableStreamImpl {
     return this.state.reader !== undefined;
   }
 
-  /** Streams §4.2.4, cancel(reason). */
-  cancel(reason?: unknown): InternalPromise<void> {
-    if (this.locked) {
-      return this.env.exec.Promise.reject(new TypeError(
-        'Cannot cancel a stream that already has a reader',
-      ), idlType.undefined);
-    }
-    return this.cancelInternal(reason);
-  }
-
-  getReader(
-    options: { mode: 'byob'; },
-  ): ReadableStreamBYOBReaderImpl;
-
-  getReader(
-    options?: { mode?: undefined; },
-  ): ReadableStreamDefaultReaderImpl;
-
-  getReader(
-    options: ReadableStreamGetReaderOptions = {},
-  ): ReadableStreamBYOBReaderImpl | ReadableStreamDefaultReaderImpl {
-    return options.mode === 'byob'
-      ? this.getBYOBReader()
-      : this.getDefaultReader();
-  }
-
-  pipeThrough(
-    transform: ReadableWritablePair,
-    options: StreamPipeOptions,
-    env: JSEnvironment,
-  ): ReadableStreamImpl {
-    if (this.locked) {
-      throw new TypeError(
-        'ReadableStream.prototype.pipeThrough cannot be used on a locked ReadableStream',
-      );
-    }
-    if (transform.writable.locked) {
-      throw new TypeError(
-        'ReadableStream.prototype.pipeThrough cannot be used on a locked WritableStream',
-      );
-    }
-
-    const promise = this.pipeToInternal(
-      transform.writable,
-      options.preventClose,
-      options.preventAbort,
-      options.preventCancel,
-      options.signal,
-      env,
-    );
-    void promise.then(undefined, () => {});
-    return transform.readable;
-  }
-
-  /** Streams §4.2.4, pipeTo(destination, options). */
-  pipeTo(
-    destination: WritableStreamImpl,
-    options: StreamPipeOptions,
-    env: JSEnvironment,
-  ): InternalPromise<void> {
-    if (this.locked) {
-      return this.env.exec.Promise.reject(new TypeError(
-        'ReadableStream.prototype.pipeTo cannot be used on a locked ReadableStream',
-      ), idlType.undefined);
-    }
-    if (destination.locked) {
-      return this.env.exec.Promise.reject(new TypeError(
-        'ReadableStream.prototype.pipeTo cannot be used on a locked WritableStream',
-      ), idlType.undefined);
-    }
-
-    return this.pipeToInternal(
-      destination,
-      options.preventClose,
-      options.preventAbort,
-      options.preventCancel,
-      options.signal,
-      env,
-    );
-  }
-
-  tee(): [ReadableStreamImpl, ReadableStreamImpl] {
-    return ReadableByteStreamControllerImpl.is(
-      this.controller,
-    )
-      ? this.teeBytes()
-      : this.teeDefault(false);
-  }
-
   /** RequireDefaultController. */
   get defaultController(): ReadableStreamDefaultControllerImpl {
     const controller = this.controller;
@@ -383,6 +294,95 @@ export class ReadableStreamImpl {
 
   get state(): ReadableStreamState {
     return this.#state;
+  }
+
+  /** Streams §4.2.4, cancel(reason). */
+  cancel(reason?: unknown): InternalPromise<void> {
+    if (this.locked) {
+      return this.env.exec.Promise.reject(new TypeError(
+        'Cannot cancel a stream that already has a reader',
+      ), idlType.undefined);
+    }
+    return this.cancelInternal(reason);
+  }
+
+  getReader(
+    options: { mode: 'byob'; },
+  ): ReadableStreamBYOBReaderImpl;
+
+  getReader(
+    options?: { mode?: undefined; },
+  ): ReadableStreamDefaultReaderImpl;
+
+  getReader(
+    options: ReadableStreamGetReaderOptions = {},
+  ): ReadableStreamBYOBReaderImpl | ReadableStreamDefaultReaderImpl {
+    return options.mode === 'byob'
+      ? this.getBYOBReader()
+      : this.getDefaultReader();
+  }
+
+  pipeThrough(
+    transform: ReadableWritablePair,
+    options: StreamPipeOptions,
+    env: JSEnvironment,
+  ): ReadableStreamImpl {
+    if (this.locked) {
+      throw new TypeError(
+        'ReadableStream.prototype.pipeThrough cannot be used on a locked ReadableStream',
+      );
+    }
+    if (transform.writable.locked) {
+      throw new TypeError(
+        'ReadableStream.prototype.pipeThrough cannot be used on a locked WritableStream',
+      );
+    }
+
+    const promise = this.pipeToInternal(
+      transform.writable,
+      options.preventClose,
+      options.preventAbort,
+      options.preventCancel,
+      options.signal,
+      env,
+    );
+    void promise.then(undefined, () => {});
+    return transform.readable;
+  }
+
+  /** Streams §4.2.4, pipeTo(destination, options). */
+  pipeTo(
+    destination: WritableStreamImpl,
+    options: StreamPipeOptions,
+    env: JSEnvironment,
+  ): InternalPromise<void> {
+    if (this.locked) {
+      return this.env.exec.Promise.reject(new TypeError(
+        'ReadableStream.prototype.pipeTo cannot be used on a locked ReadableStream',
+      ), idlType.undefined);
+    }
+    if (destination.locked) {
+      return this.env.exec.Promise.reject(new TypeError(
+        'ReadableStream.prototype.pipeTo cannot be used on a locked WritableStream',
+      ), idlType.undefined);
+    }
+
+    return this.pipeToInternal(
+      destination,
+      options.preventClose,
+      options.preventAbort,
+      options.preventCancel,
+      options.signal,
+      env,
+    );
+  }
+
+  tee(): [ReadableStreamImpl, ReadableStreamImpl] {
+    return ReadableByteStreamControllerImpl.is(
+      this.controller,
+    )
+      ? this.teeBytes()
+      : this.teeDefault(false);
   }
 
   /** AcquireReadableStreamDefaultReader. */
@@ -1566,33 +1566,6 @@ export class ReadableStreamDefaultControllerImpl {
     return state.strategyHighWaterMark - state.queue.totalSize;
   }
 
-  close(): void {
-    if (!this.canCloseOrEnqueue) {
-      throw new TypeError(
-        'The stream is not in a state that permits close',
-      );
-    }
-    this.closeInternal();
-  }
-
-  enqueue(chunk: unknown, env: JSEnvironment): void {
-    if (!this.canCloseOrEnqueue) {
-      throw new TypeError(
-        'The stream is not in a state that permits enqueue',
-      );
-    }
-    this.enqueueInternal(chunk, env);
-  }
-
-  /** ReadableStreamDefaultControllerError. */
-  error(error?: unknown): void {
-    const state = this.state;
-    if (state.stream.state.state !== 'readable') return;
-    state.queue.reset();
-    this.clearAlgorithms();
-    state.stream.errorInternal(error);
-  }
-
   /** ReadableStreamDefaultControllerHasBackpressure. */
   get hasBackpressure(): boolean {
     return !this.shouldCallPull;
@@ -1632,6 +1605,33 @@ export class ReadableStreamDefaultControllerImpl {
 
   set state(state: ReadableStreamDefaultControllerState) {
     this.#state = state;
+  }
+
+  close(): void {
+    if (!this.canCloseOrEnqueue) {
+      throw new TypeError(
+        'The stream is not in a state that permits close',
+      );
+    }
+    this.closeInternal();
+  }
+
+  enqueue(chunk: unknown, env: JSEnvironment): void {
+    if (!this.canCloseOrEnqueue) {
+      throw new TypeError(
+        'The stream is not in a state that permits enqueue',
+      );
+    }
+    this.enqueueInternal(chunk, env);
+  }
+
+  /** ReadableStreamDefaultControllerError. */
+  error(error?: unknown): void {
+    const state = this.state;
+    if (state.stream.state.state !== 'readable') return;
+    state.queue.reset();
+    this.clearAlgorithms();
+    state.stream.errorInternal(error);
   }
 
   /** ReadableStreamDefaultControllerCallPullIfNeeded. */
@@ -1891,6 +1891,36 @@ export class ReadableByteStreamControllerImpl {
     return state.strategyHighWaterMark - state.queueTotalSize;
   }
 
+  /** ShouldCallPull. */
+  get shouldCallPull(): boolean {
+    const state = this.state;
+    const streamState = state.stream.state;
+    if (streamState.state !== 'readable' || state.closeRequested ||
+      !state.started) {
+      return false;
+    }
+    if (state.stream.hasDefaultReader &&
+      state.stream.numReadRequests > 0) {
+      return true;
+    }
+    if (state.stream.hasBYOBReader &&
+      state.stream.numReadIntoRequests > 0) {
+      return true;
+    }
+    return (this.desiredSize ?? 0) > 0;
+  }
+
+  get state(): ReadableByteStreamControllerState {
+    if (!this.#state) {
+      throw new InternalError('ReadableByteStreamController is not set up');
+    }
+    return this.#state;
+  }
+
+  set state(state: ReadableByteStreamControllerState) {
+    this.#state = state;
+  }
+
   close(env: JSEnvironment): void {
     const state = this.state;
     if (state.closeRequested) {
@@ -1945,36 +1975,6 @@ export class ReadableByteStreamControllerImpl {
     state.queueTotalSize = 0;
     this.clearAlgorithms();
     state.stream.errorInternal(error);
-  }
-
-  /** ShouldCallPull. */
-  get shouldCallPull(): boolean {
-    const state = this.state;
-    const streamState = state.stream.state;
-    if (streamState.state !== 'readable' || state.closeRequested ||
-      !state.started) {
-      return false;
-    }
-    if (state.stream.hasDefaultReader &&
-      state.stream.numReadRequests > 0) {
-      return true;
-    }
-    if (state.stream.hasBYOBReader &&
-      state.stream.numReadIntoRequests > 0) {
-      return true;
-    }
-    return (this.desiredSize ?? 0) > 0;
-  }
-
-  get state(): ReadableByteStreamControllerState {
-    if (!this.#state) {
-      throw new InternalError('ReadableByteStreamController is not set up');
-    }
-    return this.#state;
-  }
-
-  set state(state: ReadableByteStreamControllerState) {
-    this.#state = state;
   }
 
   /** [[CancelSteps]](reason). */
@@ -2616,17 +2616,6 @@ export class ReadableStreamGenericReaderMixin {
     return this.state.closedPromise.promise;
   }
 
-  /** Streams §4.3.3, cancel(reason). */
-  cancel(reason?: unknown): InternalPromise<void> {
-    const state = this.state;
-    if (!state.stream) {
-      return state.Promise.reject(new TypeError(
-        'Cannot cancel a stream using a released reader',
-      ), idlType.undefined);
-    }
-    return this.cancelInternal(reason);
-  }
-
   get state(): ReadableStreamGenericReaderState {
     if (!this.#state) {
       throw new InternalError('ReadableStreamGenericReader is not set up');
@@ -2636,6 +2625,17 @@ export class ReadableStreamGenericReaderMixin {
 
   set state(state: ReadableStreamGenericReaderState) {
     this.#state = state;
+  }
+
+  /** Streams §4.3.3, cancel(reason). */
+  cancel(reason?: unknown): InternalPromise<void> {
+    const state = this.state;
+    if (!state.stream) {
+      return state.Promise.reject(new TypeError(
+        'Cannot cancel a stream using a released reader',
+      ), idlType.undefined);
+    }
+    return this.cancelInternal(reason);
   }
 
   /** Streams §4.9.3, ReadableStreamReaderGenericCancel. */
@@ -2746,6 +2746,14 @@ export class ReadableStreamDefaultReaderImpl {
     return this.genericReaderMixin.closed;
   }
 
+  get genericReaderMixin(): ReadableStreamGenericReaderMixin {
+    return this.#genericReader;
+  }
+
+  get readRequests(): ReadRequest[] {
+    return this.#readRequests;
+  }
+
   /** Streams §4.3.3, cancel(reason) (ReadableStreamGenericReader). */
   cancel(reason?: unknown): InternalPromise<void> {
     return this.genericReaderMixin.cancel(reason);
@@ -2780,14 +2788,6 @@ export class ReadableStreamDefaultReaderImpl {
     const generic = this.genericReaderMixin;
     if (!generic.state.stream) return;
     this.release(env);
-  }
-
-  get genericReaderMixin(): ReadableStreamGenericReaderMixin {
-    return this.#genericReader;
-  }
-
-  get readRequests(): ReadRequest[] {
-    return this.#readRequests;
   }
 
   /** SetUpReadableStreamDefaultReader. */
@@ -2995,6 +2995,14 @@ export class ReadableStreamBYOBReaderImpl {
     return this.genericReaderMixin.closed;
   }
 
+  get genericReaderMixin(): ReadableStreamGenericReaderMixin {
+    return this.#genericReader;
+  }
+
+  get readIntoRequests(): ReadIntoRequest[] {
+    return this.#readIntoRequests;
+  }
+
   /** Streams §4.3.3, cancel(reason) (ReadableStreamGenericReader). */
   cancel(reason?: unknown): InternalPromise<void> {
     return this.genericReaderMixin.cancel(reason);
@@ -3060,14 +3068,6 @@ export class ReadableStreamBYOBReaderImpl {
     const generic = this.genericReaderMixin;
     if (!generic.state.stream) return;
     this.release(env);
-  }
-
-  get genericReaderMixin(): ReadableStreamGenericReaderMixin {
-    return this.#genericReader;
-  }
-
-  get readIntoRequests(): ReadIntoRequest[] {
-    return this.#readIntoRequests;
   }
 
   /** SetUpReadableStreamBYOBReader. */

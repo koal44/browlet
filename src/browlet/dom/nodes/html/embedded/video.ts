@@ -24,6 +24,11 @@ export class HTMLVideoElementImpl extends HTMLMediaElementImpl {
     return value instanceof HTMLVideoElementImpl;
   }
 
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Interactive) return this.hasAttributeNS(null, 'controls');
+    return super.hasCategory(category);
+  }
+
   /** Capture both continuations before either can replace the other's state. */
   // https://html.spec.whatwg.org/multipage/media.html#attr-media-loading
   protected override resumeLazyLoading(): void {
@@ -37,11 +42,6 @@ export class HTMLVideoElementImpl extends HTMLMediaElementImpl {
       this.posterLazyLoadResumptionSteps = null;
       posterSteps();
     }
-  }
-
-  override hasCategory(category: ContentCategory): boolean {
-    if (category === ContentCategory.Interactive) return this.hasAttributeNS(null, 'controls');
-    return super.hasCategory(category);
   }
 }
 

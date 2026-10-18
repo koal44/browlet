@@ -749,6 +749,17 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return record;
   }
 
+  // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — replace a null or undefined receiver with
+  // the global object.
+  resolveThisValue(thisArgument: unknown): unknown {
+    return thisArgument ?? this.globalObject?.platformObject ?? this.realm.globalObject;
+  }
+
+  // Throw a TypeError allocated in this binding's realm.
+  throwTypeError(message: string): never {
+    throw new this.realm.intrinsics.typeError(message);
+  }
+
   // Resolve direct platform receivers and proxy object receiver aliases.
   #resolveReceiverRecord(
     value: unknown,
@@ -761,17 +772,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       if (record?.binding.world === this.world) return record;
     }
     return undefined;
-  }
-
-  // Extracted from Web IDL §3.7.6 Attributes and §3.7.7 Operations — replace a null or undefined receiver with
-  // the global object.
-  resolveThisValue(thisArgument: unknown): unknown {
-    return thisArgument ?? this.globalObject?.platformObject ?? this.realm.globalObject;
-  }
-
-  // Throw a TypeError allocated in this binding's realm.
-  throwTypeError(message: string): never {
-    throw new this.realm.intrinsics.typeError(message);
   }
 }
 

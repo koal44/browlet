@@ -309,20 +309,6 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     }
   }
 
-  #defineConstant(
-    target: object,
-    constant: IDLConstant,
-  ): void {
-    const realmBinding = this.binding;
-    const converter = realmBinding.getConverter(constant.type);
-    defineProperty(target, constant.name, {
-      configurable: false,
-      enumerable: true,
-      value: converter.idlToJS(converter.createDefault(constant.value)),
-      writable: false,
-    });
-  }
-
   /** Install exposed attributes at the selected constructor, prototype, or instance location. */
   defineAttributes(
     this: ImplementationBinding<MemberOwner>,
@@ -474,13 +460,6 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     return result;
   }
 
-  #getDefaultToJSONAttributes(
-    this: ImplementationBinding<AssembledInterface>,
-  ): DefaultToJSONAttribute[] {
-    return this.defaultToJSONAttributes ??= this.assembled.getDefaultToJSONAttributes()
-      .filter((entry) => entry.assembled.isMemberExposed(entry, this.binding.realm));
-  }
-
   /** Reject special operations that the available platform-object machinery cannot implement. */
   assertOrdinaryProjection(
     this: ImplementationBinding<AssembledInterface>,
@@ -513,6 +492,41 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     this.defineStringifier(object, 'unforgeable');
     const descriptors = Object.getOwnPropertyDescriptors(object);
     return this.unforgeableDescriptors = Reflect.ownKeys(descriptors).length === 0 ? null : descriptors;
+  }
+
+  /** Retain indexed/named property behavior, or null for an ordinary interface. */
+  getLegacyPropertyMetadata(
+    this: ImplementationBinding<AssembledInterface>,
+  ): LegacyPropertyMetadata | null {
+    const { binding: realmBinding, assembled } = this;
+    // null records an ordinary interface; undefined means it has not been inspected yet.
+    if (this.legacyPropertyMetadata === undefined) {
+      this.legacyPropertyMetadata = realmBinding.legacyPlatformObjects.createPropertyMetadata(
+        assembled,
+      );
+    }
+    return this.legacyPropertyMetadata;
+  }
+
+  #defineConstant(
+    target: object,
+    constant: IDLConstant,
+  ): void {
+    const realmBinding = this.binding;
+    const converter = realmBinding.getConverter(constant.type);
+    defineProperty(target, constant.name, {
+      configurable: false,
+      enumerable: true,
+      value: converter.idlToJS(converter.createDefault(constant.value)),
+      writable: false,
+    });
+  }
+
+  #getDefaultToJSONAttributes(
+    this: ImplementationBinding<AssembledInterface>,
+  ): DefaultToJSONAttribute[] {
+    return this.defaultToJSONAttributes ??= this.assembled.getDefaultToJSONAttributes()
+      .filter((entry) => entry.assembled.isMemberExposed(entry, this.binding.realm));
   }
 
   // https://webidl.spec.whatwg.org/#named-properties-object
@@ -558,20 +572,6 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       value: unscopables,
       writable: false,
     });
-  }
-
-  /** Retain indexed/named property behavior, or null for an ordinary interface. */
-  getLegacyPropertyMetadata(
-    this: ImplementationBinding<AssembledInterface>,
-  ): LegacyPropertyMetadata | null {
-    const { binding: realmBinding, assembled } = this;
-    // null records an ordinary interface; undefined means it has not been inspected yet.
-    if (this.legacyPropertyMetadata === undefined) {
-      this.legacyPropertyMetadata = realmBinding.legacyPlatformObjects.createPropertyMetadata(
-        assembled,
-      );
-    }
-    return this.legacyPropertyMetadata;
   }
 }
 

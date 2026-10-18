@@ -25,6 +25,123 @@ export class RangeImpl extends AbstractRangeImpl {
     this.#register();
   }
 
+  /** Adjust boundaries strictly after the insertion point. */
+  // https://dom.spec.whatwg.org/#concept-node-insert
+  static adjustForInsertion(parent: NodeImpl, index: number, count: number): void {
+    const ranges = this.#byRoot.get(parent.getRoot());
+    if (!ranges) return;
+    for (const range of ranges.values()) {
+      if (range.startContainer === parent && range.startOffset > index) range.startOffset += count;
+      if (range.endContainer === parent && range.endOffset > index) range.endOffset += count;
+    }
+  }
+
+  /** Move ordinary-tree boundaries out of the removed subtree before unlinking it. */
+  // https://dom.spec.whatwg.org/#live-range-pre-remove-steps
+  static preRemove(node: NodeImpl): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const parent = node.parentNode!;
+    const index = node.getIndex();
+    for (const range of ranges.values()) {
+      if (node.contains(range.startContainer)) {
+        range.startContainer = parent;
+        range.startOffset = index;
+      } else if (range.startContainer === parent && range.startOffset > index) {
+        range.startOffset--;
+      }
+      if (node.contains(range.endContainer)) {
+        range.endContainer = parent;
+        range.endOffset = index;
+      } else if (range.endContainer === parent && range.endOffset > index) {
+        range.endOffset--;
+      }
+    }
+  }
+
+  /** Clamp replaced boundaries and shift later offsets by the replacement's length change. */
+  // https://dom.spec.whatwg.org/#concept-cd-replace
+  static adjustForReplaceData(node: CharacterDataImpl, offset: number, count: number, dataLength: number): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const end = offset + count;
+    for (const range of ranges.values()) {
+      if (range.startContainer === node && range.startOffset > offset) {
+        range.startOffset = range.startOffset <= end ? offset : range.startOffset + dataLength - count;
+      }
+      if (range.endContainer === node && range.endOffset > offset) {
+        range.endOffset = range.endOffset <= end ? offset : range.endOffset + dataLength - count;
+      }
+    }
+  }
+
+  /** After insertion, move split-off boundaries and advance points immediately after the old Text. */
+  // https://dom.spec.whatwg.org/#concept-text-split
+  static adjustForSplitText(node: TextImpl, newNode: TextImpl, offset: number): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const parent = node.parentNode!;
+    const index = node.getIndex() + 1;
+    for (const range of ranges.values()) {
+      if (range.startContainer === node && range.startOffset > offset) {
+        range.startContainer = newNode;
+        range.startOffset -= offset;
+      } else if (range.startContainer === parent && range.startOffset === index) {
+        range.startOffset++;
+      }
+      if (range.endContainer === node && range.endOffset > offset) {
+        range.endContainer = newNode;
+        range.endOffset -= offset;
+      } else if (range.endContainer === parent && range.endOffset === index) {
+        range.endOffset++;
+      }
+    }
+  }
+
+  /** Retarget a merged Text run's boundaries before any of its old nodes are removed. */
+  // https://dom.spec.whatwg.org/#dom-node-normalize
+  static adjustForNormalization(node: TextImpl, length: number): void {
+    const ranges = this.#byRoot.get(node.getRoot());
+    if (!ranges) return;
+    const parent = node.parentNode!;
+    let index = node.getIndex() + 1;
+    for (let current = node.nextSibling; current?.isExclusiveText(); current = current.nextSibling) {
+      for (const range of ranges.values()) {
+        if (range.startContainer === current) {
+          range.startContainer = node;
+          range.startOffset += length;
+        } else if (range.startContainer === parent && range.startOffset === index) {
+          range.startContainer = node;
+          range.startOffset = length;
+        }
+        if (range.endContainer === current) {
+          range.endContainer = node;
+          range.endOffset += length;
+        } else if (range.endContainer === parent && range.endOffset === index) {
+          range.endContainer = node;
+          range.endOffset = length;
+        }
+      }
+      length += current.length;
+      index++;
+    }
+  }
+
+  /** A detached root was inserted: retain its boundaries and notify them through the new root. */
+  static rootInserted(node: NodeImpl): void {
+    const ranges = this.#byRoot.get(node);
+    if (!ranges) return;
+    for (const range of ranges.values()) range.#updateRoot();
+    this.#byRoot.delete(node);
+  }
+
+  /** Check the node kind and offset before changing a live boundary point. */
+  // https://dom.spec.whatwg.org/#concept-range-bp-set
+  static #validateBoundaryPoint(node: NodeImpl, offset: number): void {
+    if (node.isDocumentType()) throw new DOMExceptionImpl('', DOMExceptionNames.invalidNodeType);
+    if (offset > node.getLength()) throw new DOMExceptionImpl('', DOMExceptionNames.indexSize);
+  }
+
   /** Closest inclusive ancestor shared by both boundary nodes. */
   // https://dom.spec.whatwg.org/#get-the-common-ancestor
   get commonAncestorContainer(): NodeImpl {
@@ -306,116 +423,6 @@ export class RangeImpl extends AbstractRangeImpl {
       AbstractRangeImpl.compareBoundaryPoints(node, node.getLength(), this.endContainer, this.endOffset) === -1;
   }
 
-  /** Adjust boundaries strictly after the insertion point. */
-  // https://dom.spec.whatwg.org/#concept-node-insert
-  static adjustForInsertion(parent: NodeImpl, index: number, count: number): void {
-    const ranges = this.#byRoot.get(parent.getRoot());
-    if (!ranges) return;
-    for (const range of ranges.values()) {
-      if (range.startContainer === parent && range.startOffset > index) range.startOffset += count;
-      if (range.endContainer === parent && range.endOffset > index) range.endOffset += count;
-    }
-  }
-
-  /** Move ordinary-tree boundaries out of the removed subtree before unlinking it. */
-  // https://dom.spec.whatwg.org/#live-range-pre-remove-steps
-  static preRemove(node: NodeImpl): void {
-    const ranges = this.#byRoot.get(node.getRoot());
-    if (!ranges) return;
-    const parent = node.parentNode!;
-    const index = node.getIndex();
-    for (const range of ranges.values()) {
-      if (node.contains(range.startContainer)) {
-        range.startContainer = parent;
-        range.startOffset = index;
-      } else if (range.startContainer === parent && range.startOffset > index) {
-        range.startOffset--;
-      }
-      if (node.contains(range.endContainer)) {
-        range.endContainer = parent;
-        range.endOffset = index;
-      } else if (range.endContainer === parent && range.endOffset > index) {
-        range.endOffset--;
-      }
-    }
-  }
-
-  /** Clamp replaced boundaries and shift later offsets by the replacement's length change. */
-  // https://dom.spec.whatwg.org/#concept-cd-replace
-  static adjustForReplaceData(node: CharacterDataImpl, offset: number, count: number, dataLength: number): void {
-    const ranges = this.#byRoot.get(node.getRoot());
-    if (!ranges) return;
-    const end = offset + count;
-    for (const range of ranges.values()) {
-      if (range.startContainer === node && range.startOffset > offset) {
-        range.startOffset = range.startOffset <= end ? offset : range.startOffset + dataLength - count;
-      }
-      if (range.endContainer === node && range.endOffset > offset) {
-        range.endOffset = range.endOffset <= end ? offset : range.endOffset + dataLength - count;
-      }
-    }
-  }
-
-  /** After insertion, move split-off boundaries and advance points immediately after the old Text. */
-  // https://dom.spec.whatwg.org/#concept-text-split
-  static adjustForSplitText(node: TextImpl, newNode: TextImpl, offset: number): void {
-    const ranges = this.#byRoot.get(node.getRoot());
-    if (!ranges) return;
-    const parent = node.parentNode!;
-    const index = node.getIndex() + 1;
-    for (const range of ranges.values()) {
-      if (range.startContainer === node && range.startOffset > offset) {
-        range.startContainer = newNode;
-        range.startOffset -= offset;
-      } else if (range.startContainer === parent && range.startOffset === index) {
-        range.startOffset++;
-      }
-      if (range.endContainer === node && range.endOffset > offset) {
-        range.endContainer = newNode;
-        range.endOffset -= offset;
-      } else if (range.endContainer === parent && range.endOffset === index) {
-        range.endOffset++;
-      }
-    }
-  }
-
-  /** Retarget a merged Text run's boundaries before any of its old nodes are removed. */
-  // https://dom.spec.whatwg.org/#dom-node-normalize
-  static adjustForNormalization(node: TextImpl, length: number): void {
-    const ranges = this.#byRoot.get(node.getRoot());
-    if (!ranges) return;
-    const parent = node.parentNode!;
-    let index = node.getIndex() + 1;
-    for (let current = node.nextSibling; current?.isExclusiveText(); current = current.nextSibling) {
-      for (const range of ranges.values()) {
-        if (range.startContainer === current) {
-          range.startContainer = node;
-          range.startOffset += length;
-        } else if (range.startContainer === parent && range.startOffset === index) {
-          range.startContainer = node;
-          range.startOffset = length;
-        }
-        if (range.endContainer === current) {
-          range.endContainer = node;
-          range.endOffset += length;
-        } else if (range.endContainer === parent && range.endOffset === index) {
-          range.endContainer = node;
-          range.endOffset = length;
-        }
-      }
-      length += current.length;
-      index++;
-    }
-  }
-
-  /** A detached root was inserted: retain its boundaries and notify them through the new root. */
-  static rootInserted(node: NodeImpl): void {
-    const ranges = this.#byRoot.get(node);
-    if (!ranges) return;
-    for (const range of ranges.values()) range.#updateRoot();
-    this.#byRoot.delete(node);
-  }
-
   /** Share the partial-ancestor copying steps; extraction additionally moves nodes and removes data. */
   // https://dom.spec.whatwg.org/#concept-range-extract
   // https://dom.spec.whatwg.org/#concept-range-clone
@@ -484,13 +491,6 @@ export class RangeImpl extends AbstractRangeImpl {
       clone.appendChild(subrange.#copyContents(extract));
     }
     return fragment;
-  }
-
-  /** Check the node kind and offset before changing a live boundary point. */
-  // https://dom.spec.whatwg.org/#concept-range-bp-set
-  static #validateBoundaryPoint(node: NodeImpl, offset: number): void {
-    if (node.isDocumentType()) throw new DOMExceptionImpl('', DOMExceptionNames.invalidNodeType);
-    if (offset > node.getLength()) throw new DOMExceptionImpl('', DOMExceptionNames.indexSize);
   }
 
   #updateRoot(): void {

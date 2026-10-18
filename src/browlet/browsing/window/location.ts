@@ -49,10 +49,6 @@ export class LocationImpl {
     navigationNotImplemented();
   }
 
-  toString(): string {
-    return this.href;
-  }
-
   get origin(): string {
     return this.#url.origin;
   }
@@ -87,6 +83,10 @@ export class LocationImpl {
 
   set search(_value: string) {
     navigationNotImplemented();
+  }
+
+  toString(): string {
+    return this.href;
   }
 
   assign(_url: string): void {

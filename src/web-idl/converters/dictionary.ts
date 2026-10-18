@@ -27,6 +27,11 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
     return (value) => (plan.input ??= this.#prepareInput())(value);
   }
 
+  protected override createOutputSteps(): ConversionSteps<object> {
+    const plan = this.#plan;
+    return (value) => (plan.output ??= this.#prepareOutput())(value);
+  }
+
   #prepareInput(): ConversionSteps<IDLDictionary> {
     const assembled = this.type.assembled;
     const dependencies: Record<string, unknown> = {
@@ -68,11 +73,6 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
         return new IDLDictionary(${complete ? `{${fields}}` : 'Object.fromEntries(entries)'});
       }`,
     );
-  }
-
-  protected override createOutputSteps(): ConversionSteps<object> {
-    const plan = this.#plan;
-    return (value) => (plan.output ??= this.#prepareOutput())(value);
   }
 
   #prepareOutput(): ConversionSteps<object> {
