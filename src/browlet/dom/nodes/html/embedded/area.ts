@@ -1,11 +1,28 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Image-map area identity used by Document links. */
 // https://html.spec.whatwg.org/multipage/image-maps.html#the-area-element
-export class HTMLAreaElementImpl extends HTMLElementImpl {}
+export class HTMLAreaElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLArea;
+    this.prototype.categories = [];
+  }
+
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Flow || category === ContentCategory.Phrasing) {
+      for (let ancestor = this.parentElement; ancestor !== null; ancestor = ancestor.parentElement) {
+        if (ancestor.tag === ElementTag.HTMLMap) return true;
+      }
+      return false;
+    }
+    return super.hasCategory(category);
+  }
+}
 
 /*
  * [Exposed=Window]

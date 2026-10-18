@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Suggestion-list identity used by select option traversal. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#the-datalist-element
-export class HTMLDataListElementImpl extends HTMLElementImpl {}
+export class HTMLDataListElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLDatalist;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

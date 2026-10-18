@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Machine-readable data element identity. */
 // https://html.spec.whatwg.org/multipage/text-level-semantics.html#htmldataelement
-export class HTMLDataElementImpl extends HTMLElementImpl {}
+export class HTMLDataElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLData;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

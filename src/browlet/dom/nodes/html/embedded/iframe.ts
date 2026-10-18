@@ -4,11 +4,21 @@ import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } 
 import { loadingAttribute } from '../attributes/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
 
+import { ElementTag } from '../../element-tag';
+import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Iframe loading policy and the continuation retained while navigation is deferred. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-iframe-element
 export class HTMLIFrameElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLIframe;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Interactive,
+      ContentCategory.Palpable,
+    ];
+  }
+
   /** Child navigation destination, or null before creation and after destruction. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
   // TODO(HTML child navigation): create/destroy the child and maintain this association.

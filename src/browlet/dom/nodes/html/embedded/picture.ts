@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Picture element identity. */
 // https://html.spec.whatwg.org/multipage/embedded-content.html#htmlpictureelement
-export class HTMLPictureElementImpl extends HTMLElementImpl {}
+export class HTMLPictureElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLPicture;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

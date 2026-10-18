@@ -5,7 +5,9 @@ import {
 
 import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory, emptyContent } from '../content-model';
 
 /** Input type and checkedness needed by RadioNodeList. */
 // https://html.spec.whatwg.org/multipage/input.html#htmlinputelement
@@ -18,6 +20,17 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   dirtyCheckedness = false;
 
   override readonly isAllNamedElement = true;
+
+  static {
+    this.prototype.tag = ElementTag.HTMLInput;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.FormAssociated,
+      ContentCategory.Listed, ContentCategory.Submittable, ContentCategory.Resettable,
+      ContentCategory.AutocapitalizeAndAutocorrectInheriting,
+    ];
+    // https://html.spec.whatwg.org/multipage/input.html#the-input-element
+    this.prototype.contentModel = { children: [emptyContent] };
+  }
 
   static is(value: unknown): value is HTMLInputElementImpl {
     return value instanceof HTMLInputElementImpl;
@@ -33,6 +46,14 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   set checked(value: boolean) {
     this.dirtyCheckedness = true;
     this.setCheckedness(value);
+  }
+
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Interactive || category === ContentCategory.Labelable ||
+      category === ContentCategory.Palpable) {
+      return this.typeState !== 'hidden';
+    }
+    return super.hasCategory(category);
   }
 
   /** Change internal checkedness without changing dirty checkedness. */

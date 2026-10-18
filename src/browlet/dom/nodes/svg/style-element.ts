@@ -6,6 +6,7 @@ import { LinkStyleMixin } from '../../../style/index';
 import type { BrowletEnvironment } from '../../../environment';
 
 import type { ElementCreationContext } from '../element';
+import { ElementTag } from '../element-tag';
 import { SVGElementImpl } from './element';
 
 /** Associates inline SVG stylesheet text with its tree scope. */
@@ -16,6 +17,10 @@ export class SVGStyleElementImpl extends SVGElementImpl {
     attributes: new Set(['media', 'title', 'type']),
     children: true,
   };
+
+  static {
+    this.prototype.tag = ElementTag.SVGStyle;
+  }
 
   constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(context, env);

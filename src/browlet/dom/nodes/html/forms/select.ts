@@ -2,7 +2,9 @@ import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
 import type { NodeImpl } from '../../node';
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 import { HTMLHRElementImpl } from '../grouping/index';
 import { HTMLDataListElementImpl } from './data-list';
 import { HTMLOptGroupElementImpl } from './optgroup';
@@ -12,9 +14,18 @@ import { HTMLOptionsCollectionImpl } from './options-collection';
 /** Select-owned option membership and explicit selected-index changes. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmlselectelement
 export class HTMLSelectElementImpl extends HTMLElementImpl {
-  #options: HTMLOptionsCollectionImpl | undefined;
+  static {
+    this.prototype.tag = ElementTag.HTMLSelect;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Interactive, ContentCategory.Palpable,
+      ContentCategory.FormAssociated, ContentCategory.Listed, ContentCategory.Labelable,
+      ContentCategory.Submittable, ContentCategory.Resettable,
+      ContentCategory.AutocapitalizeAndAutocorrectInheriting,
+    ];
+  }
 
   override readonly isAllNamedElement = true;
+  #options: HTMLOptionsCollectionImpl | undefined;
 
   static is(value: unknown): value is HTMLSelectElementImpl {
     return value instanceof HTMLSelectElementImpl;

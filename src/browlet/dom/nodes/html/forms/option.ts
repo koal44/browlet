@@ -1,11 +1,17 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Option selection state owned independently of its selected content attribute. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmloptionelement
 export class HTMLOptionElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLOption;
+    this.prototype.categories = [];
+  }
+
   // https://html.spec.whatwg.org/#concept-option-selectedness
   selectedness = false;
   // https://html.spec.whatwg.org/#concept-option-dirtiness
@@ -21,6 +27,13 @@ export class HTMLOptionElementImpl extends HTMLElementImpl {
     this.selectedness = value;
     this.dirtiness = true;
     this.askForReset();
+  }
+
+  override canOmitEndTag(): boolean {
+    const next = this.nextContent();
+    if (next === null) return this.parentElement !== null;
+    return next.isElement() && (next.tag === ElementTag.HTMLOption ||
+      next.tag === ElementTag.HTMLOptgroup || next.tag === ElementTag.HTMLHr);
   }
 
   /** Notify the owning select after changing this option's selection. */

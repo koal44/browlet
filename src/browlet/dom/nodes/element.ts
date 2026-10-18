@@ -18,6 +18,8 @@ import { ElementAssociations, type ElementConstructor } from '../../html/reflect
 import type { BrowletEnvironment } from '../../environment';
 
 import { NodeImpl, NodeType } from './node';
+import { ElementTag } from './element-tag';
+import type { ContentCategory } from './html/content-model';
 import type { AttrImpl } from './attribute';
 import { NamedNodeMapImpl } from './named-node-map';
 import type { DocumentImpl } from './document';
@@ -46,12 +48,22 @@ const classAttribute: TokenListAttribute = { name: 'class', supportedTokens: nul
 /** Element names, attributes, child navigation, and composed style behavior. */
 // https://dom.spec.whatwg.org/#interface-element
 export class ElementImpl extends NodeImpl {
+  /** Fixed name for tag-specific registration; absent on shared and fallback classes. */
+  static localName?: string;
+
+  static {
+    this.prototype.tag = ElementTag.Other;
+  }
+
   /** Execution and allocation owner supplied at construction. */
   declare env: BrowletEnvironment;
   /** Document supplied at construction, including while this element is detached. */
   declare nodeDocument: DocumentImpl;
-  /** Fixed name for tag-specific registration; absent on shared and fallback classes. */
-  static localName?: string;
+  /** Namespaced tag identity shared through the implementation prototype. */
+  declare tag: ElementTag;
+  /** Fixed HTML content-category memberships; undefined means the inventory is unfinished. */
+  // https://html.spec.whatwg.org/multipage/dom.html#kinds-of-content
+  declare categories?: ContentCategory[];
   /** Stable live view of this element's attribute list. */
   attributes: NamedNodeMapImpl;
   /** Element name without a namespace prefix. */
@@ -81,6 +93,8 @@ export class ElementImpl extends NodeImpl {
   /** Separate content-attribute storage for ElementInternals, allocated only when used. */
   // https://html.spec.whatwg.org/multipage/custom-elements.html#internal-content-attribute-map
   internalContentAttributeMap: Map<string, string> | undefined;
+  /** Sheet loading and ownership for elements that provide a style sheet. */
+  protected linkStyleMixin: LinkStyleMixin | undefined;
 
   /** Ordered attribute storage; only this element's mutation algorithms modify it. */
   // https://dom.spec.whatwg.org/#concept-element-attribute
@@ -93,8 +107,6 @@ export class ElementImpl extends NodeImpl {
   #elementAssociations: ElementAssociations | undefined;
   /** Lazily created inline style declaration. */
   #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
-  /** Sheet loading and ownership for elements that provide a style sheet. */
-  protected linkStyleMixin: LinkStyleMixin | undefined;
   /** Navigation among element siblings. */
   #nonDocumentTypeChildNodeMixin =
     new NonDocumentTypeChildNodeMixin(this);
@@ -152,6 +164,15 @@ export class ElementImpl extends NodeImpl {
       lists.set(name, list);
     }
     return list;
+  }
+
+  /** Current HTML content-category membership, including for elements from other namespaces. */
+  hasCategory(category: ContentCategory): boolean {
+    const categories = this.categories;
+    if (categories === undefined) {
+      throw new InternalError(`Content categories for ${this.localName} are not implemented`);
+    }
+    return categories.includes(category);
   }
 
   /** Read this element's associated target or target list, narrowed to the supplied implementation constructors. */

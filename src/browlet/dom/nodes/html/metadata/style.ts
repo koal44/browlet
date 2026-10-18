@@ -10,7 +10,9 @@ import type { BrowletEnvironment } from '../../../../environment';
 
 import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Associates inline HTML stylesheet text with its tree scope. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-style-element
@@ -20,6 +22,13 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
     attributes: new Set(['media', 'title', 'type']),
     children: true,
   };
+
+  static {
+    this.prototype.tag = ElementTag.HTMLStyle;
+    this.prototype.categories = [
+      ContentCategory.Metadata,
+    ];
+  }
 
   /** Document whose parser created this style element; adoption does not replace it. */
   #parserDocument: DocumentImpl | null = null;

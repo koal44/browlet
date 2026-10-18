@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Canvas element identity. */
 // https://html.spec.whatwg.org/multipage/canvas.html#htmlcanvaselement
-export class HTMLCanvasElementImpl extends HTMLElementImpl {}
+export class HTMLCanvasElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLCanvas;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

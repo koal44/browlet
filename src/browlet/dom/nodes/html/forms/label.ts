@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Label element identity. */
 // https://html.spec.whatwg.org/multipage/forms.html#htmllabelelement
-export class HTMLLabelElementImpl extends HTMLElementImpl {}
+export class HTMLLabelElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLLabel;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Interactive, ContentCategory.Palpable,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

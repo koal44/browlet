@@ -1,11 +1,25 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Document-root identity used by Document tree accessors. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-html-element
-export class HTMLHtmlElementImpl extends HTMLElementImpl {}
+export class HTMLHtmlElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLHtml;
+    this.prototype.categories = [];
+  }
+
+  override canOmitStartTag(_previousEndTagOmitted: boolean): boolean {
+    return !this.hasStartTagAttributes() && !this.nextContent(this.firstChild)?.isComment();
+  }
+
+  override canOmitEndTag(): boolean {
+    return !this.nextContent()?.isComment();
+  }
+}
 
 /*
  * [Exposed=Window]

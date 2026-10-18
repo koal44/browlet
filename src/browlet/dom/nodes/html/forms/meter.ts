@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Scalar-gauge element identity. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmlmeterelement
-export class HTMLMeterElementImpl extends HTMLElementImpl {}
+export class HTMLMeterElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLMeter;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable, ContentCategory.Labelable,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

@@ -1,11 +1,16 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Obsolete font element identity. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#htmlfontelement
-export class HTMLFontElementImpl extends HTMLElementImpl {}
+export class HTMLFontElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLFont;
+  }
+}
 
 /*
  * [Exposed=Window]

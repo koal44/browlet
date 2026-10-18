@@ -32,6 +32,7 @@ export {
   elementIncludesNonDocumentTypeChildNodeIDL, elementIncludesSlottableIDL, type ElementCreationContext,
   type ShadowRootInit, shadowRootInitIDL,
 } from './element';
+export { ElementTag } from './element-tag';
 export {
   findElementById, findElement, findElementsByClassName, findElementsByTagName, findElementsByTagNameNS,
 } from './lookups';

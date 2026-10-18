@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Concrete dialog identity retained by Document's open-dialogs list. */
 // https://html.spec.whatwg.org/multipage/interactive-elements.html#the-dialog-element
-export class HTMLDialogElementImpl extends HTMLElementImpl {}
+export class HTMLDialogElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLDialog;
+    this.prototype.categories = [
+      ContentCategory.Flow,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

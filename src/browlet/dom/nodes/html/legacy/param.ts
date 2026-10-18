@@ -1,11 +1,16 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Obsolete object-parameter element identity. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#htmlparamelement
-export class HTMLParamElementImpl extends HTMLElementImpl {}
+export class HTMLParamElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLParam;
+  }
+}
 
 /*
  * [Exposed=Window]

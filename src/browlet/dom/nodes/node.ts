@@ -1024,6 +1024,13 @@ export abstract class NodeImpl extends EventTargetImpl {
     return this.nodeType === NodeType.DocumentType;
   }
 
+  /** Whether HTML content-model checks and document/element interpretation ignore this node. */
+  // https://html.spec.whatwg.org/multipage/dom.html#content-models
+  isIgnoredHTMLContent(): boolean {
+    return this.isComment() || this.isProcessingInstruction() ||
+      (this.isText() && this.isInterElementWhitespace());
+  }
+
   override getEventParent(_event: EventImpl): EventTargetImpl | null {
     return this.parentNode;
   }

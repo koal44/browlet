@@ -1,11 +1,17 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Fieldset-legend element identity. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmllegendelement
-export class HTMLLegendElementImpl extends HTMLElementImpl {}
+export class HTMLLegendElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLLegend;
+    this.prototype.categories = [];
+  }
+}
 
 /*
  * [Exposed=Window]

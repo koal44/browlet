@@ -1,24 +1,38 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** The pre element, exposed through HTMLPreElement. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#htmlpreelement
 export class HTMLPreElementImpl extends HTMLElementImpl {
   static override localName = 'pre';
+  static {
+    this.prototype.tag = ElementTag.HTMLPre;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Palpable,
+    ];
+  }
 }
 
 /** The listing element, exposed through HTMLPreElement. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#non-conforming-features
 export class HTMLListingElementImpl extends HTMLElementImpl {
   static override localName = 'listing';
+  static {
+    this.prototype.tag = ElementTag.HTMLListing;
+  }
 }
 
 /** The xmp element, exposed through HTMLPreElement. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#non-conforming-features
 export class HTMLXMPElementImpl extends HTMLElementImpl {
   static override localName = 'xmp';
+  static {
+    this.prototype.tag = ElementTag.HTMLXmp;
+  }
 }
 
 /*

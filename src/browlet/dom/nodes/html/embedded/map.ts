@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Image-map identity used by map lookup and named collections. */
 // https://html.spec.whatwg.org/multipage/image-maps.html#the-map-element
 export class HTMLMapElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLMap;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
+    ];
+  }
+
   override readonly isAllNamedElement = true;
 }
 

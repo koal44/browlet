@@ -85,6 +85,15 @@ q and blockquote expose HTMLQuoteElement, and the eight legacy unknown names
 expose HTMLUnknownElement. Arbitrary custom names and unrecognized names retain
 the generic HTMLElement and HTMLUnknownElement fallbacks.
 
+The dependency-free [`ElementTag`](../element-tag.ts) enum identifies namespaced
+tags numerically. Each concrete HTML and SVG class assigns `tag` to its prototype
+in a static initialization block. ElementImpl declares the instance type without
+emitting a field, so instances inherit the shared value. Existing registration
+still selects the class, without an additional tag lookup. Generic fallbacks and
+autonomous custom names use `Other`; customized built-ins retain their built-in
+tag. Identity-only checks can use these IDs without importing peer element
+classes. Use implementation types when the caller also needs derived behavior.
+
 The `q` and `blockquote` classes live beside their shared HTMLQuoteElement
 interface in [`grouping/quote.ts`](grouping/quote.ts). The interface lists
 `implementation: [impl(HTMLBlockQuoteElementImpl), impl(HTMLQElementImpl)]`
@@ -117,17 +126,95 @@ this path.
 These classes currently provide identity and inherited behavior. As §3.2.4,
 §3.2.5, and the individual element definitions are implemented, attach fixed
 categories, content-model rules, sanitization categories, and navigating URL
-attributes to their implementation classes. Queries depending on attributes or
+attributes to their implementation prototypes. Queries depending on attributes or
 tree context belong to instances. Missing information remains explicit rather
 than receiving permissive defaults.
+
+The concrete prototypes hold `categories`, `contentModel`, `contentAttributes`, and `sanitization`,
+initialized once alongside `tag`. ElementImpl declares categories for HTML and
+foreign elements; HTMLElementImpl declares the other metadata. These declarations
+emit no fields, so instances inherit the shared arrays and model objects.
+Queries read them directly from the receiver.
+
+The category inventory covers all 113 current HTML tag identities, with instance
+overrides for conditional membership. An undefined array marks an unfinished
+inventory; an empty array means no fixed memberships, although an override may
+still supply conditional ones. Main's hierarchy check and autonomous custom
+elements' form association remain throwing dependencies. The obsolete identities
+remain unclassified. The [HTML category roadmap](../../../html/ROADMAP.md#section-3252-kinds-of-content)
+records the complete scope, foreign/Text integration, and source discrepancies.
+
+[`content-model.ts`](content-model.ts) owns `ContentCategory` and shared descriptions
+of empty, text, category, element, sequence, repetition, and transparent content, plus descendant
+restrictions. Prototype `contentModel` definitions and `getContentModel()` cover p,
+blockquote, q, input, details, and a. Undefined models are explicit dependencies;
+an empty model is a known requirement. `HTMLElementImpl.matchesNothingContentModel()`
+checks that requirement against the current children, excluding comments, processing
+instructions, and empty or ASCII-whitespace Text through `NodeImpl.isIgnoredHTMLContent()`.
+Text's `isInterElementWhitespace()` reads current data, including CDATA sections;
+non-ASCII whitespace remains content. The ignored nodes stay in the DOM.
+The general evaluator, conditional models, additional rule forms, and remaining
+element inventory belong to later slices. DOM insertion and parsing do not
+consult these descriptions.
+
+Each optionally tagged element overrides `canOmitStartTag()` or `canOmitEndTag()`
+for HTML §13.1.2.4; the base class permits neither omission. The methods read
+current attributes and tree content, comparing ElementTag IDs for adjacent tag
+identities. Protected methods on [`HTMLElementImpl`](html-element.ts) provide
+the shared attribute checks and content scans. The forward scan defaults to the
+next sibling and accepts the first child when examining a start tag. Start tags
+with attributes, including
+an internal customized-built-in `is` value, must be retained. Empty text nodes
+emit nothing; whitespace and comments otherwise remain significant.
+`canOmitStartTag(previousEndTagOmitted)` requires the preceding content sibling's
+actual output decision. Adjacent colgroups and table sections cannot infer that
+decision from the tree or from whether the preceding end tag was eligible for
+omission. The paragraph rule uses the existing custom-element definition to
+recognize an autonomous custom parent; definition/upgrade production remains
+with custom elements.
+
+These permissions assume a conforming HTML document whose content is preserved.
+They do not validate content models, describe forbidden void-element end tags,
+or apply to XML. There is no omission-capable markup writer yet. The standard
+HTML fragment serializer, also still pending, must emit normal start/end tags
+as specified; these permissions do not add a minification option to that API.
+Parser recovery continues to belong to parse5. Tests cover every optional-tag
+family and demonstrate that omitting both tags between tbody groups merges them.
+
+Prototype `contentAttributes` arrays record element-specific names for article, div,
+blockquote, q, and a. `allowsContentAttribute(name)` checks permission to specify a
+namespace-less attribute, using its lowercase HTML name. The base searches the
+inventory once, then calls `allowsListedContentAttribute()` for a matching name.
+Anchor overrides that hook so target, download, ping, rel, hreflang, type, and
+referrerpolicy require a current namespace-less href; an empty href still counts.
+This does not check values or whether required attributes are missing; DOM
+mutation does not call it.
+An undefined inventory throws; an empty inventory means globals only. Global
+eligibility remains an explicit §3.2.6 dependency: names outside a completed
+element inventory throw instead of being classified as forbidden. Global names,
+data-* naming rules, event handlers, and ARIA applicability will be shared at
+that boundary. Anchor's itemprop/href requirement also remains with that work.
+Other element inventories, obsolete attributes, and value/required-attribute
+conformance rules remain for their defining sections.
+
+Prototype `sanitization` records cover article, a, script, and form. They contain a
+numeric `SanitizationCategory` and optional lists of default attributes and
+navigating URL attributes, defined in [`sanitization.ts`](sanitization.ts).
+Names in both lists identify namespace-less HTML
+attributes; omitted lists mean no element-specific entries. An absent record is
+unfinished inventory, distinct from the specified `Uncategorized` category.
+Default attributes are independent of content-attribute permissions. These fixed
+facts do not inspect values or mutate the DOM. The remaining element inventory and
+the shared configurations, namespace rules, and filtering algorithms remain in the
+[sanitization roadmap](../../../html/sanitization/ROADMAP.md).
 
 Revisit this ownership when content-model consumers and §8.6 sanitization are
 implemented: shared processing and configurable sanitizer policy belong to those
 consumers, and they can derive centralized lookups if needed. WebKit's internal
 [HTMLArticleElement with HTMLElement exposure](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLTagNames.in)
 is precedent for separating implementation classes from public interfaces.
-This slice supplies construction and registration, not the metadata inventory or
-element-specific algorithms.
+Construction and registration are complete; the metadata inventory and
+element-specific algorithms remain incremental.
 
 ## Section 3.2.2 interface identities
 

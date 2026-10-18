@@ -5,7 +5,8 @@
 - `element.ts`: `SVGElement` base identity and inline-style integration.
 - `graphics-element.ts` and `svg-element.ts`: the SVGSVGElement → SVGGraphicsElement
   → SVGElement identity chain. Document title selection recognizes the concrete
-  SVG root; this does not supply viewport, geometry, or animated-value behavior.
+  SVG root, which also supplies its HTML content-category memberships; this does
+  not supply viewport, geometry, or animated-value behavior.
 - `style-element.ts`: `SVGStyleElement` and document tree-scope style-sheet
   association.
 - `script-element.ts`: concrete `SVGScriptElement` identity required by HTML
@@ -29,6 +30,8 @@
   loading, and execution. HTML's `currentScript` consumer is still pending.
 - [ ] Complete HTML foreign-content parser adjustments for SVG names and
   attributes (HTML §13.2.6, foreign-content rules).
+- [ ] Classify remaining SVG elements for HTML content models, distinguishing
+  content from metadata rather than assigning every foreign element to embedded.
 
 HTML §3.2.5 owns HTML/SVG/MathML integration; SVG 2 owns the interfaces and
 element behavior. The SVG element implementations now live with the DOM node

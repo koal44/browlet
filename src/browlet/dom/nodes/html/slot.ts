@@ -7,11 +7,20 @@ import {
 
 import type { ElementImpl } from '../element';
 import type { TextImpl } from '../text';
+import { ElementTag } from '../element-tag';
 import { HTMLElementImpl } from './html-element';
+import { ContentCategory } from './content-model';
 
 /** Named/manual assignment, flattened fallback content, and slot-change signaling. */
 // https://html.spec.whatwg.org/multipage/scripting.html#the-slot-element
 export class HTMLSlotElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLSlot;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing,
+    ];
+  }
+
   /** Name matched against slottables; distinct from this element's own slot assignment name. */
   // https://dom.spec.whatwg.org/#slot-name
   slotName = '';

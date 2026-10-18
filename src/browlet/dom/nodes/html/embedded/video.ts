@@ -1,11 +1,20 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
+import { ContentCategory } from '../content-model';
 import { HTMLMediaElementImpl } from './media';
 
 /** Video element's media and independent poster-loading continuations. */
 // https://html.spec.whatwg.org/multipage/media.html#the-video-element
 export class HTMLVideoElementImpl extends HTMLMediaElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLVideo;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
+    ];
+  }
+
   /** Suspended poster-image loading, independent of the media resource. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#poster-lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained poster-load state when loading exists; see loader/ROADMAP.md.
@@ -28,6 +37,11 @@ export class HTMLVideoElementImpl extends HTMLMediaElementImpl {
       this.posterLazyLoadResumptionSteps = null;
       posterSteps();
     }
+  }
+
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Interactive) return this.hasAttributeNS(null, 'controls');
+    return super.hasCategory(category);
   }
 }
 

@@ -13,11 +13,23 @@ import type { SpeculationRulesParseResult } from '../../../scripting/index';
 import type { WindowImpl } from '../../../browsing/window/index';
 
 import type { DocumentImpl } from '../document';
+import { ElementTag } from '../element-tag';
 import { HTMLElementImpl } from './html-element';
+import { ContentCategory } from './content-model';
+import { SanitizationCategory } from './sanitization';
 
 /** Represents a script's fetch attributes and prepared result. */
 // https://html.spec.whatwg.org/multipage/scripting.html#the-script-element
 export class HTMLScriptElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLScript;
+    this.prototype.categories = [
+      ContentCategory.Metadata, ContentCategory.Flow, ContentCategory.Phrasing,
+      ContentCategory.ScriptSupporting,
+    ];
+    this.prototype.sanitization = { category: SanitizationCategory.Unsafe };
+  }
+
   /** Parser association; script preparation may clear and restore it. Null means not parser-inserted. */
   // https://html.spec.whatwg.org/multipage/scripting.html#parser-document
   parserDocument: DocumentImpl | null = null;

@@ -1,12 +1,17 @@
 import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
+import { ElementTag } from '../element-tag';
 import { SVGElementImpl } from './element';
 
 /** Concrete SVG script identity used by HTML's HTMLOrSVGScriptElement typedef. */
 // https://svgwg.org/svg2-draft/interact.html#InterfaceSVGScriptElement
 // PROVISIONAL: attributes, URI references, script preparation, loading, and execution remain unimplemented.
-export class SVGScriptElementImpl extends SVGElementImpl {}
+export class SVGScriptElementImpl extends SVGElementImpl {
+  static {
+    this.prototype.tag = ElementTag.SVGScript;
+  }
+}
 
 /*
  * [Exposed=Window]

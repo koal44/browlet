@@ -1,15 +1,24 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
+import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import { HTMLEmbedElementImpl } from './embed';
 
 /** Object identity and exposure state used by Document's named properties. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element
 export class HTMLObjectElementImpl extends HTMLElementImpl {
-  #showsFallbackContent = false;
+  static {
+    this.prototype.tag = ElementTag.HTMLObject;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
+      ContentCategory.FormAssociated, ContentCategory.Listed,
+    ];
+  }
 
   override readonly isAllNamedElement = true;
+  #showsFallbackContent = false;
 
   /** Whether resource selection has chosen the element's fallback content. */
   // TODO(HTML §4.8.7): object loading must maintain this state as its representation changes.

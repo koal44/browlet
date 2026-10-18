@@ -3,11 +3,21 @@ import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } 
 
 import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
 
+import { ElementTag } from '../../element-tag';
+import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Image loading policy and the continuation retained while loading is deferred. */
 // https://html.spec.whatwg.org/multipage/embedded-content.html#the-img-element
 export class HTMLImageElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLImg;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
+      ContentCategory.FormAssociated,
+    ];
+  }
+
   /** Suspended image-loading steps, installed by the image loading algorithm. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained load state when the loader exists; see loader/ROADMAP.md.
@@ -41,6 +51,13 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
     const steps = this.lazyLoadResumptionSteps;
     this.lazyLoadResumptionSteps = null;
     steps?.();
+  }
+
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Interactive) {
+      return this.hasAttributeNS(null, 'usemap') || this.hasAttributeNS(null, 'controls');
+    }
+    return super.hasCategory(category);
   }
 }
 

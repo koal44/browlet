@@ -1,12 +1,22 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
+import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import { hasExposedObjectAncestor } from './object';
 
 /** Embed identity and exposure used by Document's named properties. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-embed-element
 export class HTMLEmbedElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLEmbed;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Interactive,
+      ContentCategory.Palpable,
+    ];
+  }
+
   override readonly isAllNamedElement = true;
 
   override getDocumentNamedItemType(): DocumentNamedItemType {

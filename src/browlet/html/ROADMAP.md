@@ -1061,20 +1061,21 @@ claiming that author-facing custom elements work end to end.
 [Element definitions](https://html.spec.whatwg.org/multipage/dom.html#element-definitions)
 explains the information supplied by each element's specification entry. It does
 not prescribe a runtime representation. The reviewed implementation direction is
-to retain fixed facts on each tag's implementation class and conditional queries
+to retain fixed facts on each tag's implementation prototype and conditional queries
 on the instance. The [tag-specific implementations](../dom/nodes/html/ROADMAP.md#tag-specific-implementations)
-and their construction path are present; the metadata inventory remains pending.
+and their construction path are present; category and attribute inventories have
+begun below.
 Resume this section before §3.2.5. Its requirements are accounted for as follows:
 
 | Definition entry | Requirement and owner |
 | --- | --- |
-| Categories | Inputs to content models in §3.2.5 and the individual element sections. Fixed membership will live on implementation classes; conditional membership will use instance queries. The inventory is pending. |
+| Categories | `ElementImpl.hasCategory()` reads the concrete prototype's shared array; HTML overrides handle conditional membership. §3.2.5.2 now covers all 113 current HTML element identities and the SVG/MathML roots. Text has its own query. Main hierarchy, custom form association, obsolete elements, and remaining foreign vocabularies stay explicit dependencies. |
 | Contexts in which this element can be used | An informative summary of the surrounding elements' content models, not a separate runtime check. |
-| Content model | Normative requirements for an element's children and descendants, continued in §3.2.5 and its element definition. DOM mutation is not a general HTML conformance validator. |
-| Tag omission in text/html | An informative summary of §13's normative optional-tag rules. Syntax and parsing remain with the [parser](parser/ROADMAP.md), whose parse5 adapter and integration gaps are already tracked. |
-| Content attributes | The allowed-attribute list is normative; the brief descriptions following each dash are informative. Processing and reflection belong to each attribute's defining section. DOM setters do not reject all attributes absent from these lists. |
+| Content model | Shared rule descriptions on the implementation prototypes; `getContentModel()` reads the concrete element's model. The initial inventory covers p, blockquote, q, input, details, and a. Consumers and the remaining definitions are unfinished. DOM mutation is not a general HTML conformance validator. |
+| Tag omission in text/html | Each optionally tagged element implements §13.1.2.4's conditions through `canOmitStartTag()` and `canOmitEndTag()` overrides, using numeric ElementTag identities. The permissions apply to conforming HTML content; start-tag checks require the preceding content sibling's actual end-tag output decision. No omission-capable markup writer is present. Parser recovery remains with the [parser](parser/ROADMAP.md). |
+| Content attributes | The allowed-attribute list is normative; descriptions following each dash are informative. Prototype `contentAttributes` inventories and the instance query `allowsContentAttribute()` cover article, div, blockquote, q, and a. Anchor permissions depend on current href presence. Global eligibility and the remaining inventories are explicit dependencies. Value processing, reflection, and required-attribute rules belong to each attribute's defining section; DOM setters do not enforce these inventories. |
 | Accessibility considerations | Author conformance comes from ARIA in HTML; user-agent accessibility mappings come from HTML-AAM. The future accessibility domain in the [Browlet roadmap](../ROADMAP.md) owns the missing tree and host exposure. Existing ARIA reflection does not implement those mappings. |
-| Sanitization | Per-element categories and navigating URL attributes will live beside their implementations as inputs to the future [Sanitizer configuration and filtering algorithms](sanitization/ROADMAP.md). The metadata inventory and consumers remain pending. |
+| Sanitization | Prototype `sanitization` records cover article, a, script, and form with numeric categories, default attribute allowances, and navigating URL attributes. Missing records remain explicit dependencies. The remaining inventory and [Sanitizer configuration and filtering algorithms](sanitization/ROADMAP.md) are unfinished. |
 | DOM interface | The normative interface determines each element's platform surface. §3.2.2 supplies the registered identities and colocated IDL comments; unfinished members remain dependencies of their defining sections. |
 
 The following description of an element's meaning and additional requirements
@@ -1083,6 +1084,31 @@ registry is needed merely to reproduce the specification's presentation. Revisit
 the class-owned information when content-model consumers and sanitization are
 implemented; the consumer algorithms and configurable policy retain their owners.
 
+The category slice uses arrays of numeric `ContentCategory` enum values for fixed
+membership. Instances inherit the shared prototype array. Conditional queries
+read current attributes and tree state without caching a category collection.
+An absent prototype array means unfinished inventory and querying it throws;
+an empty array, as on optgroup, means no fixed memberships. An override can still
+supply conditional memberships, as on area and selectedcontent. Content-model
+validation and sanitizer behavior retain their separate consumers.
+
+Content models now retain inspectable child rules and separate descendant
+restrictions in [`content-model.ts`](../dom/nodes/html/content-model.ts). Rules
+describe one category member or element, ordered sequences, bounded repetition,
+empty content, and transparent content at a position within a sequence. Descendant
+restrictions identify a category, implementation, or namespace-less attribute.
+Every entry in `children` applies to the same child sequence; ordered portions
+use an explicit sequence rule. An empty requirements array imposes no constraints,
+whereas an empty-content rule prohibits significant content.
+Instances inherit their prototype's definition. A dedicated matcher now handles
+the "nothing" rule; the general evaluator remains unfinished and no automatic
+mutation check is installed. Future consumers must distinguish completed contents
+from prospective insertions and unfinished sequences, ignore inter-element
+whitespace/comments/processing instructions, and resolve transparent positions
+against the surrounding model. Conditional models, exceptional prose requirements,
+foreign-content membership, and unfinished category inventories remain explicit
+dependencies to address as their consumers and element definitions are implemented.
+
 [§3.2.4.1 Attributes](https://html.spec.whatwg.org/multipage/dom.html#attribute-text)
 permits any string value unless an attribute specifies otherwise. Existing
 `DOMString` conversion and `AttrImpl` storage preserve that text. The public-API
@@ -1090,6 +1116,121 @@ regression in `test/browlet/dom/nodes/attributes.test.ts` exercises `setAttribut
 `setAttributeNS`, and attached `Attr.value` with empty strings, whitespace, markup
 characters, NUL, lone surrogates, and supplementary Unicode. This is a DOM-value
 contract; source markup still undergoes its parser's character processing.
+
+### Section 3.2.5 preamble and nothing content model
+
+`HTMLElementImpl.matchesNothingContentModel()` checks its current DOM children
+for the "nothing" requirement. `NodeImpl.isIgnoredHTMLContent()` in
+[`node.ts`](../dom/nodes/node.ts) excludes comments,
+processing instructions, and inter-element whitespace: empty Text or Text
+containing only tab, LF, FF, CR, and space. Text's
+instance query also covers CDATA sections and reads current data after mutations.
+Other text, including non-ASCII whitespace, and all element children count as
+content. The existing `emptyContent` rule describes this requirement for input.
+
+Ignoring these nodes affects interpretation, not DOM storage or ordinary sibling
+APIs. Optional-tag syntax keeps its separate whitespace/comment rules. "Nothing"
+is independent of void-element syntax, and this matcher does not enforce models
+during insertion. The preamble also permits orphan HTML elements and contexts
+supplied by other specifications; future context validation must preserve both.
+Other content-model rules and their consumers remain later subsection work.
+
+### Section 3.2.5.2 kinds of content
+
+The nine category subsections are recorded on the concrete element implementations.
+All 113 current HTML tag identities have explicit fixed inventories, including
+empty inventories for elements with no fixed categories. The existing additional
+form-category values are populated from §4.10.2's tables, so a completed inventory
+does not accidentally report false for a button's listed or labelable membership.
+The 28 obsolete HTML identities remain unclassified until their defining rules
+are reviewed; they retain the throwing unfinished-inventory path.
+
+`ElementImpl` owns the shared category field/query because HTML's content models
+also classify foreign elements. SVG's root and the concrete MathML `math` root
+provide flow, phrasing, embedded, and palpable memberships. MathML's concrete
+root still projects through MathMLElement; its generic fallback remains available.
+`TextImpl.hasCategory()` supplies flow and phrasing membership and tests current
+inter-element whitespace for palpable membership, including CDATA. Callers query
+the element or Text implementation directly. Comments, processing instructions,
+and other node kinds have no category API; content-model consumers independently
+exclude ignored nodes through `NodeImpl.isIgnoredHTMLContent()`.
+
+Conditional membership uses namespace-less attributes, parsed input type, or
+ordinary DOM ancestors/descendants and children. It covers anchor, area, audio,
+video, img, link, meta, hgroup, selectedcontent, input, and the list elements.
+Link's allowed-in-body query uses the seven body-ok rel keywords. A dl has a
+name-value group when its grouping algorithm encounters dt/dd directly or in a
+direct div child; even a group with missing names or values counts. This existence
+query avoids constructing groups solely to answer palpable membership.
+Hidden and disabled do not independently remove category memberships.
+
+The remaining dependencies are deliberately explicit:
+
+- `HTMLMainElementImpl.isHierarchicallyCorrect()` throws. §4.4's ancestor rules
+  include forms without an accessible name; accessible-name computation is not
+  implemented. Its flow query delegates to this stub; palpable membership works.
+- Autonomous custom elements with completed construction state supply flow,
+  phrasing, and palpable membership. Their form-associated, listed, labelable,
+  submittable, and resettable queries call the throwing
+  `isFormAssociatedCustomElement()` dependency on §4.13's definition state.
+  Customized built-ins retain their built-in memberships. Definition registration
+  and upgrade remain unfinished; a potential custom name alone is not treated as
+  a completed custom element.
+- Other foreign elements need their vocabulary's classification. In particular,
+  the foreign-metadata rule (RDF is HTML's example) cannot be implemented by
+  classifying every non-HTML element as embedded. Missing inventories throw.
+- The palpable-content subsection's recommendation to contain non-hidden palpable
+  content is an authoring aid with explicit exceptions. A conformance consumer
+  remains unfinished; this recommendation does not modify membership or insertion.
+- Embedded fallback content is defined by each embedding element. Resource
+  loading and fallback selection remain with those element-specific algorithms.
+
+The phrasing subsection also defines text-only contents and authored character
+validity. `textContent` describes the text rule, and
+`HTMLElementImpl.matchesTextContentModel()` checks current children while ignoring
+the excluded node kinds. `isValidHTMLText()` checks scalar values, noncharacters,
+and disallowed controls for text or attribute values. These are conformance
+queries; DOM strings are retained unchanged. Consumers applying the character
+check to a document and the general content-model evaluator remain unfinished.
+
+#### Category-list and browser-source review
+
+Reviewed the local Blink, Gecko, and WebKit sources on 2026-10-18, alongside the
+current HTML category definitions. The sources do not supply a complete general
+category classifier that can settle these authoring questions:
+
+- [Blink's paragraph insertion helper](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/editing/commands/insert_paragraph_separator_command.cc)
+  has an editing-specific `IsPhrasingContent` name set. It omits selectedcontent,
+  and includes area/link/meta without the category conditions or Text handling.
+- [WebKit's corresponding helper](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/editing/InsertParagraphSeparatorCommand.cpp)
+  uses the same kind of editing-specific name switch, with the same limitations.
+- [Gecko's editing table](https://searchfox.org/mozilla-central/source/editor/libeditor/HTMLEditUtils.cpp)
+  uses containment groups rather than these HTML categories. Its selectedcontent
+  entry has GROUP_NONE membership, while main/hgroup use its block grouping;
+  these are editing decisions, not answers to `hasCategory()`.
+
+No live DOM insertion/rendering probe is claimed as category-conformance evidence.
+Browsers accepting a tree does not establish that it meets an authoring rule.
+
+The [kinds-of-content relationship](https://html.spec.whatwg.org/multipage/dom.html#kinds-of-content)
+explicitly makes phrasing a subset of flow. Selectedcontent appears in the
+phrasing list but is missing from the flow enumeration. Browlet supplies both
+memberships under its phrasing condition. This is an incomplete enumeration with
+an answer supplied elsewhere in the same section, rather than unspecified behavior
+or evidence of a competing browser rule. Revisit this note when the enumeration
+is corrected; no SPEC_GAP or SPEC_CLASH is needed for that omission.
+
+The individual main, hgroup, and selectedcontent category summaries omit
+qualifiers that appear in the detailed category lists. Their permitted contexts
+or content models make those qualifiers hold in conforming uses. Queries use
+the explicit conditional definitions for arbitrary DOM states; this is not a
+claim that browser layout or accessibility helpers enforce those definitions.
+
+`category-inventory.test.ts` independently transposes the specification's lists
+into expectations for all 15 current enum values. The category and content-model
+tests cover live attribute/tree/text changes, namespace lookalikes, foreign-root
+identities, and the explicit dependency stubs. No cache or DOM mutation validator
+is installed by this slice.
 
 ## HTML section 4 ownership
 

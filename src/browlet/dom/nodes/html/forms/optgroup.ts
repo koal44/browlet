@@ -1,13 +1,25 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Optgroup identity used by the options collection's add operation. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmloptgroupelement
 export class HTMLOptGroupElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLOptgroup;
+    this.prototype.categories = [];
+  }
+
   static is(value: unknown): value is HTMLOptGroupElementImpl {
     return value instanceof HTMLOptGroupElementImpl;
+  }
+
+  override canOmitEndTag(): boolean {
+    const next = this.nextContent();
+    if (next === null) return this.parentElement !== null;
+    return next.isElement() && (next.tag === ElementTag.HTMLOptgroup || next.tag === ElementTag.HTMLHr);
   }
 }
 

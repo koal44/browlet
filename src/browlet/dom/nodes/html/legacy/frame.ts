@@ -1,12 +1,17 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Legacy frame identity used by named collections. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#frame
 export class HTMLFrameElementImpl extends HTMLElementImpl {
   override readonly isAllNamedElement = true;
+
+  static {
+    this.prototype.tag = ElementTag.HTMLFrame;
+  }
 }
 
 /*

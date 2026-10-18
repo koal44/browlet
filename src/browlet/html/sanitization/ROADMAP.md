@@ -18,16 +18,26 @@ do not supply an empty Sanitizer or permissive placeholder to remove the depende
 | `algorithms.ts` | Element/attribute filtering, replacement, flattening, and safe-method restrictions | HTML §§8.6.4–8.6.5 |
 | `web-idl.ts` | Sanitizer interfaces, dictionaries, enums, and Element/ShadowRoot contributions | HTML §8.6 |
 
-Configuration and filtering also need the per-element sanitization categories
-and navigating URL attributes identified by
+Configuration and filtering also need the per-element sanitization categories,
+default attribute allowances, and navigating URL attributes identified by
 [HTML §3.2.4](https://html.spec.whatwg.org/multipage/dom.html#concept-element-sanitization).
-That inventory is not implemented. The reviewed direction is to attach these
-fixed facts to the tag-specific element implementation classes while reading
-their definitions. Revisit that ownership when implementing this subsystem:
+Prototype `sanitization` records on the tag-specific implementations now cover
+article, a, script, and form. Their definitions live in
+[`dom/nodes/html/sanitization.ts`](../../dom/nodes/html/sanitization.ts), independently
+of the HTMLElement implementation. Their numeric category distinguishes `Default`,
+`Unsafe`, and `Uncategorized`; omitted attribute lists mean no element-specific
+entries. The lists contain namespace-less HTML names. An absent record means
+unfinished inventory and must not be treated as `Uncategorized` or allowed by
+default. Continue the inventory alongside the individual element definitions.
+Revisit that ownership when implementing this subsystem:
 configuration construction can derive centralized lookups, while filtering and
 configurable policy remain here. Combine the element facts with the sanitizer's
 built-in configuration rules; do not infer them from reflection metadata or
 supply permissive defaults.
+
+Shared default attributes, event-handler removal, SVG/MathML names and namespaces,
+URL inspection, and the remaining built-in lists are still dependencies of this
+subsystem. Element content-attribute permissions do not supply sanitizer defaults.
 
 Safe setters must not be aliases for unsafe parsing followed by a casual
 blocklist. They require the specified baseline configuration, URL/namespace

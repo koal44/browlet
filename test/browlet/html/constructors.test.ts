@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import type { DocumentImpl, ElementImpl } from '../../../src/browlet/dom/nodes/index';
+import { type DocumentImpl, type ElementImpl, ElementTag } from '../../../src/browlet/dom/nodes/index';
 import { htmlIDLDefinitions } from '../../../src/browlet/dom/nodes/html/index';
 import { HTMLArticleElementImpl, HTMLH3ElementImpl } from '../../../src/browlet/dom/nodes/html/sections/index';
 import { HTMLBlockQuoteElementImpl, HTMLQElementImpl } from '../../../src/browlet/dom/nodes/html/grouping/quote';
@@ -66,6 +66,7 @@ describe('HTML element constructors', () => {
     expect(implementation.customElementRegistry).toBe(registry);
     expect(implementation.customElementState).toBe('custom');
     expect(implementation.isValue).toBeNull();
+    expect(implementation.tag).toBe(ElementTag.Other);
     expect(definition.constructionStack).toEqual([]);
   });
 
@@ -82,6 +83,7 @@ describe('HTML element constructors', () => {
     expect(element.getAttribute('is')).toBeNull();
     expect(unwrap<ElementImpl>(element).isValue).toBe(definition.name);
     expect(unwrap<ElementImpl>(element).constructor).toBe(constructor);
+    expect(unwrap<ElementImpl>(element).tag).toBe(constructor.prototype.tag);
   });
 
   it('uses the current Document after prototype access, retaining the already selected definition and registry', async () => {
@@ -165,6 +167,7 @@ describe('HTML element constructors', () => {
     definition.constructionStack.push(unwrap<ElementImpl>(first), implementation);
     expect(new Target()).toBe(existing);
     expect(Object.getPrototypeOf(existing)).toBe(Target.prototype);
+    expect(implementation.tag).toBe(ElementTag.Other);
     expect(definition.constructionStack).toEqual([unwrap(first), alreadyConstructed]);
     // The upgrade algorithm, not super(), changes precustomized to custom and pops the stack.
     expect(implementation.customElementState).toBe('precustomized');

@@ -1,3 +1,4 @@
+import { isAsciiWhitespace } from '../../../infra/index';
 import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr } from '../../../web-idl/index';
 
 import type { EventImpl } from '../events/index';
@@ -9,6 +10,7 @@ import { CharacterDataImpl } from './character-data';
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
 import { SlottableMixin, slottableIDL } from './slottable';
+import { ContentCategory } from './html/content-model';
 import type { HTMLSlotElementImpl } from './html/index';
 
 /** Text content in a document tree, with slot assignment for shadow trees. */
@@ -49,6 +51,24 @@ export class TextImpl extends CharacterDataImpl {
 
   set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
     this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
+  /** Whether this node is empty or contains only ASCII whitespace, including for CDATA sections. */
+  // https://html.spec.whatwg.org/multipage/dom.html#inter-element-whitespace
+  isInterElementWhitespace(): boolean {
+    const data = this.data;
+    for (let i = 0; i < data.length; i++) {
+      if (!isAsciiWhitespace(data.charCodeAt(i))) return false;
+    }
+    return true;
+  }
+
+  /** Text is flow and phrasing content; only non-whitespace text is palpable. */
+  // https://html.spec.whatwg.org/multipage/dom.html#text-content
+  // https://html.spec.whatwg.org/multipage/dom.html#palpable-content
+  hasCategory(category: ContentCategory): boolean {
+    return category === ContentCategory.Flow || category === ContentCategory.Phrasing ||
+      (category === ContentCategory.Palpable && !this.isInterElementWhitespace());
   }
 
   /** Split at a UTF-16 offset; the new Text belongs to this node's current document. */

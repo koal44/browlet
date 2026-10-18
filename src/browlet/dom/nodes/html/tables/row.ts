@@ -1,11 +1,23 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Table-row element identity. */
 // https://html.spec.whatwg.org/multipage/tables.html#htmltablerowelement
-export class HTMLTableRowElementImpl extends HTMLElementImpl {}
+export class HTMLTableRowElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLTr;
+    this.prototype.categories = [];
+  }
+
+  override canOmitEndTag(): boolean {
+    const next = this.nextContent();
+    if (next === null) return this.parentElement !== null;
+    return next.isElement() && next.tag === ElementTag.HTMLTr;
+  }
+}
 
 /*
  * [Exposed=Window]

@@ -2,15 +2,28 @@ import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
 import type { ElementImpl } from '../../element';
+import { ElementTag } from '../../element-tag';
+import { ContentCategory } from '../content-model';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
+import { SanitizationCategory } from '../sanitization';
 import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 
 /** Form identity and ownership of its stable controls collection. */
 // https://html.spec.whatwg.org/multipage/forms.html#htmlformelement
 export class HTMLFormElementImpl extends HTMLElementImpl {
-  #elements: HTMLFormControlsCollectionImpl | undefined;
+  static {
+    this.prototype.tag = ElementTag.HTMLForm;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Palpable,
+    ];
+    this.prototype.sanitization = {
+      category: SanitizationCategory.Uncategorized,
+      navigatingURLAttributes: ['action'],
+    };
+  }
 
   override readonly isAllNamedElement = true;
+  #elements: HTMLFormControlsCollectionImpl | undefined;
 
   static is(value: unknown): value is HTMLFormElementImpl {
     return value instanceof HTMLFormElementImpl;

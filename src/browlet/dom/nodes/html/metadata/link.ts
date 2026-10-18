@@ -16,7 +16,9 @@ import type { BrowletEnvironment } from '../../../../environment';
 
 import type { ElementCreationContext } from '../../element';
 import type { DocumentImpl } from '../../document';
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Represents an external resource link and its stylesheet association. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-link-element
@@ -28,6 +30,13 @@ export class HTMLLinkElementImpl extends HTMLElementImpl {
       'rel', 'title', 'type',
     ]),
   };
+
+  static {
+    this.prototype.tag = ElementTag.HTMLLink;
+    this.prototype.categories = [
+      ContentCategory.Metadata,
+    ];
+  }
 
   /** Document whose parser created this link; adoption does not replace it. */
   #parserDocument: DocumentImpl | null = null;
@@ -62,6 +71,19 @@ export class HTMLLinkElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#potentially-render-blocking
   override isPotentiallyRenderBlocking(): boolean {
     return getBlockingTokens(this).has('render') || this.isImplicitlyPotentiallyRenderBlocking();
+  }
+
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Flow || category === ContentCategory.Phrasing) return this.isAllowedInBody();
+    return super.hasCategory(category);
+  }
+
+  /** Whether itemprop or the current rel tokens permit this link in phrasing content. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#allowed-in-the-body
+  isAllowedInBody(): boolean {
+    if (this.hasAttributeNS(null, 'itemprop')) return true;
+    const rel = this.getAttributeNS(null, 'rel');
+    return rel !== null && splitOnAsciiWhitespace(asciiLower(rel)).every((token) => bodyAllowedLinkTypes.has(token));
   }
 }
 
@@ -117,3 +139,8 @@ export const htmlLinkElementIDL = defineInterface({
 export const htmlLinkElementIncludesLinkStyleIDL = defineIncludes({
   interface: 'HTMLLinkElement', mixin: 'LinkStyle',
 });
+
+// https://html.spec.whatwg.org/multipage/links.html#body-ok
+const bodyAllowedLinkTypes = new Set([
+  'dns-prefetch', 'modulepreload', 'pingback', 'preconnect', 'prefetch', 'preload', 'stylesheet',
+]);

@@ -1,18 +1,39 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** The td element, exposed through HTMLTableCellElement. */
 // https://html.spec.whatwg.org/multipage/tables.html#the-td-element
 export class HTMLTableDataCellElementImpl extends HTMLElementImpl {
   static override localName = 'td';
+  static {
+    this.prototype.tag = ElementTag.HTMLTd;
+    this.prototype.categories = [];
+  }
+
+  override canOmitEndTag(): boolean {
+    const next = this.nextContent();
+    if (next === null) return this.parentElement !== null;
+    return next.isElement() && (next.tag === ElementTag.HTMLTd || next.tag === ElementTag.HTMLTh);
+  }
 }
 
 /** The th element, exposed through HTMLTableCellElement. */
 // https://html.spec.whatwg.org/multipage/tables.html#the-th-element
 export class HTMLTableHeaderCellElementImpl extends HTMLElementImpl {
   static override localName = 'th';
+  static {
+    this.prototype.tag = ElementTag.HTMLTh;
+    this.prototype.categories = [];
+  }
+
+  override canOmitEndTag(): boolean {
+    const next = this.nextContent();
+    if (next === null) return this.parentElement !== null;
+    return next.isElement() && (next.tag === ElementTag.HTMLTd || next.tag === ElementTag.HTMLTh);
+  }
 }
 
 /*

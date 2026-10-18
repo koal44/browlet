@@ -1,11 +1,21 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Template element identity. */
 // https://html.spec.whatwg.org/multipage/scripting.html#htmltemplateelement
-export class HTMLTemplateElementImpl extends HTMLElementImpl {}
+export class HTMLTemplateElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLTemplate;
+    this.prototype.categories = [
+      ContentCategory.Metadata, ContentCategory.Flow, ContentCategory.Phrasing,
+      ContentCategory.ScriptSupporting,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

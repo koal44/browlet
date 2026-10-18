@@ -1,11 +1,21 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Fieldset element identity. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmlfieldsetelement
-export class HTMLFieldSetElementImpl extends HTMLElementImpl {}
+export class HTMLFieldSetElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLFieldset;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Palpable, ContentCategory.FormAssociated, ContentCategory.Listed,
+      ContentCategory.AutocapitalizeAndAutocorrectInheriting,
+    ];
+  }
+}
 
 /*
  * [Exposed=Window]

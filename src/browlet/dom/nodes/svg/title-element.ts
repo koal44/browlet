@@ -2,12 +2,17 @@ import { SVG_NAMESPACE } from '../../../../infra/index';
 import { defineInterface, impl } from '../../../../web-idl/index';
 
 import type { NodeImpl } from '../node';
+import { ElementTag } from '../element-tag';
 import { SVGElementImpl } from './element';
 
 /** Supplies the document title when it is a direct child of the SVG document root. */
 // https://svgwg.org/svg2-draft/struct.html#InterfaceSVGTitleElement
 // https://html.spec.whatwg.org/multipage/dom.html#document.title
 export class SVGTitleElementImpl extends SVGElementImpl {
+  static {
+    this.prototype.tag = ElementTag.SVGTitle;
+  }
+
   static is(value: unknown): value is SVGTitleElementImpl {
     return value instanceof SVGTitleElementImpl;
   }

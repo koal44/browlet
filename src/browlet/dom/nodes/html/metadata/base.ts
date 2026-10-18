@@ -4,11 +4,20 @@ import {
 } from '../../../../../web-idl/index';
 import { serializeURL, type URLRecord } from '../../../../../url/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Supplies the document base URL and default navigation target. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-base-element
 export class HTMLBaseElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLBase;
+    this.prototype.categories = [
+      ContentCategory.Metadata,
+    ];
+  }
+
   /** The URL fixed when this becomes the document's first base with href. */
   frozenBaseURL!: URLRecord;
 

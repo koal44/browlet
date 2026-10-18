@@ -3,6 +3,8 @@ import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
 import { ElementImpl } from '../element';
+import { ElementTag } from '../element-tag';
+import { ContentCategory } from '../html/content-model';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 
 /** Base implementation for elements in the MathML namespace. */
@@ -44,6 +46,18 @@ export class MathMLElementImpl extends ElementImpl {
   }
 }
 
+/** MathML root identity and its participation in HTML content models. */
+// https://html.spec.whatwg.org/multipage/dom.html#embedded-content-category
+export class MathMLMathElementImpl extends MathMLElementImpl {
+  static override localName = 'math';
+  static {
+    this.prototype.tag = ElementTag.MathMLMath;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
+    ];
+  }
+}
+
 /*
  * [Exposed=Window]
  * interface MathMLElement : Element { };
@@ -54,7 +68,7 @@ export const mathMLElementIDL = defineInterface({
   name: 'MathMLElement',
   inherits: 'Element',
   exposed: 'Window',
-  implementation: impl(MathMLElementImpl),
+  implementation: [impl(MathMLElementImpl), impl(MathMLMathElementImpl)],
   namespaceURI: MATHML_NAMESPACE,
   members: [],
 });

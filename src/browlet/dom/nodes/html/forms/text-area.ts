@@ -1,11 +1,23 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Text-area identity used by named collections. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#the-textarea-element
 export class HTMLTextAreaElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLTextarea;
+    this.prototype.categories = [
+      ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Interactive, ContentCategory.Palpable,
+      ContentCategory.FormAssociated, ContentCategory.Listed, ContentCategory.Labelable,
+      ContentCategory.Submittable, ContentCategory.Resettable,
+      ContentCategory.AutocapitalizeAndAutocorrectInheriting,
+    ];
+  }
+
   override readonly isAllNamedElement = true;
 }
 

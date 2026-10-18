@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { browletDefinitions } from '../../../../src/browlet/bindings';
+import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
+import { ElementTag } from '../../../../src/browlet/dom/nodes/element-tag';
 import { HTMLArticleElementImpl } from '../../../../src/browlet/dom/nodes/html/sections/article';
 import { HTMLQElementImpl } from '../../../../src/browlet/dom/nodes/html/grouping/quote';
 import { HTMLTableHeaderCellElementImpl } from '../../../../src/browlet/dom/nodes/html/tables/cell';
@@ -9,6 +11,22 @@ import { parseTestDocument } from '../../../support/dom';
 import { validateImplementationMembers } from '../../../support/web-idl-binding';
 
 describe('HTML element interfaces', () => {
+  it('projects the concrete math root and generic MathML elements through the same interface', async () => {
+    const browser = new Browlet({ route: () => '' });
+    const actual = await browser.evaluate(() => {
+      return ['math', 'mi'].map((name) => {
+        const element = document.createElementNS('http://www.w3.org/1998/Math/MathML', name);
+        const clone = element.cloneNode();
+        return [element.constructor.name, Object.getPrototypeOf(element) === MathMLElement.prototype,
+          Object.getPrototypeOf(clone) === MathMLElement.prototype, clone.nodeName];
+      });
+    });
+    expect(actual).toEqual([
+      ['MathMLElement', true, true, 'math'],
+      ['MathMLElement', true, true, 'mi'],
+    ]);
+  });
+
   it.each(['html', 'xhtml', 'xml'] as const)('selects and clones every specified interface in %s documents', async (mode) => {
     const browser = new Browlet({ route: () => '' });
     const actual = await browser.evaluate(({ mode, interfaces }) => {
@@ -30,25 +48,35 @@ describe('HTML element interfaces', () => {
       [name, names.map((localName) => [localName, name, true, true, true])]));
   });
 
-  it('retains distinct implementations with their declared members when creating and cloning each HTML tag', () => {
+  it('retains distinct implementations and tag identities when creating and cloning each HTML tag', () => {
     const browser = new Browlet({ route: () => '' });
     const definitions = new Map(browletDefinitions.filter((definition) => definition.kind === 'interface')
       .map((definition) => [definition.name, definition]));
     const constructors = new Set<object>();
+    const tags = new Set<ElementTag>();
     let count = 0;
     for (const [interfaceName, names] of elementInterfaces) {
       for (const name of names) {
         const element = browser.document.createElement(name);
-        const implementation = unwrap(element);
-        const clone = unwrap(element.cloneNode());
+        const implementation = unwrap<ElementImpl>(element);
+        const clone = unwrap<ElementImpl>(element.cloneNode());
         validateImplementationMembers(definitions.get(interfaceName)!, implementation);
         expect(constructors.has(implementation.constructor), name).toBe(false);
         expect(clone.constructor, name).toBe(implementation.constructor);
+        expect(typeof implementation.tag, name).toBe('number');
+        expect(implementation.tag, name).not.toBe(ElementTag.Other);
+        expect(ElementTag[implementation.tag], name).toBe('HTML' + name.charAt(0).toUpperCase() + name.slice(1));
+        expect(tags.has(implementation.tag), name).toBe(false);
+        expect(clone.tag, name).toBe(implementation.tag);
+        expect(Object.hasOwn(implementation, 'tag'), name).toBe(false);
+        expect(Object.hasOwn(clone, 'tag'), name).toBe(false);
         constructors.add(implementation.constructor);
+        tags.add(implementation.tag);
         count++;
       }
     }
     expect(constructors.size).toBe(count);
+    expect(tags.size).toBe(count);
   });
 
   it('selects tag-specific implementations through the HTML parser', () => {

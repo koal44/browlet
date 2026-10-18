@@ -1,11 +1,17 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
 
 /** Media text-track element identity. */
 // https://html.spec.whatwg.org/multipage/media.html#htmltrackelement
-export class HTMLTrackElementImpl extends HTMLElementImpl {}
+export class HTMLTrackElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLTrack;
+    this.prototype.categories = [];
+  }
+}
 
 /*
  * [Exposed=Window]

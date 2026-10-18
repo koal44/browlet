@@ -2,11 +2,20 @@ import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { attr, ctor, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
 
 import type { NodeImpl } from '../../node';
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Supplies the document title from this element's direct text children. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-title-element
 export class HTMLTitleElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLTitle;
+    this.prototype.categories = [
+      ContentCategory.Metadata,
+    ];
+  }
+
   static is(value: unknown): value is HTMLTitleElementImpl {
     return value instanceof HTMLTitleElementImpl;
   }

@@ -1,11 +1,19 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Division element identity. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#htmldivelement
-export class HTMLDivElementImpl extends HTMLElementImpl {}
+export class HTMLDivElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLDiv;
+    this.prototype.categories = [ContentCategory.Flow, ContentCategory.Palpable];
+    this.prototype.contentAttributes = [];
+  }
+}
 
 /*
  * [Exposed=Window]

@@ -1,12 +1,28 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
+import { ElementTag } from '../../element-tag';
 import { HTMLElementImpl } from '../html-element';
+import { ContentCategory } from '../content-model';
 
 /** Metadata identity used by named collections. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-meta-element
 export class HTMLMetaElementImpl extends HTMLElementImpl {
+  static {
+    this.prototype.tag = ElementTag.HTMLMeta;
+    this.prototype.categories = [
+      ContentCategory.Metadata,
+    ];
+  }
+
   override readonly isAllNamedElement = true;
+
+  override hasCategory(category: ContentCategory): boolean {
+    if (category === ContentCategory.Flow || category === ContentCategory.Phrasing) {
+      return this.hasAttributeNS(null, 'itemprop');
+    }
+    return super.hasCategory(category);
+  }
 }
 
 /*
