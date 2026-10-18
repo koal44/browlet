@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
+import { attr, ctor, defineInterface, idlType, impl, xattr } from '../../../../../web-idl/index';
 
 import type { NodeImpl } from '../../node';
 import { HTMLElementImpl } from '../html-element';
@@ -57,6 +57,8 @@ export const htmlTitleElementIDL = defineInterface({
   implementation: impl(HTMLTitleElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['title'],
-  // TODO(HTML custom elements): HTMLConstructor awaits the shared construction algorithm.
-  members: [attr('text', idlType.DOMString, xattr('CEReactions'))],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+    attr('text', idlType.DOMString, xattr('CEReactions')),
+  ],
 });

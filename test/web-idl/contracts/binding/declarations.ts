@@ -12,6 +12,28 @@ const exampleIDL = defineInterface<WebIDLEnvironment>({
 });
 const exampleType = reference(Example);
 
+class FirstImpl { first = 1; }
+class SecondImpl { second = 'second'; }
+const implementations = [impl(FirstImpl), impl(SecondImpl)];
+const sharedType = reference(implementations);
+defineInterface({
+  name: 'Shared', implementation: implementations,
+  members: [op('consume', idlType.undefined,
+    [arg('value', sharedType)],
+    {
+      invoke(_ctx, value) {
+        const instance: FirstImpl | SecondImpl = value;
+        if (instance instanceof FirstImpl) instance.first.toFixed();
+        else instance.second.toUpperCase();
+        // @ts-expect-error The result is the union, not just the first implementation.
+        value.first;
+        // @ts-expect-error The result is not widened to any.
+        value.missing;
+      },
+    },
+  )],
+});
+
 // @ts-expect-error An interface declaration is not an implementation class.
 reference(exampleIDL);
 

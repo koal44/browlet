@@ -1,16 +1,31 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Image-map area identity used by Document links. */
 // https://html.spec.whatwg.org/multipage/image-maps.html#the-area-element
-// PROVISIONAL: HTML construction, hyperlink mixins, reflection, geometry, and activation remain unimplemented.
 export class HTMLAreaElementImpl extends HTMLElementImpl {}
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLAreaElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLAreaElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute DOMString alt;
+ *   [CEReactions, Reflect] attribute DOMString coords;
+ *   [CEReactions, Reflect] attribute DOMString shape;
+ *   [CEReactions, Reflect] attribute DOMString download;
+ *   [CEReactions, Reflect] attribute USVString ping;
+ *   [CEReactions, Reflect] attribute DOMString rel;
+ *   [SameObject, PutForwards=value, Reflect="rel"] readonly attribute DOMTokenList relList;
+ *   [CEReactions] attribute DOMString referrerPolicy;
+ *
+ *   // also has obsolete members
+ * };
+ *
+ * HTMLAreaElement includes HyperlinkElementUtils;
+ * HTMLAreaElement includes HTMLHyperlinkElementUtils;
  */
 export const htmlAreaElementIDL = defineInterface({
   name: 'HTMLAreaElement',
@@ -19,5 +34,7 @@ export const htmlAreaElementIDL = defineInterface({
   implementation: impl(HTMLAreaElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['area'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

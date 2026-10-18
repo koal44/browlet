@@ -25,7 +25,7 @@ import type { TextImpl } from './text';
 import type { ShadowRootImpl, ShadowRootMode, SlotAssignmentMode } from './shadow-root';
 import {
   isValidCustomElementName, type CustomElementRegistryImpl,
-  type CustomElementCallbackArguments,
+  type CustomElementCallbackArguments, type CustomElementDefinition,
 } from './html/custom-elements/index';
 import type { HTMLCollectionImpl, NodeListImpl } from './collections';
 import {
@@ -50,6 +50,8 @@ export class ElementImpl extends NodeImpl {
   declare env: BrowletEnvironment;
   /** Document supplied at construction, including while this element is detached. */
   declare nodeDocument: DocumentImpl;
+  /** Fixed name for tag-specific registration; absent on shared and fallback classes. */
+  static localName?: string;
   /** Stable live view of this element's attribute list. */
   attributes: NamedNodeMapImpl;
   /** Element name without a namespace prefix. */
@@ -70,6 +72,9 @@ export class ElementImpl extends NodeImpl {
   /** Construction/upgrade state; ordinary elements start uncustomized. */
   // https://dom.spec.whatwg.org/#concept-element-custom-element-state
   customElementState: CustomElementState = 'uncustomized';
+  /** Definition retained when construction or upgrade associates this element. */
+  // https://dom.spec.whatwg.org/#concept-element-custom-element-definition
+  customElementDefinition: CustomElementDefinition | null = null;
   /** Intersection observers tracking this element, with independent history for each observer. */
   // https://w3c.github.io/IntersectionObserver/#element
   registeredIntersectionObservers: IntersectionObserverRegistration[] = [];
@@ -149,16 +154,16 @@ export class ElementImpl extends NodeImpl {
     return list;
   }
 
-  /** Read this element's associated target or target list, narrowed to the supplied implementation constructor. */
+  /** Read this element's associated target or target list, narrowed to the supplied implementation constructors. */
   // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-element
   // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-elements
-  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructor: ElementConstructor<T>, isArray: false): T | null;
-  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructor: ElementConstructor<T>, isArray: true): T[] | null;
+  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructors: ElementConstructor<T>[], isArray: false): T | null;
+  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructors: ElementConstructor<T>[], isArray: true): T[] | null;
   getAssociatedElements<T extends ElementImpl>(
-    name: string, targetConstructor: ElementConstructor<T>, isArray: boolean,
+    name: string, targetConstructors: ElementConstructor<T>[], isArray: boolean,
   ): T | T[] | null {
     const associations = this.#elementAssociations ??= new ElementAssociations();
-    return associations.get(this, name, this.getAttributeNS(null, name), targetConstructor, isArray);
+    return associations.get(this, name, this.getAttributeNS(null, name), targetConstructors, isArray);
   }
 
   /** Store a converted element or list and synchronize the content attribute; null clears either assignment. */
@@ -669,7 +674,7 @@ export class ElementImpl extends NodeImpl {
   enqueueCustomElementCallbackReaction<Name extends keyof CustomElementCallbackArguments>(
     _callbackName: Name, _args: CustomElementCallbackArguments[Name],
   ): void {
-    // PROVISIONAL(custom elements): construction cannot reach the custom state yet.
+    // TODO(HTML): definitions need lifecycle callbacks and their reaction queues/delivery.
     throw new InternalError('Custom element callback reactions are not implemented');
   }
 

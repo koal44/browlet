@@ -13,7 +13,7 @@ import type {
   ArgumentDefinition, AsyncIterableMember, AttributeMember, ConstantMember, ConstructorMember,
   DictionaryMember, IterableMember, MaplikeMember, OperationMember, SetlikeMember, StringifierMember,
 } from './members';
-import type { PrimaryInterfaceDefinition } from './declarations';
+import type { InterfaceImplementation } from './declarations';
 
 // Members and arguments
 
@@ -241,12 +241,16 @@ export function namedGetter<Implementation extends object>(
 
 /** Refer to an interface by implementation class, retaining its converted argument type. */
 export function reference<Class extends ImplementationClass>(implClass: Class): InterfaceType & ResultValue<Class['prototype']>;
+/** Refer to the declaration's implementation array, retaining the union of its converted instance types. */
+export function reference<Implementations extends { implClass: ImplementationClass; }[]>(
+  implementations: Implementations,
+): InterfaceType & ResultValue<Implementations[number]['implClass']['prototype']>;
 /** Refer to a named IDL type without an implementation-class association. */
 export function reference<const Name extends string>(name: Name): ReferenceType & { name: Name; };
-export function reference(value: string | ImplementationClass): ReferenceType | InterfaceType {
+export function reference(value: string | InterfaceType['implementation']): ReferenceType | InterfaceType {
   return typeof value === 'string'
     ? { kind: 'reference', name: value }
-    : { kind: 'interface', implClass: value };
+    : { kind: 'interface', implementation: value };
 }
 
 /** Associate an IDL type with its implementation value. */
@@ -562,7 +566,7 @@ type ReflectionOptions = {
 };
 
 type ImplementationOptions<Env = unknown, Impl extends object = object> = Omit<
-  NonNullable<PrimaryInterfaceDefinition<Env, Impl>['implementation']>,
+  InterfaceImplementation<Env, Impl>,
   'implClass'
 >;
 

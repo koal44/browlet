@@ -1,18 +1,24 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Legacy body and named-collection identity. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#frameset
-// PROVISIONAL: WindowEventHandlers, rows/cols reflection, and frame layout remain unimplemented.
 export class HTMLFrameSetElementImpl extends HTMLElementImpl {
   override readonly isAllNamedElement = true;
 }
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLFrameSetElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLFrameSetElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute DOMString cols;
+ *   [CEReactions, Reflect] attribute DOMString rows;
+ * };
+ *
+ * HTMLFrameSetElement includes WindowEventHandlers;
  */
 export const htmlFrameSetElementIDL = defineInterface({
   name: 'HTMLFrameSetElement',
@@ -21,5 +27,7 @@ export const htmlFrameSetElementIDL = defineInterface({
   implementation: impl(HTMLFrameSetElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['frameset'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

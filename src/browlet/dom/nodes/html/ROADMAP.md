@@ -1,6 +1,8 @@
 # HTML elements roadmap
 
-`HTMLElementImpl` and the currently needed metadata elements are present.
+The HTML element-interface catalog is registered. Many dedicated classes still
+provide only identity and inherited behavior; the §3.2.2 inventory below records
+their unfinished APIs and lifecycle dependencies.
 [`script.ts`](script.ts) is an approved provisional addition for the §2.4.3
 base-change response: element/interface selection, initially uninitialized result
 state, and the script's relevant Window are present. Link and script now expose
@@ -10,10 +12,11 @@ definitions depend on the generic microsyntax machinery and sit below element
 implementations in the dependency hierarchy. Reusable reflection remains with
 `html/reflection/`. The reviewed [script null-assignment clash](../../../html/ROADMAP.md#section-25-audit)
 follows HTML, Firefox, and WebKit.
-Remaining reflected members, HTML construction, preparation, and the full
+Remaining reflected members, preparation, and the full
 script-result union remain §4.12.1 work. `[CEReactions]` entry/exit and callback
 delivery remain with custom elements; link fetching remains §4.2.4 work.
-Other empty element classes should wait for a concrete consumer.
+Section 3.2.2's interface-selection requirement now supplies a concrete consumer
+for the remaining distinct element identities.
 
 The [forms collection slice](forms/ROADMAP.md) adds minimal concrete form,
 input, select, option, and optgroup implementations for HTML §§2.6.4.2–2.6.4.3.
@@ -24,7 +27,7 @@ automatic selection, and selectedcontent remain explicit owner stubs.
 The [Document §3.1.1 slice](../../../html/ROADMAP.md#section-311-document-state-and-declarations)
 adds [`HTMLDialogElementImpl`](interactive/dialog.ts) so Document's `openDialogs`
 list retains concrete dialogs. Only element selection and platform identity are
-present. HTML construction, `open`, `returnValue`, `closedBy`, `show()`,
+present, with the shared HTML constructor supplied by §3.2.3. `open`, `returnValue`, `closedBy`, `show()`,
 `showModal()`, `close()`, and `requestClose()` remain §4.11.4 dependencies, along
 with list membership, focus, top-layer/inertness, close watchers, and dialog
 events. Do not equate the list with every element that happens to have an `open`
@@ -35,7 +38,7 @@ adds concrete [`HTMLEmbedElementImpl`](embedded/embed.ts) and
 [`HTMLObjectElementImpl`](embedded/object.ts) for named-property exposure.
 Object loading must update `showsFallbackContent`; its setter invalidates live
 collections, but no resource selection/fallback activation happens automatically.
-Their remaining attributes, constructors, loading, and rendering belong to
+Their remaining attributes, loading, and rendering belong to
 §§4.8.6–4.8.7. Iframe now retains an initially-null `contentNavigable`; child
 navigation must create, associate, and clear it. Document also retains nullable
 `currentScript`; §4.12 execution must set/restore it, including null for module
@@ -51,16 +54,16 @@ The remaining identity dependencies are registered as minimal implementations:
 
 | Elements | Owner | Missing behavior |
 | --- | --- | --- |
-| `html`, `body` | `document/html.ts`, `sections/body.ts` | HTML construction, body WindowEventHandlers, and obsolete reflected members |
+| `html`, `body` | `document/html.ts`, `sections/body.ts` | Body WindowEventHandlers and obsolete reflected members |
 | `a`, `area` | `text/anchor.ts`, `embedded/area.ts` | Hyperlink mixins, reflected attributes, navigation/activation, and area geometry |
 | `map` | `embedded/map.ts` | Name reflection and the areas collection; lookup already returns HTMLMapElementImpl |
-| `hr` | `grouping/hr.ts` | HTML construction and obsolete reflected members |
+| `hr` | `grouping/hr.ts` | Obsolete reflected members |
 | `datalist`, `button`, `textarea` | `forms/` | Datalist options/suggestions; button and textarea form association, reflection, validation, editing/commands, and activation |
 | `meta` | `metadata/meta.ts` | Reflected attributes and metadata/pragma processing |
 | `frame`, `frameset` | `legacy/` | Reflected attributes, frame navigation/layout, and frameset WindowEventHandlers |
 
-These identity fragments expose their interfaces but do not add HTML constructors
-or stand in for the missing APIs. Their consuming algorithms can nevertheless use
+These fragments expose their interfaces and shared HTML constructors, without
+standing in for the missing element-specific APIs. Their consuming algorithms can use
 the actual implementation types now. Namespace/name handling remains appropriate
 in element creation, tag-name APIs, and generic namespace algorithms.
 
@@ -68,13 +71,103 @@ in element creation, tag-name APIs, and generic namespace algorithms.
 its raw child-text `text` attribute. Document retains the selected HTML/SVG title
 and normalized text; the separate `htmlTitleElement` lookup is uncached. State-preserving
 child moves use Node's general parent notification without rerunning ordinary
-children-changed steps. HTML construction and `[CEReactions]` still depend on the
+children-changed steps. `[CEReactions]` still depends on the
 shared custom-element machinery; presenting the title and its directionality in
 browser UI remains outside this document-accessor slice.
 
-## Early platform slice
+## Tag-specific implementations
 
-Implement these in dependency order before filling out the element catalog.
+Every one of the 141 registered HTML local names now selects a distinct concrete
+implementation. Concrete classes live in the existing topic folders; small
+families sharing a public interface live together beside its declaration.
+Their inherited interfaces remain unchanged: article still exposes HTMLElement,
+q and blockquote expose HTMLQuoteElement, and the eight legacy unknown names
+expose HTMLUnknownElement. Arbitrary custom names and unrecognized names retain
+the generic HTMLElement and HTMLUnknownElement fallbacks.
+
+The `q` and `blockquote` classes live beside their shared HTMLQuoteElement
+interface in [`grouping/quote.ts`](grouping/quote.ts). The interface lists
+`implementation: [impl(HTMLBlockQuoteElementImpl), impl(HTMLQElementImpl)]`
+and supplies their namespace; each concrete class supplies its static `localName`.
+Both extend HTMLElement directly. Assembly links them once, and element selection
+and HTML constructor preparation read the same tag names. Automatic instance
+bindings use ordinary property access on the concrete receiver.
+The same arrangement covers headings, edits, table columns/cells/sections,
+pre/listing/xmp, and the obsolete unknown-name elements. Empty shared bases and
+the separately maintained constructor table have been removed.
+The 51 tags exposing HTMLElement remain in their topic folders.
+[`html-element-definition.ts`](html-element-definition.ts) collects their
+implementations above the low-level [`HTMLElementImpl`](html-element.ts), avoiding
+a cycle between that base and its subclasses. The HTMLElement and
+HTMLUnknownElement fallbacks remain real implementations for arbitrary names.
+
+Typed references such as `reference(HTMLElementImpl)` continue to work because
+that declared class covers every implementation of its interface. Unrelated
+classes can pass their shared implementation array to `reference()`, retaining
+the union of converted types. Element-reference reflection prepares those classes
+once and filters matching IDs in tree order; it uses a covering class when one is
+declared. Tests exercise unrelated q/blockquote targets and duplicate IDs.
+Ordinary constructor/static bindings must
+select their behavior explicitly when no receiver identifies a class.
+Binding's internal construction reuses the registered or nearest declared base's interface and
+injected arguments; projection does not expose the internal subclass. Creation,
+cloning, namespace handling, realm ownership, and custom construction exercise
+this path.
+
+These classes currently provide identity and inherited behavior. As §3.2.4,
+§3.2.5, and the individual element definitions are implemented, attach fixed
+categories, content-model rules, sanitization categories, and navigating URL
+attributes to their implementation classes. Queries depending on attributes or
+tree context belong to instances. Missing information remains explicit rather
+than receiving permissive defaults.
+
+Revisit this ownership when content-model consumers and §8.6 sanitization are
+implemented: shared processing and configurable sanitizer policy belong to those
+consumers, and they can derive centralized lookups if needed. WebKit's internal
+[HTMLArticleElement with HTMLElement exposure](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/html/HTMLTagNames.in)
+is precedent for separating implementation classes from public interfaces.
+This slice supplies construction and registration, not the metadata inventory or
+element-specific algorithms.
+
+## Section 3.2.2 interface identities
+
+All specified HTML names, including obsolete aliases, now select their declared
+interface. `HTMLElement` declares names whose specified interface is generic;
+`HTMLUnknownElement` registers the eight names explicitly assigned to it.
+Unregistered names use the valid-custom-name/unknown rules. No provisional list
+substitutes HTMLElement for a missing dedicated interface.
+
+The slice adds these 38 minimal implementations. Each file keeps its interface
+declaration and a TODO for its missing behavior. The shared
+[`[HTMLConstructor]` algorithm](../../../html/ROADMAP.md#section-323-html-element-constructors)
+is implemented by §3.2.3; it is not an ordinary JavaScript constructor. Public
+definition, upgrade, and reaction delivery remain missing custom-element owners.
+
+| Owner | Added identities / names | Missing element-specific behavior |
+| --- | --- | --- |
+| `sections/heading.ts` | HTMLHeadingElement: `h1`–`h6` | Obsolete alignment reflection; heading presentation/accessibility |
+| `grouping/` | HTMLParagraphElement (`p`), HTMLPreElement (`pre`, `listing`, `xmp`), HTMLQuoteElement (`blockquote`, `q`), HTMLOListElement (`ol`), HTMLUListElement (`ul`), HTMLLIElement (`li`), HTMLDListElement (`dl`), HTMLDivElement (`div`), HTMLMenuElement (`menu`) | Reflected attributes, list numbering, quote citation URL, and obsolete presentation members |
+| `text/` | HTMLBRElement (`br`), HTMLDataElement (`data`), HTMLModElement (`del`, `ins`), HTMLSpanElement (`span`), HTMLTimeElement (`time`) | Reflected attributes, datetime-value processing, and obsolete members |
+| `embedded/` | HTMLPictureElement (`picture`), HTMLSourceElement (`source`), HTMLTrackElement (`track`) | Resource/source selection, reflected attributes, text-track state/loading/cues |
+| `tables/` | HTMLTableElement (`table`), HTMLTableCaptionElement (`caption`), HTMLTableColElement (`col`, `colgroup`), HTMLTableSectionElement (`tbody`, `tfoot`, `thead`), HTMLTableRowElement (`tr`), HTMLTableCellElement (`td`, `th`) | Table collections, indices, mutation methods, reflected/obsolete members, and table-model processing |
+| `forms/` | HTMLFieldSetElement (`fieldset`), HTMLLabelElement (`label`), HTMLLegendElement (`legend`), HTMLMeterElement (`meter`), HTMLOutputElement (`output`), HTMLProgressElement (`progress`), HTMLSelectedContentElement (`selectedcontent`) | Form ownership, disabledness, label/control association, values/reset, numeric processing, validation, and selected-option copying |
+| `interactive/details.ts` | HTMLDetailsElement (`details`) | Name/open reflection, group exclusivity, activation, and toggle events |
+| `scripting/` | HTMLCanvasElement (`canvas`), HTMLTemplateElement (`template`) | Canvas attributes/context/bitmap/drawing/serialization/offscreen transfer; template attributes, contents/owner document, parsing, cloning/adoption, and declarative shadow roots |
+| `legacy/` | HTMLDirectoryElement (`dir`), HTMLFontElement (`font`), HTMLMarqueeElement (`marquee`), HTMLParamElement (`param`) | Reflected/obsolete members, marquee methods and animation |
+
+Existing specialized implementations retain their prior scope. In particular,
+adding fieldset/output identities does not implement form collection membership,
+and adding selectedcontent does not make the select's copying stub work.
+Template elements still lack their separate contents fragment and owner
+document; their generic DOM tree must not be mistaken for a completed template.
+
+The [shared-member inventory](../../../html/ROADMAP.md#section-322-elements-in-the-dom)
+accounts for HTMLElement and HTMLOrSVGOrMathMLElement, their simple reflections,
+and later global-attribute, editing, focus, popover, and custom-element owners.
+
+## Early lifecycle slice
+
+Implement these behaviors in dependency order after the interface catalog.
 This is the smallest §4 slice that exercises the browser lifecycle rather than
 merely constructing a larger static tree.
 
@@ -87,12 +180,10 @@ merely constructing a larger static tree.
 | Author-driven navigation | `a` | Connect URL reflection and activation behavior to target selection, navigation, downloads, referrer policy, and hyperlink auditing |
 | Parser and shadow structure | `template`; `slot` assignment is implemented in DOM 4H | Establish inert template contents, fragment parsing/declarative shadow roots, and cloning/adoption without pulling in canvas or custom-element completion |
 
-Only the observable specialization should force a dedicated class. Elements
-whose §4 contract is semantic or conformance-only can continue to use the
-generic `HTMLElementImpl` while lifecycle work proceeds. Distinct public Web
-IDL constructors and element-specific reflected members still have to be
-added eventually; the generic implementation is sequencing, not a claim of
-full conformance.
+Elements whose specified interface is HTMLElement retain that public identity.
+Distinct interfaces now have dedicated classes even when their behavior is still
+missing. Fill those owners in as their algorithms are reached; identity alone
+does not complete an element's lifecycle.
 
 When implementing `meta`'s `http-equiv` processing, retain the HSTS negative
 case: `Strict-Transport-Security` must neither learn nor remove a host policy
@@ -157,15 +248,15 @@ responses, WindowProxy identity, origins, sandboxing, and permissions.
 | Planned area/files | Principal interfaces | Specification |
 | --- | --- | --- |
 | `document/html.ts` | `HTMLHtmlElement` | HTML §4.1 |
-| `metadata/base.ts`, `title.ts`, `meta.ts`, `noscript.ts` | `HTMLBaseElement`, document base URL, `HTMLTitleElement`, `HTMLMetaElement` | HTML §§2.4.3 and 4.2 |
-| `sections/body.ts`, `heading.ts`, `address.ts` | `HTMLBodyElement`, `HTMLHeadingElement` | HTML §4.3 |
-| `grouping/paragraph.ts`, `hr.ts`, `pre.ts`, `quote.ts`, `list.ts`, `div.ts` | Paragraph/grouping and list interfaces | HTML §4.4 |
+| `metadata/base.ts`, `title.ts`, `meta.ts`, `link.ts`, `style.ts` | Metadata interfaces and document base URL; noscript uses HTMLElement | HTML §§2.4.3 and 4.2 |
+| `sections/body.ts`, `heading.ts` | `HTMLBodyElement`, `HTMLHeadingElement`; address and other generic names use HTMLElement | HTML §4.3 |
+| `grouping/paragraph.ts`, `hr.ts`, `pre.ts`, `quote.ts`, `ol.ts`, `ul.ts`, `li.ts`, `dl.ts`, `menu.ts`, `div.ts` | Paragraph/grouping and list interfaces | HTML §4.4 |
 | `text/anchor.ts`, `data.ts`, `time.ts`, `mod.ts`, `span.ts`, `br.ts` | Text-level semantics | HTML §§4.5–4.7 |
 | `embedded/picture.ts`, `source.ts`, `image.ts`, `iframe.ts`, `embed.ts`, `object.ts`, `media.ts`, `track.ts`, `map.ts`, `area.ts` | Embedded content and media interfaces, including user-agent plugin/content-handler integration for `embed` and `object` | HTML §§2.1.6 and 4.8 |
 | `tables/table.ts`, `caption.ts`, `section.ts`, `row.ts`, `cell.ts`, `col.ts` | Table model interfaces | HTML §4.9 |
-| `forms/form.ts`, `label.ts`, `input.ts`, `button.ts`, `select.ts`, `data-list.ts`, `opt-group.ts`, `option.ts`, `text-area.ts`, `output.ts`, `progress.ts`, `meter.ts`, `field-set.ts`, `legend.ts` | Form controls, validation, submission, and form association | HTML §4.10 |
+| `forms/form.ts`, `label.ts`, `input.ts`, `button.ts`, `select.ts`, `data-list.ts`, `optgroup.ts`, `option.ts`, `text-area.ts`, `output.ts`, `progress.ts`, `meter.ts`, `fieldset.ts`, `legend.ts`, `selected-content.ts` | Form controls, validation, submission, and form association | HTML §4.10 |
 | `interactive/details.ts`, `dialog.ts` | Interactive elements | HTML §4.11 |
-| `script.ts`, `template.ts`, `slot.ts`, `canvas.ts` | Script-supporting elements and canvas | HTML §4.12 |
+| `script.ts`, `slot.ts`, `scripting/template.ts`, `scripting/canvas.ts` | Script-supporting elements and canvas | HTML §4.12 |
 | `legacy/` contributions coordinated by `html/legacy/` | `HTMLMarqueeElement`, `HTMLFrameSetElement`, `HTMLFrameElement`, `HTMLDirectoryElement`, `HTMLFontElement`, `HTMLParamElement`, and obsolete generic elements | HTML §16 |
 
 ## Supporting interfaces exposed by section 4
@@ -179,7 +270,7 @@ They belong with their consuming subsystem rather than in one miscellaneous
 | `text/hyperlink.ts` | `HyperlinkElementUtils` and `HTMLHyperlinkElementUtils`, shared by `a` and `area` | Add with the first complete anchor implementation |
 | `embedded/media.ts` with [`media/`](../../../media/ROADMAP.md) support types | HTMLMediaElement stays with elements; MediaError, TimeRanges, tracks/lists, and media state belong to the shared media area | Deferred to the media roadmap; Blob URL integration proceeds independently with Blob support |
 | `forms/` | `ValidityState`, `SelectionMode`, `SubmitEvent`, `FormDataEvent`, and their dictionaries; consume rather than redefine the external `FormData` API | Add with form association, validation, and submission |
-| `scripting/slot.ts` | `AssignedNodesOptions` | Add as a declaration beside slot behavior; it does not require a runtime class |
+| `slot.ts` | `AssignedNodesOptions` | Present beside slot behavior; it does not require a runtime class |
 | `canvas/` | Canvas and offscreen rendering contexts, state/path/style mixins, gradients, patterns, text metrics, `Path2D`, callbacks, dictionaries, and enums | Separate later graphics slice; do not bury it in `canvas.ts` |
 | `dom/nodes/html/custom-elements/` | `ElementInternals`, `CustomStateSet`, validity flags, definitions, registry, and constructor callback | Add through the custom-elements roadmap and `[CEReactions]` work |
 

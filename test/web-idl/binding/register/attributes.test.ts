@@ -2,12 +2,12 @@ import { assert, describe, expect, it } from 'vitest';
 
 import {
   attr, attrFn, onError, ctor, defineEnumeration, defineInterface, idlType, impl, nullable, roAttr,
-  reference,
+  reference, op, staticOp, stringifier,
 } from '../../../../src/web-idl/core/index';
 import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
-import { installTestBindings } from '../../../support/web-idl-binding';
+import { installTestBindings, validateImplementationMembers } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL implementation attribute registration', () => {
@@ -217,17 +217,51 @@ describe('Web IDL implementation attribute registration', () => {
     expect(Attributes.alias).toBe('updated');
   });
 
-  it('reports missing implementation fields when an attribute is accessed', () => {
+  it('checks missing implementation fields and methods in the declaration audit', () => {
     class MissingImpl {}
     const definition = defineInterface({
       name: 'Missing', exposed: '*', implementation: impl(MissingImpl),
       members: [ctor(), attr('value', idlType.long)],
     });
-    const { globalObject } = installTestBindings(new BindingWorld([definition]));
-    const Missing = Reflect.get(globalObject, definition.name) as new() => { value: number; };
-    const object = new Missing();
+    expect(() => validateImplementationMembers(definition, new MissingImpl())).toThrow('Missing.value has no implementation');
+    const operation = { ...definition, members: [op('read', idlType.long)] };
+    expect(() => validateImplementationMembers(operation, new MissingImpl())).toThrow('Missing.read has no implementation');
+    expect(() => validateImplementationMembers(operation, { read: 1 })).toThrow('Missing.read has no implementation');
+    expect(() => validateImplementationMembers(definition, { value: undefined })).not.toThrow();
+    expect(() => validateImplementationMembers(operation, { read() { return 1; } })).not.toThrow();
+    const stringify = { ...definition, members: [stringifier()] };
+    expect(() => validateImplementationMembers(stringify, new MissingImpl())).toThrow('Missing.toString has no implementation');
+  });
 
-    expect(() => object.value).toThrow('Web IDL attribute value has no implementation');
-    expect(() => { object.value = 1; }).toThrow('Web IDL attribute value has no implementation');
+  it('uses receiver access for single-class declarations and the class for static members', () => {
+    class BaseImpl {
+      #value = 2;
+      static #label = 'base';
+      get value(): number { return this.#value; }
+      set value(value: number) { this.#value = value; }
+      read(): number { return this.value; }
+      static label(): string { return this.#label; }
+    }
+    class DerivedImpl extends BaseImpl {
+      override get value(): number { return super.value * 2; }
+      override set value(value: number) { super.value = value + 1; }
+      override read(): number { return this.value + 1; }
+    }
+    const definition = defineInterface({
+      name: 'Base', exposed: '*', implementation: impl(BaseImpl),
+      members: [attr('value', idlType.long), op('read', idlType.long), staticOp('label', idlType.DOMString)],
+    });
+    const { context, globalObject } = installTestBindings(new BindingWorld([definition]));
+    const implementation = context.construct(DerivedImpl);
+    validateImplementationMembers(definition, implementation);
+    const object = context.implToJS(implementation, reference(BaseImpl)) as { value: number; read(): number; };
+    expect(object.value).toBe(4);
+    expect(object.read()).toBe(5);
+    Reflect.set(object, 'value', '5.9');
+    expect(object.value).toBe(12);
+    implementation.read = () => 42;
+    expect(object.read()).toBe(42);
+    const Constructor = Reflect.get(globalObject, 'Base') as { label(): string; };
+    expect(Constructor.label()).toBe('base');
   });
 });

@@ -1,7 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { InternalError } from '../../../../infra/internal-error';
 import {
-  attr, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr, xattr,
+  attr, ctor, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr,
+  xattr,
 } from '../../../../web-idl/index';
 
 import {
@@ -16,7 +17,6 @@ import { HTMLElementImpl } from './html-element';
 
 /** Represents a script's fetch attributes and prepared result. */
 // https://html.spec.whatwg.org/multipage/scripting.html#the-script-element
-// PROVISIONAL: script preparation, execution, and the remaining reflected members are not implemented.
 export class HTMLScriptElementImpl extends HTMLElementImpl {
   /** Parser association; script preparation may clear and restore it. Null means not parser-inserted. */
   // https://html.spec.whatwg.org/multipage/scripting.html#parser-document
@@ -92,6 +92,7 @@ export const htmlScriptElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['script'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     roAttr('blocking', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
     ),

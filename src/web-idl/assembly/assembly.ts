@@ -159,7 +159,7 @@ export class DefinitionAssembly {
         }
       }
       case 'interface':
-        return new IDLInterfaceType(this.interfaces.getType(resolved.implClass).assembled, attributes);
+        return new IDLInterfaceType(this.interfaces.getType(resolved.implementation).assembled, attributes);
       case 'reference': {
         const name = resolved.name;
         const assembled = this.interfaces.get(name);

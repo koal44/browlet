@@ -251,6 +251,24 @@ explicit standard content-handler list used for sink metadata.
 
 ## HTML integration gates
 
+- **HTML element identities do not imply complete element APIs.** All specified
+  HTML names now select their concrete or intentionally generic interface,
+  including HTML-namespace elements in XML documents. Many interfaces expose
+  only identity, the shared HTML constructor, and inherited members; their
+  element-specific APIs and lifecycle hooks remain missing. Shared inert/autofocus/heading reflections
+  do not implement interaction, focus, or accessibility processing. See the
+  [§3.2.2 inventory](browlet/html/ROADMAP.md#section-322-elements-in-the-dom) and
+  [element owners](browlet/dom/nodes/html/ROADMAP.md#section-322-interface-identities).
+
+- **HTML constructors do not yet make custom elements publicly usable.**
+  `[HTMLConstructor]` consumes definitions, selects the current/scoped registry,
+  creates elements, and reuses upgrade-stack entries. Public `define()`, upgrade,
+  and reaction delivery remain absent, so authors cannot populate those inputs
+  yet. Direct `new HTMLElement()` and built-in construction correctly throw.
+  `Image`, `Audio`, and `Option` legacy factories remain separate missing APIs.
+  The [constructor slice](browlet/html/ROADMAP.md#section-323-html-element-constructors)
+  records those dependencies and the approved non-extensible-upgrade clash.
+
 - **Document metadata depends on the loader's inputs.** Response-based document
   creation retains `Last-Modified`; the source-only route has no response date
   and local-file modification metadata is not connected. Unknown dates use the

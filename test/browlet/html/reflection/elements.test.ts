@@ -1,7 +1,67 @@
 import { describe, expect, it } from 'vitest';
+import { HTMLElementImpl } from '../../../../src/browlet/dom/nodes/html/html-element';
+import { HTMLArticleElementImpl } from '../../../../src/browlet/dom/nodes/html/sections/article';
+import { HTMLQElementImpl, HTMLBlockQuoteElementImpl } from '../../../../src/browlet/dom/nodes/html/grouping/quote';
+import type { Element } from '../../../../src/browlet/platform';
+import { HTML_NAMESPACE } from '../../../../src/infra/namespaces';
+
 import { createReflectionFixture, createReflectionWorld } from './fixture';
 
 describe('HTML reflected element associations', () => {
+  it('matches unrelated implementations in tree order through their shared array reference', () => {
+    const { platform: owner, context, document, env, child, realm } = createReflectionFixture();
+    const wrongType = child().platform;
+    wrongType.id = 'shared';
+    owner.append(wrongType);
+    // The declaration lists blockquote first. Tree order must still prefer this q.
+    const targets = [HTMLQElementImpl, HTMLBlockQuoteElementImpl].map((Constructor) => {
+      const implementation = context.construct(Constructor, [{
+        document, localName: Constructor.localName, namespaceURI: HTML_NAMESPACE,
+      }, env]);
+      const target = context.project(HTMLElementImpl, implementation) as unknown as Element;
+      target.id = 'shared';
+      owner.append(target);
+      return target;
+    });
+    owner.setAttribute('quotetarget', 'shared');
+    owner.setAttribute('quotetargets', 'shared shared');
+    expect(owner.quoteTarget).toBe(targets[0]);
+    const list = owner.quoteTargets;
+    expect(list).toEqual([targets[0], targets[0]]);
+    expect(owner.quoteTargets).toBe(list);
+    targets[0]!.remove();
+    expect(owner.quoteTarget).toBe(targets[1]);
+    owner.append(targets[0]!);
+    owner.quoteTargets = targets;
+    expect(owner.quoteTargets).toEqual(targets);
+    expect(() => { owner.quoteTarget = wrongType; }).toThrow(realm.intrinsics.typeError);
+  });
+
+  it('uses a declared common base to filter targets across concrete element implementations', () => {
+    const { platform: owner, context, document, env, child } = createReflectionFixture();
+    const wrongType = child().platform;
+    wrongType.id = 'shared';
+    owner.append(wrongType);
+    const targets = [HTMLArticleElementImpl, HTMLQElementImpl].map((Constructor) => {
+      const implementation = context.construct(Constructor, [{
+        document, localName: Constructor.localName, namespaceURI: HTML_NAMESPACE,
+      }, env]);
+      const target = context.project(HTMLElementImpl, implementation) as unknown as Element;
+      target.id = 'shared';
+      owner.append(target);
+      return target;
+    });
+    owner.setAttribute('htmltarget', 'shared');
+    owner.setAttribute('htmltargets', 'shared shared');
+    expect(owner.htmlTarget).toBe(targets[0]);
+    expect(owner.htmlTargets).toEqual([targets[0], targets[0]]);
+    targets[0]!.remove();
+    expect(owner.htmlTarget).toBe(targets[1]);
+    owner.htmlTargets = targets;
+    owner.append(targets[0]!);
+    expect(owner.htmlTargets).toEqual(targets);
+  });
+
   it('does not resolve an empty ID, including on a detached tree root', () => {
     const { platform: owner } = createReflectionFixture();
     owner.setAttribute('id', '');

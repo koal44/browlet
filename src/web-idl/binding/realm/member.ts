@@ -49,16 +49,13 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     this.#implementationBinding = implementationBinding;
   }
 
-  /** Prepare live field access with property-access feedback isolated to this interface member. */
-  createFieldGetter(attribute: IDLAttribute, target: object): AttributeSteps['get'] {
+  /** Read a field or accessor with property-access feedback isolated to this interface member. */
+  createPropertyGetter(attribute: IDLAttribute, staticTarget?: object): AttributeSteps['get'] {
     const { binding, assembled } = this.#implementationBinding;
-    return compileSteps<AttributeSteps['get']>(`${assembled.primary.name}.${attribute.name}:field-get`,
-      { name: attribute.name, target, binding, InternalError }, `function getField(receiver) {
-        const impl = receiver?.implInst ?? target;
+    return compileSteps<AttributeSteps['get']>(`${assembled.primary.name}.${attribute.name}:property-get`,
+      { name: attribute.name, staticTarget, binding }, `function getProperty(receiver) {
+        const impl = ${staticTarget === undefined ? 'receiver.implInst' : 'staticTarget'};
         try {
-          if (!(name in impl)) {
-            throw new InternalError("Web IDL attribute " + name + " has no implementation");
-          }
           return impl[name];
         } catch (exception) {
           throw binding.realizeException(exception);
@@ -67,17 +64,28 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
     );
   }
 
-  /** Prepare live field assignment with property-access feedback isolated to this interface member. */
-  createFieldSetter(attribute: IDLAttribute): (this: object, value: unknown) => void {
+  /** Assign a field or invoke its setter through the implementation receiver. */
+  createPropertySetter(attribute: IDLAttribute): (this: object, value: unknown) => void {
     const { assembled } = this.#implementationBinding;
-    return compileSteps(`${assembled.primary.name}.${attribute.name}:field-set`,
-      { name: attribute.name, InternalError }, `function setField(value) {
-        if (!(name in this)) {
-          throw new InternalError("Web IDL attribute " + name + " has no implementation");
-        }
+    return compileSteps(`${assembled.primary.name}.${attribute.name}:property-set`,
+      { name: attribute.name }, `function setProperty(value) {
         this[name] = value;
       }`,
     );
+  }
+
+  /** Read the receiver's method, with a property-access site dedicated to this member. */
+  createMethodGetter<Method extends (...values: never[]) => unknown = (this: object, ...values: unknown[]) => unknown>(
+    name: PropertyKey,
+  ): (target: object) => Method {
+    const { assembled, binding } = this.#implementationBinding;
+    return compileSteps(`${assembled.primary.name}.${String(name)}:method-get`, { name, binding }, `function getMethod(target) {
+      try {
+        return target[name];
+      } catch (exception) {
+        throw binding.realizeException(exception);
+      }
+    }`);
   }
 
   /** Retain the function returned by this attribute in its receiver's realm. */

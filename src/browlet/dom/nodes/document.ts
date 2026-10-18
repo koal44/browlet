@@ -501,7 +501,7 @@ export class DocumentImpl extends NodeImpl {
         title = this.createElementNode('title', SVG_NAMESPACE);
         root.insertBefore(title, root.firstChild);
       }
-    } else if (root?.namespaceURI === HTML_NAMESPACE) {
+    } else if (root instanceof HTMLElementImpl) {
       if (title === null) {
         const head = this.head;
         if (head === null) return;

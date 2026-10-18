@@ -115,11 +115,22 @@ remain separate dependencies. The [§3.1.7 accessors](browlet/html/ROADMAP.md#se
 add HTML/SVG title, body replacement, live collections/name lookup, currentScript
 state, and Document named properties. Object fallback selection, iframe child
 navigation, and script-execution producers remain explicit dependencies.
-Continue with §3.2's elements, one subsection at a time.
+The [§3.2.1 audit](browlet/html/ROADMAP.md#section-321-semantics-audit-2026-10-16)
+accounts for authoring requirements and the unfinished dynamic-presentation
+dependency. The [§3.2.2 slice](browlet/html/ROADMAP.md#section-322-elements-in-the-dom)
+completes HTML element identities and the shared-member dependency inventory,
+including ordinary reflections available now. The [§3.2.3 constructor slice](browlet/html/ROADMAP.md#section-323-html-element-constructors)
+implements HTML constructor overrides and their consumed definition/stack state.
+The [§3.2.4 review](browlet/html/ROADMAP.md#section-324-element-definitions-audit)
+accounts for the definition headings and verifies unrestricted DOM attribute
+strings. Every registered HTML tag now has a distinct internal implementation
+while retaining its specified public interface. Resume §3.2.4 to attach the
+category, content-model, and sanitization information to these owners before
+continuing with §3.2.5. Consumer algorithms retain their subsystem owners.
 Keep missing
 dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
 §3.2.3 leads into §4.13
-for custom-element definitions, construction, upgrades, and reaction delivery.
+for public definition registration, upgrade producers, and reaction delivery.
 HTML cloning hooks retain their separate gates.
 Selectlet continues to use its existing pointer traversal.
 Trusted parser options, sanitization, markup

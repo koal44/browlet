@@ -1,5 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr } from '../../../../../web-idl/index';
+import {
+  attr, ctor, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr,
+} from '../../../../../web-idl/index';
 
 import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';
 
@@ -7,7 +9,6 @@ import { HTMLElementImpl } from '../html-element';
 
 /** Input type and checkedness needed by RadioNodeList. */
 // https://html.spec.whatwg.org/multipage/input.html#htmlinputelement
-// PROVISIONAL: form association, radio groups, activation, value modes, and the remaining input API await §4.10.
 export class HTMLInputElementImpl extends HTMLElementImpl {
   /** Internal checkedness, independent of the checked content attribute. */
   // https://html.spec.whatwg.org/#concept-fe-checked
@@ -73,10 +74,75 @@ const inputTypeAttribute = new EnumeratedAttribute<InputTypeState>(
 );
 
 /*
- * HTMLInputElement's implemented fragment:
- * [CEReactions] attribute DOMString type;
- * [CEReactions, Reflect="checked"] attribute boolean defaultChecked;
- * attribute boolean checked;
+ * [Exposed=Window]
+ * interface HTMLInputElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute DOMString accept;
+ *   [CEReactions, Reflect] attribute boolean alpha;
+ *   [CEReactions, Reflect] attribute DOMString alt;
+ *   [CEReactions, ReflectSetter] attribute DOMString autocomplete;
+ *   [CEReactions, Reflect="checked"] attribute boolean defaultChecked;
+ *   attribute boolean checked;
+ *   [CEReactions] attribute DOMString colorSpace;
+ *   [CEReactions, Reflect] attribute DOMString dirName;
+ *   [CEReactions, Reflect] attribute boolean disabled;
+ *   readonly attribute HTMLFormElement? form;
+ *   attribute FileList? files;
+ *   [CEReactions, ReflectSetter] attribute USVString formAction;
+ *   [CEReactions] attribute DOMString formEnctype;
+ *   [CEReactions] attribute DOMString formMethod;
+ *   [CEReactions, Reflect] attribute boolean formNoValidate;
+ *   [CEReactions, Reflect] attribute DOMString formTarget;
+ *   [CEReactions, ReflectSetter] attribute unsigned long height;
+ *   attribute boolean indeterminate;
+ *   readonly attribute HTMLDataListElement? list;
+ *   [CEReactions, Reflect] attribute DOMString max;
+ *   [CEReactions, ReflectNonNegative] attribute long maxLength;
+ *   [CEReactions, Reflect] attribute DOMString min;
+ *   [CEReactions, ReflectNonNegative] attribute long minLength;
+ *   [CEReactions, Reflect] attribute boolean multiple;
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   [CEReactions, Reflect] attribute DOMString pattern;
+ *   [CEReactions, Reflect] attribute DOMString placeholder;
+ *   [CEReactions, Reflect] attribute boolean readOnly;
+ *   [CEReactions, Reflect] attribute boolean required;
+ *   [CEReactions, Reflect] attribute unsigned long size;
+ *   [CEReactions, ReflectURL] attribute USVString src;
+ *   [CEReactions, Reflect] attribute DOMString step;
+ *   [CEReactions] attribute DOMString type;
+ *   [CEReactions, Reflect="value"] attribute DOMString defaultValue;
+ *   [CEReactions] attribute [LegacyNullToEmptyString] DOMString value;
+ *   attribute object? valueAsDate;
+ *   attribute unrestricted double valueAsNumber;
+ *   [CEReactions, ReflectSetter] attribute unsigned long width;
+ *
+ *   undefined stepUp(optional long n = 1);
+ *   undefined stepDown(optional long n = 1);
+ *
+ *   readonly attribute boolean willValidate;
+ *   readonly attribute ValidityState validity;
+ *   readonly attribute DOMString validationMessage;
+ *   boolean checkValidity();
+ *   boolean reportValidity();
+ *   undefined setCustomValidity(DOMString error);
+ *
+ *   readonly attribute NodeList? labels;
+ *
+ *   undefined select();
+ *   attribute unsigned long? selectionStart;
+ *   attribute unsigned long? selectionEnd;
+ *   attribute DOMString? selectionDirection;
+ *   undefined setRangeText(DOMString replacement);
+ *   undefined setRangeText(DOMString replacement, unsigned long start, unsigned long end, optional SelectionMode selectionMode = "preserve");
+ *   undefined setSelectionRange(unsigned long start, unsigned long end, optional DOMString direction);
+ *
+ *   undefined showPicker();
+ *
+ *   // also has obsolete members
+ * };
+ *
+ * HTMLInputElement includes PopoverTargetAttributes;
  */
 export const htmlInputElementIDL = defineInterface({
   name: 'HTMLInputElement',
@@ -86,6 +152,7 @@ export const htmlInputElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['input'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     attr('type', idlType.DOMString, xattr('CEReactions', reflectEnumerated(inputTypeAttribute))),
     attr('defaultChecked', idlType.boolean, xattr('CEReactions', reflect({ name: 'checked' }))),
     attr('checked', idlType.boolean),

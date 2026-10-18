@@ -450,11 +450,26 @@ family, including element selection and Web IDL declaration collection. The earl
 separate layer contained only image-map lookup; it no longer describes this family.
 
 Element declarations carry optional `namespaceURI` and `localNames` metadata.
-The node family's element lookup derives namespace/name-to-implementation mappings
-from the existing HTML, SVG, and MathML declaration collections, independently of
-BindingWorld. Document selects a constructor and uses its existing node factory
-for allocation. Namespace and unknown-name fallbacks remain element-selection
-rules; there are no companion element-interface declarations or registration list.
+These identify public interfaces. The node family's element lookup derives its
+namespace/name mappings from the HTML, SVG, and MathML declaration collections.
+Shared-interface tags list their concrete classes in `implementation`, each with
+a static `localName`; the interface supplies their namespace. Small families live
+beside their interface declaration, without empty intervening implementation
+classes. The 51 tags exposing HTMLElement stay in their topic folders, while
+`html/html-element-definition.ts` imports them above the shared `HTMLElementImpl`.
+That base remains the implementation for autonomous custom elements, and
+`HTMLUnknownElementImpl` remains the unknown-name fallback. Assembly links each
+class to one public interface; all automatic instance members use property lookup
+on the concrete receiver. Explicit member bindings can select a base algorithm.
+There is no separately maintained
+tag-to-constructor table.
+Document selects a constructor and uses its existing node factory for allocation;
+Binding's internal construction uses the registered implementation or its nearest
+declared base. Namespace and unknown-name fallbacks remain element-selection
+rules. Declaration tests check that each specialized constructor is registered
+for its tag. Typed class references remain available when one declared class
+covers every implementation; unrelated classes can reference the same implementation
+array used by their declaration, preserving the union of their instance types.
 
 `dom/nodes/html/attributes/` owns shared HTML element attribute definitions and
 closely related state rules. This directory sits above microsyntaxes and below
@@ -486,6 +501,12 @@ need no Element/ElementInternals discriminator at invocation.
 Declaration tests check the owner contracts. Shared mixins retain one preparation
 and projected-array cache across their includers.
 Generic Web IDL supplies the extension point; HTML owns the reflection rules.
+The same composition supplies `prepareHTMLConstructor`: HTML selects definitions
+and consumes construction stacks, while Web IDL retains the prepared overrides,
+passes constructor identities, selects platform prototypes, and projects objects.
+Definitions and stacks remain with CustomElementRegistry/Element; the active
+constructor-to-registry map belongs to WindowAgent. Public registration, upgrade,
+and reaction delivery must still supply and complete those lifecycles.
 Element owns token views and explicit weak element associations. Internal callers
 and reflected bindings use the same `TokenListAttribute` record, containing the
 attribute name and supported tokens; lookup never supplies a separate optional configuration.

@@ -58,17 +58,18 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(world.project(context.construct(ExampleImpl))).toBeDefined();
   });
 
-  it('keeps failed declaration setup out of the realm registry', () => {
+  it('keeps an ambiguous constructor declaration out of the realm registry', () => {
     class IncompleteImpl {}
+    class OtherImpl {}
     const world = new BindingWorld([defineInterface({
-      name: 'Incomplete', implementation: impl(IncompleteImpl),
-      members: [op('read', idlType.long, [])],
+      name: 'Incomplete', implementation: [impl(IncompleteImpl), impl(OtherImpl)],
+      members: [ctor()],
     })]);
     const realm = new Realm();
 
-    expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('operation read has no implementation');
+    expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('constructor must select one explicitly');
     expect(world.getBindingContext(realm)).toBeUndefined();
-    expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('operation read has no implementation');
+    expect(() => world.register(realm, (ctx) => ({ realm: ctx.realm }))).toThrow('constructor must select one explicitly');
   });
 
   it('retains a realm-only environment when no execution facilities are needed', () => {
@@ -435,6 +436,43 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(implementation.semantic).toBe('semantic');
     expect(implementation.positioned).toBe('positioned');
     expect(interfaces.getRealm(implementation)).toBe(realm);
+  });
+
+  it('constructs an internal subclass through its nearest declared interface', () => {
+    class BaseImpl {
+      constructor(public value: number, public dependency: object) {}
+    }
+    class DeclaredImpl extends BaseImpl {}
+    class InternalImpl extends DeclaredImpl {}
+    class ConcreteImpl extends InternalImpl {}
+    const baseDependency = {};
+    const declaredDependency = {};
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'Base', exposed: '*',
+        implementation: impl(BaseImpl, { constructWith: [atArg(1, () => baseDependency)] }),
+        members: [],
+      }),
+      defineInterface({
+        name: 'Declared', inherits: 'Base', exposed: '*',
+        implementation: impl(DeclaredImpl, { constructWith: [atArg(1, () => declaredDependency)] }),
+        members: [roAttr('value', idlType.long)],
+      }),
+    ]);
+    const realm = new Realm();
+    const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+    context.install(realm.globalObject);
+
+    const implementation = context.construct(ConcreteImpl, [42]);
+    const platform = context.project(BaseImpl, implementation);
+    const Declared = Reflect.get(realm.globalObject, 'Declared') as CallableFunction;
+    expect(implementation.constructor).toBe(ConcreteImpl);
+    expect(implementation.dependency).toBe(declaredDependency);
+    expect(Object.getPrototypeOf(platform)).toBe(Declared.prototype);
+    expect(Reflect.get(platform, 'value')).toBe(42);
+    expect(context.unwrap(platform, DeclaredImpl)).toBe(implementation);
+    expect(world.getRealm(platform)).toBe(realm);
+    expect(Object.hasOwn(realm.globalObject, 'Concrete')).toBe(false);
   });
 
   it('preserves registered primary identity during explicit projection', () => {

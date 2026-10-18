@@ -117,7 +117,7 @@ describe('ElementInternals reflection', () => {
     expect(platform.target).toBe(null);
     internals.setContentAttribute('target', 'named');
     expect(platform.target).toBe(target.platform);
-    expect(internals.getAssociatedElements('target', ElementImpl, false)).toBe(target.element);
+    expect(internals.getAssociatedElements('target', [ElementImpl], false)).toBe(target.element);
     internals.deleteContentAttribute('target');
     expect(platform.target).toBe(null);
     expect(host.getAttribute('target')).toBe('named');
@@ -129,10 +129,10 @@ describe('ElementInternals reflection', () => {
     host.setAttribute('target', 'host');
     internals.setContentAttribute('target', 'host');
     for (const owner of [host, internals]) {
-      const single = owner.getAssociatedElements('target', HTMLElementImpl, false);
+      const single = owner.getAssociatedElements('target', [HTMLElementImpl], false);
       expectTypeOf(single).toEqualTypeOf<HTMLElementImpl | null>();
       expect(single).toBe(host);
-      const list = owner.getAssociatedElements('target', HTMLElementImpl, true);
+      const list = owner.getAssociatedElements('target', [HTMLElementImpl], true);
       expectTypeOf(list).toEqualTypeOf<HTMLElementImpl[] | null>();
       expect(list).toEqual([host]);
     }
@@ -147,11 +147,11 @@ describe('ElementInternals reflection', () => {
     host.appendChild(second.element);
     host.setAssociatedElements('target', first.element);
     platform.target = second.platform;
-    expect(host.getAssociatedElements('target', ElementImpl, false)).toBe(first.element);
+    expect(host.getAssociatedElements('target', [ElementImpl], false)).toBe(first.element);
     expect(platform.target).toBe(second.platform);
     host.setAttribute('target', 'second');
     host.removeAttribute('target');
-    expect(host.getAssociatedElements('target', ElementImpl, false)).toBe(null);
+    expect(host.getAssociatedElements('target', [ElementImpl], false)).toBe(null);
     expect(platform.target).toBe(second.platform);
 
     // Internal string writes have no DOM attribute-change steps to clear explicit references.
@@ -160,7 +160,7 @@ describe('ElementInternals reflection', () => {
     host.setAttribute('target', 'second');
     platform.target = null;
     expect(platform.target).toBe(null);
-    expect(host.getAssociatedElements('target', ElementImpl, false)).toBe(second.element);
+    expect(host.getAssociatedElements('target', [ElementImpl], false)).toBe(second.element);
   });
 
   it('retains explicit out-of-scope references and rechecks scope after tree changes', () => {
@@ -193,8 +193,8 @@ describe('ElementInternals reflection', () => {
     expect(result).toBeInstanceOf(realm.intrinsics.array);
     expect(Object.isFrozen(result)).toBe(true);
     expect(platform.targets).toBe(result);
-    expect(host.getAssociatedElements('targets', ElementImpl, true)).toEqual([second.element]);
-    expect(internals.getAssociatedElements('targets', ElementImpl, true)).toEqual([first.element, first.element, second.element]);
+    expect(host.getAssociatedElements('targets', [ElementImpl], true)).toEqual([second.element]);
+    expect(internals.getAssociatedElements('targets', [ElementImpl], true)).toEqual([first.element, first.element, second.element]);
     host.removeAttribute('targets');
     expect(platform.targets).toBe(result);
     platform.targets = [];

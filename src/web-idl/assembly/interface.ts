@@ -1,8 +1,8 @@
 import { InternalError, appendToMapList } from '../../infra/index';
 import {
-  hasExtendedAttribute, type PrimaryInterfaceDefinition, type PartialInterfaceDefinition,
+  hasExtendedAttribute, getCommonImplementationClass, type PrimaryInterfaceDefinition, type PartialInterfaceDefinition,
   type InterfaceMixinDefinition, type PartialInterfaceMixinDefinition, type Definition, type IncludesDefinition,
-  type ImplementationClass, type SerialSteps, type TransferSteps,
+  type ImplementationClass, type InterfaceImplementation, type InterfaceType, type SerialSteps, type TransferSteps,
 } from '../core/index';
 
 import type { WebIDLRealm } from '../environment';
@@ -22,6 +22,10 @@ import type { DefinitionAssembly, AssemblySteps } from './assembly';
 export class AssembledInterface {
   /** The original interface declaration, before applying partials and mixins. */
   primary: PrimaryInterfaceDefinition;
+  /** Concrete implementations normalized once from the declaration's single value or array. */
+  implementations: InterfaceImplementation[];
+  /** Declared class covering every implementation, when the interface has such a base. */
+  commonImplementationClass: ImplementationClass | undefined;
   /** IDL name used for interface lookup and diagnostics. */
   name: string;
   /** Partial declarations retain their own exposure and other extended attributes. */
@@ -67,6 +71,10 @@ export class AssembledInterface {
 
   constructor(primary: PrimaryInterfaceDefinition, partials: PartialInterfaceDefinition[] = [], finish: AssemblySteps[]) {
     this.primary = primary;
+    this.implementations = primary.implementation
+      ? Array.isArray(primary.implementation) ? primary.implementation : [primary.implementation]
+      : [];
+    this.commonImplementationClass = getCommonImplementationClass(this.implementations);
     this.name = primary.name;
     this.partials = partials;
     this.serialSteps = primary.serialSteps;
@@ -89,6 +97,15 @@ export class AssembledInterface {
         }
       }
     });
+  }
+
+  /** Select construction metadata from an instance or prototype, preferring its nearest declared class. */
+  getImplementation(value: object): InterfaceImplementation | undefined {
+    if (this.implementations.length === 1) return this.implementations[0];
+    for (let prototype: object | null = value; prototype; prototype = Reflect.getPrototypeOf(prototype)) {
+      const definition = this.implementations.find(({ implClass }) => implClass.prototype === prototype);
+      if (definition) return definition;
+    }
   }
 
   /** Whether this interface's declared exposure requirements match the realm. */
@@ -445,17 +462,28 @@ export class AssembledInterfaces {
       }
     });
     for (const assembled of this.values()) {
-      const implementation = assembled.primary.implementation;
-      if (implementation) this.byImplClass.set(implementation.implClass, assembled);
+      for (const implementation of assembled.implementations) {
+        this.byImplClass.set(implementation.implClass, assembled);
+      }
     }
   }
 
-  /** Find an interface by its IDL name or implementation class. */
-  get(key: string | ImplementationClass): AssembledInterface | undefined {
-    return typeof key === 'string' ? this.byName.get(key) : this.byImplClass.get(key);
+  /** Find an interface by name, a covering class, or its declared implementation array. */
+  get(key: string | InterfaceType['implementation']): AssembledInterface | undefined {
+    if (typeof key === 'string') return this.byName.get(key);
+    if (Array.isArray(key)) {
+      const first = key[0];
+      const assembled = first && this.byImplClass.get(first.implClass);
+      // The declaration owns this array; a separate subset cannot describe all its values.
+      return assembled?.implementations === key ? assembled : undefined;
+    }
+    const assembled = this.byImplClass.get(key);
+    // One branch of a multi-class interface cannot safely name the whole IDL value type.
+    return assembled?.commonImplementationClass === key
+      ? assembled : undefined;
   }
 
-  /** Iterate each interface once, regardless of its two lookup keys. */
+  /** Iterate each interface once, regardless of its implementation classes. */
   values(): MapIterator<AssembledInterface> {
     return this.byName.values();
   }
@@ -474,10 +502,10 @@ export class AssembledInterfaces {
     }
   }
 
-  /** Resolve an implementation class to the IDL name declared in this assembly. */
-  getType(implClass: ImplementationClass): IDLInterfaceType {
-    const assembled = this.byImplClass.get(implClass);
-    if (!assembled) throw new InternalError('No interface declares the referenced implementation class');
+  /** Resolve a class or shared implementation array to its declared IDL interface. */
+  getType(implementation: InterfaceType['implementation']): IDLInterfaceType {
+    const assembled = this.get(implementation);
+    if (!assembled) throw new InternalError('No interface declares the referenced implementation');
     return assembled.type;
   }
 

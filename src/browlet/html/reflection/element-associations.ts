@@ -12,11 +12,11 @@ export class ElementAssociations {
 
   /**
    * Read one target or a fresh list. The owner supplies the tree scope; the target
-   * constructor filters ID matches. Explicit assignments have already been converted.
+   * constructors filter ID matches. Explicit assignments have already been converted.
    * Platform-array identity belongs to the reflected binding.
    */
   get<T extends ElementImpl>(
-    owner: ElementImpl, name: string, value: string | null, targetConstructor: ElementConstructor<T>, isArray: boolean,
+    owner: ElementImpl, name: string, value: string | null, targetConstructors: ElementConstructor<T>[], isArray: boolean,
   ): T | T[] | null {
     if (!isArray) {
       const explicit = this.#singleAssignments?.get(name);
@@ -24,7 +24,7 @@ export class ElementAssociations {
         const candidate = explicit.deref();
         return candidate && isInScope(owner.getRoot(), candidate) ? candidate as T : null;
       }
-      return value === null ? null : findById(owner.getRoot(), value, targetConstructor);
+      return value === null ? null : findById(owner.getRoot(), value, targetConstructors);
     }
 
     const explicit = this.#listAssignments?.get(name);
@@ -42,7 +42,7 @@ export class ElementAssociations {
     const root = owner.getRoot();
     const elements: T[] = [];
     for (const id of splitOnAsciiWhitespace(value)) {
-      const candidate = findById(root, id, targetConstructor);
+      const candidate = findById(root, id, targetConstructors);
       if (candidate) elements.push(candidate);
     }
     return elements;
@@ -78,11 +78,14 @@ function isInScope(root: NodeImpl, candidate: ElementImpl): boolean {
 
 // PROVISIONAL(performance): use the existing tree until a tree-scope ID index can preserve
 // first-match interface filtering, duplicate IDs, and detached element roots.
-function findById<T extends ElementImpl>(root: NodeImpl, id: string, targetConstructor: ElementConstructor<T>): T | null {
+function findById<T extends ElementImpl>(root: NodeImpl, id: string, targetConstructors: ElementConstructor<T>[]): T | null {
   // An absent or empty id attribute gives an element no ID.
   if (id === '') return null;
   for (let node: NodeImpl | null = root; node; node = node.nextDescendant(root)) {
-    if (node.isElement() && node.getAttributeNS(null, 'id') === id && node instanceof targetConstructor) return node;
+    if (!node.isElement() || node.getAttributeNS(null, 'id') !== id) continue;
+    for (const Constructor of targetConstructors) {
+      if (node instanceof Constructor) return node;
+    }
   }
   return null;
 }

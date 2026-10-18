@@ -30,24 +30,27 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   /** HTML transfer steps for this exact interface. */
   transferSteps?: TransferSteps<Impl>;
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
-  /** Implementation class and hooks used when constructing or projecting its instances. */
-  implementation?: {
-    /** Class identity used for construction, automatic member binding, and unwrapping. */
-    implClass: ImplementationClass<Impl>;
-    /** Injected arguments for internal construction and automatically bound constructors. */
-    constructWith?: InjectedArgument<Env>[];
-    /** Initialize the implementation before stamping or projection; inherited hooks run first. */
-    initializeImplementation?: DeclarationHook<'initialize-implementation', Env, Impl>;
-    /** Allocate HTMLAllCollection's undetectable callable; Binding installs its native property handlers. */
-    createHTMLAllCollection?: DeclarationHook<'html-all-collection-create', Env, Impl>;
-  };
+  /** One or more implementation classes, with their construction and projection hooks. */
+  implementation?: InterfaceImplementation<Env, Impl> | InterfaceImplementation<Env, Impl>[];
 
   /** TypeScript parameters shared by the generated instance's members and inferred by its constructors. */
   typeParameters?: TypeParameter[];
   /** Element namespace used by the host's element-constructor lookup; not part of IDL syntax. */
   namespaceURI?: string;
-  /** Element local names selecting this interface's implementation within its namespace. */
+  /** Element local names exposing this interface; the host may construct more specific implementations. */
   localNames?: string[];
+};
+
+/** One concrete implementation of an interface, with its construction dependencies and hooks. */
+export type InterfaceImplementation<Env = unknown, Impl extends object = object> = {
+  /** Implementation constructor; a declared common base can also name the interface's converted value type. */
+  implClass: ImplementationClass<Impl>;
+  /** Injected arguments for internal construction and automatically bound constructors. */
+  constructWith?: InjectedArgument<Env>[];
+  /** Initialize the implementation before stamping or projection; inherited hooks run first. */
+  initializeImplementation?: DeclarationHook<'initialize-implementation', Env, Impl>;
+  /** Allocate HTMLAllCollection's undetectable callable; Binding installs its native property handlers. */
+  createHTMLAllCollection?: DeclarationHook<'html-all-collection-create', Env, Impl>;
 };
 
 /** Declare an interface; `Env` describes the environment required by its binding hooks. */
@@ -56,6 +59,12 @@ export function defineInterface<Env = unknown>(
   definition: Omit<PrimaryInterfaceDefinition<Env>, 'kind'>,
 ): PrimaryInterfaceDefinition<Env> {
   return { kind: 'interface', ...definition };
+}
+
+/** Find a declared class whose instances include every implementation, without inventing a shared base. */
+export function getCommonImplementationClass<Env>(implementations: InterfaceImplementation<Env>[]): ImplementationClass | undefined {
+  return implementations.find(({ implClass: candidate }) => implementations.every(({ implClass }) =>
+    implClass === candidate || Object.prototype.isPrototypeOf.call(candidate.prototype, implClass.prototype)))?.implClass;
 }
 
 /** Additional members of an existing interface. */

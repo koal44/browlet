@@ -1,6 +1,7 @@
 import type { JSFunction } from '../../src/js-engine/index';
-import type {
-  Definition, InterfaceMember, NamespaceMember, NamedArgumentsExtendedAttribute,
+import {
+  hasExtendedAttribute, type Definition, type InterfaceMember, type NamespaceMember, type NamedArgumentsExtendedAttribute,
+  type PrimaryInterfaceDefinition,
 } from '../../src/web-idl/core/index';
 import { AssembledInterface, type AssembledNamespace } from '../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../src/web-idl/binding/world';
@@ -26,6 +27,42 @@ export function installTestBindings(world: BindingWorld, realm = new TestRealm()
   const globalObject = realm.globalObject;
   context.install(globalObject);
   return { realm, context, globalObject };
+}
+
+/** Audit automatic members on a supplied implementation without putting internal checks on author calls. */
+export function validateImplementationMembers<Env>(definition: PrimaryInterfaceDefinition<Env>, implementation: object): void {
+  for (const member of definition.members) {
+    let name: PropertyKey | undefined;
+    let method = true;
+    switch (member.kind) {
+      case 'attribute':
+        if (member.get || member.set || member.attributeFunction ||
+          member.extendedAttributes?.some((attribute) => attribute.kind === 'reflection')) continue;
+        method = false;
+        name = member.name;
+        break;
+      case 'operation':
+        if (member.invoke || hasExtendedAttribute(member.extendedAttributes, 'Default')) continue;
+        name = member.name;
+        break;
+      case 'iterable':
+        if (member.key !== undefined) name = 'getEntryList';
+        break;
+      case 'async-iterable': name = member.create; break;
+      case 'stringifier': name = 'toString'; break;
+      default: continue;
+    }
+    if (name === undefined) continue;
+    const target = (member.kind === 'attribute' || member.kind === 'operation') && member.static
+      ? implementation.constructor : implementation;
+    let owner: object | null = target;
+    while (owner !== null && owner !== Object.prototype && !Object.hasOwn(owner, name)) {
+      owner = Reflect.getPrototypeOf(owner);
+    }
+    if (owner === null || owner === Object.prototype || method && typeof Reflect.get(target, name) !== 'function') {
+      throw new Error(`Web IDL ${definition.name}.${String(name)} has no implementation`);
+    }
+  }
 }
 
 export function getInstalledInterface(

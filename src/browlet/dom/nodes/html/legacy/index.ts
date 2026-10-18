@@ -1,2 +1,18 @@
 export { HTMLFrameSetElementImpl, htmlFrameSetElementIDL } from './frameset';
 export { HTMLFrameElementImpl, htmlFrameElementIDL } from './frame';
+export { HTMLDirectoryElementImpl, htmlDirectoryElementIDL } from './dir';
+export { HTMLFontElementImpl, htmlFontElementIDL } from './font';
+export { HTMLMarqueeElementImpl, htmlMarqueeElementIDL } from './marquee';
+export { HTMLParamElementImpl, htmlParamElementIDL } from './param';
+export { HTMLAcronymElementImpl } from './acronym';
+export { HTMLBaseFontElementImpl } from './basefont';
+export { HTMLBigElementImpl } from './big';
+export { HTMLCenterElementImpl } from './center';
+export { HTMLNoBRElementImpl } from './nobr';
+export { HTMLNoEmbedElementImpl } from './noembed';
+export { HTMLNoFramesElementImpl } from './noframes';
+export { HTMLPlainTextElementImpl } from './plaintext';
+export { HTMLRBElementImpl } from './rb';
+export { HTMLRTCElementImpl } from './rtc';
+export { HTMLStrikeElementImpl } from './strike';
+export { HTMLTTElementImpl } from './tt';

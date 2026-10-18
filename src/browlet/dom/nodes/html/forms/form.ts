@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
-import { defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
 import type { ElementImpl } from '../../element';
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
@@ -7,7 +7,6 @@ import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 
 /** Form identity and ownership of its stable controls collection. */
 // https://html.spec.whatwg.org/multipage/forms.html#htmlformelement
-// PROVISIONAL: form-owner association, listed controls, submission/reset, and the remaining API await §4.10.
 export class HTMLFormElementImpl extends HTMLElementImpl {
   #elements: HTMLFormControlsCollectionImpl | undefined;
 
@@ -38,8 +37,35 @@ export class HTMLFormElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLFormElement's implemented fragment:
- * [SameObject] readonly attribute HTMLFormControlsCollection elements;
+ * [Exposed=Window,
+ *  LegacyOverrideBuiltIns,
+ *  LegacyUnenumerableNamedProperties]
+ * interface HTMLFormElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect="accept-charset"] attribute DOMString acceptCharset;
+ *   [CEReactions, ReflectSetter] attribute USVString action;
+ *   [CEReactions] attribute DOMString autocomplete;
+ *   [CEReactions] attribute DOMString enctype;
+ *   [CEReactions] attribute DOMString encoding;
+ *   [CEReactions] attribute DOMString method;
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   [CEReactions, Reflect] attribute boolean noValidate;
+ *   [CEReactions, Reflect] attribute DOMString target;
+ *   [CEReactions, Reflect] attribute DOMString rel;
+ *   [SameObject, PutForwards=value, Reflect="rel"] readonly attribute DOMTokenList relList;
+ *
+ *   [SameObject] readonly attribute HTMLFormControlsCollection elements;
+ *   readonly attribute unsigned long length;
+ *   getter Element (unsigned long index);
+ *   getter (RadioNodeList or Element) (DOMString name);
+ *
+ *   undefined submit();
+ *   undefined requestSubmit(optional HTMLElement? submitter = null);
+ *   [CEReactions] undefined reset();
+ *   boolean checkValidity();
+ *   boolean reportValidity();
+ * };
  */
 export const htmlFormElementIDL = defineInterface({
   name: 'HTMLFormElement',
@@ -48,5 +74,8 @@ export const htmlFormElementIDL = defineInterface({
   implementation: impl(HTMLFormElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['form'],
-  members: [roAttr('elements', reference(HTMLFormControlsCollectionImpl), xattr('SameObject'))],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+    roAttr('elements', reference(HTMLFormControlsCollectionImpl), xattr('SameObject')),
+  ],
 });

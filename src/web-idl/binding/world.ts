@@ -10,7 +10,7 @@ import {
 
 import { RealmBinding } from './realm';
 import { registerImplementationBindings } from './register';
-import type { AttributeBinding, ExtendedAttributeHooks } from './extended-attributes';
+import type { AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding } from './extended-attributes';
 
 /**
  * Owns definitions and platform-object identity across registered realms.
@@ -22,6 +22,8 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   #realmBindings = new WeakMap<JSRealm, RealmBinding>();
   /** Prepared cross-specification accessors shared by every realm in this world. */
   #attributeBindings = new Map<IDLAttribute, Map<AssembledInterface, AttributeBinding>>();
+  /** HTML constructor rules prepared once; invocation selects the current realm. */
+  #htmlConstructors = new Map<AssembledInterface, HTMLConstructorBinding>();
 
   constructor(definitions: Definition<Env>[], options: BindingWorldOptions<Env> = {}) {
     this.#assembly = new DefinitionAssembly([
@@ -46,6 +48,14 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
         const accessors = prepare(member, includers);
         // As with declaration callbacks, registration enforces this world's Env contract.
         if (accessors) this.#attributeBindings.set(member, accessors as Map<AssembledInterface, AttributeBinding>);
+      }
+    }
+    const prepareHTMLConstructor = options.extendedAttributes?.prepareHTMLConstructor;
+    if (prepareHTMLConstructor) {
+      for (const assembled of this.#assembly.interfaces.values()) {
+        const construct = prepareHTMLConstructor(assembled);
+        // Registration enforces this world's environment contract, as for attribute bindings.
+        if (construct) this.#htmlConstructors.set(assembled, construct as HTMLConstructorBinding);
       }
     }
   }
@@ -77,6 +87,11 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
   /** Find this world's prepared accessors for a member on its declaring or including interface. */
   getAttributeBinding(member: IDLAttribute, owner: AssembledInterface): AttributeBinding | undefined {
     return this.#attributeBindings.get(member)?.get(owner);
+  }
+
+  /** Find HTML's prepared override for an interface in this world. */
+  getHTMLConstructorBinding(owner: AssembledInterface): HTMLConstructorBinding | undefined {
+    return this.#htmlConstructors.get(owner);
   }
 
   /** Find a realm's binding context in this world without registering it. */
@@ -120,4 +135,5 @@ export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = 
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord' | 'isInterfaceExposed'
   | 'jsToImpl' | 'implToJS' | 'createFrozenArray' | 'realizeException'
   | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'
+  | 'getPlatformObjectPrototype'
 >;

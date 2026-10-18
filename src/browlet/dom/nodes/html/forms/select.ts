@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
+import { attr, ctor, defineInterface, idlType, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
 
 import type { NodeImpl } from '../../node';
 import { HTMLElementImpl } from '../html-element';
@@ -11,7 +11,6 @@ import { HTMLOptionsCollectionImpl } from './options-collection';
 
 /** Select-owned option membership and explicit selected-index changes. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmlselectelement
-// PROVISIONAL: automatic selectedness, form association, selectedcontent, and the remaining API await §4.10.
 export class HTMLSelectElementImpl extends HTMLElementImpl {
   #options: HTMLOptionsCollectionImpl | undefined;
 
@@ -103,9 +102,45 @@ export class HTMLSelectElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLSelectElement's implemented fragment:
- * [SameObject] readonly attribute HTMLOptionsCollection options;
- * attribute long selectedIndex;
+ * [Exposed=Window]
+ * interface HTMLSelectElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectSetter] attribute DOMString autocomplete;
+ *   [CEReactions, Reflect] attribute boolean disabled;
+ *   readonly attribute HTMLFormElement? form;
+ *   [CEReactions, Reflect] attribute boolean multiple;
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   [CEReactions, Reflect] attribute boolean required;
+ *   [CEReactions, Reflect, ReflectDefault=0] attribute unsigned long size;
+ *
+ *
+ *   readonly attribute DOMString type;
+ *
+ *   [SameObject] readonly attribute HTMLOptionsCollection options;
+ *   [CEReactions] attribute unsigned long length;
+ *   getter HTMLOptionElement? item(unsigned long index);
+ *   HTMLOptionElement? namedItem(DOMString name);
+ *   [CEReactions] undefined add((HTMLOptionElement or HTMLOptGroupElement) element, optional (HTMLElement or long)? before = null);
+ *   [CEReactions] undefined remove(); // ChildNode overload
+ *   [CEReactions] undefined remove(long index);
+ *   [CEReactions] setter undefined (unsigned long index, HTMLOptionElement? option);
+ *
+ *   [SameObject] readonly attribute HTMLCollection selectedOptions;
+ *   attribute long selectedIndex;
+ *   attribute DOMString value;
+ *
+ *   readonly attribute boolean willValidate;
+ *   readonly attribute ValidityState validity;
+ *   readonly attribute DOMString validationMessage;
+ *   boolean checkValidity();
+ *   boolean reportValidity();
+ *   undefined setCustomValidity(DOMString error);
+ *
+ *   undefined showPicker();
+ *
+ *   readonly attribute NodeList labels;
+ * };
  */
 export const htmlSelectElementIDL = defineInterface({
   name: 'HTMLSelectElement',
@@ -115,6 +150,7 @@ export const htmlSelectElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['select'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     roAttr('options', reference(HTMLOptionsCollectionImpl), xattr('SameObject')),
     attr('selectedIndex', idlType.long),
   ],

@@ -1,6 +1,7 @@
 import { InternalError } from '../../infra/index';
 import {
-  hasExtendedAttribute, type Definition, type DictionaryDefinition, type PrimaryInterfaceDefinition, type WebIDLType,
+  hasExtendedAttribute, type Definition, type DictionaryDefinition, type ImplementationClass, type InjectedArgument,
+  type PrimaryInterfaceDefinition, type WebIDLType,
 } from '../core/index';
 
 import { assembleMember } from './member';
@@ -8,13 +9,34 @@ import { DefinitionAssembly } from './assembly';
 
 /**
  * Check a complete declaration set during development or tests; normal assembly trusts its inputs.
- * Checks composition, cycles, serialization markers, and type references, including unused aliases and mixins.
+ * Checks composition, cycles, injected positions, serialization markers, and type references, including unused aliases and mixins.
  */
 export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
   // Validation inspects declarations without invoking their environment-specific binding hooks.
   const declarations = definitions as Definition[];
   const definitionsByName = new Map<string, Definition>();
+  const implementations = new Set<ImplementationClass>();
   for (const definition of declarations) {
+    if (definition.kind === 'interface' && definition.implementation) {
+      const declared = Array.isArray(definition.implementation) ? definition.implementation : [definition.implementation];
+      if (declared.length === 0) throw new InternalError(`${definition.name} has no implementations`);
+      for (const { implClass, constructWith } of declared) {
+        if (implementations.has(implClass)) {
+          throw new InternalError(`Implementation for ${definition.name} is already registered`);
+        }
+        implementations.add(implClass);
+        validateInjectedArguments(constructWith);
+      }
+    }
+    switch (definition.kind) {
+      case 'interface': case 'partial-interface': case 'interface-mixin': case 'partial-interface-mixin':
+      case 'namespace': case 'partial-namespace': case 'callback-interface':
+        for (const member of definition.members) {
+          if (member.kind === 'constructor') validateInjectedArguments(member.constructWith);
+          else if (member.kind === 'operation') validateInjectedArguments(member.invokeWith);
+        }
+        break;
+    }
     if (definition.kind !== 'interface' && definition.kind !== 'proxy-object') {
       for (const name of ['Serializable', 'Transferable', 'SameAgentCluster'] as const) {
         if (hasExtendedAttribute(definition.extendedAttributes, name)) {
@@ -59,7 +81,7 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
         included.add(definition.mixin);
         break;
       }
-      case 'interface':
+      case 'interface': {
         validateSameAgentCluster(definition);
         // https://html.spec.whatwg.org/multipage/structured-data.html#serializable-objects
         // https://html.spec.whatwg.org/multipage/structured-data.html#transferable-objects
@@ -76,6 +98,7 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
             throw new InternalError(`${definition.name} must declare exactly one [${name}] marker`);
           }
         }
+      }
     }
   }
 
@@ -93,6 +116,15 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
     if (definition.kind === 'interface-mixin' || definition.kind === 'partial-interface-mixin') {
       for (const member of definition.members) assembleMember(member, assembly);
     }
+  }
+}
+
+function validateInjectedArguments(argumentsList?: InjectedArgument[]): void {
+  if (!argumentsList) return;
+  const indices = new Set<number>();
+  for (const { index } of argumentsList) {
+    if (indices.has(index)) throw new InternalError(`Injected argument ${index} is declared more than once`);
+    indices.add(index);
   }
 }
 

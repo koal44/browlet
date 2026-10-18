@@ -96,4 +96,15 @@ describe('DOM selector APIs', () => {
       return [before, added, removed, root.querySelector('span')];
     })).toEqual([null, true, 0, null]);
   });
+
+  it('rejects non-media elements for media-state selectors without reading playback state', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const parent = document.createElement('section');
+      const elements = [document.createElement('div'), document.createElement('source'),
+        document.createElementNS('urn:other', 'video')];
+      parent.append(...elements);
+      return elements.map((element) => [element.matches(':playing'), element.matches(':paused')]);
+    })).toEqual([[false, false], [false, false], [false, false]]);
+  });
 });

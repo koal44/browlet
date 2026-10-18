@@ -17,13 +17,16 @@ export function validateReflectedAttribute(member: IDLAttribute, owners: Assembl
   if (member.static) throw new Error('Reflection requires an instance attribute.');
   let hasInternals = false;
   for (const owner of owners) {
-    const implementation = owner.primary.implementation?.implClass;
-    if (implementation === ElementImpl || implementation?.prototype instanceof ElementImpl) continue;
-    if (implementation === ElementInternalsImpl || implementation?.prototype instanceof ElementInternalsImpl) {
-      hasInternals = true;
-    } else {
-      throw new Error('Reflection requires an Element or ElementInternals implementation.');
+    if (owner.implementations.length === 0) throw new Error('Reflection requires an Element or ElementInternals implementation.');
+    let elements = false;
+    let internals = false;
+    for (const { implClass } of owner.implementations) {
+      if (implClass === ElementImpl || implClass.prototype instanceof ElementImpl) elements = true;
+      else if (implClass === ElementInternalsImpl || implClass.prototype instanceof ElementInternalsImpl) internals = true;
+      else throw new Error('Reflection requires an Element or ElementInternals implementation.');
     }
+    if (elements && internals) throw new Error('One reflection owner cannot mix Element and ElementInternals implementations.');
+    hasInternals ||= internals;
   }
   const mode = reflection.name;
   const type = member.type;
@@ -55,7 +58,7 @@ export function validateReflectedAttribute(member: IDLAttribute, owners: Assembl
     }
   }
   if (mode === 'ReflectTokens' && (nullable || inner.kind !== 'interface' ||
-    inner.assembled.primary.implementation?.implClass !== DOMTokenListImpl)) {
+    !inner.assembled.implementations.some(({ implClass }) => implClass === DOMTokenListImpl))) {
     throw new Error('[ReflectTokens] requires DOMTokenList.');
   }
   if (mode === 'ReflectTokens') {
@@ -75,7 +78,7 @@ export function validateReflectedAttribute(member: IDLAttribute, owners: Assembl
     if (primitive === 'double' && mode === 'ReflectPositiveWithFallback') {
       throw new Error('HTML does not define positive-with-fallback reflection for double.');
     }
-  } else if (inner.kind === 'interface' && inner.assembled.primary.implementation?.implClass === DOMTokenListImpl && !nullable) {
+  } else if (inner.kind === 'interface' && inner.assembled.implementations.some(({ implClass }) => implClass === DOMTokenListImpl) && !nullable) {
     if (mode !== 'ReflectTokens') throw new Error('DOMTokenList reflection uses [ReflectTokens].');
     if (hasInternals) throw new Error('DOMTokenList reflection requires only Element implementations.');
   } else if (nullable && (inner.kind === 'frozen-array' || inner.kind === 'interface')) {
@@ -86,8 +89,9 @@ export function validateReflectedAttribute(member: IDLAttribute, owners: Assembl
 }
 
 function validateElementType(type: IDLType): void {
-  const implementation = type.kind === 'interface' ? type.assembled.primary.implementation?.implClass : undefined;
-  if (!implementation || !(implementation === ElementImpl || implementation.prototype instanceof ElementImpl)) {
+  const implementations = type.kind === 'interface' ? type.assembled.implementations : [];
+  if (implementations.length === 0 || !implementations.every(({ implClass }) =>
+    implClass === ElementImpl || implClass.prototype instanceof ElementImpl)) {
     throw new Error('Element reflection requires an Element interface with an implementation.');
   }
 }

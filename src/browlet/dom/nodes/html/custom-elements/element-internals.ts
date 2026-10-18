@@ -54,16 +54,16 @@ export class ElementInternalsImpl {
     this.targetElement.internalContentAttributeMap?.delete(name);
   }
 
-  /** Read an internal associated target or target list, narrowed to the supplied implementation constructor. */
+  /** Read an internal associated target or target list, narrowed to the supplied implementation constructors. */
   // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-element
   // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#attr-associated-elements
-  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructor: ElementConstructor<T>, isArray: false): T | null;
-  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructor: ElementConstructor<T>, isArray: true): T[] | null;
+  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructors: ElementConstructor<T>[], isArray: false): T | null;
+  getAssociatedElements<T extends ElementImpl>(name: string, targetConstructors: ElementConstructor<T>[], isArray: true): T[] | null;
   getAssociatedElements<T extends ElementImpl>(
-    name: string, targetConstructor: ElementConstructor<T>, isArray: boolean,
+    name: string, targetConstructors: ElementConstructor<T>[], isArray: boolean,
   ): T | T[] | null {
     const associations = this.#elementAssociations ??= new ElementAssociations();
-    return associations.get(this.targetElement, name, this.getContentAttribute(name), targetConstructor, isArray);
+    return associations.get(this.targetElement, name, this.getContentAttribute(name), targetConstructors, isArray);
   }
 
   /** Store a converted element or list without changing DOM attributes; null clears either assignment. */

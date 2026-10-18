@@ -23,10 +23,10 @@ function registerInterfaceImplementation(
   binding: RealmBinding,
   assembled: AssembledInterface,
 ): void {
-  const definition = assembled.primary.implementation;
-  if (!definition) return;
+  if (assembled.implementations.length === 0) return;
+  const definition = assembled.implementations.length === 1 ? assembled.implementations[0] : undefined;
 
-  const implClass = definition.implClass;
+  const implClass = definition?.implClass;
   const implementationBinding = binding.getImplementationBinding(assembled);
 
   for (const { member } of assembled.members) {
@@ -40,16 +40,24 @@ function registerInterfaceImplementation(
             memberBinding, attribute, assembled, binding,
           );
         } else {
+          if (member.static && !implClass) throw missingMemberBinding(assembled, member);
           registerAttribute(
             memberBinding,
             member,
-            member.static ? implClass : implClass.prototype,
             binding,
+            member.static ? implClass : undefined,
           );
         }
         break;
       }
       case 'constructor': {
+        if (hasExtendedAttribute(member.extendedAttributes, 'HTMLConstructor')) {
+          const construct = binding.world.getHTMLConstructorBinding(assembled);
+          if (!construct) throw new InternalError('[HTMLConstructor] requires HTML constructor hooks');
+          implementationBinding.overriddenConstructor = (_values, newTarget, activeFunction) =>
+            binding.callImplementation(construct, undefined, [binding, newTarget, activeFunction]);
+          break;
+        }
         if (member.construct) {
           const construct = member.construct;
           const convert = binding.implementationConverter.createArgumentConverter(member);
@@ -60,7 +68,12 @@ function registerInterfaceImplementation(
               return binding.callImplementation(construct, undefined, [binding, ...args]);
             },
           };
-        } else if (member.invoke) {
+          break;
+        }
+        if (!definition) {
+          throw new InternalError(`${assembled.name} has multiple implementations; its constructor must select one explicitly`);
+        }
+        if (member.invoke) {
           memberBinding.constructorBehavior = {
             kind: 'initialize',
             steps: createDefinedConstructorSteps(
@@ -71,7 +84,7 @@ function registerInterfaceImplementation(
           memberBinding.constructorBehavior = {
             kind: 'construct',
             steps: createImplementationConstructorSteps(
-              implClass,
+              definition.implClass,
               member,
               binding,
               member.constructWith ?? definition.constructWith,
@@ -90,13 +103,14 @@ function registerInterfaceImplementation(
           if (member.name === undefined) {
             throw missingMemberBinding(assembled, member);
           }
+          if (member.static && !implClass) throw missingMemberBinding(assembled, member);
           registerOperation(
             memberBinding,
             member,
             member.name,
-            member.static ? implClass : implClass.prototype,
             binding,
             member.invokeWith,
+            member.static ? implClass : undefined,
           );
         }
         const indexedGetter = member.indexedGetter;
@@ -143,20 +157,14 @@ function registerInterfaceImplementation(
         if (member.key !== undefined) {
           registerPairIterable(
             memberBinding,
-            implClass.prototype,
             binding,
           );
         }
         break;
       case 'async-iterable': {
-        const factory: unknown = member.create !== undefined
-          ? findDescriptor(implClass.prototype, member.create)?.value
-          : undefined;
-        if (typeof factory !== 'function') {
-          throw missingMemberBinding(assembled, member);
-        }
+        if (member.create === undefined) throw missingMemberBinding(assembled, member);
         memberBinding.asyncIteratorSteps = createAsyncIteratorSteps(
-          factory as (this: object, ...values: unknown[]) => object,
+          memberBinding.createMethodGetter<(this: object, ...values: unknown[]) => object>(member.create),
           member,
           binding,
         );
@@ -165,31 +173,24 @@ function registerInterfaceImplementation(
       case 'stringifier':
         registerStringifier(
           memberBinding,
-          implClass.prototype,
           binding,
         );
         break;
     }
   }
 
-  implementationBinding.createImplementation = () => binding.callImplementation(
-    constructImplementationObject,
-    undefined,
-    [
-      implClass,
-      binding.resolveArguments(
-        [],
-        definition.constructWith ?? [],
-      ),
-    ],
-  );
-  const initializeImplementation = definition.initializeImplementation;
-  if (initializeImplementation) {
-    implementationBinding.initializeImplementation = (value) => binding.callImplementation(
-      initializeImplementation,
+  if (definition) {
+    implementationBinding.createImplementation = () => binding.callImplementation(
+      constructImplementationObject,
       undefined,
-      [binding, value],
+      [definition.implClass, binding.resolveArguments([], definition.constructWith ?? [])],
     );
+  }
+  if (assembled.implementations.some((implementation) => implementation.initializeImplementation)) {
+    implementationBinding.initializeImplementation = (value) => {
+      const initialize = assembled.getImplementation(value)?.initializeImplementation;
+      if (initialize) binding.callImplementation(initialize, undefined, [binding, value]);
+    };
   }
 }
 
@@ -314,7 +315,7 @@ function createDefinedOperationSteps(
 // Adapt an implementation iterator to Web IDL's iteration hooks.
 // Web IDL §2.5.10 Asynchronously iterable declarations.
 function createAsyncIteratorSteps(
-  factory: (this: object, ...values: unknown[]) => object,
+  getFactory: (target: object) => (this: object, ...values: unknown[]) => object,
   assembled: IDLAsyncIterable,
   binding: RealmBinding,
 ): AsyncIteratorSteps {
@@ -322,10 +323,11 @@ function createAsyncIteratorSteps(
   const steps: AsyncIteratorSteps = {
     // Project adapter for "asynchronous iterator initialization steps": call our iterator factory.
     create(target, argumentsList) {
+      const values = convert ? convert(argumentsList, binding) : argumentsList;
       return binding.callImplementation(
-        factory,
+        getFactory(target),
         target,
-        convert ? convert(argumentsList, binding) : argumentsList,
+        values,
       );
     },
     // Project adapter for "get the next iteration result": invoke the implementation iterator.
@@ -356,30 +358,20 @@ type AsyncIteratorValue = {
 function registerAttribute(
   memberBinding: MemberBinding,
   member: IDLAttribute,
-  target: object,
   binding: RealmBinding,
+  staticTarget?: object,
 ): void {
-  const descriptor = findDescriptor(target, member.name);
-  // eslint-disable-next-line @typescript-eslint/unbound-method -- Accessors are explicitly applied to the implementation receiver.
-  const { get: getter, set: setter } = descriptor ?? { get: undefined, set: undefined };
-  // Instance fields exist only after construction. Check them on access rather
-  // than creating an implementation merely to inspect its shape.
-  const get: AttributeSteps['get'] = getter
-    ? (receiver) => binding.callImplementation(getter, receiver?.implInst ?? target, []) as unknown
-    : memberBinding.createFieldGetter(member, target);
-  const set = getter !== undefined
-    ? setter
-    : memberBinding.createFieldSetter(member);
-  const convert = set && !member.readonly ? binding.implementationConverter.createConverter(member.type, {
-    callbackExceptionBehavior: member.callbackExceptionBehavior,
-  }) : undefined;
-  const steps: AttributeSteps = { get };
-  if (set && convert) {
+  const steps: AttributeSteps = { get: memberBinding.createPropertyGetter(member, staticTarget) };
+  if (!member.readonly) {
+    const set = memberBinding.createPropertySetter(member);
+    const convert = binding.implementationConverter.createConverter(member.type, {
+      callbackExceptionBehavior: member.callbackExceptionBehavior,
+    });
     // Adapt the converted attribute value before storing it.
     steps.set = (receiver, value) => {
       const operationBinding = receiver?.binding ?? binding;
       binding.callImplementation(
-        set, receiver?.implInst ?? target, [convert(value, operationBinding)],
+        set, staticTarget ?? receiver!.implInst, [convert(value, operationBinding)],
       );
     };
   }
@@ -392,36 +384,30 @@ function registerOperation(
   memberBinding: MemberBinding,
   assembled: IDLOperation,
   name: string,
-  target: object,
   binding: RealmBinding,
   injectedArguments: InjectedArgument[] = [],
+  staticTarget?: object,
 ): void {
-  const value: unknown = findDescriptor(target, name)?.value;
-  if (typeof value !== 'function') {
-    throw new InternalError(
-      `Web IDL operation ${name} has no implementation`,
-    );
-  }
-  const method = value as (this: object | null, ...values: unknown[]) => unknown;
+  const getMethod = memberBinding.createMethodGetter(name);
   const convert = binding.implementationConverter.createArgumentConverter(assembled);
 
   if (!convert && !injectedArguments.length) {
-    memberBinding.operationSteps = (receiver, values) =>
-      binding.callImplementation(method, receiver?.implInst ?? null, values);
+    memberBinding.operationSteps = (receiver, values) => {
+      const target = staticTarget ?? receiver!.implInst;
+      return binding.callImplementation(getMethod(target), target, values);
+    };
     return;
   }
 
   memberBinding.operationSteps = (receiver, values) => {
     const operationBinding = receiver?.binding ?? binding;
-    return binding.callImplementation(
-      method,
-      receiver?.implInst ?? null,
-      operationBinding.resolveArguments(
-        convert ? convert(values, operationBinding) : values,
-        injectedArguments,
-        binding,
-      ),
+    const target = staticTarget ?? receiver!.implInst;
+    const args = operationBinding.resolveArguments(
+      convert ? convert(values, operationBinding) : values,
+      injectedArguments,
+      binding,
     );
+    return binding.callImplementation(getMethod(target), target, args);
   };
 }
 
@@ -429,18 +415,11 @@ function registerOperation(
 // Web IDL §2.5.9 Iterable declarations — value pairs to iterate over.
 function registerPairIterable(
   memberBinding: MemberBinding,
-  target: object,
   binding: RealmBinding,
 ): void {
-  const value: unknown = findDescriptor(target, 'getEntryList')?.value;
-  if (typeof value !== 'function') {
-    throw new InternalError(
-      'Web IDL pair iterable implementation has no getEntryList method',
-    );
-  }
-  const getEntryList = value as ValuePairsSteps;
+  const getMethod = memberBinding.createMethodGetter<ValuePairsSteps>('getEntryList');
   memberBinding.valuePairsSteps = function() {
-    return binding.callImplementation(getEntryList, this, []);
+    return binding.callImplementation(getMethod(this), this, []);
   };
 }
 
@@ -448,36 +427,16 @@ function registerPairIterable(
 // Web IDL §2.5.5 Stringifiers.
 function registerStringifier(
   memberBinding: MemberBinding,
-  target: object,
   binding: RealmBinding,
 ): void {
-  const value: unknown = findDescriptor(target, 'toString')?.value;
-  if (typeof value !== 'function') {
-    throw new InternalError('Web IDL stringifier has no implementation');
-  }
-  const stringify = value as StringificationBehavior;
+  const getMethod = memberBinding.createMethodGetter<StringificationBehavior>('toString');
   memberBinding.stringificationBehavior = function() {
     return binding.callImplementation(
-      stringify,
+      getMethod(this),
       this,
       [],
     );
   };
-}
-
-// Locate a member descriptor in the implementation prototype chain.
-function findDescriptor(
-  target: object,
-  property: PropertyKey,
-): PropertyDescriptor | undefined {
-  for (
-    let current: object | null = target;
-    current && current !== Object.prototype;
-    current = Reflect.getPrototypeOf(current)
-  ) {
-    const descriptor = Reflect.getOwnPropertyDescriptor(current, property);
-    if (descriptor) return descriptor;
-  }
 }
 
 /** Construct an implementation using its already-converted arguments and injected dependencies. */

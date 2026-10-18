@@ -82,6 +82,15 @@ export interface QuotaExceededErrorOptions {
   requested?: number;
 }
 
+export interface ShowPopoverOptions {
+  source?: HTMLElement;
+}
+
+export interface TogglePopoverOptions {
+  source?: HTMLElement;
+  force?: boolean;
+}
+
 export interface AssignedNodesOptions {
   flatten?: boolean;
 }
@@ -476,15 +485,23 @@ export interface ElementInternalsConstructor {
 }
 
 export interface HTMLElement extends Element {
+  title: string;
+  lang: string;
+  inert: boolean;
+  accessKey: string;
+  headingOffset: number;
+  headingReset: boolean;
   /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
   get style(): object;
   set style(value: unknown);
   nonce: string;
+  autofocus: boolean;
 }
 
 export interface HTMLElementConstructor extends Ctor<ElementConstructor> {
   readonly prototype: HTMLElement;
   [Symbol.hasInstance](value: unknown): value is HTMLElement;
+  new (): HTMLElement;
 }
 
 export interface HTMLUnknownElement extends HTMLElement {
@@ -503,6 +520,7 @@ export interface HTMLHtmlElement extends HTMLElement {
 export interface HTMLHtmlElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLHtmlElement;
   [Symbol.hasInstance](value: unknown): value is HTMLHtmlElement;
+  new (): HTMLHtmlElement;
 }
 
 export interface HTMLScriptElement extends HTMLElement {
@@ -516,6 +534,7 @@ export interface HTMLScriptElement extends HTMLElement {
 export interface HTMLScriptElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLScriptElement;
   [Symbol.hasInstance](value: unknown): value is HTMLScriptElement;
+  new (): HTMLScriptElement;
 }
 
 export interface HTMLSlotElement extends HTMLElement {
@@ -528,6 +547,27 @@ export interface HTMLSlotElement extends HTMLElement {
 export interface HTMLSlotElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLSlotElement;
   [Symbol.hasInstance](value: unknown): value is HTMLSlotElement;
+  new (): HTMLSlotElement;
+}
+
+export interface HTMLTemplateElement extends HTMLElement {
+
+}
+
+export interface HTMLTemplateElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTemplateElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTemplateElement;
+  new (): HTMLTemplateElement;
+}
+
+export interface HTMLCanvasElement extends HTMLElement {
+
+}
+
+export interface HTMLCanvasElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLCanvasElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLCanvasElement;
+  new (): HTMLCanvasElement;
 }
 
 export interface HTMLHeadElement extends HTMLElement {
@@ -537,6 +577,7 @@ export interface HTMLHeadElement extends HTMLElement {
 export interface HTMLHeadElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLHeadElement;
   [Symbol.hasInstance](value: unknown): value is HTMLHeadElement;
+  new (): HTMLHeadElement;
 }
 
 export interface HTMLTitleElement extends HTMLElement {
@@ -546,6 +587,7 @@ export interface HTMLTitleElement extends HTMLElement {
 export interface HTMLTitleElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLTitleElement;
   [Symbol.hasInstance](value: unknown): value is HTMLTitleElement;
+  new (): HTMLTitleElement;
 }
 
 export interface HTMLBaseElement extends HTMLElement {
@@ -556,6 +598,7 @@ export interface HTMLBaseElement extends HTMLElement {
 export interface HTMLBaseElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLBaseElement;
   [Symbol.hasInstance](value: unknown): value is HTMLBaseElement;
+  new (): HTMLBaseElement;
 }
 
 export interface HTMLMetaElement extends HTMLElement {
@@ -565,6 +608,7 @@ export interface HTMLMetaElement extends HTMLElement {
 export interface HTMLMetaElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLMetaElement;
   [Symbol.hasInstance](value: unknown): value is HTMLMetaElement;
+  new (): HTMLMetaElement;
 }
 
 export interface HTMLStyleElement extends HTMLElement {
@@ -576,6 +620,7 @@ export interface HTMLStyleElement extends HTMLElement {
 export interface HTMLStyleElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLStyleElement;
   [Symbol.hasInstance](value: unknown): value is HTMLStyleElement;
+  new (): HTMLStyleElement;
 }
 
 export interface HTMLLinkElement extends HTMLElement {
@@ -590,6 +635,7 @@ export interface HTMLLinkElement extends HTMLElement {
 export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLLinkElement;
   [Symbol.hasInstance](value: unknown): value is HTMLLinkElement;
+  new (): HTMLLinkElement;
 }
 
 export interface HTMLBodyElement extends HTMLElement {
@@ -599,6 +645,27 @@ export interface HTMLBodyElement extends HTMLElement {
 export interface HTMLBodyElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLBodyElement;
   [Symbol.hasInstance](value: unknown): value is HTMLBodyElement;
+  new (): HTMLBodyElement;
+}
+
+export interface HTMLHeadingElement extends HTMLElement {
+
+}
+
+export interface HTMLHeadingElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLHeadingElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLHeadingElement;
+  new (): HTMLHeadingElement;
+}
+
+export interface HTMLParagraphElement extends HTMLElement {
+
+}
+
+export interface HTMLParagraphElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLParagraphElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLParagraphElement;
+  new (): HTMLParagraphElement;
 }
 
 export interface HTMLHRElement extends HTMLElement {
@@ -608,6 +675,77 @@ export interface HTMLHRElement extends HTMLElement {
 export interface HTMLHRElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLHRElement;
   [Symbol.hasInstance](value: unknown): value is HTMLHRElement;
+  new (): HTMLHRElement;
+}
+
+export interface HTMLPreElement extends HTMLElement {
+
+}
+
+export interface HTMLPreElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLPreElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLPreElement;
+  new (): HTMLPreElement;
+}
+
+export interface HTMLOListElement extends HTMLElement {
+
+}
+
+export interface HTMLOListElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLOListElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLOListElement;
+  new (): HTMLOListElement;
+}
+
+export interface HTMLUListElement extends HTMLElement {
+
+}
+
+export interface HTMLUListElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLUListElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLUListElement;
+  new (): HTMLUListElement;
+}
+
+export interface HTMLMenuElement extends HTMLElement {
+
+}
+
+export interface HTMLMenuElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLMenuElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLMenuElement;
+  new (): HTMLMenuElement;
+}
+
+export interface HTMLLIElement extends HTMLElement {
+
+}
+
+export interface HTMLLIElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLLIElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLLIElement;
+  new (): HTMLLIElement;
+}
+
+export interface HTMLDListElement extends HTMLElement {
+
+}
+
+export interface HTMLDListElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDListElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDListElement;
+  new (): HTMLDListElement;
+}
+
+export interface HTMLDivElement extends HTMLElement {
+
+}
+
+export interface HTMLDivElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDivElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDivElement;
+  new (): HTMLDivElement;
 }
 
 export interface HTMLAnchorElement extends HTMLElement {
@@ -617,6 +755,87 @@ export interface HTMLAnchorElement extends HTMLElement {
 export interface HTMLAnchorElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLAnchorElement;
   [Symbol.hasInstance](value: unknown): value is HTMLAnchorElement;
+  new (): HTMLAnchorElement;
+}
+
+export interface HTMLQuoteElement extends HTMLElement {
+
+}
+
+export interface HTMLQuoteElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLQuoteElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLQuoteElement;
+  new (): HTMLQuoteElement;
+}
+
+export interface HTMLDataElement extends HTMLElement {
+
+}
+
+export interface HTMLDataElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDataElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDataElement;
+  new (): HTMLDataElement;
+}
+
+export interface HTMLTimeElement extends HTMLElement {
+
+}
+
+export interface HTMLTimeElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTimeElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTimeElement;
+  new (): HTMLTimeElement;
+}
+
+export interface HTMLSpanElement extends HTMLElement {
+
+}
+
+export interface HTMLSpanElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLSpanElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLSpanElement;
+  new (): HTMLSpanElement;
+}
+
+export interface HTMLBRElement extends HTMLElement {
+
+}
+
+export interface HTMLBRElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLBRElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLBRElement;
+  new (): HTMLBRElement;
+}
+
+export interface HTMLModElement extends HTMLElement {
+
+}
+
+export interface HTMLModElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLModElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLModElement;
+  new (): HTMLModElement;
+}
+
+export interface HTMLPictureElement extends HTMLElement {
+
+}
+
+export interface HTMLPictureElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLPictureElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLPictureElement;
+  new (): HTMLPictureElement;
+}
+
+export interface HTMLSourceElement extends HTMLElement {
+
+}
+
+export interface HTMLSourceElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLSourceElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLSourceElement;
+  new (): HTMLSourceElement;
 }
 
 export interface HTMLImageElement extends HTMLElement {
@@ -627,6 +846,7 @@ export interface HTMLImageElement extends HTMLElement {
 export interface HTMLImageElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLImageElement;
   [Symbol.hasInstance](value: unknown): value is HTMLImageElement;
+  new (): HTMLImageElement;
 }
 
 export interface HTMLIFrameElement extends HTMLElement {
@@ -636,6 +856,7 @@ export interface HTMLIFrameElement extends HTMLElement {
 export interface HTMLIFrameElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLIFrameElement;
   [Symbol.hasInstance](value: unknown): value is HTMLIFrameElement;
+  new (): HTMLIFrameElement;
 }
 
 export interface HTMLEmbedElement extends HTMLElement {
@@ -645,6 +866,7 @@ export interface HTMLEmbedElement extends HTMLElement {
 export interface HTMLEmbedElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLEmbedElement;
   [Symbol.hasInstance](value: unknown): value is HTMLEmbedElement;
+  new (): HTMLEmbedElement;
 }
 
 export interface HTMLObjectElement extends HTMLElement {
@@ -654,6 +876,7 @@ export interface HTMLObjectElement extends HTMLElement {
 export interface HTMLObjectElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLObjectElement;
   [Symbol.hasInstance](value: unknown): value is HTMLObjectElement;
+  new (): HTMLObjectElement;
 }
 
 export interface HTMLMediaElement extends HTMLElement {
@@ -672,6 +895,7 @@ export interface HTMLAudioElement extends HTMLMediaElement {
 export interface HTMLAudioElementConstructor extends Ctor<HTMLMediaElementConstructor> {
   readonly prototype: HTMLAudioElement;
   [Symbol.hasInstance](value: unknown): value is HTMLAudioElement;
+  new (): HTMLAudioElement;
 }
 
 export interface HTMLVideoElement extends HTMLMediaElement {
@@ -681,6 +905,17 @@ export interface HTMLVideoElement extends HTMLMediaElement {
 export interface HTMLVideoElementConstructor extends Ctor<HTMLMediaElementConstructor> {
   readonly prototype: HTMLVideoElement;
   [Symbol.hasInstance](value: unknown): value is HTMLVideoElement;
+  new (): HTMLVideoElement;
+}
+
+export interface HTMLTrackElement extends HTMLElement {
+
+}
+
+export interface HTMLTrackElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTrackElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTrackElement;
+  new (): HTMLTrackElement;
 }
 
 export interface HTMLMapElement extends HTMLElement {
@@ -690,6 +925,7 @@ export interface HTMLMapElement extends HTMLElement {
 export interface HTMLMapElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLMapElement;
   [Symbol.hasInstance](value: unknown): value is HTMLMapElement;
+  new (): HTMLMapElement;
 }
 
 export interface HTMLAreaElement extends HTMLElement {
@@ -699,6 +935,67 @@ export interface HTMLAreaElement extends HTMLElement {
 export interface HTMLAreaElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLAreaElement;
   [Symbol.hasInstance](value: unknown): value is HTMLAreaElement;
+  new (): HTMLAreaElement;
+}
+
+export interface HTMLTableElement extends HTMLElement {
+
+}
+
+export interface HTMLTableElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTableElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTableElement;
+  new (): HTMLTableElement;
+}
+
+export interface HTMLTableCaptionElement extends HTMLElement {
+
+}
+
+export interface HTMLTableCaptionElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTableCaptionElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTableCaptionElement;
+  new (): HTMLTableCaptionElement;
+}
+
+export interface HTMLTableColElement extends HTMLElement {
+
+}
+
+export interface HTMLTableColElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTableColElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTableColElement;
+  new (): HTMLTableColElement;
+}
+
+export interface HTMLTableSectionElement extends HTMLElement {
+
+}
+
+export interface HTMLTableSectionElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTableSectionElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTableSectionElement;
+  new (): HTMLTableSectionElement;
+}
+
+export interface HTMLTableRowElement extends HTMLElement {
+
+}
+
+export interface HTMLTableRowElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTableRowElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTableRowElement;
+  new (): HTMLTableRowElement;
+}
+
+export interface HTMLTableCellElement extends HTMLElement {
+
+}
+
+export interface HTMLTableCellElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLTableCellElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLTableCellElement;
+  new (): HTMLTableCellElement;
 }
 
 export interface HTMLFormElement extends HTMLElement {
@@ -708,6 +1005,17 @@ export interface HTMLFormElement extends HTMLElement {
 export interface HTMLFormElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLFormElement;
   [Symbol.hasInstance](value: unknown): value is HTMLFormElement;
+  new (): HTMLFormElement;
+}
+
+export interface HTMLLabelElement extends HTMLElement {
+
+}
+
+export interface HTMLLabelElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLLabelElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLLabelElement;
+  new (): HTMLLabelElement;
 }
 
 export interface HTMLInputElement extends HTMLElement {
@@ -719,6 +1027,7 @@ export interface HTMLInputElement extends HTMLElement {
 export interface HTMLInputElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLInputElement;
   [Symbol.hasInstance](value: unknown): value is HTMLInputElement;
+  new (): HTMLInputElement;
 }
 
 export interface HTMLButtonElement extends HTMLElement {
@@ -728,6 +1037,7 @@ export interface HTMLButtonElement extends HTMLElement {
 export interface HTMLButtonElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLButtonElement;
   [Symbol.hasInstance](value: unknown): value is HTMLButtonElement;
+  new (): HTMLButtonElement;
 }
 
 export interface HTMLSelectElement extends HTMLElement {
@@ -738,6 +1048,7 @@ export interface HTMLSelectElement extends HTMLElement {
 export interface HTMLSelectElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLSelectElement;
   [Symbol.hasInstance](value: unknown): value is HTMLSelectElement;
+  new (): HTMLSelectElement;
 }
 
 export interface HTMLOptionElement extends HTMLElement {
@@ -748,6 +1059,7 @@ export interface HTMLOptionElement extends HTMLElement {
 export interface HTMLOptionElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLOptionElement;
   [Symbol.hasInstance](value: unknown): value is HTMLOptionElement;
+  new (): HTMLOptionElement;
 }
 
 export interface HTMLOptGroupElement extends HTMLElement {
@@ -757,6 +1069,7 @@ export interface HTMLOptGroupElement extends HTMLElement {
 export interface HTMLOptGroupElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLOptGroupElement;
   [Symbol.hasInstance](value: unknown): value is HTMLOptGroupElement;
+  new (): HTMLOptGroupElement;
 }
 
 export interface HTMLDataListElement extends HTMLElement {
@@ -766,6 +1079,7 @@ export interface HTMLDataListElement extends HTMLElement {
 export interface HTMLDataListElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLDataListElement;
   [Symbol.hasInstance](value: unknown): value is HTMLDataListElement;
+  new (): HTMLDataListElement;
 }
 
 export interface HTMLTextAreaElement extends HTMLElement {
@@ -775,6 +1089,67 @@ export interface HTMLTextAreaElement extends HTMLElement {
 export interface HTMLTextAreaElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLTextAreaElement;
   [Symbol.hasInstance](value: unknown): value is HTMLTextAreaElement;
+  new (): HTMLTextAreaElement;
+}
+
+export interface HTMLOutputElement extends HTMLElement {
+
+}
+
+export interface HTMLOutputElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLOutputElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLOutputElement;
+  new (): HTMLOutputElement;
+}
+
+export interface HTMLProgressElement extends HTMLElement {
+
+}
+
+export interface HTMLProgressElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLProgressElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLProgressElement;
+  new (): HTMLProgressElement;
+}
+
+export interface HTMLMeterElement extends HTMLElement {
+
+}
+
+export interface HTMLMeterElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLMeterElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLMeterElement;
+  new (): HTMLMeterElement;
+}
+
+export interface HTMLFieldSetElement extends HTMLElement {
+
+}
+
+export interface HTMLFieldSetElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLFieldSetElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLFieldSetElement;
+  new (): HTMLFieldSetElement;
+}
+
+export interface HTMLLegendElement extends HTMLElement {
+
+}
+
+export interface HTMLLegendElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLLegendElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLLegendElement;
+  new (): HTMLLegendElement;
+}
+
+export interface HTMLSelectedContentElement extends HTMLElement {
+
+}
+
+export interface HTMLSelectedContentElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLSelectedContentElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLSelectedContentElement;
+  new (): HTMLSelectedContentElement;
 }
 
 export interface HTMLFormControlsCollection extends Omit<HTMLCollection, "namedItem"> {
@@ -812,6 +1187,16 @@ export interface HTMLOptionsCollectionConstructor extends Ctor<HTMLCollectionCon
   [Symbol.hasInstance](value: unknown): value is HTMLOptionsCollection;
 }
 
+export interface HTMLDetailsElement extends HTMLElement {
+
+}
+
+export interface HTMLDetailsElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDetailsElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDetailsElement;
+  new (): HTMLDetailsElement;
+}
+
 export interface HTMLDialogElement extends HTMLElement {
 
 }
@@ -819,6 +1204,7 @@ export interface HTMLDialogElement extends HTMLElement {
 export interface HTMLDialogElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLDialogElement;
   [Symbol.hasInstance](value: unknown): value is HTMLDialogElement;
+  new (): HTMLDialogElement;
 }
 
 export interface HTMLFrameSetElement extends HTMLElement {
@@ -828,6 +1214,7 @@ export interface HTMLFrameSetElement extends HTMLElement {
 export interface HTMLFrameSetElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLFrameSetElement;
   [Symbol.hasInstance](value: unknown): value is HTMLFrameSetElement;
+  new (): HTMLFrameSetElement;
 }
 
 export interface HTMLFrameElement extends HTMLElement {
@@ -837,6 +1224,47 @@ export interface HTMLFrameElement extends HTMLElement {
 export interface HTMLFrameElementConstructor extends Ctor<HTMLElementConstructor> {
   readonly prototype: HTMLFrameElement;
   [Symbol.hasInstance](value: unknown): value is HTMLFrameElement;
+  new (): HTMLFrameElement;
+}
+
+export interface HTMLDirectoryElement extends HTMLElement {
+
+}
+
+export interface HTMLDirectoryElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLDirectoryElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLDirectoryElement;
+  new (): HTMLDirectoryElement;
+}
+
+export interface HTMLFontElement extends HTMLElement {
+
+}
+
+export interface HTMLFontElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLFontElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLFontElement;
+  new (): HTMLFontElement;
+}
+
+export interface HTMLMarqueeElement extends HTMLElement {
+
+}
+
+export interface HTMLMarqueeElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLMarqueeElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLMarqueeElement;
+  new (): HTMLMarqueeElement;
+}
+
+export interface HTMLParamElement extends HTMLElement {
+
+}
+
+export interface HTMLParamElementConstructor extends Ctor<HTMLElementConstructor> {
+  readonly prototype: HTMLParamElement;
+  [Symbol.hasInstance](value: unknown): value is HTMLParamElement;
+  new (): HTMLParamElement;
 }
 
 export interface SVGElement extends Element {
@@ -844,6 +1272,7 @@ export interface SVGElement extends Element {
   get style(): object;
   set style(value: unknown);
   nonce: string;
+  autofocus: boolean;
 }
 
 export interface SVGElementConstructor extends Ctor<ElementConstructor> {
@@ -901,6 +1330,7 @@ export interface MathMLElement extends Element {
   get style(): object;
   set style(value: unknown);
   nonce: string;
+  autofocus: boolean;
 }
 
 export interface MathMLElementConstructor extends Ctor<ElementConstructor> {
@@ -1078,6 +1508,8 @@ export interface Window extends EventTarget {
   HTMLHtmlElement: HTMLHtmlElementConstructor;
   HTMLScriptElement: HTMLScriptElementConstructor;
   HTMLSlotElement: HTMLSlotElementConstructor;
+  HTMLTemplateElement: HTMLTemplateElementConstructor;
+  HTMLCanvasElement: HTMLCanvasElementConstructor;
   HTMLHeadElement: HTMLHeadElementConstructor;
   HTMLTitleElement: HTMLTitleElementConstructor;
   HTMLBaseElement: HTMLBaseElementConstructor;
@@ -1085,8 +1517,25 @@ export interface Window extends EventTarget {
   HTMLStyleElement: HTMLStyleElementConstructor;
   HTMLLinkElement: HTMLLinkElementConstructor;
   HTMLBodyElement: HTMLBodyElementConstructor;
+  HTMLHeadingElement: HTMLHeadingElementConstructor;
+  HTMLParagraphElement: HTMLParagraphElementConstructor;
   HTMLHRElement: HTMLHRElementConstructor;
+  HTMLPreElement: HTMLPreElementConstructor;
+  HTMLOListElement: HTMLOListElementConstructor;
+  HTMLUListElement: HTMLUListElementConstructor;
+  HTMLMenuElement: HTMLMenuElementConstructor;
+  HTMLLIElement: HTMLLIElementConstructor;
+  HTMLDListElement: HTMLDListElementConstructor;
+  HTMLDivElement: HTMLDivElementConstructor;
   HTMLAnchorElement: HTMLAnchorElementConstructor;
+  HTMLQuoteElement: HTMLQuoteElementConstructor;
+  HTMLDataElement: HTMLDataElementConstructor;
+  HTMLTimeElement: HTMLTimeElementConstructor;
+  HTMLSpanElement: HTMLSpanElementConstructor;
+  HTMLBRElement: HTMLBRElementConstructor;
+  HTMLModElement: HTMLModElementConstructor;
+  HTMLPictureElement: HTMLPictureElementConstructor;
+  HTMLSourceElement: HTMLSourceElementConstructor;
   HTMLImageElement: HTMLImageElementConstructor;
   HTMLIFrameElement: HTMLIFrameElementConstructor;
   HTMLEmbedElement: HTMLEmbedElementConstructor;
@@ -1094,9 +1543,17 @@ export interface Window extends EventTarget {
   HTMLMediaElement: HTMLMediaElementConstructor;
   HTMLAudioElement: HTMLAudioElementConstructor;
   HTMLVideoElement: HTMLVideoElementConstructor;
+  HTMLTrackElement: HTMLTrackElementConstructor;
   HTMLMapElement: HTMLMapElementConstructor;
   HTMLAreaElement: HTMLAreaElementConstructor;
+  HTMLTableElement: HTMLTableElementConstructor;
+  HTMLTableCaptionElement: HTMLTableCaptionElementConstructor;
+  HTMLTableColElement: HTMLTableColElementConstructor;
+  HTMLTableSectionElement: HTMLTableSectionElementConstructor;
+  HTMLTableRowElement: HTMLTableRowElementConstructor;
+  HTMLTableCellElement: HTMLTableCellElementConstructor;
   HTMLFormElement: HTMLFormElementConstructor;
+  HTMLLabelElement: HTMLLabelElementConstructor;
   HTMLInputElement: HTMLInputElementConstructor;
   HTMLButtonElement: HTMLButtonElementConstructor;
   HTMLSelectElement: HTMLSelectElementConstructor;
@@ -1104,12 +1561,23 @@ export interface Window extends EventTarget {
   HTMLOptGroupElement: HTMLOptGroupElementConstructor;
   HTMLDataListElement: HTMLDataListElementConstructor;
   HTMLTextAreaElement: HTMLTextAreaElementConstructor;
+  HTMLOutputElement: HTMLOutputElementConstructor;
+  HTMLProgressElement: HTMLProgressElementConstructor;
+  HTMLMeterElement: HTMLMeterElementConstructor;
+  HTMLFieldSetElement: HTMLFieldSetElementConstructor;
+  HTMLLegendElement: HTMLLegendElementConstructor;
+  HTMLSelectedContentElement: HTMLSelectedContentElementConstructor;
   HTMLFormControlsCollection: HTMLFormControlsCollectionConstructor;
   RadioNodeList: RadioNodeListConstructor;
   HTMLOptionsCollection: HTMLOptionsCollectionConstructor;
+  HTMLDetailsElement: HTMLDetailsElementConstructor;
   HTMLDialogElement: HTMLDialogElementConstructor;
   HTMLFrameSetElement: HTMLFrameSetElementConstructor;
   HTMLFrameElement: HTMLFrameElementConstructor;
+  HTMLDirectoryElement: HTMLDirectoryElementConstructor;
+  HTMLFontElement: HTMLFontElementConstructor;
+  HTMLMarqueeElement: HTMLMarqueeElementConstructor;
+  HTMLParamElement: HTMLParamElementConstructor;
   SVGElement: SVGElementConstructor;
   SVGGraphicsElement: SVGGraphicsElementConstructor;
   SVGSVGElement: SVGSVGElementConstructor;

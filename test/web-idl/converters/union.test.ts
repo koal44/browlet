@@ -25,6 +25,15 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s union conversion', (m
     expectRealmTypeError(() => jsToIDL(Object(value), converter), realm);
   });
 
+  it('preserves an opaque object without testing absent union categories', () => {
+    const { binding } = createBinding();
+    const converter = binding.getConverter(binding.assembly.getIDLType(union(idlType.object, idlType.boolean)));
+    const { proxy, revoke } = Proxy.revocable({}, {});
+    revoke();
+
+    expect(idlToJS(proxy, converter)).toBe(proxy);
+  });
+
   it('returns null and undefined only when the union declares them', () => {
     const { binding } = createBinding();
     const nullableUnion = binding.getConverter(binding.assembly.getIDLType(union(nullable(idlType.long), idlType.DOMString)));

@@ -2,6 +2,8 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { browletDefinitions } from '../../../../src/browlet/bindings';
 import type { BrowletEnvironment } from '../../../../src/browlet/environment';
 import { DocumentImpl, ElementImpl } from '../../../../src/browlet/dom/nodes/index';
+import { HTMLElementImpl } from '../../../../src/browlet/dom/nodes/html/html-element';
+import { htmlQuoteElementImplementations } from '../../../../src/browlet/dom/nodes/html/grouping/quote';
 import type { TokenListAttribute } from '../../../../src/browlet/dom/token-list';
 import type { Element } from '../../../../src/browlet/platform';
 import { EnumeratedAttribute } from '../../../../src/browlet/html/microsyntaxes/index';
@@ -64,6 +66,10 @@ const definition = defineInterface({
     attr('typedTarget', nullable(reference('ReflectionElement')), xattr(reflect())),
     attr('typedTargets', nullable(frozenArray(reference('ReflectionElementAlias'))), xattr(reflect())),
     attr('aliasTarget', nullable(reference('ReflectionElementAlias')), xattr(reflect())),
+    attr('htmlTarget', nullable(reference(HTMLElementImpl)), xattr(reflect())),
+    attr('htmlTargets', nullable(frozenArray(reference(HTMLElementImpl))), xattr(reflect())),
+    attr('quoteTarget', nullable(reference(htmlQuoteElementImplementations)), xattr(reflect())),
+    attr('quoteTargets', nullable(frozenArray(reference(htmlQuoteElementImplementations))), xattr(reflect())),
   ],
 });
 
@@ -75,6 +81,8 @@ type ReflectionElement = Element & {
   plainTokens: DOMTokenList; emptyTokens: DOMTokenList;
   target: Element | null; targets: readonly Element[] | null; typedTarget: ReflectionElement | null;
   typedTargets: readonly ReflectionElement[] | null; aliasTarget: ReflectionElement | null;
+  htmlTarget: Element | null; htmlTargets: readonly Element[] | null;
+  quoteTarget: Element | null; quoteTargets: readonly Element[] | null;
 };
 
 /** Isolate test-only declarations in one world, retaining real Browlet realms and environments. */
@@ -85,6 +93,7 @@ export function createReflectionWorld(additionalDefinitions: Definition[] = []) 
     ...additionalDefinitions,
   ], {
     extendedAttributes: {
+      ...htmlExtendedAttributeHooks,
       prepareReflectedAttribute(member, owners) {
         validateReflectedAttribute(member, owners);
         return htmlExtendedAttributeHooks.prepareReflectedAttribute!(member, owners);

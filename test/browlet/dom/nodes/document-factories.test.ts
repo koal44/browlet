@@ -103,7 +103,7 @@ describe('Document factories', () => {
       );
     })).toEqual([
       'HTMLScriptElement', 'SVGScriptElement', 'HTMLStyleElement', 'SVGStyleElement',
-      'HTMLDialogElement', 'HTMLElement', 'HTMLElement', 'HTMLUnknownElement',
+      'HTMLDialogElement', 'HTMLDivElement', 'HTMLElement', 'HTMLUnknownElement',
       'HTMLUnknownElement', 'HTMLUnknownElement', 'SVGElement', 'MathMLElement',
       'Element', 'Element',
     ]);

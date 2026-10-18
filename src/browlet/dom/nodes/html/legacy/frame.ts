@@ -1,18 +1,31 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Legacy frame identity used by named collections. */
 // https://html.spec.whatwg.org/multipage/obsolete.html#frame
-// PROVISIONAL: Attribute reflection, child navigation, and contentWindow/contentDocument remain unimplemented.
 export class HTMLFrameElementImpl extends HTMLElementImpl {
   override readonly isAllNamedElement = true;
 }
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLFrameElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLFrameElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   [CEReactions, Reflect] attribute DOMString scrolling;
+ *   [CEReactions, ReflectURL] attribute USVString src;
+ *   [CEReactions, Reflect] attribute DOMString frameBorder;
+ *   [CEReactions, ReflectURL] attribute USVString longDesc;
+ *   [CEReactions, Reflect] attribute boolean noResize;
+ *   readonly attribute Document? contentDocument;
+ *   readonly attribute WindowProxy? contentWindow;
+ *
+ *   [CEReactions, Reflect] attribute [LegacyNullToEmptyString] DOMString marginHeight;
+ *   [CEReactions, Reflect] attribute [LegacyNullToEmptyString] DOMString marginWidth;
+ * };
  */
 export const htmlFrameElementIDL = defineInterface({
   name: 'HTMLFrameElement',
@@ -21,5 +34,7 @@ export const htmlFrameElementIDL = defineInterface({
   implementation: impl(HTMLFrameElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['frame'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

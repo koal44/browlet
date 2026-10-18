@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
@@ -24,5 +24,5 @@ export const htmlHeadElementIDL = defineInterface({
   implementation: impl(HTMLHeadElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['head'],
-  members: [],
+  members: [ctor([], xattr('HTMLConstructor'))],
 });

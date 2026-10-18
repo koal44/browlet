@@ -4,7 +4,7 @@ import type {
   ConstantValue, DefaultValue, Exposed, ExtendedAttribute, ImplementationClass, WebIDLType,
 } from './types';
 import type { ArgumentDefinition, AsyncIterableMember, InterfaceMember, DictionaryMember } from './members';
-import type { Definition } from './declarations';
+import { getCommonImplementationClass, type Definition } from './declarations';
 
 // Project formatter: join definition fragments using the Definitions production (Web IDL, IDL grammar).
 export function serializeDefinitions<Env>(
@@ -144,8 +144,8 @@ export function serializeType(type: WebIDLType, interfaces?: InterfaceNames): st
     case 'reference':
       return serializeIdentifier(type.name);
     case 'interface': {
-      const name = interfaces?.get(type.implClass);
-      if (name === undefined) throw new InternalError('No interface declares the referenced implementation class');
+      const name = interfaces?.get(type.implementation);
+      if (name === undefined) throw new InternalError('No interface declares the referenced implementation');
       return serializeIdentifier(name);
     }
     case 'nullable':
@@ -218,13 +218,16 @@ type AttributedDefinition = {
   extendedAttributes?: ExtendedAttribute[];
 };
 
-type InterfaceNames = ReadonlyMap<ImplementationClass, string>;
+type InterfaceNames = ReadonlyMap<ImplementationClass | { implClass: ImplementationClass; }[], string>;
 
 function collectInterfaceNames<Env>(definitions: Definition<Env>[]): InterfaceNames {
-  const interfaces = new Map<ImplementationClass, string>();
+  const interfaces = new Map<ImplementationClass | { implClass: ImplementationClass; }[], string>();
   for (const definition of definitions) {
     if (definition.kind === 'interface' && definition.implementation) {
-      interfaces.set(definition.implementation.implClass, definition.name);
+      const implementations = Array.isArray(definition.implementation) ? definition.implementation : [definition.implementation];
+      if (Array.isArray(definition.implementation)) interfaces.set(definition.implementation, definition.name);
+      const implClass = getCommonImplementationClass(implementations);
+      if (implClass) interfaces.set(implClass, definition.name);
     }
   }
   return interfaces;

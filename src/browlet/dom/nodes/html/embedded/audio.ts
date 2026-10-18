@@ -1,11 +1,10 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLMediaElementImpl } from './media';
 
 /** Audio element's shared media-loading state. */
 // https://html.spec.whatwg.org/multipage/media.html#the-audio-element
-// PROVISIONAL: the Audio constructor and media loading/playback remain unimplemented.
 export class HTMLAudioElementImpl extends HTMLMediaElementImpl {
   static is(value: unknown): value is HTMLAudioElementImpl {
     return value instanceof HTMLAudioElementImpl;
@@ -13,7 +12,8 @@ export class HTMLAudioElementImpl extends HTMLMediaElementImpl {
 }
 
 /*
- * [Exposed=Window]
+ * [Exposed=Window,
+ *  LegacyFactoryFunction=Audio(optional DOMString src)]
  * interface HTMLAudioElement : HTMLMediaElement {
  *   [HTMLConstructor] constructor();
  * };
@@ -25,5 +25,5 @@ export const htmlAudioElementIDL = defineInterface({
   implementation: impl(HTMLAudioElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['audio'],
-  members: [],
+  members: [ctor([], xattr('HTMLConstructor'))],
 });

@@ -6,6 +6,7 @@ import {
 
 import type { MutationObserverImpl } from '../dom/nodes/index';
 import type { HTMLSlotElementImpl } from '../dom/nodes/html/index';
+import type { CustomElementRegistryImpl } from '../dom/nodes/html/custom-elements/index';
 import type { WindowImpl } from '../browsing/window/index';
 import type { BrowsingContextGroup } from '../browsing/navigation/index';
 
@@ -54,6 +55,10 @@ export class WindowAgent extends Agent {
   pendingMutationObservers = new Set<MutationObserverImpl>();
   /** Slots signaled since the previous mutation notification. */
   signalSlots = new Set<HTMLSlotElementImpl>();
+  /** Scoped construction selects its registry here while the custom constructor runs. */
+  // https://html.spec.whatwg.org/multipage/custom-elements.html#active-custom-element-constructor-map
+  // TODO(HTML): scoped construction/upgrade must install and remove these entries.
+  activeCustomElementConstructorMap = new Map<object, CustomElementRegistryImpl>();
   /** Coalesce notification requests until their microtask begins delivery. */
   #mutationObserverMicrotaskQueued = false;
 

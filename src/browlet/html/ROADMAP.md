@@ -471,7 +471,7 @@ must not become one oversized HTML Document module.
 | §3.1.7 DOM tree accessors | `dom/nodes/document.ts`, HTML element implementations, and live collection machinery |
 | §§3.2.1 and 3.2.4–3.2.5 semantics, definitions, and content models | Element metadata, conformance tests, and accessibility; most authoring requirements create no runtime algorithm |
 | §3.2.2 elements in the DOM | `dom/nodes/html/` over DOM Element, including unknown-element and namespace behavior |
-| §3.2.3 HTML element constructors | `ctor.ts`, `dom/nodes/html/`, custom-element construction stacks, and Web IDL |
+| §3.2.3 HTML element constructors | `integration/web-idl/html-constructor.ts`, element declarations, custom-element definition/registry state, and Web IDL |
 | §3.2.6 global attributes | `html/global-attributes.ts`, reflection, custom-element reactions, and Stylelet integration |
 | §3.2.7 `innerText` | DOM mutation plus style/layout-derived text collection; it must not be approximated by `textContent` |
 | §3.2.8 bidirectional requirements | Style/layout integration over Unicode bidirectional processing |
@@ -501,7 +501,7 @@ The audit first reproduced two omissions in
 flags remained false, and cloning lost the inherited base URI. The §3.1.1 slice
 fixes both and retains the regressions, including shallow and deep cloning.
 
-Continue with §3.2. For the later slices, preserve the existing boundaries: Document owns its state,
+Continue with §3.2.3 after the §3.2.2 slice below. Preserve the existing boundaries: Document owns its state,
 focus supplies active-element behavior, navigation supplies ancestry, loaders
 consume render-blocking state, and Web IDL projects the resulting interfaces.
 
@@ -942,6 +942,155 @@ adoption, shadow exclusion, collection identity/liveness, named overrides/order,
 object fallback transitions, and both script identities. Its iframe test connects
 a real existing navigable at the missing child-navigation seam.
 
+### Section 3.2.1 semantics audit (2026-10-16)
+
+Reviewed [§3.2.1](https://html.spec.whatwg.org/multipage/dom.html#semantics)
+against the local WHATWG source. This subsection supplies requirements and
+definitions, not a new callable algorithm or interface.
+
+| Requirement | Implementation boundary |
+| --- | --- |
+| Elements, attributes, and their values carry their specified meaning | Element and attribute owners implement the concrete behavior in later sections. The examples do not require a separate metadata registry or interpretation layer. |
+| Authors must use permitted markup for its intended purpose | Authoring conformance requirements are not additional DOM mutation checks. A conformance checker is not implemented; existing DOM operations retain their own specified validation and processing rules. |
+| Nodes whose document has no browsing context are exempt from document conformance requirements except syntax | The exception depends on the node document's browsing context, not the node's connectedness. A future checker must preserve it, including for template contents; it does not disable DOM or element processing. Template-content ownership remains an explicit §4.12.3 dependency. |
+| Meaning follows the current DOM state, and presentation must update when that state changes | Existing mutations update implemented consumers such as title state, live collections, inline declarations, and style-element sheets. Production style/layout/paint delivery and accessibility presentation are incomplete; the existing mutation hooks and rendering task skeleton do not complete this requirement. |
+
+The presentation dependency remains with [style integration](../style/ROADMAP.md),
+the [rendering update phases](../scripting/ROADMAP.md#deferred-processing-model-tails),
+and §3.2.9's future accessibility owner. This audit accounts for the subsection
+without claiming a working renderer or adding a placeholder presentation API.
+The existing [`RenderingUpdateHooks`](../scripting/rendering-opportunity.ts) carry
+a source-level TODO for connecting mutations to those owners and keeping
+presentation current after the initial render. §3.2.1 adds no phase ordering;
+the scaffold's ordering comes from HTML's later update-the-rendering algorithm.
+
+### Section 3.2.2 elements in the DOM
+
+[Elements in the DOM](https://html.spec.whatwg.org/multipage/dom.html#elements-in-the-dom)
+requires the appropriate HTML interface even in XML documents. The catalog now
+registers all 141 HTML local names covered by the current element definitions
+and obsolete-name rules, adding 38 concrete implementation identities. Names
+whose specified interface is `HTMLElement` register there; specialized names
+register beside their implementations. The transitional known-name list is gone.
+
+| Selection requirement | Implementation |
+| --- | --- |
+| Specified HTML interface, independent of document syntax | `element-interfaces.ts` combines the declared public interfaces with HTML's tag-specific constructors. HTML, XHTML, and explicit HTML-namespace creation in XML documents use the same identities. |
+| Obsolete names selecting HTMLUnknownElement | `applet`, `bgsound`, `blink`, `isindex`, `keygen`, `multicol`, `nextid`, and `spacer` register on HTMLUnknownElement. |
+| Obsolete names selecting HTMLElement | `acronym`, `basefont`, `big`, `center`, `nobr`, `noembed`, `noframes`, `plaintext`, `rb`, `rtc`, `strike`, and `tt` register on HTMLElement. |
+| Obsolete aliases | `listing` and `xmp` register alongside `pre` on HTMLPreElement. |
+| Other applicable specifications | Their interface declarations use the same namespace/local-name metadata and must be included in the composed declaration set. No separate registry is needed. |
+| Valid custom name, then unknown fallback | Unregistered valid custom names select HTMLElement; all other unregistered HTML names select HTMLUnknownElement. `menuitem` no longer receives the old provisional generic identity. |
+| HTML, SVG, and MathML shared features | All three include HTMLOrSVGOrMathMLElement; unrelated namespaces retain Element and do not receive that mixin. |
+| Meaning and references | These paragraphs define terminology and examples, not additional ID resolution or conformance-validation algorithms. |
+
+The [element roadmap](../dom/nodes/html/ROADMAP.md#section-322-interface-identities)
+lists the minimal classes and their missing owners. Interfaces are exposed in
+Window realms, but identity alone does not implement their §4/§16 APIs.
+`[HTMLConstructor]` is supplied by the following slice; HTMLUnknownElement
+deliberately has no HTML constructor.
+
+The subsection's executable IDL now supplies ordinary reflection for `title`,
+`lang`, `inert`, `accessKey`, `headingOffset` (read range 0–8), `headingReset`,
+and the shared `autofocus`. Existing nonce handling remains intact.
+`ShowPopoverOptions` and `TogglePopoverOptions` are declared here; dictionaries
+do not expose globals or implement popover operations. Every remaining shared
+member has an owning dependency:
+
+| Members or contract | Missing owner |
+| --- | --- |
+| `[HTMLConstructor]` producers | The §3.2.3 consumer is implemented below; validated public definitions and upgrades remain §4.13 work |
+| `translate`, `dir` | [§3.2.6 global attributes](https://html.spec.whatwg.org/multipage/dom.html#global-attributes): inherited translation state and directionality; language/translation presentation is separate from reflected `lang` |
+| `hidden`, inert processing, `click`, `accessKeyLabel` and access-key assignment | [§6 user interaction](https://html.spec.whatwg.org/multipage/interaction.html): hidden states, inert subtrees, activation, and keyboard shortcut selection |
+| `draggable` | [Drag and drop](https://html.spec.whatwg.org/multipage/dnd.html#the-draggable-attribute): default state and drag behavior |
+| `spellcheck`, `writingSuggestions`, `autocapitalize`, `autocorrect` | [Editing](https://html.spec.whatwg.org/multipage/interaction.html#editing): inherited/default states and editing services; ReflectSetter alone cannot supply their getters |
+| `innerText`, `outerText` | [§3.2.7](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute): rendered-text collection, layout, and specified replacement algorithms |
+| `attachInternals()` | [Custom elements](../dom/nodes/html/custom-elements/ROADMAP.md): definition lookup, construction/attachment checks, and internals ownership |
+| `showPopover`, `hidePopover`, `togglePopover`, `popover` | [Popover](https://html.spec.whatwg.org/multipage/popover.html#the-popover-attribute): state, top layer, invokers, focus, and toggle events |
+| `headingOffset`/`headingReset` effects | [Heading-level computation](https://html.spec.whatwg.org/multipage/sections.html#heading-level) and accessibility presentation; reflection is present |
+| `GlobalEventHandlers`, `ElementContentEditable` includes | [Event handlers](https://html.spec.whatwg.org/multipage/webappapis.html#globaleventhandlers) and [editing](https://html.spec.whatwg.org/multipage/interaction.html#elementcontenteditable): shared implementations and their IDL members are still absent |
+| `dataset` | [DOMStringMap](https://html.spec.whatwg.org/multipage/dom.html#domstringmap) and live `data-*` name conversion |
+| `tabIndex`, `focus`, `blur`, `FocusOptions`, autofocus processing | [Focus](https://html.spec.whatwg.org/multipage/interaction.html#focus): focusability, focus state, scrolling, and autofocus candidates; autofocus reflection is present |
+| `[CEReactions]` delivery | Custom-element reaction entry/exit and callback delivery remain missing; annotations are retained |
+
+The identity regressions first failed for missing concrete interfaces in HTML,
+XHTML, and XML documents and for the obsolete `menuitem` fallback. They now
+cover the complete fixed catalog, cloning, custom/reserved names, case and
+namespace handling, and receiver-realm allocation. Shared-attribute regressions
+cover raw/IDL updates, boolean presence, heading range clamping without changing
+the stored text, and autofocus on HTML/SVG/MathML.
+
+This completes the catalog and accounts for §3.2.2's shared surface. It does not
+claim those later algorithms are implemented.
+
+### Section 3.2.3 HTML element constructors
+
+[HTML element constructors](https://html.spec.whatwg.org/multipage/dom.html#html-element-constructors)
+now use HTML-owned overridden constructor steps, prepared once per interface
+through the Web IDL extended-attribute integration. All 70 applicable interfaces
+declare `[HTMLConstructor] constructor()`; HTMLMediaElement and HTMLUnknownElement
+retain illegal constructors. The declaration audit checks the Window exposure,
+single annotation, sole overload, and empty argument list.
+
+| Requirement | Implementation |
+| --- | --- |
+| Reject the active constructor itself and unregistered new targets | Constructor identity is checked before observing the author prototype; ordinary function calls have no new target and also throw TypeError. |
+| Select the registry and definition | The current WindowAgent's active-constructor map takes precedence over the current Document registry. Definitions match constructor identity, without falling back after a selected registry has no match. |
+| Validate autonomous and customized built-in bases | Autonomous definitions require HTMLElement; customized definitions use the same `localNames` metadata as element-interface selection, including multi-name interfaces and obsolete aliases. |
+| Fresh construction | Web IDL selects the new-target prototype. Document's existing node factory supplies the implementation, document, namespace, prefix, local name, registry and is value; construction sets custom state and definition, then projects the platform object. |
+| Upgrade construction | Reuse the last stack element, reject the already-constructed marker, set its platform prototype, and replace only that entry. The upgrade owner must later finish state changes and pop the stack. |
+| Author-controlled prototype and realms | The empty/nonempty branch is chosen before prototype access, while the last entry is read afterward. Exceptions propagate; non-object prototypes fall back to the matching interface in newTarget's function realm. Allocation still belongs to the invoking constructor's realm/current Document. |
+| Non-extensible upgrade | Follow HTML/Chromium's ignored false prototype-set result; retain the approved [SPEC_CLASH and browser evidence](../dom/nodes/html/custom-elements/ROADMAP.md#non-extensible-upgrade-clash). |
+| Legacy factory functions mentioned here | `Image`, `Audio`, and `Option` are distinct constructors whose algorithms belong to [images](https://html.spec.whatwg.org/multipage/embedded-content.html#dom-image), [audio](https://html.spec.whatwg.org/multipage/media.html#dom-audio), and [options](https://html.spec.whatwg.org/multipage/form-elements.html#dom-option). They remain absent rather than being aliased to the HTML constructor. |
+
+The binding callback receives the specification's implicit NewTarget and active
+function object explicitly as `JSFunction` values, with an undefined NewTarget
+for ordinary function calls. This reviewed adaptation preserves constructor
+identity; environment injection is the existing binding contract.
+
+Missing producers are explicit in the [custom-elements roadmap](../dom/nodes/html/custom-elements/ROADMAP.md):
+public definition/registry APIs, complete validated definition records, upgrade
+stack management, scoped-map entry lifetime, and custom-element reactions.
+`Document.createElement*` and the parser still need the custom-element definition
+lookup and construction/upgrade paths. Tests seed the necessary state and invoke
+real realm-owned platform constructors. This closes the §3.2.3 consumer without
+claiming that author-facing custom elements work end to end.
+
+### Section 3.2.4 element definitions audit
+
+[Element definitions](https://html.spec.whatwg.org/multipage/dom.html#element-definitions)
+explains the information supplied by each element's specification entry. It does
+not prescribe a runtime representation. The reviewed implementation direction is
+to retain fixed facts on each tag's implementation class and conditional queries
+on the instance. The [tag-specific implementations](../dom/nodes/html/ROADMAP.md#tag-specific-implementations)
+and their construction path are present; the metadata inventory remains pending.
+Resume this section before §3.2.5. Its requirements are accounted for as follows:
+
+| Definition entry | Requirement and owner |
+| --- | --- |
+| Categories | Inputs to content models in §3.2.5 and the individual element sections. Fixed membership will live on implementation classes; conditional membership will use instance queries. The inventory is pending. |
+| Contexts in which this element can be used | An informative summary of the surrounding elements' content models, not a separate runtime check. |
+| Content model | Normative requirements for an element's children and descendants, continued in §3.2.5 and its element definition. DOM mutation is not a general HTML conformance validator. |
+| Tag omission in text/html | An informative summary of §13's normative optional-tag rules. Syntax and parsing remain with the [parser](parser/ROADMAP.md), whose parse5 adapter and integration gaps are already tracked. |
+| Content attributes | The allowed-attribute list is normative; the brief descriptions following each dash are informative. Processing and reflection belong to each attribute's defining section. DOM setters do not reject all attributes absent from these lists. |
+| Accessibility considerations | Author conformance comes from ARIA in HTML; user-agent accessibility mappings come from HTML-AAM. The future accessibility domain in the [Browlet roadmap](../ROADMAP.md) owns the missing tree and host exposure. Existing ARIA reflection does not implement those mappings. |
+| Sanitization | Per-element categories and navigating URL attributes will live beside their implementations as inputs to the future [Sanitizer configuration and filtering algorithms](sanitization/ROADMAP.md). The metadata inventory and consumers remain pending. |
+| DOM interface | The normative interface determines each element's platform surface. §3.2.2 supplies the registered identities and colocated IDL comments; unfinished members remain dependencies of their defining sections. |
+
+The following description of an element's meaning and additional requirements
+belongs to that element and its consuming algorithms. No parallel definition
+registry is needed merely to reproduce the specification's presentation. Revisit
+the class-owned information when content-model consumers and sanitization are
+implemented; the consumer algorithms and configurable policy retain their owners.
+
+[§3.2.4.1 Attributes](https://html.spec.whatwg.org/multipage/dom.html#attribute-text)
+permits any string value unless an attribute specifies otherwise. Existing
+`DOMString` conversion and `AttrImpl` storage preserve that text. The public-API
+regression in `test/browlet/dom/nodes/attributes.test.ts` exercises `setAttribute`,
+`setAttributeNS`, and attached `Attr.value` with empty strings, whitespace, markup
+characters, NUL, lone surrogates, and supplementary Unicode. This is a DOM-value
+contract; source markup still undergoes its parser's character processing.
+
 ## HTML section 4 ownership
 
 Section 4 defines every HTML element, but only a small subset is prerequisite
@@ -954,7 +1103,7 @@ records that early slice and the complete element-family inventory.
 | §§4.3–4.7 semantic, grouping, text, links, and edits | `dom/nodes/html/sections/`, `grouping/`, and `text/`; hyperlink activation crosses into `browsing/navigation/` |
 | §4.8 embedded content | `dom/nodes/html/embedded/`; `iframe` delegates nested navigables to `browsing/`, while image and media resource work delegates to `loader/` |
 | §§4.9–4.11 tables, forms, and interactive elements | Corresponding `dom/nodes/html/` areas, with form infrastructure retained under `forms/` and focus/input under the future `interaction/` domain |
-| §4.12 scripting elements and canvas | `dom/nodes/html/scripting/` for script/template/slot; script execution belongs to `scripting/` and loading to `loader/`; canvas is a later graphics subsystem |
+| §4.12 scripting elements and canvas | `dom/nodes/html/script.ts`, `slot.ts`, and `scripting/` for template/canvas; script execution belongs to `scripting/` and loading to `loader/`; canvas rendering is a later graphics subsystem |
 | §4.13 custom elements | `dom/nodes/html/custom-elements/`, integrated with DOM mutations and Web IDL `[CEReactions]` |
 
 Element interfaces do not own the subsystems they expose. In particular,

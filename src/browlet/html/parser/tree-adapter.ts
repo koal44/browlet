@@ -7,6 +7,7 @@ import {
   type AttrImpl, type CommentImpl, DocumentMode, type DocumentImpl, type DocumentTypeImpl,
   type DocumentFragmentImpl, type ElementImpl, type TextImpl, type NodeImpl,
 } from '../../dom/nodes/index';
+import type { HTMLTemplateElementImpl } from '../../dom/nodes/html/scripting/index';
 
 /** Connects parse5 tree construction directly to Browlet node implementations. */
 // https://html.spec.whatwg.org/multipage/parsing.html#tree-construction
@@ -178,13 +179,13 @@ export class HTMLTreeAdapter implements TreeAdapter<HTMLTreeAdapterMap> {
   }
 
   setTemplateContent(
-    _templateElement: ElementImpl,
+    _templateElement: HTMLTemplateElementImpl,
     _contentElement: DocumentFragmentImpl,
   ): void {
     notImplemented('setTemplateContent');
   }
 
-  getTemplateContent(_templateElement: ElementImpl): DocumentFragmentImpl {
+  getTemplateContent(_templateElement: HTMLTemplateElementImpl): DocumentFragmentImpl {
     return notImplemented('getTemplateContent');
   }
 
@@ -295,7 +296,7 @@ export type HTMLTreeAdapterMap = {
   element: ElementImpl;
   commentNode: CommentImpl;
   textNode: TextImpl;
-  template: ElementImpl;
+  template: HTMLTemplateElementImpl;
   documentType: DocumentTypeImpl;
 };
 

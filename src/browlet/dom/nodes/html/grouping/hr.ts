@@ -1,16 +1,19 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Thematic-break identity used by select option traversal. */
 // https://html.spec.whatwg.org/multipage/grouping-content.html#the-hr-element
-// PROVISIONAL: HTML construction and obsolete presentation members remain unimplemented.
 export class HTMLHRElementImpl extends HTMLElementImpl {}
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLHRElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLHRElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   // also has obsolete members
+ * };
  */
 export const htmlHRElementIDL = defineInterface({
   name: 'HTMLHRElement',
@@ -19,5 +22,7 @@ export const htmlHRElementIDL = defineInterface({
   implementation: impl(HTMLHRElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['hr'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

@@ -3,16 +3,25 @@ import type { Definition } from '../../../../web-idl/index';
 import { htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 import {
   htmlElementIDL, htmlElementIncludesElementCSSInlineStyleIDL,
-  htmlElementIncludesHTMLOrSVGOrMathMLElementIDL,
-} from './html-element';
+  htmlElementIncludesHTMLOrSVGOrMathMLElementIDL, showPopoverOptionsIDL, togglePopoverOptionsIDL,
+} from './html-element-definition';
 import { htmlUnknownElementIDL } from './html-unknown-element';
 import { htmlScriptElementIDL } from './script';
 import { assignedNodesOptionsIDL, htmlSlotElementIDL } from './slot';
 import { htmlHtmlElementIDL } from './document/index';
-import { htmlBodyElementIDL } from './sections/index';
-import { htmlHRElementIDL } from './grouping/index';
-import { htmlAnchorElementIDL } from './text/index';
-import { htmlFrameElementIDL, htmlFrameSetElementIDL } from './legacy/index';
+import { htmlBodyElementIDL, htmlHeadingElementIDL } from './sections/index';
+import {
+  htmlParagraphElementIDL, htmlHRElementIDL, htmlPreElementIDL, htmlOListElementIDL, htmlUListElementIDL,
+  htmlMenuElementIDL, htmlLIElementIDL, htmlDListElementIDL, htmlDivElementIDL, htmlQuoteElementIDL,
+} from './grouping/index';
+import {
+  htmlAnchorElementIDL, htmlDataElementIDL, htmlTimeElementIDL,
+  htmlSpanElementIDL, htmlBRElementIDL, htmlModElementIDL,
+} from './text/index';
+import {
+  htmlFrameElementIDL, htmlFrameSetElementIDL, htmlDirectoryElementIDL,
+  htmlFontElementIDL, htmlMarqueeElementIDL, htmlParamElementIDL,
+} from './legacy/index';
 import {
   htmlHeadElementIDL, htmlTitleElementIDL, htmlBaseElementIDL, htmlLinkElementIDL, htmlLinkElementIncludesLinkStyleIDL,
   htmlStyleElementIDL, htmlStyleElementIncludesLinkStyleIDL, htmlMetaElementIDL,
@@ -21,13 +30,21 @@ import { customElementRegistryIDL, elementInternalsIDL } from './custom-elements
 import {
   htmlImageElementIDL, htmlIFrameElementIDL, htmlMediaElementIDL, htmlAudioElementIDL, htmlVideoElementIDL,
   htmlEmbedElementIDL, htmlObjectElementIDL, htmlMapElementIDL, htmlAreaElementIDL,
+  htmlPictureElementIDL, htmlSourceElementIDL, htmlTrackElementIDL,
 } from './embedded/index';
+import {
+  htmlTableElementIDL, htmlTableCaptionElementIDL, htmlTableColElementIDL,
+  htmlTableSectionElementIDL, htmlTableRowElementIDL, htmlTableCellElementIDL,
+} from './tables/index';
 import {
   htmlFormElementIDL, htmlInputElementIDL, htmlSelectElementIDL, htmlOptionElementIDL, htmlOptGroupElementIDL,
   htmlFormControlsCollectionIDL, radioNodeListIDL, htmlOptionsCollectionIDL,
   htmlButtonElementIDL, htmlDataListElementIDL, htmlTextAreaElementIDL,
+  htmlLabelElementIDL, htmlOutputElementIDL, htmlProgressElementIDL, htmlMeterElementIDL,
+  htmlFieldSetElementIDL, htmlLegendElementIDL, htmlSelectedContentElementIDL,
 } from './forms/index';
-import { htmlDialogElementIDL } from './interactive/index';
+import { htmlDetailsElementIDL, htmlDialogElementIDL } from './interactive/index';
+import { htmlCanvasElementIDL, htmlTemplateElementIDL } from './scripting/index';
 
 export const htmlIDLDefinitions: Definition[] = [
   htmlOrSVGOrMathMLElementIDL,
@@ -36,11 +53,15 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlElementIDL,
   htmlElementIncludesElementCSSInlineStyleIDL,
   htmlElementIncludesHTMLOrSVGOrMathMLElementIDL,
+  showPopoverOptionsIDL,
+  togglePopoverOptionsIDL,
   htmlUnknownElementIDL,
   htmlHtmlElementIDL,
   htmlScriptElementIDL,
   htmlSlotElementIDL,
   assignedNodesOptionsIDL,
+  htmlTemplateElementIDL,
+  htmlCanvasElementIDL,
   htmlHeadElementIDL,
   htmlTitleElementIDL,
   htmlBaseElementIDL,
@@ -50,8 +71,25 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlLinkElementIDL,
   htmlLinkElementIncludesLinkStyleIDL,
   htmlBodyElementIDL,
+  htmlHeadingElementIDL,
+  htmlParagraphElementIDL,
   htmlHRElementIDL,
+  htmlPreElementIDL,
+  htmlOListElementIDL,
+  htmlUListElementIDL,
+  htmlMenuElementIDL,
+  htmlLIElementIDL,
+  htmlDListElementIDL,
+  htmlDivElementIDL,
   htmlAnchorElementIDL,
+  htmlQuoteElementIDL,
+  htmlDataElementIDL,
+  htmlTimeElementIDL,
+  htmlSpanElementIDL,
+  htmlBRElementIDL,
+  htmlModElementIDL,
+  htmlPictureElementIDL,
+  htmlSourceElementIDL,
   htmlImageElementIDL,
   htmlIFrameElementIDL,
   htmlEmbedElementIDL,
@@ -59,9 +97,17 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlMediaElementIDL,
   htmlAudioElementIDL,
   htmlVideoElementIDL,
+  htmlTrackElementIDL,
   htmlMapElementIDL,
   htmlAreaElementIDL,
+  htmlTableElementIDL,
+  htmlTableCaptionElementIDL,
+  htmlTableColElementIDL,
+  htmlTableSectionElementIDL,
+  htmlTableRowElementIDL,
+  htmlTableCellElementIDL,
   htmlFormElementIDL,
+  htmlLabelElementIDL,
   htmlInputElementIDL,
   htmlButtonElementIDL,
   htmlSelectElementIDL,
@@ -69,10 +115,21 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlOptGroupElementIDL,
   htmlDataListElementIDL,
   htmlTextAreaElementIDL,
+  htmlOutputElementIDL,
+  htmlProgressElementIDL,
+  htmlMeterElementIDL,
+  htmlFieldSetElementIDL,
+  htmlLegendElementIDL,
+  htmlSelectedContentElementIDL,
   htmlFormControlsCollectionIDL,
   radioNodeListIDL,
   htmlOptionsCollectionIDL,
+  htmlDetailsElementIDL,
   htmlDialogElementIDL,
   htmlFrameSetElementIDL,
   htmlFrameElementIDL,
+  htmlDirectoryElementIDL,
+  htmlFontElementIDL,
+  htmlMarqueeElementIDL,
+  htmlParamElementIDL,
 ];

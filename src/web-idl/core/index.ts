@@ -18,9 +18,10 @@ export {
   defineInterface, definePartialInterface, defineInterfaceMixin, definePartialInterfaceMixin,
   defineIncludes, defineDictionary, definePartialDictionary, defineNamespace, definePartialNamespace,
   defineCallbackInterface, defineCallbackFunction, defineEnumeration, defineTypedef, defineProxyObject,
+  getCommonImplementationClass,
 } from './declarations';
 export type {
-  PrimaryInterfaceDefinition, PartialInterfaceDefinition,
+  PrimaryInterfaceDefinition, PartialInterfaceDefinition, InterfaceImplementation,
   InterfaceMixinDefinition, PartialInterfaceMixinDefinition, IncludesDefinition,
   DictionaryDefinition, PartialDictionaryDefinition,
   NamespaceDefinition, PartialNamespaceDefinition,
@@ -51,7 +52,7 @@ export {
 } from './types';
 export type {
   WebIDLType, TypeParameter, AnnotatedType, AsyncSequenceType, NullableType, UnionType,
-  SimpleType, StringType, ReferenceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
+  SimpleType, StringType, ReferenceType, InterfaceType, SequenceType, FrozenArrayType, RecordType, PromiseType, IntegerLiteral,
   SimpleTypeName, BufferTypeName, BufferViewTypeName, ConstantValue, DefaultValue,
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposed, ExtendedAttribute, NamedArgumentsExtendedAttribute,

@@ -1,4 +1,4 @@
-import { attr, defineInterfaceMixin, idlType } from '../../../web-idl/index';
+import { attr, defineInterfaceMixin, idlType, reflect, xattr } from '../../../web-idl/index';
 
 import type { ElementImpl } from './element';
 
@@ -54,6 +54,8 @@ export const htmlOrSVGOrMathMLElementIDL = defineInterfaceMixin({
   name: 'HTMLOrSVGOrMathMLElement',
   members: [
     attr('nonce', idlType.DOMString),
-    // TODO(HTML): dataset, autofocus, tabIndex, focus, and blur belong to their later sections.
+    attr('autofocus', idlType.boolean, xattr('CEReactions', reflect())),
+    // TODO(HTML): §3.2.6's DOMStringMap owns dataset; §6.6 owns tabIndex, focus/blur,
+    // FocusOptions, and autofocus processing beyond this reflected attribute.
   ],
 });

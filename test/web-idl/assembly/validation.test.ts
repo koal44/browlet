@@ -2,10 +2,11 @@ import { describe, expect, it } from 'vitest';
 
 import { InternalError } from '../../../src/infra/internal-error';
 import {
-  arg, cbDict, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
+  arg, atArg, cbDict, ctor, defineCallbackFunction, defineCallbackInterface, defineDictionary, defineEnumeration,
   defineIncludes, defineInterface, defineInterfaceMixin, defineNamespace, definePartialDictionary,
   definePartialInterface, definePartialInterfaceMixin, definePartialNamespace, defineTypedef,
-  idlType, nullable, observableArray, op, reference, roAttr, sequence, type Definition,
+  idlType, impl, invokeWith, nullable, observableArray, op, reference, roAttr, sequence,
+  type Definition, type InjectedArgument,
 } from '../../../src/web-idl/core/index';
 import { DefinitionAssembly, validateDefinitions } from '../../../src/web-idl/assembly/index';
 
@@ -24,6 +25,45 @@ describe('Web IDL declaration validation', () => {
     const definitions = [definePartialInterface({ name: 'Missing', members: [] })];
     expect(() => new DefinitionAssembly(definitions)).not.toThrow();
     expect(() => validateDefinitions(definitions)).toThrowError(InternalError);
+  });
+
+  it.each([
+    ['implementation', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', implementation: impl(class {}, { constructWith: positions }), members: [],
+    })]],
+    ['implementation array', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', implementation: [impl(class {}), impl(class {}, { constructWith: positions })], members: [],
+    })]],
+    ['constructor', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', members: [ctor([], { constructWith: positions })],
+    })]],
+    ['operation', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', members: [op('run', idlType.undefined, [], invokeWith(...positions))],
+    })]],
+    ['partial interface', (positions: InjectedArgument[]) => [
+      defineInterface({ name: 'Example', members: [] }),
+      definePartialInterface({ name: 'Example', members: [op('run', idlType.undefined, [], invokeWith(...positions))] }),
+    ]],
+    ['mixin', (positions: InjectedArgument[]) => [defineInterfaceMixin({
+      name: 'Example', members: [op('run', idlType.undefined, [], invokeWith(...positions))],
+    })]],
+    ['partial mixin', (positions: InjectedArgument[]) => [
+      defineInterfaceMixin({ name: 'Example', members: [] }),
+      definePartialInterfaceMixin({ name: 'Example', members: [op('run', idlType.undefined, [], invokeWith(...positions))] }),
+    ]],
+    ['namespace', (positions: InjectedArgument[]) => [defineNamespace({
+      name: 'Example', members: [op('run', idlType.undefined, [], invokeWith(...positions))],
+    })]],
+    ['partial namespace', (positions: InjectedArgument[]) => [
+      defineNamespace({ name: 'Example', members: [] }),
+      definePartialNamespace({ name: 'Example', members: [op('run', idlType.undefined, [], invokeWith(...positions))] }),
+    ]],
+  ] as const)('validates %s injection positions without resolving dependencies', (_name, definitions) => {
+    const resolve = (): never => { throw new Error('Validation must not resolve a dependency'); };
+    expect(() => validateDefinitions(definitions([atArg(3, resolve), atArg(3, resolve)])))
+      .toThrowError(new InternalError('Injected argument 3 is declared more than once'));
+    expect(() => validateDefinitions(definitions([atArg(3, resolve), atArg(0, resolve)])))
+      .not.toThrow();
   });
 
   it.each<Definition>([

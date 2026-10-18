@@ -6,6 +6,7 @@ import {
   ShadowRootImpl, type TextImpl,
 } from '../dom/nodes/index';
 import { HTMLElementImpl } from '../dom/nodes/html/index';
+import { HTMLMediaElementImpl } from '../dom/nodes/html/embedded/index';
 
 /** Selector and style access to Browlet implementations, preserving their identities. */
 export const browletDOM: DOMOperations<
@@ -75,7 +76,7 @@ export const browletDOM: DOMOperations<
     document.addEventListener(type, (event) => listener(NodeImpl.is(event.target) ? event.target : null), true);
   },
 
-  // HTML control and media implementations are still pending in Browlet.
+  // TODO(HTML): Connect control state and media playback as their algorithms are implemented.
   controlType: () => unavailable('control type'),
   controlValue: () => unavailable('control value'),
   formOwner: () => unavailable('form association'),
@@ -87,7 +88,7 @@ export const browletDOM: DOMOperations<
   checkValidity: () => unavailable('constraint validation'),
   rangeUnderflow: () => unavailable('constraint validation'),
   rangeOverflow: () => unavailable('constraint validation'),
-  isMediaElement: () => unavailable('media elements'),
+  isMediaElement: (element) => HTMLMediaElementImpl.is(element),
   currentTime: () => unavailable('media playback'),
   paused: () => unavailable('media playback'),
   ended: () => unavailable('media playback'),

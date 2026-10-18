@@ -77,7 +77,8 @@ export type ReferenceType = {
 
 export type InterfaceType = {
   kind: 'interface';
-  implClass: ImplementationClass;
+  /** A covering class or the same implementation array supplied to defineInterface(). */
+  implementation: ImplementationClass | { implClass: ImplementationClass; }[];
 };
 
 export interface NullableType<Type extends WebIDLType = WebIDLType> {

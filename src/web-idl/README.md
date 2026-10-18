@@ -108,18 +108,44 @@ type helpers describe the boundary. `serializeDefinitions()` emits IDL syntax.
 included mixins are combined into an `AssembledInterface` during assembly.
 
 An interface may also carry `namespaceURI` and `localNames` for element creation.
-These are project metadata, omitted from serialized IDL. Browlet derives its
-element-constructor lookup from the declaration collections outside BindingWorld;
-generic assembly and binding do not interpret element names.
+These are project metadata, omitted from serialized IDL. They identify each tag's
+public interface. A shared interface can supply
+`implementation: [impl(First), impl(Second)]` for its concrete classes.
+Assembly normalizes implementations to a list. Both classes project through one
+public interface, while automatic instance members read properties or call methods
+on the receiver. Each class retains its own construction dependencies and initializer.
+Single-implementation declarations use the same receiver access. An explicit
+member binding can select a base algorithm when ordinary overriding is not wanted.
+Automatic calls resolve the receiver's method after argument conversion and
+dependency injection, then pass that method and the prepared argument array
+directly to `callImplementation`. The compiled lookup realizes accessor failures;
+`callImplementation` realizes failures from the method itself.
+A declared class covering every implementation remains a valid typed IDL reference,
+as with HTMLElement and its tag subclasses. Unrelated implementations can share
+the exact array between `defineInterface({ implementation: implementations, ... })`
+and `reference(implementations)`, preserving the union of their converted types.
+A single sibling class or a copied subset cannot describe that whole interface.
+Multiple-implementation constructors and static members require explicit bindings
+to select their behavior; there is no arbitrary default implementation for allocation
+by interface name. HTML element-reference reflection prepares the declared target
+constructors once and filters ID matches in tree order, using a covering class when
+one is declared.
+Browlet reads a registered element subclass's static `localName` together with
+its interface's `namespaceURI`. It derives the element-constructor lookup outside
+BindingWorld; generic assembly and binding do not interpret element names.
 
 Normal assembly trusts declarations. Call `validateDefinitions()` from
 `assembly/index.ts` during development or tests to check duplicate primary names,
 orphan partials or includes, inheritance and typedef cycles, serialization markers,
-and unresolved types, including unused aliases and mixins. Browlet's complete
+empty or duplicate implementation registrations, repeated injected argument
+positions, and unresolved types, including unused aliases and mixins. Browlet's complete
 declaration set has a dedicated validation test. Required type resolution still
 throws when assembly cannot produce a valid IDL type. Forward references and
 recursive dictionary values remain valid; an unimplemented conversion for a
 recognized type is a separate runtime limitation.
+Automatic member lookup trusts implementation members; test audits use
+`validateImplementationMembers()` with supplied instances to catch missing fields
+and methods without repeating internal validation on author calls.
 Composition must supply every referenced declaration, including type identities
 whose implementations are still pending.
 
@@ -349,6 +375,21 @@ Ordinary binding still validates and unwraps the receiver at invocation.
 Unclaimed annotations retain ordinary binding. Browlet supplies HTML reflection
 through this seam; Web IDL itself does not import HTML or interpret `[Reflect]`.
 Operation and reaction-boundary wrapping are not implemented by this hook yet.
+
+The `prepareHTMLConstructor(owner)` hook receives Browlet's
+`prepareCustomElementConstructor`, which prepares `[HTMLConstructor]` superclass
+steps for custom-element construction after assembly. BindingWorld retains each
+prepared override; realm registration connects it to the existing constructor
+invocation path for `[HTMLConstructor]`.
+The callback receives the invoking realm's context, NewTarget, and active
+function object before ordinary Web IDL constructor checks or argument conversion.
+HTML owns registry/definition selection and construction-stack handling in
+`browlet/integration/web-idl/html-constructor.ts`. It uses Binding Context's
+`getPlatformObjectPrototype()` for author prototype access and cross-realm
+fallback, and normal projection for the new or existing implementation. An
+annotated constructor requires its integration hook; it cannot silently fall
+back to ordinary implementation construction. No HTML nodes or registry state
+are imported into Web IDL.
 
 Core's `reflect()`, `reflectSetter()`, `reflectURL()`, `reflectNonNegative()`,
 `reflectPositive()`, and `reflectPositiveWithFallback()` helpers record the
@@ -678,6 +719,13 @@ when callbacks, retained state, or internal creation require ownership earlier.
 An implementation can therefore be stamped but not yet projected. Structured
 serialization can dispatch from that record without creating a platform object.
 HTML separately owns transferable detached state.
+
+Internal construction can select a subclass without declaring another public
+interface. `ctx.construct()` uses the exact class's declaration when present,
+otherwise its nearest declared implementation base, retaining that interface's
+injected arguments and platform identity while constructing the requested class.
+Interface references and unwrapping still name declared classes; an internal
+subclass does not create another IDL type or author-visible constructor.
 
 Lazy projection asks the owning realm binding to allocate an object, then attaches
 it directly to the existing record. Attachment initializes collection storage,

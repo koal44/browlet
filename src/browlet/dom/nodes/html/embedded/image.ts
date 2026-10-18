@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
+import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
 import { loadingAttribute, fetchPriorityAttribute } from '../attributes/index';
 
@@ -7,7 +7,6 @@ import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Image loading policy and the continuation retained while loading is deferred. */
 // https://html.spec.whatwg.org/multipage/embedded-content.html#the-img-element
-// PROVISIONAL: image selection, fetching, decoding, and the remaining image API are not implemented.
 export class HTMLImageElementImpl extends HTMLElementImpl {
   /** Suspended image-loading steps, installed by the image loading algorithm. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
@@ -46,9 +45,34 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLImageElement's implemented fragment:
- * [CEReactions] attribute DOMString loading;
- * [CEReactions] attribute DOMString fetchPriority;
+ * [Exposed=Window,
+ *  LegacyFactoryFunction=Image(optional unsigned long width, optional unsigned long height)]
+ * interface HTMLImageElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute DOMString alt;
+ *   [CEReactions, ReflectURL] attribute USVString src;
+ *   [CEReactions, Reflect] attribute USVString srcset;
+ *   [CEReactions, Reflect] attribute DOMString sizes;
+ *   [CEReactions] attribute DOMString? crossOrigin;
+ *   [CEReactions, Reflect] attribute DOMString useMap;
+ *   [CEReactions, Reflect] attribute boolean isMap;
+ *   [CEReactions, Reflect] attribute boolean controls;
+ *   [CEReactions, ReflectSetter] attribute unsigned long width;
+ *   [CEReactions, ReflectSetter] attribute unsigned long height;
+ *   readonly attribute unsigned long naturalWidth;
+ *   readonly attribute unsigned long naturalHeight;
+ *   readonly attribute boolean complete;
+ *   readonly attribute USVString currentSrc;
+ *   [CEReactions] attribute DOMString referrerPolicy;
+ *   [CEReactions] attribute DOMString decoding;
+ *   [CEReactions] attribute DOMString loading;
+ *   [CEReactions] attribute DOMString fetchPriority;
+ *
+ *   Promise<undefined> decode();
+ *
+ *   // also has obsolete members
+ * };
  */
 export const htmlImageElementIDL = defineInterface({
   name: 'HTMLImageElement',
@@ -58,6 +82,7 @@ export const htmlImageElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['img'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
     attr('fetchPriority', idlType.DOMString, xattr('CEReactions', reflectEnumerated(fetchPriorityAttribute))),

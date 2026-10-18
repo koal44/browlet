@@ -450,9 +450,16 @@ describe('Browlet DOM binding', () => {
       'webkitMatchesSelector',
     ]);
     expect(ownKeys(getPrototype(browlet, 'HTMLElement'))).toEqual([
+      'accessKey',
+      'autofocus',
       'constructor',
+      'headingOffset',
+      'headingReset',
+      'inert',
+      'lang',
       'nonce',
       'style',
+      'title',
     ]);
     expect(ownKeys(getPrototype(browlet, 'HTMLStyleElement'))).toEqual([
       'blocking',

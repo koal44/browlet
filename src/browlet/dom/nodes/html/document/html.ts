@@ -1,16 +1,19 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Document-root identity used by Document tree accessors. */
 // https://html.spec.whatwg.org/multipage/semantics.html#the-html-element
-// PROVISIONAL: HTML construction and obsolete version reflection await the element API.
 export class HTMLHtmlElementImpl extends HTMLElementImpl {}
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLHtmlElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLHtmlElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   // also has obsolete members
+ * };
  */
 export const htmlHtmlElementIDL = defineInterface({
   name: 'HTMLHtmlElement',
@@ -19,5 +22,7 @@ export const htmlHtmlElementIDL = defineInterface({
   implementation: impl(HTMLHtmlElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['html'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

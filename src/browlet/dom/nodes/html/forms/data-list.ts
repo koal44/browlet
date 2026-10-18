@@ -1,16 +1,19 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Suggestion-list identity used by select option traversal. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#the-datalist-element
-// PROVISIONAL: HTML construction, the options collection, and input suggestions remain unimplemented.
 export class HTMLDataListElementImpl extends HTMLElementImpl {}
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLDataListElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLDataListElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [SameObject] readonly attribute HTMLCollection options;
+ * };
  */
 export const htmlDataListElementIDL = defineInterface({
   name: 'HTMLDataListElement',
@@ -19,5 +22,7 @@ export const htmlDataListElementIDL = defineInterface({
   implementation: impl(HTMLDataListElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['datalist'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

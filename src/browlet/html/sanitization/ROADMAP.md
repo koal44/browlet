@@ -18,6 +18,17 @@ do not supply an empty Sanitizer or permissive placeholder to remove the depende
 | `algorithms.ts` | Element/attribute filtering, replacement, flattening, and safe-method restrictions | HTML §§8.6.4–8.6.5 |
 | `web-idl.ts` | Sanitizer interfaces, dictionaries, enums, and Element/ShadowRoot contributions | HTML §8.6 |
 
+Configuration and filtering also need the per-element sanitization categories
+and navigating URL attributes identified by
+[HTML §3.2.4](https://html.spec.whatwg.org/multipage/dom.html#concept-element-sanitization).
+That inventory is not implemented. The reviewed direction is to attach these
+fixed facts to the tag-specific element implementation classes while reading
+their definitions. Revisit that ownership when implementing this subsystem:
+configuration construction can derive centralized lookups, while filtering and
+configurable policy remain here. Combine the element facts with the sanitizer's
+built-in configuration rules; do not infer them from reflection metadata or
+supply permissive defaults.
+
 Safe setters must not be aliases for unsafe parsing followed by a casual
 blocklist. They require the specified baseline configuration, URL/namespace
 handling, and custom-element/Trusted Types integration. Mutation still runs

@@ -127,6 +127,11 @@ export type RenderingOpportunityHost = {
   unsafeSharedCurrentTime(this: void): UnsafeMoment;
 };
 
+// https://html.spec.whatwg.org/multipage/dom.html#semantics
+// TODO(rendering): connect DOM, element-state, and style changes to the production
+// style/layout and presentation owners. Presentation must follow current document
+// state after the initial render too; cached derived state must be invalidated or
+// recomputed. The mutation/invalidation contract remains with those future owners.
 export type RenderingUpdateHooks = Readonly<Partial<Record<
   RenderingUpdatePhase,
   (context: RenderingUpdateContext) => void

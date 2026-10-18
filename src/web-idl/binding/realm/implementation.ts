@@ -586,8 +586,8 @@ type ImplementationInitializationSteps = (value: object) => void;
 
 type OverriddenConstructorSteps = (
   argumentsList: unknown[],
-  newTarget: object | undefined,
-  activeFunction: object,
+  newTarget: JSFunction | undefined,
+  activeFunction: JSFunction,
 ) => unknown;
 
 // Report installation failures without exposing an engine-created exception.

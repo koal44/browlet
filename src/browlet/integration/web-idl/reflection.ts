@@ -41,9 +41,9 @@ export function prepareReflectedAttribute(
     // HTML reflection requires an Element interface here; the declaration tests check that constraint.
     sharedAccessors = createElementArrayBinding(name, inner as IDLFrozenArrayType<IDLInterfaceType>);
   } else if (nullable && inner.kind === 'interface') {
-    const targetConstructor = getElementConstructor(inner);
+    const targetConstructors = getElementConstructors(inner);
     sharedAccessors = {
-      get() { return this.getAssociatedElements(name, targetConstructor, false); },
+      get() { return this.getAssociatedElements(name, targetConstructors, false); },
       set(_ctx, value) { this.setAssociatedElements(name, value as ElementImpl | null); },
     } satisfies ReflectionBinding;
   }
@@ -58,8 +58,9 @@ export function prepareReflectedAttribute(
   let internalsAccessors: InternalsReflectionBinding | undefined;
   const isURL = reflection.name === 'ReflectURL';
   for (const owner of owners) {
-    const implementation = owner.primary.implementation!.implClass;
-    const accessors = implementation === ElementInternalsImpl || implementation.prototype instanceof ElementInternalsImpl
+    const internals = owner.implementations.some(({ implClass }) =>
+      implClass === ElementInternalsImpl || implClass.prototype instanceof ElementInternalsImpl);
+    const accessors = internals
       ? internalsAccessors ??= createAttributeBinding(member, reflection, createValueBinding(name, rules, isURL, internalsReflection))
       : elementAccessors ??= createAttributeBinding(member, reflection, createValueBinding(name, rules, isURL, elementReflection));
     bindings.set(owner, accessors);
@@ -115,11 +116,11 @@ function createAttributeBinding<T extends ReflectedTarget>(
 
 /** Retain array identity while the associated implementation elements remain unchanged. */
 function createElementArrayBinding(name: string, type: IDLFrozenArrayType<IDLInterfaceType>): ReflectionBinding {
-  const targetConstructor = getElementConstructor(type.elementType);
+  const targetConstructors = getElementConstructors(type.elementType);
   const cache = new WeakMap<ReflectedTarget, { elements: ElementImpl[] | null; array: readonly unknown[] | null; }>();
   return {
     get(ctx) {
-      const elements = this.getAssociatedElements(name, targetConstructor, true);
+      const elements = this.getAssociatedElements(name, targetConstructors, true);
       const previous = cache.get(this);
       // SPEC_CLASH(reflected-elements-initial-empty): Follow Chromium/WebKit: create [] on the first empty result; HTML/Firefox reuse an initial null cache.
       if (previous && equalElements(elements, previous.elements)) return previous.array;
@@ -160,9 +161,10 @@ function createValueBinding<T extends ReflectedTarget>(
   };
 }
 
-/** Retrieve the target element's implementation constructor selected by Web IDL assembly. */
-function getElementConstructor(type: IDLInterfaceType): ElementConstructor {
-  return type.assembled.primary.implementation!.implClass as ElementConstructor;
+/** Retain the permitted constructors once; a declared covering base avoids redundant subclass checks. */
+function getElementConstructors(type: IDLInterfaceType): ElementConstructor[] {
+  const implClass = type.assembled.commonImplementationClass;
+  return (implClass ? [implClass] : type.assembled.implementations.map(({ implClass }) => implClass)) as ElementConstructor[];
 }
 
 function equalElements(first: ElementImpl[] | null, second: ElementImpl[] | null): boolean {

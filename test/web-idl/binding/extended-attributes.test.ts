@@ -1,11 +1,13 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 
+import type { JSFunction } from '../../../src/js-engine/index';
 import {
-  BindingWorld, attr, defineIncludes, defineInterface, defineInterfaceMixin, defineTypedef,
+  BindingWorld, attr, ctor, defineIncludes, defineInterface, defineInterfaceMixin, defineTypedef,
   hasExtendedAttribute, idlType, impl, reference, reflect, xattr,
   type AttributeBinding, type ExtendedAttributeHooks, type WebIDLEnvironment,
 } from '../../../src/web-idl/index';
 import { TestRealm } from '../../support/web-idl-realm';
+import { getInstalledInterface } from '../../support/web-idl-binding';
 
 describe('Web IDL extended-attribute integration', () => {
   it('prepares resolved members once per world and uses the receiver environment across realms', () => {
@@ -16,7 +18,7 @@ describe('Web IDL extended-attribute integration', () => {
         if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
         preparations++;
         expect(member.type.kind).toBe('integer');
-        expect(owners.map((owner) => owner.primary.implementation?.implClass)).toEqual([ExampleImpl]);
+        expect(owners.map((owner) => owner.implementations.map(({ implClass }) => implClass))).toEqual([[ExampleImpl]]);
         const accessors: AttributeBinding<WebIDLEnvironment, ExampleImpl> = {
           get(ctx) {
             expectTypeOf(this).toEqualTypeOf<ExampleImpl>();
@@ -73,9 +75,9 @@ describe('Web IDL extended-attribute integration', () => {
         prepareReflectedAttribute(member, owners) {
           if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
           preparations++;
-          expect(owners.map((owner) => owner.primary.implementation?.implClass)).toEqual([FirstImpl, SecondImpl]);
+          expect(owners.map((owner) => owner.implementations.map(({ implClass }) => implClass))).toEqual([[FirstImpl], [SecondImpl]]);
           return new Map(owners.map((owner) => {
-            const multiplier = owner.primary.implementation!.implClass === FirstImpl ? 2 : 3;
+            const multiplier = owner.implementations[0]!.implClass === FirstImpl ? 2 : 3;
             const accessors: AttributeBinding<WebIDLEnvironment, ExampleImpl> = {
               get() { return this.value * multiplier; },
             };
@@ -102,6 +104,43 @@ describe('Web IDL extended-attribute integration', () => {
       },
     })).toThrow(failure);
   });
+
+  it('prepares HTML constructor rules once, passing the invoking realm and constructor identities', () => {
+    let preparations = 0;
+    const calls: { env: WebIDLEnvironment; newTarget: JSFunction | undefined; activeFunction: JSFunction; }[] = [];
+    const result = {};
+    const world = new BindingWorld([htmlConstructorDefinition], {
+      extendedAttributes: {
+        prepareHTMLConstructor(owner) {
+          if (owner.primary.name !== 'HTMLExample') return;
+          preparations++;
+          return (ctx, newTarget, activeFunction) => {
+            calls.push({ env: ctx.getEnvironment(), newTarget, activeFunction });
+            return result;
+          };
+        },
+      },
+    });
+    for (let index = 0; index < 2; index++) {
+      const context = world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm }));
+      const installed = world.getRealmBinding(context.realm)!.installDefinitions();
+      const Constructor = getInstalledInterface(installed, 'HTMLExample');
+      const Target = function Target() {};
+      expect(Reflect.construct(Constructor, [], Target)).toBe(result);
+      expect(Reflect.apply(Constructor, null, [])).toBe(result);
+      expect(calls.splice(0)).toEqual([
+        { env: context.getEnvironment(), newTarget: Target, activeFunction: Constructor },
+        { env: context.getEnvironment(), newTarget: undefined, activeFunction: Constructor },
+      ]);
+    }
+    expect(preparations).toBe(1);
+  });
+
+  it('requires HTML constructor integration instead of silently using ordinary construction', () => {
+    const world = new BindingWorld([htmlConstructorDefinition]);
+    expect(() => world.register(new TestRealm(), (ctx) => ({ realm: ctx.realm })))
+      .toThrow('[HTMLConstructor] requires HTML constructor hooks');
+  });
 });
 
 class ExampleImpl {
@@ -117,6 +156,11 @@ const definitions = [
   }),
   defineTypedef({ name: 'Count', type: idlType.long }),
 ];
+
+const htmlConstructorDefinition = defineInterface({
+  name: 'HTMLExample', exposed: '*', implementation: impl(ExampleImpl),
+  members: [ctor([], xattr('HTMLConstructor'))],
+});
 
 function project(world: BindingWorld) {
   const env = { realm: new TestRealm() };

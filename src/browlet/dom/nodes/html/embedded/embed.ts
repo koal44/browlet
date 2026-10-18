@@ -1,12 +1,11 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import { hasExposedObjectAncestor } from './object';
 
 /** Embed identity and exposure used by Document's named properties. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-embed-element
-// PROVISIONAL: embedded-content loading and the remaining embed API await §4.8.6.
 export class HTMLEmbedElementImpl extends HTMLElementImpl {
   override readonly isAllNamedElement = true;
 
@@ -22,13 +21,25 @@ export class HTMLEmbedElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLEmbedElement's identity fragment; its attribute/API algorithms remain in §4.8.6.
- * [Exposed=Window] interface HTMLEmbedElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLEmbedElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectURL] attribute USVString src;
+ *   [CEReactions, Reflect] attribute DOMString type;
+ *   [CEReactions, Reflect] attribute DOMString width;
+ *   [CEReactions, Reflect] attribute DOMString height;
+ *   Document? getSVGDocument();
+ *
+ *   // also has obsolete members
+ * };
  */
 export const htmlEmbedElementIDL = defineInterface({
   name: 'HTMLEmbedElement', inherits: 'HTMLElement', exposed: 'Window',
   implementation: impl(HTMLEmbedElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['embed'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

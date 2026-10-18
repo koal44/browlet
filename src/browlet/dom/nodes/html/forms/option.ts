@@ -1,11 +1,10 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/index';
+import { attr, ctor, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Option selection state owned independently of its selected content attribute. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#htmloptionelement
-// PROVISIONAL: selection reset, insertion/removal, cloning, and the remaining option API await §4.10.
 export class HTMLOptionElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/#concept-option-selectedness
   selectedness = false;
@@ -42,9 +41,21 @@ export class HTMLOptionElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLOptionElement's implemented fragment:
- * [CEReactions, Reflect="selected"] attribute boolean defaultSelected;
- * attribute boolean selected;
+ * [Exposed=Window,
+ *  LegacyFactoryFunction=Option(optional DOMString text = "", optional DOMString value, optional boolean defaultSelected = false, optional boolean selected = false)]
+ * interface HTMLOptionElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute boolean disabled;
+ *   readonly attribute HTMLFormElement? form;
+ *   [CEReactions, ReflectSetter] attribute DOMString label;
+ *   [CEReactions, Reflect="selected"] attribute boolean defaultSelected;
+ *   attribute boolean selected;
+ *   [CEReactions, ReflectSetter] attribute DOMString value;
+ *
+ *   [CEReactions] attribute DOMString text;
+ *   readonly attribute long index;
+ * };
  */
 export const htmlOptionElementIDL = defineInterface({
   name: 'HTMLOptionElement',
@@ -54,6 +65,7 @@ export const htmlOptionElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['option'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     attr('defaultSelected', idlType.boolean, xattr('CEReactions', reflect({ name: 'selected' }))),
     attr('selected', idlType.boolean),
   ],

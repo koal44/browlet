@@ -130,18 +130,20 @@ export class UnionConverter<Type extends IDLUnionType = IDLUnionType> extends Co
           if (isCallable(value)) return CallbackFunctionStamper.getObject(value);
           if (IDLCallbackFunction.is(value)) return value.object;
         }
-        if (IDLCallbackInterface.is(value) && candidates.callbackInterface) return value.object;
-        if (IDLAsyncSequence.is(value) && candidates.asyncSequence) {
+        if (candidates.callbackInterface && IDLCallbackInterface.is(value)) return value.object;
+        if (candidates.asyncSequence && IDLAsyncSequence.is(value)) {
           return this.forType(candidates.asyncSequence).idlToJS(value);
         }
-        if (Array.isArray(value) && candidates.array) return this.forType(candidates.array).idlToJS(value);
-        if (value instanceof IDLDictionary && candidates.dictionary) {
+        if (candidates.array && Array.isArray(value)) return this.forType(candidates.array).idlToJS(value);
+        if (candidates.dictionary && value instanceof IDLDictionary) {
           return this.forType(candidates.dictionary).idlToJS(value);
         }
-        if (isMap(value) && candidates.record) return this.forType(candidates.record).idlToJS(value);
-        const bufferName = getBufferTypeName(value);
-        const buffer = bufferName && candidates.buffers.get(bufferName);
-        if (buffer) return this.forType(buffer).idlToJS(value);
+        if (candidates.record && isMap(value)) return this.forType(candidates.record).idlToJS(value);
+        if (candidates.buffers.size) {
+          const bufferName = getBufferTypeName(value);
+          const buffer = bufferName && candidates.buffers.get(bufferName);
+          if (buffer) return this.forType(buffer).idlToJS(value);
+        }
         if (candidates.dictionary) return this.forType(candidates.dictionary).idlToJS(value);
         if (candidates.record) return this.forType(candidates.record).idlToJS(value);
         if (candidates.hasObject) return this.binding.realizeException(value);

@@ -52,9 +52,11 @@ from IDL serialization. The source IDL comments retain the specification's notat
 `ElementImpl` owns lazily created token lists and explicit-reference state.
 `ElementInternalsImpl` owns independent reference state and content-attribute
 read/write/delete operations over its target element's internal map. Both owners expose `getAssociatedElements(name,
-targetConstructor, isArray)` and `setAssociatedElements(name, value)` to implementation
+targetConstructors, isArray)` and `setAssociatedElements(name, value)` to implementation
 callers. `ElementAssociations.get()` handles the single-element/list choice; its
-owner argument supplies the tree scope, while the constructor filters target types.
+owner argument supplies the tree scope, while the constructors filter target types.
+The binding prepares this list once from the target interface. Tree order takes
+precedence over constructor order when duplicate IDs match different implementations.
 Assignment maps are allocated only by setters; reads recompute live scope and ID
 matches, computing the owner's initial root once per list read. The setter accepts
 either shape or null to clear it. Ordinary DOM writes cannot clear the

@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
+import { attr, ctor, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
 
 import { loadingAttribute } from '../attributes/index';
 import type { Navigable } from '../../../../browsing/navigation/index';
@@ -8,7 +8,6 @@ import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 
 /** Iframe loading policy and the continuation retained while navigation is deferred. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-iframe-element
-// PROVISIONAL: child navigables, src/srcdoc processing, and the remaining iframe API are not implemented.
 export class HTMLIFrameElementImpl extends HTMLElementImpl {
   /** Child navigation destination, or null before creation and after destruction. */
   // https://html.spec.whatwg.org/multipage/document-sequences.html#content-navigable
@@ -52,8 +51,26 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLIFrameElement's implemented fragment:
- * [CEReactions] attribute DOMString loading;
+ * [Exposed=Window]
+ * interface HTMLIFrameElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectURL] attribute USVString src;
+ *   [CEReactions] attribute (TrustedHTML or DOMString) srcdoc;
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   [SameObject, PutForwards=value, Reflect] readonly attribute DOMTokenList sandbox;
+ *   [CEReactions, Reflect] attribute DOMString allow;
+ *   [CEReactions, Reflect] attribute boolean allowFullscreen;
+ *   [CEReactions, Reflect] attribute DOMString width;
+ *   [CEReactions, Reflect] attribute DOMString height;
+ *   [CEReactions] attribute DOMString referrerPolicy;
+ *   [CEReactions] attribute DOMString loading;
+ *   readonly attribute Document? contentDocument;
+ *   readonly attribute WindowProxy? contentWindow;
+ *   Document? getSVGDocument();
+ *
+ *   // also has obsolete members
+ * };
  */
 export const htmlIFrameElementIDL = defineInterface({
   name: 'HTMLIFrameElement',
@@ -63,6 +80,7 @@ export const htmlIFrameElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['iframe'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
     attr('loading', idlType.DOMString, xattr('CEReactions', reflectEnumerated(loadingAttribute))),
   ],

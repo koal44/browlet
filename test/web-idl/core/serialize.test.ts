@@ -32,7 +32,7 @@ describe('Web IDL declarations and serialization', () => {
     expect(serializeDefinitions([consumer, definition])).toContain(
       'Promise<RenamedExample?> read(sequence<RenamedExample> values);',
     );
-    expect(() => serializeDefinitions([consumer])).toThrow('No interface declares the referenced implementation class');
+    expect(() => serializeDefinitions([consumer])).toThrow('No interface declares the referenced implementation');
   });
 
   it('serializes proxy type references without inventing an interface declaration', () => {

@@ -1,11 +1,10 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLMediaElementImpl } from './media';
 
 /** Video element's media and independent poster-loading continuations. */
 // https://html.spec.whatwg.org/multipage/media.html#the-video-element
-// PROVISIONAL: poster fetching, playback, dimensions, and the remaining video API are not implemented.
 export class HTMLVideoElementImpl extends HTMLMediaElementImpl {
   /** Suspended poster-image loading, independent of the media resource. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#poster-lazy-load-resumption-steps
@@ -32,7 +31,20 @@ export class HTMLVideoElementImpl extends HTMLMediaElementImpl {
   }
 }
 
-/* HTMLVideoElement inherits the implemented loading member from HTMLMediaElement. */
+/*
+ * [Exposed=Window]
+ * interface HTMLVideoElement : HTMLMediaElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, Reflect] attribute unsigned long width;
+ *   [CEReactions, Reflect] attribute unsigned long height;
+ *   readonly attribute unsigned long videoWidth;
+ *   readonly attribute unsigned long videoHeight;
+ *   [CEReactions, ReflectURL] attribute USVString poster;
+ *   [CEReactions, Reflect] attribute boolean playsInline;
+ *
+ * };
+ */
 export const htmlVideoElementIDL = defineInterface({
   name: 'HTMLVideoElement',
   inherits: 'HTMLMediaElement',
@@ -40,5 +52,7 @@ export const htmlVideoElementIDL = defineInterface({
   implementation: impl(HTMLVideoElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['video'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

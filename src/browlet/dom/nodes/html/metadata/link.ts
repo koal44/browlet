@@ -1,7 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { asciiLower } from '../../../../../infra/ascii';
 import {
-  attr, defineIncludes, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr, xattr,
+  attr, ctor, defineIncludes, defineInterface, idlType, impl, nullable, reference, reflectEnumerated,
+  reflectTokens, roAttr, xattr,
 } from '../../../../../web-idl/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
@@ -88,6 +89,8 @@ export class HTMLLinkElementImpl extends HTMLElementImpl {
  *
  *   // also has obsolete members
  * };
+ *
+ * HTMLLinkElement includes LinkStyle;
  */
 export const htmlLinkElementIDL = defineInterface({
   name: 'HTMLLinkElement',
@@ -97,6 +100,7 @@ export const htmlLinkElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['link'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     // PROVISIONAL: [CEReactions] entry/exit awaits HTML custom-element reaction delivery.
     attr('crossOrigin', nullable(idlType.DOMString), xattr('CEReactions', reflectEnumerated(corsSettingsAttribute))),
     attr('referrerPolicy', idlType.DOMString, xattr('CEReactions', reflectEnumerated(referrerPolicyAttribute))),

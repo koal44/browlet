@@ -1,18 +1,43 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl } from '../html-element';
 
 /** Button identity used by named collections. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#the-button-element
-// PROVISIONAL: HTML construction, form association, reflection, validation, commands, and activation remain unimplemented.
 export class HTMLButtonElementImpl extends HTMLElementImpl {
   override readonly isAllNamedElement = true;
 }
 
 /*
- * Implemented identity fragment:
- * [Exposed=Window] interface HTMLButtonElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLButtonElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectSetter] attribute DOMString command;
+ *   [CEReactions, Reflect] attribute Element? commandForElement;
+ *   [CEReactions, Reflect] attribute boolean disabled;
+ *   readonly attribute HTMLFormElement? form;
+ *   [CEReactions, ReflectSetter] attribute USVString formAction;
+ *   [CEReactions] attribute DOMString formEnctype;
+ *   [CEReactions] attribute DOMString formMethod;
+ *   [CEReactions, Reflect] attribute boolean formNoValidate;
+ *   [CEReactions, Reflect] attribute DOMString formTarget;
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   [CEReactions, ReflectSetter] attribute DOMString type;
+ *   [CEReactions, Reflect] attribute DOMString value;
+ *
+ *   readonly attribute boolean willValidate;
+ *   readonly attribute ValidityState validity;
+ *   readonly attribute DOMString validationMessage;
+ *   boolean checkValidity();
+ *   boolean reportValidity();
+ *   undefined setCustomValidity(DOMString error);
+ *
+ *   readonly attribute NodeList labels;
+ * };
+ *
+ * HTMLButtonElement includes PopoverTargetAttributes;
  */
 export const htmlButtonElementIDL = defineInterface({
   name: 'HTMLButtonElement',
@@ -21,5 +46,7 @@ export const htmlButtonElementIDL = defineInterface({
   implementation: impl(HTMLButtonElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['button'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });

@@ -1,12 +1,11 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 import { HTMLEmbedElementImpl } from './embed';
 
 /** Object identity and exposure state used by Document's named properties. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element
-// PROVISIONAL: resource selection, fallback activation, and the remaining object API await §4.8.7.
 export class HTMLObjectElementImpl extends HTMLElementImpl {
   #showsFallbackContent = false;
 
@@ -42,15 +41,38 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
 }
 
 /*
- * HTMLObjectElement's identity fragment; its attribute/API algorithms remain in §4.8.7.
- * [Exposed=Window] interface HTMLObjectElement : HTMLElement {};
+ * [Exposed=Window]
+ * interface HTMLObjectElement : HTMLElement {
+ *   [HTMLConstructor] constructor();
+ *
+ *   [CEReactions, ReflectURL] attribute USVString data;
+ *   [CEReactions, Reflect] attribute DOMString type;
+ *   [CEReactions, Reflect] attribute DOMString name;
+ *   readonly attribute HTMLFormElement? form;
+ *   [CEReactions, Reflect] attribute DOMString width;
+ *   [CEReactions, Reflect] attribute DOMString height;
+ *   readonly attribute Document? contentDocument;
+ *   readonly attribute WindowProxy? contentWindow;
+ *   Document? getSVGDocument();
+ *
+ *   readonly attribute boolean willValidate;
+ *   readonly attribute ValidityState validity;
+ *   readonly attribute DOMString validationMessage;
+ *   boolean checkValidity();
+ *   boolean reportValidity();
+ *   undefined setCustomValidity(DOMString error);
+ *
+ *   // also has obsolete members
+ * };
  */
 export const htmlObjectElementIDL = defineInterface({
   name: 'HTMLObjectElement', inherits: 'HTMLElement', exposed: 'Window',
   implementation: impl(HTMLObjectElementImpl),
   namespaceURI: HTML_NAMESPACE,
   localNames: ['object'],
-  members: [],
+  members: [
+    ctor([], xattr('HTMLConstructor')),
+  ],
 });
 
 /** Shared ancestor condition for object and embed exposure. */

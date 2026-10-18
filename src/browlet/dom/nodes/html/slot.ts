@@ -1,8 +1,8 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
 import { WeakOrderedSet } from '../../../../infra/collections';
 import {
-  arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl,
-  op, reference, reflect, sequence, union, xattr,
+  arg, attr, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, op,
+  reference, reflect, sequence, union, xattr,
 } from '../../../../web-idl/index';
 
 import type { ElementImpl } from '../element';
@@ -142,13 +142,14 @@ export class HTMLSlotElementImpl extends HTMLElementImpl {
  * [Exposed=Window]
  * interface HTMLSlotElement : HTMLElement {
  *   [HTMLConstructor] constructor();
+ *
  *   [CEReactions, Reflect] attribute DOMString name;
  *   sequence<Node> assignedNodes(optional AssignedNodesOptions options = {});
  *   sequence<Element> assignedElements(optional AssignedNodesOptions options = {});
  *   undefined assign((Element or Text)... nodes);
  * };
+ *
  */
-// HTMLConstructor remains with custom-element construction.
 export const htmlSlotElementIDL = defineInterface({
   name: 'HTMLSlotElement',
   inherits: 'HTMLElement',
@@ -157,6 +158,7 @@ export const htmlSlotElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['slot'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     attr('name', idlType.DOMString, xattr('CEReactions', reflect())),
     op('assignedNodes', sequence(reference('Node')),
       [arg('options', reference('AssignedNodesOptions'), { optional: true, default: emptyDictionary })],

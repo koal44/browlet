@@ -190,13 +190,15 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return record?.binding.world === this.world ? record : undefined;
   }
 
-  /** Construct and associate an implementation using its declared injected arguments. */
+  /** Construct an implementation using its own or its nearest declared base's interface and dependencies. */
   construct<T extends object>(
     implClass: ImplementationClass<T>,
     argumentsList: unknown[] = [],
   ): StampedImplInstance<T> {
-    const assembled = this.resolveInterface(implClass);
-    const definition = assembled.primary.implementation;
+    const assembled = this.assembly.interfaces.byImplClass.get(implClass) ??
+      this.assembly.interfaces.findForImplementation(implClass.prototype);
+    if (!assembled) throw new InternalError('No Web IDL interface is registered for this implementation');
+    const definition = assembled.getImplementation(implClass.prototype);
     const implInst: T = Reflect.construct(
       implClass as new (...argumentsList: unknown[]) => T,
       this.resolveArguments(argumentsList, definition?.constructWith ?? []),
@@ -214,9 +216,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
     const result: unknown[] = [];
     for (const { index, resolve } of injectedArguments) {
-      if (Object.hasOwn(result, index)) {
-        throw new InternalError(`Injected argument ${index} is declared more than once`);
-      }
       result[index] = resolve(this, methodContext);
     }
 
@@ -445,7 +444,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       );
     }
 
-    const prototype = this.#getPlatformObjectPrototype(assembled, newTarget);
+    const prototype = this.getPlatformObjectPrototype(assembled, newTarget);
 
     const createImplementation = this.getImplementationBinding(assembled).createImplementation;
     if (!createImplementation) {
@@ -471,15 +470,15 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       return record.platformObject!;
     }
 
-    const prototype = this.#getPlatformObjectPrototype(assembled, newTarget);
+    const prototype = this.getPlatformObjectPrototype(assembled, newTarget);
     const implInst = behavior.steps(values);
     const platformObject = this.allocatePlatformObject(implInst, assembled, prototype);
     return this.initializePlatformObject(platformObject, assembled, implInst).platformObject!;
   }
 
-  // Extracted from Web IDL §3.8 Platform objects implementing interfaces — internally create a new object
-  // implementing the interface: prototype selection.
-  #getPlatformObjectPrototype(
+  /** Select the constructor prototype, including fallback through newTarget's function realm. */
+  // https://webidl.spec.whatwg.org/#internally-create-a-new-object-implementing-the-interface
+  getPlatformObjectPrototype(
     assembled: AssembledInterface,
     newTarget?: object,
   ): object {
@@ -516,7 +515,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       );
     }
     let backingObject: object;
-    const createHTMLAllCollection = assembled.primary.implementation?.createHTMLAllCollection;
+    const createHTMLAllCollection = assembled.getImplementation(implInst)?.createHTMLAllCollection;
     if (createHTMLAllCollection) {
       backingObject = createHTMLAllCollection.call(undefined, this, implInst);
       Object.setPrototypeOf(backingObject, prototype);

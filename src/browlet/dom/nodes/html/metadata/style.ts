@@ -1,5 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { defineIncludes, defineInterface, impl, reference, reflectTokens, roAttr, xattr } from '../../../../../web-idl/index';
+import {
+  ctor, defineIncludes, defineInterface, impl, reference, reflectTokens, roAttr, xattr,
+} from '../../../../../web-idl/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
 import { LinkStyleMixin } from '../../../../style/index';
@@ -65,6 +67,8 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
  *
  *   // also has obsolete members
  * };
+ *
+ * HTMLStyleElement includes LinkStyle;
  */
 export const htmlStyleElementIDL = defineInterface({
   name: 'HTMLStyleElement',
@@ -74,6 +78,7 @@ export const htmlStyleElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['style'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     roAttr('blocking', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
     ),

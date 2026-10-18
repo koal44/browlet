@@ -1,5 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, defineInterface, idlType, impl, reflect, reflectSetter, xattr } from '../../../../../web-idl/index';
+import {
+  attr, ctor, defineInterface, idlType, impl, reflect, reflectSetter, xattr,
+} from '../../../../../web-idl/index';
 import { serializeURL, type URLRecord } from '../../../../../url/index';
 
 import { HTMLElementImpl } from '../html-element';
@@ -84,6 +86,7 @@ export const htmlBaseElementIDL = defineInterface({
   namespaceURI: HTML_NAMESPACE,
   localNames: ['base'],
   members: [
+    ctor([], xattr('HTMLConstructor')),
     attr('href', idlType.USVString, xattr('CEReactions', reflectSetter())),
     attr('target', idlType.DOMString, xattr('CEReactions', reflect())),
   ],

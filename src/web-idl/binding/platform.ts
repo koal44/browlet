@@ -90,7 +90,7 @@ export class PlatformRecord<T extends object = object> {
     else if (member?.kind === 'setlike') this.setEntries ??= new Set();
     for (const ancestorAssembled of assembled.getInheritanceChain()) {
       // Use the declaration's class identity without probing implementation Proxy prototypes.
-      if (ancestorAssembled.primary.implementation?.implClass === DOMExceptionImpl) {
+      if (ancestorAssembled.implementations.some(({ implClass }) => implClass === DOMExceptionImpl)) {
         DOMExceptionStamper.stamp(platformObject, implInst as StampedImplInstance<DOMExceptionImpl>);
       }
       // https://webidl.spec.whatwg.org/#js-platform-objects

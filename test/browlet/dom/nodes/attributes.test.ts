@@ -3,6 +3,26 @@ import { Browlet } from '../../../../src/browlet/browlet';
 import { createTestDocument } from '../../../support/dom';
 
 describe('DOM attributes', () => {
+  // https://html.spec.whatwg.org/multipage/dom.html#attribute-text
+  it('preserves unrestricted attribute strings through DOM setters', async () => {
+    const browlet = new Browlet({ route: () => '' });
+    const values = ['', ' \t\r\n ', '<tag a="b">&\'</tag>', 'before\0after', '\uD800', '\uDFFF', '\u{1F98A}'];
+    expect(await browlet.evaluate((values) => {
+      const element = document.createElement('main');
+      const attribute = document.createAttribute('data-attr-value');
+      element.setAttributeNode(attribute);
+      return values.map((value) => {
+        element.setAttribute('data-value', value);
+        element.setAttributeNS('urn:test', 'p:value', value);
+        attribute.value = value;
+        return [
+          element.getAttribute('data-value'), element.getAttributeNS('urn:test', 'value'),
+          element.getAttribute('data-attr-value'), attribute.value,
+        ];
+      });
+    }, values)).toEqual(values.map((value) => [value, value, value, value]));
+  });
+
   it('keeps one live map and one Attr while exposing independent name snapshots', async () => {
     const browlet = new Browlet({ route: () => '' });
     expect(await browlet.evaluate(() => {
