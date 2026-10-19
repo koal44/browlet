@@ -378,6 +378,15 @@ use `HostPromise` without pretending to belong to a retired Document.
 | Another specification's behavior | Direct owner API when permitted; a narrow capability for reverse/cyclic or host-specific dependencies |
 | Native I/O, clocks, scheduling, or unavailable engine primitive | Narrow Host Port, composed by the embedder |
 
+Planned shared engines have roadmap-only owners: [geometry](geometry/ROADMAP.md),
+[fonts](fonts/ROADMAP.md), [graphics](graphics/ROADMAP.md),
+[animation](animation/ROADMAP.md), and [layout](layout/ROADMAP.md). They own their
+data and algorithms; Browlet connects document state, policy, scheduling, and
+presentation. Stylelet owns CSS processing and [Typed OM](stylelet/cssom/typed/ROADMAP.md).
+These folders establish responsibility, not new Environment/Context APIs.
+Style/layout feedback needs explicit update ordering and invalidation, not
+reciprocal engine imports or ambient service discovery.
+
 [Browlet's bindings](browlet/bindings.ts) and
 [integration modules](browlet/integration/README.md) are explicit composition
 boundaries. They can know both sides of a dependency and capture Binding Context

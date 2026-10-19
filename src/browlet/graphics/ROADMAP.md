@@ -1,21 +1,29 @@
-# Graphics primitives roadmap
+# Graphics integration roadmap
 
 HTML §8.11's image objects are shared primitives for canvas, workers, and later
-graphics APIs. They are not part of the initial rendering engine merely
-because animation frames appear in the same HTML chapter.
+graphics APIs. Their state and operations belong to the planned
+[graphics subsystem](../../graphics/ROADMAP.md). This folder retains the
+Browlet-specific source, lifecycle, policy, and binding integration; neither
+folder contains a graphics implementation yet.
 
-| Planned source | Contract | Specification |
+| Integration | Contract | Specification |
 | --- | --- | --- |
-| `image-data.ts` | `ImageData`, pixel formats, storage, color space, dimensions, and constructor validation | HTML §8.11.1 |
-| `image-bitmap.ts` | `ImageBitmap`, source decoding/cropping, orientation, resize, color conversion, close, and realm-correct promises | HTML §8.11.2 |
-| `image-source.ts` | Shared image-source extraction/decoding capability consumed by canvas and element loading | HTML §8.11; HTML §4.8 |
-| `web-idl.ts` | ImageData/ImageBitmap interfaces, dictionaries, enums, and exposure | HTML §8.11 |
+| HTML image sources | Extract supported image/canvas/video/bitmap sources with their current availability, dimensions, origin-clean state, and lifetime; pass explicit source data to shared algorithms | HTML §§8.11 and 4.8 |
+| Resource loading | Connect actual element/CSS consumers to Fetch, request settings, policy, cancellation, decode completion, and invalidation | HTML image loading; CSS Images |
+| Platform exposure | Bind shared ImageData/ImageBitmap implementations, complete dictionaries/conversion, exceptions, promises, and transfer using the owning environment | HTML §8.11; Web IDL; structured data |
+| Output consumers | Supply image frames and metadata to layout/canvas/paint through the existing document update lifecycle | HTML rendering updates; consuming graphics specifications |
 
-Decoders and pixel buffers are injected host capabilities. Public objects and
-their Web IDL conversions remain Browlet-owned; Node-native image objects must
-not leak onto the author-facing surface.
+Decoding and pixel operations stay in shared graphics/backend facilities;
+source extraction must not make those facilities depend on DOM nodes. Native
+objects must not leak onto the author-facing surface. Keep document association
+and request authorization explicit rather than adding another graphics environment.
+
+Start with one real image consumer and test accepted/invalid sources, policy and
+taint propagation, source changes, close/transfer, and realm-sensitive results.
+Shared pixel tests do not establish HTML resource selection or display behavior.
 
 ## Removal condition
 
-Burn this file once image data and bitmap creation have implemented source or
-a narrower canvas/decoder roadmap.
+Remove this roadmap once source extraction, loading, and Platform integration
+have implemented source or narrower owning roadmaps. Shared graphics work stays
+with its subsystem.

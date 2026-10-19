@@ -160,12 +160,33 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   [overload](../test/web-idl/binding/realm/overload.test.ts) and
   [union conversion](../test/web-idl/converters/union.test.ts) regressions cover this choice.
 - **CSSOM projection:** CSSStyleSheet and related platform interfaces remain
-  incomplete; `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
+  incomplete, including the missing CSSStyleProperties implementation/interface.
+  `.style` still exposes the declaration implementation through `object`;
+  `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
   interface brand check. Direct CSSOM APIs currently allocate exceptions in the
   owning environment; method-realm selection awaits their member bindings.
+  The [CSSOM roadmap](stylelet/cssom/ROADMAP.md#projection-and-declaration-lifecycle)
+  owns the shared interface and declaration-state review.
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
-  owns projection, restoring `ObservableArray<CSSStyleSheet>`, and removing the
-  temporary Infra observable-array factory.
+  owns Browlet's binding integration, restoring `ObservableArray<CSSStyleSheet>`,
+  and removing the temporary Infra observable-array factory.
+- **Computed style:** `getComputedStyle()` currently creates a readonly snapshot
+  of selected installed properties. CSSOM requires a new live object, complete
+  supported-property/defaulting behavior, and resolved values that can depend
+  on layout. Pseudo-elements and full eligibility checks also remain unfinished.
+  See [computed-result dependencies](stylelet/cssom/ROADMAP.md#computed-results-and-external-facts).
+- **Value lifecycle:** selected values do not yet receive engine defaulting or
+  inheritance; CSS-wide keywords currently remain keywords. Arbitrary
+  substitution throws as unfinished, and custom-property registration/value
+  helpers are not connected to author registration or per-element computation.
+  The [engine inventory](stylelet/engine/README.md) distinguishes these limits
+  from passing direct resolver tests.
+- **Stylesheet rules:** interpretation currently drops at-rules, including
+  namespace declarations and conditional groups. Nested style rules are retained
+  but not visited by the cascade or exposed as CSSOM children. Direct nested
+  selector tests therefore do not establish nested stylesheet support. See the
+  [rule inventory](stylelet/css/README.md#rule-support-stops-at-different-layers)
+  and [remaining contracts](stylelet/css/ROADMAP.md).
 - **Inline CSS values:** style attributes are parsed and checked against CSP on
   mutation, but URL-valued CSS properties are not registered yet. Capturing and
   retaining their parse-time base URLs, including through CSSOM edits and

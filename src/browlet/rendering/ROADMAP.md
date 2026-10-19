@@ -1,26 +1,26 @@
-# Rendering roadmap
+# Rendering integration roadmap
 
-HTML §15 describes the suggested default presentation of HTML documents. Its
-rules are expressed in CSS, but it is not another CSS engine: Stylelet supplies
-cascaded and computed values, while this domain eventually turns them into
-layout boxes, viewports, replaced content, widgets, paint, and print output.
+HTML §15 describes the suggested default presentation of HTML documents.
+Stylelet owns CSS computation; the planned [layout engine](../../layout/ROADMAP.md)
+owns boxes and fragments, with [graphics](../../graphics/ROADMAP.md) and
+[fonts](../../fonts/ROADMAP.md) supplying shared resource facilities. This domain
+coordinates those owners with HTML document state, measured APIs, and output.
+It has no rendering implementation yet.
 
 | Planned area or owner | Contract | Specification |
 | --- | --- | --- |
-| `box-tree/` | CSS/SVG box association, `display: contents`, “being rendered”, rendering delegation, and viewport intersection inputs | HTML §15 introduction; CSS Display and layout specifications |
-| `layout/` | Block, inline, table, list, form-control, bidi, intrinsic sizing, margin quirks, and viewport layout | HTML §15 non-replaced elements plus the corresponding CSS modules |
-| `replaced/` | Replaced-content selection, intrinsic dimensions, aspect ratios, images, embedded content, and nested-navigable viewports | HTML §15 replaced elements; CSS Images and Sizing |
+| Layout association | Feed tree/style changes and HTML-specific facts to layout; retain correct document/source associations and freshness for queries | HTML §15 introduction; CSS Display and layout specifications |
+| Replaced-content integration | Connect element/resource selection, image facts, embedded content, and nested-navigable viewports to layout sizing | HTML §15 replaced elements; CSS Images and Sizing |
 | `widgets/` | Native appearance and UA shadow structures for buttons, details, form controls, select, progress, meter, and marquee compatibility | HTML §15 widgets plus interaction/form state |
 | `print.ts` | Printing steps and physical-form output through an embedder capability | HTML §§8.9 and 15 print media; CSS Paged Media |
 | `native-ui.ts` | Direction-aware tooltips, labels, menus, and other text surfaced outside the document canvas | HTML §15 interactive media |
 | `unstyled-xml.ts` | Fallback DOM-tree view for XML documents without an applicable style sheet | HTML §15 unstyled XML documents |
 
-The first useful slice is not a general layout engine. Add the HTML UA sheet
-and presentational-hint source under `style/`, then define one box-tree query
-that can truthfully answer “being rendered” for implemented content. Geometry,
-Intersection Observer, focus visibility, `innerText`, paint timing, and
-screenshots must wait for that real box boundary rather than infer layout from
-DOM shape or computed `display` alone.
+Add the HTML UA sheet and presentational-hint source under `style/`, then connect
+the first bounded layout implementation to a truthful box query. Geometric
+objects can be implemented independently, but measured APIs, Intersection
+Observer, focus visibility, `innerText`, paint timing, and screenshots require
+actual results. DOM shape or computed `display` alone does not establish them.
 
 For the upcoming [HTML §3.2.7 `innerText`/`outerText` consumer](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute),
 keep the required facts explicit before choosing a layout object or query API:
@@ -30,7 +30,7 @@ keep the required facts explicit before choosing a layout object or query API:
   line-ending context needed by HTML's modified whitespace rules.
 - Used display and table-row/cell box relationships that determine separators.
 
-Stylelet supplies computed style; rendering owns box construction and layout
+Stylelet supplies computed style; layout owns box construction and measured
 results. HTML owns the rendered-text collection algorithm. A narrow input view
 or explicit parameter can connect that consumer when implemented; its shape,
 freshness, and invalidation contract remain undecided. These requirements do not
@@ -48,11 +48,49 @@ live under `scripting/`. This domain supplies concrete style, layout, display,
 and output phase hooks when those systems exist; it must not replace the
 producer with a second frame scheduler.
 
-Replaced content consumes `loader/` and `graphics/`; nested frames consume
-`browsing/`; widgets consume HTML form/interaction state. Rendering must not
-take ownership of those subsystems merely because it visualizes them. A
-headless embedder may omit an OS-native widget toolkit, but it still needs a
-deterministic platform-independent rendering model for browser automation.
+Replaced-content integration consumes `loader/` and shared graphics; nested
+frames consume `browsing/`; widgets consume HTML form/interaction state. Keep
+that state with its owners. A headless embedder may omit an OS-native widget
+toolkit, but still needs a deterministic layout/output model for browser
+automation. A complete paint/compositing boundary remains future design work.
+
+## Measured DOM APIs
+
+[CSSOM View](https://drafts.csswg.org/cssom-view/#extension-to-the-element-interface)
+adds client rectangles, scroll/offset metrics, hit testing, Screen, and
+VisualViewport. Implement the host APIs against actual box/viewport/device
+state. Range geometry consumes text fragments; use shared
+[geometric objects](../../geometry/ROADMAP.md) for the prescribed results.
+Non-live rectangle results have a different lifetime from live style queries.
+None of these measurement APIs is supplied by current computed-style snapshots.
+
+Coordinate explicit update/flush behavior with the document lifecycle. CSSOM
+resolved values and container queries need particular facts at particular
+phases; neither should trigger uncontrolled nested layout from a generic query.
+The [style integration roadmap](../style/ROADMAP.md#media-matching) owns
+MediaQueryList, which needs device/matching state but not every layout facility.
+
+## Observations and presentation
+
+- [ResizeObserver](https://drafts.csswg.org/resize-observer-1/#gather-active-observations-h)
+  needs its DOM-owned observations/last reported sizes and the specified
+  depth-ordered gather/broadcast/layout loop, including skipped-observation
+  errors. Connect it to HTML's existing update phase; ordinary DOM mutation
+  callbacks or window resize events are not substitutes.
+- Intersection Observer retains its [existing owner](../dom/intersection-observer/ROADMAP.md);
+  this integration supplies measured/clipped geometry and scheduling.
+- [View transitions](https://drafts.csswg.org/css-view-transitions-1/#lifecycle)
+  need captures, rendering suppression, author callbacks, pseudo subjects,
+  distinct promise phases, animation, and cleanup. Use the shared
+  [animation owner](../../animation/ROADMAP.md); two retained style objects
+  cannot implement the transition lifecycle.
+- Highlights and pseudo-elements require source identity and styled text/box
+  fragments before painting/hit testing. Their [DOM/style association](../style/ROADMAP.md#pseudo-elements-and-highlights)
+  stays separate from presentation.
+
+These contracts were sampled, not audited operation by operation. Their APIs
+and providers remain missing. Keep tests of explicit fixture geometry distinct
+from regressions that exercise the actual layout and delivery path.
 
 ## Title advisory presentation
 
@@ -104,6 +142,6 @@ UI belong to the form/editing owners. No provisional layout record is introduced
 
 ## Removal condition
 
-Burn this file when UA style inputs, box construction, layout, replaced
-content, widgets, print, and unstyled XML either have implemented source or a
-narrower subsystem roadmap.
+Remove this roadmap when HTML rendering integration, measured APIs, observation
+delivery, and output have implemented source or narrower owners. Preserve the
+title conflict and other unfinished presentation requirements with their consumers.

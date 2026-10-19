@@ -13,13 +13,13 @@ domains; narrower roadmaps carry their actual status and remaining contracts.
 | HTML common infrastructure, document, elements, and microdata | HTML §§2–5 | Distributed across `html/`, `browsing/policy/`, `loader/`, and `scripting/structured-data/` as mapped by `html/ROADMAP.md` |
 | HTML parsing | HTML §13 | `html/parser/` |
 | XML parsing and serialization | HTML §14; XML and Namespaces in XML; DOM Parsing and Serialization | `dom/parsing/`, using a dedicated XML syntax engine rather than the HTML parser |
-| HTML suggested rendering and legacy compatibility | HTML §§15–16 plus CSS layout specifications | `rendering/` for boxes/output, `style/` for UA rules and presentational hints, and `html/legacy/` for retained APIs |
+| HTML suggested rendering and legacy compatibility | HTML §§15–16 plus CSS layout specifications | [rendering integration](rendering/ROADMAP.md) over shared [layout](../layout/ROADMAP.md), `style/` for UA rules/hints, and `html/legacy/` for retained APIs |
 | Origins, policies, windows, and navigation | HTML §7 | `browsing/` |
 | Trusted values, policies, and injection-sink checks | Trusted Types, with DOM/HTML and CSP integrations | [browsing/policy/trusted-types/](browsing/policy/trusted-types/ROADMAP.md) |
 | Agents, realms, scripts, scheduling, global utilities, timers, and frames | HTML §§8.1–8.3, 8.7–8.8, and 8.12 | `scripting/` |
 | Dynamic markup, DOM parsing/serialization, and sanitization | HTML §§8.4–8.6 | `html/parser/`, `dom/parsing/`, and `html/sanitization/` |
 | Window prompts, printing, and system capabilities | HTML §§8.9–8.10 | `browsing/window/` plus an embedder capability, and `navigator/` |
-| Image and drawing primitives | HTML §§4.12 and 8.11 | `graphics/` |
+| Image and drawing primitives | HTML §§4.12 and 8.11 | [graphics integration](graphics/ROADMAP.md) over shared [graphics](../graphics/ROADMAP.md) |
 | Cross-context, channel, server-event, and broadcast messaging | HTML §9 | `communication/` |
 | User interaction, focus, editing, drag-and-drop, and popovers | HTML §6; UI, Pointer, Touch, Clipboard, Selection, and Fullscreen specifications | `interaction/` |
 | Clocks and performance entries | High Resolution Time and Performance Timeline family | `performance/` |
@@ -69,7 +69,8 @@ standard with its first real consumer and retain its own ownership:
   navigation/cache consumers.
 - WebSockets, WebTransport, Web Crypto, credentials, WebAuthn, and payments have
   separate protocol/security/host dependencies.
-- [Media](media/ROADMAP.md), graphics, layout, accessibility, and interaction
+- [Media](media/ROADMAP.md), [graphics](../graphics/ROADMAP.md),
+  [layout](../layout/ROADMAP.md), accessibility, and interaction
   retain their own prerequisites. MSE is unnecessary for existing Blob URLs.
 - Device APIs need both an explicit use case and a host capability.
   Core WebAssembly execution remains engine-owned; HTML module/clone integration
@@ -77,9 +78,11 @@ standard with its first real consumer and retain its own ownership:
 
 ## Deferred top-level domains
 
-Add accessibility and other new domains when their first behavior arrives,
-not as empty source placeholders. Existing narrow roadmaps reserve ownership
-for communication, workers/worklets, storage, navigation, and rendering.
+Reserve a domain with a roadmap when its responsibility and dependencies can
+be named; runtime placeholders are unnecessary. Shared geometry, fonts, graphics,
+animation, and layout now have sibling roadmap-only homes. Accessibility remains
+future work; existing browser roadmaps retain communication, workers/worklets,
+storage, navigation, and rendering integration.
 
 A future WebDriver/BiDi protocol package can drive the browser's normal algorithms.
 The core retains scoped instrumentation hooks and the existing evaluation bridge;

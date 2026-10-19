@@ -1,34 +1,10 @@
 # Style integration roadmap
 
-## Present
-
-- `integration.ts` connects Browlet Documents/elements/tree scopes to Stylelet
-  state and implements the current `DocumentOrShadowRoot`,
-  `ElementCSSInlineStyle`, and `LinkStyle` host behavior.
-- Stylelet exports those mixins' neutral declarations through
-  `styleletIDLDefinitions`; Browlet contributes only their host behavior and
-  assembles the declarations into its Web IDL bindings.
-- Documents and CSSOM implementations retain their existing environment through
-  `StyleletEnvironment`. UserAgent supplies `dom` and the `URLImpl` constructor
-  through `URL`; `env.exec` supplies the shared
-  Promise and background scheduling plus `queueTask('dom-manipulation', steps)`
-  for stylesheet delivery.
-  There is no separate document execution adapter. Standalone Stylelet uses
-  native scheduling without loading Browlet's engine runtime.
-- Stylelet's host-neutral URL contract exposes `href`. Standalone hosts use
-  their native URL constructor or supply one explicitly. Stylesheet creation
-  and computed resource values use the same provider; CSSOM exposes URL strings.
-- CSSOM exception allocation remains provisional: Browlet's direct CSSOM
-  APIs receive platform exceptions from the owning environment, while
-  standalone hosts supply their own constructor through `exec.DOMException`.
-  Core's `WebIDLExecution` owns that contract. This prevents implementation
-  objects from escaping through APIs that do not yet have member bindings.
-  Full CSSOM bindings must project new failures in the invoking method's realm.
-- Stylelet and Selectlet share Infra's `DOMOperations` through the `dom` option.
-  Browlet supplies [implementation operations](../integration/dom.ts), including
-  fast HTML class checks and access to existing inline-style state. Engines never
-  read host node fields directly. Tests cover Browlet, jsdom, and opaque nodes
-  that reject property access while preserving node identity.
+The [README](README.md) describes current owners, lifecycle, and host behavior.
+This roadmap retains unfinished integration work and browser-conflict evidence.
+The [Stylelet roadmap](../../stylelet/ROADMAP.md) covers CSS feature dependencies;
+the [CSSOM roadmap](../../stylelet/cssom/ROADMAP.md) owns the interface and
+declaration-state review.
 
 ## Next boundary change
 
@@ -37,19 +13,10 @@
   changes. Selectlet's script-visible `:visited` result is not that history or
   a renderer invalidation mechanism. Keep browser history in Browlet and expose
   only the resulting host state/invalidation through Stylelet's existing boundary.
-- [x] Share DOM operations with Selectlet, retaining original node identities
-  without requiring host nodes to implement either engine's structural types.
 - [ ] Connect focus, editing, custom-element upgrade state, and form/media state
   as Browlet implements those HTML features. Its operations currently report
   the missing feature when requested. Do not synthesize
   checkedness, validity, or focus from attributes to satisfy Stylelet.
-- [x] Move host-neutral Web IDL declaration contributions for Stylelet-owned
-  CSSOM objects and mixins into the Stylelet package.
-- [x] Let Browlet bind those declarations to Browlet-specific implementation
-  adapters; let jsdom generate or bind its own wrappers from the same semantic
-  contribution.
-- [x] Keep style-sheet fetching and HTML `<link>` processing in `loader/` and
-  HTML; keep semantic sheet/declaration mutation in Stylelet.
 - [ ] Connect HTML style/link processing and critical-resource completion to
   `Element.blockRendering()`/`unblockRendering()`. Document's
   [§3.1.6 mechanism](../html/ROADMAP.md#section-316-render-blocking) and shared
@@ -61,8 +28,9 @@
   behavior: ambient `implements` clauses do not check the implementation's
   converted values, and declarations alone do not establish conformance.
 - [ ] Replace the provisional `projectWindow()` installation of `getComputedStyle`
-  with Stylelet's CSSOM Window partial and projected style results. Its current
-  adapter only unwraps the Element; it does not complete Web IDL conversion.
+  with Stylelet's CSSOM Window partial and projected CSSStyleProperties results.
+  Its current adapter only unwraps the Element; it does not complete Web IDL
+  conversion.
 - [ ] Restore `ObservableArray<CSSStyleSheet>` for `adoptedStyleSheets` once
   those platform objects exist. Web IDL already supports observable arrays;
   `TreeScope` should retain only the backing collection and CSSOM mutation
@@ -73,6 +41,14 @@
   exception construction with projection of DOMException implementations in the
   operation's realm, preserving author-thrown exceptions. Complete CSSOM
   projection is still required to exercise this boundary.
+- [ ] Supply ShadowRoot's missing style scope and connect tree-scope selection
+  to matching. Shared DocumentOrShadowRoot declarations do not establish a
+  working shadow stylesheet implementation.
+- [ ] Connect external sheets through their actual producers: HTML `<link>`,
+  XML `xml-stylesheet` processing instructions, HTTP Link/Default-Style headers,
+  and CSS imports. Account for cancellation, response policy, MIME/encoding,
+  origin-clean/base state, load completion, and script/render blocking with the
+  loader and node owners; do not make Stylelet fetch by itself.
 
 The contracts come from CSSOM, CSSOM View, CSS Style Attributes, and HTML's
 style/link processing rather than one WHATWG HTML section. This file records
@@ -94,34 +70,22 @@ Review the existing Document-owned style engine when implementing a consumer.
 Keep CSS parsing/evaluation in Stylelet and apply HTML's empty/whitespace-list
 rule where required. Determine the needed host inputs from that caller; no
 Environment or Agent matching operation is prescribed by this roadmap.
+The [Stylelet condition roadmap](../../stylelet/conditional/ROADMAP.md) owns CSS
+evaluation and the required device/reference facts; [layout](../../layout/ROADMAP.md)
+owns box/scroll results. Neither establishes a host measurement API yet.
+
+Implement MediaQueryList separately from CSSOM's MediaList: it retains its
+Document association, live matches, and event behavior. Deliver changed matches
+in creation order at HTML's existing media-query phase. Device/preferences and
+viewport changes invalidate matching; full layout is not required for every
+feature. Test retained lists and notifications through the real host boundary.
 
 ## Style attributes — HTML §3.2.6.5
 
-HTML, SVG, and MathML elements own their inline-style mixins from construction.
-Null-namespace `style` additions and changes check CSP immediately and, when
-accepted, create/update a retained `CSSDeclarationBlock`, including parser-created
-attributes and changes before the first `.style` read. The block owns property
-data without a DOM owner, environment, or CSSOM object. First and later inputs
-both call the mixin's `attributeChanged()`. Reading `.style` lazily creates a
-`CSSStyleDeclarationImpl` around that same block without reading the attribute
-or checking policy. CSSOM writes update the block and use the CSSOM object's
-updating flag to avoid recursive parsing and CSP checks. Removing
-the attribute clears declarations without a CSP check, allocating nothing if
-there is no block yet. `getInlineStyleBlock()` returns declaration data without
-allocating, or null when no block exists. Browlet's DOM provider uses that
-query directly, including for elements outside the three CSSOM includers.
-Stylelet treats a provider's null as authoritative empty state; only an absent
-provider enables raw-attribute parsing. Computed-style reads therefore neither
-create inline CSSOM nor revive a CSP-blocked raw attribute. Computed results
-have separate blocks; the inline-style mixin never retains them.
-
-Browlet's mixin checks the current node document's global CSP list, including
-after adoption, before delivering accepted input to `CSSDeclarationBlock`.
-The former `allowsAttribute` callback is removed. Stylelet exposes its existing
-updating flag through a getter; the mixin checks it before policy evaluation.
-Only Stylelet changes the flag, and its `finally` clears it even if the host's
-attribute write throws. Standalone hosts can apply their own input policy
-without importing Browlet or giving Stylelet a policy callback.
+The [current lifecycle](README.md#inline-style-lifecycle) separates raw attribute
+input, accepted declaration data, CSSOM access, and cascade reads. Its objects
+remain under review; preserve the observable input/policy/write-back boundaries
+while completing CSSStyleProperties and its Binding.
 The [CSP roadmap](../browsing/policy/csp/ROADMAP.md#style-attribute-consumer)
 records enforcement, reporting, hashes, and the approved browser differences.
 
@@ -165,13 +129,9 @@ CSP and base-URL comparisons; it is not part of the automatic regression suite.
 
 ### Lifecycle — explicit attribute input
 
-The 2026-10-18 review selected explicit attribute input and separate declaration
-storage. `CSSStyleDeclarationImpl` construction exposes a supplied block, empty
-by default, without reading its owner. The permanent mixin owned by each
-HTML/SVG/MathML element retains the block and lazily creates its CSSOM object. Each includer
-forwards null-namespace style notifications to its own mixin; generic `Element`
-no longer owns or discovers the mixin. First and later assignments use the same
-`attributeChanged()` path, with CSP checking entirely in Browlet.
+The 2026-10-18 review selected explicit attribute input and tried separate
+declaration storage. The current CSSOM review reopens that storage arrangement;
+the engine evidence below informs it without requiring the same class split.
 
 [CSSOM's declaration-block creation steps](https://drafts.csswg.org/cssom/#css-declaration-blocks)
 do describe initialization from an existing attribute. HTML requires parsing at
@@ -208,7 +168,7 @@ Local implementation sources inspected on 2026-10-18:
   `living/css/ElementCSSInlineStyle-impl.js`, `CSSStyleDeclaration-impl.js`, and
   `living/nodes/HTMLElement-impl.js` in its `lib/jsdom/` tree.
 
-The current trial follows the engines' separation of property data from CSSOM.
+The storage trial followed the engines' separation of property data from CSSOM.
 Blink's `MatchStyleAttribute()` and WebKit's `ElementRuleCollector` read retained
 property data directly; Gecko's `GetInlineStyleDeclaration()` retrieves its
 parsed attribute block independently of `Style()`. Their `getComputedStyle()`
@@ -217,30 +177,14 @@ likewise reads the block through `DOMOperations.inlineStyleBlock`, without
 requesting the inline CSSOM implementation. The previous combined representation
 created CSSOM on accepted attribute input as well as author access.
 
-Attribute input uses one path before and after CSSOM creation. After updating
-the block, it calls `synchronizeIndices()` only if CSSOM already exists. This is
-an explicit temporary dependency on the current numeric-property implementation;
-full CSSOM Binding should own indexed property exposure and remove this step.
-The block needs no observer, CSSOM reference, or host callback. CSSOM retains its
-existing host write-back and rule-change notification responsibilities.
+The [CSSOM test inventory](../../stylelet/cssom/README.md#existing-evidence-and-its-limits)
+separates observable regressions from storage-trial assertions. Existing coverage
+includes explicit host initialization, first/later attribute input, one policy
+check, accepted state after rejection, CSSOM write-back, namespace handling,
+adoption, updating-flag cleanup on host failure, and authoritative empty provider
+results. Do not let identity/allocation tests accidentally require the trial's
+container arrangement when the interface implementation changes.
 
-Regressions cover explicit external-host initialization, stable `.style`
-identity, immediate parsing and one CSP check per attribute input, accepted state
-after blocked replacements, removal without CSP, CSSOM write-back without
-reporting across all three includers, and current document policy after adoption.
-Host write failures reset the updating flag; unrelated namespaced style attributes
-are preserved during CSSOM writes and null-namespace removal. Removing a blocking policy
-before the first CSSOM read cannot revive a rejected attribute. Parser insertion
-uses the same input path. The new external-host regression first failed because
-construction had already consumed the attribute instead of creating empty state.
-Cascade regressions first reproduced allocation on a read and raw-attribute
-parsing despite an explicit empty provider result. They now cover non-allocating
-reads across all three includers, CSP-blocked input before and after policy
-removal, and the retained fallback for hosts without a provider.
-The storage-split regression first observed CSSOM creation during accepted
-attribute input in all three element families. It now verifies parsing and
-cascade reads before the first CSSOM access, shared block identity, importance
-handling, live numeric indices, removal, and subsequent CSSOM write-back.
 Clone/import behavior needs its own audit: Blink and WebKit explicitly recognize
 cloning and bypass the ordinary CSP gate. Do not infer clone behavior from a
 constructor's incidental attribute read or silently adopt that bypass.
@@ -251,12 +195,10 @@ lowercasing is invalid for nonce/hash payloads and URL paths. Parsed-source
 caching would first need a deliberate policy for the currently mutable `tokens`
 array. These are review concerns, not authorization for a broader CSP rewrite.
 
-The planned CSSOM review should also examine the provisional direct exposure of
-declaration implementations and their inline string conversions. Completing the
-CSSStyleDeclaration/CSSStyleProperties binding boundary will establish which
-conversions belong to the author API and which behavior internal callers need.
-The declaration object still owns the retained property data. Non-allocating
-cascade reads do not require the separate storage proposed in alternative 3.
+Completing the CSSStyleDeclaration/CSSStyleProperties binding boundary must
+establish which conversions belong to the author API and which behavior internal
+callers need. Review the current [declaration-state owners](../../stylelet/cssom/README.md#declaration-data-and-mutation)
+alongside that boundary rather than preserving their split by default.
 
 ## Unchanged style type
 
@@ -274,6 +216,22 @@ both changed and unchanged type assignments with HTML §4.2.6/CSSOM before
 changing this behavior. Do not infer a global attribute-notification shortcut
 from either this split or the separate frozen-base-URL clash.
 
+## Pseudo-elements and highlights
+
+[CSSPseudoElement](https://drafts.csswg.org/css-pseudo-4/#CSSPseudoElement-interface)
+associates a pseudo subject with its originating element and retains observable
+identity independently of box existence. The inspected draft marks the API as
+under design; ordinary CSSOM pseudo-style queries do not require adopting it.
+
+[Custom highlights](https://drafts.csswg.org/css-highlight-api-1/#registration)
+associate names with sets of AbstractRanges through the document's CSS.highlights
+registry. Keep live Range adjustment and StaticRange validity with the
+[range owner](../dom/ranges/ROADMAP.md). Registry/range/priority changes must
+invalidate relevant styles and presentation; they do not synchronously paint.
+Stylelet owns highlight style processing; layout supplies text fragments and
+rendering supplies output/hit testing. Public interfaces, detailed styling, and
+delivery remain unimplemented and require a focused review.
+
 ## HTML rendering inputs
 
 HTML §15 contributes two kinds of style input that Browlet must not bury in
@@ -288,14 +246,13 @@ Hint extraction consumes HTML microsyntax parsers and produces ordinary
 Stylelet declarations; it must not mutate inline style or special-case the
 computed-style resolver. This includes both current and obsolete attributes.
 
-Stylelet decides cascade, inheritance, and computed values. The future
-`rendering/` domain consumes those values to create boxes, replaced content,
-widgets, and print output. Predicates such as “being rendered” cannot be
+Stylelet decides cascade, inheritance, and computed values. The planned
+[layout engine](../../layout/ROADMAP.md) consumes internal style and content to
+create boxes/fragments; [rendering integration](../rendering/ROADMAP.md)
+coordinates HTML state, widgets, and print/output. Predicates such as “being rendered” cannot be
 answered from `display` alone because SVG boxes, `display: contents`, native
 widgets, and suppressed replaced content participate in the result.
 
-## Removal condition
-
-Burn this file after Stylelet owns its neutral declarations and Browlet's
-integration is only the host adapter, HTML rendering inputs, and loader
-connection.
+Keep host-specific work and conflict evidence here as Stylelet's CSSOM contracts
+become complete. Current integration behavior belongs in the README; general
+CSS feature work belongs in Stylelet's roadmaps.

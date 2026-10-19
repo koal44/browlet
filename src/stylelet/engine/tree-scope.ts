@@ -121,8 +121,6 @@ export class TreeScope {
     }
   }
 
-  // Private helpers ---------------------------------------------------------
-
   #configureAddedStyleSheet(styleSheet: CSSStyleSheetImpl): void {
     if (styleSheet.disabled) return;
 

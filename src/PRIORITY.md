@@ -13,7 +13,7 @@ integration with the shared foundations and browser consumers.
 
 - The Stylelet declaration boundary is established: Stylelet exports neutral
   CSSOM contributions and Browlet supplies its host binding. Complete CSSOM
-  platform projection remains [style integration](browlet/style/ROADMAP.md) work.
+  Platform projection remains [style integration](browlet/style/ROADMAP.md) work.
 - The clock, abort core, active-Document relationships, task kernel, Window
   function timers, and supported explicit microtask backend are present.
   Script records, reaction delivery, and broader global lifecycles remain open.
@@ -28,119 +28,72 @@ integration with the shared foundations and browser consumers.
   provisional lifecycle hooks; it does not complete navigation, parsing, or
   script execution.
 
-Resume the unfinished DOM and HTML foundations below. Fetch's remaining features
-and owner integrations are deferred in its roadmap. Do not reopen completed
-preflight as a second backlog, or infer DOM readiness from the Fetch milestone.
-File/XHR consumers can use the completed Fetch contract when their own
-prerequisites are ready.
+The DOM mutation, range, traversal, collection, shadow/slot and Trusted Types
+passes are recorded in their [owning roadmaps](browlet/dom/ROADMAP.md). The
+[HTML audit](browlet/html/ROADMAP.md) has reached §3.2.6.5, the style attribute,
+with referenced missing dependencies explicit. The next global attribute is
+§3.2.6.6, data-*. The current detour is the CSSOM/inline-style boundary review;
+return to the HTML audit after that bounded review, without waiting for all CSS.
 
-DOM 4A-4I now provide structural/text mutation, live Range/NodeIterator participation,
-the shared attribute path, live/static collections, convenience mutations, and
-Selectlet-backed selector APIs, with MutationObserver records and Agent-backed
-notification. Trusted Types TT-A/TT-B supply Window factories,
-trusted values and policies, default-policy processing, attribute enforcement,
-and CSP checks/reporting through the existing mutation path.
-[DOM 4I](browlet/dom/nodes/ROADMAP.md#node-and-document-completion-4i) adds clone/import,
-equality and namespace queries, document factories, XML leaf interfaces, and
-ProcessingInstruction pseudo-attributes. Shadow attachment and slot assignment
-share the mutation path and observer checkpoint. [DOM §5](browlet/dom/ranges/ROADMAP.md)
-completes the core Range surface; contextual fragments and geometry keep their
-parser/layout gates. DOM §6 traversal now supplies NodeFilter, NodeIterator, and
-TreeWalker through the Document factories. DOM §7 adds DOMTokenList and
-Element.classList through the shared attribute path. The bounded HTML §§2–3
-pass has recorded the [§§2.1–2.2 audit](browlet/html/ROADMAP.md#sections-21-and-22-audit).
-The [§2.3 microsyntax slices](browlet/html/microsyntaxes/ROADMAP.md#five-implementation-slices)
-now supply 2.3A's boolean/enumerated attribute values and canonical keywords,
-2.3B's exact integers, floating-point values, dimensions, and numeric lists,
-2.3C's dates, times, offsets, weeks, and durations, 2.3D's legacy colors and
-token syntax, and 2.3E's hash-name references. The media and identity review
-retains the deferred matching and serialization gates. The
-[§2.4 URL audit](browlet/html/ROADMAP.md#section-24-audit) led to §2.4.2's parsing
-methods on Document and the browser environment. The §2.4.3 base-change response
-now has a basic HTML script implementation and approved provisional consumers for
-hyperlink state, speculation-rule parsing/registration, and speculative loads.
-Those effects and the proposed nested-document slices remain explicit follow-ups.
-The [§2.5 audit](browlet/html/ROADMAP.md#section-25-audit) now includes §2.5.1's
-potential-CORS request construction, §2.5.2's response reader and sniffed-prefix
-replay, §2.5.3's meta charset extractor, §2.5.4's CORS attribute states and
-credentials mapping, and §2.5.5's referrer-policy attribute interpretation.
-Link/script expose `crossOrigin` and `referrerPolicy` reflection. Actual content
-support and general document-handler selection remain explicit loader gates.
-Element fetch consumers, complete document policy delivery, and custom-element
-reactions remain explicit dependencies. The bounded §2.5.7 lazy-loading slice is
-accepted complete; its element state and HTML observer consumer use a provisional
-Intersection Observer for registrations and entry queues. Complete observer
-initialization, geometry, bindings, automatic delivery, and actual element loaders
-remain in the HTML/observer roadmaps. The BiDi scripting hook has an approved
-provisional no-session result; scoped automation overrides remain unfinished.
-§2.5.6 adds nonce state, IDL, attribute synchronization, connection-time hiding,
-and cloning across HTML, SVG, and MathML. Policy delivery and script/style loading
-remain separate consumers. §2.5.8 adds link/style/script `blocking` token lists
-and potential-render-blocking predicates, including parser-origin state.
-Script preparation and resource-loading integration remain explicit dependencies.
-§2.5.9 adds shared fetch-priority states and image/link/script
-reflection; element loaders and actual network prioritization remain pending.
-The [§§2.6.1–2.6.3 reflection slice](browlet/html/reflection/ROADMAP.md) now
-consolidates the implemented attributes and supplies numeric, URL, token, and
-element-reference rules. Minimal ElementInternals state and shadow-root access
-are present; attachment, ARIA, forms, and reaction delivery remain pending.
-§2.6.4.1 HTMLAllCollection and native `document.all` are implemented, with the
-[enumeration-order clash](browlet/dom/nodes/ROADMAP.md#property-enumeration-order)
-retained for engine follow-up. §§2.6.4.2–2.6.4.3 form/options collections now have
-minimal concrete [form-control owners](browlet/dom/nodes/html/forms/ROADMAP.md).
-Form membership, radio grouping, automatic selection, and selectedcontent remain
-explicit stubs; three approved expected-failure tests expose the first three gaps.
-§2.6.5 supplies DOMStringList, now retained by Document ancestry initialization;
-child navigation and Location's relevant-document/security integration remain pending.
-The [§3.1.1 slice](browlet/html/ROADMAP.md#section-311-document-state-and-declarations)
-supplies Document's required initial state, inherited-base cloning hook, and
-declared types, with minimal dialog/SVG-script identities and readonly
-referrer/readiness projection. Its complete member inventory keeps later
-algorithms explicit. The [§3.1.2 contribution](browlet/html/ROADMAP.md#section-312-documentorshadowroot-contribution)
-adds the active-element declaration and getter while leaving Document's focused
-area as an explicit throwing dependency on §6.6. The
-[§3.1.3 slice](browlet/html/ROADMAP.md#section-313-ancestor-origins) supplies
-ancestor-origin lists and policy masking, with explicit parent input before
-activation and child-navigation dependencies recorded. The
-[§3.1.4 slice](browlet/html/ROADMAP.md#section-314-resource-metadata) adds Document cookie
-access and response modification dates; local-file metadata remains a loader dependency,
-and inherited cookie URLs still need iframe/initiator and history-restoration producers.
-The [§3.1.5 slice](browlet/html/ROADMAP.md#section-315-document-loading-status)
-adds readiness transitions/events, parser lifecycle state, and load/unload
-timing records. XML parsing, unload capture, and complete parser/load scheduling
-remain explicit dependencies. The [§3.1.6 mechanism](browlet/html/ROADMAP.md#section-316-render-blocking)
-adds Document's blocking set, eligibility and timeout checks, element cleanup,
-and rendering-opportunity filtering. Resource loaders and production rendering
-remain separate dependencies. The [§3.1.7 accessors](browlet/html/ROADMAP.md#section-317-dom-tree-accessors)
-add HTML/SVG title, body replacement, live collections/name lookup, currentScript
-state, and Document named properties. Object fallback selection, iframe child
-navigation, and script-execution producers remain explicit dependencies.
-The [§3.2.1 audit](browlet/html/ROADMAP.md#section-321-semantics-audit-2026-10-16)
-accounts for authoring requirements and the unfinished dynamic-presentation
-dependency. The [§3.2.2 slice](browlet/html/ROADMAP.md#section-322-elements-in-the-dom)
-completes HTML element identities and the shared-member dependency inventory,
-including ordinary reflections available now. The [§3.2.3 constructor slice](browlet/html/ROADMAP.md#section-323-html-element-constructors)
-implements HTML constructor overrides and their consumed definition/stack state.
-The [§3.2.4 review](browlet/html/ROADMAP.md#section-324-element-definitions-audit)
-accounts for the definition headings and verifies unrestricted DOM attribute
-strings. Every registered HTML tag now has a distinct internal implementation
-while retaining its specified public interface. Resume §3.2.4 to attach the
-category, content-model, and sanitization information to these owners before
-continuing with §3.2.5. Consumer algorithms retain their subsystem owners.
-Keep missing
-dependencies with their owners; this is not a requirement to finish every referenced subsystem. HTML
-§3.2.3 leads into §4.13
-for public definition registration, upgrade producers, and reaction delivery.
-HTML cloning hooks retain their separate gates.
-Selectlet continues to use its existing pointer traversal.
-Trusted parser options, sanitization, markup
-APIs, script compilation, and workers keep their later consumer gates.
+The [Stylelet roadmap](stylelet/ROADMAP.md) maps missing contracts and dependencies;
+its [README](stylelet/README.md) records existing implementations. Keep detailed
+algorithm inventories in those owners rather than expanding this guide.
 
-The [WPT roadmap](../wpt/ROADMAP.md) accompanies these stages. The selected suite's
-unexpected failures are resolved, and CI runs the selection and publishes its
-results and progress graphic. WPT-compatible report interchange and server
-integration remain open. Broaden test coverage as each owning subsystem becomes
-ready, rather than postponing all conformance work until the browser is complete.
+Fetch's remaining features and owner integrations stay in its roadmap; do not
+reopen completed protocol work as a prerequisite for consumers. The
+[WPT roadmap](../wpt/ROADMAP.md) accompanies delivery: broaden public-path tests
+as each owner becomes ready, with server integration tied to real loading.
+
+## Stylelet delivery order
+
+This is the default route within the broader browser milestones below.
+Independent value/interface work can proceed beside it. Each step proves the
+connected path for a bounded supported profile; it need not finish every
+property or referenced specification first.
+
+1. **Declaration ownership and Platform projection.** Start with
+   [CSSStyleDeclaration/CSSStyleProperties and ElementCSSInlineStyle](stylelet/cssom/ROADMAP.md#next-review-order).
+   Settle retained state, mutation and typed results together. Preserve raw
+   attributes, accepted declarations, CSP rejection and the CSSOM-write bypass.
+   Prove same-object style access and realm-correct binding behavior. Existing
+   storage classes and tests of those internals are not architectural constraints.
+2. **Rules, sheets and participation.** Follow declarations into CSSStyleRule,
+   then sheet/list identity, adoption, replacement and mutation. Connect nested
+   rules and selected group rules to interpretation and cascade; retain namespace,
+   URL and tree-scope context. Follow the [rule](stylelet/css/ROADMAP.md) and
+   [selector](stylelet/selector/ROADMAP.md) gates. Add external sheet loading through
+   the existing loader when that consumer is reached, not through another fetcher.
+3. **Complete the value path for supported properties.** Finish cascade ordering,
+   defaulting, inheritance, CSS-wide keywords and custom-property substitution.
+   Connect @property/CSS.registerProperty to registration and invalidation.
+   Follow [engine](stylelet/engine/ROADMAP.md), [lifecycle](stylelet/value-processing/ROADMAP.md),
+   and [value](stylelet/values/ROADMAP.md) ownership. Serialization exposes the
+   resulting stage; it does not repair missing computation.
+4. **Live queries and typed views.** Complete getComputedStyle's identity,
+   eligibility, enumeration, freshness and property-specific resolved values.
+   Keep Typed OM computed values distinct. Declared typed maps can follow step 1;
+   retained computed maps need step 3 and invalidation. Context-free typed values
+   and [geometry](geometry/ROADMAP.md) can proceed separately. See
+   [Typed OM](stylelet/cssom/typed/ROADMAP.md).
+5. **Deliver facts for actual consumers.** Pull in property families, device/media
+   matching, resource loading and fonts as the supported profile needs them.
+   [Value inputs](stylelet/values/ROADMAP.md#context-inputs-and-freshness) identify
+   each owner and freshness condition. matchMedia needs matching/device state; font readiness and box-based
+   queries need their rendering contracts. Do not gate every CSSOM operation on
+   complete layout, or return invented facts to hide an unfinished dependency.
+6. **Effects and rendering-dependent APIs.** Add [animation](animation/ROADMAP.md)
+   timing/composition and CSS animation/transition producers through the existing HTML update sequence.
+   Scroll timelines, resize observations, pseudo/highlight output and view
+   transitions require their particular box/scroll/capture consumers. Concrete
+   worklets follow module/global lifetime support and an actual rendering consumer.
+   Their names in the scheduler are integration points, not implementations.
+
+The immediate task remains step 1. The
+[CSSOM review order](stylelet/cssom/ROADMAP.md#next-review-order) bounds this detour;
+[subsystem roadmaps](stylelet/ROADMAP.md#source-organization) keep later dependencies
+visible. Geometry, fonts, graphics, animation, and layout have roadmap-only
+homes; concrete APIs and backend choices remain open. Stylelet stays host-neutral,
+and Browlet composes document lifecycle, policy, scheduling, and Platform bindings.
 
 ## Dependency order
 
@@ -236,12 +189,13 @@ Use the first Fetch-backed Document/external-script slice to integrate
 Dynamic-markup, child-context, and worker tests follow their own prerequisites.
 
 **6: render that Document.** [Style](browlet/style/ROADMAP.md) supplies versioned
-UA rules and presentational hints; [rendering](browlet/rendering/ROADMAP.md)
-consumes Stylelet values for boxes, viewport, block/inline layout, text, and
-replaced content. Rendering opportunities and animation frames join the existing
-event loop. [Performance](browlet/performance/ROADMAP.md) and
-[graphics](browlet/graphics/ROADMAP.md) add the required entries and deterministic
-output. DOM presence or `display` alone is not proof that an element is rendered.
+UA rules and presentational hints; [layout](layout/ROADMAP.md) consumes internal
+Stylelet values and content for boxes, formatting, and fragments, using
+[fonts](fonts/ROADMAP.md) and [graphics](graphics/ROADMAP.md) for resource facts.
+[Rendering integration](browlet/rendering/ROADMAP.md) joins document updates and
+output to the existing event loop; [performance](browlet/performance/ROADMAP.md)
+consumes actual milestones. DOM presence or `display` alone is not proof that
+an element is rendered.
 
 **7: extend the browsing graph.** [Browsing](browlet/browsing/ROADMAP.md) and
 [Window](browlet/browsing/window/ROADMAP.md) add child navigables, iframe/srcdoc,

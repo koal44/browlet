@@ -64,6 +64,22 @@ shared-storage worklet scopes remain in their owning subsystems. Browlet's
 smaller source tree can use a separate `worklets/` domain while preserving that
 same ownership distinction.
 
+## CSS worklet consumers
+
+These contracts were sampled, not audited operation by operation. Concrete
+implementations remain missing; none is a prerequisite for inline CSSOM.
+
+| Consumer | Inputs/output and owning roadmap |
+| --- | --- |
+| [CSS Painting](https://drafts.css-houdini.org/css-paint-api-1/) | Selected computed properties, arguments, size, and a drawing context; [graphics](../../graphics/ROADMAP.md) owns realization, Stylelet supplies CSS inputs |
+| [CSS Layout](https://drafts.css-houdini.org/css-layout-api-1/) | Children, constraints, intrinsic sizes, and fragments; child handles are valid for their pass. [Layout](../../layout/ROADMAP.md) owns the algorithm integration. |
+| [Animation Worklet](https://drafts.css-houdini.org/css-animation-worklet-1/) | Animator execution/state and worklet animations require the [animation model](../../animation/ROADMAP.md) as well as module loading |
+
+This owner supplies agents, realms, module replay, and teardown. The concrete
+consumer supplies registration and invocation, including allowed state/lifetime.
+Reassess each draft and interoperability target before implementation; the
+local Houdini Worklets document redirects to HTML's infrastructure.
+
 ## Delivery order
 
 1. Wait for module-graph fetching, environment-targeted tasks, and disposable
