@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('custom-elements', 'skip', [
+runScenarios('custom-elements', 'normal', [
   {
     name: ':state() matches custom element states',
     // status: 'only',

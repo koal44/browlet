@@ -12,6 +12,7 @@ export class HTMLOptionElementImpl extends HTMLElementImpl {
     this.prototype.tag = ElementTag.HTMLOption;
     this.prototype.categories = [];
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'label'];
+    this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'label'];
   }
 
   // https://html.spec.whatwg.org/#concept-option-selectedness

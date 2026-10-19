@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('shadow-root', 'skip', [
+runScenarios('shadow-root', 'normal', [
   {
     name: 'shadow-root/declarative-slot',
     // status: 'only',

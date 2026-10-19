@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { HTML_NAMESPACE, getContainedTextDirection, type TextDirection } from '../../../../../infra/index';
 import { WeakOrderedSet } from '../../../../../infra/collections';
 import {
   arg, attr, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, op,
@@ -144,6 +144,19 @@ export class HTMLSlotElementImpl extends HTMLElementImpl {
       realm.agent.signalSlots.add(this);
       realm.agent.queueMutationObserverMicrotask();
     }
+  }
+
+  protected override getAutoDirection(): TextDirection | null {
+    if (!this.getRoot().isShadowRoot() || this.assignedNodesList.length === 0) {
+      return super.getAutoDirection();
+    }
+    for (const child of this.assignedNodesList) {
+      // SPEC_CLASH(dir-assigned-root): Follow HTML/Chromium/Firefox; WebKit scans excluded assigned roots.
+      const direction = child.isText() ? child.getDirectionality()
+        : getContainedTextDirection(child, true, this.env.userAgent.dom);
+      if (direction !== null) return direction;
+    }
+    return null;
   }
 }
 

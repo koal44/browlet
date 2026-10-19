@@ -1,4 +1,7 @@
 import { HTML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE } from './namespaces';
+import { asciiLower } from './ascii';
+import { firstStrongDirection, type TextDirection } from './bidi';
+import { getContainedTextDirection } from './dom-directionality';
 import type { DOMOperations, DOMCollection } from './dom-operations';
 
 /** DOM operations for platform objects implementing the ordinary browser DOM API. */
@@ -10,10 +13,11 @@ export const standardDOM: DOMOperations<
   isElement: (node): node is StandardElement => node.nodeType === 1,
   isDocument: (node): node is StandardDocument => node.nodeType === 9,
   isDocumentFragment: (node): node is StandardDocumentFragment => node.nodeType === 11,
-  isText: (node) => node.nodeType === 3,
+  isText: (node) => node.nodeType === 3 || node.nodeType === 4,
   isShadowRoot: (node): node is StandardShadowRoot => node.nodeType === 11 && 'host' in node && node.host !== null,
   isConnected: (node) => node.isConnected,
   isHTMLElement: (element) => element.namespaceURI === HTML_NAMESPACE,
+  isSlot: (element) => element.namespaceURI === HTML_NAMESPACE && element.localName === 'slot',
   isHTMLDocument: (document) => document.contentType.includes('/html') ||
     document.createElement('DiV').localName === 'div',
   isQuirksMode: (document) => document.compatMode !== 'CSS1Compat',
@@ -54,6 +58,8 @@ export const standardDOM: DOMOperations<
   attributeNamespaceURI: (attribute) => attribute.namespaceURI,
   attributeValue: (attribute) => attribute.value,
   getLanguage,
+  getDirectionality,
+  isAutoDirectionalityBoundary: isDirectionalityBoundary,
 
   getElementById: (root, id) => root.getElementById(id),
   getElementsByTagName: (root, name) => root.getElementsByTagName(name),
@@ -211,6 +217,11 @@ interface StandardOptionElement extends StandardElement {
   selected: boolean;
 }
 
+/** Standard slots expose assignments even when their containing shadow root is closed. */
+interface StandardSlotElement extends StandardElement {
+  assignedNodes(): StandardNode[];
+}
+
 interface StandardMediaElement extends StandardElement {
   currentTime: number;
   paused: boolean;
@@ -242,4 +253,62 @@ function getLanguage(element: StandardElement): string {
 
   // Platform DOM APIs do not expose retained HTTP or language-pragma defaults.
   return '';
+}
+
+/** Compute HTML directionality for a standard DOM host without invoking its selector engine. */
+// https://html.spec.whatwg.org/multipage/dom.html#the-directionality
+function getDirectionality(element: StandardElement): TextDirection {
+  if (element.namespaceURI === HTML_NAMESPACE) {
+    const state = dirState(element);
+    if (state === 'ltr' || state === 'rtl') return state;
+    if (state === 'auto' || element.localName === 'bdi') return autoDirectionality(element) ?? 'ltr';
+    if (element.localName === 'input' && (element as StandardFormControl).type === 'tel') return 'ltr';
+  }
+  // SPEC_CLASH(dir-foreign-elements): Follow HTML/Chromium/Firefox; foreign dir does not override inheritance.
+  const parent = element.parentNode;
+  if (parent === null) return 'ltr';
+  if (standardDOM.isShadowRoot(parent)) return getDirectionality(parent.host);
+  return standardDOM.isElement(parent) ? getDirectionality(parent) : 'ltr';
+}
+
+/** Interpret an HTML element's dir attribute; absent and invalid keywords share the Undefined state. */
+function dirState(element: StandardElement): 'ltr' | 'rtl' | 'auto' | null {
+  const state = asciiLower(element.getAttributeNS(null, 'dir') ?? '');
+  return state === 'ltr' || state === 'rtl' || state === 'auto' ? state : null;
+}
+
+const autoDirectionalityInputTypes = new Set([
+  'hidden', 'text', 'search', 'tel', 'url', 'email', 'password', 'submit', 'reset', 'button',
+]);
+
+/** Use live form values, assigned slot content, or ordinary descendant text as HTML requires. */
+function autoDirectionality(element: StandardElement): TextDirection | null {
+  const name = element.localName;
+  if (name === 'textarea' || (name === 'input' &&
+    autoDirectionalityInputTypes.has((element as StandardFormControl).type))) {
+    const value = (element as StandardFormControl).value;
+    return value === '' ? null : firstStrongDirection(value) ?? 'ltr';
+  }
+  if (name === 'slot' && standardDOM.isShadowRoot(element.getRootNode())) {
+    const assigned = (element as StandardSlotElement).assignedNodes();
+    if (assigned.length !== 0) {
+      for (const child of assigned) {
+        // SPEC_CLASH(dir-assigned-root): Follow HTML/Chromium/Firefox by excluding the assigned root too.
+        const direction = standardDOM.isText(child)
+          ? firstStrongDirection((child as StandardText).data)
+          : getContainedTextDirection(child as StandardElement, true, standardDOM);
+        if (direction !== null) return direction;
+      }
+      return null;
+    }
+  }
+  // SPEC_CLASH(dir-nontext-input): Follow HTML/WebKit, including DOM-appended text in other input types.
+  return getContainedTextDirection(element, false, standardDOM);
+}
+
+/** Exclude HTML direction boundaries and text whose element defines another source or purpose. */
+function isDirectionalityBoundary(element: StandardElement): boolean {
+  if (element.namespaceURI !== HTML_NAMESPACE) return false;
+  const name = element.localName;
+  return name === 'bdi' || name === 'script' || name === 'style' || name === 'textarea' || dirState(element) !== null;
 }

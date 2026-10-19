@@ -1,5 +1,6 @@
 export { asciiLower, hasWhitespaceToken, isAsciiWhitespace } from './ascii';
 export { forgivingBase64Decode, forgivingBase64Encode } from './base64';
+export { firstStrongDirection, type TextDirection } from './bidi';
 export {
   WeakOrderedSet, appendToMapList, iterableToArray, mergeSortedUniqueLists, mergeSortedUnique, type Precedes,
 } from './collections';
@@ -7,6 +8,7 @@ export type {
   DOMOperations, DOMNode, DOMElement, DOMDocument, DOMDocumentFragment, DOMShadowRoot, DOMProcessingInstruction,
   DOMParentNode, DOMQueryRoot, DOMCollection,
 } from './dom-operations';
+export { getContainedTextDirection } from './dom-directionality';
 export { standardDOM } from './dom-standard';
 export type {
   StandardNode, StandardElement, StandardDocument, StandardDocumentFragment, StandardProcessingInstruction, StandardAttribute,

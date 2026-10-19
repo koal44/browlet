@@ -20,6 +20,7 @@ export const browletDOM: DOMOperations<
   isShadowRoot: (node): node is ShadowRootImpl => ShadowRootImpl.is(node),
   isConnected: (node) => node.isConnected,
   isHTMLElement: (element) => HTMLElementImpl.is(element),
+  isSlot: (element) => element.isSlot(),
   isHTMLDocument: (document) => document.type === 'html',
   isQuirksMode: (document) => document.compatMode !== 'CSS1Compat',
 
@@ -59,6 +60,8 @@ export const browletDOM: DOMOperations<
   attributeNamespaceURI: (attribute) => attribute.namespaceURI,
   attributeValue: (attribute) => attribute.value,
   getLanguage: (element) => element.getLanguage(),
+  getDirectionality: (element) => element.getDirectionality(),
+  isAutoDirectionalityBoundary: (element) => element.isAutoDirectionalityBoundary(),
   inlineStyle: (element) => 'style' in element ? element.getInlineStyle() : null,
 
   getElementById: (root, id) => findElementById(root, id),

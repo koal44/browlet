@@ -461,6 +461,14 @@ export class DocumentImpl extends NodeImpl {
     return root instanceof HTMLHtmlElementImpl ? root : null;
   }
 
+  /** Forward the reflected keyword to the HTML html element, when one exists. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-document-dir
+  get dir(): string { return this.htmlElement?.dir ?? ''; }
+  set dir(value: string) {
+    const html = this.htmlElement;
+    if (html !== null) html.dir = value;
+  }
+
   /** First head child of the document's HTML html element. */
   // https://html.spec.whatwg.org/#dom-document-head
   get head(): HTMLHeadElementImpl | null {
@@ -1911,7 +1919,7 @@ export const htmlDocumentIDL = definePartialInterface({
       },
     ),
     attr('title', idlType.DOMString, xattr('CEReactions')),
-    // TODO(HTML §3.2.6): dir forwards to the document element's directionality attribute.
+    attr('dir', idlType.DOMString, xattr('CEReactions')),
     attr('body', nullable(reference('HTMLElement')), xattr('CEReactions')),
     roAttr('head', nullable(reference('HTMLHeadElement'))),
     roAttr('images', reference('HTMLCollection'), xattr('SameObject')),

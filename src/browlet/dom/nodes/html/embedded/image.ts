@@ -17,6 +17,7 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
       ContentCategory.FormAssociated,
     ];
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'alt'];
+    this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'alt'];
   }
 
   /** Suspended image-loading steps, installed by the image loading algorithm. */

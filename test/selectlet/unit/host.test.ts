@@ -5,6 +5,21 @@ import { HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE, standar
 import { createOpaqueDOM } from '../../support/opaque-dom';
 
 describe('Selectlet DOM hosts', () => {
+  it.each([
+    ['<div id="target" dir="auto">١A</div>', 'ltr'],
+    ['<div id="target" dir="auto">中א</div>', 'ltr'],
+    ['<div id="target" dir="auto">𞤀A</div>', 'rtl'],
+    ['<div id="target" dir="auto"><script>א</script>A</div>', 'ltr'],
+    ['<div dir="rtl"><svg id="target" dir="ltr"></svg></div>', 'rtl'],
+  ])('uses HTML directionality for %s', (markup, direction) => {
+    const host = createOpaqueDOM(markup);
+    try {
+      const selectlet = createSelectlet(host.document, { dom: host.dom });
+      const target = host.opaque(host.window.document.getElementById('target')!);
+      expect(selectlet.matches(`:dir(${direction})`, target)).toBe(true);
+    } finally { host.close(); }
+  });
+
   it('uses an existing environment and preserves the supplied node identities', () => {
     const host = createOpaqueDOM('<main id="target"></main>');
     try {

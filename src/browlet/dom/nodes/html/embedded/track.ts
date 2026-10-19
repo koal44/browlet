@@ -12,6 +12,7 @@ export class HTMLTrackElementImpl extends HTMLElementImpl {
     this.prototype.tag = ElementTag.HTMLTrack;
     this.prototype.categories = [];
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'label'];
+    this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'label'];
   }
 }
 

@@ -1,15 +1,17 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { HTML_NAMESPACE, firstStrongDirection, type TextDirection } from '../../../../../infra/index';
+import { InternalError } from '../../../../../infra/internal-error';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 
 import { HTMLElementImpl } from '../html-element';
 
-/** Text-area identity used by named collections. */
+/** Textarea identity and automatic directionality, pending its live-value lifecycle. */
 // https://html.spec.whatwg.org/multipage/form-elements.html#the-textarea-element
 export class HTMLTextAreaElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLTextarea;
+    this.prototype.excludeFromAutoDirection = true;
     this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Interactive, ContentCategory.Palpable,
@@ -18,6 +20,19 @@ export class HTMLTextAreaElementImpl extends HTMLElementImpl {
       ContentCategory.AutocapitalizeAndAutocorrectInheriting,
     ];
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'placeholder'];
+    this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'placeholder'];
+  }
+
+  /** Current control value, independent of the default child text once the value is dirty. */
+  // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-value
+  get value(): string {
+    // TODO(HTML §4.10.11): Supply the raw/API value and dirty-value lifecycle.
+    throw new InternalError('Textarea current value is not implemented');
+  }
+
+  protected override getAutoDirection(): TextDirection | null {
+    const value = this.value;
+    return value === '' ? null : firstStrongDirection(value) ?? 'ltr';
   }
 }
 

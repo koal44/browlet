@@ -2,6 +2,7 @@ import type {
   DOMOperations, DOMNode, DOMElement, DOMDocument, DOMDocumentFragment,
 } from '../../src/infra/dom-operations';
 import { standardDOM, type StandardProcessingInstruction } from '../../src/infra/dom-standard';
+import { getContainedTextDirection } from '../../src/infra/dom-directionality';
 import { createSelectlet } from '../../src/selectlet/selectlet';
 
 // Compile-only contracts. The functions are never executed.
@@ -51,12 +52,15 @@ export function customHostTypes(
   const query = createSelectlet(document, { dom });
   const result: HostElement | null = query.first('span', fragment);
   const owner: HostDocument | null = dom.ownerDocument(element);
+  getContainedTextDirection(element, false, dom);
   void result;
   void owner;
   // @ts-expect-error Custom hosts retain their document/element distinction too.
   dom.getElementById(element, 'target');
   // @ts-expect-error A document cannot be used as the matches receiver.
   query.matches('span', document);
+  // @ts-expect-error The shared scan preserves the host's concrete element role.
+  getContainedTextDirection(document, false, dom);
 }
 
 export function browserTypes(document: Document): void {

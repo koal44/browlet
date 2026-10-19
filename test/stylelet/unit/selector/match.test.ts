@@ -13,6 +13,15 @@ import {
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('selector matching', () => {
+  it.each([
+    ['<div id="target" dir="auto">١A</div>', 'ltr'],
+    ['<div id="target" dir="auto"><script>א</script>A</div>', 'ltr'],
+    ['<div dir="rtl"><svg id="target" dir="ltr"></svg></div>', 'rtl'],
+  ])('uses the host directionality for %s', (markup, direction) => {
+    const document = createBrowletDocument(markup);
+    expect(match(`:dir(${direction})`, document.getElementById('target')!)).not.toBeNull();
+  });
+
   it('matches a top-level nesting selector like :scope', () => {
     const document = createBrowletDocument('<main id="target"></main>');
     const root = document.documentElement!;

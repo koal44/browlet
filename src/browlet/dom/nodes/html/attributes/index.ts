@@ -5,3 +5,4 @@ export { getBlockingTokens, blockingAttribute, type BlockingToken } from './bloc
 export { fetchPriorityAttribute } from './fetch-priority';
 export { isGlobalContentAttribute } from './global';
 export { translateAttribute } from './translate';
+export { dirAttribute } from './dir';

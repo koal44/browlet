@@ -169,7 +169,7 @@ export const htmlElementIDL = defineInterface({
     attr('title', idlType.DOMString, xattr('CEReactions', reflect())),
     attr('lang', idlType.DOMString, xattr('CEReactions', reflect())),
     attr('translate', idlType.boolean, xattr('CEReactions')),
-    // TODO(HTML): dir requires the directionality algorithms in §3.2.6.4.
+    attr('dir', idlType.DOMString, xattr('CEReactions')),
     attr('inert', idlType.boolean, xattr('CEReactions', reflect())),
     attr('accessKey', idlType.DOMString, xattr('CEReactions', reflect())),
     // TODO(HTML): interaction/editing owns hidden, click, accessKeyLabel, draggable, spellcheck,

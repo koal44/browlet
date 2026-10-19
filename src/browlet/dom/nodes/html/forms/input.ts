@@ -1,4 +1,5 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
+import { HTML_NAMESPACE, firstStrongDirection, type TextDirection } from '../../../../../infra/index';
+import { InternalError } from '../../../../../infra/internal-error';
 import {
   attr, ctor, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr,
 } from '../../../../../web-idl/index';
@@ -8,7 +9,7 @@ import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';
 
 import { HTMLElementImpl } from '../html-element';
 
-/** Input type and checkedness needed by RadioNodeList. */
+/** Input state used by collections and directionality. */
 // https://html.spec.whatwg.org/multipage/input.html#htmlinputelement
 export class HTMLInputElementImpl extends HTMLElementImpl {
   static {
@@ -22,6 +23,7 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
     // https://html.spec.whatwg.org/multipage/input.html#the-input-element
     this.prototype.contentModel = { childRules: [emptyContent] };
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'alt', 'placeholder'];
+    this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'alt', 'placeholder'];
   }
 
   /** Internal checkedness, independent of the checked content attribute. */
@@ -38,6 +40,13 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   /** Canonical input state; absent or invalid type attributes select Text. */
   get typeState(): InputTypeState {
     return inputTypeAttribute.getState(this.getAttributeNS(null, 'type'))!;
+  }
+
+  /** Current control value, including edits and type-dependent sanitization, rather than its default attribute. */
+  // https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#concept-fe-value
+  get value(): string {
+    // TODO(HTML §4.10.5): Supply the live value and dirty-value/type-change lifecycle.
+    throw new InternalError('Input current value is not implemented');
   }
 
   // https://html.spec.whatwg.org/#dom-input-checked
@@ -78,6 +87,23 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
       this.updateRadioButtonGroup();
     }
     // TODO: Type-change steps, form-owner changes, connection, and cloning also update input state.
+  }
+
+  protected override getDefaultDirection(): TextDirection {
+    return this.typeState === 'tel' ? 'ltr' : super.getDefaultDirection();
+  }
+
+  protected override getAutoDirection(): TextDirection | null {
+    switch (this.typeState) {
+      case 'hidden': case 'text': case 'search': case 'tel': case 'url': case 'email':
+      case 'password': case 'submit': case 'reset': case 'button': {
+        const value = this.value;
+        return value === '' ? null : firstStrongDirection(value) ?? 'ltr';
+      }
+      default:
+        // SPEC_CLASH(dir-nontext-input): Follow HTML/WebKit; Chromium misses child updates, Firefox ignores them.
+        return super.getAutoDirection();
+    }
   }
 
   protected override isTranslatableAttributeName(name: string): boolean {

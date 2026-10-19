@@ -24,6 +24,14 @@ export class HTMLMetaElementImpl extends HTMLElementImpl {
     return super.hasCategory(category);
   }
 
+  protected override isDirectionalityCapableAttributeName(name: string): boolean {
+    if (name === 'content' && this.getAttributeNS(null, 'name')) {
+      // TODO(HTML §4.2.5): Classify metadata names whose values are primarily human-readable.
+      throw new InternalError('Metadata-name directionality rules are not implemented');
+    }
+    return super.isDirectionalityCapableAttributeName(name);
+  }
+
   protected override isTranslatableAttributeName(name: string): boolean {
     if (name === 'content' && this.getAttributeNS(null, 'name')) {
       // TODO(HTML §4.2.5): Determine whether this metadata name has a translatable value.

@@ -21,6 +21,7 @@ import { HTMLElementImpl } from '../html-element';
 export class HTMLScriptElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLScript;
+    this.prototype.excludeFromAutoDirection = true;
     this.prototype.categories = [
       ContentCategory.Metadata, ContentCategory.Flow, ContentCategory.Phrasing,
       ContentCategory.ScriptSupporting,

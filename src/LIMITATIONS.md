@@ -292,6 +292,15 @@ explicit standard content-handler list used for sink metadata.
   attributes, sets the target lang, or recursively processes srcdoc/CSS. See the
   [translation slice](browlet/html/ROADMAP.md#section-3263-translate).
 
+- **Automatic direction on text controls requires their unfinished live values.**
+  HTML directionality, shadow/slot traversal, `HTMLElement.dir`, `Document.dir`,
+  and `:dir()` integration are available. Automatic direction on eligible inputs
+  and textarea throws until their current-value lifecycle exists; default value
+  attributes and textarea child text are not substituted. Metadata-name rules for
+  directionality-capable content attributes also remain explicit errors. Unicode
+  first-strong lookup does not implement bidi layout, per-paragraph rendering, or
+  editing UI. See the [directionality slice](browlet/html/ROADMAP.md#section-3264-dir).
+
 - **Document metadata depends on the loader's inputs.** Response-based document
   creation retains `Last-Modified`; the source-only route has no response date
   and local-file modification metadata is not connected. Unknown dates use the

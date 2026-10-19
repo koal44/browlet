@@ -1,3 +1,5 @@
+import type { TextDirection } from './bidi';
+
 /** A host node whose representation is private to its DOM operations. */
 export type DOMNode = object & {
   [nodeRole]?: 'element' | 'document' | 'fragment' | 'shadow-root' | 'processing-instruction' | 'other';
@@ -31,10 +33,12 @@ export interface DOMOperations<
   isElement(node: N): node is E;
   isDocument(node: N): node is D;
   isDocumentFragment(node: N): node is F;
+  /** Text includes CDATASection, which inherits from Text. */
   isText(node: N): boolean;
   isShadowRoot(node: N): node is S;
   isConnected(node: N): boolean;
   isHTMLElement(element: E): boolean;
+  isSlot(element: E): boolean;
   isHTMLDocument(document: D): boolean;
   isQuirksMode(document: D): boolean;
 
@@ -76,6 +80,10 @@ export interface DOMOperations<
   attributeValue(attribute: A): string;
   /** Host-determined language, including available document defaults; empty means unknown. */
   getLanguage(element: E): string;
+  /** Host-determined HTML directionality, independent of CSS direction or visual reordering. */
+  getDirectionality(element: E): TextDirection;
+  /** Whether an ancestor's automatic direction scan must skip this element and its subtree. */
+  isAutoDirectionalityBoundary(element: E): boolean;
   /** Existing inline-style state, when the host uses a style implementation directly. */
   inlineStyle?(element: E): object | null;
 

@@ -488,6 +488,7 @@ export interface HTMLElement extends Element {
   title: string;
   lang: string;
   translate: boolean;
+  dir: string;
   inert: boolean;
   accessKey: string;
   headingOffset: number;
@@ -2207,6 +2208,7 @@ export interface Document extends Node {
   readonly lastModified: string;
   readonly readyState: DocumentReadyState;
   title: string;
+  dir: string;
   body: HTMLElement | null;
   readonly head: HTMLHeadElement | null;
   readonly images: HTMLCollection;

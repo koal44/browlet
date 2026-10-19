@@ -24,6 +24,7 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
 
   static {
     this.prototype.tag = ElementTag.HTMLStyle;
+    this.prototype.excludeFromAutoDirection = true;
     this.prototype.categories = [
       ContentCategory.Metadata,
     ];

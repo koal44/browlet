@@ -539,7 +539,7 @@ are all its members and contributions, with the current implementation boundary:
 | `readyState` | Implemented projection and §3.1.5 readiness-update algorithm. |
 | Anonymous named getter and `LegacyOverrideBuiltIns` | Implemented §3.1.7 selection/exposure, projection, and live collection identity; child/fallback producers remain explicit. |
 | `title`, `body`, `head` | Implemented §3.1.7 HTML/SVG title, head/body getters, and body replacement/adoption. |
-| `dir` | Missing §3.2.6 global-attribute forwarding. |
+| `dir` | §3.2.6.4 forwards known-keyword reflection to the HTML html element; no such root means an empty getter and an ignored setter. |
 | `images`, `embeds`, `plugins`, `links`, `forms`, `scripts`, `getElementsByName` | Implemented live collection consumers, including SameObject attributes and exact embeds/plugins identity. |
 | `currentScript` | Implemented initially-null state and readonly projection for either script type; §4.12 script execution must set/restore it. |
 | Both `open` overloads, `close`, `write`, `writeln` | §8.4 remains pending. Existing write only forwards DOMStrings to an active parser callback; TrustedHTML conversion, policy enforcement, and the complete insertion lifecycle are absent. The three-argument open overload also needs Window navigation. |
@@ -888,7 +888,7 @@ using the existing mutation and live-collection machinery:
 | Document names | Ordered, duplicate-free supported names; name/ID eligibility and object/embed exposure; single element or iframe WindowProxy; stable live HTMLCollection for multiple matches; LegacyOverrideBuiltIns applied by existing Web IDL machinery. The implementation returns concrete implementations/handles; its IDL object binding performs projection. |
 | Object/embed exposure | Minimal concrete element classes implement the §3.1.7 exposure predicate. Object resource selection must update `showsFallbackContent`; changing it invalidates live collections. Initial false represents no selected fallback, not a completed resource load. Other §4.8 object/embed APIs, loading, and rendering remain absent. |
 | Iframe WindowProxy | Initially-null `contentNavigable` is the explicit child-navigation dependency. Named access consumes its active WindowProxy once supplied. Automatic child creation/destruction, container association, and iframe contentWindow/contentDocument remain unimplemented. |
-| `dir` | The section only refers to §3.2.6's global directionality attribute; its reflection/forwarding remains explicitly deferred there. |
+| `dir` | The section refers to §3.2.6.4, which now supplies reflection, HTML-root forwarding, and the directionality queries. |
 
 The title/body declarations retain `[CEReactions]`; custom-element reaction
 delivery remains the shared missing binding dependency.
@@ -993,7 +993,8 @@ deliberately has no HTML constructor.
 The subsection's executable IDL now supplies ordinary reflection for `title`,
 `lang`, `inert`, `accessKey`, `headingOffset` (read range 0–8), `headingReset`,
 and the shared `autofocus`. The §3.2.6.3 slice adds the inherited `translate`
-getter and canonical yes/no setter. Existing nonce handling remains intact.
+getter and canonical yes/no setter. §3.2.6.4 adds known-keyword `dir` reflection
+and the directionality queries. Existing nonce handling remains intact.
 `ShowPopoverOptions` and `TogglePopoverOptions` are declared here; dictionaries
 do not expose globals or implement popover operations. Every remaining shared
 member has an owning dependency:
@@ -1001,7 +1002,6 @@ member has an owning dependency:
 | Members or contract | Missing owner |
 | --- | --- |
 | `[HTMLConstructor]` producers | The §3.2.3 consumer is implemented below; validated public definitions and upgrades remain §4.13 work |
-| `dir` | [§3.2.6.4](https://html.spec.whatwg.org/multipage/dom.html#the-dir-attribute): directionality algorithms and IDL processing |
 | `hidden`, inert processing, `click`, `accessKeyLabel` and access-key assignment | [§6 user interaction](https://html.spec.whatwg.org/multipage/interaction.html): hidden states, inert subtrees, activation, and keyboard shortcut selection |
 | `draggable` | [Drag and drop](https://html.spec.whatwg.org/multipage/dnd.html#the-draggable-attribute): default state and drag behavior |
 | `spellcheck`, `writingSuggestions`, `autocapitalize`, `autocorrect` | [Editing](https://html.spec.whatwg.org/multipage/interaction.html#editing): inherited/default states and editing services; ReflectSetter alone cannot supply their getters |
@@ -1339,7 +1339,7 @@ namespace's attribute rules; a same-spelled attribute does not acquire HTML beha
 | --- | --- |
 | Named globals | All 28 names in the initial list are shared once. Their processing remains with each attribute's owning section; name permission does not imply a working author API. |
 | DOM's class, id, and slot | All three names are permitted. Existing Element attribute/token-list behavior and slot assignment remain the runtime owners. Class tokens have no extra HTML restrictions. An ID is opaque; nonempty/no-ASCII-whitespace/tree-uniqueness requirements belong to the future author-conformance checker and do not constrain DOM setters. |
-| HTML-only attribute meaning | The eligibility query lives on HTMLElementImpl. The preamble's foreign dir example must be exercised by §3.2.6.4's directionality algorithm; this inventory supplies no directionality result. |
+| HTML-only attribute meaning | The eligibility query lives on HTMLElementImpl. §3.2.6.4 now exercises the preamble's foreign-dir example: foreign elements inherit direction without interpreting their dir attributes. |
 | ARIA role and aria-* | Permission depends on ARIA in HTML's element/role rules. These queries throw explicitly until that inventory exists; the prefix alone does not grant permission. Accessibility mappings and custom-element defaults remain with §3.2.9 and HTML-AAM. |
 | Listed event-handler content attributes | Every handler in the preamble is recognized, including the body/Window-target names, plus §8.1's global onabort, onwebkitanimationend, onwebkitanimationiteration, onwebkitanimationstart, and onwebkittransitionend. Compilation, CSP, listeners, and body/frameset Window targeting remain with §8.1 and the element owners. The inventory does not install handlers. |
 | Further event-handler names | Window-only names and contributions from other standards remain explicit dependencies. The broader Trusted Types sink list answers a security-classification question and cannot supply element conformance permissions. A future handler inventory must distinguish valid additional names from unknown on* spellings. |
@@ -1356,9 +1356,9 @@ name rather than treating a qualified spelling as equivalent.
 The inventory pulls no later interaction/editing implementation forward. Focus,
 hidden/inert processing, access keys, drag-and-drop, editing, popovers, microdata,
 heading computation, and custom-element is behavior keep the owners recorded in
-the §3.2.2 dependency table. Translation, directionality, inline-style
-CSP, and dataset remain the coming global-attribute slices. Further dependencies
-must stay explicit when those algorithms require them.
+the §3.2.2 dependency table. Translation and directionality are accounted for
+below; inline-style CSP and dataset remain coming global-attribute slices.
+Further dependencies must stay explicit when those algorithms require them.
 
 `attributes/global.test.ts` covers every listed name, custom/unknown elements,
 custom-data syntax and values, current-document xmlns permission, explicit
@@ -1640,6 +1640,112 @@ This is a source-based explanation, not a debugger trace of the installed build.
 input, namespace, and explicit-dependency regressions. The reproducible local
 `scratch/TRANSLATE-PROBE.mjs` keeps the spec expectation and reports the Firefox
 failure without preventing the other engines from running.
+
+### Section 3.2.6.4 dir
+
+[The dir attribute](https://html.spec.whatwg.org/multipage/dom.html#the-dir-attribute)
+is implemented as current-state queries on Element, HTMLElement, and Text.
+Foreign elements inherit; HTML elements interpret dir, with bdi and telephone
+inputs specializing its Undefined state. No direction cache or layout state is
+inferred. Ordinary mutations are visible on the next query.
+Infra's shared contained-text scan uses each caller's existing DOMOperations
+provider. Boundary and slot queries delegate to Browlet's element methods;
+fixed exclusions remain prototype flags on bdi/script/style/textarea, with
+recognized dir states supplying the instance-dependent boundary elsewhere.
+Control values and slot assignments retain their element-specific overrides.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Keywords and reflection | EnumeratedAttribute recognizes ASCII-case-insensitive ltr/rtl/auto without trimming. Missing/invalid values share Undefined. HTMLElement.dir returns a canonical known keyword or empty string; its setter preserves the supplied attribute value. |
+| Document.dir | Forwards to the HTML html document element only. No root, a different HTML root, or a foreign html root yields an empty getter and an ignored setter. Both IDL declarations retain CEReactions; reaction wrapping/delivery remain §4.13 work. |
+| Parent directionality | Follow the ordinary parent element; an immediate shadow root delegates to its host. No such parent means ltr. Slot assignment does not replace a light child's ancestry. |
+| Automatic text | Scan eligible descendants in tree order, pruning bdi/script/style/textarea and HTML elements with a recognized dir state. Foreign dir attributes do not create boundaries. Text includes CDATA; the first Unicode L/R/AL character decides, and no strong text ultimately defaults to ltr. |
+| Assigned slots | A slot in a shadow tree uses its nonempty assigned-node list. Assigned elements are scanned with root exclusion enabled; excluded/neutral assignments do not revive fallback text. A slot encountered inside another contained-text scan contributes its shadow host's direction. Open and closed roots use the same implementation path. |
+| Form-associated auto direction | Hidden/Text/Search/Tel/URL/Email/Password/Submit/Reset/Button inputs and textarea use their current value: first strong direction, otherwise ltr for nonempty neutral values, null for an empty value. The input and textarea value getters explicitly throw until their §4.10 lifecycle exists. Tests supply this narrow value dependency separately; real controls never substitute the value attribute or default child text. Other input types follow the ordinary contained-text scan. |
+| Attribute directionality | HTMLElement.getAttributeDirectionality receives one of its own attributes. Explicit auto plus a directionality-capable null-namespace attribute uses that value's first strong character, otherwise ltr. Other cases use the element's direction; implicit bdi auto does not trigger the attribute rule. |
+| Fixed attribute inventory | Shared prototype lists: title on all HTML elements; abbr on th; alt on area/img/input; label on optgroup/option/track; placeholder on input/textarea. Derived lists copy inherited names rather than mutate the parent. |
+| Conditional meta content | A nonempty name requires §4.2.5 to determine whether its value is primarily human-readable. That branch throws an explicit missing-dependency error. No name means this rule does not apply. |
+| Selectors | Required DOMOperations.getDirectionality replaces the duplicate approximations in Selectlet and Stylelet. Browlet delegates to its implementation; standardDOM computes from the standard host API, including live control values. CSS direction does not change :dir(). |
+| Rendering and editing | Base direction is not visual order. Bidi isolation/override, full UAX #9, pre/textarea per-paragraph rendering, attribute presentation, and direction-changing editing UI remain explicit [rendering dependencies](../rendering/ROADMAP.md#directionality-and-bidi-presentation). |
+
+Infra's firstStrongDirection uses a generated, sorted range table from
+[Unicode 17 DerivedBidiClass](https://www.unicode.org/Public/17.0.0/ucd/extracted/DerivedBidiClass.txt).
+It includes supplementary code points and the UCD defaults for unassigned
+characters, while excluding digits, combining marks, and formatting classes
+that are not L/R/AL. `scripts/generate-bidi-data.mjs` regenerates it from the
+pinned download or a supplied local copy; the generator contains the Unicode
+license and embeds it in the generated table. This is a classifier, not a
+Unicode bidi layout implementation.
+
+The table stores lossless gap/length/direction pairs as seven-bit unsigned
+integers in Base64 (1,712 characters for 564 ranges). The first nonempty lookup
+expands it into one Uint32Array of inclusive start/end/direction triples using
+Infra's existing Base64 decoder. Later lookups reuse the array and binary search;
+there is no runtime compression-library dependency. A full-code-point digest
+test preserves the pre-packing Unicode 17 classification, including the holes
+for non-strong characters, and a separate test checks lazy initialization.
+
+Browser checks on 2026-10-18 used Chromium 149.0.7827.55, Firefox 151.0, and
+WebKit 26.5. Eric approved following the written HTML algorithm for these
+continuing differences:
+
+- SPEC_CLASH(dir-foreign-elements): Chromium/Firefox ignore foreign dir attributes
+  for inheritance and contained-text boundaries. WebKit honors them; Browlet
+  follows HTML/Chromium/Firefox.
+- SPEC_CLASH(dir-assigned-root): Chromium/Firefox exclude an assigned element
+  whose own dir is defined from a slot's auto scan. WebKit scans its text;
+  Browlet follows HTML/Chromium/Firefox.
+- SPEC_CLASH(dir-nontext-input): With Hebrew text appended through the DOM to a
+  checkbox with dir=auto, Chromium/Firefox return ltr. HTML's ordinary text scan
+  and WebKit return rtl; Browlet follows HTML/WebKit. The value attribute is not
+  the source for this input type. Chromium's result depends on mutation order;
+  it does not consistently ignore child text.
+
+Follow-up investigation on 2026-10-18 supports keeping all three choices:
+
+- Assigned-root exclusion is an intentional correction, not an inferred rule.
+  [HTML PR #10561](https://github.com/whatwg/html/pull/10561), merged in August
+  2024, explicitly fixes both the missing root exclusion and inappropriate
+  recursion into form-value/nested-slot algorithms. Its
+  [review explanation](https://github.com/whatwg/html/pull/10561#issuecomment-2296674538)
+  and [WPT change #47670](https://github.com/web-platform-tests/wpt/pull/47670)
+  cover the exact assigned-dir case. The inspected WebKit
+  `ElementTextDirection.cpp` still calls the full auto-directionality algorithm
+  for assigned elements without that exclusion; this explains the observed
+  result and resembles the algorithm before the correction. The PR links the
+  wider [WebKit shadow-directionality bug #267951](https://bugs.webkit.org/show_bug.cgi?id=267951).
+- For foreign elements, HTML explicitly limits dir interpretation to the HTML
+  namespace. The inspected WebKit `elementTextDirectionState` reads dir from
+  any Element, which explains its competing result. Discussion in
+  [HTML PR #9554](https://github.com/whatwg/html/pull/9554#issuecomment-1674938149)
+  distinguishes non-HTML behavior from missing-parent behavior, but does not
+  justify honoring foreign dir attributes. No discussion establishing a
+  deliberate alternative rule was found. Keep HTML/Chromium/Firefox here.
+- For nontext inputs, [HTML PR #9689](https://github.com/whatwg/html/pull/9689)
+  explains the selected control types that use their current value; it does
+  not address DOM-appended children on the remaining input types. One minimized
+  duplicate comment was unavailable to the reader. A follow-up browser probe
+  tested checkbox/radio/image controls with both operation orders. Chromium
+  returns ltr when Hebrew is appended after dir=auto, but rtl when dir=auto is
+  set after the Hebrew text. Toggling dir also corrects it, after which changing
+  the text to Latin leaves a stale rtl result. Its `HTMLInputElement::ChildrenChanged`
+  calls `ContainerNode::ChildrenChanged`, bypassing Element's direction update;
+  this is consistent with the observed stale result. Firefox stays ltr in all
+  these cases, and its `ParticipatesInAutoDirection` excludes every HTML input.
+  WebKit updates after each mutation. These are observations and source-based
+  explanations, not evidence of an agreed competing standard. Keep the written
+  scan; do not reproduce Chromium's mutation-order dependence. The manual
+  `scratch/DIR-MUTATIONS-PROBE.mjs` reproduces these differences; Browlet and
+  standardDOM regressions retain the correct mutation behavior.
+
+`attributes/dir.test.ts` covers reflection/bindings, root identity, inheritance,
+mutations, foreign elements, shadow/slot rules, attribute inventories, and explicit
+missing dependencies. `test/infra/bidi.test.ts` covers Unicode boundaries.
+The enabled Selectlet `pseudo-directionality` browser regression suite exercises
+our selector engine and preserves spec expectations with
+separate browser failure markers; selector unit regressions first reproduced
+the old Arabic-digit, CJK/astral, script-text, and foreign-dir errors before
+the approximation was removed.
 
 ## HTML section 4 ownership
 

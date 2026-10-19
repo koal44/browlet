@@ -1,4 +1,4 @@
-import { isAsciiWhitespace } from '../../../infra/index';
+import { firstStrongDirection, isAsciiWhitespace, type TextDirection } from '../../../infra/index';
 import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr } from '../../../web-idl/index';
 
 import { ContentCategory } from './element-definitions/index';
@@ -51,6 +51,12 @@ export class TextImpl extends CharacterDataImpl {
 
   set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
     this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
+  /** Direction of the first strong character, or null when this text has no strong character. */
+  // https://html.spec.whatwg.org/multipage/dom.html#text-node-directionality
+  getDirectionality(): TextDirection | null {
+    return firstStrongDirection(this.data);
   }
 
   /** Whether this node is empty or contains only ASCII whitespace, including for CDATA sections. */

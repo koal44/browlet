@@ -214,6 +214,20 @@ their hosts; platform DOM APIs do not expose retained HTTP or pragma defaults.
 Custom hosts supply the query through their own adapter. Selectlet and Stylelet
 own language-range matching, not language lookup or document metadata.
 
+The required `getDirectionality()` operation similarly supplies HTML directionality,
+independently of CSS `direction`. Browlet delegates to the element implementation;
+`standardDOM` uses the host's ordinary DOM, live control values, and slot assignment.
+Both use Infra's contained-text scan through `DOMOperations`, including its
+`isAutoDirectionalityBoundary()` and `isSlot()` queries. Browlet forwards these
+to its element methods, retaining their overrides and prototype metadata. The
+caller supplies its existing provider as the scan's final argument. Control
+values and slot assignments remain with their owners. Text queries include
+CDATASection. Infra's Unicode lookup lazily expands the generated packed data
+once; this caches the character table, not any element's direction. Selector engines compare
+that result with the requested direction; they do not maintain another bidi scan
+or call the host's native selector engine. Unfinished Browlet control values remain
+explicit dependencies rather than falling back to default attributes.
+
 `DOMOperations` distinguishes the host's node, element, attribute, document,
 document-fragment, and shadow-root types. Its predicates narrow those roles, and each lookup
 accepts only the receiver kinds it supports. Engine internals use opaque role

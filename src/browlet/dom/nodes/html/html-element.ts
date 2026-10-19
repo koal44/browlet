@@ -1,12 +1,15 @@
-import { asciiWhitespacePattern, normalizeNewlines } from '../../../../infra/index';
+import {
+  asciiWhitespacePattern, firstStrongDirection, getContainedTextDirection, normalizeNewlines, type TextDirection,
+} from '../../../../infra/index';
 import { InternalError } from '../../../../infra/internal-error';
 import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
 import { ContentCategory, type ElementSanitization } from '../element-definitions/index';
-import { isGlobalContentAttribute, translateAttribute } from './attributes/index';
+import { dirAttribute, isGlobalContentAttribute, translateAttribute } from './attributes/index';
 
 import { ElementImpl } from '../element';
 import type { NodeImpl } from '../node';
+import type { AttrImpl } from '../attribute';
 import { HTMLOrSVGOrMathMLElementMixin } from '../html-or-svg-or-mathml-element';
 
 /** Base implementation for elements in the HTML namespace. */
@@ -16,6 +19,8 @@ export class HTMLElementImpl extends ElementImpl {
     this.prototype.isAllNamedElement = false;
     // Localization must set lang to the target language and recursively process style as CSS.
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'lang', 'style', 'title'];
+    this.prototype.directionalityAttributes = ['title'];
+    this.prototype.excludeFromAutoDirection = false;
   }
 
   /** Fixed eligibility for name-based document.all lookup; ID lookup does not use this flag. */
@@ -27,6 +32,12 @@ export class HTMLElementImpl extends ElementImpl {
 
   /** Sanitizer facts shared through the prototype; undefined means the inventory is unfinished. */
   declare sanitization?: ElementSanitization;
+
+  /** Shared names whose rendered values determine their own direction when dir is auto. */
+  declare directionalityAttributes: string[];
+
+  /** Whether an ancestor's auto-direction scan always skips this element and its descendants. */
+  declare protected excludeFromAutoDirection: boolean;
 
   /** Common HTML, SVG, and MathML state and attribute behavior. */
   #htmlOrSVGOrMathMLElementMixin = new HTMLOrSVGOrMathMLElementMixin(this);
@@ -40,6 +51,11 @@ export class HTMLElementImpl extends ElementImpl {
   get translate(): boolean { return this.isTranslationEnabled(); }
   set translate(value: boolean) { this.setAttributeValue('translate', value ? 'yes' : 'no'); }
 
+  /** Reflect dir using only its known keywords; assignment preserves the supplied attribute text. */
+  // https://html.spec.whatwg.org/multipage/dom.html#dom-dir
+  get dir(): string { return dirAttribute.getState(this.getAttributeNS(null, 'dir')) ?? ''; }
+  set dir(value: string) { this.setAttributeValue('dir', value); }
+
   /** Cryptographic nonce exposed to script, independently of the content attribute. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#dom-noncedelement-nonce
   get nonce(): string { return this.#htmlOrSVGOrMathMLElementMixin.nonce; }
@@ -52,6 +68,29 @@ export class HTMLElementImpl extends ElementImpl {
   override isTranslationEnabled(): boolean {
     const state = translateAttribute.getState(this.getAttributeNS(null, 'translate'));
     return state === 'inherit' ? super.isTranslationEnabled() : state === 'yes';
+  }
+
+  /** Resolve explicit, automatic, or inherited HTML directionality from current DOM state. */
+  // https://html.spec.whatwg.org/multipage/dom.html#the-directionality
+  override getDirectionality(): TextDirection {
+    const state = this.dir;
+    if (state === 'ltr' || state === 'rtl') return state;
+    if (state === 'auto') return this.getAutoDirection() ?? 'ltr';
+    return this.getDefaultDirection();
+  }
+
+  override isAutoDirectionalityBoundary(): boolean {
+    return this.excludeFromAutoDirection || this.dir !== '';
+  }
+
+  /** Determine the rendering direction of an attribute belonging to this element. */
+  // https://html.spec.whatwg.org/multipage/dom.html#directionality-of-the-attribute
+  getAttributeDirectionality(attribute: AttrImpl): TextDirection {
+    if (this.dir === 'auto' && attribute.namespaceURI === null &&
+      this.isDirectionalityCapableAttributeName(attribute.localName)) {
+      return firstStrongDirection(attribute.value) ?? 'ltr';
+    }
+    return this.getDirectionality();
   }
 
   override hasCategory(category: ContentCategory): boolean {
@@ -176,6 +215,22 @@ export class HTMLElementImpl extends ElementImpl {
   ): void {
     super.attributeChanged(localName, oldValue, newValue, namespace);
     this.#htmlOrSVGOrMathMLElementMixin.attributeChanged(localName, newValue, namespace);
+  }
+
+  /** Default direction for an absent or invalid dir attribute; bdi and telephone inputs specialize it. */
+  protected getDefaultDirection(): TextDirection {
+    return super.getDirectionality();
+  }
+
+  /** First eligible text direction; controls and assigned slots specialize the source of text. */
+  // https://html.spec.whatwg.org/multipage/dom.html#auto-directionality
+  protected getAutoDirection(): TextDirection | null {
+    return getContainedTextDirection(this, false, this.env.userAgent.dom);
+  }
+
+  /** Classify a namespace-less attribute independently of its value or the element's direction. */
+  protected isDirectionalityCapableAttributeName(name: string): boolean {
+    return this.directionalityAttributes.includes(name);
   }
 
   /** Own normalized advisory text; null permits inheritance, while an empty string stops it. */

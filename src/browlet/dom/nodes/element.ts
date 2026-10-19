@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE } from '../../../infra/index';
+import { HTML_NAMESPACE, type TextDirection } from '../../../infra/index';
 import { asciiLower, asciiUpper } from '../../../infra/ascii';
 import { InternalError } from '../../../infra/internal-error';
 import {
@@ -214,6 +214,20 @@ export class ElementImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/dom.html#translation-mode
   isTranslationEnabled(): boolean {
     return this.parentElement?.isTranslationEnabled() ?? true;
+  }
+
+  /** Inherit direction through ordinary parents, using the host when the parent is a shadow root. */
+  // https://html.spec.whatwg.org/multipage/dom.html#parent-directionality
+  getDirectionality(): TextDirection {
+    // SPEC_CLASH(dir-foreign-elements): Follow HTML/Chromium/Firefox; WebKit honors foreign dir attributes.
+    const parent = this.parentNode;
+    if (parent?.isShadowRoot()) return parent.host.getDirectionality();
+    return parent?.isElement() ? parent.getDirectionality() : 'ltr';
+  }
+
+  /** Whether an ancestor's automatic direction scan must exclude this element and its subtree. */
+  isAutoDirectionalityBoundary(): boolean {
+    return false;
   }
 
   /** Classify one of this element's attributes independently of its current translation mode. */

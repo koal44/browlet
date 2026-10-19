@@ -90,6 +90,18 @@ direction, available font, or dictionary. Those facilities remain explicit
 dependencies rather than guessed layout fields. See the
 [language accounting](../html/ROADMAP.md#section-3262-lang-and-xmllang).
 
+## Directionality and bidi presentation
+
+HTML §3.2.6.4 now supplies `ElementImpl.getDirectionality()` and
+`HTMLElementImpl.getAttributeDirectionality()`. These determine base direction
+from current DOM state and Unicode L/R/AL classes; they do not reorder text.
+The renderer still owes HTML's [bidirectional-text requirements](https://html.spec.whatwg.org/multipage/rendering.html#bidireq):
+isolation/override behavior, the Unicode Bidirectional Algorithm and CSS bidi
+integration, and per-paragraph auto direction for pre/textarea. Attribute text
+rendered as tooltips, labels, or placeholders must use the attribute query,
+not assume the element's direction. Editable control values and direction-changing
+UI belong to the form/editing owners. No provisional layout record is introduced.
+
 ## Removal condition
 
 Burn this file when UA style inputs, box construction, layout, replaced

@@ -1,6 +1,6 @@
 import { runScenarios } from '../../../scenario/dispatch';
 
-runScenarios('id-selector', 'skip', [
+runScenarios('id-selector', 'normal', [
   {
     name: 'id-selector/document-all-awkward-id-names',
     // status: 'only',
