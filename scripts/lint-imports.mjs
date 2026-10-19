@@ -1,7 +1,7 @@
 import { relative } from 'node:path';
 import { ESLint } from 'eslint';
 
-// Use the ordinary configuration, but report only the two hierarchy rules.
+// Use the ordinary configuration, but report only import-boundary and hierarchy rules.
 // --fix changes import layout; dependency findings never have automatic fixes.
 const args = process.argv.slice(2);
 if (args.some((arg) => arg !== '--fix')) throw new Error('Usage: node scripts/lint-imports.mjs [--fix]');
@@ -14,6 +14,7 @@ if (args.includes('--fix')) await ESLint.outputFixes(results);
 const groups = new Map();
 let runtime = 0;
 let layout = 0;
+let boundary = 0;
 let other = 0;
 for (const result of results) {
   for (const message of result.messages) {
@@ -22,6 +23,8 @@ for (const result of results) {
       else other++;
     } else if (message.ruleId === 'browlet/import-order') {
       layout++;
+    } else if (message.ruleId === 'browlet/subsystem-imports' || message.ruleId === 'browlet/no-ancestor-barrel-imports') {
+      boundary++;
     } else if (message.fatal) {
       other++;
     } else continue;
@@ -37,5 +40,5 @@ for (const [message, entries] of [...groups].sort(([a], [b]) => priority(a) - pr
   console.log(`\n${message}`);
   for (const entry of entries) console.log(`  ${entry}`);
 }
-console.log(`\nImports: ${runtime} runtime, ${layout} ordering, ${other} unclassified findings.`);
-process.exitCode = runtime + layout + other > 0 ? 1 : 0;
+console.log(`\nImports: ${runtime} runtime, ${layout} ordering, ${boundary} boundary, ${other} unclassified findings.`);
+process.exitCode = runtime + layout + boundary + other > 0 ? 1 : 0;

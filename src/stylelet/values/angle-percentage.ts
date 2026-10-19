@@ -1,14 +1,8 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
 import {
   createAnglePercentageConsumer as createAnglePercentageLiteralConsumer,
   serializeAnglePercentage as serializeAnglePercentageLiteral,
@@ -16,9 +10,14 @@ import {
   tryAddAnglePercentages as tryAddAnglePercentageLiterals,
   tryInterpolateAnglePercentages as tryInterpolateAnglePercentageLiterals,
   tryResolveAnglePercentage as tryResolveAnglePercentageLiteral,
-  type AnglePercentageLiteral,
-} from './numeric-literal/angle-percentage';
-import { type DimensionPercentageConsumerOptions } from './numeric-literal/dimension-percentage';
+  type AnglePercentageLiteral, type DimensionPercentageConsumerOptions,
+} from './numeric-literal/index';
+
+import {
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
+  type MathValue,
+} from './math-value';
 
 /*
  * <angle-percentage> = <angle> | <percentage> | <math-function>

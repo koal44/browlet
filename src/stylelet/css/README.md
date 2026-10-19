@@ -46,7 +46,7 @@ longhands. Broader value parsers do not register additional properties.
 Namespace support currently requires explicitly supplied selector-parser
 context. Stylesheet interpretation neither processes `@namespace` nor supplies
 that context. Likewise, the declaration-based condition grammar in
-[conditional/supports.ts](../conditional/supports.ts) is not an implemented
+[values/supports-condition.ts](../values/supports-condition.ts) is not an implemented
 `@supports` rule or projected `CSS.supports()` API.
 
 ## Mutation and participation

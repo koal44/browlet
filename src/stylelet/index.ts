@@ -1,4 +1,4 @@
-export { InternalPromise, Stylelet, StyleletContext } from './stylelet';
+export { Stylelet, StyleletContext } from './stylelet';
 export {
   createStyleletEnvironment, defaultStyleletEnvironment, defaultStyleletExecution,
   type StyleletEnvironment, type StyleletExecution, type StyleletOptions, type StyleletUserAgent,
@@ -6,19 +6,18 @@ export {
 } from './environment';
 export type { DOMException, DOMExceptionConstructor, DOMExceptionName } from '../web-idl/core/index';
 export type { Encoding, DecodeText } from '../encoding/core/index';
+export { InternalPromise } from '../infra/promises';
 export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from '../infra/index';
-export { TreeScope } from './engine/tree-scope';
-export { CSSStyleSheetImpl, type CSSStyleSheetInit } from './cssom/css-stylesheet';
-export { CSSRuleImpl } from './cssom/rule';
-export { CSSStyleRuleImpl } from './cssom/rules';
-export { StylePropertyMapImpl } from './cssom/style-property-map';
-export { CSSStyleDeclarationImpl } from './cssom/declaration';
-export { CSSDeclarationBlock } from './css/declaration-block';
-export { MediaListImpl } from './cssom/media-list';
-export { StyleSheetListImpl } from './cssom/stylesheet-list';
+export { TreeScope } from './engine/index';
+export {
+  CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl,
+  MediaListImpl, StyleSheetListImpl,
+  type CSSStyleSheetInit,
+} from './cssom/index';
+export { CSSDeclarationBlock } from './css/index';
 export { styleletIDLDefinitions } from './web-idl';
-export type { BoxSides } from './values/box-sides';
-export { ColorRgba, absoluteColorFromRgba, type AbsoluteColor } from './values/color';
-export { lengthLiteral } from './values/numeric-literal/length';
-export { percentageLiteral } from './values/numeric-literal/percentage';
-export type { CanonicalLengthPercentageLiteral } from './values/numeric-literal/length-percentage';
+export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor } from './values/index';
+export {
+  lengthLiteral, percentageLiteral,
+  type CanonicalLengthPercentageLiteral,
+} from './values/numeric-literal/index';

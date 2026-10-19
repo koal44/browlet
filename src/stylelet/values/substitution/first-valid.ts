@@ -1,17 +1,9 @@
-import { createFreeFormConsumer, createFunctionalNotationConsumer } from '../../syntax/component-consumers';
 import {
-  isBraceBlock, isTokenKind, serializeComponentValues,
-  type ComponentValue,
-} from '../../syntax/component-value';
-import { commaRepeat, withTrivia } from '../../syntax/component-grammar';
-import {
-  type TokenCursor, type TryConsumerResult,
-} from '../../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../../syntax/parser';
-import { TokenKind } from '../../syntax/tokens';
-import {
-  consumeDeclarationValue, type DeclarationValue,
-} from '../../syntax/declaration-value';
+  createFreeFormConsumer, createFunctionalNotationConsumer, isBraceBlock, isTokenKind,
+  serializeComponentValues, commaRepeat, withTrivia, createComponentParser, TokenKind,
+  consumeDeclarationValue,
+  type ComponentValue, type TokenCursor, type TryConsumerResult, type ParserInput, type DeclarationValue,
+} from '../../syntax/index';
 
 export type FirstValidValue = {
   type: 'first-valid';

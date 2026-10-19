@@ -2,14 +2,13 @@ import type { DOMElement as Element } from '../../infra/index';
 import { assertNever } from '../../infra/util';
 
 import type { StyleletContext } from '../context';
+
 import {
   PseudoArgumentKind, SelectorKind,
-  type Combinator, type ComplexRealSelector, type ComplexRealSelectorList,
-  type ComplexSelector, type ComplexSelectorList, type ComplexSelectorUnit,
-  type CompoundSelector, type ForgivingSelectorList, type PseudoClassSelector,
-  type RelativeSelectorList,
-  type SelectorList, type Specificity,
-} from '../syntax/selector';
+  type Combinator, type ComplexRealSelector, type ComplexRealSelectorList, type ComplexSelector,
+  type ComplexSelectorList, type ComplexSelectorUnit, type CompoundSelector, type ForgivingSelectorList,
+  type PseudoClassSelector, type RelativeSelectorList, type SelectorList, type Specificity,
+} from './parser';
 import {
   buildComplexMatcher, buildRelativeSelectorMatcher,
   buildSelectorListMatcher,

@@ -2,17 +2,18 @@ import { asciiLower } from '../../infra/ascii';
 import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../infra/util';
 import { InternalError } from '../../infra/internal-error';
 
-import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
-  createFunctionalNotationConsumer, consumeComma, consumeDimensionToken,
-  consumeHashToken, consumeIdentToken, consumeIntegerToken, consumeSlashDelim,
-} from '../syntax/component-consumers';
+  createFunctionalNotationConsumer, consumeComma, consumeDimensionToken, consumeHashToken,
+  consumeIdentToken, consumeIntegerToken, consumeSlashDelim, allOf, commaRepeat, one, oneOf, opt, plus,
+  adaptConsumer, repeat, sequenceOf, withTrivia, createComponentParser, NumberTokenFlag,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage, type ValueDefinition } from '../value-processing/index';
 import {
-  allOf, commaRepeat, one, oneOf, opt, plus, adaptConsumer, repeat, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { NumberTokenFlag } from '../syntax/tokens';
-import { ValueStage } from '../value-processing/stage';
+  canonicalizeAngle, serializeCssNumber,
+  type NumberLiteral, type PercentageLiteral,
+} from './numeric-literal/index';
+
 import { resolveAngle, serializeAngle, consumeAngle, type AngleValue } from './angle';
 import {
   coercePercentageMathToNumber, promoteNumericVariable, tryGetMathVariableName, type MathContext,
@@ -22,15 +23,11 @@ import { completeMixPercentages, normalizeMixPercentages } from './mix';
 import { consumeDashedIdent, type DashedIdentValue } from './dashed-ident';
 import { consumeIdent } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { canonicalizeAngle } from './numeric-literal/angle';
-import { serializeCssNumber, type NumberLiteral } from './numeric-literal/number';
-import { type PercentageLiteral } from './numeric-literal/percentage';
 import { resolveNumber, serializeNumber, consumeNumber, type NumberValue } from './number';
 import {
   createPercentageConsumer, resolvePercentage, serializePercentage, consumePercentage,
   type PercentageValue,
 } from './percentage';
-import type { ValueDefinition } from '../value-processing/definition';
 
 // Resolved representation of a color in an identified coordinate space. It
 // has an intrinsic colorimetric interpretation when its space is predefined;

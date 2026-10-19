@@ -10,12 +10,23 @@ RuleTester.it = it;
 const filename = fileURLToPath(new URL('../../src/browlet/example.ts', import.meta.url));
 const options = [{
   unrestrictedSubsystems: ['infra'],
-  entryPoints: { 'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'] },
+  entryPoints: {
+    'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
+    stylelet: ['index', 'environment', 'context'],
+    'stylelet/syntax': ['index'], 'stylelet/values': ['index'],
+    'stylelet/values/numeric-literal': ['index'], 'stylelet/cssom': ['index'],
+  },
 }];
+const styleletFile = (path) => fileURLToPath(new URL(`../../src/stylelet/${path}.ts`, import.meta.url));
 const tester = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
 tester.run('subsystem-imports', rule, {
   valid: [
+    { filename: styleletFile('values/color'), options, code: "import { tokenize } from '../syntax/index';" },
+    { filename: styleletFile('values/color'), options, code: "import { parseNumber } from './number';" },
+    { filename: styleletFile('values/length'), options, code: "import { lengthLiteral } from './numeric-literal/index';" },
+    { filename: styleletFile('values/color'), options, code: "import type { StyleletEnvironment } from '../environment';" },
+    { filename, options, code: "import { tokenize } from '../stylelet/syntax/index';" },
     { filename, options, code: "import { FetchGroup } from '../fetch/index';" },
     { filename, options, code: "import type { ReferrerPolicy } from '../fetch/index.js';" },
     { filename, options, code: "export { defineInterface } from '../web-idl/core/index';" },
@@ -36,6 +47,30 @@ tester.run('subsystem-imports', rule, {
     },
   ],
   invalid: [
+    {
+      filename: styleletFile('values/color'), options, code: "import { tokenize } from '../syntax/tokens';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename: styleletFile('values/color'), options, code: "import type { TokenCursor } from '../syntax/token-cursor';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename: styleletFile('values/length'), options, code: "import { lengthLiteral } from './numeric-literal/length';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename: styleletFile('cssom/declaration'), options, code: "type Color = import('../values/color').AbsoluteColor;",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename: styleletFile('index'), options, code: "export { tokenize } from './syntax/tokens';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename, options, code: "import { tokenize } from '../stylelet/syntax/tokens';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
     { filename, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { FetchRequest } from '../fetch/request';", errors: [{ messageId: 'entryPoint' }] },

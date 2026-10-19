@@ -1,14 +1,18 @@
 import { assertNever, mapTuple } from '../../infra/util';
 import { InternalError } from '../../infra/internal-error';
 
-import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
-import { createFunctionalNotationConsumer, consumeComma } from '../syntax/component-consumers';
 import {
-  adaptConsumer, one, oneOf, opt, repeat, requiredSequenceOf, requiredSomeOf,
-  sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
+  createFunctionalNotationConsumer, consumeComma, adaptConsumer, one, oneOf, opt, repeat,
+  requiredSequenceOf, requiredSomeOf, sequenceOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+import {
+  angleLiteral, canonicalizeAngle, tryResolveAnglePercentage as tryResolveAnglePercentageLiteral,
+  lengthLiteral, percentageLiteral, consumeZero,
+  type CanonicalAngleLiteral, type CanonicalLengthLiteral, type PercentageLiteral, type ZeroValue,
+} from './numeric-literal/index';
+
 import { resolveAngle, serializeAngle, consumeAngle, type AngleValue } from './angle';
 import {
   resolveAnglePercentage, serializeAnglePercentage, consumeAnglePercentage,
@@ -26,16 +30,11 @@ import {
   consumeLengthPercentage, type LengthPercentageValue,
 } from './length-percentage';
 import type { PercentageReferenceValue } from './math-value';
-import { angleLiteral, canonicalizeAngle, type CanonicalAngleLiteral } from './numeric-literal/angle';
-import { tryResolveAnglePercentage as tryResolveAnglePercentageLiteral } from './numeric-literal/angle-percentage';
-import { lengthLiteral, type CanonicalLengthLiteral } from './numeric-literal/length';
-import { percentageLiteral, type PercentageLiteral } from './numeric-literal/percentage';
 import {
   resolvePosition, serializePosition, consumePosition, positionLiteral,
   type PositionOffsets, type PositionValue, type PositionValueContext,
 } from './position';
 import { serializeNumber } from './number';
-import { consumeZero, type ZeroValue } from './numeric-literal/zero';
 
 /*
  * <gradient> =

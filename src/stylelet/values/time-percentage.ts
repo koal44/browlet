@@ -1,14 +1,8 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
 import {
   createTimePercentageConsumer as createTimePercentageLiteralConsumer,
   serializeTimePercentage as serializeTimePercentageLiteral,
@@ -17,7 +11,13 @@ import {
   tryInterpolateTimePercentages as tryInterpolateTimePercentageLiterals,
   tryResolveTimePercentage as tryResolveTimePercentageLiteral,
   type TimePercentageConsumerOptions, type TimePercentageLiteral,
-} from './numeric-literal/time-percentage';
+} from './numeric-literal/index';
+
+import {
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
+  type MathValue,
+} from './math-value';
 
 /*
  * <time-percentage> = <time> | <percentage> | <math-function>

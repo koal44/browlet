@@ -1,12 +1,11 @@
 import type { StyleletURL } from '../environment';
 import {
   parseSyntaxStylesheet,
-  type ParserInput, type SyntaxBlockContents, type SyntaxQualifiedRule,
-  type SyntaxRule, type SyntaxStyleSheet,
-} from '../syntax/parser';
-import {
-  parseNestedSelectorList, parseSelectorList, type SelectorList,
-} from '../syntax/selector';
+  type ParserInput, type SyntaxBlockContents, type SyntaxQualifiedRule, type SyntaxRule,
+  type SyntaxStyleSheet,
+} from '../syntax/index';
+import { parseNestedSelectorList, parseSelectorList, type SelectorList } from '../selector/index';
+
 import {
   interpretPropertyDeclaration, type PropertyDeclaration, type PropertyRule,
 } from './property';

@@ -1,10 +1,8 @@
-import type { ValueDefinition } from '../value-processing/definition';
-import type { MathContext } from '../values/math-value';
+import type { ValueDefinition } from '../value-processing/index';
 import {
-  consumeOpacityValue, resolveOpacityValue, serializeOpacityValue,
-  type OpacityValue,
-} from '../values/opacity-value';
-import { defineProperty } from '../values/whole-value';
+  consumeOpacityValue, resolveOpacityValue, serializeOpacityValue, defineProperty,
+  type MathContext, type OpacityValue,
+} from '../values/index';
 
 const opacityDef: ValueDefinition<OpacityValue, MathContext> = {
   consume: consumeOpacityValue,

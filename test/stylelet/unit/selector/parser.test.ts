@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type {
   AttributeSelector, AttrMatcher, AttrModifier, Combinator, ComplexSelector, ComplexSelectorList,
   SelectorParserContext, WqName,
-} from '../../../../src/stylelet/syntax/selector';
+} from '../../../../src/stylelet/selector/parser';
 import {
   parseComplexSelectorList, parseNestedSelectorList, parseSelectorList, PseudoArgumentKind,
   SelectorKind,
-} from '../../../../src/stylelet/syntax/selector';
+} from '../../../../src/stylelet/selector/parser';
 
 // eslint-disable-next-line @typescript-eslint/no-unsafe-function-type
 function rethrowFromCaller(error: unknown, caller: Function): never {

@@ -1,17 +1,14 @@
 import { asciiLower } from '../../infra/ascii';
 
 import {
-  consumeDimensionToken, consumeIdentToken, consumeIntegerToken,
-  consumeMinusDelim, consumePlusDelim,
-} from '../syntax/component-consumers';
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { one, oneOf, opt, adaptConsumer, sequenceOf, withTrivia } from '../syntax/component-grammar';
-import type { DimensionToken, IdentToken, NumberToken } from '../syntax/tokens';
-import { NumericSign, NumberTokenFlag, TokenKind } from '../syntax/tokens';
+  consumeDimensionToken, consumeIdentToken, consumeIntegerToken, consumeMinusDelim, consumePlusDelim, one,
+  oneOf, opt, adaptConsumer, sequenceOf, withTrivia, NumericSign, NumberTokenFlag, TokenKind,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type DimensionToken, type IdentToken,
+  type NumberToken,
+} from '../syntax/index';
+import { serializeCssNumber } from './numeric-literal/index';
+
 import { createKeywordConsumer } from './keyword';
-import { serializeCssNumber } from './numeric-literal/number';
 
 /*
  * <a-n-plus-b> =

@@ -1,15 +1,14 @@
 import type { DOMElement as Element } from '../../infra/index';
 
+import { ValueStage } from '../value-processing/index';
 import {
-  propertyRegistry,
-  resolveBuiltInPropertyDeclaration,
+  propertyRegistry, resolveBuiltInPropertyDeclaration, CSSDeclarationBlock, parseDeclarationBlock,
   type PropertyContext, type PropertyDeclaration, type PropertyName,
-} from '../css/property';
+} from '../css/index';
+import { CSSStyleDeclarationImpl } from '../cssom/index';
+
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
-import { ValueStage } from '../value-processing/stage';
-import { CSSStyleDeclarationImpl } from '../cssom/declaration';
-import { CSSDeclarationBlock, parseDeclarationBlock } from '../css/declaration-block';
 
 export function computeStyle(
   engine: CascadeEngine,

@@ -1,18 +1,14 @@
-import type { TryConsumer } from '../syntax/token-cursor';
-import { serializeComponentValues } from '../syntax/component-value';
 import {
-  adaptConsumer, withTrivia,
-} from '../syntax/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import { type PropertyContext } from '../css/property';
+  serializeComponentValues, adaptConsumer, withTrivia, parseAsComponentGrammar,
+  parseOptionalDeclarationValue,
+  type TryConsumer, type ParserInput, type OptionalDeclarationValue,
+} from '../syntax/index';
+import { ValueStage, type ValueDefinition } from '../value-processing/index';
+import type { PropertyContext } from '../css/index';
+
 import {
   consumeCssWideValue, type CssWideValue,
 } from './css-wide';
-import {
-  parseOptionalDeclarationValue,
-  type OptionalDeclarationValue,
-} from '../syntax/declaration-value';
 import {
   createSubstitutionValue, isSubstitutionDeclaration,
   type SubstitutionValue,
@@ -21,7 +17,6 @@ import {
   serializeFirstValid, consumeFirstValid,
   type FirstValidValue,
 } from './substitution/first-valid';
-import type { ValueDefinition } from '../value-processing/definition';
 import {
   createSyntaxConsumer, resolveParsedSyntaxValue, serializeParsedSyntaxValue,
   type ParsedSyntaxValue, type SyntaxValue,

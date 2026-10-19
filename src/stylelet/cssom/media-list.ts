@@ -1,8 +1,9 @@
+import type { StyleletEnvironment } from '../environment';
 import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MediaQuery,
-} from '../values/media-query';
-import type { StyleletEnvironment } from '../environment';
+} from '../values/index';
+
 import type { CSSOMString } from './string';
 
 /*

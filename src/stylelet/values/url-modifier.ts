@@ -1,23 +1,13 @@
 import { asciiLower } from '../../infra/ascii';
 
-import type {
-  TokenCursor, TryConsumer, TryConsumerResult,
-} from '../syntax/token-cursor';
 import {
-  createFunctionalNotationConsumer,
-  consumeFunctionBlock,
-} from '../syntax/component-consumers';
-import {
-  one, oneOf,
-  withTrivia,
-} from '../syntax/component-grammar';
-import { type FunctionBlock } from '../syntax/component-value';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { isAnyValueContents } from '../syntax/any-value';
+  createFunctionalNotationConsumer, consumeFunctionBlock, one, oneOf, withTrivia, createComponentParser,
+  isAnyValueContents, serializeCssString, TokenKind,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type FunctionBlock, type ParserInput,
+} from '../syntax/index';
+
 import { consumeIdent, type IdentValue } from './ident';
 import { createKeywordConsumer } from './keyword';
-import { serializeCssString } from '../syntax/component-value';
-import { TokenKind } from '../syntax/tokens';
 import { consumeString } from './string';
 
 /*

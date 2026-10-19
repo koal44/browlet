@@ -1,21 +1,10 @@
 import {
-  consumeParensBlock,
-} from '../syntax/component-consumers';
-import {
-  adaptConsumer, withTrivia,
-} from '../syntax/component-grammar';
-import {
-  type TokenCursor, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { isTokenKind } from '../syntax/component-value';
-import {
-  consumeDeclaration, createComponentParser, parseAsComponentGrammar,
-  type ParserInput, type SyntaxDeclaration,
-} from '../syntax/parser';
-import { TokenKind } from '../syntax/tokens';
-import {
-  createBooleanExprConsumer, type BooleanExprValue,
-} from '../values/boolean-expr';
+  consumeParensBlock, adaptConsumer, withTrivia, isTokenKind, consumeDeclaration, createComponentParser,
+  parseAsComponentGrammar, TokenKind,
+  type TokenCursor, type TryConsumerResult, type ParserInput, type SyntaxDeclaration,
+} from '../syntax/index';
+
+import { createBooleanExprConsumer, type BooleanExprValue } from './boolean-expr';
 
 /*
  * <supports-condition> =

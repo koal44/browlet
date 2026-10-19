@@ -1,11 +1,9 @@
 import {
-  one, oneOf, plus, adaptConsumer, recursive, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { type TryConsumer } from '../syntax/token-cursor';
-import { consumeParensBlock } from '../syntax/component-consumers';
-import { type ParensBlock } from '../syntax/component-value';
-import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
-import { TokenKind } from '../syntax/tokens';
+  one, oneOf, plus, adaptConsumer, recursive, sequenceOf, withTrivia, consumeParensBlock,
+  parseAsComponentGrammar, TokenKind,
+  type TryConsumer, type ParensBlock, type ParserInput,
+} from '../syntax/index';
+
 import { consumeGeneralEnclosed, type GeneralEnclosedValue } from './general-enclosed';
 import { createKeywordConsumer } from './keyword';
 

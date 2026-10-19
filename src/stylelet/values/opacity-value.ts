@@ -1,9 +1,11 @@
 import { clamp } from '../../infra/util';
 
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
+import {
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+
 import type { MathContext } from './math-value';
 import {
   accumulateNumbers, addNumbers, interpolateNumbers, resolveNumber, serializeNumber,

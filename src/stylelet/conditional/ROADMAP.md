@@ -5,6 +5,10 @@ missing matching. Keep CSS condition logic in Stylelet, with actual host and
 layout facts supplied explicitly. This is dependency accounting, not a new
 environment interface or a commitment to implement every query at once.
 
+Shared condition grammars and records live in [values/](../values/README.md),
+including [supports conditions](../values/supports-condition.ts). This folder
+will supply condition evaluation and applicability using those representations.
+
 ## Feature support
 
 Sources: [Conditional 3 supports](https://drafts.csswg.org/css-conditional-3/#at-supports)
@@ -17,7 +21,7 @@ and [Conditional 4 selector tests](https://drafts.csswg.org/css-conditional-4/#a
   logic; media/container conditions can propagate unknown. Do not assume the
   generic BooleanExpr helper's final unknown-to-false conversion implements
   every leaf or negation rule.
-- [ ] Connect @supports and CSS.supports to the same capability decisions while
+- [ ] Connect @supports, CSS.supports, and if() to the same capability decisions while
   retaining their entry-point parsing contracts. Keep newer font/at-rule
   support tests in the broader Conditional 5 inventory until their consumers
   and support definitions are reviewed.

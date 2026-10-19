@@ -1,13 +1,13 @@
 import type { DOMElement as Element } from '../../infra/index';
 
 import type { StyleletURL } from '../environment';
-import type {
-  CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry,
-  PropertyContext, PropertyDeclaration,
-} from '../css/property';
-import type { CSSStyleDeclarationImpl } from '../cssom/declaration';
-import { CSSStyleSheetImpl, type CSSStyleSheetInit } from '../cssom/css-stylesheet';
 import type { StyleletContext } from '../context';
+import type {
+  CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext,
+  PropertyDeclaration,
+} from '../css/index';
+import { CSSStyleSheetImpl, type CSSStyleDeclarationImpl, type CSSStyleSheetInit } from '../cssom/index';
+
 import { computeStyle } from './computed-style';
 import {
   getCascadedProperty as findCascadedProperty, type CascadedProperty,

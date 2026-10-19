@@ -1,7 +1,9 @@
-import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
-import { withTrivia } from '../syntax/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
-import type { ValueStage } from '../value-processing/stage';
+import {
+  withTrivia, parseAsComponentGrammar,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
+
 import { createKeywordConsumer } from './keyword';
 import type { WholeValue } from './whole-value';
 

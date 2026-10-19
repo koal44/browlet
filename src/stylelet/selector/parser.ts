@@ -3,31 +3,20 @@ import { assertNever } from '../../infra/util';
 
 import {
   any, commaRepeat, one, oneOf, opt, plus, adaptConsumer, requiredSequenceOf, sequenceOf, withTrivia,
-} from './component-grammar';
-import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
-import {
-  consumeAmpersandDelim, consumeAnyValueFunctionBlock,
-  consumeAsteriskDelim, consumeBracketBlock,
+  consumeAmpersandDelim, consumeAnyValueFunctionBlock, consumeAsteriskDelim, consumeBracketBlock,
   consumeCaretDelim, consumeColon, consumeDollarDelim, consumeDotDelim,
   consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeIdHashToken,
-  consumeIntegerToken, consumePipeDelim, consumePlusDelim, consumeStringToken,
-  consumeTildeDelim,
-} from './component-consumers';
+  consumeIntegerToken, consumePipeDelim, consumePlusDelim, consumeStringToken, consumeTildeDelim,
+  isComponentBlock, isDelimToken, isWhitespaceToken, serializeComponentValues, serializeCssIdentifier,
+  serializeCssString, parseAsComponentGrammar, parseCommaSeparatedListOfComponentValues,
+  parseListAsComponentGrammar, TokenKind,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ComponentValue, type ParserInput,
+} from '../syntax/index';
+import { serializeCssInteger } from '../values/numeric-literal/index';
 import {
-  isComponentBlock, isDelimToken, isWhitespaceToken,
-  serializeComponentValues, serializeCssIdentifier, serializeCssString,
-  type ComponentValue,
-} from './component-value';
-import {
-  parseAsComponentGrammar, parseCommaSeparatedListOfComponentValues,
-  parseListAsComponentGrammar,
-  type ParserInput,
-} from './parser';
-import { TokenKind } from './tokens';
-import { parseCustomIdent, serializeCustomIdent, type CustomIdentValue } from '../values/custom-ident';
-import { consumeAnPlusB, serializeAnPlusB, type AnPlusBValue } from '../values/an-plus-b';
-import { createKeywordConsumer } from '../values/keyword';
-import { serializeCssInteger } from '../values/numeric-literal/integer';
+  parseCustomIdent, serializeCustomIdent, consumeAnPlusB, serializeAnPlusB, createKeywordConsumer,
+  type CustomIdentValue, type AnPlusBValue,
+} from '../values/index';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',

@@ -478,6 +478,13 @@ findings and fails while they remain; `npm run lint:imports -- --fix` fixes layo
 only. Do not erase concrete types or merge components merely to silence those
 findings.
 
+Stylelet has its own [component barrels and dependency order](stylelet/README.md#entry-points-and-existing-layers).
+The entry-point rule also checks those internal boundaries, including type-only
+references. Changes to Stylelet's layer order require the same ownership review
+as changes to subsystem dependencies.
+`environment.ts` and `context.ts` remain deliberate named entries. The package
+index composes its existing public API; internal components do not import it.
+
 Browlet's [timing foundation](browlet/timing/README.md) supplies shared clocks,
 precision, and time origins without importing DOM or Performance. The Performance
 API consumes timing and DOM events. Event, EventTarget, and the UI Events

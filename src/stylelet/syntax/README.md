@@ -1,8 +1,8 @@
 # CSS syntax
 
 This folder turns CSS input into tokens, component values, and syntax records.
-It also parses and serializes selectors. Recognizing a property, deciding which
-rules apply, and exposing CSSOM objects belong to later layers.
+Selector parsing, property recognition, deciding which rules apply, and exposing
+CSSOM objects belong to later layers.
 
 The [roadmap](ROADMAP.md) records missing consumer connections and remaining
 algorithm checks. Existing parser coverage does not establish complete Syntax
@@ -48,12 +48,13 @@ for validation of every rule's permitted contents or placement.
 
 ## Selectors and serialization
 
-[selector.ts](selector.ts) builds typed selector records, resolves supplied
+[selector/parser.ts](../selector/parser.ts) builds typed selector records, resolves supplied
 namespace prefixes, calculates specificity, binds nested selectors to their
 parent selector lists, and serializes them. Invalid forgiving-list arms can
 retain syntax without becoming matching selectors. The
 [matcher inventory](../selector/README.md) explains what consumes these records
-and how this differs from Selectlet's query parser.
+and how this differs from Selectlet's query parser. Selector grammar consumes
+this folder's generic syntax machinery and the reusable value grammars.
 
 `serializeComponentValues()`, `serializeCssIdentifier()`, and
 `serializeCssString()` provide syntax-level serialization. Custom-property
@@ -64,7 +65,8 @@ serialization, or value resolution during serialization.
 ## Evidence
 
 The [syntax tests](../../../test/stylelet/unit/syntax/) cover tokenization and
-decoding, parser recovery, component grammars, selector context/specificity, and
-serialization. They were included in the passing
+decoding, parser recovery, component grammars, and component serialization.
+[Selector tests](../../../test/stylelet/unit/selector/) cover selector grammar,
+context, specificity, serialization, and matching. Both were included in the passing
 [syntax and selector baseline](../README.md#syntax-rules-and-selectors). Loader behavior, all
 property grammars, and full browser/WPT conformance were not tested by that run.

@@ -1,6 +1,6 @@
 import {
-  type DOMOperations, type DOMElement as Element, type DOMParentNode as ParentNode,
   isHtmlSvgOrMathNamespace,
+  type DOMOperations, type DOMElement as Element, type DOMParentNode as ParentNode,
 } from '../../infra/index';
 import {
   asciiDashMatch, asciiEndsWith, asciiEquals, hasAsciiWhitespaceToken, asciiIncludes, asciiStartsWith,
@@ -10,6 +10,7 @@ import { asciiLower, hasWhitespaceToken } from '../../infra/ascii';
 import { InternalError } from '../../infra/internal-error';
 
 import type { StyleletContext } from '../context';
+
 import type {
   NthElementIndexMap, NthOfTypeParentMap, RuntimeCache,
 } from './runtimeCache';

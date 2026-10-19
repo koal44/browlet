@@ -1,16 +1,11 @@
 import {
-  adaptConsumer, commaRepeat, one, oneOf, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { createKeywordConsumer } from '../values/keyword';
+  adaptConsumer, commaRepeat, one, oneOf, sequenceOf, withTrivia, createComponentParser,
+  type ParserInput, type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/index';
 import {
-  createCustomIdentConsumer, serializeCustomIdent,
-  type CustomIdentValue,
-} from '../values/custom-ident';
-import { serializeString, consumeString, type StringValue } from '../values/string';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
+  createKeywordConsumer, createCustomIdentConsumer, serializeCustomIdent, serializeString, consumeString,
+  type CustomIdentValue, type StringValue,
+} from '../values/index';
 
 /*
  * <'animation-name'> = [ none | <keyframes-name> ]#

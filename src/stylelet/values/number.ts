@@ -1,21 +1,20 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueStage } from '../value-processing/stage';
-import type { ValueDefinition } from '../value-processing/definition';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueStage, ValueDefinition } from '../value-processing/index';
+import {
+  accumulateNumbers as accumulateNumberLiterals, addNumbers as addNumberLiterals,
+  createNumberConsumer as createNumberLiteralConsumer, interpolateNumbers as interpolateNumberLiterals,
+  serializeNumber as serializeNumberLiteral,
+  type NumberConsumerOptions as NumberLiteralConsumerOptions, type NumberLiteral,
+} from './numeric-literal/index';
+
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
   type MathValue,
 } from './math-value';
-import {
-  accumulateNumbers as accumulateNumberLiterals, addNumbers as addNumberLiterals,
-  createNumberConsumer as createNumberLiteralConsumer,
-  interpolateNumbers as interpolateNumberLiterals, serializeNumber as serializeNumberLiteral,
-  type NumberConsumerOptions as NumberLiteralConsumerOptions, type NumberLiteral,
-} from './numeric-literal/number';
 
 /*
  * <number> = <number-token> | <math-function>

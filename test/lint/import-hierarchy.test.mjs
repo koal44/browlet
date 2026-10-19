@@ -13,6 +13,12 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 
 tester.run('dependency-direction', direction, {
   valid: [
+    { filename: sourceFile('stylelet/values/color'), code: "import { tokenize } from '../syntax/index';" },
+    { filename: sourceFile('stylelet/values/length'), code: "import { lengthLiteral } from './numeric-literal/index';" },
+    { filename: sourceFile('stylelet/conditional/example'), code: "import { parseMediaQueryList } from '../values/index';" },
+    { filename: sourceFile('stylelet/cssom/declaration'), code: "import type { StyleletContext } from '../context';" },
+    { filename: sourceFile('stylelet/engine/cascade'), code: "import { CSSStyleSheetImpl } from '../cssom/index';" },
+    { filename: sourceFile('stylelet/environment'), code: "import type { StreamsEnvironment } from '../streams/index';" },
     { filename, code: "import { WindowImpl } from '../window/index';" },
     { filename, code: "import { Navigable } from './navigable';" },
     { filename, code: "import { parseURL } from '../../../url/index';" },
@@ -39,6 +45,22 @@ tester.run('dependency-direction', direction, {
     { filename, code: "import type { Helper } from '../../../new-subsystem/index';" },
   ],
   invalid: [
+    {
+      filename: sourceFile('stylelet/syntax/parser'), code: "import { parseColor } from '../values/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/syntax', target: 'stylelet/values' } }],
+    },
+    {
+      filename: sourceFile('stylelet/values/example'), code: "import { matchCondition } from '../conditional/index';",
+      errors: [{ messageId: 'upward' }],
+    },
+    {
+      filename: sourceFile('stylelet/cssom/declaration'), code: "import { computeStyle } from '../engine/index';",
+      errors: [{ messageId: 'upward' }],
+    },
+    {
+      filename: sourceFile('streams/readable'), code: "import { Stylelet } from '../stylelet/index';",
+      errors: [{ messageId: 'upward' }],
+    },
     {
       filename: sourceFile('browlet/dom/nodes/element-definitions/content-model'),
       code: "import { ElementImpl } from '../element';",

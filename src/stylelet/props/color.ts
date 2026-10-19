@@ -1,4 +1,3 @@
-import { colorDef } from '../values/color';
-import { defineProperty } from '../values/whole-value';
+import { colorDef, defineProperty } from '../values/index';
 
 export const colorProperty = defineProperty(colorDef);

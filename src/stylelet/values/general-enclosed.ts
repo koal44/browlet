@@ -1,11 +1,9 @@
-import { consumeFunctionBlock, consumeParensBlock } from '../syntax/component-consumers';
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
 import {
-  serializeComponentValues, type FunctionBlock, type ParensBlock,
-} from '../syntax/component-value';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { parseAnyValue, type AnyValue } from '../syntax/any-value';
+  consumeFunctionBlock, consumeParensBlock, one, oneOf, withTrivia, serializeComponentValues,
+  createComponentParser, parseAnyValue,
+  type TokenCursor, type TryConsumerResult, type FunctionBlock, type ParensBlock, type ParserInput,
+  type AnyValue,
+} from '../syntax/index';
 
 /*
  * <general-enclosed> =

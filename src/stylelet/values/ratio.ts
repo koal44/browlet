@@ -1,21 +1,15 @@
 import { InternalError } from '../../infra/internal-error';
 
-import { consumeSlashDelim } from '../syntax/component-consumers';
 import {
-  adaptConsumer, one, oneOf, opt, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueDefinition } from '../value-processing/definition';
-import type { ValueStage } from '../value-processing/stage';
+  consumeSlashDelim, adaptConsumer, one, oneOf, opt, sequenceOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueDefinition, ValueStage } from '../value-processing/index';
+import { createNumberConsumer, numberLiteral, serializeCssNumber } from './numeric-literal/index';
+
 import {
   consumeNumber, resolveNumber, serializeNumber, type NumberValue,
 } from './number';
-import {
-  createNumberConsumer, numberLiteral, serializeCssNumber,
-} from './numeric-literal/number';
 import { type MathContext } from './math-value';
 
 /*

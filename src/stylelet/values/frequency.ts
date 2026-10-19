@@ -1,23 +1,20 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+import {
+  accumulateDimensions, addDimensions, interpolateDimensions, canonicalizeFrequency,
+  createFrequencyConsumer as createFrequencyLiteralConsumer,
+  serializeFrequency as serializeFrequencyLiteral,
+  type FrequencyConsumerOptions, type FrequencyLiteral,
+} from './numeric-literal/index';
+
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
   type MathValue,
 } from './math-value';
-import {
-  accumulateDimensions, addDimensions,
-  interpolateDimensions,
-} from './numeric-literal/dimension';
-import {
-  canonicalizeFrequency, createFrequencyConsumer as createFrequencyLiteralConsumer,
-  serializeFrequency as serializeFrequencyLiteral,
-  type FrequencyConsumerOptions, type FrequencyLiteral,
-} from './numeric-literal/frequency';
 
 /*
  * <frequency> = <dimension-token with a frequency unit> | <math-function>

@@ -1,21 +1,21 @@
 import { InternalError } from '../../infra/internal-error';
 
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import { type TokenCursor, type TryConsumerResult } from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueDefinition } from '../value-processing/definition';
-import type { ValueStage } from '../value-processing/stage';
+import {
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueDefinition, ValueStage } from '../value-processing/index';
+import {
+  consumeDimension as consumeDimensionLiteral, serializeDimension as serializeDimensionLiteral,
+  type DimensionLiteral,
+} from './numeric-literal/index';
+
 import { consumeAngle, resolveAngle, serializeAngle, type AngleValue } from './angle';
 import {
   consumeFrequency, resolveFrequency, serializeFrequency, type FrequencyValue,
 } from './frequency';
 import { consumeLength, resolveLength, serializeLength, type LengthValue } from './length';
 import { type MathContext } from './math-value';
-import {
-  consumeDimension as consumeDimensionLiteral,
-  serializeDimension as serializeDimensionLiteral,
-  type DimensionLiteral,
-} from './numeric-literal/dimension';
 import {
   consumeResolution, resolveResolution, serializeResolution, type ResolutionValue,
 } from './resolution';

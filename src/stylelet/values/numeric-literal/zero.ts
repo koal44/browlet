@@ -1,9 +1,8 @@
-import { consumeNumberToken } from '../../syntax/component-consumers';
-import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../../syntax/parser';
+  consumeNumberToken, adaptConsumer, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../../syntax/index';
+
 import type { NumberLiteral } from './number';
 
 /*

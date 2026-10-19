@@ -4,12 +4,13 @@ import { assertNever } from '../../infra/util';
 import { InternalError } from '../../infra/internal-error';
 import { asciiWhitespacePattern } from '../../infra/patterns';
 
+import type { StyleletContext } from '../context';
+
 import {
   PseudoArgumentKind, SelectorKind,
-  type AttributeSelector, type ClassSelector, type IdSelector,
-  type PseudoClassSelector, type SimpleSelector, type TypeSelector,
-} from '../syntax/selector';
-import type { StyleletContext } from '../context';
+  type AttributeSelector, type ClassSelector, type IdSelector, type PseudoClassSelector,
+  type SimpleSelector, type TypeSelector,
+} from './parser';
 import {
   checkClass, checkId, checkTag, hasAttr, isChecked, isDefault, isDefined, isDisabled, isEnabled, isFocused, isIndeterminate,
   isInRange, isInvalid, isMuted, isNthElement, isNthOfType, isOptional, isOutOfRange, isPaused,

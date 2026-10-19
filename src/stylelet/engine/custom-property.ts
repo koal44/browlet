@@ -1,6 +1,5 @@
-import type {
-  CustomPropertyName, CustomPropertyRegistration,
-} from '../css/property';
+import type { CustomPropertyName, CustomPropertyRegistration } from '../css/index';
+
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
 

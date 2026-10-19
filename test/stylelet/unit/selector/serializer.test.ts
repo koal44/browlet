@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   parseNestedSelectorList, parseSelectorList, serializeSelectorList,
   type SelectorList,
-} from '../../../../src/stylelet/syntax/selector';
+} from '../../../../src/stylelet/selector/parser';
 
 describe('selector serialization', () => {
   it.each([

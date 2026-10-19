@@ -1,7 +1,8 @@
+import { parseDeclarationList, type ParserInput } from '../syntax/index';
+
 import {
   interpretPropertyDeclaration, serializePropertyDeclaration, type PropertyDeclaration,
 } from './property';
-import { parseDeclarationList, type ParserInput } from '../syntax/parser';
 
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
 // https://drafts.csswg.org/cssom/#css-declaration-blocks

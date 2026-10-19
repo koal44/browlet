@@ -2,12 +2,11 @@ import { asciiLower } from '../../../infra/ascii';
 import { assertNever } from '../../../infra/util';
 import { InternalError } from '../../../infra/internal-error';
 
-import { consumeDimensionToken, consumeNumberToken } from '../../syntax/component-consumers';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../../syntax/token-cursor';
-import { one, oneOf, adaptConsumer, withTrivia } from '../../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../../syntax/parser';
+  consumeDimensionToken, consumeNumberToken, one, oneOf, adaptConsumer, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../../syntax/index';
+
 import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
 
 /*

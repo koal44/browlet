@@ -2,7 +2,7 @@ import type { DOMOperations, DOMElement as Element, DOMShadowRoot as ShadowRoot 
 import { assertNever } from '../../infra/util';
 import { InternalError } from '../../infra/internal-error';
 
-import type { Combinator } from '../syntax/selector';
+import type { Combinator } from './parser';
 import {
   asSubjectPredicate, SubjectKind, triAnd, triOr,
   type CandidateElementPredicate, type CandidateSubjectPredicate,

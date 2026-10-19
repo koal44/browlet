@@ -1,4 +1,5 @@
-import type { TryConsumer } from '../syntax/token-cursor';
+import type { TryConsumer } from '../syntax/index';
+
 import type { ValueStage } from './stage';
 
 export type ValueDefinition<Value, Context = unknown> = {

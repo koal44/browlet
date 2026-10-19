@@ -1,23 +1,20 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import type { ValueDefinition } from '../value-processing/definition';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage, type ValueDefinition } from '../value-processing/index';
+import {
+  accumulateDimensions, addDimensions, interpolateDimensions,
+  createLengthConsumer as createLengthLiteralConsumer, serializeLength as serializeLengthLiteral,
+  tryResolveLength,
+  type LengthConsumerOptions, type LengthLiteral,
+} from './numeric-literal/index';
+
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
   type MathValue,
 } from './math-value';
-import {
-  accumulateDimensions, addDimensions,
-  interpolateDimensions,
-} from './numeric-literal/dimension';
-import {
-  createLengthConsumer as createLengthLiteralConsumer, serializeLength as serializeLengthLiteral,
-  tryResolveLength, type LengthConsumerOptions, type LengthLiteral,
-} from './numeric-literal/length';
 
 /*
  * <length> =

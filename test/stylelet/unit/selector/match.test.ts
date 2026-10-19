@@ -9,7 +9,7 @@ import {
 } from '../../../../src/stylelet/selector/match';
 import {
   parseNestedSelectorList, parseSelectorList,
-} from '../../../../src/stylelet/syntax/selector';
+} from '../../../../src/stylelet/selector/parser';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('selector matching', () => {

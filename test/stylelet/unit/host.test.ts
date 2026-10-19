@@ -10,7 +10,7 @@ import {
 } from '../../../src/infra/index';
 import { browletDOM } from '../../../src/browlet/integration/dom';
 import { matchSelectorList } from '../../../src/stylelet/selector/match';
-import { parseSelectorList } from '../../../src/stylelet/syntax/selector';
+import { parseSelectorList } from '../../../src/stylelet/selector/parser';
 import { createBrowletDocument } from '../browlet-document';
 import { createOpaqueDOM } from '../../support/opaque-dom';
 

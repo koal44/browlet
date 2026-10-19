@@ -2,41 +2,25 @@ import { asciiLower } from '../../infra/ascii';
 import { assertNever } from '../../infra/util';
 import { InternalError } from '../../infra/internal-error';
 
-import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
-  consumeWhitespace, createFunctionalNotationConsumer, consumeAsteriskDelim,
-  consumeComma, consumeIdentToken, consumeParensBlock, consumeSlashDelim,
-} from '../syntax/component-consumers';
+  consumeWhitespace, createFunctionalNotationConsumer, consumeAsteriskDelim, consumeComma,
+  consumeIdentToken, consumeParensBlock, consumeSlashDelim, commaRepeat, one, oneOf, opt, adaptConsumer,
+  repeat, sequenceOf, withTrivia, isDelimToken, serializeCssIdentifier, parseAsComponentGrammar, TokenKind,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
 import {
-  commaRepeat, one, oneOf, opt, adaptConsumer, repeat, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { isDelimToken, serializeCssIdentifier } from '../syntax/component-value';
-import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
-import { TokenKind } from '../syntax/tokens';
-import { ValueStage } from '../value-processing/stage';
+  ANGLE_UNITS, canonicalizeAngle, serializeDimension, consumeDimension, FREQUENCY_UNITS,
+  canonicalizeFrequency, LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, serializeNumber,
+  consumeNumber, serializePercentage, consumePercentage, RESOLUTION_UNITS, canonicalizeResolution,
+  TIME_UNITS, canonicalizeTime,
+  type AngleLiteral, type CanonicalAngleLiteral, type AnyDimensionLiteral, type DimensionLiteral,
+  type CanonicalFrequencyLiteral, type FrequencyLiteral, type IntegerLiteral, type CanonicalLengthLiteral,
+  type LengthLiteral, type LengthResolutionContext, type NumberLiteral, type PercentageLiteral,
+  type ResolutionLiteral, type CanonicalTimeLiteral, type TimeLiteral,
+} from './numeric-literal/index';
+
 import { createKeywordConsumer } from './keyword';
-import {
-  ANGLE_UNITS, canonicalizeAngle, type AngleLiteral, type CanonicalAngleLiteral,
-} from './numeric-literal/angle';
-import {
-  serializeDimension, consumeDimension, type AnyDimensionLiteral,
-  type DimensionLiteral,
-} from './numeric-literal/dimension';
-import {
-  FREQUENCY_UNITS, canonicalizeFrequency, type CanonicalFrequencyLiteral,
-  type FrequencyLiteral,
-} from './numeric-literal/frequency';
-import { type IntegerLiteral } from './numeric-literal/integer';
-import {
-  LENGTH_UNITS, snapLengthAsLineWidth, tryResolveLength, type CanonicalLengthLiteral,
-  type LengthLiteral, type LengthResolutionContext,
-} from './numeric-literal/length';
-import { serializeNumber, consumeNumber, type NumberLiteral } from './numeric-literal/number';
-import { serializePercentage, consumePercentage, type PercentageLiteral } from './numeric-literal/percentage';
-import { RESOLUTION_UNITS, canonicalizeResolution, type ResolutionLiteral } from './numeric-literal/resolution';
-import {
-  TIME_UNITS, canonicalizeTime, type CanonicalTimeLiteral, type TimeLiteral,
-} from './numeric-literal/time';
 
 export type MathValue<Type extends MathValueType = MathValueType> = {
   type: 'math';

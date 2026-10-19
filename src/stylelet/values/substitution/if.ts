@@ -1,25 +1,15 @@
 import {
-  createFreeFormConsumer, createFunctionalNotationConsumer,
-  consumeColon, consumeSemicolon,
-} from '../../syntax/component-consumers';
-import {
-  any, one, opt, oneOf, sequenceOf, withTrivia,
-} from '../../syntax/component-grammar';
-import {
-  type TokenCursor, type TryConsumer,
-  type TryConsumerResult,
-} from '../../syntax/token-cursor';
-import { isTokenKind } from '../../syntax/component-value';
-import {
-  consumeDeclarationValue, consumeOptionalDeclarationValue,
-  type DeclarationValue, type OptionalDeclarationValue,
-} from '../../syntax/declaration-value';
-import { createComponentParser, type ParserInput } from '../../syntax/parser';
-import { TokenKind } from '../../syntax/tokens';
+  createFreeFormConsumer, createFunctionalNotationConsumer, consumeColon, consumeSemicolon, any, one, opt,
+  oneOf, sequenceOf, withTrivia, isTokenKind, consumeDeclarationValue, consumeOptionalDeclarationValue,
+  createComponentParser, TokenKind,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type DeclarationValue,
+  type OptionalDeclarationValue, type ParserInput,
+} from '../../syntax/index';
+
 import {
   consumeSupportsCondition, consumeSupportsDeclaration,
   type SupportsCondition, type SupportsDeclaration,
-} from '../../conditional/supports';
+} from '../supports-condition';
 import {
   createBooleanExprConsumer, type BooleanExprValue,
 } from '../boolean-expr';

@@ -1,11 +1,8 @@
-import { consumeIdentToken } from '../syntax/component-consumers';
-import { serializeCssIdentifier } from '../syntax/component-value';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueDefinition } from '../value-processing/definition';
+  consumeIdentToken, serializeCssIdentifier, adaptConsumer, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueDefinition } from '../value-processing/index';
 
 /*
  * <ident> = <ident-token>

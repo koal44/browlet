@@ -1,16 +1,14 @@
 import type { DOMDocument as Document } from '../../infra/index';
-import { internalType } from '../../infra/promises';
+import { internalType, type InternalPromise } from '../../infra/promises';
 
+import type { StyleletEnvironment } from '../environment';
+import { parseRule, type SyntaxRule } from '../syntax/index';
+import type { StyleletContext } from '../context';
 import {
   interpretStylesheet, parseStylesheet,
   type InterpretedRule, type InterpretedStyleSheet,
-} from '../css/stylesheet';
-import {
-  parseRule, type SyntaxRule,
-} from '../syntax/parser';
-import type { StyleletContext } from '../context';
-import type { InternalPromise } from '../stylelet';
-import type { StyleletEnvironment } from '../environment';
+} from '../css/index';
+
 import { CSSRuleListImpl } from './rule-list';
 import { CSSStyleRuleImpl } from './rules';
 import { StyleSheetImpl } from './stylesheet';

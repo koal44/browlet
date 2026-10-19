@@ -2,21 +2,19 @@ import { InternalError } from '../../infra/internal-error';
 
 import type { StyleletURL, StyleletURLConstructor } from '../environment';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createFunctionalNotationConsumer, consumeUrlToken } from '../syntax/component-consumers';
-import { any, one, oneOf, adaptConsumer, sequenceOf, withTrivia } from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { serializeCssString } from '../syntax/component-value';
+  createFunctionalNotationConsumer, consumeUrlToken, any, one, oneOf, adaptConsumer, sequenceOf, withTrivia,
+  createComponentParser, serializeCssString,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage, type ValueDefinition } from '../value-processing/index';
+import type { TreeScope } from '../engine/index';
+
 import { consumeString } from './string';
 import {
   isRequestUrlModifierValue, serializeRequestUrlModifiers,
   consumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,
   type UrlModifierValue,
 } from './url-modifier';
-import type { ValueDefinition } from '../value-processing/definition';
-import { ValueStage } from '../value-processing/stage';
-import type { TreeScope } from '../engine/tree-scope';
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL

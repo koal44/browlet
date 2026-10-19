@@ -1,23 +1,13 @@
 import { asciiLower } from '../../infra/ascii';
 
 import {
-  consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken,
-  consumeLessDelim, consumeParensBlock,
-} from '../syntax/component-consumers';
-import {
-  adaptConsumer, any, one, oneOf, opt, plus, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import {
-  serializeCssIdentifier, type ParensBlock,
-} from '../syntax/component-value';
-import {
-  createComponentParser, parseAsComponentGrammar, parseListAsComponentGrammar,
-  type ParserInput,
-} from '../syntax/parser';
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import type { ValueStage } from '../value-processing/stage';
+  consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeLessDelim,
+  consumeParensBlock, adaptConsumer, any, one, oneOf, opt, plus, sequenceOf, withTrivia,
+  serializeCssIdentifier, createComponentParser, parseAsComponentGrammar, parseListAsComponentGrammar,
+  type ParensBlock, type ParserInput, type TokenCursor, type TryConsumer, type TryConsumerResult,
+} from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
+
 import {
   consumeDimension, resolveDimension, serializeDimension, type DimensionValue,
 } from './dimension';

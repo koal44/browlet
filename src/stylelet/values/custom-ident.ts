@@ -1,14 +1,13 @@
 import { asciiLower } from '../../infra/ascii';
 
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
-import { parseAsComponentGrammar, type ParserInput } from '../syntax/parser';
+  adaptConsumer, withTrivia, parseAsComponentGrammar, serializeCssIdentifier,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueDefinition } from '../value-processing/index';
+
 import { CSS_WIDE_KEYWORDS } from './css-wide';
-import { serializeCssIdentifier } from '../syntax/component-value';
 import { consumeIdent } from './ident';
-import type { ValueDefinition } from '../value-processing/definition';
 
 export type CustomIdentValue = {
   type: 'custom-ident';

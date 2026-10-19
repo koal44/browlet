@@ -1,7 +1,7 @@
 import { InternalError } from '../../../infra/internal-error';
 
-import { one, oneOf } from '../../syntax/component-grammar';
-import { type TryConsumer } from '../../syntax/token-cursor';
+import { one, oneOf, type TryConsumer } from '../../syntax/index';
+
 import {
   addDimensions, interpolateDimensions, type AnyDimensionLiteral,
 } from './dimension';

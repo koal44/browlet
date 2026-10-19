@@ -75,7 +75,7 @@ resolution/serialization boundary.
 | [Gradients](gradient.ts) | Linear/radial/conic and repeating forms, stops and interpolation; explicit used-value preparation accepts gradient-box geometry. | Explicit preparation can return null when stage/facts are insufficient. Interpolation still throws for cases including cross-fade fallback, repeating-stop alignment and missing required percentage bases. No rasterization. |
 | [Positions](position.ts) | Position grammar and stage-aware resolution, including CSS writing-mode/direction inputs for logical positions | Does not choose a property's reference rectangle or image size. |
 | [BoxSides](box-sides.ts) | A four-item physical-side tuple introduced for HTML lazy loading | A provisional type, not shorthand expansion or layout. |
-| [Conditions](../conditional/README.md) | Media-query records and generic boolean evaluation | Query-value resolution is distinct from device matching and stylesheet participation. |
+| [Supports conditions](supports-condition.ts), [media queries](media-query.ts), and [boolean expressions](boolean-expr.ts) | Shared condition grammars, records, and generic boolean evaluation; if() reuses the supports parser | Query-value resolution is distinct from capability checks, device matching, and stylesheet participation; see the [condition roadmap](../conditional/ROADMAP.md). |
 
 The [property registry inventory](../props/README.md) records the seven installed
 built-ins and unregistered animation-name parser. Additional generic types do

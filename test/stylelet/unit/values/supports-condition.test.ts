@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseSupportsCondition,
-} from '../../../../src/stylelet/conditional/supports';
+} from '../../../../src/stylelet/values/supports-condition';
 import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 
 describe('<supports-condition>', () => {

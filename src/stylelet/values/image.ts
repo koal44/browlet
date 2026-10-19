@@ -1,9 +1,9 @@
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueStage } from '../value-processing/stage';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueStage, ValueDefinition } from '../value-processing/index';
+
 import {
   resolveGradient, serializeGradient, consumeGradient,
   type GradientValueContext, type GradientValue,
@@ -11,7 +11,6 @@ import {
 import {
   resolveUrl, serializeUrl, consumeUrl, type UrlContext, type UrlValue,
 } from './url';
-import type { ValueDefinition } from '../value-processing/definition';
 
 /*
  * <image> = <url> | <gradient>

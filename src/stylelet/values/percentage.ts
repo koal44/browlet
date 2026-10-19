@@ -1,22 +1,21 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueStage } from '../value-processing/stage';
-import type { ValueDefinition } from '../value-processing/definition';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueStage, ValueDefinition } from '../value-processing/index';
+import {
+  accumulatePercentages as accumulatePercentageLiterals, addPercentages as addPercentageLiterals,
+  createPercentageConsumer as createPercentageLiteralConsumer,
+  interpolatePercentages as interpolatePercentageLiterals,
+  serializePercentage as serializePercentageLiteral,
+  type PercentageConsumerOptions, type PercentageLiteral,
+} from './numeric-literal/index';
+
 import {
   accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
   interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
   type MathValue,
 } from './math-value';
-import {
-  accumulatePercentages as accumulatePercentageLiterals, addPercentages as addPercentageLiterals,
-  createPercentageConsumer as createPercentageLiteralConsumer,
-  interpolatePercentages as interpolatePercentageLiterals,
-  serializePercentage as serializePercentageLiteral, type PercentageConsumerOptions,
-  type PercentageLiteral,
-} from './numeric-literal/percentage';
 
 /*
  * <percentage> = <percentage-token> | <math-function>

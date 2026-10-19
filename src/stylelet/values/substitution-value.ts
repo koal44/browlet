@@ -2,11 +2,11 @@ import { asciiLower } from '../../infra/ascii';
 import { InternalError } from '../../infra/internal-error';
 
 import {
-  isComponentBlock, isFunctionBlock, serializeComponentValues, type ComponentValue,
-} from '../syntax/component-value';
-import type { ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import type { DeclarationValue, OptionalDeclarationValue } from '../syntax/declaration-value';
+  isComponentBlock, isFunctionBlock, serializeComponentValues,
+  type ComponentValue, type ParserInput, type DeclarationValue, type OptionalDeclarationValue,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+
 import type { GuaranteedInvalidValue, RawWholeValue, WholeValue } from './whole-value';
 
 export type SubstitutionValue<Value, Context = unknown> = {

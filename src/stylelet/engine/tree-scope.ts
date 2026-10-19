@@ -1,12 +1,14 @@
-import type { DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node } from '../../infra/index';
+import type {
+  DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node,
+} from '../../infra/index';
 import {
   createObservableArray, type ObservableArrayHandle,
 } from '../../infra/observable-array';
 import { TypeError } from '../../infra/exceptions';
 
-import { parseStylesheet } from '../css/stylesheet';
-import { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
-import { StyleSheetListImpl } from '../cssom/stylesheet-list';
+import { parseStylesheet } from '../css/index';
+import { CSSStyleSheetImpl, StyleSheetListImpl } from '../cssom/index';
+
 import type { CascadeEngine } from './cascade-engine';
 
 export class TreeScope {

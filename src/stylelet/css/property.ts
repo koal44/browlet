@@ -1,25 +1,18 @@
 import { asciiLower } from '../../infra/ascii';
 
-import type { SupportsContext } from '../conditional/supports';
-import { colorProperty } from '../props/color';
 import {
-  marginBottomProperty, marginLeftProperty,
-  marginRightProperty, marginTopProperty,
-} from '../props/margin';
-import { opacityProperty } from '../props/opacity';
+  parseOptionalDeclarationValue, serializeComponentValues,
+  type OptionalDeclarationValue, type SyntaxDeclaration,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+import type {
+  ColorContext, GradientContext, MathContext, PositionContext, ParsedSyntaxValue, SyntaxValue, UrlContext,
+  WholeValue, WholeValueDefinition, SupportsContext,
+} from '../values/index';
 import {
-  parseOptionalDeclarationValue, type OptionalDeclarationValue,
-} from '../syntax/declaration-value';
-import { serializeComponentValues } from '../syntax/component-value';
-import type { SyntaxDeclaration } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import type { ColorContext } from '../values/color';
-import type { GradientContext } from '../values/gradient';
-import type { MathContext } from '../values/math-value';
-import type { PositionContext } from '../values/position';
-import type { ParsedSyntaxValue, SyntaxValue } from '../values/syntax-value';
-import type { UrlContext } from '../values/url';
-import type { WholeValue, WholeValueDefinition } from '../values/whole-value';
+  colorProperty, marginBottomProperty, marginLeftProperty, marginRightProperty, marginTopProperty,
+  opacityProperty,
+} from '../props/index';
 
 export type PropertyDeclaration =
   | BuiltInPropertyDeclaration

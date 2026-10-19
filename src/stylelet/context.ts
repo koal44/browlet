@@ -3,8 +3,8 @@ import type {
   DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node,
 } from '../infra/index';
 
-import { RuntimeCache } from './selector/runtimeCache';
 import { defaultStyleletEnvironment, type StyleletEnvironment } from './environment';
+import { RuntimeCache } from './selector/index';
 
 export class StyleletContext {
   document: Document;

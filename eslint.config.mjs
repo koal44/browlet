@@ -265,7 +265,15 @@ export default defineConfig(
     rules: {
       'browlet/subsystem-imports': ['error', {
         unrestrictedSubsystems: ['infra'],
-        entryPoints: { 'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'] },
+        entryPoints: {
+          'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
+          stylelet: ['index', 'environment', 'context'],
+          'stylelet/syntax': ['index'], 'stylelet/value-processing': ['index'],
+          'stylelet/values/numeric-literal': ['index'],
+          'stylelet/conditional': ['index'], 'stylelet/values': ['index'],
+          'stylelet/props': ['index'], 'stylelet/selector': ['index'],
+          'stylelet/css': ['index'], 'stylelet/cssom': ['index'], 'stylelet/engine': ['index'],
+        },
       }],
     },
   },

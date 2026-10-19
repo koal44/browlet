@@ -1,9 +1,9 @@
 import type { DOMElement as Element } from '../../infra/index';
 
-import type { PropertyDeclaration } from '../css/property';
-import { matchSelectorList } from '../selector/match';
-import type { Specificity } from '../syntax/selector';
-import type { CSSStyleSheetImpl } from '../cssom/css-stylesheet';
+import { matchSelectorList, type Specificity } from '../selector/index';
+import type { PropertyDeclaration } from '../css/index';
+import type { CSSStyleSheetImpl } from '../cssom/index';
+
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
 

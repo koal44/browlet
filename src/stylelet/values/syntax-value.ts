@@ -1,19 +1,15 @@
 import { InternalError } from '../../infra/internal-error';
 
 import {
-  consumeAsteriskDelim, consumeGreaterDelim, consumeHashDelim,
-  consumeIdentToken, consumeLessDelim, consumePipeDelim,
-  consumePlusDelim, consumeStringToken,
-} from '../syntax/component-consumers';
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { serializeComponentValues, serializeCssIdentifier } from '../syntax/component-value';
-import {
-  adaptConsumer, any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { type ValueStage } from '../value-processing/stage';
+  consumeAsteriskDelim, consumeGreaterDelim, consumeHashDelim, consumeIdentToken, consumeLessDelim,
+  consumePipeDelim, consumePlusDelim, consumeStringToken, serializeComponentValues, serializeCssIdentifier,
+  adaptConsumer, any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withTrivia, createComponentParser,
+  consumeOptionalDeclarationValue,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput, type DeclarationComponent,
+} from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
+import type { PropertyContext } from '../css/index';
+
 import { angleDef } from './angle';
 import { colorDef } from './color';
 import { customIdentDef } from './custom-ident';
@@ -27,11 +23,6 @@ import { resolutionDef } from './resolution';
 import { stringDef } from './string';
 import { timeDef } from './time';
 import { urlDef } from './url';
-import {
-  consumeOptionalDeclarationValue,
-  type DeclarationComponent,
-} from '../syntax/declaration-value';
-import { type PropertyContext } from '../css/property';
 
 export type SyntaxValue =
   | UniversalSyntaxValue

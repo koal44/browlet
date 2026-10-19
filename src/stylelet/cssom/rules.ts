@@ -1,8 +1,8 @@
 import { InternalError } from '../../infra/internal-error';
 
-import { type StyleBlock, type StyleRule } from '../css/stylesheet';
-import { CSSDeclarationBlock } from '../css/declaration-block';
 import type { StyleletEnvironment } from '../environment';
+import { CSSDeclarationBlock, type StyleBlock, type StyleRule } from '../css/index';
+
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
 import { CSSRuleImpl } from './rule';

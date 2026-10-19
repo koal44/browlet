@@ -1,12 +1,10 @@
 import { InternalError } from '../../../infra/internal-error';
 
-import { consumeDimensionToken } from '../../syntax/component-consumers';
-import { serializeCssDimensionUnit } from '../../syntax/component-value';
 import {
-  type TokenCursor, type TryConsumerResult,
-} from '../../syntax/token-cursor';
-import { adaptConsumer, withTrivia } from '../../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../../syntax/parser';
+  consumeDimensionToken, serializeCssDimensionUnit, adaptConsumer, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../../syntax/index';
+
 import { serializeCssNumber } from './number';
 
 /*

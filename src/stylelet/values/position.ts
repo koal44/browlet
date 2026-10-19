@@ -1,11 +1,11 @@
 import { mapTuple } from '../../infra/util';
 
-import { type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/token-cursor';
 import {
-  adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia,
-} from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
+  adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+
 import { createKeywordConsumer } from './keyword';
 import {
   addLengthPercentages, interpolateLengthPercentages, resolveLengthPercentage,

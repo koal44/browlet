@@ -1,7 +1,5 @@
-import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { adaptConsumer } from '../syntax/component-grammar';
+import { adaptConsumer, type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/index';
+
 import { createKeywordConsumer } from './keyword';
 
 /*

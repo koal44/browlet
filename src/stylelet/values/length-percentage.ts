@@ -1,15 +1,8 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import type { ValueDefinition } from '../value-processing/definition';
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue,
-  type MathContext, type MathRange, type MathValue,
-} from './math-value';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage, type ValueDefinition } from '../value-processing/index';
 import {
   createLengthPercentageConsumer as createLengthPercentageLiteralConsumer,
   serializeLengthPercentage as serializeLengthPercentageLiteral,
@@ -18,7 +11,13 @@ import {
   tryInterpolateLengthPercentages as tryInterpolateLengthPercentageLiterals,
   tryResolveLengthPercentage as tryResolveLengthPercentageLiteral,
   type LengthPercentageConsumerOptions, type LengthPercentageLiteral,
-} from './numeric-literal/length-percentage';
+} from './numeric-literal/index';
+
+import {
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue,
+  type MathContext, type MathRange, type MathValue,
+} from './math-value';
 
 /*
  * <length-percentage> = <length> | <percentage> | <math-function>

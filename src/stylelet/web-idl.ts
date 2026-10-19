@@ -1,6 +1,6 @@
 import {
-  attr, defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable,
-  roAttr, xattr, type Definition,
+  attr, defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable, roAttr, xattr,
+  type Definition,
 } from '../web-idl/core/index';
 
 // These object-typed CSSOM members are provisional. Stylelet must define and

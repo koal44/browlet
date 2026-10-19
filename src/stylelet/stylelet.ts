@@ -1,13 +1,9 @@
-import type {
-  DOMDocument as Document, DOMElement as Element,
-} from '../infra/index';
+import type { DOMDocument as Document, DOMElement as Element } from '../infra/index';
 
-import type { CSSStyleDeclarationImpl } from './cssom/declaration';
-import type { CSSStyleSheetImpl, CSSStyleSheetInit } from './cssom/css-stylesheet';
-import { CascadeEngine } from './engine/cascade-engine';
-import { TreeScope } from './engine/tree-scope';
-import { StyleletContext } from './context';
 import { createStyleletEnvironment, type StyleletOptions } from './environment';
+import { StyleletContext } from './context';
+import type { CSSStyleDeclarationImpl, CSSStyleSheetImpl, CSSStyleSheetInit } from './cssom/index';
+import { CascadeEngine, TreeScope } from './engine/index';
 
 export class Stylelet {
   version = 'stylelet-__VERSION__' as const;
@@ -36,5 +32,4 @@ export class Stylelet {
 }
 
 export { StyleletContext } from './context';
-export { InternalPromise } from '../infra/promises';
 export type { StyleletOptions } from './environment';

@@ -10,7 +10,7 @@ import {
 import { parseOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
 import {
   parseSelectorList, serializeSelectorList,
-} from '../../../../src/stylelet/syntax/selector';
+} from '../../../../src/stylelet/selector/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 

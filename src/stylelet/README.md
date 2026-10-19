@@ -18,17 +18,32 @@ entry points and implementation types.
 
 | Home | Existing responsibility |
 | --- | --- |
-| [syntax/](syntax/README.md) | CSS input, tokens, component values, generic syntax rules/declarations, and selector parsing/serialization |
+| [syntax/](syntax/README.md) | CSS input, tokens, component values, and generic syntax rules/declarations |
 | [css/](css/README.md) | Interpreted sheets and style rules, property declarations, the installed property registry, and declaration storage |
-| [selector/](selector/README.md) | Stylesheet selector matching and its caches; separate from Selectlet's selector engine |
-| [values/](values/README.md) | Reusable value grammars, representations, resolution, and serialization, including media queries |
+| [selector/](selector/README.md) | Selector parsing, serialization, specificity, stylesheet matching, and its caches; separate from Selectlet's selector engine |
+| [values/](values/README.md) | Reusable value grammars, representations, resolution, and serialization, including media queries and supports conditions |
 | [value-processing/](value-processing/README.md) | Value stages and shared processing contracts; complete element-level orchestration remains missing |
 | [props/](props/README.md) | Seven installed property definitions; color/background-color, opacity, and the four margin longhands. Animation-name has a separate unregistered parser. |
-| [conditional/](conditional/README.md) | Supports grammar, with related boolean/media representations in values; device/container matching is not connected |
+| [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | CSS interface implementations, their collections, and mutation behavior |
 | [web-idl.ts](web-idl.ts) | Neutral declaration contributions; currently three mixin/partial contributions with provisional result types |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
+
+Each implemented component has an explicit `index.ts`; imports across its boundary use that
+barrel, while collaborating modules inside it import each other directly.
+`environment.ts` and `context.ts` remain named entries for their existing owners.
+The public [index](index.ts) also exports Infra's `InternalPromise` for standalone
+hosts supplying `exec.Promise`. Implementation modules import it directly from Infra.
+
+The provisional [component order](../../scripts/eslint/import-hierarchy.mjs) puts
+syntax and value-processing contracts below numeric literals, values, conditions,
+property definitions/selectors, interpreted CSS, CSSOM, and the engine. Streams
+and Selectlet precede Stylelet; this does not add dependencies on either one.
+Selector parsing consumes generic syntax and value grammars from this higher
+layer. Supports conditions stay with reusable value grammars; `conditional/`
+owns future evaluation and applicability work. `npm run lint:imports` checks
+these boundaries; new findings require an ownership review before changing the map.
 
 These layers represent different things. A `SyntaxStyleSheet` contains syntax
 records. An `InterpretedStyleSheet` contains recognized rules and property values.
@@ -155,7 +170,7 @@ expected failures and skips. Full cascade/defaulting and live queries remain mis
 **9 files, 958 tests passed**, with no skips or expected failures.
 
 ```text
-node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/property.test.ts test/stylelet/unit/conditional test/stylelet/unit/values/color.test.ts test/stylelet/unit/values/gradient.test.ts test/stylelet/unit/values/image.test.ts test/stylelet/unit/values/media-query.test.ts test/stylelet/unit/values/position.test.ts test/stylelet/unit/values/mix.test.ts test/stylelet/unit/values/boolean-expr.test.ts
+node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/property.test.ts test/stylelet/unit/values/supports-condition.test.ts test/stylelet/unit/values/color.test.ts test/stylelet/unit/values/gradient.test.ts test/stylelet/unit/values/image.test.ts test/stylelet/unit/values/media-query.test.ts test/stylelet/unit/values/position.test.ts test/stylelet/unit/values/mix.test.ts test/stylelet/unit/values/boolean-expr.test.ts
 ```
 
 This covers installed definitions, value operations and condition grammar.

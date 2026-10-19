@@ -1,11 +1,8 @@
-import { consumeStringToken } from '../syntax/component-consumers';
-import { serializeCssString } from '../syntax/component-value';
 import {
-  type TokenCursor, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import type { ValueDefinition } from '../value-processing/definition';
+  consumeStringToken, serializeCssString, adaptConsumer, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueDefinition } from '../value-processing/index';
 
 /*
  * <string> = <string-token>

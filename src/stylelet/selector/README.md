@@ -1,17 +1,20 @@
-# Stylesheet selector matching
+# Stylesheet selectors
 
-This folder matches Stylelet's parsed selector records against host elements.
+This folder parses and serializes selectors, calculates specificity, and matches
+the parsed selector records against host elements.
 It is separate from Selectlet's DOM query engine. Both use Infra's
 `DOMOperations`; matching a stylesheet rule also needs specificity and eventually
 style-tree/pseudo-element context that a DOM query result does not provide.
 
 ## Current path
 
-[syntax/selector.ts](../syntax/selector.ts) parses component values into selector
+[parser.ts](parser.ts) parses component values into selector
 records, with optional namespace and parent-nesting context. Those records
 retain specificity and serializer information. Forgiving lists can retain an
 `UnparsedSelector` arm for serialization; it contributes neither a matcher nor
-specificity.
+specificity. The parser consumes generic [syntax](../syntax/README.md) and
+reusable [value grammars](../values/README.md); those lower layers do not
+depend on selector parsing or matching.
 
 [matchSelectorList()](match.ts) returns the greatest specificity among matching
 arms, or null. It compiles compounds and combinator chains using

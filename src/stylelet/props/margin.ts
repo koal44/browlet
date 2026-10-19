@@ -1,15 +1,10 @@
-import { one, oneOf } from '../syntax/component-grammar';
-import type {
-  TokenCursor, TryConsumer, TryConsumerResult,
-} from '../syntax/token-cursor';
-import { serializeAuto, consumeAuto, type AutoValue } from '../values/auto';
-import type { ValueDefinition } from '../value-processing/definition';
-import type { MathContext } from '../values/math-value';
+import { one, oneOf, type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/index';
+import type { ValueDefinition } from '../value-processing/index';
 import {
-  resolveLengthPercentage, serializeLengthPercentage, consumeLengthPercentage,
-  type LengthPercentageValue,
-} from '../values/length-percentage';
-import { defineProperty } from '../values/whole-value';
+  serializeAuto, consumeAuto, resolveLengthPercentage, serializeLengthPercentage, consumeLengthPercentage,
+  defineProperty,
+  type AutoValue, type MathContext, type LengthPercentageValue,
+} from '../values/index';
 
 /*
  * <margin-top>, <margin-right>, <margin-bottom>, <margin-left> =

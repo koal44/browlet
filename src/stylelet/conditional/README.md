@@ -1,15 +1,15 @@
 # CSS conditions
 
-The folder currently contains one
-supports-condition parser; related media and boolean representations still
-live in `values/`. The [roadmap](ROADMAP.md) owns missing evaluation and consumer
-connections.
+This folder records the planned condition evaluation and applicability work.
+It has no implementation yet. Shared supports, media, and boolean-expression
+grammars live in `values/`; the [roadmap](ROADMAP.md) owns missing evaluation
+and consumer connections.
 
-## Existing machinery
+## Existing machinery in other owners
 
 | Entry point | Current behavior | Limit |
 | --- | --- | --- |
-| [supports.ts](supports.ts) | Parses declaration tests, grouping, not/and/or, and general-enclosed syntax into BooleanExprValue. | No supports evaluator connects these tests to the property/selector implementation. SupportsContext declares an optional declaration callback, not an installed capability checker. |
+| [supports-condition.ts](../values/supports-condition.ts) | Parses declaration tests, grouping, not/and/or, and general-enclosed syntax into BooleanExprValue; reused by the if() grammar. | No supports evaluator connects these tests to the property/selector implementation. SupportsContext declares an optional declaration callback, not an installed capability checker. |
 | [boolean-expr.ts](../values/boolean-expr.ts) | Parses generic tests and short-circuits boolean evaluation through caller-supplied test results. It propagates unknown internally and, unless requested otherwise, converts a final unknown result to false. | This helper does not choose the leaf semantics of supports, media, or container queries. Those contracts differ. |
 | [media-query.ts](../values/media-query.ts) | Parses types, modifiers, boolean/range features, lists and conditions; serializes query records. Invalid list entries become not all. | Feature names are strings, not a complete inventory of supported device features. |
 | `resolveMediaQuery()` | Resolves value components using ValueStage/MathContext and returns a MediaQuery. | Despite its name, it does not answer whether the query matches a device/document. |

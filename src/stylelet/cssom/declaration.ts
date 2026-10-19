@@ -1,13 +1,13 @@
 import type { DOMElement as Element } from '../../infra/index';
 import { asciiLower } from '../../infra/ascii';
 
-import {
-  interpretPropertyDeclaration, propertyRegistry,
-  serializePropertyDeclaration, type PropertyDeclaration,
-} from '../css/property';
-import { parseDeclaration } from '../syntax/parser';
-import { CSSDeclarationBlock } from '../css/declaration-block';
 import type { StyleletEnvironment } from '../environment';
+import { parseDeclaration } from '../syntax/index';
+import {
+  interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration, CSSDeclarationBlock,
+  type PropertyDeclaration,
+} from '../css/index';
+
 import type { CSSRuleImpl } from './rule';
 
 /*

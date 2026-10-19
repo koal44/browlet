@@ -1,14 +1,8 @@
-import { one, oneOf, withTrivia } from '../syntax/component-grammar';
 import {
-  type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
-import { ValueStage } from '../value-processing/stage';
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+  one, oneOf, withTrivia, createComponentParser,
+  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
 import {
   createFrequencyPercentageConsumer as createFrequencyPercentageLiteralConsumer,
   serializeFrequencyPercentage as serializeFrequencyPercentageLiteral,
@@ -17,7 +11,13 @@ import {
   tryInterpolateFrequencyPercentages as tryInterpolateFrequencyPercentageLiterals,
   tryResolveFrequencyPercentage as tryResolveFrequencyPercentageLiteral,
   type FrequencyPercentageConsumerOptions, type FrequencyPercentageLiteral,
-} from './numeric-literal/frequency-percentage';
+} from './numeric-literal/index';
+
+import {
+  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
+  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
+  type MathValue,
+} from './math-value';
 
 /*
  * <frequency-percentage> = <frequency> | <percentage> | <math-function>

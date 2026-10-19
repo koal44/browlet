@@ -1,10 +1,9 @@
 import {
-  type TokenCursor, type TryConsumerResult,
-} from '../syntax/token-cursor';
-import { adaptConsumer, withTrivia } from '../syntax/component-grammar';
-import { createComponentParser, type ParserInput } from '../syntax/parser';
+  adaptConsumer, withTrivia, createComponentParser, serializeCssIdentifier,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+
 import { consumeCustomIdent } from './custom-ident';
-import { serializeCssIdentifier } from '../syntax/component-value';
 
 /*
  * <dashed-ident> = a <custom-ident> that starts with two dashes
