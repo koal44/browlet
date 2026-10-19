@@ -28,14 +28,22 @@ describe('Navigable HTML response loading', () => {
     expect(document.body?.localName).toBe('body');
   });
 
-  it.each([true, false])('sniffs and replays streamed HTML with response policy (supplied type: %s)', async (suppliedType) => {
+  // SPEC_CLASH(language-protocol-fallback): Chromium/WebKit select the first language; HTML says unknown and Firefox matches all.
+  it.each([
+    { suppliedType: true, languageHeaders: ['fr, en'] },
+    { suppliedType: true, languageHeaders: ['fr', 'en'] },
+    { suppliedType: false, languageHeaders: ['fr, en'] },
+    { suppliedType: false, languageHeaders: ['fr', 'en'] },
+  ])('sniffs streamed HTML with response policy and language (type: $suppliedType, headers: $languageHeaders)', async ({ suppliedType, languageHeaders }) => {
     const server = createServer((_request, response) => {
       response.writeHead(200, {
         ...(suppliedType ? { 'Content-Type': 'text/html; charset=windows-1252' } : {}),
         'Content-Security-Policy': "default-src 'none'",
+        'Content-Language': languageHeaders,
       });
       response.write(Buffer.from('<html><p>caf', 'latin1'));
-      response.end(suppliedType ? Buffer.from([0xe9, 0x3c, 0x2f, 0x70, 0x3e]) : Buffer.from('é</p>'));
+      response.write(suppliedType ? Buffer.from([0xe9, 0x3c, 0x2f, 0x70, 0x3e]) : Buffer.from('é</p>'));
+      response.end('<p lang="de">Deutsch</p>');
     });
     const origin = await listen(server);
     cleanup.push(() => closeServer(server));
@@ -55,6 +63,7 @@ describe('Navigable HTML response loading', () => {
       useParallelQueue: true,
       processResponse(response) {
         try {
+          expect(response.headerList.getDecodeAndSplit('Content-Language')).toEqual(['fr', 'en']);
           const params = navigable.createNavigationParams(response);
           params.request = request;
           params.fetchController = controller;
@@ -74,10 +83,18 @@ describe('Navigable HTML response loading', () => {
     await expect.poll(() => document.readyState).toBe('complete');
     const text = document.body?.firstChild?.firstChild;
     expect(text?.isText() ? text.data : undefined).toBe('café');
+    const inherited = document.querySelector('p')!;
+    expect(inherited.getLanguage()).toBe('fr');
+    expect(inherited.matches(':lang(fr)')).toBe(true);
+    expect(inherited.matches(':lang(en)')).toBe(false);
+    const explicit = document.querySelector('[lang]')!;
+    expect(explicit.getLanguage()).toBe('de');
+    expect(explicit.matches(':lang(de)')).toBe(true);
+    expect(explicit.matches(':lang(fr)')).toBe(false);
     expect(document.policyContainer.cspList?.policies).toHaveLength(1);
     expect(navigable.activeSessionHistoryEntry.documentState.resource).toBeNull();
     expect(document.navigationTimingEntry?.fetchTimingInfo).toBe(controller.extractFullTimingInfo());
     expect(document.navigationTimingEntry?.documentTimingInfo).toBe(document.loadTimingInfo);
-    expect(document.navigationTimingEntry?.bodyInfo.decodedSize).toBe(suppliedType ? 17 : 18);
+    expect(document.navigationTimingEntry?.bodyInfo.decodedSize).toBe(suppliedType ? 41 : 42);
   });
 });

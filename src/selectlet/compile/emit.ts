@@ -363,7 +363,7 @@ export function emitDirPseudoTest(arg: string): CandidateTest {
 
 // :lang()
 export function emitLangPseudoTest(arg: string): CandidateTest {
-  const lang = arg.toLowerCase();
+  const lang = asciiLower(arg);
   return { buildElement: (ctx) => (e) => matchLang(lang, e, ctx), cost: 4, debug: { kind: 'pseudo', name: 'lang(...)' } };
 }
 

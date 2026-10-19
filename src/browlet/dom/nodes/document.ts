@@ -156,6 +156,13 @@ export class DocumentImpl extends NodeImpl {
   httpStatus = 0;
   /** Source modification time in Unix milliseconds, when supplied by the loader. */
   lastModificationTime?: number;
+  /** Default selected by a successfully processed content-language meta pragma. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#pragma-set-default-language
+  // TODO(HTML §4.2.5): meta pragma processing must populate this state.
+  pragmaLanguage?: string;
+  /** First protocol language, or the empty string when none was supplied. */
+  // https://html.spec.whatwg.org/multipage/dom.html#language
+  contentLanguage = '';
   /** Permissions policy controlling features in this document. */
   permissionsPolicy = new PermissionsPolicy();
   /** Cross-origin opener policy selected for this document. */
@@ -1218,6 +1225,9 @@ export class DocumentImpl extends NodeImpl {
     const lastModified = response.headerList.get('Last-Modified');
     this.lastModificationTime = lastModified === null ? undefined : parseHTTPDate(lastModified, Date.now()) ?? undefined;
     // TODO(file loading): supply filesystem modification times when local-file navigation exists.
+    const languages = response.headerList.getDecodeAndSplit('Content-Language');
+    // SPEC_CLASH(language-protocol-fallback): Use the first language like Chromium/WebKit; HTML says unknown and Firefox matches all.
+    this.contentLanguage = languages?.find((language) => language !== '') ?? '';
     this.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
     if (response.headerList.get('Refresh') !== null) {
       throw new InternalError('Refresh response processing is not implemented');

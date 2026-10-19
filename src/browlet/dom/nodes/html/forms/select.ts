@@ -16,6 +16,7 @@ import { HTMLOptionsCollectionImpl } from './options-collection';
 export class HTMLSelectElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLSelect;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Interactive, ContentCategory.Palpable,
       ContentCategory.FormAssociated, ContentCategory.Listed, ContentCategory.Labelable,
@@ -24,7 +25,6 @@ export class HTMLSelectElementImpl extends HTMLElementImpl {
     ];
   }
 
-  override readonly isAllNamedElement = true;
   #options: HTMLOptionsCollectionImpl | undefined;
 
   static is(value: unknown): value is HTMLSelectElementImpl {

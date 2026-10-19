@@ -11,6 +11,7 @@ export class HTMLOptGroupElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLOptgroup;
     this.prototype.categories = [];
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'label'];
   }
 
   static is(value: unknown): value is HTMLOptGroupElementImpl {

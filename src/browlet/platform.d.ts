@@ -487,6 +487,7 @@ export interface ElementInternalsConstructor {
 export interface HTMLElement extends Element {
   title: string;
   lang: string;
+  translate: boolean;
   inert: boolean;
   accessKey: string;
   headingOffset: number;

@@ -207,6 +207,12 @@ per-node adapters or required fields on host nodes.
 Attribute operations distinguish qualified-name access from namespace/local-name
 access. CSSOM reads and writes the null-namespace `style` attribute through these
 operations so another namespace's `style` attribute cannot receive those writes.
+The required `getLanguage()` operation supplies the host's determined element
+language. Browlet delegates to `NodeImpl`, including document defaults.
+`standardDOM` reads language attributes and ancestry, crossing shadow roots to
+their hosts; platform DOM APIs do not expose retained HTTP or pragma defaults.
+Custom hosts supply the query through their own adapter. Selectlet and Stylelet
+own language-range matching, not language lookup or document metadata.
 
 `DOMOperations` distinguishes the host's node, element, attribute, document,
 document-fragment, and shadow-root types. Its predicates narrow those roles, and each lookup

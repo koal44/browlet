@@ -472,7 +472,7 @@ must not become one oversized HTML Document module.
 | §§3.2.1 and 3.2.4–3.2.5 semantics, definitions, and content models | Element metadata, conformance tests, and accessibility; most authoring requirements create no runtime algorithm |
 | §3.2.2 elements in the DOM | `dom/nodes/html/` over DOM Element, including unknown-element and namespace behavior |
 | §3.2.3 HTML element constructors | `integration/web-idl/html-constructor.ts`, element declarations, custom-element definition/registry state, and Web IDL |
-| §3.2.6 global attributes | `html/global-attributes.ts`, reflection, custom-element reactions, and Stylelet integration |
+| §3.2.6 global attributes | `dom/nodes/html/attributes/` for shared definitions, HTML element implementations for instance behavior, plus reflection, custom-element reactions, and Stylelet integration |
 | §3.2.7 `innerText` | DOM mutation plus style/layout-derived text collection; it must not be approximated by `textContent` |
 | §3.2.8 bidirectional requirements | Style/layout integration over Unicode bidirectional processing |
 | §3.2.9 ARIA and accessibility APIs | A future `accessibility/` domain consuming semantic element state and the rendered tree |
@@ -992,7 +992,8 @@ deliberately has no HTML constructor.
 
 The subsection's executable IDL now supplies ordinary reflection for `title`,
 `lang`, `inert`, `accessKey`, `headingOffset` (read range 0–8), `headingReset`,
-and the shared `autofocus`. Existing nonce handling remains intact.
+and the shared `autofocus`. The §3.2.6.3 slice adds the inherited `translate`
+getter and canonical yes/no setter. Existing nonce handling remains intact.
 `ShowPopoverOptions` and `TogglePopoverOptions` are declared here; dictionaries
 do not expose globals or implement popover operations. Every remaining shared
 member has an owning dependency:
@@ -1000,7 +1001,7 @@ member has an owning dependency:
 | Members or contract | Missing owner |
 | --- | --- |
 | `[HTMLConstructor]` producers | The §3.2.3 consumer is implemented below; validated public definitions and upgrades remain §4.13 work |
-| `translate`, `dir` | [§3.2.6 global attributes](https://html.spec.whatwg.org/multipage/dom.html#global-attributes): inherited translation state and directionality; language/translation presentation is separate from reflected `lang` |
+| `dir` | [§3.2.6.4](https://html.spec.whatwg.org/multipage/dom.html#the-dir-attribute): directionality algorithms and IDL processing |
 | `hidden`, inert processing, `click`, `accessKeyLabel` and access-key assignment | [§6 user interaction](https://html.spec.whatwg.org/multipage/interaction.html): hidden states, inert subtrees, activation, and keyboard shortcut selection |
 | `draggable` | [Drag and drop](https://html.spec.whatwg.org/multipage/dnd.html#the-draggable-attribute): default state and drag behavior |
 | `spellcheck`, `writingSuggestions`, `autocapitalize`, `autocorrect` | [Editing](https://html.spec.whatwg.org/multipage/interaction.html#editing): inherited/default states and editing services; ReflectSetter alone cannot supply their getters |
@@ -1073,7 +1074,7 @@ Resume this section before §3.2.5. Its requirements are accounted for as follow
 | Contexts in which this element can be used | An informative summary of the surrounding elements' content models, not a separate runtime check. |
 | Content model | Shared rule descriptions on the implementation prototypes; `getContentModel()` reads the concrete element's model. The initial inventory covers p, blockquote, q, input, details, and a. Consumers and the remaining definitions are unfinished. DOM mutation is not a general HTML conformance validator. |
 | Tag omission in text/html | Each optionally tagged element implements §13.1.2.4's conditions through `canOmitStartTag()` and `canOmitEndTag()` overrides, using numeric ElementTag identities. The permissions apply to conforming HTML content; start-tag checks require the preceding content sibling's actual end-tag output decision. No omission-capable markup writer is present. Parser recovery remains with the [parser](parser/ROADMAP.md). |
-| Content attributes | The allowed-attribute list is normative; descriptions following each dash are informative. Prototype `contentAttributes` inventories and the instance query `allowsContentAttribute()` cover article, div, blockquote, q, and a. Anchor permissions depend on current href presence. Global eligibility and the remaining inventories are explicit dependencies. Value processing, reflection, and required-attribute rules belong to each attribute's defining section; DOM setters do not enforce these inventories. |
+| Content attributes | The allowed-attribute list is normative; descriptions following each dash are informative. Prototype `contentAttributes` inventories and the instance query `allowsContentAttribute()` cover article, div, blockquote, q, and a. Anchor permissions depend on current href presence. The shared global inventory covers §3.2.6's preamble; unfinished attribute families and element inventories remain explicit dependencies. Value processing, reflection, and required-attribute rules belong to each attribute's defining section; DOM setters do not enforce these inventories. |
 | Accessibility considerations | Author conformance comes from ARIA in HTML; user-agent accessibility mappings come from HTML-AAM. The future accessibility domain in the [Browlet roadmap](../ROADMAP.md) owns the missing tree and host exposure. Existing ARIA reflection does not implement those mappings. |
 | Sanitization | Prototype `sanitization` records cover article, a, script, and form with numeric categories, default attribute allowances, and navigating URL attributes. Missing records remain explicit dependencies. The remaining inventory and [Sanitizer configuration and filtering algorithms](sanitization/ROADMAP.md) are unfinished. |
 | DOM interface | The normative interface determines each element's platform surface. §3.2.2 supplies the registered identities and colocated IDL comments; unfinished members remain dependencies of their defining sections. |
@@ -1097,7 +1098,7 @@ restrictions in [`content-model.ts`](../dom/nodes/element-definitions/content-mo
 describe one category member or element, ordered sequences, bounded repetition,
 empty content, and transparent content at a position within a sequence. Descendant
 restrictions identify a category, implementation, or namespace-less attribute.
-Every entry in `children` applies to the same child sequence; ordered portions
+Every entry in `childRules` applies to the same child sequence; ordered portions
 use an explicit sequence rule. An empty requirements array imposes no constraints,
 whereas an empty-content rule prohibits significant content.
 Instances inherit their prototype's definition. A dedicated matcher now handles
@@ -1262,6 +1263,12 @@ dl model remains a throwing dependency, taking precedence over that ancestry.
 Media's mixed models, noscript's scripting-dependent model, and the remaining
 element definitions stay with their owners.
 
+The resolver supports a transparent tail inside a sequence. A regression supplies
+audio/video's no-src model (source elements, then track elements, then transparent
+content) and checks flow/phrasing inheritance while retaining its prefix and
+descendant restriction. Actual media declarations and position matching within
+their variable-length prefixes remain for the media slice.
+
 `getParagraphs(document: DocumentImpl)` in
 [`paragraphs.ts`](../dom/nodes/element-definitions/paragraphs.ts) returns snapshot
 records for the whole document: an explicit p element or the original first/last
@@ -1315,6 +1322,325 @@ Paragraph regressions also enforce the document-only parameter type, preserve a
 complete run spanning an anchor, and cover empty documents and a flattened
 document element.
 
+### Section 3.2.6 global-attribute preamble
+
+The [global-attribute preamble](https://html.spec.whatwg.org/multipage/dom.html#global-attributes)
+is accounted for below. Title and language processing are covered in the
+following slices; the remaining attribute subsections remain separate work.
+[`attributes/global.ts`](../dom/nodes/html/attributes/global.ts)
+owns the shared name inventory, consumed by `HTMLElementImpl.allowsContentAttribute()`.
+The query tests permission to specify a namespace-less name. It neither checks
+attribute values/required companion attributes nor adds mutation restrictions.
+Globals are recognized even when an element-specific inventory is unfinished,
+including custom and unknown HTML elements. Foreign elements retain their own
+namespace's attribute rules; a same-spelled attribute does not acquire HTML behavior.
+
+| Preamble requirement | Implementation or explicit dependency |
+| --- | --- |
+| Named globals | All 28 names in the initial list are shared once. Their processing remains with each attribute's owning section; name permission does not imply a working author API. |
+| DOM's class, id, and slot | All three names are permitted. Existing Element attribute/token-list behavior and slot assignment remain the runtime owners. Class tokens have no extra HTML restrictions. An ID is opaque; nonempty/no-ASCII-whitespace/tree-uniqueness requirements belong to the future author-conformance checker and do not constrain DOM setters. |
+| HTML-only attribute meaning | The eligibility query lives on HTMLElementImpl. The preamble's foreign dir example must be exercised by §3.2.6.4's directionality algorithm; this inventory supplies no directionality result. |
+| ARIA role and aria-* | Permission depends on ARIA in HTML's element/role rules. These queries throw explicitly until that inventory exists; the prefix alone does not grant permission. Accessibility mappings and custom-element defaults remain with §3.2.9 and HTML-AAM. |
+| Listed event-handler content attributes | Every handler in the preamble is recognized, including the body/Window-target names, plus §8.1's global onabort, onwebkitanimationend, onwebkitanimationiteration, onwebkitanimationstart, and onwebkittransitionend. Compilation, CSP, listeners, and body/frameset Window targeting remain with §8.1 and the element owners. The inventory does not install handlers. |
+| Further event-handler names | Window-only names and contributions from other standards remain explicit dependencies. The broader Trusted Types sink list answers a security-classification question and cannot supply element conformance permissions. A future handler inventory must distinguish valid additional names from unknown on* spellings. |
+| Custom data attributes | Recognize a valid DOM attribute local name beginning data-, with a nonempty suffix and no ASCII uppercase letters. Non-ASCII uppercase letters are permitted. Values remain unrestricted attribute strings. The live DOMStringMap and dataset API belong to §3.2.6.6; custom data does not add user-agent behavior. |
+| Namespace-less xmlns | Name permission follows the current node document's HTML/XML type, including after adoption. Its required value is exactly the HTML namespace string; checking that value remains author-conformance work. This HTML compatibility attribute has no namespace-changing effect. Actual XML namespace declarations are a separate namespace-aware contract. |
+| XML's xml:space | Existing namespaced attribute storage preserves it, and DOM text remains unchanged. A namespace-less xml:space lookalike is not global. XML serialization remains with the parsing/serialization owner; the attribute cannot be serialized on HTML elements in text/html. |
+
+The compatibility spelling xml:lang is permitted only in HTML documents; its
+companion lang attribute and equal-value requirements are recorded in §3.2.6.2 below.
+The existing name-only query intentionally cannot validate a namespaced attribute:
+future namespace-aware author conformance must inspect its namespace and local
+name rather than treating a qualified spelling as equivalent.
+
+The inventory pulls no later interaction/editing implementation forward. Focus,
+hidden/inert processing, access keys, drag-and-drop, editing, popovers, microdata,
+heading computation, and custom-element is behavior keep the owners recorded in
+the §3.2.2 dependency table. Translation, directionality, inline-style
+CSP, and dataset remain the coming global-attribute slices. Further dependencies
+must stay explicit when those algorithms require them.
+
+`attributes/global.test.ts` covers every listed name, custom/unknown elements,
+custom-data syntax and values, current-document xmlns permission, explicit
+dependencies, and XML whitespace storage. Existing DOM attribute, token-list,
+and slot regressions exercise the reused mutation behavior. Content-attribute
+tests preserve anchor's conditional permissions and unrestricted DOM mutation.
+
+### Section 3.2.6.1 title advisory information
+
+[`HTMLElementImpl.getAdvisoryInformation()`](../dom/nodes/html/html-element.ts)
+implements [advisory-information lookup](https://html.spec.whatwg.org/multipage/dom.html#advisory-information),
+following browsers' flat-tree ancestry as recorded below. It reads the current
+tree and attributes on demand. No cached title or mutation hook is needed. This
+is an implementation query; `HTMLElement.title` remains the existing reflected
+DOMString property.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Arbitrary advisory text | A null-namespace title on the element wins, including whitespace-only text. Otherwise lookup follows flat-tree parents, including assigned slots and shadow hosts. Foreign-element attributes and namespaced lookalikes do not gain HTML title semantics. |
+| Empty title | A present empty string stops inheritance and means no advisory information. With no applicable title, the result is also empty. |
+| Newlines | Infra's normalize-newlines operation converts CRLF and CR to LF. Other text is preserved, and neither the content attribute nor its reflected IDL value is changed. Each LF represents a line break for a future presenter. |
+| Reflection | Existing `[CEReactions, Reflect]` title exposes only the element's own unnormalized attribute, or an empty string when absent. Custom-element reaction delivery remains the previously recorded §4.13 dependency. |
+| Link and style exceptions | These elements never inherit a title. A style element's own title is also ignored outside a document tree, including in a connected shadow tree. Their overrides apply both to direct queries and when traversing ancestors. Raw attributes and IDL reflection remain unchanged. |
+| Discovery and presentation | §3.2.6.1 requires informing users when advisory information is available. Interaction and rendering must supply that indication and a way to request/read the text, including keyboard and touch access. This slice installs no tooltip UI. See the [rendering boundary](../rendering/ROADMAP.md#title-advisory-presentation). |
+| Additional element-specific meanings | Link titles and link/style sheet-set names belong to §§4.2.4–4.2.6; abbreviation expansions and defining terms to §§4.5.8–4.5.9; input pattern guidance to §4.10.5. These consumers must not use inherited advisory text as their metadata. Existing LinkStyle integration reads the element's own title; full stylesheet-set processing, term/expansion algorithms, and validation-message presentation remain with those owners. |
+
+`NodeImpl.getFlatTreeParent()` uses the current slot-assignment state. Unassigned
+light children and replaced slot fallback cannot inherit through those hidden
+branches. The advisory query asks each HTML ancestor for its own information;
+the link/style overrides stop inheritance without a second traversal or tag
+checks in the general algorithm.
+
+Additional title meanings remain with their element owners. For example, dfn's
+defining term uses its own title, its sole abbr child's title, or descendant text.
+The advisory query does not implement those term/expansion algorithms or full
+stylesheet-set processing.
+
+SPEC_CLASH(title-shadow-ancestry): Browlet follows browsers' flat-tree ancestry
+instead of HTML's ordinary parent-element algorithm. Shadow children can inherit
+a host's title, and assigned content follows its slot. Browser tooltip providers
+inspected on 2026-10-18 use the following traversals:
+
+- [Blink HitTestResult::Title](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/layout/hit_test_result.cc)
+  uses FlatTreeTraversal::Parent.
+- [Gecko TooltipTextProvider](https://searchfox.org/mozilla-central/source/toolkit/components/tooltiptext/TooltipTextProvider.sys.mjs)
+  uses flattenedTreeParentNode.
+- [WebKit HitTestResult::title](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/rendering/HitTestResult.cpp)
+  uses parentInComposedTree.
+
+These are source observations of tooltip providers, which also handle other
+tooltip sources and presentation policy; no native-tooltip oracle was run.
+The exact discrepancy is tracked by
+[WHATWG HTML #13035](https://github.com/whatwg/html/issues/13035), which remains
+open with the compat and topic: shadow labels as of 2026-10-18. The report
+proposes using flat-tree parentage. Its concrete example is GitHub's relative-time
+component: a host title supplies the full timestamp for text rendered inside its
+shadow tree. It also covers titles inherited through assigned slots. The captured
+issue has no substantive replies, and a search for pull requests referencing it
+found none; this is a compatibility report, not an adopted specification change.
+
+The approved choice preserves advisory text in those existing components. It
+does not establish historical intent behind the current wording or substitute
+for a future native-tooltip integration test. Hit testing and advisory-information
+presentation remain separate dependencies.
+
+`attributes/title.test.ts` covers own/inherited/empty values, live ancestry and
+adoption, foreign and namespaced attributes, line-ending preservation, open and
+closed shadow roots, named/manual slot reassignment, replaced fallback, nested
+slot reprojection, link/style non-inheritance, style titles outside document
+trees, and raw IDL reflection.
+`test/infra/strings.test.ts` covers the shared newline operation.
+
+### Section 3.2.6.2 lang and xml:lang
+
+[`NodeImpl.getLanguage()`](../dom/nodes/node.ts) implements HTML's
+[language determination](https://html.spec.whatwg.org/multipage/dom.html#language).
+This is a node query, not a reflected attribute: text and other nodes can inherit
+language, and foreign elements participate through XML's namespaced attribute.
+The existing `HTMLElement.lang` reflection still exposes only its own raw,
+null-namespace attribute. Queries read current attributes, ancestry, and document
+state; no cached language or additional mutation hooks are introduced.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| XML priority | A lang attribute in the XML namespace takes priority on every element, including HTML elements in an HTML document. Its prefix is irrelevant. Authoring restrictions do not change runtime processing. |
+| Plain lang | A null-namespace lang is recognized on HTML and SVG elements. It does not acquire that meaning on MathML or arbitrary foreign elements. Attribute local names are case-sensitive; normal HTML attribute APIs/parser casing rules remain their existing owners. |
+| Inheritance | Ordinary parent elements supply language. A child of a shadow root instead inherits from its host, in open and closed trees. Assigned slots do not replace light-tree parents; fallback content retains its DOM language even when not rendered. This deliberately differs from advisory-title lookup. |
+| Unknown and unrecognized tags | Empty language stops inheritance. Other tags pass through unchanged, including unrecognized values; no trimming, canonicalization, registry validation, or locale guessing occurs in this query. Consumers receive BCP 47 language tags, not another language-name notation. |
+| Document defaults | The pragma-set default wins over the protocol language. Response integration retains the first nonempty Content-Language list member across comma-separated or repeated fields, trimming field whitespace through Fetch's list parser. No supplied language means the empty string. Detached/adopted nodes consult their current node document. |
+| Pragma producer | Document.pragmaLanguage is explicit state, but HTMLMetaElement's §4.2.5 processing does not populate it yet. Its eventual producer must reject missing/empty/comma-containing content and select the first ASCII-whitespace-delimited token on successful processing. Do not replace the pragma lifecycle with a scan of current meta elements during language lookup. |
+| Compatibility spelling | A namespace-less literal xml:lang is permitted on HTML elements only in HTML documents and has no effect on language determination. allowsContentAttribute answers this name/document permission, not value or companion-attribute conformance. |
+| Author conformance | BCP 47 validity or an empty value, equal lang/xml:lang values under ASCII-insensitive comparison, the required plain lang companion for the compatibility spelling, and the prohibition on namespaced XML lang on HTML elements in HTML documents remain checks for a future conformance checker. DOM mutation remains unrestricted. Namespace-aware checks must inspect the actual namespace/local name rather than the qualified spelling. |
+| Selector consumers | Selectlet and Stylelet require DOMOperations.getLanguage. Browlet delegates to NodeImpl, keeping document defaults and node lookup in their owner. standardDOM owns attribute/ancestry lookup for platform DOM hosts, whose APIs do not expose retained HTTP/pragma defaults. Custom hosts supply their own query. Empty-string and wildcard matching stay separate. |
+| Other consumers | Font selection, pronunciation, dictionaries/spellchecking, form-control language, and accessibility delivery remain with rendering, editing, form controls, and accessibility. Language is not a resolved page locale or text direction. No layout or locale-service facade is added here. |
+
+The Selectlet integration also corrects XML priority and foreign-namespace
+handling in its fallback and accepts quoted/escaped single language ranges.
+Its comma-separated range-list support remains unfinished. Full CSS language
+range validation, BCP 47 canonicalization, and extlang conversion remain selector
+work; preserving a raw HTML language tag does not itself establish CSS range
+validity. Style invalidation/layout consumers must account for document-default
+changes when those producers and caches are implemented.
+
+Maintained browser comparisons live in Selectlet's
+`test/selectlet/scenarios/02_regression/pseudo-language.test.ts` and
+`test/selectlet/scenarios/03_wpt/html/dom/elements/global-attributes/lang-attribute-shadow.window.test.ts`.
+They compare Selectlet with native selectors in Chromium, Firefox, and WebKit,
+covering identifier/string ranges, ASCII-only casing, escapes and string newlines,
+unknown language, namespace priority, and shadow/slot ancestry. The groups run
+normally as maintained regressions. The shadow tests record native Firefox's
+observed empty result separately from Selectlet's HTML-conforming slot match;
+the string-range cases retain their approved browser-specific expected failures.
+
+Browser checks on 2026-10-18 used Playwright's Chromium 149.0.7827.55, Firefox 151.0,
+and WebKit 26.5, with a fulfilled HTTPS document carrying Content-Language.
+All three agree on XML priority (including an empty XML lang), ordinary light-tree
+ancestry for assigned content, fallback-content language, and distinct xyzzy/abcde
+tags. HTML fallback and inheritance need continuing compatibility records:
+
+| Probe | Written HTML | Browlet | Chromium | Firefox | WebKit |
+| --- | --- | --- | --- | --- | --- |
+| Detached div, no language attributes, response Content-Language: fr; :lang(fr) | true | true | false | true | false |
+| Connected body, response Content-Language: fr,en; :lang(fr), :lang(en) | false, false | true, false | true, false | true, true | true, false |
+| Shadow child without lang, host lang=en; :lang(en) | true | true | true | false | true |
+
+SPEC_CLASH(language-protocol-fallback): Use the first nonempty HTTP language,
+matching Chromium/WebKit. Written HTML instead makes multiple languages unknown;
+Firefox exposes multiple languages to CSS. For detached nodes, retain HTML's
+explicit document fallback; Chromium/WebKit require connected ancestry to reach
+the HTTP default. This compatibility choice changes language selection only,
+not the retained Fetch response headers.
+
+The [W3C internationalization tests](https://www.w3.org/International/tests/repo/results/the-lang-attribute)
+already record the multi-language discrepancy, including Firefox matching several
+languages. The [W3C explanation](https://www.w3.org/International/questions/qa-http-and-lang)
+distinguishes HTTP audience metadata from the single language used for processing
+text, explaining why HTML only uses an unambiguous HTTP default. This is historical
+evidence, not a claim about current browser versions.
+
+A follow-up on the same date tested real HTTP/1.1 responses from a loopback server,
+without Playwright response interception. A Node HTTP server supplied repeated
+fields through the raw header array accepted by `writeHead()`; a separate Node
+HTTP client verified the received `rawHeaders` before browser navigation. Documents
+had no lang attributes or language pragma. Both `Element.matches()` and stylesheet
+matching produced the same results:
+
+| Content-Language wire format | Browlet's current :lang(fr), :lang(en) | Chromium | Firefox | WebKit |
+| --- | --- | --- | --- | --- |
+| One field: fr, en | true, false | true, false | true, true | true, false |
+| Two fields: fr followed by en | true, false | true, false | true, true | true, false |
+| One field: en, fr | false, true | false, true | true, true | false, true |
+| Two fields: en followed by fr | false, true | false, true | true, true | false, true |
+
+Single-language and missing-header controls passed. The probe also repeated the
+ko/ja pair used by WPT and checked repeated fr values in both formats. Every browser
+treated each split-field case like its comma-list counterpart. In all three,
+`fetch().headers.get('Content-Language')` returned the combined comma-separated
+value, including both languages. This agrees with HTTP's field-combination rule
+and Content-Language list syntax in [RFC 9110](https://www.rfc-editor.org/rfc/rfc9110.html#section-5.3).
+The disagreement is how HTML uses that list as a language fallback, not whether
+the second field survived transport.
+
+[WPT commit 68ea9c7](https://github.com/web-platform-tests/wpt/commit/68ea9c7cfaa91f1cb82cd5e8e6b534476e2a150d)
+(September 2026) sends separate ko and ja fields and checks that :lang(ko) applies.
+It does not check that :lang(ja) fails: Chromium/WebKit's first-language behavior
+and Firefox's multiple-language behavior both satisfy its assertion. The test
+therefore contradicts HTML's unknown-language result without establishing a
+first-language-only consensus. Browlet combines the fields through Fetch and
+selects the first nonempty language, following Chromium/WebKit. The real-network
+`loader/document-loader.test.ts` exercises both header formats through decoding
+and HTML parsing, then checks inherited :lang() matches and an explicit lang
+override. Its test-supplied navigation coordination does not complete the missing
+Fetch-backed public navigation path.
+
+For detached nodes, the [2020 proposal in HTML #4906](https://github.com/whatwg/html/issues/4906#issuecomment-603662494)
+explicitly limited document fallback to a tree rooted at a Document. The current
+algorithm does not retain that condition. This helps explain the implementation
+shape, but no separate resolution for detached nodes was found; Browlet keeps the
+current written fallback rather than inferring a requirement from that proposal.
+
+SPEC_CLASH(language-shadow-inheritance): Follow HTML's explicit shadow-host step,
+also observed in Chromium/WebKit. Firefox's :lang() did not inherit from the host
+in the tested closed shadow tree. Assigned light children still use their DOM
+parent in all three browsers. These checks observe selector behavior, since the
+platform does not expose a general computed-language property.
+
+[HTML #4906](https://github.com/whatwg/html/issues/4906) explains the choice: retain
+the ancestry visible to each tree's author, with host language as a default for
+the shadow tree, without allowing slot placement to redefine light-tree language.
+The language algorithm was subsequently updated in [HTML #9796](https://github.com/whatwg/html/pull/9796)
+in 2023. [Firefox bug 1740283](https://bugzilla.mozilla.org/show_bug.cgi?id=1740283)
+tracks the shadow-tree :lang() failure and remains open in the inspected tracker.
+The still-open HTML discussion is historical context, not evidence that the
+current written algorithm lacks the host-inheritance rule.
+
+SPEC_CLASH(language-selector-ranges): Follow CSS's quoted language ranges and
+empty-range matching. In the same installed browsers, the focused follow-up
+probe gave these results:
+
+| Element language and selector | CSS result retained by Browlet | Chromium default | Chromium with CSSLangExtendedRanges | Firefox | WebKit |
+| --- | --- | --- | --- | --- | --- |
+| lang=en; :lang("en") | true | SyntaxError | true | true | true |
+| lang=und; :lang("*") | true | SyntaxError | true | true | true |
+| lang=""; :lang("") | true | SyntaxError | true | false | false |
+| lang=""; :lang("*") | false | SyntaxError | false | false | false |
+
+[CSSWG #6915](https://github.com/w3c/csswg-drafts/issues/6915) added empty-range
+matching in November 2022. Its text was accidentally overwritten in a later merge
+and [restored in May 2025](https://github.com/w3c/csswg-drafts/issues/6915#issuecomment-2856142185).
+The distinction is deliberate: untagged language matches the empty range, while
+the explicit tag und matches the wildcard. [HTML #8288](https://github.com/whatwg/html/issues/8288)
+also confirms that missing language information yields the empty tag.
+
+[Chromium's implementation discussion](https://groups.google.com/a/chromium.org/g/blink-dev/c/tO598HXuS94)
+records the feature behind CSSLangExtendedRanges; enabling it in our installed
+Chromium reproduces CSS's required results above. [WebKit bug 139678](https://bugs.webkit.org/show_bug.cgi?format=multiple&id=139678)
+documents the older 2014 decision that an empty range never matches, preceding
+the CSSWG change. These are implementation/version differences; the investigation
+found no reason to replace the approved CSS behavior with the older results.
+
+`attributes/lang.test.ts` covers HTML/XML documents, namespace precedence,
+unknown/raw values, non-element nodes, live ancestry/adoption, shadow hosts
+versus slots, document-default precedence, response-header selection, compatibility
+name permission, and projected :lang() behavior. The selector host tests exercise
+both Browlet's query and the fallback for other hosts.
+
+### Section 3.2.6.3 translate
+
+[`ElementImpl.isTranslationEnabled()`](../dom/nodes/element.ts) supplies the
+translation-mode query for every element. HTMLElement interprets its own
+translate attribute before inheriting; foreign elements inherit without giving
+their translate attribute HTML meaning. `HTMLElement.translate` exposes this
+result and writes the canonical yes/no keywords through normal attribute mutation.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Keywords and defaults | The shared EnumeratedAttribute definition recognizes ASCII-case-insensitive yes/no without trimming. Missing and invalid values inherit; an empty value enables translation. |
+| Inheritance | Ordinary parent elements supply the mode, including through foreign elements. No parent element means enabled. Shadow roots stop inheritance; slot assignment does not replace a light child's parent. Queries read current attributes and ancestry without a cache. |
+| Public property | The boolean getter exposes the mode; the setter writes yes or no, rather than adding/removing a boolean attribute. Web IDL supplies boolean conversion and retains the CEReactions annotation; reaction entry/exit wrapping and delivery remain [§4.13 work](../dom/nodes/html/custom-elements/ROADMAP.md). |
+| Attribute inventory | Element.isTranslatableAttribute takes an attribute belonging to the receiver. It checks the namespace once, then queries the shared prototype inventory through the name predicate. Element starts with an empty inventory; HTMLElement adds lang, style, and title. Individual implementations extend the inherited array with the fixed names below. Only input and meta override the predicate for their instance-dependent cases. Classification is independent of the current translation mode. |
+| Conditional input value | The existing input type-state parser limits value to Button and Reset Button, including mixed-case keywords. Submit and other input states are excluded. |
+| Conditional meta content | No nonempty name means content is not translatable under this rule. A nonempty name requires §4.2.5's metadata-name classification; that branch throws an explicit missing-dependency error until those definitions are implemented. |
+| Other specifications | ARIA attribute queries explicitly throw pending its translation metadata. Other specifications can extend the element predicates when integrated. No arbitrary attribute is assumed translatable. |
+| Localization consumer | No page-localization service is implemented. Its traversal must consult each element's mode before translating eligible attributes and direct Text children, while still visiting descendants that can re-enable translation. A no-translate ancestor cannot justify pruning the whole subtree. |
+| Structured values | A future localizer must set lang to the target language, parse and recursively process iframe srcdoc as HTML, and parse and recursively process style as CSS, including content values. The predicates identify these attributes; they neither rewrite values nor claim that an ordinary string translator can process them correctly. |
+
+The HTML inventory is complete apart from the explicit metadata-name dependency:
+th adds abbr; area adds alt/download; img adds alt; input adds alt/placeholder and
+conditional value; a adds download; optgroup/option/track add label; textarea adds
+placeholder; iframe adds srcdoc. Title remains translatable on link and style
+even though their advisory-information lookup has separate exceptions.
+
+Each extending class creates its inventory once during class initialization,
+preserving inherited names without mutating the parent's array. Instances read
+the shared list from their prototype; no per-instance list or query-time merge
+is needed. Conditional input value and meta content remain outside the fixed
+inventory.
+
+SPEC_CLASH(translate-empty-value): Follow HTML, Chromium, and WebKit: an empty
+translate attribute is the Yes state and overrides a no-translate parent.
+Firefox 151 instead inherits for that value. HTML explicitly specifies the
+empty-value default, so this is an implementation disagreement, not a spec gap.
+
+On 2026-10-18, a Playwright probe against Chromium 149.0.7827.55, Firefox 151.0,
+and WebKit 26.5 confirmed that difference. All other checked cases agreed:
+yes/no case folding, missing/invalid values, no whitespace trimming or Unicode
+folding, foreign/XML ancestry, detachment, open/closed shadow roots, slot
+assignment, and setter boolean conversion/canonical keywords.
+
+Firefox already records the exact case as a failure in
+[the-translate-attribute-012.html.ini](https://searchfox.org/mozilla-central/source/testing/web-platform/meta/html/dom/elements/global-attributes/the-translate-attribute-012.html.ini).
+Its paired WPT requires an empty attribute beneath translate=no to enable
+translation. Source inspection also suggests the cause: HTMLElement's attribute
+parser stores translate as an atom, while Translate() tests IsEmptyString(),
+which checks the empty-string representation instead of the empty atom.
+This is a source-based explanation, not a debugger trace of the installed build.
+
+`attributes/translate.test.ts` retains the mode, binding, inventory, conditional
+input, namespace, and explicit-dependency regressions. The reproducible local
+`scratch/TRANSLATE-PROBE.mjs` keeps the spec expectation and reports the Firefox
+failure without preventing the other engines from running.
+
 ## HTML section 4 ownership
 
 Section 4 defines every HTML element, but only a small subset is prerequisite
@@ -1339,8 +1665,8 @@ semantics.
 
 Current HTML §5 defines Microdata attributes and extraction algorithms, but no
 Microdata Web IDL interfaces. `html/microdata/` owns item/property discovery
-and JSON extraction over the DOM; global-attribute reflection remains in
-`html/global-attributes.ts`. See its narrower roadmap for the deliberately
+and JSON extraction over the DOM; reflected properties belong with element
+declarations and `html/reflection/`. See its narrower roadmap for the deliberately
 deferred vocabulary conversions.
 
 ## HTML sections 8–9 ownership
@@ -1411,7 +1737,7 @@ initial Document lifecycle.
 | Planned source or owner | Contract | Specification |
 | --- | --- | --- |
 | `document.ts` only if the algorithms outgrow `dom/nodes/document.ts` | HTML Document coordination that cannot remain with a narrower loader, policy, timing, or node owner | HTML §3.1 |
-| `global-attributes.ts` | HTML global attributes and shared element algorithms | HTML §3.2.6 |
+| HTML element implementations and `dom/nodes/html/attributes/` | Remaining global-attribute rules, with stateful behavior on its owning element | HTML §3.2.6 |
 | `document-metadata.ts` only if a shared record emerges | Metadata common to Document and response/navigation state that does not belong to an element or Fetch response | HTML §§3.1 and 7.5 |
 | `microdata/` | Microdata item/property semantics and JSON extraction, without reviving the removed Microdata DOM API | HTML §5 |
 

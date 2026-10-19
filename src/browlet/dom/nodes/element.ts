@@ -52,6 +52,7 @@ export class ElementImpl extends NodeImpl {
 
   static {
     this.prototype.tag = ElementTag.Other;
+    this.prototype.translatableAttributes = [];
   }
 
   /** Execution and allocation owner supplied at construction. */
@@ -65,6 +66,8 @@ export class ElementImpl extends NodeImpl {
   declare categories?: ContentCategory[];
   /** Content requirements shared through the prototype; undefined means the model is unfinished. */
   declare contentModel?: ContentModel;
+  /** Shared attribute names that are translatable without element-specific conditions. */
+  declare translatableAttributes: string[];
   /** Stable live view of this element's attribute list. */
   attributes: NamedNodeMapImpl;
   /** Element name without a namespace prefix. */
@@ -205,6 +208,18 @@ export class ElementImpl extends NodeImpl {
 
   set manualSlotAssignment(slot: WeakRef<HTMLSlotElementImpl> | null) {
     this.#slottableMixin.manualSlotAssignment = slot;
+  }
+
+  /** Whether localization may translate this element's translatable attributes and direct text children. */
+  // https://html.spec.whatwg.org/multipage/dom.html#translation-mode
+  isTranslationEnabled(): boolean {
+    return this.parentElement?.isTranslationEnabled() ?? true;
+  }
+
+  /** Classify one of this element's attributes independently of its current translation mode. */
+  // https://html.spec.whatwg.org/multipage/dom.html#translatable-attributes
+  isTranslatableAttribute(attribute: AttrImpl): boolean {
+    return attribute.namespaceURI === null && this.isTranslatableAttributeName(attribute.localName);
   }
 
   /** Obtain the stable token list associated with a null-namespace attribute. */
@@ -725,6 +740,16 @@ export class ElementImpl extends NodeImpl {
   ): void {
     // TODO(HTML): definitions need lifecycle callbacks and their reaction queues/delivery.
     throw new InternalError('Custom element callback reactions are not implemented');
+  }
+
+  /** Classify a null-namespace attribute using the inventory; overrides add instance-dependent cases. */
+  protected isTranslatableAttributeName(name: string): boolean {
+    if (this.translatableAttributes.includes(name)) return true;
+    if (name.startsWith('aria-')) {
+      // TODO(ARIA): Add its translatable attributes when integrating accessibility metadata.
+      throw new InternalError('ARIA attribute translation rules are not implemented');
+    }
+    return false;
   }
 
   protected override insertionSteps(): void {

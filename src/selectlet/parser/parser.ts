@@ -1116,15 +1116,17 @@ function parseOptionalRelativeCombinator(c: TextCursor): Combinator | null {
 }
 
 function parseDirPseudoArg(c: TextCursor): string { // 'ltr' | 'rtl'
-  const arg = parsePseudoBodyIdentArg(c).toLowerCase();
+  const arg = parsePseudoBodyArg(c, false).toLowerCase();
   return arg;
 }
 
 function parseLangPseudoArg(c: TextCursor): string {
-  return parsePseudoBodyIdentArg(c).toLowerCase();
+  // SPEC_CLASH(language-selector-ranges): Accept CSS string ranges; Chromium's default grammar still rejects them.
+  return cssIdentUnescape(parsePseudoBodyArg(c, true));
 }
 
-function parsePseudoBodyIdentArg(c: TextCursor): string {
+/** Consume one identifier, or a string when permitted, inside a functional pseudo-class. */
+function parsePseudoBodyArg(c: TextCursor, allowString: boolean): string {
   c.expect('(');
   consumeTrivia(c);
 
@@ -1134,7 +1136,7 @@ function parsePseudoBodyIdentArg(c: TextCursor): string {
     c.error(`Expected argument in pseudo-class, got ${ch || '<eof>'}`);
   }
 
-  const arg = consumeIdent(c);
+  const arg = allowString && (ch === '"' || ch === "'") ? consumeStringValue(c) : consumeIdent(c);
 
   consumeTrivia(c);
   ch = c.peek();

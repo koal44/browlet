@@ -1,4 +1,4 @@
-import { asciiWhitespaceRunPattern, surroundingASCIIWhitespacePattern } from './patterns';
+import { asciiWhitespaceRunPattern, lineEndingPattern, surroundingASCIIWhitespacePattern } from './patterns';
 
 declare const scalarValueStringBrand: unique symbol;
 
@@ -9,6 +9,12 @@ export type ScalarValueString = string & {
 
 export function toScalarValueString(value: string): ScalarValueString {
   return value.toWellFormed() as ScalarValueString;
+}
+
+/** Replace CRLF pairs and remaining CRs with LF, preserving all other text. */
+// https://infra.spec.whatwg.org/#normalize-newlines
+export function normalizeNewlines(value: string): string {
+  return value.replace(lineEndingPattern, '\n');
 }
 
 /** Remove surrounding ASCII whitespace and replace each remaining run with a space. */

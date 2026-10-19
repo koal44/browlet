@@ -58,6 +58,7 @@ export const browletDOM: DOMOperations<
   attributeLocalName: (attribute) => attribute.localName,
   attributeNamespaceURI: (attribute) => attribute.namespaceURI,
   attributeValue: (attribute) => attribute.value,
+  getLanguage: (element) => element.getLanguage(),
   inlineStyle: (element) => 'style' in element ? element.getInlineStyle() : null,
 
   getElementById: (root, id) => findElementById(root, id),

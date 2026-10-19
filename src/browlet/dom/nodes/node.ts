@@ -1,7 +1,7 @@
 // Mutable tree cursors start at this node and then advance; they do not capture this for callbacks.
 /* eslint @typescript-eslint/no-this-alias: ["error", { "allowedNames": ["node", "descendant"] }] */
 import { InternalError } from '../../../infra/internal-error';
-import { XML_NAMESPACE, XMLNS_NAMESPACE } from '../../../infra/index';
+import { HTML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE } from '../../../infra/index';
 import {
   arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
   constant, integer, op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
@@ -362,6 +362,50 @@ export abstract class NodeImpl extends EventTargetImpl {
   // https://dom.spec.whatwg.org/#dom-node-isdefaultnamespace
   isDefaultNamespace(namespace: string | null): boolean {
     return this.lookupNamespaceURI(null) === (namespace || null);
+  }
+
+  /**
+   * Language tag inherited through DOM parents and shadow hosts, then document defaults.
+   * Preserves unrecognized tags verbatim; an empty tag stops inheritance and means unknown.
+   */
+  // https://html.spec.whatwg.org/multipage/dom.html#language
+  getLanguage(): string {
+    // SPEC_CLASH(language-shadow-inheritance): Follow HTML's shadow-host step; Firefox's :lang() stops at the root.
+    // https://bugzilla.mozilla.org/show_bug.cgi?id=1740283
+    // SPEC_CLASH(language-protocol-fallback): Apply HTML's document fallback to detached nodes too.
+    // Chromium/WebKit omit the protocol fallback when detached; see HTML's roadmap for browser evidence.
+    let node: NodeImpl = this;
+    while (true) {
+      if (node.isElement()) {
+        const xmlLanguage = node.getAttributeNS(XML_NAMESPACE, 'lang');
+        if (xmlLanguage !== null) return xmlLanguage;
+        if (node.namespaceURI === HTML_NAMESPACE || node.namespaceURI === SVG_NAMESPACE) {
+          const language = node.getAttributeNS(null, 'lang');
+          if (language !== null) return language;
+        }
+      }
+      const parent = node.#parent;
+      if (parent?.isShadowRoot()) node = parent.host;
+      else if (parent?.isElement()) node = parent;
+      else return node.nodeDocument.pragmaLanguage ?? node.nodeDocument.contentLanguage;
+    }
+  }
+
+  /**
+   * Parent in the flat tree, following slot assignments and crossing shadow roots to hosts.
+   * Unassigned light children and replaced slot fallback have no parent at those boundaries.
+   */
+  // https://drafts.csswg.org/css-scoping/#flat-tree
+  getFlatTreeParent(): NodeImpl | null {
+    const parent = this.#parent;
+    if (parent?.isElement()) {
+      if (parent.shadowRoot !== null) {
+        const slottable: ElementImpl | TextImpl | null = this.isElement() || this.isText() ? this : null;
+        return slottable?.getAssignedSlot() ?? null;
+      }
+      if (parent.isSlot() && parent.assignedNodesList.length > 0) return null;
+    }
+    return parent?.isShadowRoot() ? parent.host : parent;
   }
 
   // https://dom.spec.whatwg.org/#concept-tree-root

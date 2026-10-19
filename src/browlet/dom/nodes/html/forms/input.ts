@@ -13,6 +13,7 @@ import { HTMLElementImpl } from '../html-element';
 export class HTMLInputElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLInput;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.FormAssociated,
       ContentCategory.Listed, ContentCategory.Submittable, ContentCategory.Resettable,
@@ -20,6 +21,7 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
     ];
     // https://html.spec.whatwg.org/multipage/input.html#the-input-element
     this.prototype.contentModel = { childRules: [emptyContent] };
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'alt', 'placeholder'];
   }
 
   /** Internal checkedness, independent of the checked content attribute. */
@@ -28,8 +30,6 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
   /** Whether author interaction has detached checkedness from the default. */
   // https://html.spec.whatwg.org/#concept-input-dirty-checkedness-flag
   dirtyCheckedness = false;
-
-  override readonly isAllNamedElement = true;
 
   static is(value: unknown): value is HTMLInputElementImpl {
     return value instanceof HTMLInputElementImpl;
@@ -78,6 +78,14 @@ export class HTMLInputElementImpl extends HTMLElementImpl {
       this.updateRadioButtonGroup();
     }
     // TODO: Type-change steps, form-owner changes, connection, and cloning also update input state.
+  }
+
+  protected override isTranslatableAttributeName(name: string): boolean {
+    if (name === 'value') {
+      const state = this.typeState;
+      return state === 'button' || state === 'reset';
+    }
+    return super.isTranslatableAttributeName(name);
   }
 }
 

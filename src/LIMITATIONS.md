@@ -275,6 +275,23 @@ explicit standard content-handler list used for sink metadata.
   validate DOM insertion or provide layout/editing behavior. See the
   [transparency/paragraph scope](browlet/html/ROADMAP.md#sections-3253-and-3254-transparency-and-paragraphs).
 
+- **Language lookup has an unfinished pragma producer.** Node language and
+  Browlet-backed `:lang()` use attributes, DOM/shadow-host ancestry, and retained
+  HTTP `Content-Language`. The §4.2.5 meta lifecycle does not yet populate
+  `Document.pragmaLanguage`; creating a content-language meta element
+  therefore does not supply that default. Standalone selector hosts without a
+  computed-language operation use attribute ancestry only. CSS language-range
+  validation/canonicalization and Selectlet's comma-separated language-range lists
+  remain separate selector work. See the
+  [language slice](browlet/html/ROADMAP.md#section-3262-lang-and-xmllang).
+
+- **Translation policy does not yet drive page localization.** Element translation
+  modes, HTMLElement.translate, and HTML's translatable-attribute inventory are
+  available. Metadata-name classification and ARIA translation rules explicitly
+  throw when queried. No localization service applies translations to text or
+  attributes, sets the target lang, or recursively processes srcdoc/CSS. See the
+  [translation slice](browlet/html/ROADMAP.md#section-3263-translate).
+
 - **Document metadata depends on the loader's inputs.** Response-based document
   creation retains `Last-Modified`; the source-only route has no response date
   and local-file modification metadata is not connected. Unknown dates use the

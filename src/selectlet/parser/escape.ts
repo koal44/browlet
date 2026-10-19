@@ -7,12 +7,13 @@ export function cssIdentUnescape(str: string): string {
     .replace(NULL_RE, REPLACEMENT_CHARACTER)
     .replace(
       CSS_ESCAPE_RE,
-      (_match, hex: string | undefined, escaped: string | undefined) => {
+      (_match, hex: string | undefined, continuation: string | undefined, escaped: string | undefined) => {
         if (hex !== undefined) {
           const codePoint = parseInt(hex, 16);
           return codePoint === 0 ? REPLACEMENT_CHARACTER : stringFromCodePoint(codePoint);
         }
 
+        if (continuation !== undefined) return '';
         if (escaped !== undefined) return escaped;
 
         // CSS EOF escape: trailing "\" -> U+FFFD.
@@ -34,4 +35,6 @@ const REPLACEMENT_CHARACTER = '\ufffd';
 // eslint-disable-next-line no-control-regex
 const NULL_RE = /\x00/g;
 
-const CSS_ESCAPE_RE = /\\([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|\\([\s\S])|\\$/g;
+// Alternatives: hex escape plus optional terminator; line continuation; escaped character; EOF escape.
+// Captures: hex digits, continuation line break, escaped character. CRLF is one line break.
+const CSS_ESCAPE_RE = /\\([0-9a-fA-F]{1,6})(?:\r\n|[ \t\n\r\f])?|\\(\r\n|[\n\r\f])|\\([\s\S])|\\$/g;

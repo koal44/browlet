@@ -12,10 +12,13 @@ import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 export class HTMLIFrameElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLIframe;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Interactive,
       ContentCategory.Palpable,
     ];
+    // Localization must parse srcdoc as HTML and recursively translate the embedded document.
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'srcdoc'];
   }
 
   /** Child navigation destination, or null before creation and after destruction. */
@@ -27,8 +30,6 @@ export class HTMLIFrameElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained navigation state when loading exists; see loader/ROADMAP.md.
   lazyLoadResumptionSteps: (() => void) | null = null;
-
-  override readonly isAllNamedElement = true;
 
   static is(value: unknown): value is HTMLIFrameElementImpl {
     return value instanceof HTMLIFrameElementImpl;

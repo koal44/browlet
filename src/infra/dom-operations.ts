@@ -74,6 +74,8 @@ export interface DOMOperations<
   attributeLocalName(attribute: A): string;
   attributeNamespaceURI(attribute: A): string | null;
   attributeValue(attribute: A): string;
+  /** Host-determined language, including available document defaults; empty means unknown. */
+  getLanguage(element: E): string;
   /** Existing inline-style state, when the host uses a style implementation directly. */
   inlineStyle?(element: E): object | null;
 

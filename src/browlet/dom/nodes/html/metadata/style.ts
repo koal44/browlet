@@ -62,6 +62,13 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
   override isPotentiallyRenderBlocking(): boolean {
     return getBlockingTokens(this).has('render') || this.isImplicitlyPotentiallyRenderBlocking();
   }
+
+  /** A style title applies only in a document tree and is never inherited. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#attr-style-title
+  protected override getOwnAdvisoryInformation(): string {
+    if (!this.getRoot().isDocument()) return '';
+    return super.getOwnAdvisoryInformation() ?? '';
+  }
 }
 
 /*

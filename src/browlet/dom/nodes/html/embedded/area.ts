@@ -11,6 +11,7 @@ export class HTMLAreaElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLArea;
     this.prototype.categories = [];
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'alt', 'download'];
   }
 
   override hasCategory(category: ContentCategory): boolean {

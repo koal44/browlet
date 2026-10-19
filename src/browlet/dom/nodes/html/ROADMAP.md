@@ -192,16 +192,24 @@ family and demonstrate that omitting both tags between tbody groups merges them.
 Prototype `contentAttributes` arrays record element-specific names for article, div,
 blockquote, q, and a. `allowsContentAttribute(name)` checks permission to specify a
 namespace-less attribute, using its lowercase HTML name. The base searches the
-inventory once, then calls `allowsListedContentAttribute()` for a matching name.
+shared global inventory first, then searches the element inventory once and calls
+`allowsListedContentAttribute()` for a matching name.
 Anchor overrides that hook so target, download, ping, rel, hreflang, type, and
 referrerpolicy require a current namespace-less href; an empty href still counts.
 This does not check values or whether required attributes are missing; DOM
 mutation does not call it.
-An undefined inventory throws; an empty inventory means globals only. Global
-eligibility remains an explicit §3.2.6 dependency: names outside a completed
-element inventory throw instead of being classified as forbidden. Global names,
-data-* naming rules, event handlers, and ARIA applicability will be shared at
-that boundary. Anchor's itemprop/href requirement also remains with that work.
+An undefined element inventory throws for names not already resolved by the
+global rules; an empty inventory means globals only. The shared
+[`attributes/global.ts`](attributes/global.ts) inventory covers §3.2.6's fixed
+names, listed content handlers, custom data names, and §8.1's additional global
+onabort and four onwebkit* handlers. Handler execution remains separate unfinished
+work. The namespace-less xmlns and xml:lang names are permitted only in HTML
+documents; their values and required companion attributes remain conformance
+checks. ARIA applicability and remaining handler names stay explicit throwing dependencies. Other
+unlisted names return false for completed element inventories. The
+[global-attribute preamble accounting](../../../html/ROADMAP.md#section-326-global-attribute-preamble)
+records namespace, value-validation, execution, and later-section boundaries.
+Anchor's itemprop/href requirement remains a required-attribute validation dependency.
 Other element inventories, obsolete attributes, and value/required-attribute
 conformance rules remain for their defining sections.
 

@@ -1,7 +1,7 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 import { createSelectlet } from '../../../src/selectlet/selectlet';
-import { HTML_NAMESPACE, standardDOM } from '../../../src/infra/index';
+import { HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE, standardDOM } from '../../../src/infra/index';
 import { createOpaqueDOM } from '../../support/opaque-dom';
 
 describe('Selectlet DOM hosts', () => {
@@ -62,6 +62,46 @@ describe('Selectlet DOM hosts', () => {
       first.window.close();
       second.window.close();
     }
+  });
+
+  it('uses the standard language query through an opaque host adapter', () => {
+    const host = createOpaqueDOM('<main lang="en"><span></span></main>');
+    try {
+      const selectlet = createSelectlet(host.document, { dom: host.dom });
+      const main = host.window.document.querySelector('main')!;
+      const span = main.querySelector('span')!;
+      expect(selectlet.matches(':lang(en)', host.opaque(span))).toBe(true);
+      span.setAttribute('lang', 'de');
+      span.setAttributeNS(XML_NAMESPACE, 'xml:lang', 'fr');
+      expect(selectlet.matches(':lang(fr)', host.opaque(span))).toBe(true);
+      expect(selectlet.matches(':lang(de)', host.opaque(span))).toBe(false);
+      span.setAttributeNS(XML_NAMESPACE, 'xml:lang', '');
+      expect(selectlet.matches(':lang("")', host.opaque(span))).toBe(true);
+      expect(selectlet.matches(':lang("*")', host.opaque(span))).toBe(false);
+      for (const namespace of [SVG_NAMESPACE, MATHML_NAMESPACE, 'urn:other']) {
+        const child = host.window.document.createElementNS(namespace, 'child');
+        child.setAttribute('lang', 'fr');
+        main.appendChild(child);
+        expect(selectlet.matches(':lang(fr)', host.opaque(child))).toBe(namespace === SVG_NAMESPACE);
+        expect(selectlet.matches(':lang(en)', host.opaque(child))).toBe(namespace !== SVG_NAMESPACE);
+      }
+      const shadow = main.attachShadow({ mode: 'closed' });
+      const shadowChild = host.window.document.createElement('span');
+      shadow.appendChild(shadowChild);
+      expect(selectlet.matches(':lang(en)', host.opaque(shadowChild))).toBe(true);
+    } finally { host.close(); }
+  });
+
+  it('folds ASCII letters only in language ranges and language tags', () => {
+    const host = createOpaqueDOM('<main lang="ko"></main>');
+    try {
+      const selectlet = createSelectlet(host.document, { dom: host.dom });
+      const main = host.dom.firstElementChild(host.dom.body(host.document)!)!;
+      expect(selectlet.matches(':lang(KO)', main)).toBe(true);
+      expect(selectlet.matches(':lang(Ko)', main)).toBe(false);
+      host.dom.setAttribute(main, 'lang', 'Ko');
+      expect(selectlet.matches(':lang(ko)', main)).toBe(false);
+    } finally { host.close(); }
   });
 
   it('uses supplied constructors without namespace lookups during matching', () => {

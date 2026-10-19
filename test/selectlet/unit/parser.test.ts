@@ -796,6 +796,9 @@ describe('parsePseudoTestSource linguistic and location pseudos', () => {
     expect(parseCompoundSelector(new TextCursor('div:dir(ltr)'), {}).tests.length).toBeGreaterThan(0);
     expect(parseCompoundSelector(new TextCursor('div:dir(rtl)'), {}).tests.length).toBeGreaterThan(0);
     expect(parseCompoundSelector(new TextCursor('div:lang(en)'), {}).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new TextCursor('div:lang("*")'), {}).tests.length).toBeGreaterThan(0);
+    expect(parseCompoundSelector(new TextCursor("div:lang('')"), {}).tests.length).toBeGreaterThan(0);
+    expect(() => parseCompoundSelector(new TextCursor('div:dir("ltr")'), {})).toThrow();
   });
 
   it('accepts location pseudo-classes', () => {
@@ -810,6 +813,15 @@ describe('parsePseudoTestSource linguistic and location pseudos', () => {
   it('rejects empty linguistic pseudo-class arguments', () => {
     expect(() => parseCompoundSelector(new TextCursor('div:dir()'), {})).toThrow('Expected argument in pseudo-class');
     expect(() => parseCompoundSelector(new TextCursor('div:lang()'), {})).toThrow('Expected argument in pseudo-class');
+  });
+
+  it.each(['\n', '\r', '\r\n', '\f'])('rejects a raw %j newline in a language string', (newline) => {
+    expect(() => parseCompoundSelector(new TextCursor(`:lang("e${newline}n")`), {})).toThrow();
+  });
+
+  it.each(['\n', '\r', '\r\n', '\f'])('accepts a %j string continuation or hex-escape terminator', (newline) => {
+    expect(() => parseCompoundSelector(new TextCursor(`:lang("e\\${newline}n")`), {})).not.toThrow();
+    expect(() => parseCompoundSelector(new TextCursor(`:lang("\\65${newline}n")`), {})).not.toThrow();
   });
 });
 

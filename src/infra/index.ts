@@ -39,7 +39,7 @@ export {
   isFormStateElementName,
 } from './selector-matching';
 export { Stamper } from './stamper';
-export { toScalarValueString, escapeRegExp, type ScalarValueString } from './strings';
+export { toScalarValueString, normalizeNewlines, escapeRegExp, type ScalarValueString } from './strings';
 export { TextCursor, TextCursorError } from './text-cursor';
 export { coarsenTime } from './time';
 export {

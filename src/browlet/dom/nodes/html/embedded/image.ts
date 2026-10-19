@@ -11,18 +11,18 @@ import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
 export class HTMLImageElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLImg;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
       ContentCategory.FormAssociated,
     ];
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'alt'];
   }
 
   /** Suspended image-loading steps, installed by the image loading algorithm. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-resumption-steps
   // PROVISIONAL: revisit callbacks versus retained load state when the loader exists; see loader/ROADMAP.md.
   lazyLoadResumptionSteps: (() => void) | null = null;
-
-  override readonly isAllNamedElement = true;
 
   static is(value: unknown): value is HTMLImageElementImpl {
     return value instanceof HTMLImageElementImpl;

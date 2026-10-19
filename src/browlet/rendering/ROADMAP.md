@@ -22,6 +22,20 @@ Intersection Observer, focus visibility, `innerText`, paint timing, and
 screenshots must wait for that real box boundary rather than infer layout from
 DOM shape or computed `display` alone.
 
+For the upcoming [HTML §3.2.7 `innerText`/`outerText` consumer](https://html.spec.whatwg.org/multipage/dom.html#the-innertext-idl-attribute),
+keep the required facts explicit before choosing a layout object or query API:
+
+- Whether a node is being rendered, including box association and `display: contents`.
+- Text-box contents after whitespace processing and text transformation, including
+  line-ending context needed by HTML's modified whitespace rules.
+- Used display and table-row/cell box relationships that determine separators.
+
+Stylelet supplies computed style; rendering owns box construction and layout
+results. HTML owns the rendered-text collection algorithm. A narrow input view
+or explicit parameter can connect that consumer when implemented; its shape,
+freshness, and invalidation contract remain undecided. These requirements do not
+justify a generic layout data bag or deriving rendered text from the DOM alone.
+
 HTML §2.5.7's Document consumer now uses the provisional
 [Intersection Observer implementation](../dom/intersection-observer/ROADMAP.md).
 That observer retains registrations and entry queues; scheduled notification
@@ -39,6 +53,42 @@ Replaced content consumes `loader/` and `graphics/`; nested frames consume
 take ownership of those subsystems merely because it visualizes them. A
 headless embedder may omit an OS-native widget toolkit, but it still needs a
 deterministic platform-independent rendering model for browser automation.
+
+## Title advisory presentation
+
+HTML's [title advisory information](https://html.spec.whatwg.org/multipage/dom.html#advisory-information)
+is available through `HTMLElementImpl.getAdvisoryInformation()`. It returns the
+advisory text inherited through the flat tree, with normalized newlines and the
+link/style inheritance exceptions. The consumer remains missing:
+interaction must select the element and support pointer, keyboard, and touch
+access; presentation must signal availability and expose the text on request.
+Do not treat a mouse tooltip alone as satisfying that accessibility requirement.
+
+[HTML's interactive-media rules](https://html.spec.whatwg.org/multipage/rendering.html#the-title-attribute-2)
+also require line breaks for LF and tab stops at multiples of eight space widths.
+Directionality, text measurement, hit testing, and native/embedder UI remain
+dependencies of this future consumer, not fields inferred from the DOM query.
+Element-specific title meanings, including stylesheet-set names, still require
+their own consumers; the advisory query does not implement that metadata
+processing or decide whether a tooltip is appropriate for each element.
+
+The [HTML roadmap](../html/ROADMAP.md#section-3261-title-advisory-information)
+records SPEC_CLASH(title-shadow-ancestry): Browlet follows the flat-tree ancestry
+used by browser tooltip providers despite HTML's ordinary-parent wording. Keep
+the link to [WHATWG HTML #13035](https://github.com/whatwg/html/issues/13035) until
+the specification and implementations converge. This lookup does not yet supply
+the tooltip selection or display pipeline.
+
+## Language-dependent presentation
+
+`NodeImpl.getLanguage()` supplies HTML's inherited BCP 47 language tag, including
+document defaults. Font selection, pronunciation, dictionaries/spellchecking,
+accessibility delivery, and form-control UI may consume it when those owners
+exist. An empty tag means explicitly unknown; unrecognized tags retain their
+original spelling. This value does not itself determine a page locale, text
+direction, available font, or dictionary. Those facilities remain explicit
+dependencies rather than guessed layout fields. See the
+[language accounting](../html/ROADMAP.md#section-3262-lang-and-xmllang).
 
 ## Removal condition
 

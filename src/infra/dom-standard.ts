@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE } from './namespaces';
+import { HTML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE } from './namespaces';
 import type { DOMOperations, DOMCollection } from './dom-operations';
 
 /** DOM operations for platform objects implementing the ordinary browser DOM API. */
@@ -53,6 +53,7 @@ export const standardDOM: DOMOperations<
   attributeLocalName: (attribute) => attribute.localName,
   attributeNamespaceURI: (attribute) => attribute.namespaceURI,
   attributeValue: (attribute) => attribute.value,
+  getLanguage,
 
   getElementById: (root, id) => root.getElementById(id),
   getElementsByTagName: (root, name) => root.getElementsByTagName(name),
@@ -217,4 +218,28 @@ interface StandardMediaElement extends StandardElement {
   readyState: number;
   seeking: boolean;
   muted: boolean;
+}
+
+/** Read language attributes and DOM ancestry, crossing shadow roots to their hosts. */
+function getLanguage(element: StandardElement): string {
+  let node: StandardElement | null = element;
+  while (node !== null) {
+    const xmlLanguage = node.getAttributeNS(XML_NAMESPACE, 'lang');
+    if (xmlLanguage !== null) return xmlLanguage;
+    if (node.namespaceURI === HTML_NAMESPACE || node.namespaceURI === SVG_NAMESPACE) {
+      const language = node.getAttributeNS(null, 'lang');
+      if (language !== null) return language;
+    }
+
+    const parent: StandardElement | null = node.parentElement;
+    if (parent !== null) {
+      node = parent;
+    } else {
+      const root = node.getRootNode();
+      node = standardDOM.isShadowRoot(root) ? root.host : null;
+    }
+  }
+
+  // Platform DOM APIs do not expose retained HTTP or language-pragma defaults.
+  return '';
 }

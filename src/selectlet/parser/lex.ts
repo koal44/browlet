@@ -60,7 +60,9 @@ export function consumeStringValue(c: TextCursor): string {
       return c.slice(start, c.pos() - 1);
     }
 
-    if (consumeEscapedChar(c)) continue;
+    if (consumeStringContinuation(c)) continue;
+    if (consumeCssEscape(c)) continue;
+    if (isVerticalWhitespace(c.peek())) c.error('Unexpected newline in string');
 
     c.advance();
   }
@@ -84,6 +86,15 @@ export function consumeAsciiWord(c: TextCursor): string {
 export function consumeEscapedChar(c: TextCursor): boolean {
   if (!c.match('\\')) return false;
   if (!c.eof()) c.advance();
+  return true;
+}
+
+/** Consume a backslash followed by one line break, treating CRLF as a single break. */
+// https://drafts.csswg.org/css-syntax/#consume-string-token
+function consumeStringContinuation(c: TextCursor): boolean {
+  if (c.peek() !== '\\' || !isVerticalWhitespace(c.peek(1))) return false;
+  c.advance();
+  if (c.next() === '\r') c.match('\n');
   return true;
 }
 

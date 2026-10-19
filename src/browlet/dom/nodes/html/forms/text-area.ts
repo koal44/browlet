@@ -10,15 +10,15 @@ import { HTMLElementImpl } from '../html-element';
 export class HTMLTextAreaElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLTextarea;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Interactive, ContentCategory.Palpable,
       ContentCategory.FormAssociated, ContentCategory.Listed, ContentCategory.Labelable,
       ContentCategory.Submittable, ContentCategory.Resettable,
       ContentCategory.AutocapitalizeAndAutocorrectInheriting,
     ];
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'placeholder'];
   }
-
-  override readonly isAllNamedElement = true;
 }
 
 /*

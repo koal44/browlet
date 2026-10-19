@@ -10,9 +10,8 @@ import { HTMLElementImpl } from '../html-element';
 export class HTMLFrameElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLFrame;
+    this.prototype.isAllNamedElement = true;
   }
-
-  override readonly isAllNamedElement = true;
 }
 
 /*

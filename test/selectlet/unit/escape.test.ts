@@ -268,6 +268,12 @@ describe('cssIdentUnescape', () => {
     expect(cssIdentUnescape('spac\\65\rsA')).toBe('spacesA');
   });
 
+  it.each(['\n', '\r', '\r\n', '\f'])('removes a %j string continuation without removing escaped characters', (newline) => {
+    expect(cssIdentUnescape(`e\\${newline}n`)).toBe('en');
+    expect(cssIdentUnescape(`\\65${newline}n`)).toBe('en');
+    expect(cssIdentUnescape(String.raw`e\a n`)).toBe('e\nn');
+  });
+
   it('replaces invalid code point escapes with U+FFFD', () => {
     expect(cssIdentUnescape('\\0 ')).toBe('\ufffd');
     expect(cssIdentUnescape('\\000000 ')).toBe('\ufffd');

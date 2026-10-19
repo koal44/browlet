@@ -6,7 +6,7 @@ import {
   CSSStyleDeclarationImpl, defaultStyleletExecution, Stylelet, type InternalPromise, type StyleletExecution,
 } from '../../../src/stylelet/index';
 import {
-  standardDOM, type DOMOperations, type DOMNode, type DOMDocument, type DOMElement, type DOMDocumentFragment,
+  standardDOM, XML_NAMESPACE, type DOMOperations, type DOMNode, type DOMDocument, type DOMElement, type DOMDocumentFragment,
 } from '../../../src/infra/index';
 import { browletDOM } from '../../../src/browlet/integration/dom';
 import { matchSelectorList } from '../../../src/stylelet/selector/match';
@@ -100,6 +100,33 @@ describe('Stylelet DOM hosts', () => {
       }
     });
 
+    it(`uses XML language priority and explicit unknown language on ${host.name}`, () => {
+      const { document, dom, close } = host.create('<main lang="en"><span></span></main>');
+      try {
+        const main = dom.firstElementChild(dom.body(document)!)!;
+        const child = dom.firstElementChild(main)!;
+        const styles = new Stylelet(document, { dom });
+        dom.setAttributeNS(main, XML_NAMESPACE, 'xml:lang', 'fr');
+        expect(matchSelectorList(parseSelectorList(':lang(fr)')!, child, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(en)')!, child, styles.context)).toBeNull();
+        dom.setAttributeNS(main, XML_NAMESPACE, 'xml:lang', '');
+        expect(matchSelectorList(parseSelectorList(':lang("")')!, child, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang("*")')!, child, styles.context)).toBeNull();
+      } finally { close(); }
+    });
+
+    it(`folds ASCII letters only in language ranges and language tags on ${host.name}`, () => {
+      const { document, dom, close } = host.create('<main lang="ko"></main>');
+      try {
+        const main = dom.firstElementChild(dom.body(document)!)!;
+        const styles = new Stylelet(document, { dom });
+        expect(matchSelectorList(parseSelectorList(':lang(KO)')!, main, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(Ko)')!, main, styles.context)).toBeNull();
+        dom.setAttribute(main, 'lang', 'Ko');
+        expect(matchSelectorList(parseSelectorList(':lang(ko)')!, main, styles.context)).toBeNull();
+      } finally { close(); }
+    });
+
     it(`reads and writes only the null-namespace style attribute on ${host.name}`, () => {
       const { document, dom, close } = host.create('<main></main>');
       try {
@@ -141,6 +168,19 @@ describe('Stylelet DOM hosts', () => {
     expect(matchSelectorList(parseSelectorList('CIRCLE')!, circle, context)).toBeNull();
     expect(matchSelectorList(parseSelectorList('circle')!, circle, context)).not.toBeNull();
     expect(getNamespaceURI).not.toHaveBeenCalled();
+  });
+
+  it('uses Browlet document language defaults through the host query', () => {
+    const document = createBrowletDocument('<main></main>');
+    const main = document.querySelector('main')!;
+    const styles = document.getCSSEngine();
+    document.contentLanguage = 'fr';
+    expect(matchSelectorList(parseSelectorList(':lang(fr)')!, main, styles.context)).not.toBeNull();
+    document.pragmaLanguage = 'de';
+    expect(matchSelectorList(parseSelectorList(':lang(de)')!, main, styles.context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList(':lang(fr)')!, main, styles.context)).toBeNull();
+    main.setAttribute('lang', '');
+    expect(matchSelectorList(parseSelectorList(':lang("")')!, main, styles.context)).not.toBeNull();
   });
 
   it('uses namespace classification across raw jsdom realms without constructors', () => {

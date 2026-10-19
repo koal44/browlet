@@ -1,6 +1,6 @@
 import {
   type DOMOperations, type DOMElement as Element, type DOMNode as Node, type DOMParentNode as ParentNode,
-  XML_NAMESPACE, isHtmlSvgOrMathNamespace,
+  isHtmlSvgOrMathNamespace,
 } from '../../infra/index';
 import {
   asciiDashMatch, asciiEndsWith, asciiEquals, hasAsciiWhitespaceToken, asciiIncludes, asciiStartsWith,
@@ -466,18 +466,10 @@ export function isFocused(el: Element, context: StyleletContext): boolean {
 
 export function matchLang(wanted: string, element: Element, context: StyleletContext): boolean {
   wanted = asciiLower(wanted);
-
-  for (let node: Element | null = element; node; node = langParent(node, context.dom)) {
-    const actual = elementLanguage(node, context);
-
-    if (actual !== null) {
-      if (actual === '') return false;
-
-      return extendedLangMatch(wanted, asciiLower(actual));
-    }
-  }
-
-  return false;
+  const actual = context.dom.getLanguage(element);
+  // SPEC_CLASH(language-selector-ranges): CSS :lang("") matches unknown language; Firefox/WebKit do not yet match it.
+  // https://github.com/w3c/csswg-drafts/issues/6915
+  return actual === '' ? wanted === '' : extendedLangMatch(wanted, asciiLower(actual));
 }
 
 function extendedLangMatch(range: string, lang: string): boolean {
@@ -521,26 +513,6 @@ function extendedLangMatch(range: string, lang: string): boolean {
   }
 
   return true;
-}
-
-function langParent(element: Element, dom: DOMOperations): Element | null {
-  const parent = dom.parentElement(element);
-  if (parent) return parent;
-
-  const root = dom.root(element);
-
-  if (dom.isShadowRoot(root)) {
-    return dom.shadowHost(root);
-  }
-
-  return null;
-}
-
-function elementLanguage(element: Element, context: StyleletContext): string | null {
-  const lang = context.dom.getAttribute(element, 'lang');
-  if (lang !== null) return lang;
-
-  return context.dom.getAttributeNS(element, XML_NAMESPACE, 'lang');
 }
 
 export function matchDir(wanted: string, element: Element, context: StyleletContext): boolean {

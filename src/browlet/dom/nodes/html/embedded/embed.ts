@@ -11,13 +11,12 @@ import { hasExposedObjectAncestor } from './object';
 export class HTMLEmbedElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLEmbed;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Interactive,
       ContentCategory.Palpable,
     ];
   }
-
-  override readonly isAllNamedElement = true;
 
   override getDocumentNamedItemType(): DocumentNamedItemType {
     return this.isExposed() ? 'name' : 'none';

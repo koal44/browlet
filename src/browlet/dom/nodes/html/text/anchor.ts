@@ -12,6 +12,7 @@ import { HTMLElementImpl } from '../html-element';
 export class HTMLAnchorElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLA;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
@@ -26,14 +27,13 @@ export class HTMLAnchorElementImpl extends HTMLElementImpl {
     this.prototype.contentAttributes = [
       'href', 'target', 'download', 'ping', 'rel', 'hreflang', 'type', 'referrerpolicy',
     ];
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'download'];
     this.prototype.sanitization = {
       category: SanitizationCategory.Default,
       defaultAttributes: ['href', 'hreflang', 'type'],
       navigatingURLAttributes: ['href'],
     };
   }
-
-  override readonly isAllNamedElement = true;
 
   override hasCategory(category: ContentCategory): boolean {
     if (category === ContentCategory.Interactive) return this.hasAttributeNS(null, 'href');

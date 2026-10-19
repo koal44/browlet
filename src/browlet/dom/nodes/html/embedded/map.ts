@@ -10,13 +10,12 @@ import { HTMLElementImpl } from '../html-element';
 export class HTMLMapElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLMap;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Palpable,
     ];
     this.prototype.contentModel = { childRules: [transparentContent] };
   }
-
-  override readonly isAllNamedElement = true;
 }
 
 /*

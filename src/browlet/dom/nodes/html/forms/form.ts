@@ -12,6 +12,7 @@ import { HTMLFormControlsCollectionImpl } from './form-controls-collection';
 export class HTMLFormElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLForm;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Palpable,
     ];
@@ -21,7 +22,6 @@ export class HTMLFormElementImpl extends HTMLElementImpl {
     };
   }
 
-  override readonly isAllNamedElement = true;
   #elements: HTMLFormControlsCollectionImpl | undefined;
 
   static is(value: unknown): value is HTMLFormElementImpl {

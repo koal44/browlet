@@ -28,6 +28,7 @@ export class HTMLTableHeaderCellElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLTh;
     this.prototype.categories = [];
+    this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'abbr'];
   }
 
   override canOmitEndTag(): boolean {

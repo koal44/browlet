@@ -11,6 +11,7 @@ import { HTMLEmbedElementImpl } from './embed';
 export class HTMLObjectElementImpl extends HTMLElementImpl {
   static {
     this.prototype.tag = ElementTag.HTMLObject;
+    this.prototype.isAllNamedElement = true;
     this.prototype.categories = [
       ContentCategory.Flow, ContentCategory.Phrasing, ContentCategory.Embedded, ContentCategory.Palpable,
       ContentCategory.FormAssociated, ContentCategory.Listed,
@@ -18,7 +19,6 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
     this.prototype.contentModel = { childRules: [transparentContent] };
   }
 
-  override readonly isAllNamedElement = true;
   #showsFallbackContent = false;
 
   /** Whether resource selection has chosen the element's fallback content. */

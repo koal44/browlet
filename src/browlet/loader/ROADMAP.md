@@ -15,6 +15,15 @@ the getter uses the current time. A future local-file loader must populate
 `Document.lastModificationTime` from filesystem metadata; this getter does not
 read files itself. See the [resource metadata slice](../html/ROADMAP.md#section-314-resource-metadata).
 
+Response integration retains the first nonempty `Content-Language` list member
+for node language fallback, whether supplied in one field or separate fields;
+no supplied language means unknown. This follows Chromium/WebKit rather than
+HTML's unknown result for multiple languages or Firefox's multiple matches, as
+recorded by SPEC_CLASH(language-protocol-fallback). The source-only route has
+no protocol language. A later successful meta pragma will override that default
+through `Document.pragmaLanguage`; its producer remains §4.2.5 work.
+See the [language slice](../html/ROADMAP.md#section-3262-lang-and-xmllang).
+
 Document retains the §3.1.7 `currentScript` state and projects either script
 interface. The §4.12 execution algorithms must set it for classic scripts in a
 document tree, clear it for modules/shadow-tree execution, and restore the old
@@ -119,7 +128,9 @@ is still a callable-shape review point until script preparation has an owner.
 The real network regressions use Windows-1252 with a supplied type and UTF-8
 with no supplied type. They determine the MIME type before passing the same
 ResourceReader to the HTML handler, then check parsing, CSP, and live byte counts.
-They supply navigation inputs, select Fetch's parallel callback queue and sandbox
+Both decoding cases also cover comma-separated and repeated Content-Language
+fields: parsed elements inherit the first language, and an explicit lang attribute
+overrides it. They supply navigation inputs, select Fetch's parallel callback queue and sandbox
 body owner, and commit before parser input tasks run. They do not implement
 HTML §7.4's state machine, general MIME handler selection, Refresh, or
 Speculation-Rules processing. These remain HTML work.

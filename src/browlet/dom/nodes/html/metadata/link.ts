@@ -84,6 +84,12 @@ export class HTMLLinkElementImpl extends HTMLElementImpl {
     const rel = this.getAttributeNS(null, 'rel');
     return rel !== null && splitOnAsciiWhitespace(asciiLower(rel)).every((token) => bodyAllowedLinkTypes.has(token));
   }
+
+  /** A link without its own title has no title; ancestors cannot supply one. */
+  // https://html.spec.whatwg.org/multipage/semantics.html#attr-link-title
+  protected override getOwnAdvisoryInformation(): string {
+    return super.getOwnAdvisoryInformation() ?? '';
+  }
 }
 
 /*

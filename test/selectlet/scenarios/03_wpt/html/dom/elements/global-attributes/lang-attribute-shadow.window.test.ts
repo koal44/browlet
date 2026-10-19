@@ -43,6 +43,9 @@ runScenarios('lang pseudo', 'normal', [
       { match: ':lang(en-AU)', ref: { by: 'id', id: 'light' }, expect: { ids: ['light'] } },
       { match: ':lang(en-US)', ref: { by: 'id', id: 'light' }, expect: { ids: [] } },
       { match: ':lang(en-AU)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['slot'] }, browsers: ['chromium', 'webkit'] },
+      { match: ':lang(en-AU)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['slot'] }, browsers: ['firefox'], engines: ['selectlet'] },
+      // SPEC_CLASH(language-shadow-inheritance): Firefox does not inherit from shadow hosts.
+      // https://bugzilla.mozilla.org/show_bug.cgi?id=1740283
       { match: ':lang(en-AU)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: [] }, browsers: ['firefox'], engines: ['native'] },
       { match: ':lang(en-US)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: [] } },
     ],
@@ -90,6 +93,8 @@ runScenarios('lang pseudo', 'normal', [
       { match: ':lang(en-GB)', ref: { by: 'id', id: 'light' }, expect: { ids: ['light'] } },
       { match: ':lang(en-AU)', ref: { by: 'id', id: 'light' }, expect: { ids: [] } },
       { match: ':lang(en-AU)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['slot'] }, browsers: ['chromium', 'webkit'] },
+      { match: ':lang(en-AU)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: ['slot'] }, browsers: ['firefox'], engines: ['selectlet'] },
+      // SPEC_CLASH(language-shadow-inheritance): Native Firefox omits the slot; Selectlet follows HTML.
       { match: ':lang(en-AU)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: [] }, browsers: ['firefox'], engines: ['native'] },
       { match: ':lang(en-GB)', ref: { by: 'id', id: 'slot', within: { by: 'shadowRoot', id: 'host' } }, expect: { ids: [] } },
     ],

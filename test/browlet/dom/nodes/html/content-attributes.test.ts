@@ -55,15 +55,12 @@ describe('HTML content-attribute permissions', () => {
     expect(anchor.getAttribute('unrecognized')).toBe('retained');
   });
 
-  it('distinguishes a completed element inventory from unfinished global rules', () => {
+  it('rejects unlisted names once the element inventory is complete', () => {
     const document = createTestDocument();
     for (const tag of ['article', 'div', 'q', 'blockquote', 'a']) {
       const element = document.createElementNS(HTML_NAMESPACE, tag);
       assert(element instanceof HTMLElementImpl);
-      for (const name of ['id', 'data-example', 'aria-label', 'onclick', 'unrecognized']) {
-        expect(() => element.allowsContentAttribute(name))
-          .toThrow(`Global content-attribute rules for ${name} are not implemented`);
-      }
+      expect(element.allowsContentAttribute('unrecognized')).toBe(false);
     }
   });
 
@@ -71,6 +68,7 @@ describe('HTML content-attribute permissions', () => {
     const input = createTestDocument().createElementNS(HTML_NAMESPACE, 'input');
     assert(input instanceof HTMLElementImpl);
     input.setAttribute('name', 'example');
+    expect(input.allowsContentAttribute('id')).toBe(true);
     expect(() => input.allowsContentAttribute('name')).toThrow('Content attributes for input are not implemented');
   });
 });
