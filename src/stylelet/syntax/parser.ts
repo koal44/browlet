@@ -131,6 +131,28 @@ export function parseBlockContents(
   return consumeBlockContents(normalize(input, context));
 }
 
+/** Parse declaration-only input, recovering through semicolons without admitting nested style rules. */
+// https://drafts.csswg.org/css-style-attr/#syntax
+// SPEC_CLASH(css-style-attribute-parsing): Follow CSS Style Attributes and all
+// three engines. CSSOM's newer block-contents reference also admits nested rules
+// and treats an unmatched closing brace as the end of the whole input.
+export function parseDeclarationList(input: ParserInput): SyntaxDeclaration[] {
+  const c = normalize(input);
+  const declarations: SyntaxDeclaration[] = [];
+  while (!c.eof()) {
+    const type = c.peek().type;
+    if (type === TokenKind.Whitespace || type === TokenKind.Semicolon) {
+      c.next();
+    } else if (type === TokenKind.AtKeyword) {
+      consumeAtRule(c);
+    } else {
+      const declaration = consumeDeclaration(c);
+      if (declaration !== null) declarations.push(declaration);
+    }
+  }
+  return declarations;
+}
+
 // 5.4.6. Parse a rule
 export function parseRule(input: ParserInput): SyntaxRule | null {
   const c = normalize(input);

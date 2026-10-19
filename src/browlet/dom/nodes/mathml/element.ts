@@ -1,8 +1,9 @@
 import { MATHML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
-import type { CSSStyleDeclarationImpl } from '../../../../stylelet/index';
+import type { CSSDeclarationBlock, CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
 import { ElementTag, ContentCategory } from '../element-definitions/index';
+import { ElementCSSInlineStyleMixin } from '../../../style/index';
 
 import { ElementImpl } from '../element';
 import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
@@ -12,6 +13,8 @@ import { HTMLOrSVGOrMathMLElementMixin, htmlOrSVGOrMathMLElementIDL } from '../h
 export class MathMLElementImpl extends ElementImpl {
   /** Common HTML, SVG, and MathML state and attribute behavior. */
   #htmlOrSVGOrMathMLElementMixin = new HTMLOrSVGOrMathMLElementMixin(this);
+  /** Owns inline declarations independently of the lazily created CSSOM object. */
+  #inlineStyleMixin = new ElementCSSInlineStyleMixin(this, this.env);
 
   static is(value: unknown): value is MathMLElementImpl {
     return value instanceof MathMLElementImpl;
@@ -23,7 +26,11 @@ export class MathMLElementImpl extends ElementImpl {
   set nonce(value: string) { this.#htmlOrSVGOrMathMLElementMixin.nonce = value; }
 
   get style(): CSSStyleDeclarationImpl {
-    return this.getInlineStyle();
+    return this.#inlineStyleMixin.style;
+  }
+
+  override getInlineStyleBlock(): CSSDeclarationBlock | null {
+    return this.#inlineStyleMixin.getInlineStyleBlock();
   }
 
   override attributeChanged(
@@ -31,6 +38,7 @@ export class MathMLElementImpl extends ElementImpl {
     namespace: string | null,
   ): void {
     super.attributeChanged(localName, oldValue, newValue, namespace);
+    if (localName === 'style' && namespace === null) this.#inlineStyleMixin.attributeChanged(newValue);
     this.#htmlOrSVGOrMathMLElementMixin.attributeChanged(localName, newValue, namespace);
   }
 

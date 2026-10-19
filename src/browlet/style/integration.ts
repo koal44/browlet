@@ -1,22 +1,52 @@
 import {
-  CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
+  CSSDeclarationBlock, CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
   type StyleletEnvironment,
 } from '../../stylelet/index';
 
 import type { ElementImpl, NodeImpl } from '../dom/nodes/index';
 
-/** Owns an element's inline declaration and synchronizes its style attribute. */
+/** Owns accepted inline declarations and lazily exposes their CSSOM object. */
 // https://drafts.csswg.org/cssom/#elementcssinlinestyle
 export class ElementCSSInlineStyleMixin {
-  /** Retained declaration updated by both CSSOM writes and attribute changes. */
-  style: CSSStyleDeclarationImpl;
+  #element: ElementImpl;
+  #env: StyleletEnvironment;
+  #block?: CSSDeclarationBlock;
+  #style?: CSSStyleDeclarationImpl;
 
+  /** Retain the owner without allocating a declaration or reading its attributes. */
   constructor(element: ElementImpl, env: StyleletEnvironment) {
-    this.style = new CSSStyleDeclarationImpl({ ownerNode: element }, env);
+    this.#element = element;
+    this.#env = env;
   }
 
+  /** Obtain the retained CSSOM object without reading or reparsing the attribute. */
+  get style(): CSSStyleDeclarationImpl {
+    return this.#style ??= new CSSStyleDeclarationImpl({
+      block: this.#block ??= new CSSDeclarationBlock(),
+      ownerNode: this.#element,
+    }, this.#env);
+  }
+
+  /** Read accepted declarations without creating CSSOM or parsing the raw attribute. */
+  getInlineStyleBlock(): CSSDeclarationBlock | null {
+    return this.#block ?? null;
+  }
+
+  /** Check and apply attribute input, including the first assignment. */
+  // https://html.spec.whatwg.org/multipage/dom.html#the-style-attribute
   attributeChanged(value: string | null): void {
-    this.style.attributeChanged('style', value);
+    // CSSOM write-back has already updated the declaration; it bypasses CSP and parsing.
+    if (this.#style?.updating) return;
+    if (value === null) {
+      this.#block?.clear();
+    } else {
+      // SPEC_CLASH(csp-blocked-style-attribute): Chromium/WebKit retain both the
+      // raw attribute and prior accepted declarations; Firefox clears both.
+      if (this.#element.nodeDocument.env.policyContainer.cspList!
+        .isStyleAttributeBlocked(this.#element, value)) return;
+      (this.#block ??= new CSSDeclarationBlock()).setText(value);
+    }
+    this.#style?.synchronizeIndices();
   }
 }
 

@@ -6,11 +6,11 @@ import {
   nullable, op, reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/index';
-import type { CSSStyleSheetImpl, CSSStyleDeclarationImpl } from '../../../stylelet/index';
+import type { CSSStyleSheetImpl, CSSDeclarationBlock } from '../../../stylelet/index';
 
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
-import { ElementCSSInlineStyleMixin, type LinkStyleMixin, type TreeScopeResolver } from '../../style/index';
+import type { LinkStyleMixin, TreeScopeResolver } from '../../style/index';
 import type { EventImpl } from '../events/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import { DOMTokenListImpl, type TokenListAttribute } from '../token-list';
@@ -109,8 +109,6 @@ export class ElementImpl extends NodeImpl {
   #attributeTokenLists: Map<string, DOMTokenListImpl> | undefined;
   /** Explicit weak element associations shared by this element's reflected reference attributes. */
   #elementAssociations: ElementAssociations | undefined;
-  /** Lazily created inline style declaration. */
-  #inlineStyleMixin: ElementCSSInlineStyleMixin | undefined;
   /** Navigation among element siblings. */
   #nonDocumentTypeChildNodeMixin =
     new NonDocumentTypeChildNodeMixin(this);
@@ -513,7 +511,6 @@ export class ElementImpl extends NodeImpl {
     this.#attributeTokenLists?.get(localName)?.updateTokens(newValue);
     this.#elementAssociations?.clear(localName);
     if (localName === 'slot') this.#slottableMixin.attributeChanged(this, oldValue, newValue);
-    if (localName === 'style') this.#inlineStyleMixin?.attributeChanged(newValue);
     // https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism
     if (localName === 'blocking' && this.isRenderBlocking() && !this.isPotentiallyRenderBlocking()) {
       this.unblockRendering();
@@ -691,10 +688,9 @@ export class ElementImpl extends NodeImpl {
     return this.#slottableMixin.assignedSlot ?? this.parentNode;
   }
 
-  /** Return the lazily created declaration reflected by the style attribute. */
-  getInlineStyle(): CSSStyleDeclarationImpl {
-    return (this.#inlineStyleMixin ??=
-      new ElementCSSInlineStyleMixin(this, this.env)).style;
+  /** Read accepted inline declarations; elements without inline styling return null. */
+  getInlineStyleBlock(): CSSDeclarationBlock | null {
+    return null;
   }
 
   /** Style sheet supplied by this element, if its style behavior has one. */
@@ -786,6 +782,7 @@ export class ElementImpl extends NodeImpl {
       ? asciiLower(qualifiedName)
       : qualifiedName;
   }
+
 }
 
 /*

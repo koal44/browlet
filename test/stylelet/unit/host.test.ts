@@ -23,6 +23,77 @@ const { implForWrapper } = createRequire(__filename)('jsdom/lib/generated/idl/ut
 };
 
 describe('Stylelet DOM hosts', () => {
+  it.each([false, true])('uses raw attribute fallback only without an inline-state provider (provider present: %s)', (hasProvider) => {
+    const host = createOpaqueDOM('<main style="opacity: .25"></main>');
+    try {
+      const { document, dom, opaque, window } = host;
+      const element = opaque(window.document.querySelector('main')!);
+      const styles = new Stylelet(document, {
+        dom: hasProvider ? { ...dom, inlineStyleBlock: () => null } : dom,
+      });
+
+      expect(styles.getComputedStyle(element).getPropertyValue('opacity')).toBe(hasProvider ? '' : '0.25');
+      expect(dom.getAttributeNS(element, null, 'style')).toBe('opacity: .25');
+    } finally { host.close(); }
+  });
+
+  it('initializes an inline declaration explicitly after attaching to an existing host', () => {
+    const host = createOpaqueDOM('<main style="opacity: .25; color: red"></main>');
+    try {
+      const { document, dom, opaque, window } = host;
+      const element = opaque(window.document.querySelector('main')!);
+      const styles = new Stylelet(document, { dom });
+      const onChange = vi.fn();
+      const declaration = new CSSStyleDeclarationImpl({ ownerNode: element, onChange }, styles.context.env);
+
+      expect(declaration.cssText).toBe('');
+      expect(onChange).not.toHaveBeenCalled();
+
+      declaration.attributeChanged('style', dom.getAttributeNS(element, null, 'style'));
+      expect(declaration.cssText).toBe('opacity: 0.25; color: red;');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(dom.getAttributeNS(element, null, 'style')).toBe('opacity: .25; color: red');
+
+      dom.setAttributeNS(element, null, 'style', 'color: blue');
+      declaration.attributeChanged('style', dom.getAttributeNS(element, null, 'style'));
+      expect(declaration.cssText).toBe('color: blue;');
+      expect(onChange).toHaveBeenCalledTimes(2);
+
+      dom.removeAttribute(element, 'style');
+      declaration.attributeChanged('style', null);
+      expect(declaration.cssText).toBe('');
+      expect(onChange).toHaveBeenCalledTimes(3);
+    } finally { host.close(); }
+  });
+
+  it('exposes the write-back flag during host notification and resets it after a host failure', () => {
+    const host = createOpaqueDOM('<main></main>');
+    try {
+      const { document, dom, opaque, window } = host;
+      const element = opaque(window.document.querySelector('main')!);
+      const styles = new Stylelet(document, { dom });
+      const declaration = new CSSStyleDeclarationImpl({ ownerNode: element }, styles.context.env);
+      const failure = new Error('Host write failed');
+      const setAttributeNS = vi.spyOn(dom, 'setAttributeNS').mockImplementation(() => {
+        expect(declaration.updating).toBe(true);
+        declaration.attributeChanged('style', 'color: blue');
+        expect(declaration.getPropertyValue('color')).toBe('red');
+        throw failure;
+      });
+
+      expect(() => { declaration.cssText = 'color: red'; }).toThrow(failure);
+      expect(setAttributeNS).toHaveBeenCalledOnce();
+      expect(declaration.updating).toBe(false);
+      setAttributeNS.mockRestore();
+
+      declaration.attributeChanged('style', 'color: green');
+      expect(declaration.getPropertyValue('color')).toBe('green');
+      declaration.cssText = 'opacity: .5';
+      expect(dom.getAttributeNS(element, null, 'style')).toBe('opacity: 0.5;');
+      expect(declaration.updating).toBe(false);
+    } finally { host.close(); }
+  });
+
   it('matches, orders sheets, and reads inline state without inspecting host nodes', () => {
     const host = createOpaqueDOM('<style id="first"></style><style id="second"></style><main id="target" data-state="chosen"><span></span></main>');
     try {

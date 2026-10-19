@@ -5,9 +5,8 @@ import {
   interpretPropertyDeclaration, propertyRegistry,
   serializePropertyDeclaration, type PropertyDeclaration,
 } from '../css/property';
-import {
-  parseBlockContents, parseDeclaration, type ParserInput,
-} from '../syntax/parser';
+import { parseDeclaration } from '../syntax/parser';
+import { CSSDeclarationBlock } from '../css/declaration-block';
 import type { StyleletEnvironment } from '../environment';
 import type { CSSRuleImpl } from './rule';
 
@@ -36,7 +35,8 @@ import type { CSSRuleImpl } from './rule';
 export class CSSStyleDeclarationImpl {
   [index: number]: string;
 
-  #declarations: PropertyDeclaration[] = [];
+  #block: CSSDeclarationBlock;
+  #indexedLength = 0;
   #computed: boolean;
   #readonly: boolean;
   #parentRule: CSSRuleImpl | null;
@@ -45,8 +45,10 @@ export class CSSStyleDeclarationImpl {
   #updating = false;
   #env: StyleletEnvironment;
 
+  /** Expose a declaration block; hosts deliver attribute changes explicitly. */
+  // https://drafts.csswg.org/cssom/#css-declaration-blocks
   constructor({
-    declarations = [],
+    block = new CSSDeclarationBlock(),
     computed = false,
     readonly = false,
     parentRule = null,
@@ -59,51 +61,46 @@ export class CSSStyleDeclarationImpl {
     this.#parentRule = parentRule;
     this.#ownerNode = ownerNode;
     this.#onChange = onChange;
-    this.#replaceDeclarations(declarations);
-
-    if (!computed && ownerNode !== null) {
-      const value = env.userAgent.dom.getAttributeNS(ownerNode, null, 'style');
-      if (value !== null) {
-        this.#replaceDeclarations(parseDeclarationBlock(value));
-      }
-    }
+    this.#block = block;
+    this.synchronizeIndices();
   }
 
   get cssText(): string {
-    return this.#computed ? '' : serializeDeclarationBlock(this.#declarations);
+    return this.#computed ? '' : this.#block.cssText;
   }
 
   set cssText(value: string) {
     this.#assertMutable();
-    this.#replaceDeclarations(parseDeclarationBlock(String(value)));
+    this.#block.setText(String(value));
     this.#commit();
   }
 
   get length(): number {
-    return this.#declarations.length;
+    return this.#block.declarations.length;
   }
 
   get parentRule(): CSSRuleImpl | null {
     return this.#parentRule;
   }
 
-  get declarations(): readonly PropertyDeclaration[] {
-    return this.#declarations;
+  /** Whether CSSOM is writing the owner attribute; hosts must bypass their input policy during write-back. */
+  get updating(): boolean {
+    return this.#updating;
   }
 
   item(index: number): string {
-    return this.#declarations[index]?.name ?? '';
+    return this.#block.declarations[index]?.name ?? '';
   }
 
   getPropertyValue(property: string): string {
-    const declaration = this.#find(normalizePropertyName(String(property)));
+    const declaration = this.#block.find(normalizePropertyName(String(property)));
     return declaration === undefined
       ? ''
       : serializePropertyDeclaration(declaration).value;
   }
 
   getPropertyPriority(property: string): string {
-    return this.#find(normalizePropertyName(String(property)))?.important
+    return this.#block.find(normalizePropertyName(String(property)))?.important
       ? 'important'
       : '';
   }
@@ -132,7 +129,7 @@ export class CSSStyleDeclarationImpl {
       value,
       priority !== '',
     );
-    if (declaration === null || !this.#setDeclaration(declaration)) return;
+    if (declaration === null || !this.#block.set(declaration)) return;
 
     this.#commit();
   }
@@ -142,22 +139,16 @@ export class CSSStyleDeclarationImpl {
 
     const name = normalizePropertyName(String(property));
     const value = this.getPropertyValue(name);
-    const index = this.#declarations.findIndex(
-      (declaration) => declaration.name === name,
-    );
-    if (index < 0) return value;
-
-    const previousLength = this.length;
-    this.#declarations.splice(index, 1);
-    this.#syncIndices(previousLength);
+    if (!this.#block.remove(name)) return value;
     this.#commit();
     return value;
   }
 
   [Symbol.iterator](): ArrayIterator<string> {
-    return this.#declarations.map(({ name }) => name)[Symbol.iterator]();
+    return this.#block.declarations.map(({ name }) => name)[Symbol.iterator]();
   }
 
+  /** Apply an initial or changed attribute value without writing it back to the owner. */
   attributeChanged(
     localName: string,
     value: string | null,
@@ -166,63 +157,16 @@ export class CSSStyleDeclarationImpl {
     if (this.#computed || this.#updating) return;
     if (localName !== 'style' || namespace !== null) return;
 
-    this.#replaceDeclarations(
-      value === null ? [] : parseDeclarationBlock(value),
-    );
-    this.#onChange(this.#declarations);
+    this.#block.setText(value ?? '');
+    this.synchronizeIndices();
+    this.#onChange(this.#block.declarations);
   }
 
-  #find(name: string): PropertyDeclaration | undefined {
-    return this.#declarations.find(
-      (declaration) => declaration.name === name,
-    );
-  }
-
-  #replaceDeclarations(declarations: readonly PropertyDeclaration[]): void {
-    const previousLength = this.length;
-    this.#declarations = [];
-
-    for (const declaration of declarations) {
-      this.#setDeclaration(declaration, true);
-    }
-
-    this.#syncIndices(previousLength);
-  }
-
-  #setDeclaration(
-    declaration: PropertyDeclaration,
-    respectImportance = false,
-  ): boolean {
-    const index = this.#declarations.findIndex(
-      ({ name }) => name === declaration.name,
-    );
-
-    if (index < 0) {
-      this.#declarations.push(declaration);
-      this.#syncIndices(this.length - 1);
-      return true;
-    }
-
-    const previous = this.#declarations[index]!;
-    if (respectImportance && previous.important && !declaration.important) {
-      return false;
-    }
-
-    const previousValue = serializePropertyDeclaration(previous).value;
-    const nextValue = serializePropertyDeclaration(declaration).value;
-    if (
-      previous.important === declaration.important &&
-      previousValue === nextValue
-    ) {
-      return false;
-    }
-
-    this.#declarations[index] = declaration;
-    return true;
-  }
-
-  #syncIndices(previousLength: number): void {
-    for (let index = previousLength; index < this.length; index++) {
+  /** Update exposed numeric properties after the owner changes the shared block. */
+  // PROVISIONAL: indexed properties belong to Binding once CSSOM projection is complete.
+  synchronizeIndices(): void {
+    const length = this.length;
+    for (let index = this.#indexedLength; index < length; index++) {
       Object.defineProperty(this, index, {
         configurable: true,
         enumerable: true,
@@ -230,9 +174,10 @@ export class CSSStyleDeclarationImpl {
       });
     }
 
-    for (let index = this.length; index < previousLength; index++) {
+    for (let index = length; index < this.#indexedLength; index++) {
       Reflect.deleteProperty(this, String(index));
     }
+    this.#indexedLength = length;
   }
 
   #updateStyleAttribute(): void {
@@ -247,7 +192,8 @@ export class CSSStyleDeclarationImpl {
   }
 
   #commit(): void {
-    this.#onChange(this.#declarations);
+    this.synchronizeIndices();
+    this.#onChange(this.#block.declarations);
     this.#updateStyleAttribute();
   }
 
@@ -262,41 +208,14 @@ export class CSSStyleDeclarationImpl {
 }
 
 type CSSStyleDeclarationOptions = {
-  declarations?: readonly PropertyDeclaration[];
+  block?: CSSDeclarationBlock;
   computed?: boolean;
   readonly?: boolean;
   parentRule?: CSSRuleImpl | null;
+  /** Attribute write-back target; attaching an owner does not read its current attribute. */
   ownerNode?: Element | null;
   onChange?: (declarations: readonly PropertyDeclaration[]) => void;
 };
-
-export function parseDeclarationBlock(
-  input: ParserInput,
-): PropertyDeclaration[] {
-  const declarations: PropertyDeclaration[] = [];
-
-  for (const item of parseBlockContents(input)) {
-    if (!Array.isArray(item)) continue;
-
-    for (const syntaxDeclaration of item) {
-      const declaration = interpretPropertyDeclaration(syntaxDeclaration);
-      if (declaration !== null) declarations.push(declaration);
-    }
-  }
-
-  return declarations;
-}
-
-function serializeDeclarationBlock(
-  declarations: PropertyDeclaration[],
-): string {
-  return declarations.map(serializeDeclaration).join(' ');
-}
-
-function serializeDeclaration(declaration: PropertyDeclaration): string {
-  const { name, value, important } = serializePropertyDeclaration(declaration);
-  return `${name}: ${value}${important ? ' !important' : ''};`;
-}
 
 function parsePropertyDeclaration(
   property: string,

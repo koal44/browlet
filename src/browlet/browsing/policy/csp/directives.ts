@@ -1,10 +1,13 @@
 import { asciiLower } from '../../../../infra/ascii';
 import { forgivingBase64Decode } from '../../../../infra/base64';
+import { utf8Encode } from '../../../../encoding/index';
 import {
   areSameOrigin, getDefaultPort, hostsEqual, obtainURLOrigin, percentDecodeString, serializeHost, serializeURLPath,
   type Host, type Origin, type URLRecord,
 } from '../../../../url/index';
-import { parseIntegrityMetadata, type FetchRequest } from '../../../../fetch/index';
+import {
+  applyIntegrityAlgorithm, parseIntegrityMetadata, type FetchRequest, type IntegrityAlgorithm,
+} from '../../../../fetch/index';
 
 /** One policy's directive names and token lists, interpreted by each directive's algorithm. */
 // https://w3c.github.io/webappsec-csp/#framework-policy
@@ -99,6 +102,47 @@ export class CSPDirectiveValue {
       return bytes !== null && hashes.some((hash) => hash.algorithm === algorithm &&
         hash.digest.length === bytes.length && hash.digest.every((byte, i) => byte === bytes[i]));
     });
+  }
+
+  /** Match style-attribute source, where nonces cannot authorize and hashes require unsafe-hashes. */
+  // https://w3c.github.io/webappsec-csp/#match-element-to-source-list
+  matchesStyleAttribute(source: string): boolean {
+    let unsafeInline = false;
+    let unsafeHashes = false;
+    let hasNonceOrHash = false;
+    const hashes: { algorithm: IntegrityAlgorithm; value: string; }[] = [];
+    for (const token of this.tokens) {
+      const keyword = asciiLower(token);
+      if (keyword === "'unsafe-inline'") {
+        unsafeInline = true;
+      } else if (keyword === "'unsafe-hashes'") {
+        unsafeHashes = true;
+      } else if (nonceSourcePattern.test(token)) {
+        hasNonceOrHash = true;
+      } else {
+        const match = hashSourcePattern.exec(token);
+        if (match === null) continue;
+        hasNonceOrHash = true;
+        hashes.push({ algorithm: asciiLower(match[1]!) as IntegrityAlgorithm, value: match[2]! });
+      }
+    }
+    // SPEC_CLASH(csp-style-attribute-nonce): Follow CSP/Chromium/Firefox;
+    // a nonce source suppresses unsafe-inline and cannot authorize attributes.
+    // WebKit instead authorizes a style attribute when the element's nonce matches.
+    if (unsafeInline && !hasNonceOrHash) return true;
+    if (!unsafeHashes || hashes.length === 0) return false;
+
+    const bytes = utf8Encode(source);
+    const digests: Partial<Record<IntegrityAlgorithm, Uint8Array>> = {};
+    for (const { algorithm, value } of hashes) {
+      // SPEC_CLASH(csp-decoded-integrity): As for external integrity metadata,
+      // Chromium/WebKit accept equivalent Base64 spellings; Firefox/the draft do not.
+      const expected = decodeDigest(value);
+      if (expected === null) continue;
+      const actual = digests[algorithm] ??= applyIntegrityAlgorithm(algorithm, bytes);
+      if (actual.length === expected.length && actual.every((byte, i) => byte === expected[i])) return true;
+    }
+    return false;
   }
 }
 

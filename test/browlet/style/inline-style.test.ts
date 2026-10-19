@@ -1,14 +1,77 @@
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it, vi } from 'vitest';
 
 import { parseTestDocument } from '../../support/dom';
 import { HTMLElementImpl } from '../../../src/browlet/dom/nodes/html/html-element';
 import { SVGElementImpl } from '../../../src/browlet/dom/nodes/svg/element';
 import { MathMLElementImpl } from '../../../src/browlet/dom/nodes/mathml/element';
+import { ElementCSSInlineStyleMixin } from '../../../src/browlet/style/integration';
 import {
-  MATHML_NAMESPACE, SVG_NAMESPACE,
+  HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../src/infra/index';
 
 describe('ElementCSSInlineStyle', () => {
+  it.each([HTML_NAMESPACE, SVG_NAMESPACE, MATHML_NAMESPACE])(
+    'parses and computes inline declarations before creating CSSOM for %s', (namespace) => {
+      const document = createTestDocument();
+      const target = document.createElementNS(namespace, 'a');
+      if (!HTMLElementImpl.is(target) && !SVGElementImpl.is(target) && !MathMLElementImpl.is(target)) {
+        throw new Error('Expected an HTML, SVG, or MathML element');
+      }
+      const getStyle = vi.spyOn(ElementCSSInlineStyleMixin.prototype, 'style', 'get');
+      try {
+        target.setAttribute('style', 'opacity: .2; opacity: .4 !important; opacity: .8');
+        const block = target.getInlineStyleBlock();
+        assert.isNotNull(block);
+        expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.4');
+        expect(getStyle).not.toHaveBeenCalled();
+
+        const style = target.style;
+        expect(target.getInlineStyleBlock()).toBe(block);
+        expect(style.getPropertyValue('opacity')).toBe('0.4');
+        expect(style[0]).toBe('opacity');
+
+        target.setAttribute('style', 'color: red; opacity: .6');
+        expect(target.getInlineStyleBlock()).toBe(block);
+        expect(getStyle).toHaveBeenCalledOnce();
+        expect(style[0]).toBe('color');
+        expect(style[1]).toBe('opacity');
+        expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.6');
+
+        target.removeAttribute('style');
+        expect(style.length).toBe(0);
+        expect(Object.hasOwn(style, 0)).toBe(false);
+        expect(Object.hasOwn(style, 1)).toBe(false);
+
+        style.setProperty('opacity', '.7');
+        expect(block.cssText).toBe('opacity: 0.7;');
+        expect(target.getAttribute('style')).toBe('opacity: 0.7;');
+        expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.7');
+        expect(target.style).toBe(style);
+      } finally { getStyle.mockRestore(); }
+    },
+  );
+
+  it('recovers after an unmatched brace and ignores at-rules in attribute declarations', () => {
+    const document = createTestDocument();
+    const target = document.createElement('main');
+    const source = 'opacity: .2; } color: red; @media all { opacity: .9 } opacity: .7; color: blue !important; color: red';
+    target.setAttribute('style', source);
+
+    const block = target.getInlineStyleBlock();
+    assert.isNotNull(block);
+    expect(block.cssText).toBe('opacity: 0.7; color: blue !important;');
+    expect(target.getAttribute('style')).toBe(source);
+  });
+
+  it.each(['&', 'bad'])('does not parse %s { ... } as a nested style rule inside an attribute', (selector) => {
+    const document = createTestDocument();
+    const target = document.createElement('main');
+    target.setAttribute('style', `color: red; ${selector} { color: green } opacity: .5`);
+    const block = target.getInlineStyleBlock();
+    assert.isNotNull(block);
+    expect(block.cssText).toBe('color: red;');
+  });
+
   it('exposes a same-object declaration block initialized from the attribute', () => {
     const document = createTestDocument({
       source: '<main id="target" style="opacity: 50%; color: red"></main>',
@@ -58,6 +121,14 @@ describe('ElementCSSInlineStyle', () => {
       throw new Error('Expected HTML, SVG, and MathML element implementations');
     }
 
+    const dom = document.env.userAgent.dom;
+    for (const element of [html, svg, math]) {
+      expect(element.getInlineStyleBlock()).toBeNull();
+      expect(dom.inlineStyleBlock?.(element)).toBeNull();
+      document.getCSSEngine().getComputedStyle(element);
+      expect(element.getInlineStyleBlock()).toBeNull();
+    }
+
     html.style.setProperty('opacity', '0.1');
     svg.style.setProperty('opacity', '0.2');
     math.style.setProperty('opacity', '0.3');
@@ -65,6 +136,21 @@ describe('ElementCSSInlineStyle', () => {
     expect(html.getAttribute('style')).toBe('opacity: 0.1;');
     expect(svg.getAttribute('style')).toBe('opacity: 0.2;');
     expect(math.getAttribute('style')).toBe('opacity: 0.3;');
+
+    for (const element of [html, svg, math]) {
+      expect(dom.inlineStyleBlock?.(element)).toBe(element.getInlineStyleBlock());
+      expect(element.getInlineStyleBlock()?.cssText).toBe(element.style.cssText);
+    }
+  });
+
+  it('has no inline declaration for elements outside the three CSSOM includers', () => {
+    const document = createTestDocument();
+    const element = document.createElementNS('urn:example', 'other');
+    element.setAttribute('style', 'opacity: .5');
+
+    expect(element.getInlineStyleBlock()).toBeNull();
+    expect(document.env.userAgent.dom.inlineStyleBlock?.(element)).toBeNull();
+    expect(element.getAttribute('style')).toBe('opacity: .5');
   });
 });
 

@@ -205,8 +205,28 @@ provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts
 uses implementations, including class checks for HTML elements. There are no
 per-node adapters or required fields on host nodes.
 Attribute operations distinguish qualified-name access from namespace/local-name
-access. CSSOM reads and writes the null-namespace `style` attribute through these
-operations so another namespace's `style` attribute cannot receive those writes.
+access. Stylelet's `CSSDeclarationBlock` owns parsed property data independently
+of `CSSStyleDeclarationImpl`, which exposes a supplied block through CSSOM.
+Neither constructor reads an owner's attribute. Browlet's HTML, SVG, and MathML
+elements own their inline-style mixins from construction. Attribute input checks
+CSP and updates a retained block without creating CSSOM. Reading `.style`
+lazily creates the retained CSSOM object around that same block. The cascade's
+`getInlineStyleBlock()` query reads the block directly. The optional DOM
+`inlineStyleBlock` provider returns null when there is no block; that result is
+authoritative. Only an absent provider permits raw-attribute parsing.
+Computed-style results have their own blocks and remain owned by their callers,
+not by the inline-style mixin. Until CSSOM projection owns indexed properties,
+attribute input synchronizes the indices of an existing CSSOM object explicitly.
+A standalone host attaching to an existing element explicitly delivers its
+initial attribute through `attributeChanged()`. CSSOM writes the null-namespace `style` attribute through
+DOM operations so another namespace's `style` attribute cannot receive those writes.
+Browlet's inline-style mixin checks CSP before supplying attribute input to
+Stylelet. It first reads the declaration's CSSOM updating flag so write-back
+bypasses both policy checking and parsing. Stylelet alone changes that flag;
+its getter lets hosts recognize write-back without introducing another flag.
+Removal clears an existing declaration without CSP checking or new allocation.
+Stylelet has no attribute-policy callback; other hosts apply their own policy
+before delivering input.
 The required `getLanguage()` operation supplies the host's determined element
 language. Browlet delegates to `NodeImpl`, including document defaults.
 `standardDOM` reads language attributes and ancestry, crossing shadow roots to

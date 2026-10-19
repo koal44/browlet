@@ -4,7 +4,7 @@ import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/in
 import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 
 import { SandboxingFlagSet } from '../sandbox';
-import type { DocumentImpl } from '../../../dom/nodes/index';
+import type { DocumentImpl, ElementImpl } from '../../../dom/nodes/index';
 import type { BrowletEnvironment } from '../../../environment';
 
 import { ContentSecurityPolicy, type CSPDisposition } from './policy';
@@ -130,6 +130,27 @@ export class CSPList implements FetchCSPList {
       if (policy.disposition === 'enforce') return true;
     }
     return false;
+  }
+
+  /** Report every rejected style attribute; only enforcing policies prevent its application. */
+  // https://w3c.github.io/webappsec-csp/#should-block-inline
+  // Specialized to style attributes; script and style-block checks have separate consumers.
+  isStyleAttributeBlocked(element: ElementImpl, source: string): boolean {
+    let blocked = false;
+    for (const policy of this.policies) {
+      // https://w3c.github.io/webappsec-csp/#directive-fallback-list
+      const sources = policy.directives.get('style-src-attr') ??
+        policy.directives.get('style-src') ?? policy.directives.get('default-src');
+      if (sources === undefined || sources.matchesStyleAttribute(source)) continue;
+      const violation = new CSPViolation(policy, 'style-src-attr', 'inline', element.nodeDocument.env);
+      violation.element = element;
+      // SPEC_CLASH(csp-style-attribute-sample): Follow CSP/Chromium/Firefox;
+      // WebKit currently omits style-attribute samples despite report-sample.
+      if (sources.tokens.includes("'report-sample'")) violation.sample = source.slice(0, 40);
+      violation.report();
+      if (policy.disposition === 'enforce') blocked = true;
+    }
+    return blocked;
   }
 
   /** Whether any applicable policy requires a trusted value for this sink group. */

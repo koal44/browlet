@@ -13,6 +13,7 @@ export { CSSRuleImpl } from './cssom/rule';
 export { CSSStyleRuleImpl } from './cssom/rules';
 export { StylePropertyMapImpl } from './cssom/style-property-map';
 export { CSSStyleDeclarationImpl } from './cssom/declaration';
+export { CSSDeclarationBlock } from './css/declaration-block';
 export { MediaListImpl } from './cssom/media-list';
 export { StyleSheetListImpl } from './cssom/stylesheet-list';
 export { styleletIDLDefinitions } from './web-idl';

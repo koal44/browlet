@@ -1747,6 +1747,24 @@ separate browser failure markers; selector unit regressions first reproduced
 the old Arabic-digit, CJK/astral, script-text, and foreign-dir errors before
 the approximation was removed.
 
+## Section 3.2.6.5 — style
+
+The global inventory already permits `style`, and ElementCSSInlineStyle already
+supplies SameObject/PutForwards reflection. This slice adds immediate attribute
+parsing and inline CSP checks, including parser input before the first CSSOM
+read. CSSOM writes bypass the attribute-input policy check. Declaration parsing
+now recovers after unmatched braces and rejects nested-rule syntax as attribute
+input. The [style roadmap](../style/ROADMAP.md#style-attributes--html-3265)
+records the CSS Style Attributes/CSSOM ownership and browser evidence; the
+[CSP roadmap](../browsing/policy/csp/ROADMAP.md#style-attribute-consumer) records
+the approved retained-state, reporting, nonce, and hash differences.
+
+URL-valued property integration must retain parse-time base URLs; eager parsing
+does not implement that missing value/provenance pipeline. Full CSSStyleProperties
+projection and rendering remain explicit style dependencies. HTML's requirement
+that content remain usable without the style attribute is author conformance,
+not a DOM rejection rule. The next global-attribute section is §3.2.6.6, `data-*`.
+
 ## HTML section 4 ownership
 
 Section 4 defines every HTML element, but only a small subset is prerequisite

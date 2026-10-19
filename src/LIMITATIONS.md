@@ -166,6 +166,10 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
   owns projection, restoring `ObservableArray<CSSStyleSheet>`, and removing the
   temporary Infra observable-array factory.
+- **Inline CSS values:** style attributes are parsed and checked against CSP on
+  mutation, but URL-valued CSS properties are not registered yet. Capturing and
+  retaining their parse-time base URLs, including through CSSOM edits and
+  custom-property substitution, remains [style integration work](browlet/style/ROADMAP.md#style-attributes--html-3265).
 
 One owning world per implementation and preservation of genuine `object`/`any`
 values are intentional [binding contracts](web-idl/README.md), not missing APIs.

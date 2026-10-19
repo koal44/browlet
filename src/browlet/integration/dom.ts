@@ -62,7 +62,7 @@ export const browletDOM: DOMOperations<
   getLanguage: (element) => element.getLanguage(),
   getDirectionality: (element) => element.getDirectionality(),
   isAutoDirectionalityBoundary: (element) => element.isAutoDirectionalityBoundary(),
-  inlineStyle: (element) => 'style' in element ? element.getInlineStyle() : null,
+  inlineStyleBlock: (element) => element.getInlineStyleBlock(),
 
   getElementById: (root, id) => findElementById(root, id),
   getElementsByTagName: (root, name) => root.getElementsByTagName(name),

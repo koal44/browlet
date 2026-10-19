@@ -464,7 +464,16 @@ export function installBrowserHelpers(): void {
             return getComputedStyle(source, c.pseudo).getPropertyValue(query).trim();
           };
         }
-        throw new Error(`computedStyle cases do not support engine ${ng}`);
+        if (ng === 'selectlet') {
+          const stlt = stylelet;
+          if (!stlt) throw new Error('stylelet is not available');
+          return (query, source) => () => {
+            if (!isElement(source)) throw new Error(`Query source for 'computedStyle' case must be an Element`);
+            if (c.pseudo) throw new Error('Stylelet pseudo-element computed styles are not implemented');
+            return stlt.getComputedStyle(source).getPropertyValue(query).trim();
+          };
+        }
+        return assertNever(ng);
       }
 
       case 'cssom' in c: {

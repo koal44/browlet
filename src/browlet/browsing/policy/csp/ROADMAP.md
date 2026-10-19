@@ -61,6 +61,47 @@ reading their body. Opt-out suppresses this work. Hash reports are never exposed
 to ReportingObservers. Future loader/SRI consumers should reuse completed bytes
 or digests when available instead of reading twice.
 
+## Style-attribute consumer
+
+HTML §3.2.6.5 now calls the inline CSP check for `style` attribute input through
+the [style integration](../../../style/ROADMAP.md#style-attributes--html-3265).
+`CSPList.isStyleAttributeBlocked(element, source)` specializes
+[should-block-inline](https://w3c.github.io/webappsec-csp/#should-block-inline)
+to `style attribute`, returning a boolean. It selects `style-src-attr`, then
+`style-src`, then `default-src`; an empty present directive stops fallback.
+Every rejected policy reports, including report-only policies, but only enforcing
+policies block. Reports retain effective directive `style-src-attr` even when a
+fallback supplied the source list, and use the existing element-targeted task.
+CSSOM writes and attribute removal bypass the attribute-input check.
+
+Matching supports `unsafe-inline` and exact UTF-8 SHA-256/384/512 hashes with
+`unsafe-hashes`. A valid nonce/hash source suppresses `unsafe-inline`; nonces
+cannot authorize style attributes. `strict-dynamic` has no effect for styles.
+The report sample is the first 40 characters only when the selected source list
+contains `report-sample`. Source locations remain unavailable as documented above.
+
+Browser checks on 2026-10-18 used Chromium 149.0.7827.55, Firefox 151.0, and
+WebKit 26.5. Eric approved these choices:
+
+- **SPEC_CLASH(csp-blocked-style-attribute):** preserve the raw DOM attribute and
+  last accepted declaration, as Chromium/WebKit do. Firefox clears both after
+  rejection. CSSOM's attribute-change steps contain no CSP gate; HTML explicitly
+  forbids applying rejected rules, leaving the retained-state interaction unclear.
+- **SPEC_CLASH(csp-style-attribute-sample):** include requested samples following
+  CSP/Chromium/Firefox. WebKit reports an empty sample for these violations.
+- **SPEC_CLASH(csp-style-attribute-nonce):** follow CSP/Chromium/Firefox by
+  excluding nonce authorization. WebKit accepts a style attribute with a matching
+  nonce, both with and without `unsafe-inline`; an unmatched nonce still blocks.
+- **SPEC_CLASH(csp-decoded-integrity):** extend the existing decoded-digest choice
+  to inline hashes. Chromium/WebKit accept omitted padding; Firefox/the draft's
+  encoded comparison reject it. All three accept padded Base64url spelling.
+
+The native probes are in `scratch/STYLE-ATTRIBUTE-PROBE.mjs`; persistent Browlet
+regressions cover pre-CSSOM checks, parser input, both dispositions and multiple
+policies, report targets/samples, adoption, namespaces, and CSSOM bypass. Source
+list regressions cover all three hashes, UTF-8 input, equivalent hash encodings,
+fallback inputs, and keywords. No new expected failures or skips are needed.
+
 ## Retained specification decisions
 
 The following source markers retain approved choices. September 2026 browser
@@ -117,8 +158,9 @@ documentation cleanup does not refresh those observations.
   consumer gates in that roadmap.
 - **HTML delivery:** meta policies and their directive restrictions; full
   response/local-URL/history inheritance and policy-container selection.
-- **Elements:** inline script/style checks, nonce/hash inputs, script preparation,
-  and element/preload integration. Parsing these directives is not enforcement.
+- **Elements:** inline script and style-block checks, script preparation, and
+  element/preload integration. Style-attribute checks are implemented above;
+  parsing the remaining directives is not enforcement.
 - **Navigation:** form-action, navigation and frame-ancestor checks with real
   nested contexts, navigation state, and response policies.
 - **Globals:** worker/worklet initialization and violation construction;

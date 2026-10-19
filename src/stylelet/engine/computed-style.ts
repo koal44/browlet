@@ -8,9 +8,8 @@ import {
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
 import { ValueStage } from '../value-processing/stage';
-import {
-  CSSStyleDeclarationImpl, parseDeclarationBlock,
-} from '../cssom/declaration';
+import { CSSStyleDeclarationImpl } from '../cssom/declaration';
+import { CSSDeclarationBlock, parseDeclarationBlock } from '../css/declaration-block';
 
 export function computeStyle(
   engine: CascadeEngine,
@@ -18,10 +17,11 @@ export function computeStyle(
   scope: TreeScope,
 ): CSSStyleDeclarationImpl {
   const dom = engine.context.dom;
-  const style = dom.inlineStyle?.(element);
-  const declarations = style instanceof CSSStyleDeclarationImpl
-    ? style.declarations
-    : parseDeclarationBlock(dom.getAttributeNS(element, null, 'style') ?? '');
+  const block = dom.inlineStyleBlock?.(element);
+  // An absent provider permits text fallback; a provider's empty result is authoritative.
+  const declarations = block === undefined
+    ? parseDeclarationBlock(dom.getAttributeNS(element, null, 'style') ?? '')
+    : block instanceof CSSDeclarationBlock ? block.declarations : [];
   const computed: PropertyDeclaration[] = [];
 
   for (const name of Object.keys(propertyRegistry) as PropertyName[]) {
@@ -61,7 +61,7 @@ export function computeStyle(
 
   return new CSSStyleDeclarationImpl({
     computed: true,
-    declarations: computed,
+    block: new CSSDeclarationBlock(computed),
     readonly: true,
   }, engine.context.env);
 }

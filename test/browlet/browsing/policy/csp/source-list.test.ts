@@ -1,9 +1,51 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
 import { createOpaqueOrigin, type Origin } from '../../../../../src/url/origin';
 import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../../src/url/url';
 
 const selfOrigin = obtainURLOrigin(url('https://example.test/page'));
+
+describe('CSP style-attribute source lists', () => {
+  it.each([
+    [[], false],
+    [["'none'"], false],
+    [['*', 'https:', "'self'"], false],
+    [["'UNSAFE-INLINE'"], true],
+    [["'unsafe-inline'", "'strict-dynamic'"], true],
+    [["'unsafe-inline'", "'nonce-abc'"], false],
+    [["'unsafe-inline'", "'sha256-a'"], false],
+    [["'unsafe-inline'", "'nonce-'", "'sha1-abc'"], true],
+    [["'nonce-abc'"], false],
+    [["'unsafe-hashes'"], false],
+  ] as [string[], boolean][])('matches %j: %s', (tokens, expected) => {
+    expect(new CSPDirectiveValue(tokens).matchesStyleAttribute('opacity: .5')).toBe(expected);
+  });
+
+  it.each(['sha256', 'sha384', 'sha512'])('checks the exact UTF-8 source with %s only when unsafe-hashes is present', (algorithm) => {
+    const source = '--text: "שלום 😀"; opacity: .5';
+    const digest = createHash(algorithm).update(source).digest('base64');
+    const hash = `'${algorithm}-${digest}'`;
+    expect(new CSPDirectiveValue([hash]).matchesStyleAttribute(source)).toBe(false);
+    expect(new CSPDirectiveValue(["'unsafe-inline'", hash]).matchesStyleAttribute(source)).toBe(false);
+    const list = new CSPDirectiveValue(["'UNSAFE-HASHES'", hash]);
+    expect(list.matchesStyleAttribute(source)).toBe(true);
+    expect(list.matchesStyleAttribute(`${source} `)).toBe(false);
+    for (const spelling of [digest.replace(/=+$/, ''), digest.replace(/\+/g, '-').replace(/\//g, '_')]) {
+      expect(new CSPDirectiveValue(["'unsafe-hashes'", `'${algorithm.toUpperCase()}-${spelling}'`])
+        .matchesStyleAttribute(source)).toBe(true);
+    }
+  });
+
+  it('accepts any authorized hash rather than requiring the strongest algorithm', () => {
+    const source = 'opacity: .5';
+    const matching = createHash('sha256').update(source).digest('base64');
+    const different = createHash('sha512').update('opacity: .2').digest('base64');
+    expect(new CSPDirectiveValue([
+      "'unsafe-hashes'", "'sha256-a'", `'sha512-${different}'`, `'sha256-${matching}'`,
+    ]).matchesStyleAttribute(source)).toBe(true);
+  });
+});
 
 describe('CSP URL source lists', () => {
   it('treats empty lists and none as denial, but ignores none beside a matching expression', () => {

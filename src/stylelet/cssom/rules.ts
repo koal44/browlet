@@ -1,6 +1,7 @@
 import { InternalError } from '../../infra/internal-error';
 
 import { type StyleBlock, type StyleRule } from '../css/stylesheet';
+import { CSSDeclarationBlock } from '../css/declaration-block';
 import type { StyleletEnvironment } from '../environment';
 import { CSSStyleDeclarationImpl } from './declaration';
 import { CSSRuleListImpl } from './rule-list';
@@ -16,7 +17,7 @@ export class CSSStyleRuleImpl extends CSSRuleImpl {
   constructor(rule: StyleRule | undefined, env: StyleletEnvironment) {
     super();
     this.#style = new CSSStyleDeclarationImpl({
-      declarations: declarationBlock(rule?.block),
+      block: new CSSDeclarationBlock(declarationBlock(rule?.block)),
       parentRule: this,
       onChange: (declarations) => {
         if (rule) rule.block = [...declarations];

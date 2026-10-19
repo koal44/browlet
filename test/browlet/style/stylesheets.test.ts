@@ -11,12 +11,13 @@ describe('stylesheet integration', () => {
   it('uses the owner DOM provider for detached inline styles without creating a style engine', () => {
     const document = createTestDocument();
     const element = document.createElement('div');
+    if (!HTMLElementImpl.is(element)) throw new Error('Expected an HTML element');
     const getCSSEngine = vi.spyOn(document, 'getCSSEngine');
     const { userAgent } = document.env;
     const setAttributeNS = vi.fn(userAgent.dom.setAttributeNS.bind(userAgent.dom));
     userAgent.dom = { ...userAgent.dom, setAttributeNS };
 
-    element.getInlineStyle().setProperty('opacity', '0.25');
+    element.style.setProperty('opacity', '0.25');
 
     expect(element.nodeDocument).toBe(document);
     expect(element.parentNode).toBeNull();
