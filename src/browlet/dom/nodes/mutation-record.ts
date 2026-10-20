@@ -1,4 +1,4 @@
-import { defineInterface, idlType, impl, nullable, reference, roAttr, xattr } from '../../../web-idl/index';
+import { defineInterface, idlType, impl, nullable, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
 import { NodeListImpl } from './collections';
 import type { NodeImpl } from './node';

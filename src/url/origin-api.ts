@@ -1,7 +1,7 @@
 import { TypeError } from '../infra/exceptions';
 import {
   arg, ctor, defineInterface, idlType, impl, op, reference, unwrapArg, roAttr, staticOp,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import { URLImpl } from './api';
 import {

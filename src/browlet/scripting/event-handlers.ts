@@ -2,7 +2,7 @@ import { InternalError } from '../../infra/internal-error';
 import {
   arg, attr, onError, defineCallbackFunction, defineTypedef, idlType,
   nullable, reference, type AttributeMember, xattr,
-} from '../../web-idl/index';
+} from '../../web-idl/core/index';
 
 import type { EventTargetImpl, EventImpl } from '../dom/events/index';
 

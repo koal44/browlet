@@ -2,7 +2,7 @@ import { WeakOrderedSet } from '../../../infra/collections';
 import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, op, reference, roAttr, stringifier, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { CharacterDataImpl, DocumentFragmentImpl, DocumentImpl, NodeImpl, TextImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';
@@ -547,8 +547,8 @@ export const rangeIDL = defineInterface<DOMEnvironment>({
       [],
       {
         constructWith: [
-          atArg(0, (ctx) => ctx.realm.getAssociatedDocument()),
-          atArg(1, (ctx) => ctx.getEnvironment()),
+          atArg(0, (env) => env.realm.getAssociatedDocument()),
+          atArg(1, (env) => env),
         ],
       },
     ),

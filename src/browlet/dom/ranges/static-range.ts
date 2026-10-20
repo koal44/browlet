@@ -1,7 +1,7 @@
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember, idlType, impl, reference,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';
@@ -66,6 +66,6 @@ export const staticRangeInitIDL = defineDictionary({
  */
 export const staticRangeIDL = defineInterface<DOMEnvironment>({
   name: 'StaticRange', inherits: 'AbstractRange', exposed: 'Window',
-  implementation: impl(StaticRangeImpl, { constructWith: [atArg(1, (ctx) => ctx.getEnvironment())] }),
+  implementation: impl(StaticRangeImpl, { constructWith: [atArg(1, (env) => env)] }),
   members: [ctor([arg('init', reference('StaticRangeInit'))])],
 });

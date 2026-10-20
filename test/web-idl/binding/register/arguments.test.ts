@@ -9,6 +9,7 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
+import { createEnvironment, type TestEnvironment } from '../../../js-engine/execution-fixture';
 
 describe('Web IDL implementation argument conversion', () => {
   it('keeps conversion attributes local to arguments across repeated and variadic calls', () => {
@@ -77,35 +78,36 @@ describe('Web IDL implementation argument conversion', () => {
       name: 'RenamedValue', exposed: '*', implementation: impl(ValueImpl),
       members: [ctor([arg('value', idlType.DOMString)]), roAttr('value', idlType.DOMString)],
     });
-    const consumerIDL = defineInterface({
+    const consumerIDL = defineInterface<TestEnvironment>({
       name: 'Consumer', exposed: '*', implementation: impl(ConsumerImpl),
       members: [
         staticOp('read', idlType.DOMString,
           [arg('value', reference(ValueImpl))],
-          { invoke(_ctx, value) { return value.value; } },
+          { invoke(_env, value) { return value.value; } },
         ),
         staticOp('read', idlType.DOMString,
           [arg('value', idlType.DOMString)],
-          { invoke(_ctx, value) { return value.toUpperCase(); } },
+          { invoke(_env, value) { return value.toUpperCase(); } },
         ),
         staticOp('echo', nullable(reference(ValueImpl)),
           [arg('value', nullable(reference(ValueImpl)))],
-          { invoke(_ctx, value) { return value; } },
+          { invoke(_env, value) { return value; } },
         ),
         staticOp('describe', idlType.DOMString,
           [arg('value', union(reference(ValueImpl), idlType.DOMString))],
-          { invoke(_ctx, value) { return typeof value === 'string' ? value : value.value; } },
+          { invoke(_env, value) { return typeof value === 'string' ? value : value.value; } },
         ),
         staticOp('later', promiseType(reference('RenamedValue')),
           [arg('value', reference(ValueImpl))],
-          { invoke(ctx, value) { return ctx.Promise.resolve(value, reference(ValueImpl)); } },
+          { invoke(env, value) { return env.exec.Promise.resolve(value, reference(ValueImpl)); } },
         ),
       ],
     });
-    const world = new BindingWorld([consumerIDL, valueIDL]);
+    const world = new BindingWorld<TestEnvironment>([consumerIDL, valueIDL]);
     const otherRealm = new Realm();
-    const { realm } = installTestBindings(world);
-    installTestBindings(world, otherRealm);
+    const realm = new Realm();
+    world.register(realm, (context) => createEnvironment(realm, context)).install(realm.globalObject);
+    world.register(otherRealm, (context) => createEnvironment(otherRealm, context)).install(otherRealm.globalObject);
     const Value = Reflect.get(otherRealm.globalObject, 'RenamedValue') as new(value: string) => object;
     const Consumer = Reflect.get(realm.globalObject, 'Consumer') as {
       read(value: unknown): string;
@@ -204,12 +206,12 @@ describe('Web IDL implementation argument conversion', () => {
       members: [
         {
           arguments: [{ name: 'settings', type: reference('Settings') }],
-          invoke(_context, settingsValue) { received.push(settingsValue); },
+          invoke(_env, settingsValue) { received.push(settingsValue); },
           kind: 'constructor',
         },
         {
           arguments: [{ name: 'settings', type: reference('Settings'), variadic: true }],
-          invoke(_context, ...settingsValues) { received.push(...settingsValues); },
+          invoke(_env, ...settingsValues) { received.push(...settingsValues); },
           kind: 'operation',
           name: 'apply',
           returns: idlType.undefined,

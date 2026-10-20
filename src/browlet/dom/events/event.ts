@@ -2,7 +2,7 @@ import { InternalError } from '../../../infra/internal-error';
 import {
   arg, atArg, attr, constant, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, roAttr, reference, sequence, tsType, xattr,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { unsafeSharedCurrentTime, type DOMHighResTimeStamp } from '../../timing/index';
 import type { DOMEnvironment } from '../environment';
@@ -323,7 +323,7 @@ export const eventIDL = defineInterface<DOMEnvironment>({
   name: 'Event',
   exposed: '*',
   implementation: impl(EventImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
+    constructWith: [atArg(2, (env) => env.realm.eventTimeStamp())],
   }),
   members: [
     ctor([
@@ -436,7 +436,7 @@ export const customEventIDL = defineInterface<DOMEnvironment>({
   inherits: 'Event',
   exposed: '*',
   implementation: impl(CustomEventImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
+    constructWith: [atArg(2, (env) => env.realm.eventTimeStamp())],
   }),
   members: [
     ctor([

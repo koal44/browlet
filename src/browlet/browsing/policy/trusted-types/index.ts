@@ -1,4 +1,4 @@
-import type { Definition } from '../../../../web-idl/index';
+import type { Definition } from '../../../../web-idl/core/index';
 
 import { trustedHTMLIDL, trustedScriptIDL, trustedScriptURLIDL, trustedTypeIDL } from './value';
 import {

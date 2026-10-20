@@ -1,6 +1,6 @@
 import {
   defineDictionary, dictMember, emptySequence, idlType, sequence,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 /** Objects selected for transfer by a structured-clone operation. */
 export type StructuredSerializeOptionsRecord = {

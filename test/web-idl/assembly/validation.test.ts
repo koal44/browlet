@@ -66,6 +66,38 @@ describe('Web IDL declaration validation', () => {
       .not.toThrow();
   });
 
+  it.each([
+    ['primary interface', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', implementation: impl(class {}, { constructWith: positions }),
+      members: [ctor([], { constructWith: positions })],
+    })]],
+    ['implementation array', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', implementation: [impl(class {}), impl(class {}, { constructWith: positions })],
+      members: [ctor([], { constructWith: positions })],
+    })]],
+    ['constructor overload', (positions: InjectedArgument[]) => [defineInterface({
+      name: 'Example', implementation: impl(class {}, { constructWith: positions }),
+      members: [ctor(), ctor([arg('value', idlType.DOMString)], { constructWith: positions })],
+    })]],
+  ] as const)('rejects constructWith at both levels only during validation: %s', (_name, definitions) => {
+    const resolve = (): never => { throw new Error('Validation must not resolve a dependency'); };
+    for (const positions of [[], [atArg(0, resolve)]]) {
+      const declarations = definitions(positions);
+      expect(() => new DefinitionAssembly(declarations)).not.toThrow();
+      expect(() => validateDefinitions(declarations))
+        .toThrowError(new InternalError('Example declares constructWith on both its implementation and a constructor'));
+    }
+  });
+
+  it.each(['implementation', 'constructor'] as const)('accepts constructWith on the %s alone', (location) => {
+    const positions = [atArg(0, (): never => { throw new Error('Validation must not resolve a dependency'); })];
+    expect(() => validateDefinitions([defineInterface({
+      name: 'Example',
+      implementation: impl(class {}, location === 'implementation' ? { constructWith: positions } : {}),
+      members: [ctor([], location === 'constructor' ? { constructWith: positions } : {})],
+    })])).not.toThrow();
+  });
+
   it.each<Definition>([
     defineInterface({ name: 'Example', members: [roAttr('value', reference('Missing'))] }),
     defineDictionary({ name: 'Example', members: [{ name: 'value', type: sequence(reference('Missing')) }] }),

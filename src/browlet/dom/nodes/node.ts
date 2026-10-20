@@ -5,7 +5,7 @@ import { HTML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE } from '.
 import {
   arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
   constant, integer, op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { EventTargetImpl, type EventImpl } from '../events/index';
 import { RangeImpl } from '../ranges/index';

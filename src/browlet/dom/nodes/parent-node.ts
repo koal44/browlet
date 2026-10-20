@@ -1,6 +1,6 @@
 import {
   arg, defineInterfaceMixin, idlType, nullable, op, roAttr, reference, union, xattr,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { HTMLCollectionImpl, NodeListImpl } from './collections';
 import type { InsertionParent, NodeImpl } from './node';

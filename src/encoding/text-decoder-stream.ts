@@ -3,7 +3,7 @@ import { isFixedBufferSource } from '../js-engine/index';
 import {
   arg, atArg, ctor, defineIncludes, defineInterface, emptyDictionary, idlType, impl,
   reference,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import {
   GenericTransformStreamMixin, TransformStreamImpl, type ReadableStreamImpl,
   type StreamsEnvironment, type WritableStreamImpl,
@@ -80,7 +80,7 @@ export const textDecoderStreamIDL = defineInterface<StreamsEnvironment>({
   exposed: '*',
   implementation: impl(TextDecoderStreamImpl, {
     constructWith: [
-      atArg(2, (ctx) => ctx.getEnvironment()),
+      atArg(2, (env) => env),
     ],
   }),
   members: [ctor([

@@ -2,7 +2,7 @@ import { TypeError } from '../infra/exceptions';
 import {
   arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
   sequence, staticOp, stringifier, union, xattr, type Definition,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import { serializeHost } from './host';
 import { serializeOrigin, type Origin } from './origin';

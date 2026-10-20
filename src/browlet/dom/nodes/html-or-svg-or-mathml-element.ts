@@ -1,4 +1,4 @@
-import { attr, defineInterfaceMixin, idlType, reflect, xattr } from '../../../web-idl/index';
+import { attr, defineInterfaceMixin, idlType, reflect, xattr } from '../../../web-idl/core/index';
 
 import type { ElementImpl } from './element';
 

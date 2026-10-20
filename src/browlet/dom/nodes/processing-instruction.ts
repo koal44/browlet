@@ -1,7 +1,7 @@
 import {
   arg, atArg, ctor, defineInterface, idlType, impl, nullable, op, roAttr, sequence,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { isValidAttributeLocalName, isXMLName, parsePseudoAttributes } from '../infra/index';
 import type { DOMEnvironment } from '../environment';
@@ -18,8 +18,8 @@ export class ProcessingInstructionImpl extends CharacterDataImpl {
   /** Parsed pseudo-attributes; malformed data produces an empty map. */
   #attributeMap = new Map<string, string>();
 
-  constructor(target: string, data: string, ownerDoc: DocumentImpl, env: DOMEnvironment) {
-    super(NodeType.ProcessingInstruction, data, ownerDoc, env);
+  constructor(target: string, data: string, ownerDoc: DocumentImpl) {
+    super(NodeType.ProcessingInstruction, data, ownerDoc);
     if (!isXMLName(target) || data.includes('?>')) {
       throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
     }
@@ -109,7 +109,11 @@ export const processingInstructionIDL = defineInterface<DOMEnvironment>({
   members: [
     ctor(
       [arg('target', idlType.DOMString), arg('data', idlType.DOMString, { default: '', optional: true })],
-      { constructWith: [atArg(2, (ctx) => ctx.realm.getAssociatedDocument()), atArg(3, (ctx) => ctx.getEnvironment())] },
+      {
+        constructWith: [
+          atArg(2, (env) => env.realm.getAssociatedDocument()),
+        ],
+      },
     ),
     roAttr('target', idlType.DOMString),
     op('hasAttributes', idlType.boolean),

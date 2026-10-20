@@ -9,7 +9,7 @@ import {
   CallbackFunctionStamper, type StampedCallbackFunction,
 } from '../../../../src/web-idl/values/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
-import type { WebIDLRealm } from '../../../../src/web-idl/index';
+import type { WebIDLEnvironment, WebIDLRealm } from '../../../../src/web-idl/index';
 
 import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
@@ -208,7 +208,7 @@ describe('Web IDL implementation callback conversion', () => {
         ]),
         op('construct', idlType.any,
           [arg('callback', reference(factory.name))],
-          invokeWith(atArg(1, (_receiver, method) => method.realm)),
+          invokeWith(atArg<WebIDLEnvironment>(1, (_env, methodEnv) => methodEnv.realm)),
         ),
       ],
     });
@@ -300,7 +300,7 @@ describe('Web IDL implementation callback conversion', () => {
         ctor(),
         op('construct', idlType.double,
           [arg('callback', reference(factory.name))],
-          invokeWith(atArg(1, (_receiver, method) => method.realm)),
+          invokeWith(atArg<WebIDLEnvironment>(1, (_env, methodEnv) => methodEnv.realm)),
         ),
       ],
     });
@@ -333,7 +333,7 @@ describe('Web IDL implementation callback conversion', () => {
         ctor(),
         op('construct', idlType.double,
           [arg('callback', reference(factory.name))],
-          invokeWith(atArg(1, (_receiver, method) => method.realm)),
+          invokeWith(atArg<WebIDLEnvironment>(1, (_env, methodEnv) => methodEnv.realm)),
         ),
       ],
     });
@@ -388,7 +388,7 @@ describe('Web IDL implementation callback conversion', () => {
       name: 'FactoryOwner', exposed: '*', implementation: impl(FactoryOwnerImpl),
       members: [
         ctor([arg('callback', reference(factory.name))]),
-        op('construct', idlType.any, [], invokeWith(atArg(0, (_receiver, method) => method.realm))),
+        op('construct', idlType.any, [], invokeWith(atArg<WebIDLEnvironment>(0, (_env, methodEnv) => methodEnv.realm))),
       ],
     });
     const constructionRealm = new Realm();

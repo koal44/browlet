@@ -17,7 +17,8 @@ import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timin
 import type { EventLoop, BrowletRealm, WindowRealm, WindowAgent } from './scripting/index';
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
-import type { DocumentImpl, ModuleMap } from './dom/nodes/index';
+import type { AbortSignalImpl } from './dom/abort/index';
+import type { DocumentImpl, DOMNodeFactory, ModuleMap } from './dom/nodes/index';
 import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
@@ -106,9 +107,12 @@ export class BrowletEnvironmentRecord implements FetchEnvironmentRecord {
 }
 
 /** Engine, Fetch, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
-export interface BrowletExecution extends RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, StyleletExecution {
+export interface BrowletExecution extends
+  RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, DOMNodeFactory, StyleletExecution {
   /** Allocate a Document and its descendant-node factory in this environment's binding. */
   createDocument(): DocumentImpl;
+  /** Allocate an AbortSignal with this environment's binding ownership before first projection. */
+  createAbortSignal(): AbortSignalImpl;
 }
 
 /** Composed browser settings and execution for one realm and global. */

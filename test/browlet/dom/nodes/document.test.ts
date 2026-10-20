@@ -207,8 +207,8 @@ describe('Document', () => {
   it('represents document fragments and shadow-root event topology', () => {
     const document = createTestDocument();
     const host = document.createElementNode('main', HTML_NAMESPACE);
-    const fragment = new DocumentFragmentImpl(document, null, document.env);
-    const root = new ShadowRootImpl(host, 'closed', document.env);
+    const fragment = new DocumentFragmentImpl(document);
+    const root = new ShadowRootImpl(host, 'closed');
 
     expect(fragment.nodeType).toBe(NodeType.DocumentFragment);
     expect(fragment.host).toBeNull();

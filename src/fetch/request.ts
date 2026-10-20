@@ -7,7 +7,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
   areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
@@ -697,7 +697,7 @@ export const requestIDL = defineInterface<FetchEnvironment>({
   name: 'Request',
   exposed: ['Window', 'Worker'],
   implementation: impl(RequestImpl, {
-    constructWith: [atArg(3, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(3, (env) => env)],
   }),
   members: [
     ctor(
@@ -706,10 +706,10 @@ export const requestIDL = defineInterface<FetchEnvironment>({
         arg('init', reference('RequestInit'), { optional: true, default: emptyDictionary }),
       ],
       {
-        construct(ctx, input, init): RequestImpl {
+        construct(env, input, init): RequestImpl {
           return RequestImpl.create(
             input as FetchRequestInfo, init as FetchRequestInit,
-            ctx.getEnvironment(),
+            env,
           );
         },
       },

@@ -3,7 +3,7 @@ import type { JSFunction } from '../js-engine/index';
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
   emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../fetch/index';
 
 import { GlobalTimers, type TimerAction } from './scripting/index';

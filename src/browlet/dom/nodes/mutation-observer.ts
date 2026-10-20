@@ -3,7 +3,7 @@ import { InternalError } from '../../../infra/internal-error';
 import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, onError, op, reference, sequence,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { DOMEnvironment } from '../environment';
 
@@ -176,7 +176,7 @@ export const mutationObserverIDL = defineInterface<DOMEnvironment>({
   name: 'MutationObserver',
   exposed: 'Window',
   implementation: impl(MutationObserverImpl, {
-    constructWith: [atArg(1, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(1, (env) => env)],
   }),
   members: [
     ctor([arg('callback', reference('MutationCallback'), onError('report'))]),

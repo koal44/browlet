@@ -3,7 +3,7 @@ import { InternalError } from '../infra/internal-error';
 import {
   arg, atArg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   reference, sequence, union,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import { type BlobImpl, FileImpl, type FileEnvironment } from '../file/index';
 
 export type FormDataEntryValue = FileImpl | ScalarValueString;
@@ -146,7 +146,7 @@ export const formDataIDL = defineInterface<FileEnvironment>({
   name: 'FormData',
   exposed: ['Window', 'Worker'],
   implementation: impl(FormDataImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(2, (env) => env)],
   }),
   members: [
     ctor([

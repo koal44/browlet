@@ -1,5 +1,5 @@
 import { toString } from '../js-engine/index';
-import { atArg, ctor, defineIncludes, defineInterface, impl } from '../web-idl/index';
+import { atArg, ctor, defineIncludes, defineInterface, impl } from '../web-idl/core/index';
 import {
   GenericTransformStreamMixin, TransformStreamImpl,
   type ReadableStreamImpl, type StreamsEnvironment, type WritableStreamImpl,
@@ -72,7 +72,7 @@ export const textEncoderStreamIDL = defineInterface<StreamsEnvironment>({
   name: 'TextEncoderStream',
   exposed: '*',
   implementation: impl(TextEncoderStreamImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(0, (env) => env)],
   }),
   members: [ctor()],
 });

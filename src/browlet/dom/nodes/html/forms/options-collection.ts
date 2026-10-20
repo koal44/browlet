@@ -1,7 +1,7 @@
 import {
   arg, attr, defineInterface, DOMExceptionImpl, DOMExceptionNames, idlType, impl, nullable, op,
   reference, union, xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 
 import { HTMLCollectionImpl } from '../../collections';
 import { HTMLElementImpl } from '../html-element';
@@ -101,7 +101,7 @@ export const htmlOptionsCollectionIDL = defineInterface({
       {
         ...xattr('CEReactions'),
         special: 'setter',
-        invoke(_context, index, option) {
+        invoke(_env, index, option) {
           (this as HTMLOptionsCollectionImpl).setOption(index, option);
         },
       },

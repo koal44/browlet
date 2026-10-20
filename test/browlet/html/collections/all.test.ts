@@ -89,6 +89,30 @@ describe('native document.all', () => {
     expect(browser.document.all).toBe(all);
   });
 
+  itPassesWith('htmlDDA')('keeps calls independent of replaced item methods and projects live collection results', async () => {
+    const browser = new Browlet({ route: () => '' });
+    expect(await browser.evaluate(() => {
+      const first = document.createElement('div');
+      const second = document.createElement('div');
+      first.id = second.id = 'shared';
+      document.body.append(first, second);
+      const replaced = () => { throw new Error('Author item must not be called'); };
+      HTMLAllCollection.prototype.item = replaced;
+      const all = document.all;
+      Object.defineProperty(all, 'item', { value: replaced, configurable: true });
+      const call = (...args: unknown[]) => Reflect.apply(all as unknown as (...args: unknown[]) => unknown, {}, args);
+      let conversions = 0;
+      const name = { toString() { conversions++; return 'shared'; } };
+      const ignored = { toString() { throw new Error('Extra arguments must not be converted'); } };
+      const matches = call(name, ignored) as HTMLCollection;
+      const results = [matches instanceof HTMLCollection, matches.length, matches[0] === first, matches[1] === second];
+      first.remove();
+      results.push(matches.length, matches[0] === second, call('shared') === second,
+        call('missing') === null, call() === null, call(undefined) === null, conversions);
+      return results;
+    })).toEqual([true, 2, true, true, 1, true, true, true, true, true, 1]);
+  });
+
   itPassesWith('htmlDDA')('rejects document.all returned by an author primitive-conversion hook', async () => {
     const browser = new Browlet({ route: () => '' });
     expect(await browser.evaluate(() => {

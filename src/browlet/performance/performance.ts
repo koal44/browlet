@@ -1,6 +1,6 @@
 import {
   defineInterface, idlType, impl, op, reference, roAttr, xattr,
-} from '../../web-idl/index';
+} from '../../web-idl/core/index';
 
 import type { EnvironmentTiming, DOMHighResTimeStamp } from '../timing/index';
 import { EventTargetImpl } from '../dom/events/index';

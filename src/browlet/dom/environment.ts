@@ -19,6 +19,8 @@ export interface DOMRealm {
   eventTimeStamp(): DOMHighResTimeStamp;
   /** The global's associated document; non-Window globals have none. */
   getAssociatedDocument(): DocumentImpl | null;
+  /** Report an exception thrown by an event listener in the listener's own realm. */
+  reportException(exception: unknown): void;
 }
 
 /** Allocation facilities supplied to DOM implementations by their owning environment. */

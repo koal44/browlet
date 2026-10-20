@@ -22,18 +22,18 @@ declare const hostRealm: HostRealm;
 declare const minimalRealm: WebIDLRealm;
 class Example { value = 1; }
 
-atArg(0, (ctx) => ctx.getEnvironment());
-attrFn((ctx) => function value() { return ctx.realm.globalObject; });
-// @ts-expect-error A default binding context has no HTML timing API.
-atArg(0, (ctx) => ctx.realm.eventTimeStamp());
+atArg(0, (env) => env);
+attrFn<WebIDLEnvironment>((env) => function value() { return env.realm.globalObject; });
+// @ts-expect-error An undeclared environment exposes no host facilities.
+atArg(0, (env) => env.realm.eventTimeStamp());
 
 const definition = defineInterface<HostEnvironment>({
   name: 'Example',
   implementation: impl(Example, {
-    constructWith: [atArg(0, (ctx) => ctx.realm.eventTimeStamp())],
-    initializeImplementation(ctx, value) {
-      ctx.getEnvironment().exec.createEvent();
-      value.value = ctx.realm.eventTimeStamp();
+    constructWith: [atArg(0, (env) => env.realm.eventTimeStamp())],
+    initializeImplementation(env, value) {
+      env.exec.createEvent();
+      value.value = env.realm.eventTimeStamp();
       // @ts-expect-error Initializers receive the implementation's fields, not arbitrary properties.
       value.missing;
       // @ts-expect-error The implementation's field types remain checked.
@@ -43,17 +43,17 @@ const definition = defineInterface<HostEnvironment>({
   members: [
     ctor(
       [],
-      { constructWith: [atArg(0, (ctx) => ctx.realm.eventTimeStamp())] },
+      { constructWith: [atArg(0, (env) => env.realm.eventTimeStamp())] },
     ),
     roAttr('time', idlType.double, {
-      get(ctx) { return ctx.realm.eventTimeStamp(); },
+      get(env) { return env.realm.eventTimeStamp(); },
     }),
     op('read', idlType.double,
       [],
       {
-        invoke(ctx) {
-          ctx.getEnvironment().exec.createEvent();
-          return ctx.realm.eventTimeStamp();
+        invoke(env) {
+          env.exec.createEvent();
+          return env.realm.eventTimeStamp();
         },
       },
     ),
@@ -62,12 +62,12 @@ const definition = defineInterface<HostEnvironment>({
 serializeDefinition(definition);
 impl(Example, {
   // @ts-expect-error The constructor determines the instance type accepted by its initializer.
-  initializeImplementation(_ctx, _value: { missing: string; }) {},
+  initializeImplementation(_env, _value: { missing: string; }) {},
 });
 const callbackDefinition = defineCallbackInterface<HostEnvironment>({
   name: 'Callback',
   members: [],
-  toImpl(_ctx, cbValue) {
+  toImpl(_env, cbValue) {
     cbValue.realm.eventTimeStamp();
     return cbValue.object;
   },

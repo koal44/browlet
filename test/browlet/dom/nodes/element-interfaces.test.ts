@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Browlet } from '../../../../src/browlet/browlet';
 import { browletDefinitions } from '../../../../src/browlet/bindings';
+import type { BrowletEnvironment } from '../../../../src/browlet/environment';
 import type { ElementImpl } from '../../../../src/browlet/dom/nodes/element';
 import { ElementTag } from '../../../../src/browlet/dom/nodes/element-definitions/element-tag';
 import { HTMLArticleElementImpl } from '../../../../src/browlet/dom/nodes/html/sections/article';
@@ -60,7 +61,7 @@ describe('HTML element interfaces', () => {
         const element = browser.document.createElement(name);
         const implementation = unwrap<ElementImpl>(element);
         const clone = unwrap<ElementImpl>(element.cloneNode());
-        validateImplementationMembers(definitions.get(interfaceName)!, implementation);
+        validateImplementationMembers<BrowletEnvironment>(definitions.get(interfaceName)!, implementation);
         expect(constructors.has(implementation.constructor), name).toBe(false);
         expect(clone.constructor, name).toBe(implementation.constructor);
         expect(typeof implementation.tag, name).toBe('number');

@@ -4,7 +4,7 @@ import {
   arg, atArg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,
   DOMExceptionNames, DOMExceptionImpl,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { AbortSignalImpl } from '../abort/index';
 import type { ShadowRootMode } from '../nodes/index';
@@ -543,7 +543,7 @@ export const eventTargetIDL = defineInterface<DOMEnvironment>({
   name: 'EventTarget',
   exposed: '*',
   implementation: impl(EventTargetImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(0, (env) => env)],
   }),
   members: [
     ctor(),
@@ -582,7 +582,7 @@ export const eventListenerIDL = defineCallbackInterface<DOMEnvironment>({
   name: 'EventListener',
   // Event dispatch retains the callback realm and original object identity in
   // addition to the callback-interface invocation steps.
-  toImpl(_ctx, cbValue) {
+  toImpl(_env, cbValue) {
     return new EventListenerValue(
       cbValue.object,
       cbValue.realm,

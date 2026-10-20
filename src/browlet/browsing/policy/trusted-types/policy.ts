@@ -2,7 +2,7 @@ import { TypeError } from '../../../../infra/exceptions';
 import {
   arg, defineCallbackFunction, defineDictionary, defineInterface, dictMember, idlType,
   impl, nullable, onError, op, reference, roAttr,
-} from '../../../../web-idl/index';
+} from '../../../../web-idl/core/index';
 
 import { TrustedHTMLImpl, TrustedScriptImpl, TrustedScriptURLImpl, type TrustedTypeName } from './value';
 

@@ -7,7 +7,8 @@ import {
 import { getImplementationObject } from '../../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
-import { installTestBindings } from '../../../support/web-idl-binding';
+import { TestRealm } from '../../../support/web-idl-realm';
+import { createEnvironment, type TestEnvironment } from '../../../js-engine/execution-fixture';
 
 describe('Web IDL implementation result conversion', () => {
   it('projects nested implementation results without exposing their identity', async () => {
@@ -52,7 +53,7 @@ describe('Web IDL implementation result conversion', () => {
       implementations.set(label, value);
       return value;
     };
-    const ownerIDL = defineInterface({
+    const ownerIDL = defineInterface<TestEnvironment>({
       name: 'NestedResultOwner',
       exposed: 'Window',
       implementation: impl(NestedResultOwnerImpl),
@@ -91,16 +92,16 @@ describe('Web IDL implementation result conversion', () => {
         op('createdPromiseResult', promiseType(resultType),
           [],
           {
-            invoke(context) {
-              return context.Promise.resolve(createResult('created promise'), resultType);
+            invoke(env) {
+              return env.exec.Promise.resolve(createResult('created promise'), resultType);
             },
           },
         ),
         op('resolvedPromiseResult', promiseType(resultType),
           [],
           {
-            invoke(context) {
-              const result = context.Promise.withResolvers(resultType);
+            invoke(env) {
+              const result = env.exec.Promise.withResolvers(resultType);
               result.resolve(createResult('resolved promise'));
               return result.promise;
             },
@@ -109,8 +110,8 @@ describe('Web IDL implementation result conversion', () => {
         op('reactedPromiseResult', promiseType(resultType),
           [],
           {
-            invoke(context) {
-              return context.Promise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
+            invoke(env) {
+              return env.exec.Promise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
             },
           },
         ),
@@ -121,7 +122,7 @@ describe('Web IDL implementation result conversion', () => {
             ),
           ],
           {
-            invoke(_context, callback) {
+            invoke(_env, callback) {
               (callback as (
                 direct: NestedResultImpl,
                 union: NestedResultImpl,
@@ -134,13 +135,15 @@ describe('Web IDL implementation result conversion', () => {
         ),
       ],
     });
-    const world = new BindingWorld([
+    const world = new BindingWorld<TestEnvironment>([
       nestedResultIDL,
       nestedResultCallbackIDL,
       resultDictionaryIDL,
       ownerIDL,
     ]);
-    const { globalObject } = installTestBindings(world);
+    const realm = new TestRealm();
+    world.register(realm, (context) => createEnvironment(realm, context)).install(realm.globalObject);
+    const { globalObject } = realm;
     type NestedResult = { label: string; };
     const NestedResultOwner = Reflect.get(globalObject, ownerIDL.name) as {
       new(): {

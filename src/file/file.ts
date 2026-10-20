@@ -3,7 +3,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, reference, roAttr, sequence, xattr,
   type SerialSteps,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import { parseMIMEType } from '../mime/index';
 
 import {
@@ -163,7 +163,7 @@ export const fileIDL = defineInterface<FileEnvironment>({
   ...xattr('Serializable'),
   serialSteps: fileSerialSteps,
   implementation: impl(FileImpl, {
-    constructWith: [atArg(3, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(3, (env) => env)],
   }),
   members: [
     ctor([

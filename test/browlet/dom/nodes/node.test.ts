@@ -169,14 +169,14 @@ describe('Node tree order', () => {
     const host = document.createElement('host');
     const lightChild = document.createTextNode('light');
     host.appendChild(lightChild);
-    const shadow = new ShadowRootImpl(host, 'closed', document.env);
+    const shadow = new ShadowRootImpl(host, 'closed');
     const nestedHost = document.createElement('nested-host');
     const shadowLast = document.createComment('shadow last');
     shadow.appendChild(nestedHost);
     shadow.appendChild(shadowLast);
     const nestedLight = document.createTextNode('nested light');
     nestedHost.appendChild(nestedLight);
-    const nestedShadow = new ShadowRootImpl(nestedHost, 'open', document.env);
+    const nestedShadow = new ShadowRootImpl(nestedHost, 'open');
     const nestedShadowChild = document.createTextNode('nested shadow');
     nestedShadow.appendChild(nestedShadowChild);
     // attachShadow is a later slice; these are the implementation associations it establishes.
@@ -198,7 +198,7 @@ describe('Node tree order', () => {
     const host = document.createElement('host');
     const lightChild = document.createTextNode('light');
     host.appendChild(lightChild);
-    const shadow = new ShadowRootImpl(host, 'open', document.env);
+    const shadow = new ShadowRootImpl(host, 'open');
     host.shadowRoot = shadow;
 
     expect(collectDescendants(host, true)).toEqual([host, shadow, lightChild]);

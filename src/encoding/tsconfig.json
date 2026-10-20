@@ -15,7 +15,6 @@
     { "path": "../infra" },
     { "path": "../js-engine" },
     { "path": "../web-idl/core" },
-    { "path": "../web-idl" },
     { "path": "../streams" }
   ]
 }

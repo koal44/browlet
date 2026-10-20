@@ -235,7 +235,7 @@ configures `HTMLAllCollection` with V8's public `SetCallAsFunctionHandler()` and
 `createHTMLDDA(context, call)`, with native regressions for calls, special checks,
 realm ownership, direct property handlers, and garbage collection. No additional
 V8 patch is needed. The factory invokes supplied call steps without interpreting
-their arguments; HTML owns the collection's dispatch and conversion rules.
+their arguments; HTML owns collection lookup and Web IDL binds its declared types.
 
 Web IDL's `HTMLAllCollectionBinding` reuses its indexed/named algorithms through the addon's direct
 `setPropertyHandlers()` entry point. The older object-to-object delegate adapter
@@ -246,10 +246,11 @@ Web IDL intercepts collection properties; ordinary accessors and data properties
 remain on the actual platform object. This preserves alternate receivers even on
 Node 26+, whose property callbacks expose only the holder. No Node-version branch
 is needed in Web IDL. Native and binding regressions cover these receiver cases.
-HTML lookup/call steps remain in HTML, allocation in addon/JS Engine, and reusable
-indexed/named behavior in Web IDL.
+Collection lookup remains in HTML, allocation in addon/JS Engine, and call conversion
+and reusable indexed/named behavior in Web IDL.
 
-The declaration's `createHTMLAllCollection` hook is specific to this interface.
+The interface declares `documentAll: true`; its binding uses the declared `item`
+operation for call conversion and dispatch without consulting author `.item` properties.
 Native allocation for other objects need not share its undetectable callable and
 property-handler contract. JS Engine's shared `isObject`/`isCallable` operations
 handle its misleading `typeof`. Web IDL conversion, callback boundaries and

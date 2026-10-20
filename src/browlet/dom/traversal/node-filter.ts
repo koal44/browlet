@@ -1,6 +1,6 @@
 import {
-  arg, constant, defineCallbackInterface, idlType, integer, op, reference, type IDLCallbackInterface,
-} from '../../../web-idl/index';
+  arg, constant, defineCallbackInterface, idlType, integer, op, reference, type IDLCallbackInterfaceValue,
+} from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';
 
@@ -16,17 +16,17 @@ export const SHOW_ALL = 0xffffffff;
 
 // Retain the original callback only at the binding boundary, including object identity
 // for NodeIterator.filter and TreeWalker.filter. Traversal receives only the converted invocation contract.
-const callbacks = new WeakMap<NodeFilterCallback, IDLCallbackInterface>();
+const callbacks = new WeakMap<NodeFilterCallback, IDLCallbackInterfaceValue>();
 
 /** Supply the converted callback value to a traversal object's Web IDL getter. */
-export function getNodeFilterCallback(filter: NodeFilterCallback | null): IDLCallbackInterface | null {
+export function getNodeFilterCallback(filter: NodeFilterCallback | null): IDLCallbackInterfaceValue | null {
   return filter === null ? null : callbacks.get(filter)!;
 }
 
 // https://dom.spec.whatwg.org/#interface-nodefilter
 export const nodeFilterIDL = defineCallbackInterface({
   name: 'NodeFilter', exposed: 'Window',
-  toImpl(_ctx, callback): NodeFilterCallback {
+  toImpl(_env, callback): NodeFilterCallback {
     const filter: NodeFilterCallback = {
       acceptNode: (node) => callback.callUserObjectOperation('acceptNode', [node]) as number,
     };

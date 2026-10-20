@@ -1,5 +1,5 @@
 import { SVG_NAMESPACE } from '../../../../infra/index';
-import { defineInterface, impl } from '../../../../web-idl/index';
+import { defineInterface, impl } from '../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory } from '../element-definitions/index';
 

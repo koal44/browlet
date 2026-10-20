@@ -1,6 +1,6 @@
 import {
   defineInterfaceMixin, definePartialInterfaceMixin, nullable, roAttr, reference,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 import type { CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
 
 import type { DocumentImpl } from './document';

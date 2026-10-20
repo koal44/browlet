@@ -2,7 +2,7 @@ import { HTML_NAMESPACE } from '../../../../infra/index';
 import {
   attr, ctor, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl, reference,
   reflect, xattr, type Definition,
-} from '../../../../web-idl/index';
+} from '../../../../web-idl/core/index';
 
 import { htmlOrSVGOrMathMLElementIDL } from '../html-or-svg-or-mathml-element';
 import { HTMLElementImpl } from './html-element';

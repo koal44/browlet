@@ -3,7 +3,7 @@ import { asciiLower } from '../../../../../infra/ascii';
 import {
   attr, ctor, defineIncludes, defineInterface, idlType, impl, nullable, reference, reflectEnumerated,
   reflectTokens, roAttr, xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
 import { splitOnAsciiWhitespace } from '../../../infra/index';

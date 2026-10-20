@@ -45,6 +45,12 @@ export function validateImplementationMembers<Env>(definition: PrimaryInterfaceD
         if (member.invoke || hasExtendedAttribute(member.extendedAttributes, 'Default')) continue;
         name = member.name;
         break;
+      case 'named-getter':
+        if (typeof Reflect.get(implementation, 'getSupportedPropertyNames') !== 'function') {
+          throw new Error(`Web IDL ${definition.name}.getSupportedPropertyNames has no implementation`);
+        }
+        name = member.method;
+        break;
       case 'iterable':
         if (member.key !== undefined) name = 'getEntryList';
         break;

@@ -1,9 +1,9 @@
 import { RangeError } from '../infra/exceptions';
-import { getV } from '../js-engine/index';
+import { getV, type JSEnvironment } from '../js-engine/index';
 import {
   arg, attrFn, onError, ctor, defineCallbackFunction, defineDictionary, defineInterface,
   dictMember, idlType, impl, roAttr, reference,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 /*
  * dictionary QueuingStrategy {
@@ -106,7 +106,7 @@ export class ByteLengthQueuingStrategyImpl {
 
 // -- Web IDL ------------------------------------------------------------
 
-export const byteLengthQueuingStrategyIDL = defineInterface({
+export const byteLengthQueuingStrategyIDL = defineInterface<JSEnvironment>({
   name: 'ByteLengthQueuingStrategy',
   exposed: '*',
   implementation: impl(ByteLengthQueuingStrategyImpl),
@@ -114,7 +114,8 @@ export const byteLengthQueuingStrategyIDL = defineInterface({
     ctor([arg('init', reference('QueuingStrategyInit'))]),
     roAttr('highWaterMark', idlType.unrestrictedDouble),
     // BINDING_INTEGRATION: primitive chunks use the size function's owning realm.
-    roAttr('size', reference('Function'), attrFn(({ realm }) => {
+    roAttr('size', reference('Function'), attrFn((env) => {
+      const { realm } = env;
       return function size(chunk: unknown) {
         return getV(chunk, 'byteLength', realm);
       };

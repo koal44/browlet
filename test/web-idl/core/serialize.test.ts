@@ -183,12 +183,7 @@ dictionary AddEventListenerOptions : EventListenerOptions {
         attr('text', idlType.DOMString, { stringifier: true }),
         op('run', idlType.undefined),
         op('run', idlType.undefined, [arg('value', idlType.long)]),
-        op(undefined, idlType.object,
-          [arg('name', idlType.DOMString)],
-          {
-            special: 'getter',
-          },
-        ),
+        { kind: 'named-getter', method: 'getNamedProperty', returns: reference('Interface'), serializedType: idlType.object },
         staticOp('create', reference('Interface'), []),
         stringifier(),
         iter(idlType.DOMString),
@@ -212,6 +207,20 @@ dictionary AddEventListenerOptions : EventListenerOptions {
   async_iterable<DOMString>();
   readonly maplike<DOMString, long>;
   setlike<DOMString>;`);
+  });
+
+  it('preserves named-getter result spelling, method exposure, and argument identifiers', () => {
+    expect(serializeMember({
+      kind: 'named-getter', method: 'lookup', name: 'getNamedItem',
+      argumentName: 'qualifiedName', returns: nullable(reference('Attr')),
+    })).toBe('getter Attr? getNamedItem(DOMString qualifiedName);');
+    expect(serializeMember({
+      kind: 'named-getter', method: 'lookup', name: 'namedItem',
+      returns: nullable(union(reference('Element'), reference('Collection'))),
+    })).toBe('getter (Element or Collection)? namedItem(DOMString name);');
+    expect(serializeMember({
+      kind: 'named-getter', method: 'lookup', returns: idlType.DOMString,
+    })).toBe('getter DOMString(DOMString name);');
   });
 
   it('serializes the complete type vocabulary and type composition', () => {

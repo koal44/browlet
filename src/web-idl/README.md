@@ -14,17 +14,18 @@ records backend constraints and unresolved behavior.
 | [`index.ts`](index.ts) | Core plus BindingWorld, binding contracts, and stamped-object types |
 | [`generate.ts`](generate.ts) | Development-only TypeScript emission from a completed DefinitionAssembly |
 
-Stylelet and Selectlet can use Core without loading Browlet's runtime. The full
-entry augments declaration hooks with typed `BindingContext` arguments.
-Core and full-binding type fixtures are compiled separately so the augmentation
-cannot hide a dependency in the standalone surface.
+Stylelet and Selectlet can use Core without loading Browlet's runtime. Core owns
+the complete declaration contracts, including constructor, accessor, operation,
+and callback-adapter steps. Those steps receive the declared environment directly;
+they cannot access BindingContext. Core and full-binding type fixtures compile
+separately to verify that declarations need no runtime imports or augmentation.
 Web IDL runtime modules import Core through its index; Core modules import their siblings directly.
 
 | Modules | Responsibility |
 | --- | --- |
 | `core/declarations.ts`, `core/helpers.ts` | Complete definition records and declaration builders |
 | `core/members.ts` | Member and argument records, permitted member sets, and legacy property hooks |
-| `core/types.ts` | Type expressions, literals, extended attributes, implementation identity, and binding-hook contracts |
+| `core/types.ts` | Type expressions, literals, extended attributes, implementation identity, environment dependencies, and callback-adapter contracts |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
 | `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
 | `core/execution.ts` | Host-neutral execution contract supplying the DOMException constructor |
@@ -137,9 +138,10 @@ BindingWorld; generic assembly and binding do not interpret element names.
 Normal assembly trusts declarations. Call `validateDefinitions()` from
 `assembly/index.ts` during development or tests to check duplicate primary names,
 orphan partials or includes, inheritance and typedef cycles, serialization markers,
-empty or duplicate implementation registrations, repeated injected argument
-positions, and unresolved types, including unused aliases and mixins. Browlet's complete
-declaration set has a dedicated validation test. Required type resolution still
+empty or duplicate implementation registrations, conflicting `constructWith`
+locations, repeated injected argument positions, and unresolved types, including
+unused aliases and mixins. Browlet's complete declaration set has a dedicated
+validation test. Required type resolution still
 throws when assembly cannot produce a valid IDL type. Forward references and
 recursive dictionary values remain valid; an unimplemented conversion for a
 recognized type is a separate runtime limitation.
@@ -156,7 +158,7 @@ independently meaningful specification behavior out of the implementation.
 
 Declarations take one environment type, which also determines their realm type.
 For example, `defineInterface<DOMEnvironment>()` gives its callbacks both
-`ctx.getEnvironment().exec.createEvent()` and `ctx.realm.eventTimeStamp()`.
+`env.exec.createEvent()` and `env.realm.eventTimeStamp()`.
 The host's binding world must supply that environment contract.
 
 Binding recognizes `DOMExceptionImpl` and its subclasses during projection,
@@ -196,25 +198,49 @@ Its constructor dependency is declared once:
 
 ```ts
 implementation: impl(TextEncoderImpl, {
-  constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
+  constructWith: [atArg(0, (env) => env)],
 }),
 ```
 
 `atArg()` inserts the dependency into the implementation argument list; converted
 author arguments fill the remaining positions. Both public construction and
 `ctx.construct(Impl, argumentsList)` use the declaration; the latter accepts an
-existing argument array without spreading or changing it. Operation-specific dependencies use
-`invokeWith()`. Keep implementation-only arguments last when translating a spec
+existing argument array without spreading or changing it. For dependencies needed
+only by public construction, put `constructWith` on the constructor member instead.
+Declaring it at both levels, even as an empty list, is a validation error.
+Operation-specific dependencies use `invokeWith()`.
+Keep implementation-only arguments last when translating a spec
 signature. Ordinary implementations receive `env`, never the Binding Context.
-An `atArg()` resolver receives `(receiver, method)` contexts. Select
-`receiver.getEnvironment()` for owner dependencies or `method.getEnvironment()`
-for allocations belonging to the invoked member's realm.
+An `atArg()` resolver receives `(env, methodEnv)`. Select `env` for receiver-owned
+dependencies or `methodEnv` for allocations belonging to the invoked member's
+realm. Constructors supply the same environment in both positions. Binding
+selects these owners and retains conversion, projection, and exception realization.
 
-For automatically bound legacy getters, `indexedGetter()` and `namedGetter()`
-declare their live supported-property algorithms. Do not infer dense indices
-from `length` or duplicate the operation in a custom binding. Use `attrFn()` for
-an attribute whose value is a retained built-in function. `cbDict()` selects the
-original dictionary object as the receiver for its callback members.
+Declaration callbacks obtain owner state and execution facilities through the
+selected environment. Browlet supplies bound node and AbortSignal allocation
+at its composition root; declarations do not build an allocator around Binding
+Context. Pure forwarding callbacks ignore the environment argument.
+
+Trusted Types predicates use `unwrapArg()` and implementation brand checks;
+HTMLAllCollection declares `documentAll: true`. HTML's reflection annotations
+and `[HTMLConstructor]` select adapters supplied at composition, which retain
+frozen-array result identity and custom-element platform construction. These
+adapters still use BindingContext inside Binding integration; declarations do not
+receive it, and environments do not expose it through an equivalent façade.
+
+For automatically bound legacy indexed getters, `indexedGetter()` declares the
+live supported-index algorithm. Do not infer dense indices from `length`.
+A `NamedGetterMember` declares `kind: 'named-getter'`, the implementation `method`,
+and its `returns` type. The implementation supplies `getSupportedPropertyNames()`.
+An optional `name` also exposes an ordinary method; omit it for an unnamed getter.
+`argumentName` defaults to `name`. Assembly feeds the getter through the existing
+operation conversion and invocation machinery. `serializedType`, when present,
+changes only emitted Web IDL, letting Window/Document spell the result `object`
+while their concrete result types select normal projection. It does not change
+TypeScript output or introduce a string index signature.
+Use `attrFn()` for an attribute whose value is a retained built-in function.
+`cbDict()` selects the original dictionary object as the receiver for its callback
+members.
 
 Partials amend a primary construct; mixin declarations contribute members to
 includers. Meaningful mixin state belongs to their composed `FooMixin`, and the
@@ -244,7 +270,10 @@ Callback values expose invocation methods that delegate to `CallbackBinding`.
 That realm component owns shared `CallbackInvoker` plans, dynamic operation
 lookup, and context restoration. `values/callback.ts` owns the stamp associating
 an implementation callable with its IDL callback value. A callback interface's
-`toImpl(ctx, cbValue)` hook still receives the value and can invoke its operations.
+`toImpl(env, cbValue)` hook receives Core's `IDLCallbackInterfaceValue` view of the
+existing IDL value: its author object, callback realm, and invocation operation.
+This is a type boundary, with no additional object or allocation. The adapter
+cannot access assembly or binding internals through that view.
 The value captures its own callback context; sharing a plan never shares that
 context or the original author object.
 
@@ -613,11 +642,13 @@ or prototype and emit no IDL declaration text. Using JavaScript's `Proxy` alone
 does not need this declaration: legacy indexed/named objects and observable arrays
 keep their existing binding machinery.
 
-HTMLAllCollection's implementation declaration supplies
-`createHTMLAllCollection(context, implementation)` for its `[[IsHTMLDDA]]` identity;
-an outer JavaScript Proxy would lose its falsiness. This hook is specific to
-HTMLAllCollection, rather than a general native-object allocation contract.
-`HTMLAllCollectionBinding` installs the existing indexed/named algorithms through
+HTMLAllCollection's interface declaration selects `documentAll: true` for its
+native `[[IsHTMLDDA]]` identity and callable behavior; an outer JavaScript Proxy
+would lose its falsiness. This metadata is omitted from serialized IDL.
+`HTMLAllCollectionBinding` uses the declared `item` operation's argument/result
+converters and implementation steps. Calls ignore the supplied receiver and extra
+arguments, return null for absent/undefined input, and bypass author replacements
+of `.item`. The same binding installs the existing indexed/named algorithms through
 native property handlers, then RealmBinding associates the same identity
 record as ordinary platform objects. Ordinary own properties stay on the native
 object, preserving accessor and alternate-receiver behavior. A member's optional

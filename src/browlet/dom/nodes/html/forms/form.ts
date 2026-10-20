@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, reference, roAttr, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory, SanitizationCategory } from '../../element-definitions/index';
 

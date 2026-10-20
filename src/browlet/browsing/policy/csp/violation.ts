@@ -2,7 +2,7 @@ import { InternalError } from '../../../../infra/internal-error';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,
-} from '../../../../web-idl/index';
+} from '../../../../web-idl/core/index';
 import { utf8Encode } from '../../../../encoding/index';
 import { copyURL, stripURLForReporting, type URLRecord } from '../../../../url/index';
 import { FetchRequest, fetch } from '../../../../fetch/index';
@@ -326,7 +326,7 @@ export const securityPolicyViolationEventIDL = defineInterface<DOMEnvironment>({
   inherits: 'Event',
   exposed: ['Window', 'Worker'],
   implementation: impl(SecurityPolicyViolationEventImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
+    constructWith: [atArg(2, (env) => env.realm.eventTimeStamp())],
   }),
   members: [
     ctor([

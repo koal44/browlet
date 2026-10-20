@@ -2,8 +2,8 @@ import { TypeError } from '../../../../infra/exceptions';
 import { asciiLower } from '../../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../../infra/namespaces';
 import {
-  arg, defineInterface, emptyDictionary, idlType, impl, nullable, op, reference, roAttr,
-} from '../../../../web-idl/index';
+  arg, defineInterface, emptyDictionary, idlType, impl, nullable, op, reference, roAttr, unwrapArg,
+} from '../../../../web-idl/core/index';
 
 import type { BrowletEnvironment } from '../../../environment';
 
@@ -44,6 +44,18 @@ export class TrustedTypePolicyFactoryImpl {
     this.#createdPolicyNames.add(name);
     return policy;
   }
+
+  /** Test the implementation selected by the declared argument conversion. */
+  // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-ishtml
+  isHTML(value: unknown): boolean { return TrustedHTMLImpl.is(value); }
+
+  /** Test the implementation selected by the declared argument conversion. */
+  // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-isscript
+  isScript(value: unknown): boolean { return TrustedScriptImpl.is(value); }
+
+  /** Test the implementation selected by the declared argument conversion. */
+  // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-isscripturl
+  isScriptURL(value: unknown): boolean { return TrustedScriptURLImpl.is(value); }
 
   /** Classify an attribute name without requiring an implemented element constructor. */
   // https://w3c.github.io/trusted-types/dist/spec/#dom-trustedtypepolicyfactory-getattributetype
@@ -122,18 +134,14 @@ export const trustedTypePolicyFactoryIDL = defineInterface({
       arg('policyName', idlType.DOMString),
       arg('policyOptions', reference('TrustedTypePolicyOptions'), { optional: true, default: emptyDictionary }),
     ]),
-    // These operations recognize author-side brands, so identity belongs at the binding boundary.
     op('isHTML', idlType.boolean,
-      [arg('value', idlType.any)],
-      { invoke: (context, value) => context.unwrap(value, TrustedHTMLImpl) !== undefined },
+      [arg('value', idlType.any, unwrapArg(TrustedHTMLImpl))],
     ),
     op('isScript', idlType.boolean,
-      [arg('value', idlType.any)],
-      { invoke: (context, value) => context.unwrap(value, TrustedScriptImpl) !== undefined },
+      [arg('value', idlType.any, unwrapArg(TrustedScriptImpl))],
     ),
     op('isScriptURL', idlType.boolean,
-      [arg('value', idlType.any)],
-      { invoke: (context, value) => context.unwrap(value, TrustedScriptURLImpl) !== undefined },
+      [arg('value', idlType.any, unwrapArg(TrustedScriptURLImpl))],
     ),
     roAttr('emptyHTML', reference(TrustedHTMLImpl)),
     roAttr('emptyScript', reference(TrustedScriptImpl)),

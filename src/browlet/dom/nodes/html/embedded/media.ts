@@ -1,4 +1,4 @@
-import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/index';
+import { attr, defineInterface, idlType, impl, reflectEnumerated, xattr } from '../../../../../web-idl/core/index';
 
 import { loadingAttribute } from '../attributes/index';
 

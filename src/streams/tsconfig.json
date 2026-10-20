@@ -10,7 +10,6 @@
   "include": ["./**/*.ts"],
   "references": [
     { "path": "../js-engine" },
-    { "path": "../web-idl/core" },
-    { "path": "../web-idl" }
+    { "path": "../web-idl/core" }
   ]
 }

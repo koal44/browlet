@@ -10,6 +10,7 @@ import type {
   MemberBinding, OperationSteps, StringificationBehavior,
 } from './realm/index';
 import type { RealmBinding } from './realm';
+import type { AttributeBinding } from './extended-attributes';
 
 /** Register implementation factories and member steps before the world publishes this realm. */
 export function registerImplementationBindings(binding: RealmBinding): void {
@@ -34,10 +35,9 @@ function registerInterfaceImplementation(
     switch (member.kind) {
       case 'attribute': {
         const accessors = binding.world.getAttributeBinding(member, assembled);
-        const attribute = accessors ? { ...member, ...accessors } : member;
-        if (attribute.attributeFunction || attribute.get || attribute.set) {
+        if (accessors || member.attributeFunction || member.get || member.set) {
           registerDefinedAttribute(
-            memberBinding, attribute, assembled, binding,
+            memberBinding, member, assembled, binding, accessors,
           );
         } else {
           if (member.static && !implClass) throw missingMemberBinding(assembled, member);
@@ -65,7 +65,7 @@ function registerInterfaceImplementation(
             kind: 'construct',
             steps: (values) => {
               const args = convert ? convert(values, binding) : values;
-              return binding.callImplementation(construct, undefined, [binding, ...args]);
+              return binding.callImplementation(construct, undefined, [binding.getEnvironment(), ...args]);
             },
           };
           break;
@@ -100,14 +100,15 @@ function registerInterfaceImplementation(
             member.invoke, member, binding,
           );
         } else {
-          if (member.name === undefined) {
+          const method = member.namedGetter ?? member.name;
+          if (method === undefined) {
             throw missingMemberBinding(assembled, member);
           }
           if (member.static && !implClass) throw missingMemberBinding(assembled, member);
           registerOperation(
             memberBinding,
             member,
-            member.name,
+            method,
             binding,
             member.invokeWith,
             member.static ? implClass : undefined,
@@ -124,7 +125,7 @@ function registerInterfaceImplementation(
                 return binding.callImplementation(
                   indexedGetter.supportsIndex,
                   this,
-                  [index, binding],
+                  [index],
                 );
               },
             }),
@@ -133,20 +134,20 @@ function registerInterfaceImplementation(
               return binding.callImplementation(
                 indexedGetter.getSupportedPropertyIndices,
                 this,
-                [binding],
+                [],
               );
             },
           };
         }
-        const getSupportedPropertyNames = member.getSupportedPropertyNames;
-        if (getSupportedPropertyNames) {
+        if (member.namedGetter !== undefined) {
+          const getMethod = memberBinding.createMethodGetter<() => ReadonlySet<string>>('getSupportedPropertyNames');
           memberBinding.namedPropertySteps = {
             // Project adapter for Web IDL §2.5.6.2 Named properties — supported property names.
             getSupportedPropertyNames() {
               return binding.callImplementation(
-                getSupportedPropertyNames,
+                getMethod(this),
                 this,
-                [binding],
+                [],
               );
             },
           };
@@ -189,7 +190,7 @@ function registerInterfaceImplementation(
   if (assembled.implementations.some((implementation) => implementation.initializeImplementation)) {
     implementationBinding.initializeImplementation = (value) => {
       const initialize = assembled.getImplementation(value)?.initializeImplementation;
-      if (initialize) binding.callImplementation(initialize, undefined, [binding, value]);
+      if (initialize) binding.callImplementation(initialize, undefined, [binding.getEnvironment(), value]);
     };
   }
 }
@@ -211,40 +212,50 @@ function registerDefinedAttribute(
   member: IDLAttribute,
   assembled: AssembledInterface,
   binding: RealmBinding,
+  accessors?: AttributeBinding,
 ): void {
   const createSteps = member.attributeFunction;
+  const get = member.get;
+  const set = member.set;
   const steps: AttributeSteps = {
     // Invoke a declared getter or obtain its realm-owned attribute function.
     get(receiver) {
       const owner = receiver?.binding ?? binding;
       if (createSteps) {
-        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, owner));
+        return owner.getImplementationBinding(assembled).getOrCreateMemberBinding(member).getAttributeFunction(member, () => createSteps.call(undefined, owner.getEnvironment()));
       }
-      if (!member.get) {
+      if (accessors) {
+        return binding.callImplementation(accessors.get, receiver?.implInst ?? null, [owner]);
+      }
+      if (!get) {
         throw new InternalError(
           `Web IDL attribute ${member.name} has no getter binding`,
         );
       }
       return binding.callImplementation(
-        member.get,
+        get,
         receiver?.implInst ?? null,
-        [owner],
+        [owner.getEnvironment()],
       );
     },
   };
-  const set = member.set;
-  if (set && !member.readonly) {
+  if ((accessors?.set || set) && !member.readonly) {
     const convert = binding.implementationConverter.createConverter(member.type, {
       callbackExceptionBehavior: member.callbackExceptionBehavior,
     });
     steps.set = (receiver, value) => {
       const operationBinding = receiver?.binding ?? binding;
+      const converted = convert(value, operationBinding);
+      if (accessors?.set) {
+        binding.callImplementation(accessors.set, receiver?.implInst ?? null, [operationBinding, converted]);
+        return;
+      }
       binding.callImplementation(
-        set,
+        set!,
         receiver?.implInst ?? null,
         [
-          operationBinding,
-          convert(value, operationBinding),
+          operationBinding.getEnvironment(),
+          converted,
         ],
       );
     };
@@ -264,7 +275,7 @@ function createDefinedConstructorSteps(
       invoke,
       receiver,
       [
-        binding,
+        binding.getEnvironment(),
         ...(convert ? convert(values, binding) : values),
       ],
     );
@@ -292,7 +303,7 @@ function createImplementationConstructorSteps(
   );
 }
 
-// Adapt converted arguments and the receiver binding for a declared invocation.
+// Adapt converted arguments and the receiver environment for a declared invocation.
 function createDefinedOperationSteps(
   invoke: NonNullable<IDLOperation['invoke']>,
   assembled: IDLOperation,
@@ -305,7 +316,7 @@ function createDefinedOperationSteps(
       invoke,
       receiver?.implInst ?? null,
       [
-        operationBinding,
+        operationBinding.getEnvironment(),
         ...(convert ? convert(values, operationBinding) : values),
       ],
     );

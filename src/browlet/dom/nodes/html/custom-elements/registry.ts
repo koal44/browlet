@@ -1,4 +1,4 @@
-import { defineInterface, impl } from '../../../../../web-idl/index';
+import { defineInterface, impl } from '../../../../../web-idl/core/index';
 
 import type { DocumentImpl } from '../../document';
 import type { CustomElementDefinition } from './definition';

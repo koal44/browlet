@@ -2,11 +2,11 @@ import type { AbortController } from '../../../infra/execution';
 import {
   arg, atArg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
   impl, invokeWith,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { BrowletEnvironment } from '../../environment';
 
-import { AbortSignalImpl } from './abort-signal';
+import type { AbortSignalImpl } from './abort-signal';
 
 /** Controls cancellation through an associated signal. */
 // https://dom.spec.whatwg.org/#interface-abortcontroller
@@ -39,14 +39,14 @@ export const abortControllerIDL = defineInterface<BrowletEnvironment>({
   name: 'AbortController',
   exposed: '*',
   implementation: impl(AbortControllerImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.construct(AbortSignalImpl))],
+    constructWith: [atArg(0, (env) => env.exec.createAbortSignal())],
   }),
   members: [
     ctor(),
     roAttr('signal', reference('AbortSignal'), xattr('SameObject')),
     op('abort', idlType.undefined,
       [arg('reason', idlType.any, { optional: true })],
-      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(1, (_env, methodEnv) => methodEnv)),
     ),
   ],
 });

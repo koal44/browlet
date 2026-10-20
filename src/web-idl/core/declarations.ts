@@ -1,5 +1,7 @@
+import type { PropertyOf } from '../../infra/util';
+
 import type {
-  DeclarationHook, Exposed, ExtendedAttribute, ImplementationClass, InjectedArgument, TypeParameter, WebIDLType,
+  IDLCallbackInterfaceValue, Exposed, ExtendedAttribute, ImplementationClass, InjectedArgument, TypeParameter, WebIDLType,
 } from './types';
 import type {
   ArgumentDefinition, CallbackInterfaceMember, DictionaryMember, InterfaceMember,
@@ -24,14 +26,14 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
   /** Extended attributes applying to this interface. */
   extendedAttributes?: ExtendedAttribute[];
   /** HTML serialization steps for this exact interface, including any inherited state. */
-  serialSteps?: SerialSteps<
-    Impl, Record<string, unknown>, Env extends { realm: infer Realm; } ? Realm : unknown
-  >;
+  serialSteps?: SerialSteps<Impl, Record<string, unknown>, PropertyOf<Env, 'realm'>>;
   /** HTML transfer steps for this exact interface. */
   transferSteps?: TransferSteps<Impl>;
   // Project metadata: implementation identity, construction dependencies, and projection hooks.
   /** One or more implementation classes, with their construction and projection hooks. */
   implementation?: InterfaceImplementation<Env, Impl> | InterfaceImplementation<Env, Impl>[];
+  /** Select HTMLAllCollection's native identity and call behavior, using its declared `item` operation. */
+  documentAll?: true;
 
   /** TypeScript parameters shared by the generated instance's members and inferred by its constructors. */
   typeParameters?: TypeParameter[];
@@ -45,12 +47,10 @@ export type PrimaryInterfaceDefinition<Env = unknown, Impl extends object = obje
 export type InterfaceImplementation<Env = unknown, Impl extends object = object> = {
   /** Implementation constructor; a declared common base can also name the interface's converted value type. */
   implClass: ImplementationClass<Impl>;
-  /** Injected arguments for internal construction and automatically bound constructors. */
+  /** Shared injected arguments for internal and public construction; cannot accompany constructor-level `constructWith`. */
   constructWith?: InjectedArgument<Env>[];
   /** Initialize the implementation before stamping or projection; inherited hooks run first. */
-  initializeImplementation?: DeclarationHook<'initialize-implementation', Env, Impl>;
-  /** Allocate HTMLAllCollection's undetectable callable; Binding installs its native property handlers. */
-  createHTMLAllCollection?: DeclarationHook<'html-all-collection-create', Env, Impl>;
+  initializeImplementation?: (this: undefined, env: Env, value: Impl) => void;
 };
 
 /** Declare an interface; `Env` describes the environment required by its binding hooks. */
@@ -263,7 +263,9 @@ export type CallbackInterfaceDefinition<Env = unknown> = {
   /** Extended attributes applying to this callback interface. */
   extendedAttributes?: ExtendedAttribute[];
   /** Turn the IDL callback, including its invocation method, into the implementation's value. */
-  toImpl?: DeclarationHook<'callback-interface-to-impl', Env>;
+  toImpl?: (
+    this: undefined, env: Env, callback: IDLCallbackInterfaceValue<PropertyOf<Env, 'realm'>>,
+  ) => unknown;
 
   /** TypeScript parameters shared by the generated callback object's members. */
   typeParameters?: TypeParameter[];

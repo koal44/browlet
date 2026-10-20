@@ -12,7 +12,7 @@ import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
 import { queueNodeTask } from '../../../src/browlet/integration/node';
 import {
   BindingWorld, arg, atArg, ctor, defineCallbackFunction, defineInterface, idlType, impl, op,
-  promise, reference, roAttr,
+  promise, reference, roAttr, type WebIDLEnvironment,
 } from '../../../src/web-idl/index';
 import type { InternalPromise } from '../../../src/infra/promises';
 
@@ -20,7 +20,7 @@ describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.globalObject);
+    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm, exec: { Promise: ctx.Promise } })).install(realm.globalObject);
     const constructor = Reflect.get(browlet.window, 'InitializationProbe') as new () => object;
     const unrelated = new AsyncLocalStorage<string>();
     let reported: string | undefined;
@@ -42,7 +42,7 @@ describe('implementation Promise delivery', () => {
   itPassesWith('explicitQueues')('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm })).install(realm.globalObject);
+    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm, exec: { Promise: ctx.Promise } })).install(realm.globalObject);
     const trace: string[] = [];
     Reflect.set(realm.globalObject, 'record', (value: string) => { trace.push(value); });
     realm.evaluate('new InitializationProbe().ready.then(value => record(value))', 'construct.js');
@@ -253,9 +253,9 @@ class InitializationProbeImpl {
 //   constructor();
 //   readonly attribute Promise<DOMString> ready;
 // };
-const initializationIDL = defineInterface({
+const initializationIDL = defineInterface<WebIDLEnvironment & { exec: { Promise: typeof InternalPromise; }; }>({
   name: 'InitializationProbe', exposed: '*', implementation: impl(InitializationProbeImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.Promise)],
+    constructWith: [atArg(0, (env) => env.exec.Promise)],
   }),
   members: [ctor(), roAttr('ready', promise(idlType.DOMString))],
 });

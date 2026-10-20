@@ -1,6 +1,10 @@
 import { InternalError } from '../../../infra/internal-error';
 import { addon } from '../../../js-engine/index';
 
+import type { AssembledInterface } from '../../assembly/index';
+import { getImplementationRecord } from '../platform';
+
+import type { ImplementationBinding } from './implementation';
 import {
   LegacyPlatformObjectBinding, isArrayIndex, toArrayIndex, type LegacyPropertyMetadata,
 } from './legacy';
@@ -8,6 +12,28 @@ import {
 /** Keep HTMLAllCollection's undetectable identity while reusing Web IDL's legacy property rules. */
 // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#the-htmlallcollection-interface
 export class HTMLAllCollectionBinding extends LegacyPlatformObjectBinding {
+  /** Allocate the native collection and bind calls through its declared `item` operation. */
+  // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#HTMLAllCollection-call
+  allocateObject(
+    implementation: object, implementationBinding: ImplementationBinding<AssembledInterface>, prototype: object,
+  ): object {
+    const { binding, assembled } = implementationBinding;
+    const item = assembled.getOperationGroups('regular', (operation) => operation.name === 'item')
+      .get('regular:item')!.callables[0]!;
+    const memberBinding = implementationBinding.getOrCreateMemberBinding(item);
+    const convertName = binding.getConverter(item.arguments[0]!.type).getJSToIDLSteps();
+    const convertResult = binding.getConverter(item.returns).getIDLToJSSteps();
+    // [[Call]] ignores thisArgument and every argument after the first. Use the
+    // implementation directly, even if author code replaces the platform's item.
+    const object = binding.realm.createHTMLDDA((value: unknown) => {
+      if (value === undefined) return null;
+      const name = convertName(value);
+      return convertResult(memberBinding.operationSteps!(getImplementationRecord(implementation)!, [name]));
+    });
+    Object.setPrototypeOf(object, prototype);
+    return this.createObject(object, implementation, implementationBinding.getLegacyPropertyMetadata());
+  }
+
   /** Intercept virtual properties; V8 retains ordinary properties and their actual receivers. */
   override createObject(
     object: object, implementation: object, properties: LegacyPropertyMetadata | null,

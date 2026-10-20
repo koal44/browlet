@@ -1,8 +1,8 @@
 import { HTML_NAMESPACE } from '../../../infra/index';
 import {
-  arg, defineInterface, idlType, impl, indexedGetter, iter, namedGetter, nullable, op,
+  arg, defineInterface, idlType, impl, indexedGetter, iter, nullable, op,
   reference, roAttr, xattr,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
@@ -176,11 +176,9 @@ export const htmlCollectionIDL = defineInterface({
         { unsupportedValue: null },
       ),
     ),
-    op('namedItem', nullable(reference('Element')),
-      [arg('name', idlType.DOMString)],
-      namedGetter(
-        (collection: HTMLCollectionImpl) => collection.getSupportedPropertyNames(),
-      ),
-    ),
+    {
+      kind: 'named-getter', name: 'namedItem', method: 'namedItem',
+      returns: nullable(reference('Element')),
+    },
   ],
 });

@@ -3,16 +3,16 @@ import type { URL } from 'node:url';
 import type { InternalPromise } from '../../../infra/promises';
 import { InternalError } from '../../../infra/internal-error';
 import {
-  arg, defineIncludes, defineInterface, definePartialInterface, idlType, op,
+  defineIncludes, defineInterface, definePartialInterface, idlType,
   impl, roAttr, reference, union, xattr, type VoidFunction,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 
 import type { SpeculationRulesParseResult, TimerAction } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
-import { type DocumentImpl, ElementImpl } from '../../dom/nodes/index';
+import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
 import type { WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
@@ -330,23 +330,10 @@ export const windowIDL = defineInterface({
     roAttr('location', reference('Location'),
       xattr(['PutForwards', 'href'], 'LegacyUnforgeable'),
     ),
-    // Web IDL's unnamed getter has no implementation member name to bind
-    // automatically, and Window supplies its dynamic supported-name set.
-    op(undefined, idlType.object,
-      [arg('name', idlType.DOMString)],
-      {
-        special: 'getter',
-        getSupportedPropertyNames() {
-          return (this as WindowImpl).getSupportedPropertyNames();
-        },
-        invoke(context, name) {
-          return context.project(
-            ElementImpl,
-            (this as WindowImpl).getNamedProperty(name),
-          );
-        },
-      },
-    ),
+    {
+      kind: 'named-getter', method: 'getNamedProperty',
+      returns: reference('Element'), serializedType: idlType.object,
+    },
   ],
 });
 

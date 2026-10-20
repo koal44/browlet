@@ -1,7 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import {
   attr, ctor, defineInterface, idlType, impl, reflect, reflectSetter, xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 import { serializeURL, type URLRecord } from '../../../../../url/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';

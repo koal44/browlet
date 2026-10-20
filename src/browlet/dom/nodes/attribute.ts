@@ -1,6 +1,6 @@
 import {
   attr, defineInterface, idlType, impl, nullable, reference, roAttr, xattr,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { DOMEnvironment } from '../environment';
 

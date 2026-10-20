@@ -7,6 +7,7 @@ import {
 } from '../../../src/web-idl/core/index';
 import { getImplementationObject, getImplementationRecord } from '../../../src/web-idl/binding/platform';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
+import type { WebIDLEnvironment } from '../../../src/web-idl/environment';
 
 import { installTestBindings } from '../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../support/web-idl-realm';
@@ -137,7 +138,7 @@ describe('Web IDL implementation registration', () => {
     expect(Reflect.get(instance, 'value')).toBeUndefined();
   });
 
-  it('constructs implementations with realm-created dependencies', () => {
+  it('projects dependencies supplied during implementation construction', () => {
     class DependencyImpl {}
     class OwnerImpl {
       #dependency: DependencyImpl;
@@ -163,7 +164,7 @@ describe('Web IDL implementation registration', () => {
       members: [
         ctor(
           [],
-          { constructWith: [atArg(0, (ctx) => ctx.construct(DependencyImpl))] },
+          { constructWith: [atArg(0, () => new DependencyImpl())] },
         ),
         roAttr('dependency', reference(dependencyIDL.name)),
       ],
@@ -210,17 +211,17 @@ describe('Web IDL implementation registration', () => {
         return result;
       }
     }
-    const interfaceIDL = defineInterface({
+    const interfaceIDL = defineInterface<WebIDLEnvironment>({
       name: 'ContextualDependency',
       exposed: 'Window',
       implementation: impl(ContextualDependencyImpl, {
-        constructWith: [atArg(1, (ctx) => ({ global: ctx.realm.globalObject }))],
+        constructWith: [atArg(1, (env) => ({ global: env.realm.globalObject }))],
       }),
       members: [
         ctor([arg('value', idlType.DOMString)]),
         staticOp('create', reference('ContextualDependency'),
           [],
-          invokeWith(atArg(0, (ctx) => ctx.construct(ContextualDependencyImpl))),
+          invokeWith(atArg(0, (env) => new ContextualDependencyImpl(undefined, { global: env.realm.globalObject }))),
         ),
         roAttr('env', idlType.object),
         roAttr('value', idlType.DOMString),
@@ -262,16 +263,16 @@ describe('Web IDL implementation registration', () => {
         return this.#global;
       }
     }
-    const resultIDL = defineInterface({
+    const resultIDL = defineInterface<WebIDLEnvironment>({
       name: 'Result',
       exposed: 'Window',
       implementation: impl(ResultImpl, {
-        constructWith: [atArg(0, (ctx) => ctx.realm.globalObject)],
+        constructWith: [atArg(0, (env) => env.realm.globalObject)],
       }),
       members: [
         staticOp('create', reference('Result'),
           [],
-          invokeWith(atArg(0, (ctx) => ctx.construct(ResultImpl))),
+          invokeWith(atArg(0, (env) => new ResultImpl(env.realm.globalObject))),
         ),
         roAttr('global', idlType.object),
       ],
@@ -293,12 +294,12 @@ describe('Web IDL implementation registration', () => {
     const constructor = ctor(
       [arg('value', idlType.DOMString)],
       {
-        invoke(context, value) {
+        invoke(env: WebIDLEnvironment, value) {
           DeclarativeExampleImpl.initialize(
             this as DeclarativeExampleImpl,
             String(value),
           );
-          expect(context.realm).toBe(realm);
+          expect(env.realm).toBe(realm);
         },
       },
     );
@@ -307,8 +308,8 @@ describe('Web IDL implementation registration', () => {
         arg('value', idlType.DOMString),
       ],
       {
-        invoke(context, value) {
-          expect(context.realm).toBe(realm);
+        invoke(env: WebIDLEnvironment, value) {
+          expect(env.realm).toBe(realm);
           return `bound:${String(value)}`;
         },
       },
@@ -385,16 +386,20 @@ describe('Web IDL implementation registration', () => {
         value.#value = input;
       }
 
-      static namedItem(value: ProductImpl, name: string): string {
-        return name === 'label' ? value.#value : '';
-      }
-
       get value(): string {
         return this.#value;
       }
 
       set value(value: string) {
         this.#value = value;
+      }
+
+      namedItem(name: string): string {
+        return name === 'label' ? this.#value : '';
+      }
+
+      getSupportedPropertyNames(): ReadonlySet<string> {
+        return new Set(['label']);
       }
     }
 
@@ -406,29 +411,13 @@ describe('Web IDL implementation registration', () => {
         ctor(
           [arg('value', idlType.DOMString)],
           {
-            invoke(_context, value) {
+            invoke(_env, value) {
               ProductImpl.initialize(this as ProductImpl, String(value));
             },
           },
         ),
         attr('value', idlType.DOMString),
-        op('namedItem', idlType.DOMString,
-          [
-            arg('name', idlType.DOMString),
-          ],
-          {
-            special: 'getter',
-            getSupportedPropertyNames() {
-              return new Set(['label']);
-            },
-            invoke(_context, name) {
-              return ProductImpl.namedItem(
-                this as ProductImpl,
-                String(name),
-              );
-            },
-          },
-        ),
+        { kind: 'named-getter', name: 'namedItem', method: 'namedItem', returns: idlType.DOMString },
         staticOp('copy', reference('Product'),
           [
             arg('value', idlType.any, unwrapArg(ProductImpl)),
@@ -454,31 +443,31 @@ describe('Web IDL implementation registration', () => {
   });
 
   it('runs inherited interface lifecycle steps from parent to child', () => {
-    const contexts: object[] = [];
+    const environments: WebIDLEnvironment[] = [];
     const lifecycle: string[] = [];
     const realm = new Realm();
-    const parentIDL = defineInterface({
+    const parentIDL = defineInterface<WebIDLEnvironment>({
       name: 'ParentLifecycle',
       exposed: ['Window'],
       implementation: impl(ParentLifecycleImpl, {
-        initializeImplementation(context, value) {
-          expect(context.realm).toBe(realm);
+        initializeImplementation(env, value) {
+          expect(env.realm).toBe(realm);
           expect(value).toBeTypeOf('object');
-          contexts.push(context);
+          environments.push(env);
           lifecycle.push('parent');
         },
       }),
       members: [],
     });
-    const childIDL = defineInterface({
+    const childIDL = defineInterface<WebIDLEnvironment>({
       name: 'ChildLifecycle',
       inherits: 'ParentLifecycle',
       exposed: ['Window'],
       implementation: impl(ChildLifecycleImpl, {
-        initializeImplementation(context, value) {
-          expect(context.realm).toBe(realm);
+        initializeImplementation(env, value) {
+          expect(env.realm).toBe(realm);
           expect(value).toBeTypeOf('object');
-          contexts.push(context);
+          environments.push(env);
           lifecycle.push('child');
         },
       }),
@@ -498,7 +487,7 @@ describe('Web IDL implementation registration', () => {
     const object = new ChildLifecycle();
 
     expect(object).toBeInstanceOf(ChildLifecycle);
-    expect(contexts[0]).toBe(contexts[1]);
+    expect(environments[0]).toBe(environments[1]);
     expect(lifecycle).toEqual(['parent', 'child']);
   });
 

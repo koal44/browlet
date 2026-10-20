@@ -5,7 +5,7 @@ import type { InternalPromise, PromiseResultType } from '../infra/promises';
 import { getBufferSourceCopy, isUint8Array, type GlobalObject } from '../js-engine/index';
 import {
   defineInterfaceMixin, defineTypedef, idlType, nullable, op, promise, reference, roAttr, union, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import { ReadableStreamImpl, type ReadableStreamDefaultReaderImpl } from '../streams/index';
 import { TextDecoderStreamImpl, utf8Decode, utf8Encode } from '../encoding/index';
 import { parseFormUrlEncoded, URLSearchParamsImpl } from '../url/index';

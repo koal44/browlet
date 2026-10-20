@@ -1,7 +1,7 @@
 import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, onError, op, reference, sequence,
-} from '../../web-idl/index';
+} from '../../web-idl/core/index';
 
 import type { BrowletEnvironment } from '../environment';
 import type { WindowOrWorkerGlobalScopeMixin } from '../global-scope';
@@ -123,7 +123,7 @@ export const reportingObserverIDL = defineInterface<BrowletEnvironment>({
         arg('callback', reference('ReportingObserverCallback'), onError('report')),
         arg('options', reference('ReportingObserverOptions'), { optional: true, default: emptyDictionary }),
       ],
-      { constructWith: [atArg(2, (ctx) => ctx.realm.env)] },
+      { constructWith: [atArg(2, (env) => env)] },
     ),
     op('observe', idlType.undefined),
     op('disconnect', idlType.undefined),

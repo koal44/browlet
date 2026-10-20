@@ -369,22 +369,19 @@ export type CallbackExceptionBehavior = 'report' | 'rethrow';
 export type InjectedArgument<Env = unknown> = {
   /** Zero-based index in the final implementation argument list. */
   index: number;
-  /** Compute the dependency from receiver and method contexts; constructors supply the same context twice. */
-  resolve: DeclarationHook<'argument-resolve', Env>;
+  /** Select a dependency from receiver and method environments; constructors supply the same environment twice. */
+  resolve: (env: Env, methodEnv: Env) => unknown;
 };
 
-/** Signatures for declaration hooks, supplied by the full Web IDL entry's module augmentation. */
-// Core alone leaves binding hooks unavailable; the declaration records own their fields.
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars
-export interface DeclarationHooks<Env = unknown, Impl extends object = object, Values extends unknown[] = unknown[]> {}
-
-/** Select a declaration hook's signature for its environment, implementation, and arguments. */
-export type DeclarationHook<
-  Name extends PropertyKey, Env = unknown, Impl extends object = object, Values extends unknown[] = unknown[],
-> =
-  Name extends keyof DeclarationHooks<Env, Impl, Values>
-    ? DeclarationHooks<Env, Impl, Values>[Name]
-    : never;
+/** The converted callback identity and invocation contract available to an implementation adapter. */
+export type IDLCallbackInterfaceValue<Realm = unknown> = {
+  /** Original author object, retained for identity and dynamic operation lookup. */
+  object: object;
+  /** The callback's own realm, independent of the receiving implementation's environment. */
+  realm: Realm;
+  /** Invoke a declared operation through Binding's conversion and callback lifecycle handling. */
+  callUserObjectOperation(operationName: string, argumentsList: unknown[], thisArgument?: unknown): unknown;
+};
 
 // Platform declaration generation
 

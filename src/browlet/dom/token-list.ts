@@ -3,7 +3,7 @@ import { asciiLower, isAsciiWhitespace } from '../../infra/ascii';
 import {
   arg, attr, defineInterface, idlType, impl, indexedGetter, iter, nullable, op, roAttr, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../web-idl/index';
+} from '../../web-idl/core/index';
 
 import { parseOrderedSet } from './infra/index';
 import type { ElementImpl } from './nodes/index';

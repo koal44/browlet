@@ -1,5 +1,5 @@
 import { SVG_NAMESPACE } from '../../../../infra/index';
-import { defineIncludes, defineInterface, impl } from '../../../../web-idl/index';
+import { defineIncludes, defineInterface, impl } from '../../../../web-idl/core/index';
 import type { CSSDeclarationBlock, CSSStyleDeclarationImpl } from '../../../../stylelet/index';
 
 import { ElementCSSInlineStyleMixin } from '../../../style/index';

@@ -7,7 +7,9 @@ import { Browlet } from '../../src/browlet/browlet';
 import { WindowImpl } from '../../src/browlet/browsing/window/window';
 import { EventImpl } from '../../src/browlet/dom/events/event';
 import { EventTargetImpl } from '../../src/browlet/dom/events/event-target';
+import { AbortSignalImpl } from '../../src/browlet/dom/abort/abort-signal';
 import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
+import { TextImpl } from '../../src/browlet/dom/nodes/text';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
 import { SandboxEnvironment } from '../../src/browlet/environment';
@@ -358,6 +360,7 @@ describe('Browlet DOM binding', () => {
       'currentScript',
       'customElementRegistry',
       'defaultView',
+      'dir',
       'doctype',
       'documentElement',
       'documentURI',
@@ -453,6 +456,7 @@ describe('Browlet DOM binding', () => {
       'accessKey',
       'autofocus',
       'constructor',
+      'dir',
       'headingOffset',
       'headingReset',
       'inert',
@@ -460,6 +464,7 @@ describe('Browlet DOM binding', () => {
       'nonce',
       'style',
       'title',
+      'translate',
     ]);
     expect(ownKeys(getPrototype(browlet, 'HTMLStyleElement'))).toEqual([
       'blocking',
@@ -637,6 +642,25 @@ describe('Browlet DOM binding', () => {
     expect(fragment.ownerDocument).toBe(document);
     expect(fragment.host).toBeNull();
     expect(getRelevantRealm(fragment)).toBe(getRelevantRealm(object));
+  });
+
+  it('retains execution-allocated node and signal ownership before first projection in another realm', () => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const sourceRealm = getRelevantRealm(first.window);
+    const { exec } = sourceRealm.env;
+    const text = exec.createDocument().createTextNode('owned');
+    const signal = exec.createAbortSignal();
+    const foreignBinding = getBindingContext(getRelevantRealm(second.window));
+
+    expect(getRelevantRealm(text)).toBe(sourceRealm);
+    expect(getRelevantRealm(signal)).toBe(sourceRealm);
+    const textPlatform = foreignBinding.project(TextImpl, text);
+    const signalPlatform = foreignBinding.project(AbortSignalImpl, signal);
+    expect(textPlatform).toBeInstanceOf(first.window.Text);
+    expect(textPlatform).not.toBeInstanceOf(second.window.Text);
+    expect(signalPlatform).toBeInstanceOf(first.window.AbortSignal);
+    expect(signalPlatform).not.toBeInstanceOf(second.window.AbortSignal);
   });
 
   it('filters DOM constructors for the host exposure set', () => {

@@ -4,7 +4,7 @@ import {
   arg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, op,
   roAttr, reference,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import { type Encoding, getDecoder, getEncoding } from './encodings';
 import { endOfQueue, IOQueue, type Decoder } from './io-queue';

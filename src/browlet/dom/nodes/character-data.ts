@@ -1,10 +1,9 @@
 import {
   annotated, arg, attr, defineIncludes, defineInterface, idlType, impl, op, roAttr, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { RangeImpl } from '../ranges/index';
-import type { DOMEnvironment } from '../environment';
 
 import { NodeImpl, type NodeType } from './node';
 import { ChildNodeMixin, childNodeIDL } from './child-node';
@@ -24,13 +23,8 @@ export class CharacterDataImpl extends NodeImpl {
   /** Element-sibling navigation that skips intervening non-elements. */
   #nonDocumentTypeChildNodeMixin = new NonDocumentTypeChildNodeMixin(this);
 
-  constructor(
-    nodeType: NodeType,
-    data: string,
-    ownerDoc: DocumentImpl,
-    env: DOMEnvironment,
-  ) {
-    super(nodeType, ownerDoc, env);
+  constructor(nodeType: NodeType, data: string, ownerDoc: DocumentImpl) {
+    super(nodeType, ownerDoc, ownerDoc.env);
     this.#data = data;
   }
 

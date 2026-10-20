@@ -133,6 +133,6 @@ const ownerIDL = defineInterface({
 // interface CountReader { constructor(); Promise<long> read(); };
 const countReaderIDL = defineInterface<JSEnvironment>({
   name: 'CountReader', exposed: '*',
-  implementation: impl(CountReaderImpl, { constructWith: [atArg(0, (ctx) => ctx.getEnvironment())] }),
+  implementation: impl(CountReaderImpl, { constructWith: [atArg(0, (env) => env)] }),
   members: [ctor([]), op('read', promise(idlType.long))],
 });

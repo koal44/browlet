@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { attr, ctor, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/index';
+import { attr, ctor, defineInterface, idlType, impl, reflect, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag } from '../../element-definitions/index';
 

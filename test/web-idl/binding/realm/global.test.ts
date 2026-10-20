@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   attr, defineInterface, definePartialInterface, idlType, impl, integer, stringifier,
-  type AttributeMember, type OperationMember, type StringifierMember,
+  type AttributeMember, type OperationMember, type NamedGetterMember, type StringifierMember,
 } from '../../../../src/web-idl/core/index';
 import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { RealmBinding } from '../../../../src/web-idl/binding/realm';
@@ -501,13 +501,12 @@ function attribute(
   return { extendedAttributes, kind: 'attribute', name, readonly, type };
 }
 
-function namedGetter(name: string | undefined): OperationMember {
+function namedGetter(name: string | undefined): NamedGetterMember {
   return {
-    arguments: [{ name: 'name', type: idlType.DOMString }],
-    kind: 'operation',
+    kind: 'named-getter',
+    method: name ?? 'getNamedProperty',
     name,
     returns: idlType.DOMString,
-    special: 'getter',
   };
 }
 

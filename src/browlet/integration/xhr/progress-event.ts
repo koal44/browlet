@@ -1,7 +1,7 @@
 import {
   arg, atArg, ctor, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, roAttr, reference,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { DOMHighResTimeStamp } from '../../timing/index';
 import { EventImpl, type EventInitRecord, type EventTargetImpl } from '../../dom/events/index';
@@ -62,7 +62,7 @@ export const progressEventIDL = defineInterface<DOMEnvironment>({
   inherits: 'Event',
   exposed: ['Window', 'Worker'],
   implementation: impl(ProgressEventImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.realm.eventTimeStamp())],
+    constructWith: [atArg(2, (env) => env.realm.eventTimeStamp())],
   }),
   members: [
     ctor([

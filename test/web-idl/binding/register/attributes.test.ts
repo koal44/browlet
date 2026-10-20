@@ -60,7 +60,7 @@ describe('Web IDL implementation attribute registration', () => {
         attr('handler', reference('Function'), {
           ...attrFn(() => () => 1),
           ...onError('rethrow'),
-          set(_context, value) { assignedResult = (value as () => unknown)(); },
+          set(_env, value) { assignedResult = (value as () => unknown)(); },
         }),
       ],
     });
@@ -231,6 +231,15 @@ describe('Web IDL implementation attribute registration', () => {
     expect(() => validateImplementationMembers(operation, { read() { return 1; } })).not.toThrow();
     const stringify = { ...definition, members: [stringifier()] };
     expect(() => validateImplementationMembers(stringify, new MissingImpl())).toThrow('Missing.toString has no implementation');
+    const named = defineInterface({
+      name: 'Named', members: [{ kind: 'named-getter', method: 'lookup', returns: idlType.DOMString }],
+    });
+    expect(() => validateImplementationMembers(named, { lookup() {} }))
+      .toThrow('Named.getSupportedPropertyNames has no implementation');
+    expect(() => validateImplementationMembers(named, { getSupportedPropertyNames() { return new Set(); } }))
+      .toThrow('Named.lookup has no implementation');
+    expect(() => validateImplementationMembers(named, { lookup() {}, getSupportedPropertyNames() { return new Set(); } }))
+      .not.toThrow();
   });
 
   it('uses receiver access for single-class declarations and the class for static members', () => {

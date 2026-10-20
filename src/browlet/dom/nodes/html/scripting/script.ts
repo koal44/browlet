@@ -3,7 +3,7 @@ import { InternalError } from '../../../../../infra/internal-error';
 import {
   attr, ctor, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr,
   xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory, SanitizationCategory } from '../../element-definitions/index';
 import {

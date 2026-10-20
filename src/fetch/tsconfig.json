@@ -18,7 +18,6 @@
     { "path": "../storage" },
     { "path": "../streams" },
     { "path": "../url" },
-    { "path": "../web-idl" },
     { "path": "../web-idl/core" },
     { "path": "../xhr" }
   ]

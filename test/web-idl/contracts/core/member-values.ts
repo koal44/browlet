@@ -1,11 +1,13 @@
 import {
   arg, cbDict, ctor, defineInterface, definePartialInterface, idlType, impl, nullable, op,
-  reference, staticOp, tsType, unwrapArg, type WebIDLEnvironment,
-} from '../../../../src/web-idl/index';
+  reference, staticOp, tsType, unwrapArg,
+} from '../../../../src/web-idl/core/index';
+
+type ExampleEnvironment = { realm: { globalObject: object; }; };
 
 class Example { value = 1; }
 
-const exampleIDL = defineInterface<WebIDLEnvironment>({
+const exampleIDL = defineInterface<ExampleEnvironment>({
   name: 'Example',
   implementation: impl(Example),
   members: [],
@@ -21,7 +23,7 @@ defineInterface({
   members: [op('consume', idlType.undefined,
     [arg('value', sharedType)],
     {
-      invoke(_ctx, value) {
+      invoke(_env, value) {
         const instance: FirstImpl | SecondImpl = value;
         if (instance instanceof FirstImpl) instance.first.toFixed();
         else instance.second.toUpperCase();
@@ -37,13 +39,13 @@ defineInterface({
 // @ts-expect-error An interface declaration is not an implementation class.
 reference(exampleIDL);
 
-definePartialInterface<WebIDLEnvironment>({
+definePartialInterface<ExampleEnvironment>({
   name: 'Example',
   members: [
     op('consume', idlType.undefined,
       [arg('value', tsType(reference(Example), 'Example<T>'))],
       {
-        invoke(_ctx, value) {
+        invoke(_env, value) {
           value.value.toFixed();
           // @ts-expect-error Platform type refinements preserve converted implementation typing.
           value.missing;
@@ -54,8 +56,8 @@ definePartialInterface<WebIDLEnvironment>({
     staticOp('read', idlType.double,
       [arg('example', reference(Example)), arg('name', idlType.DOMString)],
       {
-        invoke(ctx, example, name) {
-          ctx.getEnvironment().realm.globalObject;
+        invoke(env, example, name) {
+          env.realm.globalObject;
           example.value.toFixed();
           name.toUpperCase();
           // @ts-expect-error Interface arguments are implementations, not arbitrary objects.
@@ -69,7 +71,7 @@ definePartialInterface<WebIDLEnvironment>({
     op('optional', idlType.undefined,
       [arg('name', idlType.DOMString, { optional: true })],
       {
-        invoke(_ctx, name) {
+        invoke(_env, name) {
           name?.toUpperCase();
           // @ts-expect-error An omitted optional argument has no string value.
           name.toUpperCase();
@@ -78,12 +80,12 @@ definePartialInterface<WebIDLEnvironment>({
     ),
     op('defaulted', idlType.undefined,
       [arg('name', idlType.DOMString, { optional: true, default: '' })],
-      { invoke(_ctx, name) { name.toUpperCase(); } },
+      { invoke(_env, name) { name.toUpperCase(); } },
     ),
     op('many', idlType.undefined,
       [arg('first', nullable(exampleType)), arg('names', idlType.DOMString, { variadic: true })],
       {
-        invoke(_ctx, first, ...names) {
+        invoke(_env, first, ...names) {
           first?.value.toFixed();
           names.map((name) => name.toUpperCase());
           // @ts-expect-error Each variadic argument has the declared type.
@@ -94,7 +96,7 @@ definePartialInterface<WebIDLEnvironment>({
     op('adapted', idlType.undefined,
       [arg('options', idlType.object, cbDict('Options')), arg('value', idlType.object, unwrapArg(Example))],
       {
-        invoke(_ctx, options, value) {
+        invoke(_env, options, value) {
           // @ts-expect-error Dictionary adaptation has no declared implementation result type.
           options.value;
           // @ts-expect-error Custom unwrapping may preserve the original object.
@@ -105,7 +107,7 @@ definePartialInterface<WebIDLEnvironment>({
     op('forwardReference', idlType.undefined,
       [arg('example', reference('Example'))],
       {
-        invoke(_ctx, example) {
+        invoke(_env, example) {
           // @ts-expect-error A string reference alone does not identify an implementation class.
           example.value;
         },
@@ -119,7 +121,7 @@ defineInterface({
   members: [
     ctor(
       [arg('name', idlType.DOMString)],
-      { construct(_ctx, name) { return { name: name.toUpperCase() }; } },
+      { construct(_env, name) { return { name: name.toUpperCase() }; } },
     ),
   ],
 });

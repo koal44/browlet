@@ -4,7 +4,7 @@ import { ParallelQueue } from '../infra/parallel-queue';
 import { type PromiseResultType, internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../infra/promises';
 import { coarsenTime } from '../infra/time';
 import { getBufferSourceCopy, isUint8Array } from '../js-engine/index';
-import { idlType, isDOMException } from '../web-idl/index';
+import { idlType, isDOMException } from '../web-idl/core/index';
 import { ReadableStreamImpl, TransformStreamImpl, type ReadableStreamDefaultReaderImpl } from '../streams/index';
 import { utf8DecodeWithoutBOM } from '../encoding/index';
 import {

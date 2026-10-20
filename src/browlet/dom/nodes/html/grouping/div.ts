@@ -1,6 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import { InternalError } from '../../../../../infra/internal-error';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/index';
+import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import {
   ElementTag, ContentCategory, flowContent, transparentContent, type ContentModel,

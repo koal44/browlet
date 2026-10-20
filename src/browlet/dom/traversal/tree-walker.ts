@@ -1,4 +1,4 @@
-import { attr, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr } from '../../../web-idl/index';
+import { attr, defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';

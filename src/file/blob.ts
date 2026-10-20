@@ -6,7 +6,7 @@ import {
   dictMember, emptyDictionary, emptySequence, idlType, impl, op, promise,
   reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames, type BufferSource, type SerialSteps,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import { utf8Decode, utf8Encode, TextDecoderStreamImpl } from '../encoding/index';
 
@@ -287,7 +287,7 @@ export const blobIDL = defineInterface<FileEnvironment>({
   ...xattr('Serializable'),
   serialSteps: blobSerialSteps,
   implementation: impl(BlobImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(2, (env) => env)],
   }),
   members: [
     ctor([

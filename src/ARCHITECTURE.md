@@ -38,10 +38,18 @@ isolated-world or separate-runtime consumer.
 Each registered realm has one `RealmBinding`. `BindingContext` is its public type,
 exposing boundary operations without adding another object or lifecycle.
 
-HTML's `HTMLAllCollection` supplies a dedicated allocation hook because a JavaScript
+Web IDL Core owns complete declarations. Their constructor, accessor, operation,
+and callback-adapter steps receive the specified environment, with converted
+arguments and implementation receivers. Binding selects the environment and owns
+conversion and projection. Reflection and HTML construction use composition-time
+binding adapters selected by declarative annotations; declarations themselves
+do not receive BindingContext.
+
+HTML's `HTMLAllCollection` declares `documentAll: true` because a JavaScript
 Proxy cannot preserve `[[IsHTMLDDA]]`. JS Engine allocates the undetectable callable;
-HTML supplies its call steps; Web IDL's `HTMLAllCollectionBinding` adapts the shared
-indexed/named property algorithms to native handlers. Ordinary properties remain on the native object so V8
+Web IDL's `HTMLAllCollectionBinding` uses the declared `item` operation for call
+conversion and implementation dispatch, and adapts the shared indexed/named property
+algorithms to native handlers. HTML owns collection lookup. Ordinary properties remain on the native object so V8
 preserves accessor receivers. The [nodes roadmap](browlet/dom/nodes/ROADMAP.md#htmlallcollection)
 records the unsupported-backend policy and remaining enumeration-order clash.
 JS Engine's `isObject` and `isCallable` operations recognize this exceptional
@@ -124,6 +132,9 @@ JavaScript facilities, such as releasing an existing reader, keep `JSEnvironment
 browser execution object, including the bound Promise, DOM allocations, Fetch
 task delivery, and structured data. Standalone `AsyncExecution` does not require
 abort or structured-data facilities.
+`BrowletExecution` implements the existing `DOMNodeFactory` contract, shared by
+its Documents, and supplies `createAbortSignal()`. Both establish binding
+ownership during allocation, before a different realm can first project the result.
 
 Subsystems declare independent execution contracts. Web IDL Core's
 [`WebIDLExecution`](web-idl/core/execution.ts) supplies `DOMException` through
@@ -332,8 +343,10 @@ declarations subsequently obtain it through `ctx.getEnvironment()`. A standalone
 binding needing only a realm can return `{ realm }` from its environment factory.
 Event construction captures the binding in an execution facility, without
 attaching it to BrowletRealm. Event targets require that facility through their constructor's
-environment; document factories pass their environment explicitly to node constructors,
-which forward it through the inheritance chain. Standalone
+environment. Character-data and document-fragment constructors take their environment
+from their initial document; shadow roots use the host's current document. The node
+retains that environment when adoption changes its document. Constructors whose
+document and environment are independent, such as Range, retain both parameters. Standalone
 EventTarget implementation tests can supply a real sandbox environment; Document
 tests need browser settings for its HTML operations. Every target retains one
 `env` field. Derived implementations can narrow its declared type to the stronger

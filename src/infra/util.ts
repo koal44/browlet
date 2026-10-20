@@ -2,6 +2,9 @@ import { InternalError } from './internal-error';
 
 export type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
+/** Read a required property's type, or use unknown when the source does not provide it. */
+export type PropertyOf<T, Key extends PropertyKey> = T extends Record<Key, infer Value> ? Value : unknown;
+
 export type SameArityTuple<
   Source extends readonly unknown[],
   Value,

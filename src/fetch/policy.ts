@@ -1,5 +1,5 @@
 import { InternalError } from '../infra/internal-error';
-import { defineEnumeration } from '../web-idl/index';
+import { defineEnumeration } from '../web-idl/core/index';
 import {
   areSameOrigin, areSameSite, areSchemelesslySameSite, obtainPublicSuffix, obtainURLOrigin,
   serializeOrigin, serializeURLPath, stripURLForReporting, type Origin, type URLRecord,

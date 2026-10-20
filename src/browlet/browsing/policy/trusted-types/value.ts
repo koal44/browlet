@@ -1,15 +1,22 @@
+import { isObject } from '../../../../js-engine/index';
 import {
   defineInterface, defineTypedef, idlType, impl, op, reference, stringifier, union,
-} from '../../../../web-idl/index';
+} from '../../../../web-idl/core/index';
 
 /** HTML text produced by a Trusted Types policy, without parsing or sanitization. */
 // https://w3c.github.io/trusted-types/dist/spec/#trustedhtml
 export class TrustedHTMLImpl {
   /** Immutable policy result; author properties cannot replace this data. */
   readonly data: string;
+  #brand = undefined;
 
   constructor(data: string) {
     this.data = data;
+  }
+
+  /** Recognize implementation identity without inspecting author properties or prototypes. */
+  static is(value: unknown): value is TrustedHTMLImpl {
+    return isObject(value) && #brand in value;
   }
 
   /** Return the retained HTML text. */
@@ -23,9 +30,15 @@ export class TrustedHTMLImpl {
 export class TrustedScriptImpl {
   /** Immutable policy result. */
   readonly data: string;
+  #brand = undefined;
 
   constructor(data: string) {
     this.data = data;
+  }
+
+  /** Recognize implementation identity without inspecting author properties or prototypes. */
+  static is(value: unknown): value is TrustedScriptImpl {
+    return isObject(value) && #brand in value;
   }
 
   /** Return the retained script text. */
@@ -39,9 +52,15 @@ export class TrustedScriptImpl {
 export class TrustedScriptURLImpl {
   /** Immutable policy result after the callback's USVString conversion. */
   readonly data: string;
+  #brand = undefined;
 
   constructor(data: string) {
     this.data = data;
+  }
+
+  /** Recognize implementation identity without inspecting author properties or prototypes. */
+  static is(value: unknown): value is TrustedScriptURLImpl {
+    return isObject(value) && #brand in value;
   }
 
   /** Return the retained URL string. */

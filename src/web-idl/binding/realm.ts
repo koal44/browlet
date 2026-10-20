@@ -206,7 +206,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     return stampImplementation(implInst, assembled, this);
   }
 
-  /** Merge converted arguments with dependencies resolved against receiver and method contexts. */
+  /** Merge converted arguments with dependencies selected from receiver and method environments. */
   resolveArguments(
     argumentsList: unknown[],
     injectedArguments: InjectedArgument[],
@@ -215,8 +215,10 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     if (injectedArguments.length === 0) return argumentsList;
 
     const result: unknown[] = [];
+    const env = this.getEnvironment();
+    const methodEnv = methodContext.getEnvironment();
     for (const { index, resolve } of injectedArguments) {
-      result[index] = resolve(this, methodContext);
+      result[index] = resolve(env, methodEnv);
     }
 
     let index = 0;
@@ -514,15 +516,12 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
         `Use projectGlobalObject for ${assembled.primary.name}`,
       );
     }
-    let backingObject: object;
-    const createHTMLAllCollection = assembled.getImplementation(implInst)?.createHTMLAllCollection;
-    if (createHTMLAllCollection) {
-      backingObject = createHTMLAllCollection.call(undefined, this, implInst);
-      Object.setPrototypeOf(backingObject, prototype);
-      return new HTMLAllCollectionBinding(this).createObject(
-        backingObject, implInst, this.getImplementationBinding(assembled).getLegacyPropertyMetadata(),
+    if (assembled.primary.documentAll) {
+      return new HTMLAllCollectionBinding(this).allocateObject(
+        implInst, this.getImplementationBinding(assembled), prototype,
       );
     }
+    let backingObject: object;
     if (implInst instanceof DOMExceptionImpl) {
       // https://webidl.spec.whatwg.org/#js-DOMException-specialness
       backingObject = new this.realm.intrinsics.error();

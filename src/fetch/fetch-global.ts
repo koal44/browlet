@@ -3,7 +3,7 @@ import { InternalError } from '../infra/internal-error';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import {
   arg, definePartialInterfaceMixin, emptyDictionary, op, promise, reference, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import { FetchBody } from './body';
 import { deserializeAbortReason, type FetchController } from './controller';

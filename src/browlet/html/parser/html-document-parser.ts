@@ -4,7 +4,7 @@ import { ParserStream } from 'parse5-parser-stream';
 
 import type { InternalPromise } from '../../../infra/promises';
 import { bindAsyncContext } from '../../../js-engine/index';
-import { DOMExceptionImpl, DOMExceptionNames, idlType } from '../../../web-idl/index';
+import { DOMExceptionImpl, DOMExceptionNames, idlType } from '../../../web-idl/core/index';
 import { bomSniff, endOfQueue, getDecoder, getEncoding, IOQueue, type Decoder } from '../../../encoding/index';
 
 import { networkingTaskSource } from '../../scripting/index';

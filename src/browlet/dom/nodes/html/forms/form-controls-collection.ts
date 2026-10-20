@@ -1,6 +1,6 @@
 import {
-  arg, attr, defineInterface, idlType, impl, namedGetter, nullable, op, reference, union,
-} from '../../../../../web-idl/index';
+  attr, defineInterface, idlType, impl, nullable, reference, union,
+} from '../../../../../web-idl/core/index';
 
 import { HTMLCollectionImpl, NodeListImpl, type LiveCollectionSource } from '../../collections';
 import type { ElementImpl } from '../../element';
@@ -62,15 +62,10 @@ export const htmlFormControlsCollectionIDL = defineInterface({
   exposed: 'Window',
   implementation: impl(HTMLFormControlsCollectionImpl),
   members: [
-    op('namedItem', nullable(union(reference('RadioNodeList'), reference('Element'))),
-      [arg('name', idlType.DOMString)],
-      {
-        ...namedGetter((collection: HTMLFormControlsCollectionImpl) => collection.getSupportedPropertyNames()),
-        invoke(_context, name) {
-          return (this as HTMLFormControlsCollectionImpl).namedItemOrItems(name);
-        },
-      },
-    ),
+    {
+      kind: 'named-getter', name: 'namedItem', method: 'namedItemOrItems',
+      returns: nullable(union(reference('RadioNodeList'), reference('Element'))),
+    },
   ],
 });
 

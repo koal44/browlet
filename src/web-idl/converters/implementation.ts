@@ -10,8 +10,8 @@ import type {
   IDLPromiseType, IDLAsyncSequenceType, AssembledCallable, AssembledDictionary,
 } from '../assembly/index';
 import {
-  IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary, IDLPromise,
-  CallbackFunctionStamper, type StampedCallbackFunction, type IDLSequence, type IDLRecord, type IDLValue,
+  IDLAsyncSequence, IDLCallbackFunction, IDLCallbackInterface, IDLDictionary,
+  CallbackFunctionStamper, type StampedCallbackFunction, type IDLSequence, type IDLRecord, type IDLValue, type IDLPromise,
 } from '../values/index';
 import type { BindingContext } from '../binding/world';
 import type { RealmBinding } from '../binding/realm';
@@ -66,8 +66,7 @@ export class ImplementationConverter {
     const classes = options.implClasses;
     if (!classes?.length || options.callbackDictionary) return convert;
     return (value, context, callbackThis) => {
-      if (isObject(value) &&
-        !(value instanceof IDLDictionary) && !IDLAsyncSequence.is(value) && !IDLPromise.is(value)) {
+      if (isObject(value)) {
         for (const implClass of classes) {
           const impl = context.unwrap(value, implClass);
           if (impl) return impl;
@@ -154,7 +153,7 @@ export class ImplementationConverter {
     if (type.kind === 'callback-interface') {
       const toImpl = type.assembled.primary.toImpl;
       const convert: ImplConverter<IDLCallbackInterface> = toImpl
-        ? (value, context) => realmBinding.callImplementation(toImpl, undefined, [context, value])
+        ? (value, context) => realmBinding.callImplementation(toImpl, undefined, [context.getEnvironment(), value])
         : (value) => value;
       return convert as ImplConverter;
     }

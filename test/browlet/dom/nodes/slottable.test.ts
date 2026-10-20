@@ -42,12 +42,12 @@ describe('Slottable', () => {
     const document = createTestDocument();
     const host = document.createElementNode('div', HTML_NAMESPACE);
     const text = document.createTextNode('text');
-    host.shadowRoot = new ShadowRootImpl(host, 'open', document.env);
+    host.shadowRoot = new ShadowRootImpl(host, 'open');
     host.appendChild(text);
     expect(text.assignedSlot).toBeNull();
 
     // Isolate lookup against each root mode without replacing an attached root through the public API.
-    const closed = new ShadowRootImpl(host, 'closed', document.env);
+    const closed = new ShadowRootImpl(host, 'closed');
     host.shadowRoot = closed;
     expect(text.assignedSlot).toBeNull();
     expect(text.getAssignedSlot()).toBeNull();

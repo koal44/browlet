@@ -1,6 +1,6 @@
 import {
   atArg, ctor, defineIncludes, defineInterface, impl,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { DOMEnvironment } from '../environment';
 
@@ -22,12 +22,8 @@ export class DocumentFragmentImpl extends NodeImpl {
   /** Live child collection and element-child navigation. */
   #parentNodeMixin = new ParentNodeMixin(this);
 
-  constructor(
-    ownerDoc: DocumentImpl,
-    host: ElementImpl | null = null,
-    env: DOMEnvironment,
-  ) {
-    super(NodeType.DocumentFragment, ownerDoc, env);
+  constructor(ownerDoc: DocumentImpl, host: ElementImpl | null = null) {
+    super(NodeType.DocumentFragment, ownerDoc, ownerDoc.env);
     this.host = host;
   }
 
@@ -97,8 +93,7 @@ export const documentFragmentIDL = defineInterface<DOMEnvironment>({
       [],
       {
         constructWith: [
-          atArg(0, (ctx) => ctx.realm.getAssociatedDocument()),
-          atArg(2, (ctx) => ctx.getEnvironment()),
+          atArg(0, (env) => env.realm.getAssociatedDocument()),
         ],
       },
     ),

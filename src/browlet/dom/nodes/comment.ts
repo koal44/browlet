@@ -1,4 +1,4 @@
-import { arg, atArg, ctor, defineInterface, idlType, impl } from '../../../web-idl/index';
+import { arg, atArg, ctor, defineInterface, idlType, impl } from '../../../web-idl/core/index';
 
 import type { DOMEnvironment } from '../environment';
 
@@ -9,12 +9,8 @@ import type { DocumentImpl } from './document';
 /** Comment text retained as a character-data node in the document tree. */
 // https://dom.spec.whatwg.org/#interface-comment
 export class CommentImpl extends CharacterDataImpl {
-  constructor(
-    data: string,
-    ownerDoc: DocumentImpl,
-    env: DOMEnvironment,
-  ) {
-    super(NodeType.Comment, data, ownerDoc, env);
+  constructor(data: string, ownerDoc: DocumentImpl) {
+    super(NodeType.Comment, data, ownerDoc);
   }
 
   static is(value: unknown): value is CommentImpl {
@@ -32,16 +28,13 @@ export const commentIDL = defineInterface<DOMEnvironment>({
   name: 'Comment',
   inherits: 'CharacterData',
   exposed: 'Window',
-  implementation: impl(CommentImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
-  }),
+  implementation: impl(CommentImpl),
   members: [
     ctor(
       [arg('data', idlType.DOMString, { default: '', optional: true })],
       {
         constructWith: [
-          atArg(1, (ctx) => ctx.realm.getAssociatedDocument()),
-          atArg(2, (ctx) => ctx.getEnvironment()),
+          atArg(1, (env) => env.realm.getAssociatedDocument()),
         ],
       },
     ),

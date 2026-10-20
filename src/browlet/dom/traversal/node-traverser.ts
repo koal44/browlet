@@ -1,4 +1,4 @@
-import { DOMExceptionImpl, DOMExceptionNames } from '../../../web-idl/index';
+import { DOMExceptionImpl, DOMExceptionNames } from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';

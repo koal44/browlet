@@ -7,7 +7,7 @@ import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, dictMember, emptyDictionary, idlType, impl, invokeWith, nullable, op, promise,
   roAttr, reference, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import {
   extractHighWaterMark, extractSizeAlgorithm,
@@ -421,7 +421,7 @@ export const writableStreamIDL = defineInterface<StreamsEnvironment>({
   ...xattr('Transferable'),
   implementation: impl(WritableStreamImpl, {
     constructWith: [
-      atArg(2, (ctx) => ctx.getEnvironment()),
+      atArg(2, (env) => env),
     ],
   }),
   members: [
@@ -1014,11 +1014,11 @@ export const writableStreamDefaultWriterIDL = defineInterface<JSEnvironment>({
     ]),
     op('close', promise(idlType.undefined)),
     op('releaseLock', idlType.undefined,
-      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+      [], invokeWith(atArg(0, (_env, methodEnv) => methodEnv)),
     ),
     op('write', promise(idlType.undefined),
       [arg('chunk', idlType.any, { optional: true })],
-      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(1, (_env, methodEnv) => methodEnv)),
     ),
   ],
 });

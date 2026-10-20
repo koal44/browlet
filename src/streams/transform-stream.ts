@@ -6,7 +6,7 @@ import {
   arg, atArg, onError, cbDict, ctor, defineCallbackFunction, defineDictionary,
   defineInterface, defineInterfaceMixin, dictMember, emptyDictionary, idlType, impl, invokeWith,
   nullable, op, promise, roAttr, reference, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import {
   extractHighWaterMark, extractSizeAlgorithm,
@@ -322,7 +322,7 @@ export const transformStreamIDL = defineInterface<StreamsEnvironment>({
   ...xattr('Transferable'),
   implementation: impl(TransformStreamImpl, {
     constructWith: [
-      atArg(3, (ctx) => ctx.getEnvironment()),
+      atArg(3, (env) => env),
     ],
   }),
   members: [
@@ -512,13 +512,13 @@ export const transformStreamDefaultControllerIDL = defineInterface<JSEnvironment
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
     op('enqueue', idlType.undefined,
       [arg('chunk', idlType.any, { optional: true })],
-      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(1, (_env, methodEnv) => methodEnv)),
     ),
     op('error', idlType.undefined, [
       arg('reason', idlType.any, { optional: true }),
     ]),
     op('terminate', idlType.undefined,
-      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+      [], invokeWith(atArg(0, (_env, methodEnv) => methodEnv)),
     ),
   ],
 });

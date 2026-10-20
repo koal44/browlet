@@ -1,5 +1,5 @@
 import { InternalError } from '../infra/internal-error';
-import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/index';
+import { DOMExceptionImpl, DOMExceptionNames } from '../web-idl/core/index';
 import { ReadableStreamImpl, type StreamsEnvironment } from '../streams/index';
 
 /*

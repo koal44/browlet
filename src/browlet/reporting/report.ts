@@ -1,6 +1,6 @@
 import {
   defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
-} from '../../web-idl/index';
+} from '../../web-idl/core/index';
 import { utf8Encode } from '../../encoding/index';
 import type { Origin } from '../../url/index';
 

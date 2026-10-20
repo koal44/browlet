@@ -1,7 +1,7 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import {
   ctor, defineIncludes, defineInterface, impl, reference, reflectTokens, roAttr, xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';

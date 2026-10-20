@@ -5,7 +5,7 @@ import { isomorphicEncode } from '../js-engine/index';
 import {
   arg, ctor, defineInterface, defineTypedef, idlType, impl, iter, nullable, op,
   record, reference, sequence, union,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import { getEncoding, type Encoding } from '../encoding/index';
 import {
   collectHTTPQuotedString, isHTTPTabOrSpace, isHTTPToken, parseStructuredField, serializeStructuredField,
@@ -633,7 +633,7 @@ export const headersIDL = defineInterface({
       [arg('init', reference('HeadersInit'), { optional: true })],
       {
         // https://fetch.spec.whatwg.org/#dom-headers
-        invoke(_ctx, init) {
+        invoke(_env, init) {
           if (init !== undefined) (this as HeadersImpl).fill(init as HeadersInitValue);
         },
       },

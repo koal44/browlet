@@ -1,6 +1,6 @@
 import {
   arg, defineInterface, idlType, impl, indexedGetter, nullable, op, roAttr,
-} from '../../web-idl/index';
+} from '../../web-idl/core/index';
 
 /** Read-only platform view of an associated string list maintained by its owner. */
 // https://html.spec.whatwg.org/multipage/common-dom-interfaces.html#the-domstringlist-interface

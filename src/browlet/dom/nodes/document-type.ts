@@ -1,4 +1,4 @@
-import { defineIncludes, defineInterface, idlType, impl, roAttr } from '../../../web-idl/index';
+import { defineIncludes, defineInterface, idlType, impl, roAttr } from '../../../web-idl/core/index';
 
 import type { DOMEnvironment } from '../environment';
 

@@ -453,6 +453,40 @@ describe('platform declaration generation', () => {
     `)).toEqual([]);
   });
 
+  it('types exposed named getters using their result contract without inventing string index signatures', () => {
+    const definition = defineInterface({
+      name: 'Named', members: [
+        {
+          kind: 'named-getter', method: 'lookup', name: 'getNamedItem', argumentName: 'qualifiedName',
+          returns: nullable(reference('Item')), serializedType: idlType.object,
+        },
+      ],
+    });
+    const assembly = new DefinitionAssembly([
+      defineInterface({ name: 'Item', members: [roAttr('id', idlType.DOMString)] }), definition,
+      defineInterface({
+        name: 'Unnamed', members: [
+          { kind: 'named-getter', method: 'lookup', returns: reference('Item'), serializedType: idlType.object },
+        ],
+      }),
+    ]);
+    const source = generatePlatformTypes(assembly);
+    expect(serializeDefinitions([definition])).toContain('getter object getNamedItem(DOMString qualifiedName);');
+    expect(source).toContain('getNamedItem(qualifiedName: string): Item | null;');
+    expect(compile(source, `
+      import type { Item, Named, Unnamed } from './platform';
+      declare const named: Named;
+      declare const unnamed: Unnamed;
+      const item: Item | null = named.getNamedItem('name');
+      // @ts-expect-error Implementation method names do not become platform methods.
+      named.lookup('name');
+      // @ts-expect-error An unnamed getter exposes no ordinary method.
+      unnamed.lookup('name');
+      // @ts-expect-error Named getters do not introduce a general string index signature.
+      named['anything'];
+    `)).toEqual([]);
+  });
+
   it('preserves an inherited iterable element type instead of the nullable indexed getter result', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({

@@ -138,7 +138,7 @@ describe('HTMLBaseElement', () => {
     const { document, root } = createDocument();
     const base = createBase(document);
     base.setAttributeValue('href', '/shadow/');
-    const shadow = new ShadowRootImpl(root, 'open', document.env);
+    const shadow = new ShadowRootImpl(root, 'open');
     shadow.appendChild(base);
     expect(base.isConnected).toBe(true);
     expect(document.baseURI).toBe(document.URL);

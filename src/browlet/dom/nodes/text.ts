@@ -1,5 +1,5 @@
 import { firstStrongDirection, isAsciiWhitespace, type TextDirection } from '../../../infra/index';
-import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr } from '../../../web-idl/index';
+import { arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, op, reference, roAttr } from '../../../web-idl/core/index';
 
 import { ContentCategory } from './element-definitions/index';
 import type { EventImpl } from '../events/index';
@@ -19,8 +19,8 @@ export class TextImpl extends CharacterDataImpl {
   /** Slot assignment shared with element nodes. */
   #slottableMixin = new SlottableMixin();
 
-  constructor(data: string, ownerDoc: DocumentImpl, env: DOMEnvironment) {
-    super(NodeType.Text, data, ownerDoc, env);
+  constructor(data: string, ownerDoc: DocumentImpl) {
+    super(NodeType.Text, data, ownerDoc);
   }
 
   static is(value: unknown): value is TextImpl {
@@ -133,16 +133,13 @@ export const textIDL = defineInterface<DOMEnvironment>({
   name: 'Text',
   inherits: 'CharacterData',
   exposed: 'Window',
-  implementation: impl(TextImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
-  }),
+  implementation: impl(TextImpl),
   members: [
     ctor(
       [arg('data', idlType.DOMString, { default: '', optional: true })],
       {
         constructWith: [
-          atArg(1, (ctx) => ctx.realm.getAssociatedDocument()),
-          atArg(2, (ctx) => ctx.getEnvironment()),
+          atArg(1, (env) => env.realm.getAssociatedDocument()),
         ],
       },
     ),

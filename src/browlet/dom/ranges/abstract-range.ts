@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/internal-error';
-import { defineInterface, idlType, impl, reference, roAttr } from '../../../web-idl/index';
+import { defineInterface, idlType, impl, reference, roAttr } from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';

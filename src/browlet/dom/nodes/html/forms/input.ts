@@ -2,7 +2,7 @@ import { HTML_NAMESPACE, firstStrongDirection, type TextDirection } from '../../
 import { InternalError } from '../../../../../infra/internal-error';
 import {
   attr, ctor, defineInterface, idlType, impl, reflect, reflectEnumerated, xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory, emptyContent } from '../../element-definitions/index';
 import { EnumeratedAttribute } from '../../../../html/microsyntaxes/index';

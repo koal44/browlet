@@ -1,12 +1,9 @@
-import type { AttributeFunctionSteps } from './core/index';
-
 import type { WebIDLEnvironment, WebIDLRealm } from './environment';
-import type { IDLCallbackInterface } from './values/index';
 import type { BindingContext } from './binding/world';
 
 export * from './core/index';
 
-export type { BindingContext, IDLCallbackInterface };
+export type { BindingContext };
 export { BindingWorld, type BindingWorldOptions } from './binding/world';
 export type { AttributeBinding, ExtendedAttributeHooks, HTMLConstructorBinding } from './binding/extended-attributes';
 export type { AssembledInterface, IDLAttribute, IDLFrozenArrayType, IDLInterfaceType, IDLType } from './assembly/index';
@@ -17,28 +14,3 @@ export {
   isStampedImplInstance, isStampedPlatformObject, getImplementationObject,
   type StampedImplInstance, type StampedPlatformObject, type PlatformRecord,
 } from './binding/platform';
-
-// The full Web IDL entry supplies typed Binding Contexts for declaration hooks.
-declare module './core/types' {
-  interface DeclarationHooks<Env, Impl extends object, Values extends unknown[]> {
-    'argument-resolve': BindingHook<Env, void, [method: BindingContext<Env & WebIDLEnvironment>], unknown>;
-    'initialize-implementation': BindingHook<Env, undefined, [value: Impl], void>;
-    'html-all-collection-create': BindingHook<Env, undefined, [value: Impl], object>;
-    'constructor-create': BindingHook<Env, undefined, Values, object>;
-    'constructor-invoke': BindingHook<Env, object, Values, void>;
-    'attribute-get': BindingHook<Env, object | null, [], unknown>;
-    'attribute-set': BindingHook<Env, object | null, [value: unknown], void>;
-    'attribute-function': BindingHook<Env, undefined, [], AttributeFunctionSteps>;
-    'operation-invoke': BindingHook<Env, object | null, Values, unknown>;
-    'callback-interface-to-impl': BindingHook<
-      Env, undefined, [cbValue: IDLCallbackInterface<(Env & WebIDLEnvironment)['realm']>], unknown
-    >;
-  }
-}
-
-/** A declaration hook receiving its typed Binding Context before the hook-specific arguments. */
-type BindingHook<Env, This, Values extends unknown[], Result> = (
-  this: This,
-  ctx: BindingContext<Env & WebIDLEnvironment>,
-  ...values: Values
-) => Result;

@@ -12,6 +12,7 @@
     "../../../../src/infra/iteration.ts",
     "../../../../src/infra/exceptions.ts",
     "../../../../src/infra/stamper.ts",
-    "../../../../src/infra/internal-error.ts"
+    "../../../../src/infra/internal-error.ts",
+    "../../../../src/infra/util.ts"
   ]
 }

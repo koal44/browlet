@@ -1,5 +1,5 @@
 import { HTML_NAMESPACE } from '../../../../infra/index';
-import { defineInterface, impl } from '../../../../web-idl/index';
+import { defineInterface, impl } from '../../../../web-idl/core/index';
 
 import { ElementTag } from '../element-definitions/index';
 

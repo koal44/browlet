@@ -35,11 +35,11 @@ describe('Implementation arrays', () => {
   const implementations = [
     impl(QImpl, {
       constructWith: [atArg(1, () => qDependency)],
-      initializeImplementation(_ctx, value) { value.initialized = true; },
+      initializeImplementation(_env, value) { value.initialized = true; },
     }),
     impl(BlockQuoteImpl, {
       constructWith: [atArg(1, () => blockQuoteDependency)],
-      initializeImplementation(_ctx, value) { value.initialized = true; },
+      initializeImplementation(_env, value) { value.initialized = true; },
     }),
   ];
   const definition = defineInterface({
@@ -233,7 +233,11 @@ describe('Implementation arrays', () => {
         ...definition.members,
         ctor(
           [arg('block', idlType.boolean)],
-          { construct(ctx, block) { return ctx.construct<QImpl | BlockQuoteImpl>(block ? BlockQuoteImpl : QImpl, ['created']); } },
+          {
+            construct(_env, block) {
+              return block ? new BlockQuoteImpl('created', blockQuoteDependency) : new QImpl('created', qDependency);
+            },
+          },
         ),
         staticOp('label', idlType.DOMString, [], { invoke() { return 'shared'; } }),
       ],

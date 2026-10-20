@@ -1,4 +1,4 @@
-import { defineInterface, impl } from '../../../../web-idl/index';
+import { defineInterface, impl } from '../../../../web-idl/core/index';
 
 import { SVGElementImpl } from './element';
 

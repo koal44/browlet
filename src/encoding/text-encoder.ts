@@ -3,7 +3,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineIncludes, defineInterface,
   defineInterfaceMixin, dictMember, idlType, impl, op,
   roAttr, reference, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
 
@@ -68,7 +68,7 @@ export const textEncoderIDL = defineInterface<JSEnvironment>({
   name: 'TextEncoder',
   exposed: '*',
   implementation: impl(TextEncoderImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(0, (env) => env)],
   }),
   members: [
     ctor(),

@@ -1,4 +1,4 @@
-import { defineInterface, impl, nullable, reference, roAttr } from '../../../../../web-idl/index';
+import { defineInterface, impl, nullable, reference, roAttr } from '../../../../../web-idl/core/index';
 
 import { ElementAssociations, type ElementConstructor } from '../../../../html/reflection/index';
 import type { BrowletEnvironment } from '../../../../environment';

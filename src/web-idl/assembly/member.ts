@@ -1,10 +1,10 @@
 import { InternalError } from '../../infra/index';
 import {
-  hasExtendedAttribute, type ArgumentDefinition, type ExtendedAttribute, type ImplementationClass,
+  hasExtendedAttribute, idlType, type ArgumentDefinition, type ExtendedAttribute, type ImplementationClass,
   type StringifierMember, type WebIDLType, type AttributeMember, type OperationMember, type ConstantMember,
   type ConstructorMember, type IterableMember, type AsyncIterableMember, type MaplikeMember, type SetlikeMember,
   type NamedArgumentsExtendedAttribute, type InterfaceMember, type MixinMember, type NamespaceMember,
-  type DefaultValue, type CallbackExceptionBehavior,
+  type DefaultValue, type CallbackExceptionBehavior, type NamedGetterMember,
 } from '../core/index';
 
 import { undefinedType, type IDLType, type IDLDictionaryType } from './types';
@@ -139,7 +139,10 @@ export class AssembledOverloads<Callable extends AssembledCallable = AssembledCa
 
 export type IDLAttribute = Omit<AttributeMember, 'type'> & { type: IDLType; };
 export type IDLConstant = Omit<ConstantMember, 'type'> & { type: IDLType; };
-export type IDLOperation = Omit<OperationMember, 'returns' | 'arguments'> & AssembledCallable;
+export type IDLOperation = Omit<OperationMember, 'returns' | 'arguments'> & AssembledCallable & {
+  /** Implementation method selected by a named-getter declaration. */
+  namedGetter?: string;
+};
 export type IDLConstructor = Omit<ConstructorMember, 'arguments'> & AssembledCallable;
 export type IDLIterable = Omit<IterableMember, 'key' | 'value'> & { key?: IDLType; value: IDLType; };
 export type IDLAsyncIterable = Omit<AsyncIterableMember, 'key' | 'value' | 'arguments'> & AssembledCallable & { key?: IDLType; value: IDLType; };
@@ -214,7 +217,7 @@ type PrimitiveOverloadCandidates<Callable> = Record<'boolean' | 'numeric' | 'big
 
 type MemberFromDeclaration<Member> =
   Member extends AttributeMember ? IDLAttribute : Member extends ConstantMember ? IDLConstant
-    : Member extends OperationMember ? IDLOperation : Member extends ConstructorMember ? IDLConstructor
+    : Member extends OperationMember | NamedGetterMember ? IDLOperation : Member extends ConstructorMember ? IDLConstructor
       : Member extends IterableMember ? IDLIterable : Member extends AsyncIterableMember ? IDLAsyncIterable
         : Member extends MaplikeMember ? IDLMaplike : Member extends SetlikeMember ? IDLSetlike : StringifierMember;
 
@@ -232,6 +235,16 @@ export function assembleMember(member: InterfaceMember | MixinMember | Namespace
         argumentsList.map((argument) => new AssembledArgument(argument, assembly)), assembly.getIDLType(returns),
       ), metadata);
     }
+    case 'named-getter':
+      // Named getters share ordinary operation conversion, overload grouping, and invocation.
+      return Object.assign(new AssembledCallable(
+        [new AssembledArgument({ name: member.argumentName ?? 'name', type: idlType.DOMString }, assembly)],
+        assembly.getIDLType(member.returns),
+      ), {
+        kind: 'operation' as const, special: 'getter' as const,
+        namedGetter: member.method, name: member.name,
+        exposed: member.exposed, extendedAttributes: member.extendedAttributes,
+      });
     case 'constructor': {
       const { arguments: argumentsList, ...metadata } = member;
       return Object.assign(new AssembledCallable(

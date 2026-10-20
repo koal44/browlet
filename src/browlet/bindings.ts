@@ -5,7 +5,7 @@ import type { TaskCreationOptions } from '../infra/execution';
 import { addon } from '../js-engine/index';
 import {
   BindingWorld, type GlobalObjectAllocation,
-  type BindingContext, type StampedPlatformObject,
+  type BindingContext, type ImplementationClass, type StampedPlatformObject,
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
@@ -187,12 +187,16 @@ export function createBrowletExecution(context: BindingContext<BrowletEnvironmen
     },
     parseJSON: (text) => realm.parseJSON(text),
     stringifyJSON: (value) => realm.stringifyJSON(value),
+    constructNode<T extends object>(implementation: ImplementationClass<T>, argumentsList: unknown[]): T {
+      return context.construct(implementation, argumentsList);
+    },
     createDocument: () => context.construct(DocumentImpl),
     createEvent: (EventConstructor = EventImpl) => {
       const event = context.construct(EventConstructor, ['', {}]);
       event.isTrusted = true;
       return event;
     },
+    createAbortSignal: () => context.construct(AbortSignalImpl),
     createAbortController: () => context.construct(AbortControllerImpl),
     createDependentAbortSignal: (signals) => AbortSignalImpl.any(
       context.construct(AbortSignalImpl), signals as AbortSignalImpl[],

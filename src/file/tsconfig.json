@@ -13,7 +13,6 @@
     { "path": "../encoding" },
     { "path": "../mime" },
     { "path": "../streams" },
-    { "path": "../web-idl" },
     { "path": "../web-idl/core" }
   ]
 }

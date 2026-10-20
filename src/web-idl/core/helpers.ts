@@ -4,7 +4,7 @@ import type { InternalPromise, PromiseResult, ResultValue } from '../../infra/pr
 
 import type {
   AnnotatedType, AsyncSequenceType, CallbackExceptionBehavior,
-  ConstantValue, DecimalLiteral, DeclarationHook, DefaultValue, ExtendedAttribute, FrozenArrayType,
+  ConstantValue, DecimalLiteral, DefaultValue, ExtendedAttribute, FrozenArrayType,
   ImplementationClass, ImplementationType, InjectedArgument, IntegerLiteral, InterfaceType,
   NullableType, NumericLiteral, ObservableArrayType, PromiseType, RecordType, ReferenceType,
   ReflectionExtendedAttribute, SequenceType, StringType, UnionType, WebIDLType,
@@ -54,7 +54,7 @@ export function roAttr<Env = unknown>(
 
 /**
  * Return one built-in function per attribute and receiver realm, named after the attribute.
- * The factory receives the owning binding context; the returned steps supply the function's length.
+ * The factory receives the owning environment; the returned steps supply the function's length.
  */
 export function attrFn<Env = unknown>(
   createSteps: NonNullable<AttributeOptions<Env>['attributeFunction']>,
@@ -213,25 +213,6 @@ export function indexedGetter<Implementation extends object>(
           return support.supportsIndex(this as Implementation, index);
         },
       }),
-    },
-    special: 'getter',
-  };
-}
-
-/**
- * Declare a named getter whose implementation supplies the supported property
- * names while ordinary operation binding supplies invocation.
- */
-// https://webidl.spec.whatwg.org/#idl-named-properties
-export function namedGetter<Implementation extends object>(
-  getSupportedPropertyNames: (
-    implementation: Implementation,
-  ) => ReadonlySet<string>,
-): Pick<OperationOptions, 'getSupportedPropertyNames' | 'special'> {
-  return {
-    // Project adapter: pass the receiver to the declared supported-name callback.
-    getSupportedPropertyNames() {
-      return getSupportedPropertyNames(this as Implementation);
     },
     special: 'getter',
   };
@@ -408,7 +389,7 @@ export function hasExtendedAttribute(
  *
  * Interface construction dependencies apply both when the binding creates an
  * implementation internally and when an automatically bound IDL constructor
- * constructs it. Constructor-level `constructWith` metadata overrides them.
+ * constructs it. Declare `constructWith` here or on constructor members, never both.
  * The initializer receives the supplied class's instance type.
  */
 export function impl<Env = unknown, Class extends ImplementationClass = ImplementationClass>(
@@ -420,7 +401,7 @@ export function impl<Env = unknown, Class extends ImplementationClass = Implemen
 
 /**
  * Supply an injected value at a final constructor or operation argument index.
- * Resolvers receive receiver and method contexts; constructors use the same context for both.
+ * Resolvers receive receiver and method environments; constructors use the same environment for both.
  */
 export function atArg<Env = unknown>(
   index: number,
@@ -482,19 +463,14 @@ export function tsType<Type extends WebIDLType>(type: Type, typescript: string):
 // Helper options derived from declaration members
 
 type ConstructorOptions<Env = unknown, Values extends unknown[] = unknown[]> =
-  Omit<ConstructorMember<Env>, 'kind' | 'arguments' | 'construct' | 'invoke'> & {
-    construct?: DeclarationHook<'constructor-create', Env, object, Values>;
-    invoke?: DeclarationHook<'constructor-invoke', Env, object, Values>;
-  };
+  Omit<ConstructorMember<Env, Values>, 'kind' | 'arguments'>;
 
 type AttributeOptions<Env = unknown> = Omit<AttributeMember<Env>, 'kind' | 'name' | 'type'>;
 
 type ReadonlyAttributeOptions<Env = unknown> = Omit<AttributeOptions<Env>, 'readonly'>;
 
 type OperationOptions<Env = unknown, Values extends unknown[] = unknown[]> =
-  Omit<OperationMember<Env>, 'kind' | 'name' | 'returns' | 'arguments' | 'invoke'> & {
-    invoke?: DeclarationHook<'operation-invoke', Env, object, Values>;
-  };
+  Omit<OperationMember<Env, Values>, 'kind' | 'name' | 'returns' | 'arguments'>;
 
 type StaticOperationOptions<Env = unknown, Values extends unknown[] = unknown[]> = Omit<OperationOptions<Env, Values>, 'static'>;
 

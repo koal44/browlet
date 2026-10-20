@@ -1,4 +1,4 @@
-import type { Definition } from '../web-idl/index';
+import type { Definition } from '../web-idl/core/index';
 
 import type { FetchEnvironment } from './environment';
 import { headersIDL, headersInitIDL } from './headers';

@@ -2,7 +2,7 @@ import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../infra/index';
 import {
   annotated, arg, defineInterface, idlType, impl, nullable, op, reference, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { isValidDoctypeName } from '../infra/index';
 import type { DOMEnvironment } from '../environment';

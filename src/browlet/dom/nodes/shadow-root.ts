@@ -1,12 +1,11 @@
 import { InternalError } from '../../../infra/internal-error';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType, impl, reference, roAttr,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 import type { TreeScope, CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
 
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import type { EventImpl, EventTargetImpl } from '../events/index';
-import type { DOMEnvironment } from '../environment';
 
 import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
@@ -45,8 +44,8 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
   /** IDL handler registration shares the ordinary event listener ordering. */
   #eventHandlers = new EventHandlerMap(this, [{ name: 'onslotchange', type: 'slotchange' }]);
 
-  constructor(host: ElementImpl, mode: ShadowRootMode, env: DOMEnvironment) {
-    super(host.nodeDocument, host, env);
+  constructor(host: ElementImpl, mode: ShadowRootMode) {
+    super(host.nodeDocument, host);
     this.mode = mode;
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin(this);
   }

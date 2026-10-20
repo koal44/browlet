@@ -1,5 +1,5 @@
 import type {
-  CallbackExceptionBehavior, ConstantValue, DeclarationHook, DefaultValue, Exposed, ExtendedAttribute,
+  CallbackExceptionBehavior, ConstantValue, DefaultValue, Exposed, ExtendedAttribute,
   ImplementationClass, InjectedArgument, ReferenceType, TypeParameter, WebIDLType,
 } from './types';
 
@@ -13,6 +13,7 @@ export type PartialInterfaceMember<Env = unknown> =
   | ConstantMember
   | AttributeMember<Env>
   | OperationMember<Env>
+  | NamedGetterMember
   | StringifierMember
   | IterableMember
   | AsyncIterableMember
@@ -75,12 +76,12 @@ export type AttributeMember<Env = unknown> = {
   enabled?: boolean;
 
   // Project metadata: member steps, returned function creation, and callback exception policy.
-  /** Read the implementation value using the owner's context; `this` is the implementation or null for static access. */
-  get?: DeclarationHook<'attribute-get', Env>;
-  /** Store a converted value using the owner's context; `this` is the implementation or null for static access. */
-  set?: DeclarationHook<'attribute-set', Env>;
+  /** Read the implementation value using the owner's environment; `this` is the implementation or null for static access. */
+  get?: (this: object | null, env: Env) => unknown;
+  /** Store a converted value using the owner's environment; `this` is the implementation or null for static access. */
+  set?: (this: object | null, env: Env, value: unknown) => void;
   /** Create the steps for a cached realm-owned function returned by this attribute. */
-  attributeFunction?: DeclarationHook<'attribute-function', Env>;
+  attributeFunction?: (this: undefined, env: Env) => AttributeFunctionSteps;
   /** Report or rethrow exceptions from an author callback assigned to this attribute. */
   callbackExceptionBehavior?: CallbackExceptionBehavior;
 };
@@ -89,7 +90,7 @@ export type AttributeMember<Env = unknown> = {
 export type AttributeFunctionSteps = (this: unknown, ...argumentsList: unknown[]) => unknown;
 
 /** An author-facing constructor overload and its implementation creation steps. */
-export type ConstructorMember<Env = unknown> = {
+export type ConstructorMember<Env = unknown, Values extends unknown[] = unknown[]> = {
   /** Member discriminator supplied by `ctor()`. */
   kind: 'constructor';
   /** Author arguments in declaration order. */
@@ -100,19 +101,19 @@ export type ConstructorMember<Env = unknown> = {
   extendedAttributes?: ExtendedAttribute[];
 
   // Project metadata: implementation construction and argument injection.
-  /** Return a new implementation from the binding context and converted arguments. */
-  construct?: DeclarationHook<'constructor-create', Env>;
-  /** Injected arguments for automatic construction; overrides the interface's `constructWith`. */
+  /** Return a new implementation from the owning environment and converted arguments. */
+  construct?: (this: undefined, env: Env, ...values: Values) => object;
+  /** Injected arguments for public construction; cannot accompany implementation-level `constructWith`. */
   constructWith?: InjectedArgument<Env>[];
   /** Initialize the preallocated implementation supplied as `this`, using converted arguments. */
-  invoke?: DeclarationHook<'constructor-invoke', Env>;
+  invoke?: (this: object, env: Env, ...values: Values) => void;
 
   /** Additional TypeScript parameters scoped to this generated constructor overload. */
   typeParameters?: TypeParameter[];
 };
 
 /** An operation overload and its explicit or automatic implementation binding. */
-export type OperationMember<Env = unknown> = {
+export type OperationMember<Env = unknown, Values extends unknown[] = unknown[]> = {
   /** Member discriminator supplied by `op()` or `staticOp()`. */
   kind: 'operation';
   /** IDL type used to expose the implementation's result to JavaScript. */
@@ -134,18 +135,36 @@ export type OperationMember<Env = unknown> = {
   // Project metadata: invocation, argument injection, and legacy property support.
   /**
    * Run with converted arguments and return the implementation result.
-   * The context belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
+   * The environment belongs to the receiver, or the method for a static operation; `this` is the implementation or null.
    */
-  invoke?: DeclarationHook<'operation-invoke', Env>;
+  invoke?: (this: object | null, env: Env, ...values: Values) => unknown;
   /** Injected arguments for an automatically bound implementation method. */
   invokeWith?: InjectedArgument<Env>[];
   /** Supported indices and membership checks for a legacy indexed getter. */
   indexedGetter?: IndexedGetterDeclaration;
-  /** Live supported names for a legacy named getter, with the implementation as `this`. */
-  getSupportedPropertyNames?: SupportedPropertyNamesSteps;
 
   /** TypeScript parameters scoped to this generated operation overload. */
   typeParameters?: TypeParameter[];
+};
+
+/** A legacy named getter backed by an implementation method and `getSupportedPropertyNames()`. */
+// https://webidl.spec.whatwg.org/#idl-named-properties
+export type NamedGetterMember = {
+  kind: 'named-getter';
+  /** Implementation method receiving one converted DOMString key. */
+  method: string;
+  /** IDL type used to project the implementation result. */
+  returns: WebIDLType;
+  /** Also expose an ordinary method with this name; omit for an unnamed getter. */
+  name?: string;
+  /** Argument identifier in IDL and generated declarations; defaults to `name`. */
+  argumentName?: string;
+  /** Override only the emitted Web IDL spelling, leaving conversion and TypeScript unchanged. */
+  serializedType?: WebIDLType;
+  /** Global exposure names for this getter. */
+  exposed?: Exposed;
+  /** Extended attributes applying to this getter. */
+  extendedAttributes?: ExtendedAttribute[];
 };
 
 /** A standalone stringifier bound to the implementation's string conversion method. */
@@ -286,18 +305,6 @@ export type IndexedGetterDeclaration =
     supportsIndex: SupportsIndexSteps;
   };
 
-export type SupportedPropertyNamesSteps = (
-  this: object,
-  context: unknown,
-) => ReadonlySet<string>;
+type SupportedPropertyIndicesSteps = (this: object) => Iterable<number>;
 
-type SupportedPropertyIndicesSteps = (
-  this: object,
-  context: unknown,
-) => Iterable<number>;
-
-type SupportsIndexSteps = (
-  this: object,
-  index: number,
-  context: unknown,
-) => boolean;
+type SupportsIndexSteps = (this: object, index: number) => boolean;

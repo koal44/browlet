@@ -1,4 +1,4 @@
-import { arg, defineInterfaceMixin, idlType, nullable, op, reference } from '../../../web-idl/index';
+import { arg, defineInterfaceMixin, idlType, nullable, op, reference } from '../../../web-idl/core/index';
 
 /*
  * interface mixin NonElementParentNode {

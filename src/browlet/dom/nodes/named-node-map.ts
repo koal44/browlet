@@ -1,9 +1,9 @@
 import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE } from '../../../infra/index';
 import {
-  arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op, reference,
+  arg, defineInterface, idlType, impl, indexedGetter, nullable, op, reference,
   roAttr, xattr, DOMExceptionNames, DOMExceptionImpl,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { AttrImpl } from './attribute';
 import type { ElementImpl } from './element';
@@ -106,12 +106,10 @@ export const namedNodeMapIDL = defineInterface({
         { unsupportedValue: null },
       ),
     ),
-    op('getNamedItem', nullable(reference('Attr')),
-      [arg('qualifiedName', idlType.DOMString)],
-      namedGetter(
-        (attributes: NamedNodeMapImpl) => attributes.getSupportedPropertyNames(),
-      ),
-    ),
+    {
+      kind: 'named-getter', name: 'getNamedItem', method: 'getNamedItem',
+      argumentName: 'qualifiedName', returns: nullable(reference('Attr')),
+    },
     op('getNamedItemNS', nullable(reference('Attr')), [
       arg('namespace', nullable(idlType.DOMString)),
       arg('localName', idlType.DOMString),

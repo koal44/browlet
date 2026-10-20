@@ -349,7 +349,7 @@ describe('DOM insertion and adoption', () => {
     const source = createTestDocument();
     const target = createTestDocument();
     const host = source.createElement('host');
-    const shadow = new ShadowRootImpl(host, 'closed', source.env);
+    const shadow = new ShadowRootImpl(host, 'closed');
     host.shadowRoot = shadow;
     const child = source.createElement('child');
     shadow.appendChild(child);
@@ -486,8 +486,8 @@ describe('Host-including insertion cycles', () => {
     const document = createTestDocument();
     const host = document.createElement('host');
     const root = kind === 'fragment'
-      ? new DocumentFragmentImpl(document, host, document.env)
-      : new ShadowRootImpl(host, 'open', document.env);
+      ? new DocumentFragmentImpl(document, host)
+      : new ShadowRootImpl(host, 'open');
     const child = document.createElement('child');
     root.appendChild(child);
 

@@ -35,12 +35,7 @@ describe('Web IDL undetectable callable objects', () => {
     }
     const callable = defineInterface({
       name: 'Callable', exposed: '*',
-      implementation: impl(CallableImpl, {
-        createHTMLAllCollection(context) {
-          return context.realm.createHTMLDDA((...args: unknown[]) => { calls.push(args); return result; });
-        },
-      }),
-      members: [ctor()],
+      implementation: impl(CallableImpl), members: [],
     });
     const callback = defineCallbackFunction({ name: 'Callback', returns: idlType.object, arguments: [] });
     const dictionary = defineDictionary({
@@ -78,7 +73,11 @@ describe('Web IDL undetectable callable objects', () => {
       ],
     });
     const { context, globalObject } = installTestBindings(new BindingWorld([callable, callback, dictionary, consumer]));
-    const Callable = Reflect.get(globalObject, 'Callable') as new() => object;
+    // These conversion tests need arbitrary native call steps, independently of document.all's lookup rules.
+    const value = context.realm.createHTMLDDA((...args: unknown[]) => { calls.push(args); return result; });
+    const record = context.associate(CallableImpl, new CallableImpl());
+    Object.setPrototypeOf(value, context.getPlatformObjectPrototype(record.assembled));
+    record.attachPlatformObject(value);
     const Consumer = Reflect.get(globalObject, 'Consumer') as new() => {
       echo(value: object): object;
       echoNullable(value: object): object;
@@ -95,7 +94,7 @@ describe('Web IDL undetectable callable objects', () => {
       overloaded(value: object): object;
       unwrap(value: object): boolean;
     };
-    return { value: new Callable(), consumer: new Consumer(), result, calls, context };
+    return { value, consumer: new Consumer(), result, calls, context };
   }
 
   itPassesWith('htmlDDA')('retains object, nullable, union and interface values instead of treating them as undefined', () => {

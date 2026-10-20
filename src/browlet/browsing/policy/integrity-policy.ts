@@ -1,4 +1,4 @@
-import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/index';
+import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/core/index';
 import type { FetchHeaders, FetchIntegrityPolicy, IntegrityViolationReportBody } from '../../../fetch/index';
 
 import { ReportBodyImpl } from '../../reporting/index';

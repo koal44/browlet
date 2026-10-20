@@ -4,7 +4,7 @@ import { getBufferSourceCopy } from '../../../js-engine/index';
 import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,
   reference, union, DOMExceptionNames, DOMExceptionImpl,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 import {
   packageData, type BlobImpl, type FileReadType,
 } from '../../../file/index';
@@ -304,7 +304,7 @@ export const fileReaderIDL = defineInterface<BrowletEnvironment>({
   inherits: 'EventTarget',
   exposed: ['Window', 'Worker'],
   implementation: impl(FileReaderImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(0, (env) => env)],
   }),
   members: [
     ctor(),

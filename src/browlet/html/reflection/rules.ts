@@ -1,5 +1,5 @@
 import { toScalarValueString } from '../../../infra/index';
-import { DOMExceptionImpl, DOMExceptionNames } from '../../../web-idl/index';
+import { DOMExceptionImpl, DOMExceptionNames } from '../../../web-idl/core/index';
 
 import {
   type EnumeratedAttribute, parseInteger, parseNonNegativeInteger,

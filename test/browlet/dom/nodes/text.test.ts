@@ -137,7 +137,7 @@ describe('Node.normalize', () => {
   it('does not cross a shadow boundary and can normalize the shadow root itself', () => {
     const document = createTestDocument();
     const host = document.createElement('host');
-    const shadow = new ShadowRootImpl(host, 'open', document.env);
+    const shadow = new ShadowRootImpl(host, 'open');
     host.shadowRoot = shadow;
     const light = host.appendChild(document.createTextNode('a'));
     host.appendChild(document.createTextNode('b'));

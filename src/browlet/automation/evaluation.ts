@@ -6,7 +6,7 @@ import {
   type JSRealm, copyMapData, copySetData, getDateValue, getRegExpData,
   hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isCallable, isObject, isProxyObject,
 } from '../../js-engine/index';
-import { idlType } from '../../web-idl/index';
+import { idlType } from '../../web-idl/core/index';
 
 import type { WindowRealm } from '../scripting/index';
 

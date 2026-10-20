@@ -5,7 +5,7 @@ import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface,
   dictMember, emptyDictionary, idlType, impl, integer, nullable, op, reference,
   roAttr, staticOp, invokeWith, xattr,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 import type { ReadableStreamImpl } from '../streams/index';
 import { utf8Encode } from '../encoding/index';
 import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
@@ -424,7 +424,7 @@ export const responseIDL = defineInterface<FetchEnvironment>({
   name: 'Response',
   exposed: ['Window', 'Worker'],
   implementation: impl(ResponseImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(2, (env) => env)],
   }),
   members: [
     ctor(
@@ -433,14 +433,14 @@ export const responseIDL = defineInterface<FetchEnvironment>({
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
       {
-        construct(ctx, body, init) {
-          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, ctx.getEnvironment());
+        construct(env, body, init) {
+          return ResponseImpl.create(body as BodyInitValue | null, init as FetchResponseInit, env);
         },
       },
     ),
     staticOp('error', reference('Response'),
       [],
-      { ...xattr('NewObject'), ...invokeWith(atArg(0, (ctx) => ctx.getEnvironment())) },
+      { ...xattr('NewObject'), ...invokeWith(atArg(0, (env) => env)) },
     ),
     staticOp('redirect', reference('Response'),
       [
@@ -449,7 +449,7 @@ export const responseIDL = defineInterface<FetchEnvironment>({
       ],
       {
         ...xattr('NewObject'),
-        ...invokeWith(atArg(2, (ctx) => ctx.getEnvironment())),
+        ...invokeWith(atArg(2, (env) => env)),
       },
     ),
     staticOp('json', reference('Response'),
@@ -457,7 +457,7 @@ export const responseIDL = defineInterface<FetchEnvironment>({
         arg('data', idlType.any),
         arg('init', reference('ResponseInit'), { optional: true, default: emptyDictionary }),
       ],
-      { ...xattr('NewObject'), ...invokeWith(atArg(2, (ctx) => ctx.getEnvironment())) },
+      { ...xattr('NewObject'), ...invokeWith(atArg(2, (env) => env)) },
     ),
     roAttr('type', reference('ResponseType')),
     roAttr('url', idlType.USVString),

@@ -1,4 +1,4 @@
-import { arg, definePartialInterface, idlType, reference, staticOp } from '../../../web-idl/index';
+import { arg, definePartialInterface, idlType, reference, staticOp } from '../../../web-idl/core/index';
 import { BlobImpl } from '../../../file/index';
 
 import type { BrowletEnvironment } from '../../environment';
@@ -19,8 +19,7 @@ export const objectURLIDL = definePartialInterface<BrowletEnvironment>({
     staticOp('createObjectURL', idlType.DOMString,
       [arg('obj', reference(BlobImpl))],
       {
-        invoke(context, object) {
-          const env = context.realm.env;
+        invoke(env, object) {
           return env.userAgent.blobURLStore.add(object, env);
         },
       },
@@ -28,8 +27,7 @@ export const objectURLIDL = definePartialInterface<BrowletEnvironment>({
     staticOp('revokeObjectURL', idlType.undefined,
       [arg('url', idlType.DOMString)],
       {
-        invoke(context, url) {
-          const env = context.realm.env;
+        invoke(env, url) {
           env.userAgent.blobURLStore.revoke(url, env);
         },
       },

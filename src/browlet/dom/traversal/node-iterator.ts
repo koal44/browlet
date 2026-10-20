@@ -2,7 +2,7 @@ import { WeakOrderedSet } from '../../../infra/collections';
 import {
   defineInterface, idlType, impl, nullable, op, reference, roAttr, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';
 import type { DOMEnvironment } from '../environment';

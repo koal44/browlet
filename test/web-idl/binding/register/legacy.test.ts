@@ -1,13 +1,77 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  arg, ctor, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op,
+  arg, ctor, defineInterface, definePartialInterface, idlType, impl, indexedGetter, nullable, op, reference, roAttr, union,
 } from '../../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { installTestBindings } from '../../../support/web-idl-binding';
 
 describe('Web IDL legacy property registration', () => {
+  it.each([undefined, 'namedItem'])('projects typed named results with exposed method %s', (name) => {
+    class ItemImpl {
+      label = 'item';
+    }
+    class OtherImpl {
+      label = 'other';
+    }
+    class CollectionImpl {
+      values = new Map<string, ItemImpl | OtherImpl>([['first', new ItemImpl()], ['second', new OtherImpl()]]);
+
+      lookup(key: string): ItemImpl | OtherImpl | null {
+        return this.values.get(key) ?? null;
+      }
+
+      getSupportedPropertyNames(): ReadonlySet<string> {
+        return new Set(this.values.keys());
+      }
+    }
+    const world = new BindingWorld([
+      defineInterface({
+        name: 'Item', exposed: '*', implementation: impl(ItemImpl), members: [roAttr('label', idlType.DOMString)],
+      }),
+      defineInterface({
+        name: 'Other', exposed: '*', implementation: impl(OtherImpl), members: [roAttr('label', idlType.DOMString)],
+      }),
+      defineInterface({ name: 'Collection', exposed: '*', implementation: impl(CollectionImpl), members: [ctor()] }),
+      definePartialInterface({
+        name: 'Collection', members: [{
+          kind: 'named-getter', method: 'lookup', name,
+          returns: nullable(union(reference('Item'), reference('Other'))), serializedType: idlType.object,
+        }],
+      }),
+    ]);
+    const { context, globalObject, realm } = installTestBindings(world);
+    const Collection = Reflect.get(globalObject, 'Collection') as new() => object;
+    const collection = new Collection();
+    const implementation = context.unwrap(collection, CollectionImpl)!;
+    const first: unknown = Reflect.get(collection, 'first');
+    expect(first).toBeInstanceOf(Reflect.get(globalObject, 'Item'));
+    expect(Reflect.get(collection, 'second')).toBeInstanceOf(Reflect.get(globalObject, 'Other'));
+    expect(first).not.toBe(implementation.values.get('first'));
+    expect(Reflect.get(collection, 'first')).toBe(first);
+    expect(Reflect.get(collection, 'missing')).toBeUndefined();
+    expect(Object.keys(collection)).toEqual(['first', 'second']);
+    expect(Reflect.has(collection, 'lookup')).toBe(false);
+
+    if (name !== undefined) {
+      const namedItem = Reflect.get(collection, name) as (name: unknown) => object | null;
+      expect(namedItem.call(collection, { toString: () => 'first' })).toBe(first);
+      expect(namedItem.call(collection, 'missing')).toBeNull();
+      expect(() => { Reflect.apply(namedItem, collection, []); }).toThrow(realm.intrinsics.typeError);
+      expect(() => namedItem.call(collection, Symbol())).toThrow(realm.intrinsics.typeError);
+
+      const otherRealm = installTestBindings(world);
+      const otherCollection = Reflect.get(otherRealm.globalObject, 'Collection') as { prototype: object; };
+      const borrowed = Reflect.get(otherCollection.prototype, name) as typeof namedItem;
+      expect(borrowed.call(collection, 'first')).toBe(first);
+    }
+
+    implementation.values.delete('first');
+    expect(Reflect.has(collection, 'first')).toBe(false);
+    expect(Object.keys(collection)).toEqual(['second']);
+  });
+
   it.each([true, false])('uses an explicit anonymous setter binding (indexed: %s)', (indexed) => {
     class CollectionImpl {
       values = new Map<string, number>([['0', 1]]);
@@ -15,23 +79,25 @@ describe('Web IDL legacy property registration', () => {
       item(key: number | string): number | null {
         return this.values.get(String(key)) ?? null;
       }
+
+      getSupportedPropertyNames(): ReadonlySet<string> {
+        return new Set(this.values.keys());
+      }
     }
     const keyType = indexed ? idlType.unsignedLong : idlType.DOMString;
     const definition = defineInterface({
       name: 'Collection', exposed: '*', implementation: impl(CollectionImpl),
       members: [
         ctor(),
-        op('item', nullable(idlType.long),
+        indexed ? op('item', nullable(idlType.long),
           [arg('key', keyType)],
-          indexed
-            ? indexedGetter((collection: CollectionImpl) => [...collection.values.keys()].map(Number), { unsupportedValue: null })
-            : namedGetter((collection: CollectionImpl) => new Set(collection.values.keys())),
-        ),
+          indexedGetter((collection: CollectionImpl) => [...collection.values.keys()].map(Number), { unsupportedValue: null }),
+        ) : { kind: 'named-getter', name: 'item', method: 'item', returns: nullable(idlType.long) },
         op(undefined, idlType.undefined,
           [arg('key', keyType), arg('value', idlType.long)],
           {
             special: 'setter',
-            invoke(_context, key, value) {
+            invoke(_env, key, value) {
               (this as CollectionImpl).values.set(String(key), value);
             },
           },
@@ -57,20 +123,21 @@ describe('Web IDL legacy property registration', () => {
       item(name: string): number | null {
         return this.values.get(name) ?? null;
       }
+
+      getSupportedPropertyNames(): ReadonlySet<string> {
+        return new Set(this.values.keys());
+      }
     }
     const definition = defineInterface({
       name: 'Collection', exposed: '*', implementation: impl(CollectionImpl),
       members: [
         ctor(),
-        op('item', nullable(idlType.long),
-          [arg('name', idlType.DOMString)],
-          namedGetter((collection: CollectionImpl) => new Set(collection.values.keys())),
-        ),
+        { kind: 'named-getter', name: 'item', method: 'item', returns: nullable(idlType.long) },
         op(undefined, idlType.boolean,
           [arg('name', idlType.DOMString)],
           {
             special: 'deleter',
-            invoke(_context, name) {
+            invoke(_env, name) {
               return name !== 'retained' && (this as CollectionImpl).values.delete(name);
             },
           },
@@ -174,6 +241,10 @@ describe('Web IDL legacy property registration', () => {
       namedItem(name: string): string | null {
         return name === 'first' ? this.values[0]! : null;
       }
+
+      getSupportedPropertyNames(): ReadonlySet<string> {
+        return new Set(['first']);
+      }
     }
 
     const collectionIDL = defineInterface({
@@ -189,10 +260,7 @@ describe('Web IDL legacy property registration', () => {
             { unsupportedValue: null },
           ),
         ),
-        op('namedItem', nullable(idlType.DOMString),
-          [arg('name', idlType.DOMString)],
-          namedGetter(() => new Set(['first'])),
-        ),
+        { kind: 'named-getter', name: 'namedItem', method: 'namedItem', returns: nullable(idlType.DOMString) },
       ],
     });
     const world = new BindingWorld([collectionIDL]);

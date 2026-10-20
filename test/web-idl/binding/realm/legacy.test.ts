@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defineInterface, idlType, type AttributeMember, type ConstructorMember,
-  type PrimaryInterfaceDefinition, type OperationMember, type StringifierMember,
+  type PrimaryInterfaceDefinition, type OperationMember, type NamedGetterMember, type StringifierMember,
 } from '../../../../src/web-idl/core/index';
 import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
@@ -718,14 +718,13 @@ function indexedSetter(
 
 function namedGetter(
   name: string | undefined,
-  returns: OperationMember['returns'],
-): OperationMember {
+  returns: NamedGetterMember['returns'],
+): NamedGetterMember {
   return {
-    arguments: [{ name: 'name', type: idlType.DOMString }],
-    kind: 'operation',
+    kind: 'named-getter',
+    method: name ?? 'getNamedProperty',
     name,
     returns,
-    special: 'getter',
   };
 }
 

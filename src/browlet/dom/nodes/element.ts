@@ -5,7 +5,7 @@ import {
   arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
   nullable, op, reference, roAttr, sequence, union, xattr,
   DOMExceptionImpl, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 import type { CSSStyleSheetImpl, CSSDeclarationBlock } from '../../../stylelet/index';
 
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
@@ -907,7 +907,7 @@ export const elementIDL = defineInterface({
     op('matches', idlType.boolean, [arg('selectors', idlType.DOMString)]),
     op('webkitMatchesSelector', idlType.boolean,
       [arg('selectors', idlType.DOMString)],
-      { invoke(_context, selectors) { return (this as ElementImpl).matches(selectors); } },
+      { invoke(_env, selectors) { return (this as ElementImpl).matches(selectors); } },
     ),
     op('getElementsByTagName', reference('HTMLCollection'), [arg('qualifiedName', idlType.DOMString)]),
     op('getElementsByTagNameNS', reference('HTMLCollection'), [

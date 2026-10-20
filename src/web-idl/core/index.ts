@@ -31,14 +31,14 @@ export type {
 
 export type {
   InterfaceMember, MixinMember, NamespaceMember, ConstructorMember,
-  ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, StringifierMember,
+  ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, NamedGetterMember, StringifierMember,
   IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
-  DictionaryMember, ArgumentDefinition, IndexedGetterDeclaration, SupportedPropertyNamesSteps,
+  DictionaryMember, ArgumentDefinition, IndexedGetterDeclaration,
 } from './members';
 
 export {
   ctor, attr, roAttr, attrFn, op, staticOp, arg, dictMember, constant, stringifier,
-  iter, asyncIter, maplike, setlike, indexedGetter, namedGetter,
+  iter, asyncIter, maplike, setlike, indexedGetter,
   reference, implementationType, nullable, union, sequence, asyncSequence, record, promise,
   frozenArray, observableArray, annotated, tsType,
   integer, decimal, xattr, reflect, reflectSetter, reflectURL,
@@ -57,7 +57,7 @@ export type {
   PositiveInfinity, NegativeInfinity, NotANumber, UndefinedDefault, EmptySequence, EmptyDictionary,
   Exposed, ExtendedAttribute, NamedArgumentsExtendedAttribute,
   ReflectionExtendedAttribute,
-  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior,
+  ImplementationClass, ImplementationType, InjectedArgument, CallbackExceptionBehavior, IDLCallbackInterfaceValue,
 } from './types';
 
 export {

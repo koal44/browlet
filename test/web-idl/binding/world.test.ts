@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { TypeError as InternalTypeError } from '../../../src/infra/exceptions';
 import {
   arg, atArg, attr, BindingWorld, ctor,
-  defineProxyObject, defineInterface, idlType, impl, invokeWith, namedGetter, op, promise,
-  reference, roAttr, xattr, type BindingContext,
+  defineProxyObject, defineInterface, idlType, impl, invokeWith, op, promise,
+  reference, roAttr, xattr, type BindingContext, type WebIDLEnvironment,
 } from '../../../src/web-idl/index';
 
 import { TestRealm as Realm } from '../../support/web-idl-realm';
@@ -217,8 +217,9 @@ describe('Web IDL binding worlds and realm registration', () => {
     class FactoryImpl {
       get result(): ResultImpl { return new ResultImpl(); }
       createResult(): ResultImpl { return new ResultImpl(); }
-      createContextualResult(context: BindingContext): ResultImpl {
-        return context.construct(ResultImpl);
+      createContextualResult(env: WebIDLEnvironment): ResultImpl {
+        expect(env.realm).toBe(receiverRealm);
+        return new ResultImpl();
       }
     }
     const resultIDL = defineInterface({
@@ -227,7 +228,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       implementation: impl(ResultImpl),
       members: [],
     });
-    const factoryIDL = defineInterface({
+    const factoryIDL = defineInterface<WebIDLEnvironment>({
       name: 'RealmFactory',
       exposed: '*',
       implementation: impl(FactoryImpl),
@@ -237,14 +238,15 @@ describe('Web IDL binding worlds and realm registration', () => {
         op('createContextualResult', reference(resultIDL.name),
           [],
           {
-            ...invokeWith(atArg(0, (ctx) => ctx)),
+            ...invokeWith(atArg(0, (env) => env)),
           },
         ),
         op('createBoundResult', reference(resultIDL.name),
           [],
           {
-            invoke(context) {
-              return context.construct(ResultImpl);
+            invoke(env) {
+              expect(env.realm).toBe(receiverRealm);
+              return new ResultImpl();
             },
           },
         ),
@@ -305,18 +307,18 @@ describe('Web IDL binding worlds and realm registration', () => {
     }
   });
 
-  it('keeps receiver context and method error realm distinct for borrowed member adapters', () => {
+  it('keeps receiver environment and method error realm distinct for borrowed member adapters', () => {
     class ReceiverImpl {}
-    let setterContext: BindingContext | undefined;
+    let setterEnv: WebIDLEnvironment | undefined;
     let setterValue: unknown;
-    const definition = defineInterface({
+    const definition = defineInterface<WebIDLEnvironment>({
       name: 'Receiver', exposed: '*', implementation: impl(ReceiverImpl),
       members: [
         attr('owner', idlType.object, {
-          get(ctx) { return ctx.realm.globalObject; },
-          set(ctx, value) {
+          get(env) { return env.realm.globalObject; },
+          set(env, value) {
             expect(this).toBe(implInst);
-            setterContext = ctx;
+            setterEnv = env;
             setterValue = value;
           },
         }),
@@ -341,7 +343,7 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     expect(Reflect.apply(descriptor.get!, object, [])).toBe(receiverRealm.globalObject);
     Reflect.apply(descriptor.set!, object, [token]);
-    expect(setterContext).toBe(receiverContext);
+    expect(setterEnv).toBe(receiverContext.getEnvironment());
     expect(setterValue).toBe(token);
 
     const fail = Reflect.get(Constructor.prototype, 'fail') as CallableFunction;
@@ -405,18 +407,18 @@ describe('Web IDL binding worlds and realm registration', () => {
     const positioned = () => 'positioned';
     class ConstructedImpl {
       constructor(
-        public context: BindingContext,
+        public env: WebIDLEnvironment,
         public global: object,
         public semantic: string,
         public positioned: string,
       ) {}
     }
-    const interfaceIDL = defineInterface({
+    const interfaceIDL = defineInterface<WebIDLEnvironment>({
       name: 'ConstructedExample',
       exposed: '*',
       implementation: impl(ConstructedImpl, {
         constructWith: [
-          atArg(0, (ctx) => ctx), atArg(1, (ctx) => ctx.realm.globalObject), atArg(3, positioned),
+          atArg(0, (env) => env), atArg(1, (env) => env.realm.globalObject), atArg(3, positioned),
         ],
       }),
       members: [],
@@ -431,7 +433,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       ['semantic'],
     );
 
-    expect(implementation.context).toBe(registration);
+    expect(implementation.env).toBe(registration.getEnvironment());
     expect(implementation.global).toBe(realm.globalObject);
     expect(implementation.semantic).toBe('semantic');
     expect(implementation.positioned).toBe('positioned');
@@ -602,14 +604,6 @@ describe('Web IDL binding worlds and realm registration', () => {
     );
   });
 
-  it('does not treat a legacy property hook as unnamed invocation steps', () => {
-    const interfaces = new BindingWorld([unnamedHookOperationIDL]);
-
-    expect(() => interfaces.register(new Realm(), (ctx) => ({ realm: ctx.realm }))).toThrow(
-      'Web IDL UnnamedHookOperationExample.operation has no binding',
-    );
-  });
-
   it('keeps platform identities within their world when declarations are shared', () => {
     const firstWorld = new BindingWorld([exampleIDL]);
     const secondWorld = new BindingWorld([exampleIDL]);
@@ -748,15 +742,5 @@ const unnamedOperationIDL = defineInterface({
   members: [op(undefined, idlType.object,
     [arg('name', idlType.DOMString)],
     { special: 'getter' },
-  )],
-});
-
-const unnamedHookOperationIDL = defineInterface({
-  name: 'UnnamedHookOperationExample',
-  exposed: '*',
-  implementation: impl(ExampleImpl),
-  members: [op(undefined, idlType.object,
-    [arg('name', idlType.DOMString)],
-    namedGetter(() => new Set(['name'])),
   )],
 });

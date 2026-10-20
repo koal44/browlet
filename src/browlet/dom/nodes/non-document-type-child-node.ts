@@ -1,6 +1,6 @@
 import {
   defineInterfaceMixin, nullable, roAttr, reference,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import type { NodeImpl } from './node';
 import type { ElementImpl } from './element';

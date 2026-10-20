@@ -1,7 +1,7 @@
 import {
-  arg, defineInterface, idlType, impl, indexedGetter, namedGetter, nullable, op,
+  arg, defineInterface, idlType, impl, indexedGetter, nullable, op,
   reference, roAttr, union, xattr,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { HTMLCollectionImpl } from './collections';
 import type { DocumentImpl } from './document';
@@ -81,17 +81,8 @@ export const htmlAllCollectionIDL = defineInterface({
   name: 'HTMLAllCollection',
   exposed: 'Window',
   ...xattr('LegacyUnenumerableNamedProperties'),
-  implementation: impl(HTMLAllCollectionImpl, {
-    createHTMLAllCollection(context, collection) {
-      // https://html.spec.whatwg.org/#HTMLAllCollection-call
-      // [[Call]] ignores thisArgument and every argument after the first.
-      return context.realm.createHTMLDDA((value: unknown) => {
-        if (value === undefined) return null;
-        const name = context.jsToImpl(value, idlType.DOMString);
-        return context.implToJS(collection.item(name), allItemType);
-      });
-    },
-  }),
+  documentAll: true,
+  implementation: impl(HTMLAllCollectionImpl),
   members: [
     roAttr('length', idlType.unsignedLong),
     op(undefined, reference('Element'),
@@ -99,19 +90,17 @@ export const htmlAllCollectionIDL = defineInterface({
       {
         ...indexedGetter((collection: HTMLAllCollectionImpl) => collection.getSupportedPropertyIndices(),
           { unsupportedValue: null }),
-        invoke(_context, index) {
+        invoke(_env, index) {
           return (this as HTMLAllCollectionImpl).getIndexedElement(index);
         },
       },
     ),
-    op('namedItem', nullable(union(reference('HTMLCollection'), reference('Element'))),
-      [arg('name', idlType.DOMString)],
-      namedGetter((collection: HTMLAllCollectionImpl) => collection.getSupportedPropertyNames()),
-    ),
+    {
+      kind: 'named-getter', name: 'namedItem', method: 'namedItem',
+      returns: nullable(union(reference('HTMLCollection'), reference('Element'))),
+    },
     op('item', nullable(union(reference('HTMLCollection'), reference('Element'))),
       [arg('nameOrIndex', idlType.DOMString, { optional: true })],
     ),
   ],
 });
-
-const allItemType = nullable(union(reference('HTMLCollection'), reference('Element')));

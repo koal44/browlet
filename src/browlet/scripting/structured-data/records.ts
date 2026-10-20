@@ -1,5 +1,5 @@
 import { InternalError } from '../../../infra/internal-error';
-import type { BufferViewTypeName, StructuredData } from '../../../web-idl/index';
+import type { BufferViewTypeName, StructuredData } from '../../../web-idl/core/index';
 
 import type { AgentCluster } from '../agents';
 import type { BrowletEnvironment } from '../../environment';

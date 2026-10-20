@@ -14,7 +14,7 @@ import {
   defineCallbackFunction, defineDictionary, defineEnumeration, defineInterface, defineTypedef,
   dictMember, emptyDictionary, idlType, impl, implementationType, invokeWith, op, promise, roAttr, reference,
   sequence, staticOp, union, xattr, nullable, defineInterfaceMixin, defineIncludes, integer,
-} from '../web-idl/index';
+} from '../web-idl/core/index';
 
 import {
   extractHighWaterMark, extractSizeAlgorithm,
@@ -1301,7 +1301,7 @@ export const readableStreamIDL = defineInterface<StreamsEnvironment>({
   exposed: '*',
   ...xattr('Transferable'),
   implementation: impl(ReadableStreamImpl, {
-    constructWith: [atArg(2, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(2, (env) => env)],
   }),
   members: [
     ctor([
@@ -1316,7 +1316,7 @@ export const readableStreamIDL = defineInterface<StreamsEnvironment>({
     ]),
     staticOp('from', reference('ReadableStream'),
       [arg('asyncIterable', asyncSequence(idlType.any))],
-      invokeWith(atArg(1, (ctx) => ctx.getEnvironment())),
+      invokeWith(atArg(1, (env) => env)),
     ),
     roAttr('locked', idlType.boolean),
     op('cancel', promise(idlType.undefined), [
@@ -1336,7 +1336,7 @@ export const readableStreamIDL = defineInterface<StreamsEnvironment>({
           optional: true,
         }),
       ],
-      invokeWith(atArg(2, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(2, (_env, methodEnv) => methodEnv)),
     ),
     op('pipeTo', promise(idlType.undefined),
       [
@@ -1346,7 +1346,7 @@ export const readableStreamIDL = defineInterface<StreamsEnvironment>({
           optional: true,
         }),
       ],
-      invokeWith(atArg(2, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(2, (_env, methodEnv) => methodEnv)),
     ),
     op('tee', sequence(reference('ReadableStream'))),
     asyncIter(idlType.any, {
@@ -1806,7 +1806,7 @@ export const readableStreamDefaultControllerIDL = defineInterface<JSEnvironment>
     op('close', idlType.undefined),
     op('enqueue', idlType.undefined,
       [arg('chunk', idlType.any, { optional: true })],
-      invokeWith(atArg(1, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(1, (_env, methodEnv) => methodEnv)),
     ),
     op('error', idlType.undefined, [
       arg('e', idlType.any, { optional: true }),
@@ -2587,7 +2587,7 @@ export const readableByteStreamControllerIDL = defineInterface<JSEnvironment>({
   members: [
     roAttr('byobRequest', nullable(reference('ReadableStreamBYOBRequest'))),
     roAttr('desiredSize', nullable(idlType.unrestrictedDouble)),
-    op('close', idlType.undefined, [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment()))),
+    op('close', idlType.undefined, [], invokeWith(atArg(0, (_env, methodEnv) => methodEnv))),
     op('enqueue', idlType.undefined, [
       arg('chunk', reference('ArrayBufferView')),
     ]),
@@ -2937,10 +2937,10 @@ export const readableStreamDefaultReaderIDL = defineInterface<JSEnvironment>({
   members: [
     ctor([arg('stream', reference('ReadableStream'))]),
     op('read', promise(reference('ReadableStreamReadResult')),
-      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+      [], invokeWith(atArg(0, (_env, methodEnv) => methodEnv)),
     ),
     op('releaseLock', idlType.undefined,
-      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+      [], invokeWith(atArg(0, (_env, methodEnv) => methodEnv)),
     ),
   ],
 });
@@ -3157,10 +3157,10 @@ export const readableStreamBYOBReaderIDL = defineInterface<JSEnvironment>({
           optional: true,
         }),
       ],
-      invokeWith(atArg(2, (_receiver, method) => method.getEnvironment())),
+      invokeWith(atArg(2, (_env, methodEnv) => methodEnv)),
     ),
     op('releaseLock', idlType.undefined,
-      [], invokeWith(atArg(0, (_receiver, method) => method.getEnvironment())),
+      [], invokeWith(atArg(0, (_env, methodEnv) => methodEnv)),
     ),
   ],
 });

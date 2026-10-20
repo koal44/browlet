@@ -170,7 +170,7 @@ describe('EventTargetImpl', () => {
   it('retargets composed events when they leave a shadow tree', () => {
     const document = parseTestDocument('<main id="host"></main>');
     const host = document.getElementById('host')!;
-    const root = new ShadowRootImpl(host, 'closed', document.env);
+    const root = new ShadowRootImpl(host, 'closed');
     const target = document.createElement('button');
     const targets: (EventTargetImpl | null)[] = [];
 
@@ -194,7 +194,7 @@ describe('EventTargetImpl', () => {
   it('does not propagate non-composed events beyond their shadow root', () => {
     const document = parseTestDocument('<main id="host"></main>');
     const host = document.getElementById('host')!;
-    const root = new ShadowRootImpl(host, 'open', document.env);
+    const root = new ShadowRootImpl(host, 'open');
     const target = document.createElement('button');
     const inside = vi.fn();
     const outside = vi.fn();

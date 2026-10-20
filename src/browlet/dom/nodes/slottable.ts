@@ -1,4 +1,4 @@
-import { defineInterfaceMixin, nullable, reference, roAttr } from '../../../web-idl/index';
+import { defineInterfaceMixin, nullable, reference, roAttr } from '../../../web-idl/core/index';
 
 import type { ElementImpl } from './element';
 import type { TextImpl } from './text';

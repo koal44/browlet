@@ -9,7 +9,8 @@ import { DefinitionAssembly } from './assembly';
 
 /**
  * Check a complete declaration set during development or tests; normal assembly trusts its inputs.
- * Checks composition, cycles, injected positions, serialization markers, and type references, including unused aliases and mixins.
+ * Checks composition, cycles, injection placement and positions, serialization markers, and type references,
+ * including unused aliases and mixins.
  */
 export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
   // Validation inspects declarations without invoking their environment-specific binding hooks.
@@ -111,6 +112,12 @@ export function validateDefinitions<Env>(definitions: Definition<Env>[]): void {
 
   // Reuse compilation for type checks after structural validation has ruled out cycles.
   const assembly = new DefinitionAssembly(declarations);
+  for (const assembled of assembly.interfaces.values()) {
+    if (!assembled.implementations.some(({ constructWith }) => constructWith !== undefined)) continue;
+    if (assembled.members.some(({ member }) => member.kind === 'constructor' && member.constructWith !== undefined)) {
+      throw new InternalError(`${assembled.name} declares constructWith on both its implementation and a constructor`);
+    }
+  }
   for (const definition of declarations) {
     if (definition.kind === 'typedef') assembly.getNamedType(definition.name);
     if (definition.kind === 'interface-mixin' || definition.kind === 'partial-interface-mixin') {

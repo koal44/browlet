@@ -4,7 +4,7 @@ import type { AbortAlgorithmHandle, AbortSignal } from '../../../infra/execution
 import {
   arg, atArg, defineInterface, idlType, impl, invokeWith, op, reference, roAttr,
   sequence, staticOp, xattr, DOMExceptionNames,
-} from '../../../web-idl/index';
+} from '../../../web-idl/core/index';
 
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import { EventTargetImpl } from '../events/index';
@@ -246,13 +246,13 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
   inherits: 'EventTarget',
   exposed: '*',
   implementation: impl(AbortSignalImpl, {
-    constructWith: [atArg(0, (ctx) => ctx.getEnvironment())],
+    constructWith: [atArg(0, (env) => env)],
   }),
   members: [
     staticOp('abort', reference('AbortSignal'),
       [arg('reason', idlType.any, { optional: true })],
       {
-        ...invokeWith(atArg(0, (ctx) => ctx.construct(AbortSignalImpl))),
+        ...invokeWith(atArg(0, (env) => env.exec.createAbortSignal())),
         ...xattr('NewObject'),
       },
     ),
@@ -260,9 +260,8 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
       [arg('milliseconds', idlType.unsignedLongLong, xattr('EnforceRange'))],
       {
         ...invokeWith(
-          atArg(0, (ctx) => ctx.construct(AbortSignalImpl)),
-          atArg(2, (ctx) => {
-            const { env } = ctx.realm;
+          atArg(0, (env) => env.exec.createAbortSignal()),
+          atArg(2, (env) => {
             const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
             return (milliseconds: number, steps: () => void) => {
               timers.runStepsAfterTimeout('AbortSignal-timeout', milliseconds, () => {
@@ -277,7 +276,7 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
     staticOp('any', reference('AbortSignal'),
       [arg('signals', sequence(reference('AbortSignal')))],
       {
-        ...invokeWith(atArg(0, (ctx) => ctx.construct(AbortSignalImpl))),
+        ...invokeWith(atArg(0, (env) => env.exec.createAbortSignal())),
         ...xattr('NewObject'),
       },
     ),

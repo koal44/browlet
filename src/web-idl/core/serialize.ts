@@ -116,6 +116,12 @@ export function serializeMember<Env>(
       return prefix + modifier + serializeType(member.returns, interfaces) + name
         + `(${member.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')});`;
     }
+    case 'named-getter': {
+      const name = member.name === undefined
+        ? '' : ` ${serializeIdentifier(member.name, operationNameKeywords)}`;
+      return prefix + 'getter ' + serializeType(member.serializedType ?? member.returns, interfaces) + name
+        + `(DOMString ${serializeIdentifier(member.argumentName ?? 'name')});`;
+    }
     case 'constructor':
       return prefix + `constructor(`
         + `${member.arguments.map((argument) => serializeArgument(argument, interfaces)).join(', ')});`;

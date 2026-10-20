@@ -2,17 +2,26 @@ import {
   arg, atArg, attr, attrFn, ctor, defineCallbackInterface, defineInterface, defineProxyObject,
   dictMember, domExceptionIDL, idlType, impl, invokeWith, op, sequence, staticOp, tsType,
   reflect, webIDLCommonDefinitions, xattr,
-  type SerialSteps, type TransferSteps,
+  type SerialSteps, type TransferSteps, type NamedGetterMember,
 } from '../../../../src/web-idl/core/index';
-
-declare module '../../../../src/web-idl/core/types' {
-  interface DeclarationHooks {
-    'argument-resolve': (ctx: { global: object; }) => unknown;
-  }
-}
 
 class Example {}
 defineInterface({ name: 'Example', implementation: impl(Example), members: [] });
+defineInterface({
+  name: 'HTMLAllCollection', documentAll: true, implementation: impl(Example),
+  members: [op('item', idlType.object, [arg('name', idlType.DOMString, { optional: true })])],
+});
+
+const namedGetter = {
+  kind: 'named-getter', method: 'getNamedProperty', returns: idlType.DOMString,
+} satisfies NamedGetterMember;
+defineInterface({ name: 'Named', members: [namedGetter] });
+// @ts-expect-error Named getters must identify an implementation method.
+const missingGetter: NamedGetterMember = { kind: 'named-getter', returns: idlType.DOMString };
+// @ts-expect-error A named getter's key is always one DOMString, not a configurable argument list.
+const wrongKey: NamedGetterMember = { ...namedGetter, arguments: [arg('index', idlType.unsignedLong)] };
+// @ts-expect-error Named getters do not need imperative binding callbacks.
+const imperativeGetter: NamedGetterMember = { ...namedGetter, invoke() {} };
 
 webIDLCommonDefinitions.includes(domExceptionIDL);
 
@@ -90,7 +99,7 @@ const incompleteSerialization: SerialSteps = { serializationSteps() {} };
 // @ts-expect-error Transferable interfaces need both directions.
 const incompleteTransfer: TransferSteps = { transferSteps() {} };
 
-impl(Example, { constructWith: [atArg(0, (ctx) => ctx.global)] });
+impl(Example, { constructWith: [atArg(0, (env: { global: object; }) => env.global)] });
 ctor([], { constructWith: [atArg(0, () => new Example())] });
 op('run', idlType.undefined, [], invokeWith(atArg(0, () => new Example())));
 staticOp('create', idlType.object, [], invokeWith(atArg(0, () => new Example())));
@@ -114,12 +123,11 @@ atArg(0, Example);
 // @ts-expect-error Selecting a global also requires a resolver callback.
 atArg(0, 'current-global');
 // @ts-expect-error Resolvers receive the declared context type.
-atArg(0, (ctx) => ctx.missing);
+atArg(0, (env) => env.missing);
 // @ts-expect-error Raw argument records also require a resolver callback.
 ctor([], { constructWith: [{ index: 0, resolve: 42 }] });
 // @ts-expect-error Static operations select their own static flag.
 staticOp('create', idlType.object, [], { static: false });
-// @ts-expect-error Attribute-function factories require the projection's context signature.
 attr('size', idlType.any, attrFn(() => () => 1));
 // @ts-expect-error Callback dictionary conversion names a dictionary.
 arg('source', idlType.object, { callbackDictionary: 42 });
@@ -127,11 +135,60 @@ arg('source', idlType.object, { callbackDictionary: 42 });
 dictMember('callback', idlType.object, { callbackExceptionBehavior: 'ignore' });
 // @ts-expect-error Indexed getters must declare how unsupported indices are identified.
 op('item', idlType.object, [], { indexedGetter: { getSupportedPropertyIndices() { return [0]; } } });
-// @ts-expect-error Runtime callbacks require a declared runtime signature.
 ctor([], { construct() { return {}; } });
 // @ts-expect-error Backing allocation belongs to Binding, not declaration hooks.
 impl(Example, { allocatePlatformObject() { return {}; } });
-// @ts-expect-error Initialization callbacks require the projection's signature.
+// @ts-expect-error document.all uses declarative interface metadata, not an allocation callback.
+impl(Example, { createHTMLAllCollection() { return {}; } });
 impl(Example, { initializeImplementation() {} });
-// @ts-expect-error Callback-interface adapters require the projection's signature.
 defineCallbackInterface({ name: 'Callback', members: [], toImpl() {} });
+
+type ExampleEnvironment = { realm: { name: string; }; token: object; };
+defineInterface<ExampleEnvironment>({
+  name: 'Portable', implementation: impl(Example, {
+    initializeImplementation(env, value) {
+      env.realm.name.toUpperCase();
+      value satisfies Example;
+      // @ts-expect-error Implementation initialization has no Binding Context.
+      env.project(Example, value);
+    },
+  }),
+  members: [
+    ctor(
+      [arg('name', idlType.DOMString)],
+      {
+        construct(env, name) {
+          name.toUpperCase();
+          return { name, token: env.token };
+        },
+      },
+    ),
+    attr('name', idlType.DOMString, {
+      get(env) { return env.realm.name; },
+      set(env, value) {
+        env.realm.name = value as string;
+        // @ts-expect-error Ordinary declaration steps cannot perform Web IDL conversion.
+        env.jsToImpl(value, idlType.DOMString);
+      },
+    }),
+    op('select', idlType.object,
+      [],
+      invokeWith(atArg(0, (env, methodEnv) => {
+        env.realm.name.toUpperCase();
+        return methodEnv.token;
+      })),
+    ),
+  ],
+});
+defineCallbackInterface<ExampleEnvironment>({
+  name: 'PortableCallback', members: [op('run', idlType.undefined)],
+  toImpl(env, callback) {
+    env.token satisfies object;
+    callback.realm.name.toUpperCase();
+    callback.object satisfies object;
+    callback.callUserObjectOperation('run', []);
+    // @ts-expect-error Callback adapters cannot reach the binding assembly.
+    callback.assembled;
+    return callback.object;
+  },
+});

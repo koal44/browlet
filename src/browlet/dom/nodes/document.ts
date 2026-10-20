@@ -6,9 +6,9 @@ import { InternalError } from '../../../infra/internal-error';
 import { addon, isomorphicDecode, isomorphicEncode, type JSEnvironment } from '../../../js-engine/index';
 import {
   arg, atArg, attr, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, definePartialInterface,
-  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, namedGetter, nullable, onError, op, roAttr, reference, union,
-  DOMExceptionNames, DOMExceptionImpl, xattr, type ImplementationClass,
-} from '../../../web-idl/index';
+  defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, onError, op, roAttr, reference, union,
+  DOMExceptionNames, DOMExceptionImpl, xattr,
+} from '../../../web-idl/core/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import {
   Stylelet, lengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
@@ -813,13 +813,13 @@ export class DocumentImpl extends NodeImpl {
 
   /** Allocate existing CDATA data, including data that became non-XML after mutation. */
   createCDATASectionNode(data: string): CDATASectionImpl {
-    return this.#nodeFactory.constructNode(CDATASectionImpl, [data, this, this.env]);
+    return this.#nodeFactory.constructNode(CDATASectionImpl, [data, this]);
   }
 
   /** Create and initialize a processing instruction in this document. */
   // https://dom.spec.whatwg.org/#dom-document-createprocessinginstruction
   createProcessingInstruction(target: string, data: string): ProcessingInstructionImpl {
-    return this.#nodeFactory.constructNode(ProcessingInstructionImpl, [target, data, this, this.env]);
+    return this.#nodeFactory.constructNode(ProcessingInstructionImpl, [target, data, this]);
   }
 
   /** Copy retained instruction data without repeating public creation validation. */
@@ -850,12 +850,12 @@ export class DocumentImpl extends NodeImpl {
 
   // https://dom.spec.whatwg.org/#dom-document-createtextnode
   createTextNode(data: string): TextImpl {
-    return this.#nodeFactory.constructNode(TextImpl, [data, this, this.env]);
+    return this.#nodeFactory.constructNode(TextImpl, [data, this]);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createcomment
   createComment(data: string): CommentImpl {
-    return this.#nodeFactory.constructNode(CommentImpl, [data, this, this.env]);
+    return this.#nodeFactory.constructNode(CommentImpl, [data, this]);
   }
 
   /** Create a live range collapsed at this document's start. */
@@ -1508,17 +1508,14 @@ export class DocumentImpl extends NodeImpl {
 
   // https://dom.spec.whatwg.org/#dom-document-createdocumentfragment
   createDocumentFragment(): DocumentFragmentImpl {
-    return this.#nodeFactory.constructNode(
-      DocumentFragmentImpl,
-      [this, null, this.env],
-    );
+    return this.#nodeFactory.constructNode(DocumentFragmentImpl, [this]);
   }
 
   /** Allocate a shadow root in this document's realm, including for an adopted host. */
   // https://dom.spec.whatwg.org/#concept-node-create
   // SPEC_CLASH(adopted-shadow-root-realm): follow DOM and Firefox; Chromium/WebKit use the host's original realm.
   createShadowRoot(host: ElementImpl, mode: ShadowRootMode): ShadowRootImpl {
-    return this.#nodeFactory.constructNode(ShadowRootImpl, [host, mode, this.env]);
+    return this.#nodeFactory.constructNode(ShadowRootImpl, [host, mode]);
   }
 
   /** Allocate an attribute from an already selected name, namespace, and value. */
@@ -1713,15 +1710,8 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
   exposed: 'Window',
   implementation: impl(DocumentImpl, {
     constructWith: [
-      atArg(0, (ctx): DOMNodeFactory => ({
-        constructNode<T extends object>(
-          implClass: ImplementationClass<T>,
-          argumentsList: unknown[],
-        ): T {
-          return ctx.construct(implClass, argumentsList);
-        },
-      })),
-      atArg(1, (ctx) => ctx.realm.env),
+      atArg(0, (env) => env.exec),
+      atArg(1, (env) => env),
     ],
   }),
   members: [
@@ -1909,15 +1899,11 @@ export const htmlDocumentIDL = definePartialInterface({
     roAttr('lastModified', idlType.DOMString),
     roAttr('readyState', reference('DocumentReadyState')),
 
-    op(undefined, idlType.object,
-      [arg('name', idlType.DOMString)],
-      {
-        ...namedGetter((document: DocumentImpl) => document.getSupportedPropertyNames()),
-        invoke(context, name) {
-          return context.implToJS((this as DocumentImpl).getNamedProperty(name), documentNamedValueType);
-        },
-      },
-    ),
+    {
+      kind: 'named-getter', method: 'getNamedProperty',
+      returns: union(reference('Element'), reference('HTMLCollection'), reference('WindowProxy')),
+      serializedType: idlType.object,
+    },
     attr('title', idlType.DOMString, xattr('CEReactions')),
     attr('dir', idlType.DOMString, xattr('CEReactions')),
     attr('body', nullable(reference('HTMLElement')), xattr('CEReactions')),
@@ -1949,9 +1935,6 @@ export const htmlDocumentIDL = definePartialInterface({
     }),
   ],
 });
-
-// The IDL result is object; this boundary conversion projects each permitted implementation result.
-const documentNamedValueType = union(reference('Element'), reference('HTMLCollection'), reference('WindowProxy'));
 
 /** Converted element-creation options supported by the current declaration. */
 export type ElementCreationOptionsRecord = {

@@ -106,7 +106,7 @@ describe('Sequence and record conversion through implementations', () => {
     let calls = 0;
     const callback = defineCallbackInterface({
       name: 'Reader', members: [op('read', idlType.long)],
-      toImpl: (_context, cbValue) => () => cbValue.callUserObjectOperation('read', []),
+      toImpl: (_env, cbValue) => () => cbValue.callUserObjectOperation('read', []),
     });
     const world = new BindingWorld([callback]);
     const realm = new TestRealm();
@@ -150,5 +150,13 @@ describe('Sequence and record conversion through implementations', () => {
     expect(convert(platform)).toBe(implInst);
     expect(convert(foreignPlatform)).toBe(foreignPlatform);
     expect(convert(false)).toBe(false);
+    const proxy = new Proxy(platform, {
+      get() { throw new Error('Unexpected property read'); },
+      getPrototypeOf() { throw new Error('Unexpected prototype read'); },
+    });
+    const revoked = Proxy.revocable(platform, {});
+    revoked.revoke();
+    expect(convert(proxy)).toBe(proxy);
+    expect(convert(revoked.proxy)).toBe(revoked.proxy);
   });
 });

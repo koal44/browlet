@@ -3,7 +3,7 @@ import { WeakOrderedSet } from '../../../../../infra/collections';
 import {
   arg, attr, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, op,
   reference, reflect, sequence, union, xattr,
-} from '../../../../../web-idl/index';
+} from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 
