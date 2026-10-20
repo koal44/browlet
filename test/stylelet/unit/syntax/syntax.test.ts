@@ -8,7 +8,11 @@ import {
   type BlockAtRule, type BlockContents, type Declaration, type QualifiedRule,
   type Rule, type StatementAtRule,
 } from '../../../../src/stylelet/syntax/parser';
-import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { tokenize, tokenizeWithSource, TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { SyntaxParsingContext } from '../../../support/stylelet-syntax';
+
+const syntaxContext = new SyntaxParsingContext();
 
 function preservedKinds(values: ComponentValue[]): TokenKind[] {
   return values
@@ -88,8 +92,39 @@ function expectFunctionBlock(
 }
 
 describe('5.4 parser entry points', () => {
+  test('normalizes an existing token stream without restarting or copying it', () => {
+    const input = new TokenCursor(tokenize('discarded color: red; width: 1px'), emptyParsingContext);
+    input.next();
+    const declaration = expectDeclaration(parseDeclaration(input, syntaxContext));
+    expect(declaration.name).toBe('color');
+    expect(input.peek().type).toBe(TokenKind.Semicolon);
+    input.next();
+    expect(expectDeclaration(parseDeclaration(input, syntaxContext)).name).toBe('width');
+    expect(input.eof()).toBe(true);
+  });
+
+  test('consumes existing component-value streams from their current position', () => {
+    const components = parseListOfComponentValues('skip fn(x)');
+    const input = new TokenCursor(components, emptyParsingContext, { position: 2 });
+    expect(parseComponentValue(input)).toBe(components[2]);
+    expect(input.eof()).toBe(true);
+  });
+
+  test('preserves source spelling from an existing token stream', () => {
+    const { tokens, source, ranges } = tokenizeWithSource('--x: fn(a) /**/ foo\\62 ar !important; unicode-range: U+4??');
+    const input = new TokenCursor(tokens, emptyParsingContext, { source: { text: source, ranges } });
+
+    expect(parseDeclaration(input, syntaxContext)).toMatchObject({
+      name: '--x', originalText: 'fn(a) /**/ foo\\62 ar', important: true,
+    });
+    input.next();
+    expect(parseDeclaration(input, syntaxContext)?.value).toEqual([
+      { type: TokenKind.UnicodeRange, start: 0x400, end: 0x4FF },
+    ]);
+  });
+
   test('parses stylesheet contents', () => {
-    const rules = parseStylesheetContents('@layer reset; .a { color: red }');
+    const rules = parseStylesheetContents('@layer reset; .a { color: red }', syntaxContext);
 
     expect(rules).toHaveLength(2);
     expectStatementAtRule(rules[0]);
@@ -100,7 +135,7 @@ describe('5.4 parser entry points', () => {
   });
 
   test('ignores whitespace, CDO, and CDC in stylesheet contents', () => {
-    const rules = parseStylesheetContents('<!-- .a {} --> @layer x;');
+    const rules = parseStylesheetContents('<!-- .a {} --> @layer x;', syntaxContext);
 
     expect(rules).toHaveLength(2);
     expectQualifiedRule(rules[0]);
@@ -109,7 +144,7 @@ describe('5.4 parser entry points', () => {
 
   test('parses block contents as ordered declaration runs and rules', () => {
     const contents = parseBlockContents(
-      'color: red; width: 1px; & {} height: 2px; @x; opacity: .5',
+      'color: red; width: 1px; & {} height: 2px; @x; opacity: .5', syntaxContext,
     );
 
     expect(contents).toHaveLength(5);
@@ -121,7 +156,7 @@ describe('5.4 parser entry points', () => {
   });
 
   test('retains the final declaration run at EOF', () => {
-    const contents = parseBlockContents('color: red; width: 1px');
+    const contents = parseBlockContents('color: red; width: 1px', syntaxContext);
 
     expect(contents).toHaveLength(1);
     expect(expectDeclarations(contents[0]).map(({ name }) => name)).toEqual([
@@ -131,11 +166,11 @@ describe('5.4 parser entry points', () => {
   });
 
   test('parses exactly one rule with surrounding whitespace', () => {
-    expectStatementAtRule(parseRule('  @layer x;  '));
-    expectQualifiedRule(parseRule('  .a {}  '));
-    expect(parseRule('')).toBeNull();
-    expect(parseRule('.a')).toBeNull();
-    expect(parseRule('.a {} .b {}')).toBeNull();
+    expectStatementAtRule(parseRule('  @layer x;  ', syntaxContext));
+    expectQualifiedRule(parseRule('  .a {}  ', syntaxContext));
+    expect(parseRule('', syntaxContext)).toBeNull();
+    expect(parseRule('.a', syntaxContext)).toBeNull();
+    expect(parseRule('.a {} .b {}', syntaxContext)).toBeNull();
   });
 
   test('returns null for empty component-value input', () => {
@@ -145,14 +180,14 @@ describe('5.4 parser entry points', () => {
   });
 
   test('parses one declaration', () => {
-    const declaration = expectDeclaration(parseDeclaration(' color: red !important'));
+    const declaration = expectDeclaration(parseDeclaration(' color: red !important', syntaxContext));
 
     expect(declaration.name).toBe('color');
     expect(declaration.important).toBe(true);
     expect(preservedKinds(declaration.value)).toEqual([TokenKind.Ident]);
 
-    expect(parseDeclaration('color red')).toBeNull();
-    expect(parseDeclaration('@x;')).toBeNull();
+    expect(parseDeclaration('color red', syntaxContext)).toBeNull();
+    expect(parseDeclaration('@x;', syntaxContext)).toBeNull();
   });
 
   test('parses one component value or a list', () => {
@@ -192,8 +227,8 @@ describe('5.4 parser entry points', () => {
 
 describe('5.5 rule consumers', () => {
   test('distinguishes statement and block at-rules', () => {
-    const statement = expectStatementAtRule(parseRule('@media screen;'));
-    const block = expectBlockAtRule(parseRule('@media screen { .a {} }'));
+    const statement = expectStatementAtRule(parseRule('@media screen;', syntaxContext));
+    const block = expectBlockAtRule(parseRule('@media screen { .a {} }', syntaxContext));
 
     expect(statement.name).toBe('media');
     expect(preservedKinds(statement.prelude)).toEqual([
@@ -206,7 +241,7 @@ describe('5.5 rule consumers', () => {
   });
 
   test('returns a statement at-rule at EOF without requiring a semicolon', () => {
-    const rule = expectStatementAtRule(parseRule('@charset "utf-8"'));
+    const rule = expectStatementAtRule(parseRule('@charset "utf-8"', syntaxContext));
 
     expect(rule.name).toBe('charset');
     expect(preservedKinds(rule.prelude)).toEqual([
@@ -216,7 +251,7 @@ describe('5.5 rule consumers', () => {
   });
 
   test('keeps semicolons inside at-rule prelude components', () => {
-    const rule = expectStatementAtRule(parseRule('@import url("x;y.css");'));
+    const rule = expectStatementAtRule(parseRule('@import url("x;y.css");', syntaxContext));
 
     expect(rule.prelude).toHaveLength(2);
     expect(rule.prelude[1]).toMatchObject({
@@ -226,7 +261,7 @@ describe('5.5 rule consumers', () => {
   });
 
   test('preserves component values in at-rule preludes', () => {
-    const rule = expectBlockAtRule(parseRule('@x foo(bar) [baz] {}'));
+    const rule = expectBlockAtRule(parseRule('@x foo(bar) [baz] {}', syntaxContext));
 
     expect(rule.prelude).toHaveLength(5);
     expectFunctionBlock(rule.prelude[1], 'foo');
@@ -242,7 +277,7 @@ describe('5.5 rule consumers', () => {
         @x;
         opacity: .5;
       }
-    `));
+    `, syntaxContext));
 
     expect(rule.block).toHaveLength(5);
     expect(expectDeclarations(rule.block[0]).map(({ name }) => name)).toEqual(['color']);
@@ -253,7 +288,7 @@ describe('5.5 rule consumers', () => {
   });
 
   test('parses declarations inside nested qualified rules', () => {
-    const outer = expectQualifiedRule(parseRule('.a { &:hover { color: blue } }'));
+    const outer = expectQualifiedRule(parseRule('.a { &:hover { color: blue } }', syntaxContext));
     const nested = expectQualifiedRule(outer.block[0]);
 
     expect(expectDeclarations(nested.block[0])).toHaveLength(1);
@@ -261,7 +296,7 @@ describe('5.5 rule consumers', () => {
   });
 
   test('does not reinterpret a custom-property-shaped construct as a rule', () => {
-    const contents = parseBlockContents('--x:hover { color: red }; width: 1px');
+    const contents = parseBlockContents('--x:hover { color: red }; width: 1px', syntaxContext);
 
     expect(contents).toHaveLength(1);
     expect(expectDeclarations(contents[0]).map(({ name }) => name)).toEqual([
@@ -271,12 +306,12 @@ describe('5.5 rule consumers', () => {
   });
 
   test('drops a nested qualified rule that reaches EOF before its block', () => {
-    expect(parseBlockContents('&:hover')).toEqual([]);
+    expect(parseBlockContents('&:hover', syntaxContext)).toEqual([]);
   });
 
   test('preserves CDO and CDC when parsing an individual qualified rule', () => {
-    const cdo = expectQualifiedRule(parseRule('<!--{}'));
-    const cdc = expectQualifiedRule(parseRule('-->{}'));
+    const cdo = expectQualifiedRule(parseRule('<!--{}', syntaxContext));
+    const cdc = expectQualifiedRule(parseRule('-->{}', syntaxContext));
 
     expect(preservedKinds(cdo.prelude)).toEqual([TokenKind.CDO]);
     expect(preservedKinds(cdc.prelude)).toEqual([TokenKind.CDC]);
@@ -285,40 +320,40 @@ describe('5.5 rule consumers', () => {
 
 describe('5.5 declaration recovery', () => {
   test('recovers after malformed declarations', () => {
-    const contents = parseBlockContents('color red; width: 10px');
+    const contents = parseBlockContents('color red; width: 10px', syntaxContext);
 
     expect(contents).toHaveLength(1);
     expect(expectDeclarations(contents[0]).map(({ name }) => name)).toEqual(['width']);
   });
 
   test('allows a brace block as the entire non-custom value', () => {
-    const declaration = expectDeclaration(parseDeclaration('foo: { bar }'));
+    const declaration = expectDeclaration(parseDeclaration('foo: { bar }', syntaxContext));
 
     expect(declaration.value).toHaveLength(1);
     expectSimpleBlock(declaration.value[0], TokenKind.BraceBlock);
   });
 
   test('rejects a brace block mixed with another non-custom value', () => {
-    expect(parseDeclaration('foo: before { bar }')).toBeNull();
-    expect(parseDeclaration('foo: { bar } after')).toBeNull();
+    expect(parseDeclaration('foo: before { bar }', syntaxContext)).toBeNull();
+    expect(parseDeclaration('foo: { bar } after', syntaxContext)).toBeNull();
   });
 
   test('allows arbitrary top-level brace blocks in custom properties', () => {
-    const declaration = expectDeclaration(parseDeclaration('--foo: before { bar } after'));
+    const declaration = expectDeclaration(parseDeclaration('--foo: before { bar } after', syntaxContext));
 
     expect(declaration.value).toHaveLength(5);
     expectSimpleBlock(declaration.value[2], TokenKind.BraceBlock);
   });
 
   test('captures the original source text of a custom property value', () => {
-    const declaration = expectDeclaration(parseDeclaration('--foo:foo\\62 ar'));
+    const declaration = expectDeclaration(parseDeclaration('--foo:foo\\62 ar', syntaxContext));
 
     expect(declaration.originalText).toBe('foo\\62 ar');
   });
 
   test('re-tokenizes a unicode-range descriptor from its original source', () => {
     const declaration = expectDeclaration(
-      parseDeclaration('unicode-range: U+400-4FF'),
+      parseDeclaration('unicode-range: U+400-4FF', syntaxContext),
     );
 
     expect(declaration.value).toEqual([{
@@ -328,10 +363,32 @@ describe('5.5 declaration recovery', () => {
     }]);
   });
 
+  test('re-tokenizes the entire unicode-range value before descriptor validation', () => {
+    const declaration = expectDeclaration(parseDeclaration('UNICODE-RANGE: U+4?? !important', syntaxContext));
+
+    expect(declaration.important).toBe(true);
+    expect(declaration.value).toEqual([
+      { type: TokenKind.UnicodeRange, start: 0x400, end: 0x4FF },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.Delim, value: '!' },
+      { type: TokenKind.Ident, value: 'important' },
+    ]);
+  });
+
+  test('leaves unicode-range bounds and ordering for the descriptor grammar', () => {
+    const declaration = expectDeclaration(parseDeclaration('unicode-range: U+500-400, U+110000', syntaxContext));
+    expect(declaration.value).toEqual([
+      { type: TokenKind.UnicodeRange, start: 0x500, end: 0x400 },
+      { type: TokenKind.Comma },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.UnicodeRange, start: 0x110000, end: 0x110000 },
+    ]);
+  });
+
   test('only recognizes a final important flag', () => {
-    const final = expectDeclaration(parseDeclaration('color: red ! important'));
-    const mixedCase = expectDeclaration(parseDeclaration('color: red ! ImPoRtAnT'));
-    const nonfinal = expectDeclaration(parseDeclaration('color: red !important blue'));
+    const final = expectDeclaration(parseDeclaration('color: red ! important', syntaxContext));
+    const mixedCase = expectDeclaration(parseDeclaration('color: red ! ImPoRtAnT', syntaxContext));
+    const nonfinal = expectDeclaration(parseDeclaration('color: red !important blue', syntaxContext));
 
     expect(final.important).toBe(true);
     expect(mixedCase.important).toBe(true);
@@ -339,7 +396,7 @@ describe('5.5 declaration recovery', () => {
   });
 
   test('trims trailing whitespace from declaration values', () => {
-    const declaration = expectDeclaration(parseDeclaration('color: red   \n\t'));
+    const declaration = expectDeclaration(parseDeclaration('color: red   \n\t', syntaxContext));
 
     expect(preservedKinds(declaration.value)).toEqual([TokenKind.Ident]);
   });
@@ -395,7 +452,7 @@ describe('5.5 component-value consumers', () => {
   });
 
   test('does not split on semicolons inside strings or functions', () => {
-    const contents = parseBlockContents('font-family: "x;y"; x: fn(a;b); width: 1px');
+    const contents = parseBlockContents('font-family: "x;y"; x: fn(a;b); width: 1px', syntaxContext);
     const declarations = expectDeclarations(contents[0]);
 
     expect(declarations.map(({ name }) => name)).toEqual(['font-family', 'x', 'width']);
@@ -404,7 +461,7 @@ describe('5.5 component-value consumers', () => {
   });
 
   test('an unterminated comment consumes the rest of the input', () => {
-    const contents = parseBlockContents('width: 1px; /* unterminated height: 2px;');
+    const contents = parseBlockContents('width: 1px; /* unterminated height: 2px;', syntaxContext);
     const declarations = expectDeclarations(contents[0]);
 
     expect(declarations.map(({ name }) => name)).toEqual(['width']);
@@ -412,7 +469,7 @@ describe('5.5 component-value consumers', () => {
 
   test('recovers a following declaration after a bad URL token', () => {
     const contents = parseBlockContents(
-      'background-image: url(foo"bar); margin-left: 4px;',
+      'background-image: url(foo"bar); margin-left: 4px;', syntaxContext,
     );
     const declarations = expectDeclarations(contents[0]);
 
@@ -425,7 +482,7 @@ describe('5.5 component-value consumers', () => {
 
   test('recovers after a bad string reaches a declaration boundary', () => {
     const contents = parseBlockContents(
-      'font-family: "x\n; margin-left: 3px;',
+      'font-family: "x\n; margin-left: 3px;', syntaxContext,
     );
     const declarations = expectDeclarations(contents[0]);
 
@@ -437,7 +494,7 @@ describe('5.5 component-value consumers', () => {
   });
 
   test('does not treat a brace inside an attribute string as the rule block', () => {
-    const rule = expectQualifiedRule(parseRule('.foo[data-x="{"] { color: red }'));
+    const rule = expectQualifiedRule(parseRule('.foo[data-x="{"] { color: red }', syntaxContext));
 
     expectSimpleBlock(rule.prelude[2], TokenKind.BracketBlock);
     expect(expectDeclarations(rule.block[0]).map(({ name }) => name)).toEqual(['color']);
@@ -454,14 +511,14 @@ describe('mixed token and component-value input', () => {
 
   test('parses rule bodies supplied as an existing brace block', () => {
     const components = parseListOfComponentValues('.a { color: red }');
-    const rule = expectQualifiedRule(parseRule(components));
+    const rule = expectQualifiedRule(parseRule(components, syntaxContext));
 
     expect(expectDeclarations(rule.block[0]).map(({ name }) => name)).toEqual(['color']);
   });
 
   test('parses a block at-rule supplied as existing component values', () => {
     const components = parseListOfComponentValues('@media { .a {} }');
-    const rule = expectBlockAtRule(parseRule(components));
+    const rule = expectBlockAtRule(parseRule(components, syntaxContext));
 
     expectQualifiedRule(rule.block[0]);
   });
@@ -471,4 +528,4 @@ function expectBlockContents(_contents: BlockContents): void {
   // Compile-time assertion that the public entry point exposes the spec shape.
 }
 
-expectBlockContents(parseBlockContents(''));
+expectBlockContents(parseBlockContents('', syntaxContext));

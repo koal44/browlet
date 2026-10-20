@@ -5,7 +5,8 @@ import {
   propertyRegistry,
   type BuiltInPropertyDeclaration, type CustomPropertyDeclaration,
 } from '../../../../src/stylelet/css/property';
-import { parseCSSRules } from '../../../../src/stylelet/cssom/parser';
+import { CSSParsingContext } from '../../../../src/stylelet/cssom/parser';
+import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
 import { parseOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
 import {
@@ -13,6 +14,8 @@ import {
 } from '../../../../src/stylelet/selector/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
+
+const context = new CSSParsingContext(null, false, env);
 
 describe('CSS rule construction', () => {
   it('preserves the registry association in a built-in declaration', () => {
@@ -52,14 +55,14 @@ describe('CSS rule construction', () => {
   });
 
   it('interprets valid declarations and discards invalid declarations', () => {
-    const rules = parseCSSRules(`
+    const rules = parseStylesheetContents(`
       * {
         COLOR: blue;
         unknown: red;
         color: definitely-not-a-color;
         --Accent: red !important;
       }
-    `, env);
+    `, context);
 
     expect(rules).toHaveLength(1);
     const rule = rules[0]!;
@@ -85,12 +88,12 @@ describe('CSS rule construction', () => {
   });
 
   it('discards invalid style rules and unrecognized at-rules, including @charset', () => {
-    const rules = parseCSSRules(`
+    const rules = parseStylesheetContents(`
       @charset "utf-8";
       @unknown example;
       , { color: red }
       * { color: blue }
-    `, env);
+    `, context);
 
     expect(rules).toHaveLength(1);
     expect(rules[0]).toBeInstanceOf(CSSStyleRuleImpl);
@@ -98,8 +101,41 @@ describe('CSS rule construction', () => {
       .toMatchObject([{ name: 'color' }]);
   });
 
+  it('does not interpret the children of an invalid or unknown rule', () => {
+    const rules = parseStylesheetContents(`
+      , { @media screen {} }
+      @unknown { @font-face {} }
+      .kept { color: blue }
+    `, context);
+
+    expect(rules).toHaveLength(1);
+    expect(rules[0]).toBeInstanceOf(CSSStyleRuleImpl);
+  });
+
+  // These are implementation boundaries, not assertions of CSS conformance.
+  // Replace them with grammar/consumer acceptance tests as the owning rules are implemented.
+  it.each([
+    ['@media screen { .a {} }', '@media prelude, placement, and block grammar'],
+    ['.a { @supports (color: red) {} }', '@supports prelude, placement, and block grammar'],
+    ['@font-face { font-family: Example }', '@font-face prelude, placement, and block grammar'],
+    ['@layer reset;', '@layer statement grammar and CSSOM construction'],
+  ])('exposes the missing dependency for %s', (input, dependency) => {
+    expect(() => parseStylesheetContents(input, context)).toThrow(dependency);
+  });
+
+  it('accepts comment-separated whitespace in selectors and declaration values', () => {
+    const [rule] = parseStylesheetContents('div /**/ span { color: rgb(10 /**/ 20 /**/ 30); --text: a /**/ b }', context);
+    if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+
+    expect(serializeSelectorList(rule.selectors)).toBe('div span');
+    expect(rule.style.declarations).toMatchObject([
+      { name: 'color', custom: false },
+      { name: '--text', custom: true, originalText: 'a /**/ b' },
+    ]);
+  });
+
   it('retains substitution for later value resolution', () => {
-    const [rule] = parseCSSRules('* { color: var(--accent) }', env);
+    const [rule] = parseStylesheetContents('* { color: var(--accent) }', context);
 
     expect((rule as CSSStyleRuleImpl).style.declarations).toMatchObject([{
       custom: false,
@@ -110,13 +146,13 @@ describe('CSS rule construction', () => {
 
   // CSS Nesting Level 1 defines nested style rules and declaration runs.
   it('keeps declarations after nested rules separate from the parent style', () => {
-    const [rule] = parseCSSRules(`
+    const [rule] = parseStylesheetContents(`
       .parent {
         color: blue;
         &:hover { color: red }
         --accent: green;
       }
-    `, env);
+    `, context);
 
     if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
     expect(rule.style.declarations).toMatchObject([{ name: 'color' }]);
@@ -135,14 +171,38 @@ describe('CSS rule construction', () => {
     expect(nested.parentStyleSheet).toBeNull();
   });
 
+  // SPEC_CLASH(css-invalid-rule-declaration-runs): Match all three browsers.
+  // https://github.com/w3c/csswg-drafts/issues/11271
+  it.each(['& + {}', '@unknown;'])('merges initial declarations across discarded %s', (invalidRule) => {
+    const [rule] = parseStylesheetContents(`.parent { color: red; ${invalidRule} color: blue; }`, context);
+    if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+
+    expect(rule.style.declarations).toHaveLength(1);
+    expect(rule.style.getPropertyValue('color')).toBe('blue');
+    expect(rule.cssRules.length).toBe(0);
+  });
+
+  it.each(['& + {}', '@unknown;'])('merges nested declarations across discarded %s', (invalidRule) => {
+    const [rule] = parseStylesheetContents(`.parent { & {} color: red; ${invalidRule} color: blue; }`, context);
+    if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+
+    expect(rule.style.declarations).toHaveLength(0);
+    expect(rule.cssRules.length).toBe(2);
+    const following = rule.cssRules.item(1);
+    if (!(following instanceof CSSNestedDeclarationsImpl)) throw new Error('Expected nested declarations');
+    expect(following.style.declarations).toMatchObject([{ name: 'color' }]);
+    expect(following.style.getPropertyValue('color')).toBe('blue');
+    expect(following.parentRule).toBe(rule);
+  });
+
   it('binds nested selectors recursively to their parent style rules', () => {
-    const [parent] = parseCSSRules(`
+    const [parent] = parseStylesheetContents(`
       #featured, article {
         .item {
           > .label { color: red }
         }
       }
-    `, env);
+    `, context);
     if (!(parent instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
     const child = parent.cssRules.item(0)!;
     if (!(child instanceof CSSStyleRuleImpl)) throw new Error('Expected a nested style rule');

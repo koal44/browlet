@@ -5,7 +5,8 @@ import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
-import { parseCSSRules } from '../../../../src/stylelet/cssom/parser';
+import { CSSParsingContext } from '../../../../src/stylelet/cssom/parser';
+import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
 import { CSSPropertyRuleImpl } from '../../../../src/stylelet/cssom/rules';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
@@ -339,7 +340,7 @@ function addStyleSheet(
       alternate: false,
       originClean: true,
     },
-    typeof source === 'string' ? parseCSSRules(source, scope.cascade.context.env) : source,
+    typeof source === 'string' ? parseStylesheetContents(source, new CSSParsingContext(null, false, scope.cascade.context.env)) : source,
   );
 
   scope.addTreeStyleSheet(styleSheet);

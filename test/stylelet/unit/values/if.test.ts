@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import type { PropertyContext } from '../../../../src/stylelet/css/property';
@@ -114,7 +114,7 @@ describe('<if()>', () => {
 
   it('consumes one notation without consuming following input', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('if(else: red) trailing'),
+      parseListOfComponentValues('if(else: red) trailing'), emptyParsingContext,
     );
 
     expect(consumeIf(c)?.type).toBe('if');

@@ -59,7 +59,11 @@ currently supports direct registration fixtures, not parsed `@property` input.
 CSSOM's legacy numeric
 constants are not a complete list of rule types.
 
-At present, stylesheet interpretation drops at-rules. `insertRule()` rejects
+At present, unknown at-rules are discarded. Recognized unfinished at-rules stop
+at CSSParsingContext's explicit statement/block dependencies rather than being
+silently discarded. Those methods receive preludes and preceding siblings;
+block preparation must supply the child grammar and final validity/construction
+step. Replacement discards imports as required by CSSOM. `insertRule()` rejects
 all imports, including on non-constructed sheets, and cannot enforce a complete
 mixed-rule hierarchy. Parsing support, CSSOM identity, engine participation,
 and fetching must be accounted for separately as each rule is added.
@@ -111,6 +115,10 @@ Declaration edits already update the state the engine reads. Regressions cover
 nested-rule survival, separate later declaration runs, and parent-sheet links
 after removal/replacement. There is no declaration copy-back callback or
 independent interpreted tree to keep synchronized.
+
+Discarded nested rules do not split declaration runs, following the reviewed
+browser behavior. The continuing Syntax disagreement and issue link are recorded
+in the [syntax roadmap](../syntax/ROADMAP.md#parser-disagreements).
 
 ## Computed results and external facts
 

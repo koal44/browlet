@@ -3,7 +3,7 @@ import {
   describe, expect,
   it,
 } from 'vitest';
-import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
   createBooleanExprConsumer,
@@ -151,7 +151,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('leaves an incomplete Boolean tail for the enclosing grammar', () => {
-    const c = new TokenCursor(parseListOfComponentValues('a and'));
+    const c = new TokenCursor(parseListOfComponentValues('a and'), emptyParsingContext);
     const consume = createBooleanExprConsumer(consumeTest);
 
     expect(consume(c)).toMatchObject({
@@ -164,7 +164,7 @@ describe('<boolean-expr[]>', () => {
   });
 
   it('consumes one expression and leaves following components', () => {
-    const c = new TokenCursor(parseListOfComponentValues('a and b trailing'));
+    const c = new TokenCursor(parseListOfComponentValues('a and b trailing'), emptyParsingContext);
     const consume = createBooleanExprConsumer(consumeTest);
 
     expect(consume(c)).toMatchObject({

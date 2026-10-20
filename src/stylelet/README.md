@@ -50,23 +50,28 @@ these boundaries; new findings require an ownership review before changing the m
 Use these responsibilities when adding or reviewing parsing code:
 
 1. **Syntax parsing** in [syntax/parser.ts](syntax/parser.ts) consumes CSS text
-   or existing tokens and produces generic rule/declaration records. It handles
-   syntax and recovery without deciding which properties or values are supported.
+   or existing tokens and owns structural recovery. Its typed cursor carries the
+   required rule context that makes grammar decisions during consumption.
+   Declaration-only and component parsers remain available for narrower grammars,
+   including support queries that must retain unsupported declaration syntax.
 2. **Property interpretation** in [css/property.ts](css/property.ts) applies
    the installed property grammars and produces `PropertyDeclaration` values.
-   `interpretPropertyDeclarations()` shares this step between declaration-only
-   input and stylesheet rules. `parseDeclarationBlock()` first obtains syntax
-   declarations; callers that already have them use the interpreter directly.
+   `interpretPropertyDeclaration()` supplies the shared grammar step. Stylesheet
+   consumption calls it before deciding whether to retry input as a rule;
+   `interpretPropertyDeclarations()` applies it to declaration-only syntax lists.
 3. **CSSOM rule interpretation** in [cssom/parser.ts](cssom/parser.ts) recognizes
-   rule grammars through `interpretCSSRule()` and `interpretStyleRule()`, producing
-   implementations with parsed selectors and interpreted declarations.
+   rule grammars through `CSSParsingContext`, producing implementations with
+   parsed selectors and interpreted declarations. It selects child grammars
+   before entering blocks. Each context method consumes and interprets the whole
+   rule; `createStyleRule()` assembles already interpreted declarations and children.
 
 Use plain specification names for syntax records (`Rule`, `QualifiedRule`,
 `Declaration`), `interpret…` for applying the relevant grammars, and `…Impl` for
 implementations of Platform interfaces. Keep named parsing entry points aligned
 with their source algorithms, such as `parseStylesheetContents()`.
 
-These are processing stages. `CSSStyleSheetImpl` owns the resulting rule tree
+These responsibilities cooperate during parsing, rather than requiring complete
+independent passes. `CSSStyleSheetImpl` owns the resulting rule tree
 and its URL provenance; the engine and CSSOM mutation use that same tree.
 There is no retained intermediate stylesheet tree. The host's Binding machinery
 must provide the realm-owned `CSSStyleSheet` Platform object; that last boundary
@@ -111,12 +116,13 @@ Generic value support is broader than the installed property registry. A value
 parser's presence does not imply that a property using it participates in a
 stylesheet, cascade, CSSOM access, or computed style.
 
-The CSSOM parser recognizes style rules, including nested style-rule
-data, but currently discards at-rules. The cascade visits only top-level style
+The CSSOM parser recognizes style rules, including nested style-rule data.
+Unknown at-rules are discarded; recognized unfinished grammars stop at explicit
+context methods. The cascade visits only top-level style
 rules; nested-selector tests do not establish nested-rule participation.
 CSSOM's rule objects are less complete:
 style declaration edits work, while selector mutation, nested-rule operations,
-rule serialization, and rule/sheet parent associations remain unfinished.
+and rule serialization remain unfinished.
 
 The engine selects supported declarations from inline state and matched sheets.
 It does not yet provide the complete cascade/defaulting/inheritance pipeline,

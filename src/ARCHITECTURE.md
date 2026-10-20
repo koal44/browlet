@@ -235,6 +235,23 @@ provenance, and rule attachment/removal updates parent-sheet associations throug
 their children. Binding projects these implementations rather than creating a
 second representation of their state.
 
+Stylelet's CSSParsingContext supplies rule grammar decisions to Syntax during
+consumption. It retains the existing environment for CSSOM allocation and the
+enclosing selector context for nested rules; it is per-parse state, not a host
+service on the environment. TokenCursor carries a typed context, temporarily
+selecting child contexts and restoring the parent on completion or failure.
+ParsingContext is the complete interpretation contract, required by rule entry
+points and their internal consumers. Declaration-block APIs use Partial<ParsingContext>;
+primitive component grammars can use the shared empty context. Declaration syntax
+readers preserve the caller's context without
+injecting an identity interpreter. Each block interpretation method owns child
+consumption and whole-rule validation. CSSOM supplies constructed-sheet status
+as data on the same context class; the environment carries no per-operation
+import permission.
+Grammar checks return their parsed results, so construction does not repeat
+selector/property interpretation. Unfinished standard at-rule grammars have
+explicit throwing entry points; unknown syntax still follows CSS recovery.
+
 The required `getLanguage()` operation supplies the host's determined element
 language. Browlet delegates to `NodeImpl`, including document defaults.
 `standardDOM` reads language attributes and ancestry, crossing shadow roots to

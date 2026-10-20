@@ -3,6 +3,7 @@ import {
   type ComponentValue, type Token, type TokenSourceRange,
 } from './tokens';
 
+/** Source text and ranges parallel to this cursor's tokens; prebuilt blocks need their own ranges. */
 export type TokenSource = {
   text: string;
   ranges: TokenSourceRange[];
@@ -10,9 +11,11 @@ export type TokenSource = {
 
 export type TokenCursorOptions = {
   position?: number;
-  context?: unknown;
   source?: TokenSource;
 };
+
+/** Shared context for component grammars that need no contextual state. */
+export const emptyParsingContext = Object.freeze({});
 
 export type TokenPredicate<Value extends Token> = (value: Value) => boolean;
 
@@ -32,20 +35,21 @@ export type TryConsumer<T> =
  */
 export type TryConsumerResult<T> = T | null;
 
-export class TokenCursor<Value extends Token = ComponentValue> {
-  context: unknown;
+export class TokenCursor<Value extends Token = ComponentValue, Context = unknown> {
+  context: Context;
   #input: Value[];
   #i: number;
   #source?: TokenSource;
 
   constructor(
     input: Value[],
-    options: TokenCursorOptions = {},
+    context: Context,
+    options?: TokenCursorOptions,
   ) {
     this.#input = input;
-    this.#i = options.position ?? 0;
-    this.context = options.context;
-    this.#source = options.source;
+    this.#i = options?.position ?? 0;
+    this.context = context;
+    this.#source = options?.source;
   }
 
   pos(): number {
@@ -99,6 +103,23 @@ export class TokenCursor<Value extends Token = ComponentValue> {
     return true;
   }
 
+  /** Use a context for synchronous consumption, preserving position/source and restoring the caller's context. */
+  withContext<ScopedContext, Result>(
+    context: ScopedContext,
+    consume: (cursor: TokenCursor<Value, ScopedContext>) => Result,
+  ): Result {
+    const previous = this.context;
+    // The same cursor changes context only for this call; no token/source copy is needed.
+    const scoped = this as unknown as TokenCursor<Value, ScopedContext>;
+    scoped.context = context;
+    try {
+      return consume(scoped);
+    } finally {
+      this.context = previous;
+    }
+  }
+
+  /** Read the source span of [start, end), or undefined when the cursor has no matching ranges. */
   sourceText(start: number, end: number): string | undefined {
     if (this.#source === undefined) return undefined;
     if (start === end) return '';

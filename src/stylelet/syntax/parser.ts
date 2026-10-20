@@ -5,7 +5,7 @@ import {
   isWhitespaceToken,
   type ComponentValue, type FunctionBlock, type SimpleBlock,
 } from './component-value';
-import { TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
+import { emptyParsingContext, TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { tokenize, tokenizeWithSource, TokenKind, type Token } from './tokens';
 
 /** A generic CSS rule, before selector and property grammar interpretation. */
@@ -41,37 +41,64 @@ export type Declaration = {
   name: string;
   value: ComponentValue[];
   important: boolean;
+  /** Value spelling when the input retains source text; absent for bare token lists. */
   originalText?: string;
 };
 
-export type BlockContents = Array<DeclarationList | Rule>;
+/** Preserve source order until the owning rule interprets declaration runs and child rules. */
+export type BlockContents<ParsedRule extends object = Rule, ParsedDeclaration = Declaration> =
+  Array<ParsedDeclaration[] | ParsedRule>;
 export type DeclarationList = Declaration[];
 export type QualifiedRuleList = QualifiedRule[];
 export type AtRuleList = AtRule[];
 export type DeclarationRuleList = Array<DeclarationList | AtRule>;
 export type RuleList = Array<QualifiedRule | AtRule>;
 
-/** CSS text or an existing token sequence; byte decoding is a separate step. */
-export type ParserInput = string | Token[];
+/** CSS text, tokens/components, or a stream at its current position; decode bytes first. */
+export type ParserInput = string | Token[] | TokenCursor<Token>;
 
+/** Grammar decisions made while consuming one rule list, supplied by its owning context. */
+// CSS Syntax deliberately leaves context passing to implementations:
+// https://drafts.csswg.org/css-syntax-3/#parser-algorithms
+export interface ParsingContext<ParsedRule extends object = object, ParsedDeclaration = unknown> {
+  /** Reject invalid declarations before the parser decides whether to retry as a rule. */
+  interpretDeclaration(declaration: Declaration): ParsedDeclaration | null;
+  /** Check statement grammar and placement against already consumed siblings. */
+  interpretStatementAtRule(
+    rule: StatementAtRule,
+    preceding: BlockContents<ParsedRule, ParsedDeclaration>,
+  ): ParsedRule | null;
+  /** Interpret the whole rule, consuming or discarding the block at the cursor. */
+  interpretBlockAtRule(
+    name: string,
+    prelude: ComponentValue[],
+    preceding: BlockContents<ParsedRule, ParsedDeclaration>,
+    c: TokenCursor<Token>,
+  ): ParsedRule | null;
+  /** Interpret the prelude and block; consume the block even when returning null. */
+  interpretQualifiedRule(prelude: ComponentValue[], c: TokenCursor<Token>): ParsedRule | null;
+}
+
+/** Bind a component grammar to a parser entry point. */
 export function createComponentParser<T>(
   consumer: TryConsumer<T>,
 ): (
   input: ParserInput,
   context?: unknown,
 ) => TryConsumerResult<T> {
-  return (input, context = undefined) =>
+  return (input, context = emptyParsingContext) =>
     parseAsComponentGrammar(input, consumer, context);
 }
 
+/** Match the entire remaining input against a grammar, returning null on failure. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-grammar
 export function parseAsComponentGrammar<T>(
   input: ParserInput,
   consumer: TryConsumer<T>,
-  context: unknown = undefined,
+  context: unknown = emptyParsingContext,
 ): TryConsumerResult<T> {
   const components = parseListOfComponentValues(input);
-  const c = new TokenCursor(components, { context });
+  const c = new TokenCursor(components, input instanceof TokenCursor ? input.context : context);
   const result = consumer(c);
 
   if (result === null) return null;
@@ -80,13 +107,15 @@ export function parseAsComponentGrammar<T>(
   return c.eof() ? result : null;
 }
 
+/** Match comma-separated items independently; a failed item contributes null. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-list
 export function parseListAsComponentGrammar<T>(
   input: ParserInput,
   consumer: TryConsumer<T>,
-  context: unknown = undefined,
+  context: unknown = emptyParsingContext,
 ): (TryConsumerResult<T>)[] {
   const lists = parseCommaSeparatedListOfComponentValues(input);
+  const grammarContext = input instanceof TokenCursor ? input.context : context;
 
   if (
     lists.length === 1 &&
@@ -96,53 +125,46 @@ export function parseListAsComponentGrammar<T>(
     return [];
   }
 
-  return lists.map((item) => parseAsComponentGrammar(item, consumer, context));
+  return lists.map((item) => parseAsComponentGrammar(item, consumer, grammarContext));
 }
 
-/** Parse stylesheet contents into generic rules, leaving sheet creation to CSSOM. */
+/** Parse stylesheet contents using the owning grammar's interpretation of each rule. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-stylesheet-contents
-export function parseStylesheetContents(input: ParserInput): Rule[] {
-  return consumeStylesheetContents(normalize(input));
+export function parseStylesheetContents<ParsedRule extends object, ParsedDeclaration>(
+  input: ParserInput,
+  context: ParsingContext<ParsedRule, ParsedDeclaration>,
+): ParsedRule[] {
+  return consumeInput(input, context, consumeStylesheetContents);
 }
 
+/** Parse mixed declaration/rule content, stopping before an unmatched closing brace. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-block-contents
-export function parseBlockContents(
+export function parseBlockContents<ParsedRule extends object, ParsedDeclaration>(
   input: ParserInput,
-  context: unknown = undefined,
-): BlockContents {
-  return consumeBlockContents(normalize(input, context));
+  context: ParsingContext<ParsedRule, ParsedDeclaration>,
+): BlockContents<ParsedRule, ParsedDeclaration> {
+  return consumeInput(input, context, consumeBlockContents);
 }
 
+/** Parse exactly one rule in its grammar context; return null on invalid or extra input. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-rule
-export function parseRule(input: ParserInput): Rule | null {
-  const c = normalize(input);
-
-  consumeTrivia(c);
-  if (c.eof()) return null;
-
-  const rule = c.peek().type === TokenKind.AtKeyword
-    ? consumeAtRule(c)
-    : consumeQualifiedRule(c);
-
-  if (rule === null) return null;
-
-  consumeTrivia(c);
-  return c.eof() ? rule : null;
-}
-
-// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-declaration
-export function parseDeclaration(
+export function parseRule<ParsedRule extends object, ParsedDeclaration>(
   input: ParserInput,
-  context: unknown = undefined,
-): Declaration | null {
-  const c = normalize(input, context);
-  consumeTrivia(c);
-  return consumeDeclaration(c);
+  context: ParsingContext<ParsedRule, ParsedDeclaration>,
+): ParsedRule | null {
+  return consumeInput(input, context, consumeSingleRule);
 }
 
+/** Read declaration syntax in the caller's context, without interpreting its property or descriptor. */
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-declaration
+export function parseDeclaration<Context>(input: ParserInput, context: Context): Declaration | null {
+  return consumeInput(input, context, consumeSingleDeclaration);
+}
+
+/** Parse exactly one component value, allowing surrounding whitespace; return null otherwise. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-component-value
 export function parseComponentValue(input: ParserInput): ComponentValue | null {
-  const c = normalize(input);
+  const c = getTokenCursor(input);
 
   consumeTrivia(c);
   if (c.eof()) return null;
@@ -153,20 +175,23 @@ export function parseComponentValue(input: ParserInput): ComponentValue | null {
   return c.eof() ? value : null;
 }
 
+/** Consume all remaining components, reusing blocks that have already been parsed. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-list-of-component-values
 export function parseListOfComponentValues(input: ParserInput): ComponentValue[] {
-  if (typeof input !== 'string' && input.every(isComponentValue)) {
+  if (Array.isArray(input) && input.every(isComponentValue)) {
     return input;
   }
 
-  return consumeListOfComponentValues(normalize(input));
+  const c = getTokenCursor(input);
+  return consumeListOfComponentValues(c);
 }
 
+/** Split on top-level commas, retaining empty arms except for an empty trailing arm. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-separated-list-of-component-values
 export function parseCommaSeparatedListOfComponentValues(
   input: ParserInput,
 ): ComponentValue[][] {
-  const c = normalize(input);
+  const c = getTokenCursor(input);
   const groups: ComponentValue[][] = [];
 
   while (!c.eof()) {
@@ -179,22 +204,55 @@ export function parseCommaSeparatedListOfComponentValues(
 
 /**
  * Parse declaration-only input into syntax records, without validating property names or values.
- * Recover through semicolons without admitting nested style rules.
+ * Preserve the caller's context and recover through semicolons without admitting nested style rules.
  */
 // CSS Style Attributes: https://drafts.csswg.org/css-style-attr/#syntax
 // This entry point implements that grammar using the shared CSS Syntax consumers.
 // SPEC_CLASH(css-style-attribute-parsing): Follow CSS Style Attributes and all
 // three engines. CSSOM's newer block-contents reference also admits nested rules
 // and treats an unmatched closing brace as the end of the whole input.
-export function parseDeclarationList(input: ParserInput): Declaration[] {
-  const c = normalize(input);
+export function parseDeclarationList<Context>(input: ParserInput, context: Context): Declaration[] {
+  return consumeInput(input, context, consumeDeclarationList);
+}
+
+/** Skip an invalid rule's balanced block without interpreting its children. */
+export function discardRuleBlock<Value extends Token>(c: TokenCursor<Value>): void {
+  consumeComponentValue(c);
+}
+
+/** Consume a brace-delimited block, including its closing brace when present. */
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block
+export function consumeBlock<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
+  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
+): BlockContents<ParsedRule, ParsedDeclaration> {
+  const opening = c.peek();
+
+  if (isBraceBlock(opening)) {
+    c.next();
+    // TODO: Prebuilt component blocks do not retain source ranges for their children.
+    return consumeBlockContents(new TokenCursor(opening.value, c.context));
+  }
+
+  if (opening.type !== TokenKind.LeftBrace) {
+    c.error('Expected an opening brace token');
+  }
+
+  c.next();
+  const contents = consumeBlockContents(c);
+  c.next();
+  return contents;
+}
+
+/** Consume the declaration-only attribute grammar, ignoring complete at-rules. */
+// https://drafts.csswg.org/css-style-attr/#syntax
+function consumeDeclarationList(c: TokenCursor<Token>): Declaration[] {
   const declarations: Declaration[] = [];
   while (!c.eof()) {
     const type = c.peek().type;
     if (type === TokenKind.Whitespace || type === TokenKind.Semicolon) {
       c.next();
     } else if (type === TokenKind.AtKeyword) {
-      consumeAtRule(c);
+      discardAtRule(c);
     } else {
       const declaration = consumeDeclaration(c);
       if (declaration !== null) declarations.push(declaration);
@@ -203,33 +261,66 @@ export function parseDeclarationList(input: ParserInput): Declaration[] {
   return declarations;
 }
 
-/** Tokenize text with source locations, or wrap supplied tokens in a cursor. */
-function normalize(input: ParserInput, context: unknown = undefined): TokenCursor<Token> {
-  if (typeof input !== 'string') return new TokenCursor(input, { context });
+/** Skip a complete at-rule in declaration-only input without invoking rule interpretation. */
+// CSS Style Attributes: https://drafts.csswg.org/css-style-attr/#syntax
+// Consume the same boundary as https://drafts.csswg.org/css-syntax-3/#consume-at-rule.
+function discardAtRule(c: TokenCursor<Token>): void {
+  c.next();
+  while (true) {
+    switch (c.peek().type) {
+      case TokenKind.EOF:
+        return;
+      case TokenKind.Semicolon:
+        c.next();
+        return;
+      case TokenKind.LeftBrace:
+      case TokenKind.BraceBlock:
+        discardRuleBlock(c);
+        return;
+      default:
+        consumeComponentValue(c);
+    }
+  }
+}
+
+/** Reuse an existing cursor unchanged, or create one for context-free component parsing. */
+function getTokenCursor(input: ParserInput): TokenCursor<Token> {
+  return input instanceof TokenCursor ? input : normalize(input, emptyParsingContext);
+}
+
+/** Consume with the selected context, restoring it only when the cursor belongs to the caller. */
+function consumeInput<Context, Result>(
+  input: ParserInput,
+  context: Context,
+  consume: (c: TokenCursor<Token, Context>) => Result,
+): Result {
+  if (input instanceof TokenCursor) return input.withContext(context, consume);
+  return consume(normalize(input, context));
+}
+
+/** Create a cursor with its parsing context, retaining source locations when tokenizing text. */
+// https://drafts.csswg.org/css-syntax-3/#normalize-into-a-token-stream
+function normalize<Context>(input: string | Token[], context: Context): TokenCursor<Token, Context> {
+  if (typeof input !== 'string') return new TokenCursor(input, context);
 
   const { source, tokens, ranges } = tokenizeWithSource(input);
-  return new TokenCursor(tokens, {
-    context,
+  return new TokenCursor(tokens, context, {
     source: { text: source, ranges },
   });
 }
 
+/** Discard whitespace tokens; comments were already consumed by tokenization. */
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#token-stream-discard-whitespace
 function consumeTrivia<Value extends Token>(c: TokenCursor<Value>): void {
   c.consumeWhile(isWhitespaceToken);
 }
 
-// TODO: Sections 5.5.2, 5.5.3, 5.5.6, and 7 describe validating rules and
-// declarations in their current context while consuming them. This parser
-// currently performs only the structural checks needed for generic CSS syntax
-// and defers property-, descriptor-, and rule-specific validity to later
-// interpretation. The specification's implementation note suggests that
-// grammar-aware checks mainly enable earlier exits and avoid reparsing. Revisit
-// this when those contexts exist, and verify that deferred validation still
-// preserves invalid-rule recovery and declaration-list boundaries.
-
+/** Consume whole-sheet rules, ignoring top-level CDO/CDC tokens and malformed rules. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-stylesheet-contents
-function consumeStylesheetContents(c: TokenCursor<Token>): Rule[] {
-  const rules: Rule[] = [];
+function consumeStylesheetContents<ParsedRule extends object, ParsedDeclaration>(
+  c: TokenCursor<Token, ParsingContext<ParsedRule, ParsedDeclaration>>,
+): ParsedRule[] {
+  const rules: ParsedRule[] = [];
 
   while (true) {
     switch (c.peek().type) {
@@ -242,9 +333,11 @@ function consumeStylesheetContents(c: TokenCursor<Token>): Rule[] {
       case TokenKind.EOF:
         return rules;
 
-      case TokenKind.AtKeyword:
-        rules.push(consumeAtRule(c));
+      case TokenKind.AtKeyword: {
+        const rule = consumeAtRule(c, false, rules);
+        if (rule !== null) rules.push(rule);
         break;
+      }
 
       default: {
         const rule = consumeQualifiedRule(c);
@@ -254,11 +347,31 @@ function consumeStylesheetContents(c: TokenCursor<Token>): Rule[] {
   }
 }
 
+/** Apply the single-rule entry algorithm using the supplied grammar context. */
+// Extracted from https://drafts.csswg.org/css-syntax-3/#parse-rule
+function consumeSingleRule<ParsedRule extends object, ParsedDeclaration>(
+  c: TokenCursor<Token, ParsingContext<ParsedRule, ParsedDeclaration>>,
+): ParsedRule | null {
+  consumeTrivia(c);
+  if (c.eof()) return null;
+
+  const rule = c.peek().type === TokenKind.AtKeyword
+    ? consumeAtRule(c, false, [])
+    : consumeQualifiedRule(c);
+
+  if (rule === null) return null;
+
+  consumeTrivia(c);
+  return c.eof() ? rule : null;
+}
+
+/** Consume and validate an at-rule; nested input leaves the containing closing brace unread. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-at-rule
-function consumeAtRule<Value extends Token>(
-  c: TokenCursor<Value>,
-  nested = false,
-): AtRule {
+function consumeAtRule<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
+  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
+  nested: boolean,
+  preceding: BlockContents<ParsedRule, ParsedDeclaration>,
+): ParsedRule | null {
   const token = c.next();
 
   if (token.type !== TokenKind.AtKeyword) {
@@ -273,23 +386,18 @@ function consumeAtRule<Value extends Token>(
       case TokenKind.Semicolon:
       case TokenKind.EOF:
         c.next();
-        return { type: 'statement-at-rule', name, prelude };
+        return c.context.interpretStatementAtRule({ type: 'statement-at-rule', name, prelude }, preceding);
 
       case TokenKind.RightBrace:
         if (nested) {
-          return { type: 'statement-at-rule', name, prelude };
+          return c.context.interpretStatementAtRule({ type: 'statement-at-rule', name, prelude }, preceding);
         }
         prelude.push(consumeComponentValue(c));
         break;
 
       case TokenKind.LeftBrace:
       case TokenKind.BraceBlock:
-        return {
-          type: 'block-at-rule',
-          name,
-          prelude,
-          block: consumeBlock(c),
-        };
+        return c.context.interpretBlockAtRule(name, prelude, preceding, c);
 
       default:
         prelude.push(consumeComponentValue(c));
@@ -297,12 +405,15 @@ function consumeAtRule<Value extends Token>(
   }
 }
 
+/** Consume a qualified rule, returning null for an incomplete or declaration-shaped construct. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-qualified-rule
-function consumeQualifiedRule<Value extends Token>(
-  c: TokenCursor<Value>,
+// SPEC_CLASH(css-invalid-rule-declaration-runs): A rejected rule returns null,
+// just like an incomplete rule, so discarded rules do not split declaration runs.
+function consumeQualifiedRule<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
+  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
   stopToken?: TokenKind,
   nested = false,
-): QualifiedRule | null {
+): ParsedRule | null {
   const prelude: ComponentValue[] = [];
 
   while (true) {
@@ -327,22 +438,20 @@ function consumeQualifiedRule<Value extends Token>(
         if (nested) {
           consumeBadDeclarationRemnants(c, true);
         } else {
-          consumeBlock(c);
+          discardRuleBlock(c);
         }
         return null;
       }
 
-      return {
-        type: 'qualified-rule',
-        prelude,
-        block: consumeBlock(c),
-      };
+      return c.context.interpretQualifiedRule(prelude, c);
     }
 
     prelude.push(consumeComponentValue(c));
   }
 }
 
+/** Identify the custom-property prefix excluded from qualified-rule syntax. */
+// Extracted from https://drafts.csswg.org/css-syntax-3/#consume-qualified-rule
 function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
   const values = prelude.filter((value) => !isWhitespaceToken(value));
 
@@ -352,29 +461,13 @@ function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
     isTokenKind(values[1]!, TokenKind.Colon);
 }
 
-// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block
-function consumeBlock<Value extends Token>(c: TokenCursor<Value>): BlockContents {
-  const opening = c.peek();
-
-  if (isBraceBlock(opening)) {
-    c.next();
-    return consumeBlockContents(new TokenCursor(opening.value, { context: c.context }));
-  }
-
-  if (opening.type !== TokenKind.LeftBrace) {
-    c.error('Expected an opening brace token');
-  }
-
-  c.next();
-  const contents = consumeBlockContents(c);
-  c.next();
-  return contents;
-}
-
+/** Consume ordered declaration runs and rules, leaving a containing closing brace unread. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block-contents
-function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): BlockContents {
-  const contents: BlockContents = [];
-  let declarations: Declaration[] = [];
+function consumeBlockContents<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
+  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
+): BlockContents<ParsedRule, ParsedDeclaration> {
+  const contents: BlockContents<ParsedRule, ParsedDeclaration> = [];
+  let declarations: ParsedDeclaration[] = [];
 
   const flushDeclarations = (): void => {
     if (declarations.length === 0) return;
@@ -392,19 +485,23 @@ function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): Block
 
       case TokenKind.EOF:
       case TokenKind.RightBrace:
-        // The editor's draft currently omits this flush, which would discard
-        // every trailing declaration run. The surrounding algorithm requires it.
+        // SPEC_CLASH(css-block-final-declarations): Retain the final run, as all
+        // browsers do. The draft's return step omits it and would lose even a
+        // declaration-only block; the rest of the algorithm requires this flush.
         flushDeclarations();
         return contents;
 
-      case TokenKind.AtKeyword:
+      case TokenKind.AtKeyword: {
         flushDeclarations();
-        contents.push(consumeAtRule(c, true));
+        const rule = consumeAtRule(c, true, contents);
+        if (rule !== null) contents.push(rule);
         break;
+      }
 
       default: {
         const start = c.pos();
-        const declaration = consumeDeclaration(c, true);
+        const syntax = consumeDeclaration(c, true);
+        const declaration = syntax === null ? null : c.context.interpretDeclaration(syntax);
 
         if (declaration !== null) {
           declarations.push(declaration);
@@ -423,8 +520,16 @@ function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): Block
   }
 }
 
+/** Consume a standalone declaration after leading whitespace, leaving its semicolon unread. */
+// Extracted from https://drafts.csswg.org/css-syntax-3/#parse-declaration
+function consumeSingleDeclaration(c: TokenCursor<Token>): Declaration | null {
+  consumeTrivia(c);
+  return consumeDeclaration(c);
+}
+
+/** Consume declaration syntax and priority; the owning grammar interprets the result. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-declaration
-export function consumeDeclaration<Value extends Token>(
+function consumeDeclaration<Value extends Token>(
   c: TokenCursor<Value>,
   nested = false,
 ): Declaration | null {
@@ -454,33 +559,32 @@ export function consumeDeclaration<Value extends Token>(
   consumeTrivia(c);
   const valueStart = c.pos();
   declaration.value = consumeListOfComponentValues(c, TokenKind.Semicolon, nested);
-  let valueEnd = c.pos();
+  const valueEnd = c.pos();
 
-  valueEnd -= consumeImportantFlag(declaration);
-  valueEnd -= trimTrailingWhitespace(declaration.value);
-  const originalText = c.sourceText(valueStart, valueEnd);
+  const removed = consumeImportantFlag(declaration) + trimTrailingWhitespace(declaration.value);
 
   if (declaration.name.startsWith('--')) {
-    declaration.originalText = originalText;
-    return declaration;
-  }
-
-  if (hasDisallowedTopLevelBraceBlock(declaration.value)) {
+    // TODO: Retain source provenance when declarations arrive as bare token or
+    // component lists. Only string input and source-bearing cursors can supply it.
+    // SPEC_CLASH(css-custom-property-boundary-comments): Keep token-span text,
+    // matching Syntax and Chromium/WebKit; Firefox also retains trailing comments.
+    declaration.originalText = c.sourceText(valueStart, valueEnd - removed);
+  } else if (hasDisallowedTopLevelBraceBlock(declaration.value)) {
     return null;
-  }
-
-  if (
-    asciiLower(declaration.name) === 'unicode-range' &&
-    originalText !== undefined
-  ) {
-    declaration.value = [...parseListOfComponentValues(
-      tokenize(originalText, true),
-    )];
+  } else if (asciiLower(declaration.name) === 'unicode-range') {
+    const originalText = c.sourceText(valueStart, valueEnd);
+    // TODO: Bare token/component input has no original spelling to retokenize.
+    // Connect source provenance before supporting descriptors through that path.
+    if (originalText !== undefined) {
+      declaration.value = consumeUnicodeRangeDescriptorValue(originalText);
+    }
   }
 
   return declaration;
 }
 
+/** Recover through the next semicolon, or stop before the containing brace in nested input. */
+// Bad-declaration recovery: https://drafts.csswg.org/css-syntax-3/#consume-declaration
 function consumeBadDeclarationRemnants<Value extends Token>(
   c: TokenCursor<Value>,
   nested: boolean,
@@ -503,6 +607,8 @@ function consumeBadDeclarationRemnants<Value extends Token>(
   }
 }
 
+/** Remove a final important flag and following whitespace, returning the removed token count. */
+// Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
 function consumeImportantFlag(declaration: Declaration): number {
   const value = declaration.value;
   const importantIndex = lastNonWhitespaceIndex(value, value.length - 1);
@@ -528,6 +634,7 @@ function consumeImportantFlag(declaration: Declaration): number {
   return 0;
 }
 
+/** Locate the last significant component at or before start, or return -1. */
 function lastNonWhitespaceIndex(
   values: ComponentValue[],
   start: number,
@@ -539,6 +646,8 @@ function lastNonWhitespaceIndex(
   return -1;
 }
 
+/** Trim trailing whitespace and return the number of tokens removed. */
+// Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
 function trimTrailingWhitespace(values: ComponentValue[]): number {
   const start = values.length;
 
@@ -549,6 +658,8 @@ function trimTrailingWhitespace(values: ComponentValue[]): number {
   return start - values.length;
 }
 
+/** Detect a brace block mixed with another significant value in a non-custom declaration. */
+// Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
 function hasDisallowedTopLevelBraceBlock(values: ComponentValue[]): boolean {
   const significant = values.filter((value) => !isWhitespaceToken(value));
   const braces = significant.filter(isBraceBlock);
@@ -556,6 +667,7 @@ function hasDisallowedTopLevelBraceBlock(values: ComponentValue[]): boolean {
   return braces.length > 0 && (significant.length !== 1 || braces.length !== 1);
 }
 
+/** Consume components up to EOF, the stop token, or a containing brace in nested input. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-list-of-components
 function consumeListOfComponentValues<Value extends Token>(
   c: TokenCursor<Value>,
@@ -579,6 +691,7 @@ function consumeListOfComponentValues<Value extends Token>(
   }
 }
 
+/** Consume a preserved token or fold an opening token into a block/function. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-component-value
 // The parser uses one cursor abstraction for both lexical token streams and
 // component-value streams. Consuming a component value folds opening and
@@ -604,6 +717,7 @@ function consumeComponentValue<Value extends Token>(
   }
 }
 
+/** Consume a simple block through its matching delimiter, closing it implicitly at EOF. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-simple-block
 function consumeSimpleBlock<Value extends Token>(
   c: TokenCursor<Value>,
@@ -646,6 +760,7 @@ function consumeSimpleBlock<Value extends Token>(
   }
 }
 
+/** Consume a function through its matching parenthesis, closing it implicitly at EOF. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-function
 function consumeFunction<Value extends Token>(
   c: TokenCursor<Value>,
@@ -672,4 +787,10 @@ function consumeFunction<Value extends Token>(
 
     fn.value.push(consumeComponentValue(c));
   }
+}
+
+/** Retokenize a unicode-range descriptor's source; its grammar validates the resulting ranges. */
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-value
+function consumeUnicodeRangeDescriptorValue(input: string): ComponentValue[] {
+  return parseListOfComponentValues(tokenize(input, true));
 }

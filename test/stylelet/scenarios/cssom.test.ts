@@ -34,6 +34,28 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   },
 
   {
+    name: 'discarded nested rules do not separate declarations',
+    // SPEC_CLASH(css-invalid-rule-declaration-runs): Browser behavior was chosen.
+    // https://github.com/w3c/csswg-drafts/issues/11271
+    engines: ['native', 'selectlet'],
+    markup: `
+      <style>
+        .invalid { margin-left: 1px; & + {} margin-left: 2px; }
+        .unknown { margin-left: 3px; @unknown; margin-left: 4px; }
+      </style>`,
+    cases: [
+      {
+        cssom: { target: 'style.property', rule: 0, name: 'margin-left' },
+        expect: { cssom: { name: 'margin-left', value: '2px', important: false } },
+      },
+      {
+        cssom: { target: 'style.property', rule: 1, name: 'margin-left' },
+        expect: { cssom: { name: 'margin-left', value: '4px', important: false } },
+      },
+    ],
+  },
+
+  {
     name: 'last normal duplicate declaration wins',
     // status: 'only',
     engines: ['native', 'selectlet'],

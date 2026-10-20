@@ -1,5 +1,5 @@
 import {
-  consumeParensBlock, adaptConsumer, withTrivia, isTokenKind, consumeDeclaration, createComponentParser,
+  consumeParensBlock, adaptConsumer, withTrivia, isTokenKind, parseDeclaration, createComponentParser,
   parseAsComponentGrammar, TokenKind,
   type TokenCursor, type TryConsumerResult, type ParserInput, type Declaration,
 } from '../syntax/index';
@@ -48,7 +48,7 @@ export function consumeSupportsDeclaration(
   c: TokenCursor,
 ): TryConsumerResult<SupportsDeclaration> {
   const start = c.pos();
-  const declaration = consumeDeclaration(c);
+  const declaration = parseDeclaration(c, c.context);
 
   if (
     declaration === null ||

@@ -73,13 +73,22 @@ Location and parse-time base URL belong to the sheet, independently of its rules
 
 ### Rule parsing
 
-[parseCSSRules()](parser.ts) parses generic syntax and constructs unattached
-implementations directly. It does not retain a second interpreted tree or whole
-sheet source string. Selector/value records remain internal parsed data;
+[CSSParsingContext](parser.ts) supplies the complete interpretation contract to
+Syntax consumption and constructs unattached implementations directly. It does not retain a second
+interpreted tree or whole sheet source string. Selector/value records remain internal parsed data;
 custom-property source text is retained where its representation needs it.
 
-`interpretCSSRule()` dispatches generic rules; `interpretStyleRule()` applies
-selector/property grammars and constructs style-rule implementations. These
+CSSOM and loading callers create CSSParsingContext with the enclosing selectors,
+constructed-sheet flag, and environment. The same class handles both sheet kinds:
+ordinary imports reach the explicit unfinished grammar; constructed-sheet
+insertion rejects imports and replacement discards them. Parsing helpers receive
+the context, extracting its environment when allocating retained CSSOM objects.
+Declaration callers also supply a context explicitly; syntax reading does not
+replace it with a private identity interpreter.
+
+`CSSParsingContext` methods apply selector/property grammars, consume each block
+under its child context, and return the completed rule. `createStyleRule()` assembles
+the interpreted declarations and children without repeating grammar work. These
 helpers implement CSS Syntax's [rule interpretation requirements](https://drafts.csswg.org/css-syntax-3/#css-stylesheets)
 and CSS Nesting's declaration placement; they are not separate named spec algorithms.
 
@@ -88,7 +97,7 @@ and CSS Nesting's declaration placement; they are not separate named spec algori
 | Ordinary style rule | CSSStyleRuleImpl with parsed selectors and a declaration object |
 | Nested style rule | Child CSSStyleRuleImpl with parent-bound selectors and specificity; engine matching of nested style rules remains unfinished |
 | Declarations after a retained child rule | Separate CSSNestedDeclarationsImpl children, in order; the cascade reads them with the parent's matching result |
-| At-rules | Discarded; recognized rule grammars, namespace context, grouping applicability, and imports are unfinished |
+| At-rules | Unknown rules are discarded; named unfinished grammars stop with InternalError at their context method. Namespace, grouping, descriptors, and import consumers remain unfinished |
 | `@charset` in parsed text | Intentionally discarded; encoding detection uses its initial byte pattern, not a live rule |
 
 Invalid selector lists discard the rule. Invalid/unsupported declarations do

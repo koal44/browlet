@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
@@ -176,8 +176,8 @@ describe('position values', () => {
   it('greedily consumes a position while leaving following components', () => {
     const four = new TokenCursor(parseListOfComponentValues(
       'left 10px top 20px red',
-    ));
-    const one = new TokenCursor(parseListOfComponentValues('top 50px'));
+    ), emptyParsingContext);
+    const one = new TokenCursor(parseListOfComponentValues('top 50px'), emptyParsingContext);
 
     expect(consumePosition(four))
       .toEqual(position(['left', length(10), 'top', length(20)]));

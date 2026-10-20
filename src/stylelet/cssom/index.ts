@@ -5,6 +5,6 @@ export { CSSRuleImpl } from './rule';
 export {
   CSSGroupingRuleImpl, CSSStyleRuleImpl, CSSNestedDeclarationsImpl, CSSPropertyRuleImpl,
 } from './rules';
-export { parseCSSRules } from './parser';
+export { CSSParsingContext } from './parser';
 export { StylePropertyMapImpl } from './style-property-map';
 export { MediaListImpl } from './media-list';

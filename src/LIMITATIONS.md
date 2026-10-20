@@ -181,9 +181,11 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   helpers are not connected to author registration or per-element computation.
   The [engine inventory](stylelet/engine/README.md) distinguishes these limits
   from passing direct resolver tests.
-- **Stylesheet rules:** interpretation currently drops at-rules, including
-  namespace declarations and conditional groups. Nested style rules are retained
-  but not visited by the cascade or exposed as CSSOM children. Direct nested
+- **Stylesheet rules:** unknown at-rules are discarded; recognized unfinished
+  grammars, including namespace declarations and conditional groups, now stop
+  with an explicit InternalError in CSSParsingContext. Nested style rules are retained
+  in CSSOM implementation lists, but their cascade participation and Platform
+  projection remain unfinished. Direct nested
   selector tests therefore do not establish nested stylesheet support. See the
   [rule inventory](stylelet/css/README.md#rule-support-stops-at-different-layers)
   and [remaining contracts](stylelet/css/ROADMAP.md).

@@ -304,11 +304,14 @@ const ReplacementCharacter = '\uFFFD';
 const MaximumAllowedCodePoint = 0x10FFFF;
 
 export type DecodeStylesheetOptions = {
+  /** Charset label supplied by the transport, before Encoding label lookup. */
   transportEncoding?: string;
-  environmentEncoding?: string;
+  /** Encoding of the referring document or importing sheet, already determined. */
+  environmentEncoding?: Encoding;
 };
 
-// 3.2. The input byte stream
+/** Decode complete stylesheet bytes; the decoder gives a leading BOM precedence. */
+// https://drafts.csswg.org/css-syntax-3/#input-byte-stream
 export function decodeStylesheetBytes(
   bytes: Uint8Array,
   options: DecodeStylesheetOptions = {},
@@ -318,6 +321,8 @@ export function decodeStylesheetBytes(
   return env.userAgent.decodeText(bytes, fallback);
 }
 
+/** Select the fallback from transport metadata, the byte signature, then the referrer. */
+// https://drafts.csswg.org/css-syntax-3/#determine-the-fallback-encoding
 function determineFallbackEncoding(
   bytes: Uint8Array,
   {
@@ -335,10 +340,11 @@ function determineFallbackEncoding(
       : declared;
   }
 
-  const environment = environmentEncoding === undefined ? null : getEncoding(environmentEncoding);
-  return environment ?? 'UTF-8';
+  return environmentEncoding ?? 'UTF-8';
 }
 
+/** Recognize only the initial ASCII byte signature, wholly within the first 1024 bytes. */
+// https://drafts.csswg.org/css-syntax-3/#input-byte-stream
 function getDeclaredEncoding(bytes: Uint8Array): Encoding | null {
   const prefix = [
     0x40, 0x63, 0x68, 0x61, 0x72,
@@ -369,7 +375,8 @@ function startsWith(bytes: Uint8Array, prefix: number[]): boolean {
   return prefix.every((byte, index) => bytes[index] === byte);
 }
 
-// 3.3. Preprocessing the input stream
+/** Normalize CSS newlines, NULs, and isolated surrogates before tokenization. */
+// https://drafts.csswg.org/css-syntax-3/#input-preprocessing
 export function filterCodePoints(input: string): string {
   let out = '';
   let last = 0;
@@ -445,21 +452,31 @@ type IdentLikeToken =
   | UrlToken
   | StaticToken<TokenKind.BadUrl>;
 
+/** Half-open UTF-16 offsets in the preprocessed source, excluding preceding comments. */
 export type TokenSourceRange = {
   start: number;
   end: number;
 };
 
+/** Preprocessed source and parallel token/range arrays. EOF has no array entry. */
 export type TokenizedInput = {
   source: string;
   tokens: Token[];
   ranges: TokenSourceRange[];
 };
 
+/**
+ * Tokenize complete CSS input; TokenCursor supplies EOF when the array is exhausted.
+ * Enable unicode ranges only for the unicode-range descriptor's special parsing path.
+ */
+// https://drafts.csswg.org/css-syntax-3/#tokenization
+// consumeUnicodeRangeDescriptorValue() opts in; ordinary parsing leaves it false.
 export function tokenize(input: string, unicodeRangesAllowed = false): Token[] {
   return tokenizeSource(filterCodePoints(input), unicodeRangesAllowed);
 }
 
+/** Tokenize while retaining offsets for consumers that need the source spelling. */
+// https://drafts.csswg.org/css-syntax-3/#tokenization
 export function tokenizeWithSource(
   input: string,
   unicodeRangesAllowed = false,
@@ -474,6 +491,7 @@ export function tokenizeWithSource(
   };
 }
 
+/** Consume preprocessed input, optionally recording each token's source range. */
 function tokenizeSource(
   source: string,
   unicodeRangesAllowed: boolean,
@@ -491,22 +509,13 @@ function tokenizeSource(
       return tokens;
     }
 
-    if (
-      token.type === TokenKind.Whitespace &&
-      tokens[tokens.length - 1]?.type === TokenKind.Whitespace
-    ) {
-      if (ranges !== undefined) {
-        ranges[ranges.length - 1]!.end = c.pos();
-      }
-      continue;
-    }
-
     tokens.push(token);
     ranges?.push({ start, end: c.pos() });
   }
 }
 
-// 4.3.1. Consume a token
+/** Consume one token from filtered input, discarding any preceding comments. */
+// https://drafts.csswg.org/css-syntax-3/#consume-token
 function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
   consumeComments(c);
 
@@ -662,7 +671,8 @@ function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
   return delimToken(ch);
 }
 
-// 4.3.2. Consume comments
+/** Consume consecutive comments, including the remainder of an unterminated comment. */
+// https://drafts.csswg.org/css-syntax-3/#consume-comment
 function consumeComments(c: TextCursor): void {
   while (c.peek() === '/' && c.peek(1) === '*') {
     c.advance(2);
@@ -678,7 +688,8 @@ function consumeComments(c: TextCursor): void {
   }
 }
 
-// 4.3.3. Consume a numeric token
+/** Consume a number and its optional percentage sign or dimension unit. */
+// https://drafts.csswg.org/css-syntax-3/#consume-numeric-token
 function consumeNumericToken(c: TextCursor): NumericToken {
   const number = consumeNumber(c);
 
@@ -700,7 +711,8 @@ function consumeNumericToken(c: TextCursor): NumericToken {
   return numberToken(number.value, number.flag, number.sign);
 }
 
-// 4.3.4. Consume an ident-like token
+/** Consume an identifier, function opener, or unquoted URL. */
+// https://drafts.csswg.org/css-syntax-3/#consume-ident-like-token
 function consumeIdentLikeToken(c: TextCursor): IdentLikeToken {
   const value = consumeIdentSequence(c);
 
@@ -739,7 +751,8 @@ type StringLikeToken =
   | StringToken
   | StaticToken<TokenKind.BadString>;
 
-// 4.3.5. Consume a string token
+/** Consume a string after its opening quote; leave a terminating newline unconsumed. */
+// https://drafts.csswg.org/css-syntax-3/#consume-string-token
 function consumeStringToken(c: TextCursor, ending: '"' | "'"): StringLikeToken {
   let value = '';
 
@@ -778,7 +791,8 @@ function consumeStringToken(c: TextCursor, ending: '"' | "'"): StringLikeToken {
   }
 }
 
-// 4.3.6. Consume a url token
+/** Consume an unquoted URL after its opening parenthesis, recovering malformed input. */
+// https://drafts.csswg.org/css-syntax-3/#consume-url-token
 function consumeUrlToken(c: TextCursor): UrlToken | StaticToken<TokenKind.BadUrl> {
   let value = '';
 
@@ -834,7 +848,8 @@ function consumeUrlToken(c: TextCursor): UrlToken | StaticToken<TokenKind.BadUrl
   }
 }
 
-// 4.3.7. Consume an escaped code point
+/** Consume an escape after its backslash, replacing invalid scalar values. */
+// https://drafts.csswg.org/css-syntax-3/#consume-escaped-code-point
 function consumeEscapedCodePoint(c: TextCursor): string {
   const first = c.next();
 
@@ -869,16 +884,20 @@ function consumeEscapedCodePoint(c: TextCursor): string {
   return String.fromCodePoint(value);
 }
 
-// 4.3.8. Check if two code points are a valid escape
+/** Test whether the cursor starts a valid escape without consuming input. */
+// https://drafts.csswg.org/css-syntax-3/#starts-with-a-valid-escape
 function startsWithValidEscape(c: TextCursor): boolean {
   return isValidEscape(c.peek(), c.peek(1));
 }
 
+/** Test an escape prefix; an empty second string represents EOF, which is valid here. */
+// https://drafts.csswg.org/css-syntax-3/#starts-with-a-valid-escape
 function isValidEscape(first: string, second: string): boolean {
   return first === '\\' && !isNewline(second);
 }
 
-// 4.3.9. Check if three code points would start an ident sequence
+/** Test an identifier prefix without consuming input. */
+// https://drafts.csswg.org/css-syntax-3/#would-start-an-identifier
 function wouldStartIdentSequenceCodePoints(first: string, second: string, third: string): boolean {
   if (first === '-') {
     return (
@@ -899,7 +918,8 @@ function wouldStartIdentSequenceCodePoints(first: string, second: string, third:
   return false;
 }
 
-// 4.3.10. Check if three code points would start a number
+/** Test a number prefix without consuming input. */
+// https://drafts.csswg.org/css-syntax-3/#starts-with-a-number
 function wouldStartNumberCodePoints(first: string, second: string, third: string): boolean {
   if (first === '+' || first === '-') {
     return isDigit(second) || (second === '.' && isDigit(third));
@@ -912,7 +932,8 @@ function wouldStartNumberCodePoints(first: string, second: string, third: string
   return isDigit(first);
 }
 
-// 4.3.11. Check if three code points would start a unicode-range
+/** Test a unicode-range prefix without consuming input. */
+// https://drafts.csswg.org/css-syntax-3/#starts-a-unicode-range
 function wouldStartUnicodeRangeCodePoints(
   first: string,
   second: string,
@@ -925,9 +946,9 @@ function wouldStartUnicodeRangeCodePoints(
   );
 }
 
-// 4.3.12. Consume an ident sequence
+/** Consume identifier code points and escapes; the caller validates the prefix. */
+// https://drafts.csswg.org/css-syntax-3/#consume-name
 function consumeIdentSequence(c: TextCursor): string {
-  // Deliberately does not validate that the stream starts with an ident sequence.
   let result = '';
 
   while (true) {
@@ -954,7 +975,8 @@ type ConsumedNumber = {
   sign: NumericSign;
 };
 
-// 4.3.13. Consume a number
+/** Consume a validated numeric prefix, preserving its syntactic type and explicit sign. */
+// https://drafts.csswg.org/css-syntax-3/#consume-number
 function consumeNumber(c: TextCursor): ConsumedNumber {
   let flag = NumberTokenFlag.Integer;
   let sign = NumericSign.None;
@@ -1005,62 +1027,16 @@ function consumeNumber(c: TextCursor): ConsumedNumber {
   }
 
   return {
-    value: convertStringToNumber(repr),
+    // The CSS spelling is already validated. Convert it once so intermediate
+    // fractions and powers of ten cannot overflow or underflow independently.
+    value: Number(repr),
     flag,
     sign,
   };
 }
 
-function convertStringToNumber(repr: string): number {
-  let i = 0;
-
-  let s = 1;
-  if (repr[i] === '+' || repr[i] === '-') {
-    if (repr[i] === '-') s = -1;
-    i++;
-  }
-
-  const integerStart = i;
-  while (isDigit(repr.charAt(i))) i++;
-  const integerPart = repr.slice(integerStart, i);
-  const integer = integerPart === '' ? 0 : Number(integerPart);
-
-  let fraction = 0;
-  let fractionDigits = 0;
-
-  if (repr[i] === '.') {
-    i++;
-
-    const fractionStart = i;
-    while (isDigit(repr.charAt(i))) i++;
-
-    const fractionPart = repr.slice(fractionStart, i);
-    fractionDigits = fractionPart.length;
-    fraction = fractionPart === '' ? 0 : Number(fractionPart);
-  }
-
-  let t = 1;
-  let exponent = 0;
-
-  if (repr[i] === 'e' || repr[i] === 'E') {
-    i++;
-
-    if (repr[i] === '+' || repr[i] === '-') {
-      if (repr[i] === '-') t = -1;
-      i++;
-    }
-
-    const exponentStart = i;
-    while (isDigit(repr.charAt(i))) i++;
-
-    const exponentPart = repr.slice(exponentStart, i);
-    exponent = exponentPart === '' ? 0 : Number(exponentPart);
-  }
-
-  return s * (integer + fraction * 10 ** -fractionDigits) * 10 ** (t * exponent);
-}
-
-// 4.3.14. Consume a unicode-range token
+/** Consume a validated unicode-range prefix; descriptor validation is a later step. */
+// https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-token
 function consumeUnicodeRangeToken(c: TextCursor): UnicodeRangeToken {
   c.advance(2); // U+
 
@@ -1096,7 +1072,8 @@ function consumeUnicodeRangeToken(c: TextCursor): UnicodeRangeToken {
   return unicodeRangeToken(start, start);
 }
 
-// 4.3.15. Consume the remnants of a bad url
+/** Recover to an unescaped closing parenthesis or EOF after a malformed URL. */
+// https://drafts.csswg.org/css-syntax-3/#consume-remnants-of-bad-url
 function consumeBadUrlRemnants(c: TextCursor): void {
   while (true) {
     const ch = c.next();
@@ -1111,7 +1088,7 @@ function consumeBadUrlRemnants(c: TextCursor): void {
   }
 }
 
-// Consume whitespace
+/** Consume consecutive CSS whitespace in already filtered input. */
 function consumeWhitespace(c: TextCursor): void {
   c.consumeWhile(isWhitespace);
 }
@@ -1180,6 +1157,7 @@ function isIdentStartCodePoint(ch: string): boolean {
   return isNonAsciiIdentCodePoint(ch);
 }
 
+// https://drafts.csswg.org/css-syntax-3/#non-ascii-ident-code-point
 function isNonAsciiIdentCodePoint(ch: string): boolean {
   if (ch === '') return false;
 

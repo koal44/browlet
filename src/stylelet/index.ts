@@ -10,7 +10,7 @@ export { InternalPromise } from '../infra/promises';
 export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from '../infra/index';
 export { TreeScope } from './engine/index';
 export {
-  CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl,
+  CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, CSSParsingContext,
   MediaListImpl, StyleSheetListImpl,
   type CSSStyleSheetInit,
 } from './cssom/index';

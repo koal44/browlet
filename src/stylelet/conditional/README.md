@@ -16,7 +16,8 @@ and consumer connections.
 | [MediaListImpl](../cssom/media-list.ts) | Retains parsed media queries and exposes list mutation/serialization. | Retaining a media list does not evaluate stylesheet applicability. |
 
 There is no container-query implementation. The
-[stylesheet interpreter](../css/README.md) drops conditional at-rules, and
+[CSSOM parser](../cssom/parser.ts) reaches explicit missing-grammar methods for
+conditional at-rules, and
 `CascadeEngine.getActiveStyleSheets()` filters the disabled flag without media
 matching. CSSOM rule declarations/types therefore do not establish engine
 participation.

@@ -1,5 +1,5 @@
 import {
-  CSSDeclarationBlock, CSSStyleDeclarationImpl, type CSSStyleSheetImpl, type TreeScope,
+  CSSDeclarationBlock, CSSStyleDeclarationImpl, CSSParsingContext, type CSSStyleSheetImpl, type TreeScope,
   type StyleletEnvironment,
 } from '../../stylelet/index';
 
@@ -44,7 +44,7 @@ export class ElementCSSInlineStyleMixin {
       // raw attribute and prior accepted declarations; Firefox clears both.
       if (this.#element.nodeDocument.env.policyContainer.cspList!
         .isStyleAttributeBlocked(this.#element, value)) return;
-      (this.#block ??= new CSSDeclarationBlock()).setText(value);
+      (this.#block ??= new CSSDeclarationBlock()).setText(value, new CSSParsingContext(null, false, this.#env));
     }
     this.#style?.synchronizeIndices();
   }
@@ -127,6 +127,10 @@ export class LinkStyleMixin {
 
     // External links remain unassociated until Browlet exposes a response-
     // bearing resource loader to HTML's linked-resource processing model.
+    // TODO: Decode stylesheet bytes with the response's charset label and the
+    // referring document's encoding before parsing. Retain the BOM-selected
+    // encoding for @import and the final response URL for relative references.
+    // https://drafts.csswg.org/css-syntax-3/#input-byte-stream
     if (!this.#options.children) return;
 
     if (type !== '' && type !== 'text/css') {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { InternalError } from '../../../../src/infra/internal-error';
 import {
-  TokenCursor, type TryConsumer,
+  emptyParsingContext, TokenCursor, type TryConsumer,
   type TryConsumerResult,
 } from '../../../../src/stylelet/syntax/token-cursor';
 import { consumeWhitespace } from '../../../../src/stylelet/syntax/component-consumers';
@@ -14,8 +14,8 @@ import {
   sequenceOf, someOf, withTrivia,
 } from '../../../../src/stylelet/syntax/component-grammar';
 
-const cursor = (css: string, context: unknown = undefined): TokenCursor =>
-  new TokenCursor(parseListOfComponentValues(css), { context });
+const cursor = (css: string, context: unknown = emptyParsingContext): TokenCursor =>
+  new TokenCursor(parseListOfComponentValues(css), context);
 
 const literalConsumer = <T extends string>(expected: T): TryConsumer<T> => {
   return (c: TokenCursor): TryConsumerResult<T> => {
@@ -1235,6 +1235,25 @@ describe('component combinator null projections', () => {
 });
 
 describe('component grammar context plumbing', () => {
+  it('preserves an existing stream position and context through grammar entry points', () => {
+    const context = { mode: 'stream-test' };
+    const seen: unknown[] = [];
+    const consume: TryConsumer<'a'> = (c) => {
+      seen.push(c.context);
+      return consumeA(c);
+    };
+    const single = cursor('skip a', context);
+    single.restore(2);
+    expect(parseAsComponentGrammar(single, consume)).toBe('a');
+    expect(single.eof()).toBe(true);
+
+    const list = cursor('skip a, a', context);
+    list.restore(2);
+    expect(parseListAsComponentGrammar(list, consume)).toEqual(['a', 'a']);
+    expect(list.eof()).toBe(true);
+    expect(seen).toEqual([context, context, context]);
+  });
+
   it('passes context through parseAsComponentGrammar', () => {
     const context = { mode: 'test' };
     const seen: unknown[] = [];

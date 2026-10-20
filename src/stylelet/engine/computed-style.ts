@@ -5,7 +5,7 @@ import {
   propertyRegistry, resolveBuiltInPropertyDeclaration, CSSDeclarationBlock, parseDeclarationBlock,
   type PropertyContext, type PropertyDeclaration, type PropertyName,
 } from '../css/index';
-import { CSSStyleDeclarationImpl } from '../cssom/index';
+import { CSSStyleDeclarationImpl, CSSParsingContext } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
@@ -19,7 +19,10 @@ export function computeStyle(
   const block = dom.inlineStyleBlock?.(element);
   // An absent provider permits text fallback; a provider's empty result is authoritative.
   const declarations = block === undefined
-    ? parseDeclarationBlock(dom.getAttributeNS(element, null, 'style') ?? '')
+    ? parseDeclarationBlock(
+      dom.getAttributeNS(element, null, 'style') ?? '',
+      new CSSParsingContext(null, false, engine.context.env),
+    )
     : block instanceof CSSDeclarationBlock ? block.declarations : [];
   const computed: PropertyDeclaration[] = [];
 

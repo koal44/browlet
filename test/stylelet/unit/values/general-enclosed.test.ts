@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
@@ -41,7 +41,7 @@ describe('<general-enclosed>', () => {
   });
 
   it('consumes one block and leaves the following components', () => {
-    const c = new TokenCursor(parseListOfComponentValues('future() other'));
+    const c = new TokenCursor(parseListOfComponentValues('future() other'), emptyParsingContext);
 
     expect(consumeGeneralEnclosed(c)).toMatchObject({
       type: 'general-enclosed',

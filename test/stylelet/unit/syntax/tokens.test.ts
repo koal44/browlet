@@ -3,7 +3,7 @@ import { decode } from '../../../../src/encoding/index';
 import { createStyleletEnvironment, defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
 import {
   decodeStylesheetBytes as decodeBytes, filterCodePoints, HashTokenFlag, NumericSign, NumberTokenFlag,
-  tokenize, TokenKind, type DecodeStylesheetOptions,
+  tokenize, tokenizeWithSource, TokenKind, type DecodeStylesheetOptions,
 } from '../../../../src/stylelet/syntax/tokens';
 
 describe('filterCodePoints', () => {
@@ -15,6 +15,11 @@ describe('filterCodePoints', () => {
     expect(filterCodePoints('\uD800')).toBe('\uFFFD');
     expect(filterCodePoints('\uDC00')).toBe('\uFFFD');
     expect(filterCodePoints('💩')).toBe('💩');
+  });
+
+  it('handles consecutive replacements without losing valid surrogate pairs', () => {
+    expect(filterCodePoints('\r\r\n\f\0\uD800\uD83D\uDCA9\uDC00'))
+      .toBe('\n\n\n\uFFFD\uFFFD💩\uFFFD');
   });
 });
 
@@ -84,6 +89,24 @@ describe('style tokenizer consumers', () => {
     expect(view('U+416')).toEqual([
       ['ident', 'U'],
       ['number', 416, NumberTokenFlag.Integer, NumericSign.Plus],
+    ]);
+  });
+
+  it('limits each unicode-range segment to six digits without validating the range', () => {
+    expect(tokenize('U+1234567 U+??????? U+20-10 U+FFFFFF', true)).toMatchObject([
+      { type: TokenKind.UnicodeRange, start: 0x123456, end: 0x123456 },
+      { type: TokenKind.Number, value: 7 },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.UnicodeRange, start: 0, end: 0xFFFFFF },
+      { type: TokenKind.Delim, value: '?' },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.UnicodeRange, start: 0x20, end: 0x10 },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.UnicodeRange, start: 0xFFFFFF, end: 0xFFFFFF },
+    ]);
+    expect(tokenize('U+1-1234567', true)).toMatchObject([
+      { type: TokenKind.UnicodeRange, start: 1, end: 0x123456 },
+      { type: TokenKind.Number, value: 7 },
     ]);
   });
 
@@ -243,6 +266,17 @@ describe('style tokenizer consumers', () => {
     ]);
   });
 
+  it.each(['💩', '\\💩', '\\1f4a9 '])('preserves an astral code point in %s', (input) => {
+    expect(view(input)).toEqual([['ident', '💩']]);
+    expect(view(`"${input}"`)).toEqual([['string', '💩']]);
+    expect(view(`url(${input})`)).toEqual([['url', '💩']]);
+  });
+
+  it.each(['\r', '\r\n', '\f'])('preprocesses %j before string and escape consumption', (newline) => {
+    expect(view(`"a\\${newline}b"`)).toEqual([['string', 'ab']]);
+    expect(view(`\\41${newline}B`)).toEqual([['ident', 'AB']]);
+  });
+
   it('consume number converts decimal and exponent representations', () => {
     expect(view('.5')).toEqual([
       ['number', 0.5, NumberTokenFlag.Number, NumericSign.None],
@@ -280,6 +314,16 @@ describe('style tokenizer consumers', () => {
     ]);
   });
 
+  it.each([
+    { name: 'long fraction', input: `0.${'1'.repeat(400)}`, value: 0.1111111111111111 },
+    { name: 'large integer with a cancelling exponent', input: `1${'0'.repeat(400)}e-400`, value: 1 },
+    { name: 'subnormal value', input: '5e-324', value: Number.MIN_VALUE },
+    { name: 'zero with a large exponent', input: '0e9999', value: 0 },
+    { name: 'negative zero with a large exponent', input: '-0e9999', value: -0 },
+  ])('consume number converts $name without intermediate overflow or underflow', ({ input, value }) => {
+    expect(tokenize(input)).toMatchObject([{ type: TokenKind.Number, value }]);
+  });
+
   it('consume bad url remnants resumes after the url recovery point', () => {
     expect(view('url(foo bar);a')).toEqual([
       ['bad-url'],
@@ -306,13 +350,14 @@ describe('style tokenizer consumers', () => {
     ]);
   });
 
-  it('consume token coalesces whitespace and returns punctuation tokens', () => {
+  it('consume token groups consecutive whitespace and returns punctuation tokens', () => {
     expect(view(' \t\n')).toEqual([
       ['ws'],
     ]);
 
     expect(view('a /**/ b')).toEqual([
       ['ident', 'a'],
+      ['ws'],
       ['ws'],
       ['ident', 'b'],
     ]);
@@ -327,6 +372,32 @@ describe('style tokenizer consumers', () => {
       [']'],
       ['{'],
       ['}'],
+    ]);
+  });
+
+  it('retains separate source ranges for whitespace on either side of a comment', () => {
+    const result = tokenizeWithSource('a /**/ b');
+    expect(result.tokens).toEqual(tokenize(result.source));
+    expect(result.ranges).toEqual([
+      { start: 0, end: 1 },
+      { start: 1, end: 2 },
+      { start: 6, end: 7 },
+      { start: 7, end: 8 },
+    ]);
+  });
+
+  it('records UTF-16 offsets in preprocessed source and omits trailing comments', () => {
+    const result = tokenizeWithSource('/**/💩\r\n\\41 /**/');
+    expect(result.source).toBe('/**/💩\n\\41 /**/');
+    expect(result.tokens).toMatchObject([
+      { type: TokenKind.Ident, value: '💩' },
+      { type: TokenKind.Whitespace },
+      { type: TokenKind.Ident, value: 'A' },
+    ]);
+    expect(result.ranges).toEqual([
+      { start: 4, end: 6 },
+      { start: 6, end: 7 },
+      { start: 7, end: 11 },
     ]);
   });
 
@@ -485,7 +556,7 @@ describe.each([
 
     expect(decodeStylesheetBytes(bytes, {
       transportEncoding: 'windows-1252',
-      environmentEncoding: 'utf-8',
+      environmentEncoding: 'UTF-8',
     })).toBe('@charset "utf-8"; é');
   });
 
@@ -497,6 +568,37 @@ describe.each([
 
     expect(decodeStylesheetBytes(bytes))
       .toBe('@charset "windows-1252"; é');
+  });
+
+  it.each([
+    ' @charset "windows-1252";',
+    '/**/@charset "windows-1252";',
+    '@CHARSET "windows-1252";',
+    '@charset  "windows-1252";',
+    '@charset\t"windows-1252";',
+    "@charset 'windows-1252';",
+    '@charset "windows-1252" ;',
+    '@charset "windows-1252"',
+    '@charset "windows\\2d 1252";',
+    '@charset "windows-1252\u0080";',
+  ])('does not treat %j as an encoding declaration', (prefix) => {
+    const bytes = new Uint8Array([...textEncoder.encode(prefix), 0xE9]);
+    expect(decodeStylesheetBytes(bytes)).toBe(prefix + '\uFFFD');
+  });
+
+  it.each([1024, 1025])('bounds the complete encoding signature at %i bytes', (length) => {
+    const prefix = '@charset "windows-1252';
+    const declaration = prefix + ' '.repeat(length - prefix.length - 2) + '";';
+    const bytes = new Uint8Array([...textEncoder.encode(declaration), 0xE9]);
+    expect(decodeStylesheetBytes(bytes)).toBe(declaration + (length === 1024 ? 'é' : '\uFFFD'));
+  });
+
+  it('uses a valid declaration after an invalid transport label', () => {
+    const prefix = '@charset "windows-1252";';
+    const bytes = new Uint8Array([...textEncoder.encode(prefix), 0xE9]);
+    expect(decodeStylesheetBytes(bytes, {
+      transportEncoding: 'invalid', environmentEncoding: 'UTF-8',
+    })).toBe(prefix + 'é');
   });
 
   it('uses the environment after invalid transport and declaration labels', () => {
@@ -518,11 +620,11 @@ describe.each([
     })).toBe('é');
   });
 
-  it('treats a declared UTF-16 encoding as UTF-8', () => {
-    const bytes = textEncoder.encode('@charset "utf-16le"; é');
+  it.each(['utf-16le', 'utf-16be', 'utf-16'])('treats declared %s as UTF-8', (label) => {
+    const source = `@charset "${label}"; é`;
+    const bytes = textEncoder.encode(source);
 
-    expect(decodeStylesheetBytes(bytes))
-      .toBe('@charset "utf-16le"; é');
+    expect(decodeStylesheetBytes(bytes)).toBe(source);
   });
 
   it('gives a byte order mark precedence over the fallback encoding', () => {
@@ -534,6 +636,22 @@ describe.each([
     expect(decodeStylesheetBytes(bytes, {
       transportEncoding: 'windows-1252',
     })).toBe('é');
+  });
+
+  it.each([
+    { label: 'utf-16le', encoding: 'UTF-16LE', bom: [0xFF, 0xFE], bytes: [0xE9, 0] },
+    { label: 'utf-16be', encoding: 'UTF-16BE', bom: [0xFE, 0xFF], bytes: [0, 0xE9] },
+  ] as const)('honors $label from transport, the referrer, or a BOM', ({ label, encoding, bom, bytes }) => {
+    expect(decodeStylesheetBytes(new Uint8Array(bytes), { transportEncoding: label })).toBe('é');
+    expect(decodeStylesheetBytes(new Uint8Array(bytes), { environmentEncoding: encoding })).toBe('é');
+    expect(decodeStylesheetBytes(new Uint8Array([...bom, ...bytes]), {
+      transportEncoding: 'windows-1252',
+    })).toBe('é');
+  });
+
+  it('consumes only a leading BOM, preserving later U+FEFF characters', () => {
+    expect(decodeStylesheetBytes(textEncoder.encode('\uFEFF\uFEFFa\uFEFF')))
+      .toBe('\uFEFFa\uFEFF');
   });
 
   it('supports the replacement and x-user-defined encodings', () => {

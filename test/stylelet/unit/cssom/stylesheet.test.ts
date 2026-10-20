@@ -71,6 +71,11 @@ describe('CSSStyleSheetImpl', () => {
     expect(() => sheet.replaceSync('body {}')).toThrowError(
       expect.objectContaining({ name: 'NotAllowedError' }),
     );
+    // Ordinary sheets must reach the import grammar; the constructed-sheet
+    // prohibition must not hide this explicit missing implementation.
+    expect(() => sheet.insertRule('@import "theme.css";')).toThrowError(
+      '@import statement grammar and CSSOM construction are not implemented',
+    );
   });
 
   it('resolves a relative constructor base through the standalone URL provider', () => {
@@ -157,6 +162,18 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet.cssRules).toBe(rules);
     expect(rules).toHaveLength(2);
     expect(rules.item(1)).toBe(rules[1]);
+  });
+
+  it.each(['replaceSync', 'replace'] as const)('discards imports during %s', async (method) => {
+    const sheet = createStyleSheet();
+    const text = '@import "theme.css"; .kept { color: red }';
+
+    if (method === 'replaceSync') sheet.replaceSync(text);
+    else await observe(sheet.replace(text));
+
+    expect(sheet.cssRules).toHaveLength(1);
+    const rule = sheet.cssRules.item(0) as CSSStyleRuleImpl;
+    expect(rule.style.getPropertyValue('color')).toBe('red');
   });
 
   it('preserves nested rules when the parent declarations change', () => {

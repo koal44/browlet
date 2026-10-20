@@ -7,7 +7,9 @@ evaluation retain their own owners.
 
 ## Missing rule contracts
 
-All at-rules below are currently discarded by the [CSSOM parser](../cssom/parser.ts). A future rule
+The [CSSOM parser](../cssom/parser.ts) names the initial statement/block grammar
+dependencies and stops explicitly when they are reached; unrecognized names are
+still discarded. The table also tracks additional contributing specifications. A future rule
 needs its permitted syntax/context, retained representation, CSSOM behavior,
 and actual consumer accounted for together; not every rule contributes element
 declarations to the cascade.
