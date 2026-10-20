@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
 import {
-  type ComponentValue, serializeCssIdentifier, serializeCssString,
+  serializeCssIdentifier, serializeCssString,
 } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
@@ -13,8 +13,7 @@ import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
-  BadStringToken, BadUrlToken, RightParenToken, WhitespaceToken, identToken,
-  stringToken, TokenKind,
+  BadUrlToken, RightParenToken, identToken, TokenKind,
 } from '../../../../src/stylelet/syntax/tokens';
 import { serializeAnPlusB } from '../../../../src/stylelet/values/an-plus-b';
 import { parseAnimationNameValue } from '../../../../src/stylelet/props/animation-name';
@@ -149,8 +148,8 @@ describe('CSS-wide value', () => {
   });
 
   it('consumes one CSS-wide keyword without requiring the end of input', () => {
-    const components = parseListOfComponentValues('inherit initial');
-    const c = new TokenCursor(components, emptyParsingContext);
+    const list = parseListOfComponentValues('inherit initial');
+    const c = new TokenCursor(list, emptyParsingContext);
 
     expect(consumeCssWideValue(c)).toMatchObject({
       type: 'css-wide',
@@ -172,35 +171,39 @@ describe('any-value', () => {
   });
 
   it('returns the original component values after validating them', () => {
-    const components = parseListOfComponentValues('a fn(b)');
-    expect(parseAnyValue(components)?.components).toBe(components);
+    const list = parseListOfComponentValues('a fn(b)');
+    expect(parseAnyValue(list)?.components).toBe(list);
   });
 
   it('consumes the remaining nonempty component-value sequence', () => {
-    const components = parseListOfComponentValues('a fn(b)');
-    const c = new TokenCursor(components, emptyParsingContext);
+    const list = parseListOfComponentValues('a fn(b)');
+    const c = new TokenCursor(list, emptyParsingContext);
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
-      components,
+      components: list,
     });
-    expect(c.pos()).toBe(components.length);
+    expect(c.pos()).toBe(list.tokens.length);
   });
 
   it('stops before a component that cannot belong to the production', () => {
-    const components = parseListOfComponentValues('a)');
-    const c = new TokenCursor(components, emptyParsingContext);
+    const list = parseListOfComponentValues('a)');
+    const c = new TokenCursor(list, emptyParsingContext);
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
-      components: components.slice(0, 1),
+      components: {
+        tokens: list.tokens.slice(0, 1),
+        text: list.text,
+        ranges: list.ranges.slice(0, 1),
+      },
     });
     expect(c.pos()).toBe(1);
     expect(c.peek()).toBe(RightParenToken);
   });
 
   it('restores the cursor when its first component does not match', () => {
-    const empty = new TokenCursor([], emptyParsingContext);
+    const empty = new TokenCursor(parseListOfComponentValues(''), emptyParsingContext);
     const invalid = new TokenCursor(parseListOfComponentValues(') a'), emptyParsingContext);
 
     expect(consumeAnyValue(empty)).toBeNull();
@@ -235,25 +238,23 @@ describe('any-value', () => {
 });
 
 describe('declaration-value', () => {
-  const values = parseListOfComponentValues;
-
   it('parses a nonempty sequence of declaration component values', () => {
-    const components = values('red 1px url(foo.png)');
-    const value = parseDeclarationValue(components);
+    const list = parseListOfComponentValues('red 1px url(foo.png)');
+    const value = parseDeclarationValue(list);
 
     expect(value).toEqual({
       type: 'declaration-value',
-      components,
+      components: list,
     });
-    expect(value?.components).toBe(components);
+    expect(value?.components).toBe(list);
   });
 
   it('consumes a nonempty declaration value', () => {
-    const components = values('red 1px url(foo.png)');
+    const list = parseListOfComponentValues('red 1px url(foo.png)');
 
-    expect(consumeDeclarationValue(new TokenCursor(components, emptyParsingContext))).toEqual({
+    expect(consumeDeclarationValue(new TokenCursor(list, emptyParsingContext))).toEqual({
       type: 'declaration-value',
-      components,
+      components: list,
     });
   });
 
@@ -264,11 +265,11 @@ describe('declaration-value', () => {
   it('represents an omitted optional declaration value with empty components', () => {
     expect(parseOptionalDeclarationValue('')).toEqual({
       type: 'declaration-value',
-      components: [],
+      components: parseListOfComponentValues(''),
     });
-    expect(consumeOptionalDeclarationValue(new TokenCursor([], emptyParsingContext))).toEqual({
+    expect(consumeOptionalDeclarationValue(new TokenCursor(parseListOfComponentValues(''), emptyParsingContext))).toEqual({
       type: 'declaration-value',
-      components: [],
+      components: parseListOfComponentValues(''),
     });
   });
 
@@ -282,7 +283,7 @@ describe('declaration-value', () => {
   });
 
   it('restores after consuming an invalid declaration value', () => {
-    const c = new TokenCursor(values('a ! b'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('a ! b'), emptyParsingContext);
 
     expect(consumeDeclarationValue(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -539,7 +540,11 @@ describe('url-modifier', () => {
     expect(parseUrlModifier('future-modifier(value)')).toEqual({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
-      value: [identToken('value')],
+      value: {
+        tokens: [identToken('value')],
+        text: 'future-modifier(value)',
+        ranges: [{ start: 16, end: 21 }],
+      },
     });
   });
 
@@ -597,15 +602,11 @@ describe('url-modifier', () => {
   });
 
   it('rejects unknown functional notation containing a bad token', () => {
-    const components: ComponentValue[] = [{
-      type: TokenKind.FunctionBlock,
-      name: 'future-modifier',
-      value: [BadStringToken],
-    }];
+    const list = parseListOfComponentValues('future-modifier("bad\n)');
 
-    expect(parseUrlModifier(components)).toBeNull();
+    expect(parseUrlModifier(list)).toBeNull();
 
-    const c = new TokenCursor(components, emptyParsingContext);
+    const c = new TokenCursor(list, emptyParsingContext);
     expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
@@ -616,7 +617,7 @@ describe('url-modifier', () => {
     expect(consumeUrlModifier(c)).toEqual({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
-      value: [],
+      value: { tokens: [], text: 'future-modifier()', ranges: [] },
     });
     expect(c.pos()).toBe(1);
   });
@@ -717,21 +718,23 @@ describe('url', () => {
   });
 
   it('preserves substitution in src() but not in url()', () => {
-    expect(parseListOfComponentValues('src(var(--foo))')).toEqual([
+    expect(parseListOfComponentValues('src(var(--foo))').tokens).toMatchObject([
       {
         type: TokenKind.FunctionBlock,
         name: 'src',
-        value: [
-          {
-            type: TokenKind.FunctionBlock,
-            name: 'var',
-            value: [identToken('--foo')],
-          },
-        ],
+        value: {
+          tokens: [
+            {
+              type: TokenKind.FunctionBlock,
+              name: 'var',
+              value: { tokens: [identToken('--foo')] },
+            },
+          ],
+        },
       },
     ]);
 
-    expect(parseListOfComponentValues('url(var(--foo))')).toEqual([
+    expect(parseListOfComponentValues('url(var(--foo))').tokens).toEqual([
       BadUrlToken,
       RightParenToken,
     ]);
@@ -873,19 +876,7 @@ describe('url', () => {
   });
 
   it('rejects an unknown functional modifier containing a bad token', () => {
-    expect(parseUrl([{
-      type: TokenKind.FunctionBlock,
-      name: 'url',
-      value: [
-        stringToken('image.png'),
-        WhitespaceToken,
-        {
-          type: TokenKind.FunctionBlock,
-          name: 'future-modifier',
-          value: [BadStringToken],
-        },
-      ],
-    }])).toBeNull();
+    expect(parseUrl('url("image.png" future-modifier("bad\n))')).toBeNull();
   });
 
   it.each([

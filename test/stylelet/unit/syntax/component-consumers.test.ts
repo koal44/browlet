@@ -12,7 +12,7 @@ import { isTokenKind } from '../../../../src/stylelet/syntax/component-value';
 import { parseAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { consumeAnyValue } from '../../../../src/stylelet/syntax/any-value';
 import { consumeOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
-import { BadStringToken, EOFToken, TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { EOFToken, TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import { ColorKind, consumeColor } from '../../../../src/stylelet/values/color';
 
 describe('consumeWhitespace', () => {
@@ -117,11 +117,11 @@ describe('createFreeFormConsumer', () => {
 
   it('delegates an empty partition to an optional declaration-value grammar', () => {
     const consume = createFreeFormConsumer(consumeOptionalDeclarationValue);
-    const c = new TokenCursor([], emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(''), emptyParsingContext);
 
     expect(consume(c)).toEqual({
       type: 'declaration-value',
-      components: [],
+      components: parseListOfComponentValues(''),
     });
   });
 });
@@ -186,11 +186,7 @@ describe('block consumers', () => {
 
 describe('createFunctionalNotationConsumer', () => {
   it('returns null when the matched function has invalid components', () => {
-    const c = new TokenCursor([{
-      type: TokenKind.FunctionBlock,
-      name: 'fn',
-      value: [BadStringToken],
-    }], emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('fn("bad\n)'), emptyParsingContext);
     const consume = createFunctionalNotationConsumer(
       'fn',
       (args) => args.next(),

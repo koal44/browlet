@@ -7,7 +7,7 @@ import {
 } from '../../../../src/stylelet/syntax/parser';
 import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
-import { tokenize, TokenKind, type Token } from '../../../../src/stylelet/syntax/tokens';
+import { tokenize } from '../../../../src/stylelet/syntax/tokens';
 import { SyntaxParsingContext } from '../../../support/stylelet-syntax';
 
 describe('rule parsing context', () => {
@@ -52,7 +52,7 @@ describe('rule parsing context', () => {
     expect(contents).toHaveLength(2);
     const rule = contents[0];
     if (Array.isArray(rule) || rule?.type !== 'qualified-rule') throw new Error('Expected a qualified rule');
-    expect(serializeComponentValues(rule.prelude)).toBe('example: ');
+    expect(serializeComponentValues(rule.prelude.tokens)).toBe('example: ');
     expect(rule.block).toEqual([]);
     expect(contents[1]).toMatchObject([{ name: 'color' }]);
   });
@@ -66,18 +66,10 @@ describe('rule parsing context', () => {
       type: 'block-at-rule', name, prelude, block: c.withContext(inner, consumeBlock),
     });
     // Reuse the component block path without giving it access to any CSSOM grammar.
-    const tokens: Token[] = prebuilt
-      ? [
-        ...tokenize('@test '),
-        {
-          type: TokenKind.BraceBlock,
-          value: parseListOfComponentValues('descriptor: x; color: red'),
-        },
-        ...tokenize(' color: blue'),
-      ]
-      : tokenize('@test { descriptor: x; color: red } color: blue');
+    const text = '@test { descriptor: x; color: red } color: blue';
+    const list = prebuilt ? parseListOfComponentValues(text) : tokenize(text);
     const original = { purpose: 'caller context' };
-    const cursor = new TokenCursor(tokens, original);
+    const cursor = new TokenCursor(list, original);
     expectTypeOf(cursor.context).toEqualTypeOf<typeof original>();
     const contents = parseBlockContents(cursor, outer);
 
@@ -137,7 +129,7 @@ describe('rule parsing context', () => {
   it('allows a block to use a declaration type different from its parent grammar', () => {
     const descriptors: ParsingContext<never, string> = {
       interpretDeclaration: (declaration) => declaration.name === 'descriptor'
-        ? serializeComponentValues(declaration.value) : null,
+        ? serializeComponentValues(declaration.value.tokens) : null,
       interpretStatementAtRule: () => null,
       interpretBlockAtRule(_name, _prelude, _preceding, c) {
         discardRuleBlock(c);

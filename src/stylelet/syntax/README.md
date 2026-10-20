@@ -13,13 +13,13 @@ conformance.
 | Stage | Existing implementation | Result / boundary |
 | --- | --- | --- |
 | Bytes | [tokens.ts](tokens.ts), `decodeStylesheetBytes()` | Chooses a fallback from transport metadata, the initial `@charset` byte sequence, environment encoding, then UTF-8; the supplied decoder handles decoding, including BOM precedence. Callers decode before using the string parser. |
-| Code points and tokens | `filterCodePoints()`, `tokenize()`, `tokenizeWithSource()` | CSS newline/replacement preprocessing and tokens; the source-aware path also supplies ranges for retained text. |
+| Code points and tokens | `filterCodePoints()`, `tokenize()` | CSS newline/replacement preprocessing and tokens, with the preprocessed text and parallel source ranges. |
 | Components | [parser.ts](parser.ts), [component-value.ts](component-value.ts) | Preserved tokens, nested blocks, and functions. These are syntax, not resolved CSS values. |
 | Stylesheet contents | `parseStylesheetContents()` | Rules interpreted by the required caller-supplied grammar context. |
 | Block syntax | `parseBlockContents()` | Interpreted declaration runs interleaved with rules, preserving the distinction needed by nesting. |
 | CSS rule construction | [CSSOM parser](../cssom/parser.ts) | Recognizes selectors/properties and constructs rule implementations directly; see the [rule inventory](../cssom/README.md#rule-parsing). |
 
-`ParserInput` accepts a string, token/component array, or existing `TokenCursor`.
+`ParserInput` accepts a string, `TokenList` record, or existing `TokenCursor`.
 Existing cursors retain their position, context and source ranges; parsing
 consumes from that position. String inputs take the preprocessing path. Byte
 decoding exists independently of the unfinished external-sheet loader and must
@@ -33,13 +33,13 @@ the latter supplies `userAgent.decodeText`. Browlet uses Encoding's decoder;
 standalone hosts default to native decoding. Both paths honor leading BOMs.
 The initial `@charset` bytes select an encoding; they are not a live CSS rule.
 
-Token arrays omit EOF; `TokenCursor` supplies it at exhaustion. Source ranges
+Token lists omit EOF; `TokenCursor` supplies it at exhaustion. Source ranges
 are half-open UTF-16 offsets into the **preprocessed** string, not byte offsets
 or offsets into the original input. Comments produce no tokens, but they
 separate whitespace runs. Numeric conversion consumes the complete CSS spelling
 before converting to a JavaScript number, avoiding intermediate overflow and
 underflow. `consumeUnicodeRangeDescriptorValue()` opts into unicode-range
-tokens when a declaration named `unicode-range` has retained source text.
+tokens when a declaration is named `unicode-range`.
 It retokenizes the complete value segment; descriptor validation remains missing.
 
 Records use the specification's plain names: `Rule`, `QualifiedRule`, `AtRule`,
@@ -76,16 +76,16 @@ own the resulting rules and location.
 
 `ParsingContext` is the complete interpretation contract. `parseStylesheetContents()`,
 `parseRule()`, and `parseBlockContents()` require it in their signatures, as do
-their internal rule consumers. Declaration-block APIs accept `Partial<ParsingContext>`
-because their syntax readers do not invoke rule interpretation. The types describe
-the same caller-supplied object; there is no runtime completeness check.
+their internal rule consumers. Declaration-only APIs preserve the caller's
+context without requiring interpretation methods; CSSOM callers supply their
+existing parsing context. There is no runtime completeness check.
 The methods interpret declarations, statements, and whole block rules.
 Block methods receive the prelude, preceding siblings where relevant,
 and a cursor at the block; they must consume or discard it, even when returning
 null. They select a child grammar with `withContext(child, consumeBlock)` and can
 reject the completed block. The child grammar can use a different declaration type.
 
-`TokenCursor<Value, Context>` has one constructor: `(input, context, options?)`.
+`TokenCursor<Value, Context>` has one constructor: `(list, context, options?)`.
 Fresh cursors receive their parsing context at construction. Grammar entry points
 use `withContext()` only for an existing caller-owned cursor; component-only
 entry points preserve an existing cursor without changing its context.
@@ -120,37 +120,83 @@ and how this differs from Selectlet's query parser. Selector grammar consumes
 this folder's generic syntax machinery and the reusable value grammars.
 
 `serializeComponentValues()`, `serializeCssIdentifier()`, and
-`serializeCssString()` provide syntax-level serialization. Custom-property
-declarations can retain original value text rather than reconstructing it from
+`serializeCssString()` provide syntax-level serialization. The component serializer
+preserves token kinds, explicit numeric signs, and integer/number flags, including
+large integers and overflowed numeric tokens. Boundary comments prevent tokens
+from joining, including the three-token `<!--` hazard. Identifier escaping uses
+the tokenizer's character ranges; the resulting CSSOM/browser disagreement is
+recorded in the [roadmap](ROADMAP.md#identifier-serialization-disagreement).
+Custom-property declarations can retain original value text rather than reconstructing it from
 tokens. These facilities do not promise a lossless source editor, CSSRule
 serialization, or value resolution during serialization.
 
-Source retention currently covers string input and source-bearing cursors.
-Bare token arrays and prebuilt blocks lack that provenance. They cannot supply
-exact custom-property spelling or retokenize a unicode-range descriptor reliably;
-the missing connections are marked in `consumeDeclaration()` and `consumeBlock()`.
+[An+B](../values/an-plus-b.ts) is a component grammar used by the selector parser.
+It interprets the token productions into an integer step and offset and serializes
+that record with integer spelling. Coefficients use JavaScript's finite number
+range; overflow is limited during interpretation, not serialization. This is a
+context-specific range choice permitted by CSS Values, not a general numeric
+range policy for all properties. Selector matching owns positive-index and
+nonnegative-iteration behavior.
+
+`TokenList` extends `TokenSource` as an explicit record: `tokens`, `text`, and
+`ranges`. Source is required. `tokenize()` produces this record; folding tokens
+into components creates matching ranges while sharing the full preprocessed
+text. Block/function children, comma-list arms, and collected grammar values
+retain that same text with ranges for their own sequences.
+
+`TokenCursor` caches the tokens array for token reads and uses the record for
+source queries. Parser consumers build output lists; the cursor does not own
+output construction. Reopening a block or entering a component grammar therefore
+preserves custom-property spelling and unicode-range reparsing. Slicing a list
+requires slicing its ranges alongside its tokens. A bare array is not parser
+input; serialization can still read a component array without source information.
+
+Use `component` for one component value and `components` for an array of them;
+use `token` for a lexical or unspecialized token. Name the complete `TokenList`
+record `list`, `input`, or a specific role such as `prelude`. The `tokens` member
+can contain lexical tokens or folded components, as its type argument specifies.
+Retain `value` for payload fields and interpreted values.
 
 ## Evidence
 
-CSS Syntax 3 §§1–5 have been reviewed against the local draft: §§1–2 and the
+CSS Syntax 3 §§1–11 have been reviewed against the local draft: §§1–2 and the
 railroad diagrams are informative; input decoding/preprocessing, token records,
 character classes, and all fifteen tokenizer algorithms are implemented. Parser
 entry points and consumers cover structural recovery, including existing streams,
 mixed token/component inputs, nested delimiters and unicode-range retokenization.
-The unfinished rule grammars and source provenance prevent claiming full §5
+The unfinished rule and descriptor grammars prevent claiming full §5
 conformance. Stylesheet creation remains in CSSOM.
+
+| Remaining section | Implementation / boundary |
+| --- | --- |
+| §6 An+B | Token grammar and coefficient interpretation in `values/an-plus-b.ts`; selector tests cover accepted/rejected forms and `of` clauses. |
+| §7 Rule and arbitrary-value grammars | `ParsingContext` selects valid construct kinds while consuming. Block-list types name the categories; rule owners supply their actual validity rules. `any-value.ts` and `declaration-value.ts` enforce recursive malformed-token restrictions and the latter's additional top-level restrictions. |
+| §8 Stylesheets, style rules, at-rules, @charset | CSSOM interprets selectors/properties and retains nested rules. Invalid selectors discard the rule; invalid declarations do not. Recognized unfinished at-rules reach explicit throwing dependencies; unknown at-rules and @charset are discarded. |
+| §9 Serialization | Component/token round trips and canonical An+B serialization; CSSOM and individual value specifications still own their further serialization requirements. |
+| §§10–11 Privacy/security | No additional runtime algorithm or API; consistent error recovery is supplied by the parser. |
+
 Recovery follows the user-agent algorithms without exposing a conformance-checker
 diagnostic API. The entry points accept complete input rather than incremental
-chunks. These sections contain no Web IDL declarations.
+chunks. CSS Syntax contains no Web IDL declarations.
 
 The [syntax tests](../../../test/stylelet/unit/syntax/) cover tokenization and
 decoding, parser recovery, component grammars, and component serialization.
 [Tokenizer tests](../../../test/stylelet/unit/syntax/tokens.test.ts) exercise
 both decoder hosts, strict `@charset` spelling and the 1024-byte boundary, BOM
 precedence, preprocessing, astral characters, numeric extremes, recovery, and
-token source ranges. CSSOM parser and numeric-value regressions cover consumers
+token source ranges. [Source tests](../../../test/stylelet/unit/syntax/source.test.ts)
+cover folding, nested blocks, component grammars, comma-list arms, and reparsing
+collected `first-valid()` arguments. CSSOM parser regressions also check exact custom-property
+text through prebuilt nested rules. Numeric-value regressions cover consumers
 of the corrected whitespace and number tokens.
+[An+B tests](../../../test/stylelet/unit/values/an-plus-b.test.ts) cover coefficient
+round trips, overflow, grammar failure restoration, and the selector-clause boundary.
 [Selector tests](../../../test/stylelet/unit/selector/) cover selector grammar,
-context, specificity, serialization, and matching. Both were included in the passing
-[syntax and selector baseline](../README.md#syntax-rules-and-selectors). Loader behavior, all
-property grammars, and full browser/WPT conformance were not tested by that run.
+context, specificity, serialization, and matching.
+
+The 2026-10-19 final Syntax audit ran all 39 Stylelet unit files:
+2,915 passed, 7 existing expected failures, and 14 existing skips. The new browser
+regression exercised Stylelet's identifier/selector serialization in Chromium,
+Firefox and WebKit; all passed. The three native-only spelling probes confirmed
+the documented disagreement before returning to idle. Loader behavior, every
+property grammar, and full browser/WPT conformance were not established by these runs.

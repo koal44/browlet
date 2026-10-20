@@ -1,23 +1,16 @@
 import {
   EOFToken, TokenKind,
-  type ComponentValue, type Token, type TokenSourceRange,
+  type ComponentValue, type Token, type TokenList, type TokenSource, type TokenSourceRange,
 } from './tokens';
-
-/** Source text and ranges parallel to this cursor's tokens; prebuilt blocks need their own ranges. */
-export type TokenSource = {
-  text: string;
-  ranges: TokenSourceRange[];
-};
 
 export type TokenCursorOptions = {
   position?: number;
-  source?: TokenSource;
 };
 
 /** Shared context for component grammars that need no contextual state. */
 export const emptyParsingContext = Object.freeze({});
 
-export type TokenPredicate<Value extends Token> = (value: Value) => boolean;
+export type TokenPredicate<Value extends Token> = (token: Value) => boolean;
 
 export type TryConsumer<T> =
   (c: TokenCursor<ComponentValue>) => TryConsumerResult<T>;
@@ -37,19 +30,19 @@ export type TryConsumerResult<T> = T | null;
 
 export class TokenCursor<Value extends Token = ComponentValue, Context = unknown> {
   context: Context;
+  source: TokenSource;
   #input: Value[];
   #i: number;
-  #source?: TokenSource;
 
   constructor(
-    input: Value[],
+    list: TokenList<Value>,
     context: Context,
     options?: TokenCursorOptions,
   ) {
-    this.#input = input;
+    this.#input = list.tokens;
     this.#i = options?.position ?? 0;
     this.context = context;
-    this.#source = options?.source;
+    this.source = list;
   }
 
   pos(): number {
@@ -77,13 +70,13 @@ export class TokenCursor<Value extends Token = ComponentValue, Context = unknown
   }
 
   consume(): Value {
-    const value = this.next();
+    const token = this.next();
 
-    if (value.type === TokenKind.EOF) {
+    if (token.type === TokenKind.EOF) {
       this.error('Unexpected end of token stream');
     }
 
-    return value;
+    return token;
   }
 
   consumeWhile(predicate: TokenPredicate<Value>): number {
@@ -119,16 +112,20 @@ export class TokenCursor<Value extends Token = ComponentValue, Context = unknown
     }
   }
 
-  /** Read the source span of [start, end), or undefined when the cursor has no matching ranges. */
-  sourceText(start: number, end: number): string | undefined {
-    if (this.#source === undefined) return undefined;
+  /** Read the original text for the token interval [start, end). */
+  sourceText(start: number, end: number): string {
     if (start === end) return '';
 
-    const first = this.#source.ranges[start];
-    const last = this.#source.ranges[end - 1];
-    if (first === undefined || last === undefined) return undefined;
+    const first = this.source.ranges[start]!;
+    const last = this.source.ranges[end - 1]!;
+    return this.source.text.slice(first.start, last.end);
+  }
 
-    return this.#source.text.slice(first.start, last.end);
+  /** Read the source range of a nonempty token interval [start, end). */
+  sourceRange(start: number, end: number): TokenSourceRange {
+    const first = this.source.ranges[start]!;
+    const last = this.source.ranges[end - 1]!;
+    return first === last ? first : { start: first.start, end: last.end };
   }
 
   error(message: string): never {

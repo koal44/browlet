@@ -3,7 +3,7 @@ import {
 } from './token-cursor';
 import { isDelimToken, isTokenKind, type ComponentValue } from './component-value';
 import { parseListOfComponentValues, type ParserInput } from './parser';
-import { TokenKind, type StaticToken } from './tokens';
+import { createTokenList, TokenKind, type StaticToken, type TokenList, type NonEmptyTokenList } from './tokens';
 import {
   isAnyValueContents, consumeAnyValue, type AnyValueComponent,
 } from './any-value';
@@ -11,15 +11,16 @@ import {
 /*
  * <declaration-value>
  */
+// https://drafts.csswg.org/css-syntax-3/#any-value
 
 export type DeclarationValue = {
   type: 'declaration-value';
-  components: [DeclarationComponent, ...DeclarationComponent[]];
+  components: NonEmptyTokenList<DeclarationComponent>;
 };
 
 export type OptionalDeclarationValue = {
   type: 'declaration-value';
-  components: DeclarationComponent[];
+  components: TokenList<DeclarationComponent>;
 };
 
 export type DeclarationComponent = Exclude<
@@ -28,9 +29,9 @@ export type DeclarationComponent = Exclude<
 >;
 
 export function parseDeclarationValue(input: ParserInput): DeclarationValue | null {
-  const components = parseListOfComponentValues(input);
-  if (isNonEmptyDeclarationValueContents(components)) {
-    return { type: 'declaration-value', components: components };
+  const list = parseListOfComponentValues(input);
+  if (isNonEmptyDeclarationValueContents(list)) {
+    return { type: 'declaration-value', components: list };
   }
   return null;
 }
@@ -44,7 +45,7 @@ export function consumeDeclarationValue(
 
   if (
     value === null ||
-    !isNonEmptyDeclarationValueContents(value.components)
+    !hasOnlyDeclarationComponents(value.components)
   ) {
     c.restore(start);
     return null;
@@ -56,9 +57,9 @@ export function consumeDeclarationValue(
 export function parseOptionalDeclarationValue(
   input: ParserInput,
 ): OptionalDeclarationValue | null {
-  const components = parseListOfComponentValues(input);
-  return isDeclarationValueContents(components)
-    ? { type: 'declaration-value', components }
+  const list = parseListOfComponentValues(input);
+  return isDeclarationValueContents(list)
+    ? { type: 'declaration-value', components: list }
     : null;
 }
 
@@ -71,11 +72,11 @@ export function consumeOptionalDeclarationValue(
 
   if (value === null) {
     return c.peek().type === TokenKind.EOF
-      ? { type: 'declaration-value', components: [] }
+      ? { type: 'declaration-value', components: createTokenList(c.source.text) }
       : null;
   }
 
-  if (!isDeclarationValueContents(value.components)) {
+  if (!hasOnlyDeclarationComponents(value.components)) {
     c.restore(start);
     return null;
   }
@@ -84,11 +85,18 @@ export function consumeOptionalDeclarationValue(
 }
 
 export function isDeclarationValueContents(
-  components: ComponentValue[],
-): components is DeclarationComponent[] {
-  if (!isAnyValueContents(components)) return false;
+  list: TokenList<ComponentValue>,
+): list is TokenList<DeclarationComponent> {
+  return isAnyValueContents(list) && hasOnlyDeclarationComponents(list);
+}
 
-  for (const component of components) {
+/** Check the additional top-level restrictions on already validated <any-value> contents. */
+function hasOnlyDeclarationComponents(list: NonEmptyTokenList<AnyValueComponent>): list is NonEmptyTokenList<DeclarationComponent>;
+function hasOnlyDeclarationComponents(list: TokenList<AnyValueComponent>): list is TokenList<DeclarationComponent>;
+function hasOnlyDeclarationComponents(
+  list: TokenList<AnyValueComponent>,
+): list is TokenList<DeclarationComponent> {
+  for (const component of list.tokens) {
     if (
       isTokenKind(component, TokenKind.Semicolon) ||
       isDelimToken(component, '!')
@@ -101,7 +109,7 @@ export function isDeclarationValueContents(
 }
 
 function isNonEmptyDeclarationValueContents(
-  components: ComponentValue[],
-): components is [DeclarationComponent, ...DeclarationComponent[]] {
-  return components.length > 0 && isDeclarationValueContents(components);
+  list: TokenList<ComponentValue>,
+): list is NonEmptyTokenList<DeclarationComponent> {
+  return list.tokens.length > 0 && isDeclarationValueContents(list);
 }

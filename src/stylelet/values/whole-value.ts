@@ -103,7 +103,7 @@ export function defineProperty<Value, Context>(
       type: 'raw',
       declaration,
       resolve: (stage, ctx) => resolveRaw(value, stage, ctx),
-      serialize: () => serializeComponentValues(declaration.components),
+      serialize: () => serializeComponentValues(declaration.components.tokens),
     };
 
     return value;

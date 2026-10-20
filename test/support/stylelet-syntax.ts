@@ -2,7 +2,7 @@ import {
   consumeBlock, type BlockContents, type Declaration, type Rule, type ParsingContext, type StatementAtRule,
 } from '../../src/stylelet/syntax/parser';
 import type { TokenCursor } from '../../src/stylelet/syntax/token-cursor';
-import type { ComponentValue, Token } from '../../src/stylelet/syntax/tokens';
+import type { ComponentValue, Token, TokenList } from '../../src/stylelet/syntax/tokens';
 
 /** Structural grammar for Syntax tests; deliberately makes no claim about CSS validity. */
 export class SyntaxParsingContext implements ParsingContext<Rule, Declaration> {
@@ -16,7 +16,7 @@ export class SyntaxParsingContext implements ParsingContext<Rule, Declaration> {
 
   interpretBlockAtRule(
     name: string,
-    prelude: ComponentValue[],
+    prelude: TokenList<ComponentValue>,
     _preceding: BlockContents,
     c: TokenCursor<Token>,
   ): Rule | null {
@@ -24,7 +24,7 @@ export class SyntaxParsingContext implements ParsingContext<Rule, Declaration> {
     return { type: 'block-at-rule', name, prelude, block };
   }
 
-  interpretQualifiedRule(prelude: ComponentValue[], c: TokenCursor<Token>): Rule | null {
+  interpretQualifiedRule(prelude: TokenList<ComponentValue>, c: TokenCursor<Token>): Rule | null {
     const block = c.withContext(this, consumeBlock);
     return { type: 'qualified-rule', prelude, block };
   }

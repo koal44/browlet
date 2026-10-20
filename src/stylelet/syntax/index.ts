@@ -26,7 +26,7 @@ export {
 export {
   TokenKind, NumericSign, NumberTokenFlag,
   type DimensionToken, type IdentToken, type NumberToken, type ParensBlock, type FunctionBlock,
-  type ComponentValue, type Token,
+  type ComponentValue, type Token, type TokenList, type NonEmptyTokenList, type TokenSource, type TokenSourceRange,
 } from './tokens';
 export {
   parseOptionalDeclarationValue, consumeDeclarationValue, consumeOptionalDeclarationValue,

@@ -6,7 +6,7 @@ import {
   type BuiltInPropertyDeclaration, type CustomPropertyDeclaration,
 } from '../../../../src/stylelet/css/property';
 import { CSSParsingContext } from '../../../../src/stylelet/cssom/parser';
-import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
+import { parseListOfComponentValues, parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
 import { parseOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
 import {
@@ -132,6 +132,17 @@ describe('CSS rule construction', () => {
       { name: 'color', custom: false },
       { name: '--text', custom: true, originalText: 'a /**/ b' },
     ]);
+  });
+
+  it('preserves custom-property spelling in prebuilt nested rule blocks', () => {
+    const list = parseListOfComponentValues('.parent { --x: fn(a) /**/ foo\\62 ar; & .child { --y: [b] b\\61 z } }');
+    const [rule] = parseStylesheetContents(list, context);
+    if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+    const child = rule.cssRules.item(0);
+    if (!(child instanceof CSSStyleRuleImpl)) throw new Error('Expected a nested style rule');
+
+    expect(rule.style.getPropertyValue('--x')).toBe('fn(a) /**/ foo\\62 ar');
+    expect(child.style.getPropertyValue('--y')).toBe('[b] b\\61 z');
   });
 
   it('retains substitution for later value resolution', () => {

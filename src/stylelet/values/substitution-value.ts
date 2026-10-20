@@ -3,7 +3,7 @@ import { InternalError } from '../../infra/internal-error';
 
 import {
   isComponentBlock, isFunctionBlock, serializeComponentValues,
-  type ComponentValue, type ParserInput, type DeclarationValue, type OptionalDeclarationValue,
+  type ComponentValue, type TokenList, type ParserInput, type DeclarationValue, type OptionalDeclarationValue,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 
@@ -31,16 +31,16 @@ export function createSubstitutionValue<Value, Context = unknown>(
       stage,
       context,
     ),
-    serialize: () => serializeComponentValues(declaration.components),
+    serialize: () => serializeComponentValues(declaration.components.tokens),
   };
 
   return value;
 }
 
 export function containsSubstitutionFunction(
-  components: ComponentValue[],
+  list: TokenList<ComponentValue>,
 ): boolean {
-  for (const component of components) {
+  for (const component of list.tokens) {
     if (!isComponentBlock(component)) continue;
 
     if (isFunctionBlock(component)) {
@@ -104,8 +104,8 @@ function resolveSubstitutionValue<Value, Context>(
 }
 
 function resolveSubstitutionFunction(
-  _components: ComponentValue[],
+  _list: TokenList<ComponentValue>,
   _context: unknown,
-): ComponentValue[] | GuaranteedInvalidValue {
+): TokenList<ComponentValue> | GuaranteedInvalidValue {
   throw new InternalError('Arbitrary substitution is not implemented');
 }

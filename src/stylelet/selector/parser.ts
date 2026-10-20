@@ -10,7 +10,7 @@ import {
   isComponentBlock, isDelimToken, isWhitespaceToken, serializeComponentValues, serializeCssIdentifier,
   serializeCssString, parseAsComponentGrammar, parseCommaSeparatedListOfComponentValues,
   parseListAsComponentGrammar, TokenKind,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ComponentValue, type ParserInput,
+  type TokenCursor, type TokenList, type TryConsumer, type TryConsumerResult, type ComponentValue, type ParserInput,
 } from '../syntax/index';
 import { serializeCssInteger } from '../values/numeric-literal/index';
 import {
@@ -148,7 +148,8 @@ export function parseNestedSelectorList(
 
   const inputArms = parseCommaSeparatedListOfComponentValues(input);
   const arms = relative.arms.map((arm, index): ComplexSelector => {
-    const containsNesting = containsAmpersand(inputArms[index] ?? []);
+    const inputArm = inputArms[index];
+    const containsNesting = inputArm !== undefined && containsAmpersand(inputArm);
 
     if (arm.combinator === null && containsNesting) {
       return arm.selector;
@@ -1099,10 +1100,10 @@ function createNestingSelectorExpansion(
   };
 }
 
-function containsAmpersand(values: ComponentValue[]): boolean {
-  for (const value of values) {
-    if (isDelimToken(value, '&')) return true;
-    if (isComponentBlock(value) && containsAmpersand(value.value)) return true;
+function containsAmpersand(list: TokenList<ComponentValue>): boolean {
+  for (const component of list.tokens) {
+    if (isDelimToken(component, '&')) return true;
+    if (isComponentBlock(component) && containsAmpersand(component.value)) return true;
   }
 
   return false;
@@ -1529,7 +1530,7 @@ function canonicalPseudoClassName(rawName: string): PseudoClassName | null {
 
 function createPseudoClassSelector(
   rawName: string,
-  value: ComponentValue[] | null,
+  list: TokenList<ComponentValue> | null,
   context: SelectorParserContext,
 ): TryConsumerResult<PseudoClassSelector> {
   const name = canonicalPseudoClassName(rawName);
@@ -1551,9 +1552,9 @@ function createPseudoClassSelector(
     // Logical combination pseudo-classes
 
     case 'is': {
-      if (value === null) return null;
+      if (list === null) return null;
 
-      const argument = parseForgivingSelectorListArgument(value, context);
+      const argument = parseForgivingSelectorListArgument(list, context);
 
       return {
         kind: SelectorKind.PseudoClassSelector,
@@ -1564,9 +1565,9 @@ function createPseudoClassSelector(
     }
 
     case 'where': {
-      if (value === null) return null;
+      if (list === null) return null;
 
-      const argument = parseForgivingSelectorListArgument(value, context);
+      const argument = parseForgivingSelectorListArgument(list, context);
 
       return {
         kind: SelectorKind.PseudoClassSelector,
@@ -1577,9 +1578,9 @@ function createPseudoClassSelector(
     }
 
     case 'not': {
-      if (value === null) return null;
+      if (list === null) return null;
 
-      const selectors = parseStrictComplexRealSelectorListArgument(value, context);
+      const selectors = parseStrictComplexRealSelectorListArgument(list, context);
 
       if (selectors === null) return null;
 
@@ -1598,7 +1599,7 @@ function createPseudoClassSelector(
 
     case 'has': {
       if (
-        value === null ||
+        list === null ||
         context.insideHas === true ||
         context.selectorRestriction === 'compound' ||
         context.selectorRestriction === 'simple'
@@ -1610,7 +1611,7 @@ function createPseudoClassSelector(
       };
 
       const selectors = parseRelativeSelectorList(
-        value,
+        list,
         argumentContext,
       );
       if (selectors === null) return null;
@@ -1631,21 +1632,21 @@ function createPseudoClassSelector(
     // Elemental pseudo-classes
 
     case 'defined': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     case 'state': {
-      return createArgumentPseudoClassSelector(name, value, context, parseIdentArgument);
+      return createArgumentPseudoClassSelector(name, list, context, parseIdentArgument);
     }
 
     // Linguistic pseudo-classes
 
     case 'dir': {
-      return createArgumentPseudoClassSelector(name, value, context, parseDirectionArgument);
+      return createArgumentPseudoClassSelector(name, list, context, parseDirectionArgument);
     }
 
     case 'lang': {
-      return createArgumentPseudoClassSelector(name, value, context, parseLanguageRangeListArgument);
+      return createArgumentPseudoClassSelector(name, list, context, parseLanguageRangeListArgument);
     }
 
     // Location pseudo-classes
@@ -1654,24 +1655,24 @@ function createPseudoClassSelector(
     case 'link':
     case 'visited':
     case 'target': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     case 'local-link': {
-      if (value === null) {
-        return createNoArgumentPseudoClassSelector(name, value);
+      if (list === null) {
+        return createNoArgumentPseudoClassSelector(name, list);
       }
 
       return createArgumentPseudoClassSelector(
         name,
-        value,
+        list,
         context,
         parseNonNegativeIntegerArgument,
       );
     }
 
     case 'scope': {
-      return createNoArgumentPseudoClassSelector(name, value, SpecificityB);
+      return createNoArgumentPseudoClassSelector(name, list, SpecificityB);
     }
 
     // User action pseudo-classes
@@ -1683,7 +1684,7 @@ function createPseudoClassSelector(
     case 'focus-within':
     case 'interest-source':
     case 'interest-target': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     // Resource state pseudo-classes
@@ -1695,7 +1696,7 @@ function createPseudoClassSelector(
     case 'stalled':
     case 'muted':
     case 'volume-locked': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     // Element display state pseudo-classes
@@ -1705,7 +1706,7 @@ function createPseudoClassSelector(
     case 'modal':
     case 'fullscreen':
     case 'picture-in-picture': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     // Input pseudo-classes
@@ -1729,19 +1730,19 @@ function createPseudoClassSelector(
     case 'user-valid':
     case 'user-invalid':
     case 'blank': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     // Time-dimensional pseudo-classes
 
     case 'current': {
-      if (value === null) {
-        return createNoArgumentPseudoClassSelector(name, value);
+      if (list === null) {
+        return createNoArgumentPseudoClassSelector(name, list);
       }
 
       return createArgumentPseudoClassSelector(
         name,
-        value,
+        list,
         context,
         parseCompoundSelectorListArgument,
       );
@@ -1749,31 +1750,31 @@ function createPseudoClassSelector(
 
     case 'past':
     case 'future': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     // Heading pseudo-classes
 
     case 'heading': {
-      if (value === null) {
-        return createNoArgumentPseudoClassSelector(name, value);
+      if (list === null) {
+        return createNoArgumentPseudoClassSelector(name, list);
       }
 
-      return createArgumentPseudoClassSelector(name, value, context, parseIntegerListArgument);
+      return createArgumentPseudoClassSelector(name, list, context, parseIntegerListArgument);
     }
 
     // Tree-structural pseudo-classes
 
     case 'root':
     case 'empty': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     case 'nth-child':
     case 'nth-last-child': {
       return createArgumentPseudoClassSelector(
         name,
-        value,
+        list,
         context,
         parseNthChildArgument,
         (argument) => addSpecificity(
@@ -1786,31 +1787,31 @@ function createPseudoClassSelector(
     case 'first-child':
     case 'last-child':
     case 'only-child': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     case 'nth-of-type':
     case 'nth-last-of-type': {
-      return createArgumentPseudoClassSelector(name, value, context, parseAnPlusBArgument);
+      return createArgumentPseudoClassSelector(name, list, context, parseAnPlusBArgument);
     }
 
     case 'first-of-type':
     case 'last-of-type':
     case 'only-of-type': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     // Grid-structural pseudo-classes
 
     case 'nth-col':
     case 'nth-last-col': {
-      return createArgumentPseudoClassSelector(name, value, context, parseAnPlusBArgument);
+      return createArgumentPseudoClassSelector(name, list, context, parseAnPlusBArgument);
     }
 
     // Shadow pseudo-classes
 
     case 'host': {
-      if (value === null) {
+      if (list === null) {
         return {
           kind: SelectorKind.PseudoClassSelector,
           name,
@@ -1820,7 +1821,7 @@ function createPseudoClassSelector(
       }
 
       const selector = parseRestrictedCompoundSelectorArgument(
-        value,
+        list,
         context,
       );
       if (selector === null) return null;
@@ -1842,10 +1843,10 @@ function createPseudoClassSelector(
     }
 
     case 'host-context': {
-      if (value === null) return null;
+      if (list === null) return null;
 
       const selector = parseRestrictedCompoundSelectorArgument(
-        value,
+        list,
         context,
       );
       if (selector === null) return null;
@@ -1867,7 +1868,7 @@ function createPseudoClassSelector(
     }
 
     case 'has-slotted': {
-      return createNoArgumentPseudoClassSelector(name, value);
+      return createNoArgumentPseudoClassSelector(name, list);
     }
 
     default:
@@ -1877,10 +1878,10 @@ function createPseudoClassSelector(
 
 function createNoArgumentPseudoClassSelector(
   name: string,
-  value: ComponentValue[] | null,
+  list: TokenList<ComponentValue> | null,
   specificity: Specificity = SpecificityB,
 ): TryConsumerResult<PseudoClassSelector> {
-  if (value !== null) {
+  if (list !== null) {
     return null;
   }
 
@@ -1894,14 +1895,14 @@ function createNoArgumentPseudoClassSelector(
 
 function createArgumentPseudoClassSelector<T extends PseudoArgument>(
   name: PseudoClassName,
-  value: ComponentValue[] | null,
+  list: TokenList<ComponentValue> | null,
   context: SelectorParserContext,
   parseArgument: PseudoArgumentParser<T>,
   specificity: Specificity | ((argument: T) => Specificity) = SpecificityB,
 ): TryConsumerResult<PseudoClassSelector> {
-  if (value === null) return null;
+  if (list === null) return null;
 
-  const argument = parseArgument(value, context);
+  const argument = parseArgument(list, context);
   if (argument === null) return null;
 
   return {
@@ -1954,7 +1955,7 @@ function canonicalPseudoElementName(rawName?: string): PseudoElementName | null 
 
 function createPseudoElementSelector(
   rawName: string,
-  value: ComponentValue[] | null,
+  list: TokenList<ComponentValue> | null,
   legacy: boolean,
   context: SelectorParserContext,
 ): TryConsumerResult<PseudoElementSelector> {
@@ -1973,7 +1974,7 @@ function createPseudoElementSelector(
 
     case 'first-line':
     case 'first-letter': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     // Sub-pseudo-elements of ::first-letter.
@@ -1982,7 +1983,7 @@ function createPseudoElementSelector(
 
     case 'prefix':
     case 'suffix': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     // Highlight pseudo-elements
@@ -1992,15 +1993,15 @@ function createPseudoElementSelector(
     case 'target-text':
     case 'spelling-error':
     case 'grammar-error': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     case 'highlight': {
-      if (legacy || value === null) {
+      if (legacy || list === null) {
         return null;
       }
 
-      const ident = parseCustomIdent(value, [], context);
+      const ident = parseCustomIdent(list, [], context);
 
       if (ident === null) {
         return null;
@@ -2023,37 +2024,37 @@ function createPseudoElementSelector(
 
     case 'before':
     case 'after': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     // List marker pseudo-elements
 
     case 'marker': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     // Input pseudo-elements
 
     case 'placeholder': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     // Element-backed pseudo-elements
 
     case 'file-selector-button':
     case 'details-content': {
-      return createNoArgumentPseudoElementSelector(name, value, legacy);
+      return createNoArgumentPseudoElementSelector(name, list, legacy);
     }
 
     // Shadow pseudo-elements
 
     case 'slotted': {
-      if (legacy || value === null) {
+      if (legacy || list === null) {
         return null;
       }
 
       const selector = parseRestrictedCompoundSelectorArgument(
-        value,
+        list,
         context,
       );
 
@@ -2078,11 +2079,11 @@ function createPseudoElementSelector(
     }
 
     case 'part': {
-      if (legacy || value === null) {
+      if (legacy || list === null) {
         return null;
       }
 
-      const argument = parsePartNameListArgument(value, context);
+      const argument = parsePartNameListArgument(list, context);
 
       if (argument === null) {
         return null;
@@ -2104,11 +2105,11 @@ function createPseudoElementSelector(
 
 function createNoArgumentPseudoElementSelector(
   name: string,
-  value: ComponentValue[] | null,
+  list: TokenList<ComponentValue> | null,
   legacy: boolean,
   specificity: Specificity = SpecificityC,
 ): TryConsumerResult<PseudoElementSelector> {
-  if (value !== null) {
+  if (list !== null) {
     return null;
   }
 
@@ -2163,7 +2164,7 @@ type PseudoArgument =
   | CustomIdentPseudoArgument;
 
 type PseudoArgumentParser<T extends PseudoArgument> = (
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ) => T | null;
 
@@ -2182,7 +2183,7 @@ type ForgivingSelectorArm = ComplexRealSelector | UnparsedSelector;
 
 export type UnparsedSelector = {
   kind: SelectorKind.UnparsedSelector;
-  value: ComponentValue[];
+  value: TokenList<ComponentValue>;
   hasAmpersand: boolean;
 };
 
@@ -2216,23 +2217,23 @@ type IdentPseudoArgument = {
 // --------------------------------------
 
 function parseForgivingSelectorListArgument(
-  arg: ComponentValue[],
+  input: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): ForgivingSelectorListPseudoArgument {
   const argumentContext = contextForSelectorArgument(context);
   const parseSelector = parserForSelectorRestriction(argumentContext);
-  const values = parseCommaSeparatedListOfComponentValues(arg);
-  const arms: ForgivingSelectorArm[] = values.map((value) => {
+  const lists = parseCommaSeparatedListOfComponentValues(input);
+  const arms: ForgivingSelectorArm[] = lists.map((list) => {
     const selector = parseAsComponentGrammar(
-      value,
+      list,
       withTrivia(parseSelector),
       argumentContext,
     );
 
     return selector ?? {
       kind: SelectorKind.UnparsedSelector,
-      value,
-      hasAmpersand: containsAmpersand(value),
+      value: list,
+      hasAmpersand: containsAmpersand(list),
     };
   });
 
@@ -2250,14 +2251,14 @@ function parseForgivingSelectorListArgument(
 }
 
 function parseStrictComplexRealSelectorListArgument(
-  arg: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): TryConsumerResult<ComplexRealSelectorList> {
   const argumentContext = contextForSelectorArgument(context);
   const parseSelector = parserForSelectorRestriction(argumentContext);
 
   const parsed = parseListAsComponentGrammar(
-    arg,
+    list,
     withTrivia(parseSelector),
     argumentContext,
   );
@@ -2284,16 +2285,16 @@ function parseStrictComplexRealSelectorListArgument(
 }
 
 function parseRestrictedCompoundSelectorArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): CompoundSelector | null {
   const argumentContext = contextForSelectorArgument(context, 'compound');
 
   if (argumentContext.selectorRestriction !== 'simple') {
-    return parseCompoundSelector(value, argumentContext);
+    return parseCompoundSelector(list, argumentContext);
   }
 
-  const selector = parseSimpleSelector(value, argumentContext);
+  const selector = parseSimpleSelector(list, argumentContext);
 
   if (selector === null) {
     return null;
@@ -2308,11 +2309,11 @@ function parseRestrictedCompoundSelectorArgument(
 }
 
 function parseCompoundSelectorListArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): CompoundSelectorListPseudoArgument | null {
   const selectors = parseCompoundSelectorList(
-    value,
+    list,
     contextForSelectorArgument(context, 'compound'),
   );
 
@@ -2387,10 +2388,10 @@ type NthChildPseudoArgument = {
 };
 
 function parseAnPlusBArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): AnPlusBPseudoArgument | null {
-  const anb = parseAsComponentGrammar(value, withTrivia(consumeAnPlusB), context);
+  const anb = parseAsComponentGrammar(list, withTrivia(consumeAnPlusB), context);
 
   if (anb === null) {
     return null;
@@ -2403,10 +2404,10 @@ function parseAnPlusBArgument(
 }
 
 function parseNthChildArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): NthChildPseudoArgument | null {
-  return parseAsComponentGrammar(value, consumeNthChildArgument, context);
+  return parseAsComponentGrammar(list, consumeNthChildArgument, context);
 }
 
 function consumeNthChildArgument(c: TokenCursor): TryConsumerResult<NthChildPseudoArgument> {
@@ -2480,10 +2481,10 @@ type IntegerListPseudoArgument = {
 };
 
 function parseIdentArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): IdentPseudoArgument | null {
-  const ident = parseAsComponentGrammar(value, withTrivia(consumeIdentToken), context);
+  const ident = parseAsComponentGrammar(list, withTrivia(consumeIdentToken), context);
 
   if (ident === null) {
     return null;
@@ -2496,10 +2497,10 @@ function parseIdentArgument(
 }
 
 function parseIntegerArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): IntegerPseudoArgument | null {
-  const integer = parseAsComponentGrammar(value, withTrivia(integerConsumer), context);
+  const integer = parseAsComponentGrammar(list, withTrivia(integerConsumer), context);
 
   if (integer === null) {
     return null;
@@ -2512,19 +2513,19 @@ function parseIntegerArgument(
 }
 
 function parseNonNegativeIntegerArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): IntegerPseudoArgument | null {
-  const argument = parseIntegerArgument(value, context);
+  const argument = parseIntegerArgument(list, context);
   return argument !== null && argument.value >= 0 ? argument : null;
 }
 
 function parseIntegerListArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): IntegerListPseudoArgument | null {
   const parsed = parseAsComponentGrammar(
-    value,
+    list,
     commaRepeat(withTrivia(integerConsumer)),
     context,
   );
@@ -2554,11 +2555,11 @@ type LanguageRange = string;
 
 
 function parseLanguageRangeListArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): LanguageRangeListPseudoArgument | null {
   const parsed = parseAsComponentGrammar(
-    value,
+    list,
     commaRepeat(withTrivia(languageRangeConsumer)),
     context,
   );
@@ -2588,10 +2589,10 @@ type DirectionPseudoArgument = {
 };
 
 function parseDirectionArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): DirectionPseudoArgument | null {
-  const parsed = parseAsComponentGrammar(value, withTrivia(consumeIdentToken), context);
+  const parsed = parseAsComponentGrammar(list, withTrivia(consumeIdentToken), context);
 
   if (parsed === null) {
     return null;
@@ -2613,10 +2614,10 @@ type PartNameListPseudoArgument = {
 };
 
 function parsePartNameListArgument(
-  value: ComponentValue[],
+  list: TokenList<ComponentValue>,
   context: SelectorParserContext,
 ): PartNameListPseudoArgument | null {
-  const names = parseAsComponentGrammar(value, consumePartNameList, context);
+  const names = parseAsComponentGrammar(list, consumePartNameList, context);
 
   if (names === null) {
     return null;
@@ -2875,7 +2876,7 @@ function serializeForgivingSelectorList(
   for (const selector of selectors.arms) {
     if (selector.kind === SelectorKind.UnparsedSelector) {
       if (selector.hasAmpersand) {
-        serialized.push(serializeComponentValues(selector.value));
+        serialized.push(serializeComponentValues(selector.value.tokens));
       }
     } else {
       serialized.push(serializeComplexRealSelector(selector));

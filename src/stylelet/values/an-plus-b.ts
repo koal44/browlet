@@ -6,7 +6,7 @@ import {
   type TokenCursor, type TryConsumer, type TryConsumerResult, type DimensionToken, type IdentToken,
   type NumberToken,
 } from '../syntax/index';
-import { serializeCssNumber } from './numeric-literal/index';
+import { serializeCssInteger } from './numeric-literal/index';
 
 import { createKeywordConsumer } from './keyword';
 
@@ -26,42 +26,55 @@ import { createKeywordConsumer } from './keyword';
  * † The plus sign must be adjacent to the ident beginning with "n".
  */
 
+/** Integer step and offset, represented within the finite JavaScript-number range. */
 export type AnPlusBValue = {
   a: number;
   b: number;
 };
 
+/** Consumes an An+B formula, leaving any following selector clause unread. */
+// https://drafts.csswg.org/css-syntax-3/#the-anb-type
 export function consumeAnPlusB(
   c: TokenCursor,
 ): TryConsumerResult<AnPlusBValue> {
   return anPlusBConsumer(c);
 }
 
+/** Serializes the stored integer coefficients using the canonical An+B form. */
+// https://drafts.csswg.org/css-syntax-3/#serializing-anb
+// SPEC_MISMATCH: (A, B) -> string
+// The existing coefficient record carries both specification inputs.
 export function serializeAnPlusB(value: AnPlusBValue): string {
   if (value.a === 0) {
-    return serializeCssNumber(value.b);
+    return serializeCssInteger(value.b);
   }
 
   const a = value.a === 1
     ? 'n'
     : value.a === -1
       ? '-n'
-      : `${serializeCssNumber(value.a)}n`;
+      : `${serializeCssInteger(value.a)}n`;
 
   if (value.b > 0) {
-    return `${a}+${serializeCssNumber(value.b)}`;
+    return `${a}+${serializeCssInteger(value.b)}`;
   }
 
   if (value.b < 0) {
-    return `${a}${serializeCssNumber(value.b)}`;
+    return `${a}${serializeCssInteger(value.b)}`;
   }
 
   return a;
 }
 
-// =============================================================================
-// Syntax
-// =============================================================================
+/** Limits overflow while interpreting coefficients, and canonicalizes signed zero. */
+// https://drafts.csswg.org/css-values-4/#numeric-types
+// The supported range is implementation-defined. Preserve finite values;
+// overflowing numeric tokens or embedded decimal offsets use the nearest bound.
+function interpretCoefficient(value: number): number {
+  if (value === Infinity) return Number.MAX_VALUE;
+  if (value === -Infinity) return -Number.MAX_VALUE;
+  return value === 0 ? 0 : value;
+}
 
 function createIntegerConsumer(
   sign: 'any' | 'signed' | 'signless',
@@ -307,7 +320,7 @@ const anPlusBConsumer: TryConsumer<AnPlusBValue> = oneOf(
     one(nDashExpressionConsumer),
   ],
   ([value]) => ({
-    a: value.a === 0 ? 0 : value.a,
-    b: value.b === 0 ? 0 : value.b,
+    a: interpretCoefficient(value.a),
+    b: interpretCoefficient(value.b),
   }),
 );

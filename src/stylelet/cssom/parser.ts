@@ -5,7 +5,7 @@ import type { StyleletEnvironment } from '../environment';
 import {
   consumeBlock, discardRuleBlock,
   type Declaration, type StatementAtRule, type ComponentValue,
-  type BlockContents, type ParsingContext, type TokenCursor, type Token,
+  type BlockContents, type TokenList, type ParsingContext, type TokenCursor, type Token,
 } from '../syntax/index';
 import { parseNestedSelectorList, parseSelectorList, type SelectorList } from '../selector/index';
 import { interpretPropertyDeclaration, type PropertyDeclaration } from '../css/index';
@@ -61,7 +61,7 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
   // https://drafts.csswg.org/css-syntax-3/#block-contents
   interpretBlockAtRule(
     name: string,
-    prelude: ComponentValue[],
+    prelude: TokenList<ComponentValue>,
     preceding: BlockContents<CSSRuleImpl, PropertyDeclaration>,
     c: TokenCursor<Token>,
   ): CSSRuleImpl | null {
@@ -85,7 +85,9 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
 
   /** Interpret selectors, consume their property/nested-rule block, and construct the style rule. */
   // https://drafts.csswg.org/css-syntax-3/#style-rules
-  interpretQualifiedRule(prelude: ComponentValue[], c: TokenCursor<Token>): CSSStyleRuleImpl | null {
+  // SPEC_CLASH(css-style-rule-block-grammar): Use §7.1's <block-contents> and
+  // CSS Nesting; §8.1 still says <declaration-list>, despite allowing nested rules.
+  interpretQualifiedRule(prelude: TokenList<ComponentValue>, c: TokenCursor<Token>): CSSStyleRuleImpl | null {
     const selectors = this.#parentSelectors === null
       ? parseSelectorList(prelude)
       : parseNestedSelectorList(prelude, this.#parentSelectors);
@@ -113,7 +115,7 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
   // https://drafts.csswg.org/css-syntax-3/#block-contents
   #interpretBlockAtRule(
     name: string,
-    _prelude: ComponentValue[],
+    _prelude: TokenList<ComponentValue>,
     _preceding: BlockContents<CSSRuleImpl, PropertyDeclaration>,
     _c: TokenCursor<Token>,
   ): CSSRuleImpl | null {

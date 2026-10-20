@@ -173,10 +173,10 @@ export type PreservedToken =
   | StaticToken<TokenKind.RightBrace>;
 
 export type ComponentBlock =
-  | SimpleBlock<ComponentValue[]>
-  | FunctionBlock<ComponentValue[]>;
+  | SimpleBlock<TokenList<ComponentValue>>
+  | FunctionBlock<TokenList<ComponentValue>>;
 
-export type SimpleBlock<Contents = ComponentValue[]> =
+export type SimpleBlock<Contents = TokenList<ComponentValue>> =
   | BraceBlock<Contents>
   | BracketBlock<Contents>
   | ParensBlock<Contents>;
@@ -188,22 +188,22 @@ export type SimpleBlockKind =
   | TokenKind.BracketBlock
   | TokenKind.ParensBlock;
 
-export type BraceBlock<Contents = ComponentValue[]> = {
+export type BraceBlock<Contents = TokenList<ComponentValue>> = {
   type: TokenKind.BraceBlock;
   value: Contents;
 };
 
-export type BracketBlock<Contents = ComponentValue[]> = {
+export type BracketBlock<Contents = TokenList<ComponentValue>> = {
   type: TokenKind.BracketBlock;
   value: Contents;
 };
 
-export type ParensBlock<Contents = ComponentValue[]> = {
+export type ParensBlock<Contents = TokenList<ComponentValue>> = {
   type: TokenKind.ParensBlock;
   value: Contents;
 };
 
-export type FunctionBlock<Contents = ComponentValue[]> = {
+export type FunctionBlock<Contents = TokenList<ComponentValue>> = {
   type: TokenKind.FunctionBlock;
   name: string;
   value: Contents;
@@ -458,12 +458,25 @@ export type TokenSourceRange = {
   end: number;
 };
 
-/** Preprocessed source and parallel token/range arrays. EOF has no array entry. */
-export type TokenizedInput = {
-  source: string;
-  tokens: Token[];
+/** Source text and ranges parallel to a particular token or component sequence. */
+export type TokenSource = {
+  text: string;
   ranges: TokenSourceRange[];
 };
+
+/** Tokens/components and their parallel ranges in the shared preprocessed text. */
+export interface TokenList<Value extends Token = Token> extends TokenSource {
+  tokens: Value[];
+}
+
+export interface NonEmptyTokenList<Value extends Token> extends TokenList<Value> {
+  tokens: [Value, ...Value[]];
+}
+
+/** Create an empty sequence sharing its input's preprocessed text. */
+export function createTokenList<Value extends Token>(text: string): TokenList<Value> {
+  return { tokens: [], text, ranges: [] };
+}
 
 /**
  * Tokenize complete CSS input; TokenCursor supplies EOF when the array is exhausted.
@@ -471,54 +484,29 @@ export type TokenizedInput = {
  */
 // https://drafts.csswg.org/css-syntax-3/#tokenization
 // consumeUnicodeRangeDescriptorValue() opts in; ordinary parsing leaves it false.
-export function tokenize(input: string, unicodeRangesAllowed = false): Token[] {
-  return tokenizeSource(filterCodePoints(input), unicodeRangesAllowed);
-}
-
-/** Tokenize while retaining offsets for consumers that need the source spelling. */
-// https://drafts.csswg.org/css-syntax-3/#tokenization
-export function tokenizeWithSource(
-  input: string,
-  unicodeRangesAllowed = false,
-): TokenizedInput {
-  const source = filterCodePoints(input);
-  const ranges: TokenSourceRange[] = [];
-
-  return {
-    source,
-    tokens: tokenizeSource(source, unicodeRangesAllowed, ranges),
-    ranges,
-  };
-}
-
-/** Consume preprocessed input, optionally recording each token's source range. */
-function tokenizeSource(
-  source: string,
-  unicodeRangesAllowed: boolean,
-  ranges?: TokenSourceRange[],
-): Token[] {
-  const c = new TextCursor(source);
-  const tokens: Token[] = [];
+export function tokenize(input: string, unicodeRangesAllowed = false): TokenList {
+  const text = filterCodePoints(input);
+  const c = new TextCursor(text);
+  const list = createTokenList(text);
 
   while (true) {
-    if (ranges !== undefined) consumeComments(c);
-    const start = ranges === undefined ? 0 : c.pos();
+    // Consume a token's leading comments before recording its source range.
+    consumeComments(c);
+    const start = c.pos();
     const token = consumeToken(c, unicodeRangesAllowed);
 
     if (token.type === TokenKind.EOF) {
-      return tokens;
+      return list;
     }
 
-    tokens.push(token);
-    ranges?.push({ start, end: c.pos() });
+    list.tokens.push(token);
+    list.ranges.push({ start, end: c.pos() });
   }
 }
 
-/** Consume one token from filtered input, discarding any preceding comments. */
+/** Consume one token from filtered input after the caller has discarded leading comments. */
 // https://drafts.csswg.org/css-syntax-3/#consume-token
 function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
-  consumeComments(c);
-
   const pos = c.pos();
   const ch = c.next();
 
@@ -1154,14 +1142,12 @@ function isIdentStartCodePoint(ch: string): boolean {
   const code = ch.charCodeAt(0);
   if (code >= 0xD800 && code <= 0xDFFF) return true;
 
-  return isNonAsciiIdentCodePoint(ch);
+  return isNonAsciiIdentCodePoint(code);
 }
 
+/** Tests Syntax's non-ASCII identifier ranges, shared by tokenization and escaping. */
 // https://drafts.csswg.org/css-syntax-3/#non-ascii-ident-code-point
-function isNonAsciiIdentCodePoint(ch: string): boolean {
-  if (ch === '') return false;
-
-  const code = ch.codePointAt(0)!;
+export function isNonAsciiIdentCodePoint(code: number): boolean {
   if (code < 0xB7) return false;
 
   return (

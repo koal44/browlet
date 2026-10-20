@@ -1,6 +1,6 @@
 import {
   consumeFunctionBlock, consumeParensBlock, one, oneOf, withTrivia, serializeComponentValues,
-  createComponentParser, parseAnyValue,
+  createComponentParser, parseAnyValue, serializeCssIdentifier, TokenKind,
   type TokenCursor, type TryConsumerResult, type FunctionBlock, type ParensBlock, type ParserInput,
   type AnyValue,
 } from '../syntax/index';
@@ -38,10 +38,10 @@ export function resolveGeneralEnclosed(
 
 export function serializeGeneralEnclosed(value: GeneralEnclosedValue): string {
   const block = value.value;
-  return serializeComponentValues([{
-    ...block,
-    value: block.value?.components ?? [],
-  }]);
+  const contents = block.value === undefined ? '' : serializeComponentValues(block.value.components.tokens);
+  return block.type === TokenKind.FunctionBlock
+    ? `${serializeCssIdentifier(block.name)}(${contents})`
+    : `(${contents})`;
 }
 
 // =============================================================================
@@ -55,7 +55,7 @@ const generalEnclosedConsumer = oneOf(
     one(consumeParensBlock),
   ],
   ([component]): GeneralEnclosedValue | null => {
-    const value = component.value.length === 0
+    const value = component.value.tokens.length === 0
       ? undefined
       : parseAnyValue(component.value);
 

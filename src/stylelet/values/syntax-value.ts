@@ -5,7 +5,7 @@ import {
   consumePipeDelim, consumePlusDelim, consumeStringToken, serializeComponentValues, serializeCssIdentifier,
   adaptConsumer, any, commaRepeat, one, oneOf, opt, plus, sequenceOf, withTrivia, createComponentParser,
   consumeOptionalDeclarationValue,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput, type DeclarationComponent,
+  type TokenCursor, type TokenList, type TryConsumer, type TryConsumerResult, type ParserInput, type DeclarationComponent,
 } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
 import type { PropertyContext } from '../css/index';
@@ -36,7 +36,7 @@ export type ParsedSyntaxValue =
 
 type ParsedUniversalSyntax = {
   type: 'parsed-universal-syntax';
-  components: DeclarationComponent[];
+  components: TokenList<DeclarationComponent>;
 };
 
 type ParsedSyntaxType = {
@@ -190,7 +190,7 @@ export function serializeParsedSyntaxValue(
 ): string {
   switch (value.type) {
     case 'parsed-universal-syntax':
-      return serializeComponentValues(value.components);
+      return serializeComponentValues(value.components.tokens);
 
     case 'parsed-syntax-keyword':
       return serializeCssIdentifier(value.name);

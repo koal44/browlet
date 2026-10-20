@@ -52,7 +52,7 @@ export function consumeSupportsDeclaration(
 
   if (
     declaration === null ||
-    declaration.value.some((component) =>
+    declaration.value.tokens.some((component) =>
       isTokenKind(component, TokenKind.Semicolon)
     )
   ) {

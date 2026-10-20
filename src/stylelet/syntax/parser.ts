@@ -6,7 +6,7 @@ import {
   type ComponentValue, type FunctionBlock, type SimpleBlock,
 } from './component-value';
 import { emptyParsingContext, TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
-import { tokenize, tokenizeWithSource, TokenKind, type Token } from './tokens';
+import { createTokenList, tokenize, TokenKind, type Token, type TokenList } from './tokens';
 
 /** A generic CSS rule, before selector and property grammar interpretation. */
 // CSS Syntax parsing results: https://drafts.csswg.org/css-syntax-3/#css-tree
@@ -21,31 +21,32 @@ export type AtRule =
 export type StatementAtRule = {
   type: 'statement-at-rule';
   name: string;
-  prelude: ComponentValue[];
+  prelude: TokenList<ComponentValue>;
 };
 
 export type BlockAtRule = {
   type: 'block-at-rule';
   name: string;
-  prelude: ComponentValue[];
+  prelude: TokenList<ComponentValue>;
   block: BlockContents;
 };
 
 export type QualifiedRule = {
   type: 'qualified-rule';
-  prelude: ComponentValue[];
+  prelude: TokenList<ComponentValue>;
   block: BlockContents;
 };
 
 export type Declaration = {
   name: string;
-  value: ComponentValue[];
+  value: TokenList<ComponentValue>;
   important: boolean;
-  /** Value spelling when the input retains source text; absent for bare token lists. */
+  /** Original value spelling, retained for custom properties. */
   originalText?: string;
 };
 
 /** Preserve source order until the owning rule interprets declaration runs and child rules. */
+// https://drafts.csswg.org/css-syntax-3/#block-contents
 export type BlockContents<ParsedRule extends object = Rule, ParsedDeclaration = Declaration> =
   Array<ParsedDeclaration[] | ParsedRule>;
 export type DeclarationList = Declaration[];
@@ -55,7 +56,7 @@ export type DeclarationRuleList = Array<DeclarationList | AtRule>;
 export type RuleList = Array<QualifiedRule | AtRule>;
 
 /** CSS text, tokens/components, or a stream at its current position; decode bytes first. */
-export type ParserInput = string | Token[] | TokenCursor<Token>;
+export type ParserInput = string | TokenList | TokenCursor<Token>;
 
 /** Grammar decisions made while consuming one rule list, supplied by its owning context. */
 // CSS Syntax deliberately leaves context passing to implementations:
@@ -71,12 +72,12 @@ export interface ParsingContext<ParsedRule extends object = object, ParsedDeclar
   /** Interpret the whole rule, consuming or discarding the block at the cursor. */
   interpretBlockAtRule(
     name: string,
-    prelude: ComponentValue[],
+    prelude: TokenList<ComponentValue>,
     preceding: BlockContents<ParsedRule, ParsedDeclaration>,
     c: TokenCursor<Token>,
   ): ParsedRule | null;
   /** Interpret the prelude and block; consume the block even when returning null. */
-  interpretQualifiedRule(prelude: ComponentValue[], c: TokenCursor<Token>): ParsedRule | null;
+  interpretQualifiedRule(prelude: TokenList<ComponentValue>, c: TokenCursor<Token>): ParsedRule | null;
 }
 
 /** Bind a component grammar to a parser entry point. */
@@ -97,8 +98,8 @@ export function parseAsComponentGrammar<T>(
   consumer: TryConsumer<T>,
   context: unknown = emptyParsingContext,
 ): TryConsumerResult<T> {
-  const components = parseListOfComponentValues(input);
-  const c = new TokenCursor(components, input instanceof TokenCursor ? input.context : context);
+  const list = parseListOfComponentValues(input);
+  const c = new TokenCursor(list, input instanceof TokenCursor ? input.context : context);
   const result = consumer(c);
 
   if (result === null) return null;
@@ -119,8 +120,8 @@ export function parseListAsComponentGrammar<T>(
 
   if (
     lists.length === 1 &&
-    lists[0]!.length > 0 &&
-    lists[0]!.every(isWhitespaceToken)
+    lists[0]!.tokens.length > 0 &&
+    lists[0]!.tokens.every(isWhitespaceToken)
   ) {
     return [];
   }
@@ -169,16 +170,16 @@ export function parseComponentValue(input: ParserInput): ComponentValue | null {
   consumeTrivia(c);
   if (c.eof()) return null;
 
-  const value = consumeComponentValue(c);
+  const component = consumeComponentValue(c);
 
   consumeTrivia(c);
-  return c.eof() ? value : null;
+  return c.eof() ? component : null;
 }
 
 /** Consume all remaining components, reusing blocks that have already been parsed. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-list-of-component-values
-export function parseListOfComponentValues(input: ParserInput): ComponentValue[] {
-  if (Array.isArray(input) && input.every(isComponentValue)) {
+export function parseListOfComponentValues(input: ParserInput): TokenList<ComponentValue> {
+  if (typeof input !== 'string' && !(input instanceof TokenCursor) && isComponentList(input)) {
     return input;
   }
 
@@ -190,9 +191,9 @@ export function parseListOfComponentValues(input: ParserInput): ComponentValue[]
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-separated-list-of-component-values
 export function parseCommaSeparatedListOfComponentValues(
   input: ParserInput,
-): ComponentValue[][] {
+): TokenList<ComponentValue>[] {
   const c = getTokenCursor(input);
-  const groups: ComponentValue[][] = [];
+  const groups: TokenList<ComponentValue>[] = [];
 
   while (!c.eof()) {
     groups.push(consumeListOfComponentValues(c, TokenKind.Comma));
@@ -229,7 +230,6 @@ export function consumeBlock<Value extends Token, ParsedRule extends object, Par
 
   if (isBraceBlock(opening)) {
     c.next();
-    // TODO: Prebuilt component blocks do not retain source ranges for their children.
     return consumeBlockContents(new TokenCursor(opening.value, c.context));
   }
 
@@ -300,13 +300,15 @@ function consumeInput<Context, Result>(
 
 /** Create a cursor with its parsing context, retaining source locations when tokenizing text. */
 // https://drafts.csswg.org/css-syntax-3/#normalize-into-a-token-stream
-function normalize<Context>(input: string | Token[], context: Context): TokenCursor<Token, Context> {
+function normalize<Context>(input: string | TokenList, context: Context): TokenCursor<Token, Context> {
   if (typeof input !== 'string') return new TokenCursor(input, context);
 
-  const { source, tokens, ranges } = tokenizeWithSource(input);
-  return new TokenCursor(tokens, context, {
-    source: { text: source, ranges },
-  });
+  return new TokenCursor(tokenize(input), context);
+}
+
+/** Recognize a list whose nested blocks/functions have already been folded. */
+function isComponentList(list: TokenList): list is TokenList<ComponentValue> {
+  return list.tokens.every(isComponentValue);
 }
 
 /** Discard whitespace tokens; comments were already consumed by tokenization. */
@@ -379,7 +381,7 @@ function consumeAtRule<Value extends Token, ParsedRule extends object, ParsedDec
   }
 
   const name = token.value;
-  const prelude: ComponentValue[] = [];
+  const prelude = createTokenList<ComponentValue>(c.source.text);
 
   while (true) {
     switch (c.peek().type) {
@@ -392,7 +394,7 @@ function consumeAtRule<Value extends Token, ParsedRule extends object, ParsedDec
         if (nested) {
           return c.context.interpretStatementAtRule({ type: 'statement-at-rule', name, prelude }, preceding);
         }
-        prelude.push(consumeComponentValue(c));
+        consumeComponentValueInto(c, prelude);
         break;
 
       case TokenKind.LeftBrace:
@@ -400,7 +402,7 @@ function consumeAtRule<Value extends Token, ParsedRule extends object, ParsedDec
         return c.context.interpretBlockAtRule(name, prelude, preceding, c);
 
       default:
-        prelude.push(consumeComponentValue(c));
+        consumeComponentValueInto(c, prelude);
     }
   }
 }
@@ -414,7 +416,7 @@ function consumeQualifiedRule<Value extends Token, ParsedRule extends object, Pa
   stopToken?: TokenKind,
   nested = false,
 ): ParsedRule | null {
-  const prelude: ComponentValue[] = [];
+  const prelude = createTokenList<ComponentValue>(c.source.text);
 
   while (true) {
     const token = c.peek();
@@ -426,7 +428,7 @@ function consumeQualifiedRule<Value extends Token, ParsedRule extends object, Pa
     if (token.type === TokenKind.RightBrace) {
       if (nested) return null;
 
-      prelude.push(consumeComponentValue(c));
+      consumeComponentValueInto(c, prelude);
       continue;
     }
 
@@ -434,7 +436,7 @@ function consumeQualifiedRule<Value extends Token, ParsedRule extends object, Pa
       token.type === TokenKind.LeftBrace ||
       token.type === TokenKind.BraceBlock
     ) {
-      if (looksLikeCustomProperty(prelude)) {
+      if (looksLikeCustomProperty(prelude.tokens)) {
         if (nested) {
           consumeBadDeclarationRemnants(c, true);
         } else {
@@ -446,19 +448,19 @@ function consumeQualifiedRule<Value extends Token, ParsedRule extends object, Pa
       return c.context.interpretQualifiedRule(prelude, c);
     }
 
-    prelude.push(consumeComponentValue(c));
+    consumeComponentValueInto(c, prelude);
   }
 }
 
 /** Identify the custom-property prefix excluded from qualified-rule syntax. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#consume-qualified-rule
 function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
-  const values = prelude.filter((value) => !isWhitespaceToken(value));
+  const components = prelude.filter((component) => !isWhitespaceToken(component));
 
-  return values.length >= 2 &&
-    isIdentToken(values[0]!) &&
-    values[0].value.startsWith('--') &&
-    isTokenKind(values[1]!, TokenKind.Colon);
+  return components.length >= 2 &&
+    isIdentToken(components[0]!) &&
+    components[0].value.startsWith('--') &&
+    isTokenKind(components[1]!, TokenKind.Colon);
 }
 
 /** Consume ordered declaration runs and rules, leaving a containing closing brace unread. */
@@ -542,12 +544,6 @@ function consumeDeclaration<Value extends Token>(
 
   c.next();
 
-  const declaration: Declaration = {
-    name: token.value,
-    value: [],
-    important: false,
-  };
-
   consumeTrivia(c);
 
   if (c.peek().type !== TokenKind.Colon) {
@@ -558,26 +554,24 @@ function consumeDeclaration<Value extends Token>(
   c.next();
   consumeTrivia(c);
   const valueStart = c.pos();
-  declaration.value = consumeListOfComponentValues(c, TokenKind.Semicolon, nested);
+  const declaration: Declaration = {
+    name: token.value,
+    value: consumeListOfComponentValues(c, TokenKind.Semicolon, nested),
+    important: false,
+  };
   const valueEnd = c.pos();
 
   const removed = consumeImportantFlag(declaration) + trimTrailingWhitespace(declaration.value);
 
   if (declaration.name.startsWith('--')) {
-    // TODO: Retain source provenance when declarations arrive as bare token or
-    // component lists. Only string input and source-bearing cursors can supply it.
     // SPEC_CLASH(css-custom-property-boundary-comments): Keep token-span text,
     // matching Syntax and Chromium/WebKit; Firefox also retains trailing comments.
     declaration.originalText = c.sourceText(valueStart, valueEnd - removed);
-  } else if (hasDisallowedTopLevelBraceBlock(declaration.value)) {
+  } else if (hasDisallowedTopLevelBraceBlock(declaration.value.tokens)) {
     return null;
   } else if (asciiLower(declaration.name) === 'unicode-range') {
     const originalText = c.sourceText(valueStart, valueEnd);
-    // TODO: Bare token/component input has no original spelling to retokenize.
-    // Connect source provenance before supporting descriptors through that path.
-    if (originalText !== undefined) {
-      declaration.value = consumeUnicodeRangeDescriptorValue(originalText);
-    }
+    declaration.value = consumeUnicodeRangeDescriptorValue(originalText);
   }
 
   return declaration;
@@ -610,23 +604,24 @@ function consumeBadDeclarationRemnants<Value extends Token>(
 /** Remove a final important flag and following whitespace, returning the removed token count. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
 function consumeImportantFlag(declaration: Declaration): number {
-  const value = declaration.value;
-  const importantIndex = lastNonWhitespaceIndex(value, value.length - 1);
+  const components = declaration.value.tokens;
+  const importantIndex = lastNonWhitespaceIndex(components, components.length - 1);
   if (importantIndex < 0) return 0;
 
-  const bangIndex = lastNonWhitespaceIndex(value, importantIndex - 1);
+  const bangIndex = lastNonWhitespaceIndex(components, importantIndex - 1);
   if (bangIndex < 0) return 0;
 
-  const bang = value[bangIndex]!;
-  const important = value[importantIndex]!;
+  const bang = components[bangIndex]!;
+  const important = components[importantIndex]!;
 
   if (
     isDelimToken(bang, '!') &&
     isIdentToken(important) &&
     asciiLower(important.value) === 'important'
   ) {
-    const removed = value.length - bangIndex;
-    value.splice(bangIndex);
+    const removed = components.length - bangIndex;
+    components.splice(bangIndex);
+    declaration.value.ranges.length = bangIndex;
     declaration.important = true;
     return removed;
   }
@@ -636,11 +631,11 @@ function consumeImportantFlag(declaration: Declaration): number {
 
 /** Locate the last significant component at or before start, or return -1. */
 function lastNonWhitespaceIndex(
-  values: ComponentValue[],
+  components: ComponentValue[],
   start: number,
 ): number {
   for (let i = start; i >= 0; i--) {
-    if (!isWhitespaceToken(values[i]!)) return i;
+    if (!isWhitespaceToken(components[i]!)) return i;
   }
 
   return -1;
@@ -648,20 +643,22 @@ function lastNonWhitespaceIndex(
 
 /** Trim trailing whitespace and return the number of tokens removed. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
-function trimTrailingWhitespace(values: ComponentValue[]): number {
-  const start = values.length;
+function trimTrailingWhitespace(list: TokenList<ComponentValue>): number {
+  const { tokens: components } = list;
+  const start = components.length;
 
-  while (values.length > 0 && isWhitespaceToken(values[values.length - 1]!)) {
-    values.pop();
+  while (components.length > 0 && isWhitespaceToken(components[components.length - 1]!)) {
+    components.pop();
   }
+  list.ranges.length = components.length;
 
-  return start - values.length;
+  return start - components.length;
 }
 
 /** Detect a brace block mixed with another significant value in a non-custom declaration. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
-function hasDisallowedTopLevelBraceBlock(values: ComponentValue[]): boolean {
-  const significant = values.filter((value) => !isWhitespaceToken(value));
+function hasDisallowedTopLevelBraceBlock(components: ComponentValue[]): boolean {
+  const significant = components.filter((component) => !isWhitespaceToken(component));
   const braces = significant.filter(isBraceBlock);
 
   return braces.length > 0 && (significant.length !== 1 || braces.length !== 1);
@@ -673,22 +670,30 @@ function consumeListOfComponentValues<Value extends Token>(
   c: TokenCursor<Value>,
   stopToken?: TokenKind,
   nested = false,
-): ComponentValue[] {
-  const values: ComponentValue[] = [];
+): TokenList<ComponentValue> {
+  const list = createTokenList<ComponentValue>(c.source.text);
 
   while (true) {
     const token = c.peek();
 
     if (token.type === TokenKind.EOF || token.type === stopToken) {
-      return values;
+      return list;
     }
 
     if (token.type === TokenKind.RightBrace && nested) {
-      return values;
+      return list;
     }
 
-    values.push(consumeComponentValue(c));
+    consumeComponentValueInto(c, list);
   }
+}
+
+/** Fold one component while recording its complete consumed span in the output sequence. */
+function consumeComponentValueInto<Value extends Token>(c: TokenCursor<Value>, list: TokenList<ComponentValue>): void {
+  const start = c.pos();
+  const component = consumeComponentValue(c);
+  list.tokens.push(component);
+  list.ranges.push(c.sourceRange(start, c.pos()));
 }
 
 /** Consume a preserved token or fold an opening token into a block/function. */
@@ -723,22 +728,22 @@ function consumeSimpleBlock<Value extends Token>(
   c: TokenCursor<Value>,
 ): SimpleBlock {
   const opening = c.peek();
-  let block: SimpleBlock;
+  let type: SimpleBlock['type'];
   let ending: TokenKind;
 
   switch (opening.type) {
     case TokenKind.LeftBrace:
-      block = { type: TokenKind.BraceBlock, value: [] };
+      type = TokenKind.BraceBlock;
       ending = TokenKind.RightBrace;
       break;
 
     case TokenKind.LeftBracket:
-      block = { type: TokenKind.BracketBlock, value: [] };
+      type = TokenKind.BracketBlock;
       ending = TokenKind.RightBracket;
       break;
 
     case TokenKind.LeftParen:
-      block = { type: TokenKind.ParensBlock, value: [] };
+      type = TokenKind.ParensBlock;
       ending = TokenKind.RightParen;
       break;
 
@@ -747,17 +752,9 @@ function consumeSimpleBlock<Value extends Token>(
   }
 
   c.next();
-
-  while (true) {
-    const token = c.peek();
-
-    if (token.type === TokenKind.EOF || token.type === ending) {
-      c.next();
-      return block;
-    }
-
-    block.value.push(consumeComponentValue(c));
-  }
+  const list = consumeListOfComponentValues(c, ending);
+  c.next();
+  return { type, value: list };
 }
 
 /** Consume a function through its matching parenthesis, closing it implicitly at EOF. */
@@ -771,26 +768,13 @@ function consumeFunction<Value extends Token>(
     c.error('Expected a function token');
   }
 
-  const fn: FunctionBlock = {
-    type: TokenKind.FunctionBlock,
-    name: token.value,
-    value: [],
-  };
-
-  while (true) {
-    const next = c.peek();
-
-    if (next.type === TokenKind.EOF || next.type === TokenKind.RightParen) {
-      c.next();
-      return fn;
-    }
-
-    fn.value.push(consumeComponentValue(c));
-  }
+  const list = consumeListOfComponentValues(c, TokenKind.RightParen);
+  c.next();
+  return { type: TokenKind.FunctionBlock, name: token.value, value: list };
 }
 
 /** Retokenize a unicode-range descriptor's source; its grammar validates the resulting ranges. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-value
-function consumeUnicodeRangeDescriptorValue(input: string): ComponentValue[] {
+function consumeUnicodeRangeDescriptorValue(input: string): TokenList<ComponentValue> {
   return parseListOfComponentValues(tokenize(input, true));
 }

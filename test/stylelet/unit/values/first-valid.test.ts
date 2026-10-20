@@ -15,7 +15,7 @@ describe('<first-valid()>', () => {
 
     expect(value?.type).toBe('first-valid');
     expect(value?.arguments.map((argument) =>
-      serializeComponentValues(argument.components)
+      serializeComponentValues(argument.components.tokens)
     )).toEqual(['red', '1px', 'rgb(0, 0, 0)']);
   });
 
@@ -29,7 +29,7 @@ describe('<first-valid()>', () => {
     );
 
     expect(value?.arguments.map((argument) =>
-      serializeComponentValues(argument.components)
+      serializeComponentValues(argument.components.tokens)
     )).toEqual(['Times, serif', 'sans-serif']);
   });
 
@@ -37,7 +37,7 @@ describe('<first-valid()>', () => {
     const value = parseFirstValid('first-valid({red}, blue)');
 
     expect(value?.arguments.map((argument) =>
-      serializeComponentValues(argument.components)
+      serializeComponentValues(argument.components.tokens)
     )).toEqual(['red', 'blue']);
     expect(serializeFirstValid(value!)).toBe('first-valid(red, blue)');
   });

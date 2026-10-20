@@ -2,7 +2,7 @@ import {
   createFreeFormConsumer, createFunctionalNotationConsumer, isBraceBlock, isTokenKind,
   serializeComponentValues, commaRepeat, withTrivia, createComponentParser, TokenKind,
   consumeDeclarationValue,
-  type ComponentValue, type TokenCursor, type TryConsumerResult, type ParserInput, type DeclarationValue,
+  type ComponentValue, type TokenList, type TokenCursor, type TryConsumerResult, type ParserInput, type DeclarationValue,
 } from '../../syntax/index';
 
 export type FirstValidValue = {
@@ -21,17 +21,17 @@ export function consumeFirstValid(
 }
 
 export function serializeFirstValid(value: FirstValidValue): string {
-  const args = value.arguments.map(({ components }) =>
-    requiresFreeFormWrapper(components)
-      ? `{${serializeComponentValues(components)}}`
-      : serializeComponentValues(components)
+  const args = value.arguments.map(({ components: list }) =>
+    requiresFreeFormWrapper(list)
+      ? `{${serializeComponentValues(list.tokens)}}`
+      : serializeComponentValues(list.tokens)
   );
 
   return `first-valid(${args.join(', ')})`;
 }
 
-function requiresFreeFormWrapper(components: ComponentValue[]): boolean {
-  return components.some((component) =>
+function requiresFreeFormWrapper(list: TokenList<ComponentValue>): boolean {
+  return list.tokens.some((component) =>
     isTokenKind(component, TokenKind.Comma) || isBraceBlock(component)
   );
 }

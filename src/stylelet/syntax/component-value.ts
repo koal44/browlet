@@ -1,5 +1,5 @@
 import {
-  HashTokenFlag, NumericSign, NumberTokenFlag, TokenKind,
+  HashTokenFlag, NumericSign, NumberTokenFlag, TokenKind, isNonAsciiIdentCodePoint,
   type BlockKind, type BraceBlock, type BracketBlock, type ComponentBlock, type ComponentValue,
   type DelimToken, type FunctionBlock, type IdentToken, type ParensBlock,
   type PreservedToken, type SimpleBlock, type SimpleBlockKind, type StaticToken, type Token,
@@ -21,28 +21,28 @@ export {
 type PreservedTokenKind = PreservedToken['type'];
 
 export function isTokenKind<K extends PreservedTokenKind>(
-  component: Token,
+  token: Token,
   kind: K,
-): component is Extract<PreservedToken, { type: K; }> {
-  return component.type === kind;
+): token is Extract<PreservedToken, { type: K; }> {
+  return token.type === kind;
 }
 
-export function isIdentToken(component: Token): component is IdentToken {
-  return isTokenKind(component, TokenKind.Ident);
+export function isIdentToken(token: Token): token is IdentToken {
+  return isTokenKind(token, TokenKind.Ident);
 }
 
-export function isDelimToken(component: Token, delim: string): component is DelimToken {
-  return isTokenKind(component, TokenKind.Delim) && component.value === delim;
+export function isDelimToken(token: Token, delim: string): token is DelimToken {
+  return isTokenKind(token, TokenKind.Delim) && token.value === delim;
 }
 
 export function isWhitespaceToken(
-  component: Token,
-): component is StaticToken<TokenKind.Whitespace> {
-  return isTokenKind(component, TokenKind.Whitespace);
+  token: Token,
+): token is StaticToken<TokenKind.Whitespace> {
+  return isTokenKind(token, TokenKind.Whitespace);
 }
 
-export function isComponentBlock(component: Token): component is ComponentBlock {
-  switch (component.type) {
+export function isComponentBlock(token: Token): token is ComponentBlock {
+  switch (token.type) {
     case TokenKind.BraceBlock:
     case TokenKind.BracketBlock:
     case TokenKind.ParensBlock:
@@ -69,100 +69,102 @@ export function isComponentValue(token: Token): token is ComponentValue {
 }
 
 export function isBlockKind<K extends BlockKind>(
-  component: Token,
+  token: Token,
   kind: K,
-): component is Extract<ComponentBlock, { type: K; }> {
-  return component.type === kind;
+): token is Extract<ComponentBlock, { type: K; }> {
+  return token.type === kind;
 }
 
-export function isBraceBlock(component: Token): component is BraceBlock {
-  return isBlockKind(component, TokenKind.BraceBlock);
+export function isBraceBlock(token: Token): token is BraceBlock {
+  return isBlockKind(token, TokenKind.BraceBlock);
 }
 
-export function isBracketBlock(component: Token): component is BracketBlock {
-  return isBlockKind(component, TokenKind.BracketBlock);
+export function isBracketBlock(token: Token): token is BracketBlock {
+  return isBlockKind(token, TokenKind.BracketBlock);
 }
 
-export function isParensBlock(component: Token): component is ParensBlock {
-  return isBlockKind(component, TokenKind.ParensBlock);
+export function isParensBlock(token: Token): token is ParensBlock {
+  return isBlockKind(token, TokenKind.ParensBlock);
 }
 
-export function isFunctionBlock(component: Token): component is FunctionBlock {
-  return isBlockKind(component, TokenKind.FunctionBlock);
+export function isFunctionBlock(token: Token): token is FunctionBlock {
+  return isBlockKind(token, TokenKind.FunctionBlock);
 }
 
-export function serializeComponentValues(values: ComponentValue[]): string {
+/** Serializes components so reparsing preserves their structure and token flags. */
+// https://drafts.csswg.org/css-syntax-3/#serialization
+export function serializeComponentValues(components: ComponentValue[]): string {
   let result = '';
   let previous = TokenSerializationType.Other;
 
-  for (const value of values) {
-    const next = firstTokenSerializationType(value);
+  for (const component of components) {
+    const next = firstTokenSerializationType(component);
 
     if (needsSeparator(previous, next)) result += '/**/';
 
-    result += serializeComponentValue(value);
-    previous = lastTokenSerializationType(value);
+    result += serializeComponentValue(component);
+    previous = lastTokenSerializationType(component);
   }
 
   return result;
 }
 
-function serializeComponentValue(value: ComponentValue): string {
-  switch (value.type) {
+function serializeComponentValue(component: ComponentValue): string {
+  switch (component.type) {
     case TokenKind.BraceBlock:
-      return `{${serializeComponentValues(value.value)}}`;
+      return `{${serializeComponentValues(component.value.tokens)}}`;
 
     case TokenKind.BracketBlock:
-      return `[${serializeComponentValues(value.value)}]`;
+      return `[${serializeComponentValues(component.value.tokens)}]`;
 
     case TokenKind.ParensBlock:
-      return `(${serializeComponentValues(value.value)})`;
+      return `(${serializeComponentValues(component.value.tokens)})`;
 
     case TokenKind.FunctionBlock:
-      return `${serializeCssIdentifier(value.name)}(${serializeComponentValues(value.value)})`;
+      return `${serializeCssIdentifier(component.name)}(${serializeComponentValues(component.value.tokens)})`;
 
     case TokenKind.Ident:
-      return serializeCssIdentifier(value.value);
+      return serializeCssIdentifier(component.value);
 
     case TokenKind.AtKeyword:
-      return `@${serializeCssIdentifier(value.value)}`;
+      return `@${serializeCssIdentifier(component.value)}`;
 
     case TokenKind.Hash:
-      return `#${value.flag === HashTokenFlag.Id
-        ? serializeCssIdentifier(value.value)
-        : serializeCssName(value.value)}`;
+      return `#${component.flag === HashTokenFlag.Id
+        ? serializeCssIdentifier(component.value)
+        : serializeCssName(component.value)}`;
 
     case TokenKind.String:
-      return serializeCssString(value.value);
+      return serializeCssString(component.value);
 
     case TokenKind.BadString:
       return serializeBadStringToken();
 
     case TokenKind.Url:
-      return serializeCssUrlToken(value.value);
+      return serializeCssUrlToken(component.value);
 
     case TokenKind.BadUrl:
       return serializeBadUrlToken();
 
     case TokenKind.Delim:
-      return serializeCssDelimToken(value.value);
+      return serializeCssDelimToken(component.value);
 
     case TokenKind.Number:
-      return serializeNumericToken(value.value, value.sign, value.flag);
+      return serializeNumericToken(component.value, component.sign, component.flag);
 
     case TokenKind.Percentage:
-      return `${serializeNumericToken(value.value, value.sign)}%`;
+      return `${serializeNumericToken(component.value, component.sign)}%`;
 
     case TokenKind.Dimension:
       return (
-        serializeNumericToken(value.value, value.sign, value.flag) +
-        serializeCssDimensionUnit(value.unit)
+        serializeNumericToken(component.value, component.sign, component.flag) +
+        serializeCssDimensionUnit(component.unit)
       );
 
     case TokenKind.UnicodeRange:
-      return value.start === value.end
-        ? `U+${value.start.toString(16)}`
-        : `U+${value.start.toString(16)}-${value.end.toString(16)}`;
+      return component.start === component.end
+        ? `U+${component.start.toString(16)}`
+        : `U+${component.start.toString(16)}-${component.end.toString(16)}`;
 
     case TokenKind.Whitespace:
       return ' ';
@@ -193,6 +195,7 @@ function serializeComponentValue(value: ComponentValue): string {
   }
 }
 
+/** Preserves the numeric token's value, explicit sign, and integer/number flag. */
 function serializeNumericToken(
   value: number,
   sign: NumericSign,
@@ -200,14 +203,23 @@ function serializeNumericToken(
 ): string {
   let result: string;
 
-  if (sign === NumericSign.Minus && (value >= 0 || Object.is(value, -0))) {
-    result = `-${String(Math.abs(value))}`;
+  if (!Number.isFinite(value)) {
+    // Overflow still needs a numeric spelling. Keep its stored value and flag;
+    // supported value ranges belong to interpretation, not serialization.
+    // 1e309 overflows binary64; integer tokens spell it without an exponent.
+    result = flag === NumberTokenFlag.Integer ? `1${'0'.repeat(309)}` : '1e309';
+    if (value < 0) result = `-${result}`;
+  } else if (flag === NumberTokenFlag.Integer && Math.abs(value) >= 1e21) {
+    // String(number) uses exponent notation here, which would change the flag.
+    result = BigInt(value).toString();
   } else {
     result = String(value);
+  }
 
-    if (sign === NumericSign.Plus && value >= 0) {
-      result = `+${result}`;
-    }
+  if (sign === NumericSign.Minus && (value >= 0 || Object.is(value, -0))) {
+    result = `-${result}`;
+  } else if (sign === NumericSign.Plus && value >= 0) {
+    result = `+${result}`;
   }
 
   if (
@@ -221,6 +233,11 @@ function serializeNumericToken(
   return result;
 }
 
+/** Escapes a decoded identifier for use in CSS syntax. */
+// https://drafts.csswg.org/cssom/#serialize-an-identifier
+// SPEC_CLASH(css-non-ascii-ident-serialization): Follow Syntax's restricted ranges;
+// CSSOM and browsers emit all non-ASCII characters literally. Escape excluded
+// characters so our tokenizer can recover the identifier. See syntax/ROADMAP.md.
 export function serializeCssIdentifier(value: string): string {
   const characters = [...value];
   let result = '';
@@ -254,7 +271,7 @@ export function serializeCssIdentifier(value: string): string {
     }
 
     if (
-      codePoint >= 0x80 ||
+      isNonAsciiIdentCodePoint(codePoint) ||
       character === '-' ||
       character === '_' ||
       isAsciiDigit(codePoint) ||
@@ -270,6 +287,8 @@ export function serializeCssIdentifier(value: string): string {
   return result;
 }
 
+/** Serializes a CSS string, including its surrounding double quotes. */
+// https://drafts.csswg.org/cssom/#serialize-a-string
 export function serializeCssString(value: string): string {
   let result = '"';
 
@@ -293,6 +312,7 @@ export function serializeCssString(value: string): string {
   return `${result}"`;
 }
 
+/** Escapes a name without the leading-character restrictions of an identifier. */
 function serializeCssName(value: string): string {
   let result = '';
 
@@ -307,7 +327,7 @@ function serializeCssName(value: string): string {
     ) {
       result += `\\${codePoint.toString(16)} `;
     } else if (
-      codePoint >= 0x80 ||
+      isNonAsciiIdentCodePoint(codePoint) ||
       character === '-' ||
       character === '_' ||
       isAsciiDigit(codePoint) ||
@@ -381,8 +401,8 @@ function isAsciiLetter(codePoint: number): boolean {
   );
 }
 
-function firstTokenSerializationType(value: ComponentValue): TokenSerializationType {
-  switch (value.type) {
+function firstTokenSerializationType(component: ComponentValue): TokenSerializationType {
+  switch (component.type) {
     case TokenKind.FunctionBlock:
       return TokenSerializationType.Function;
 
@@ -394,17 +414,17 @@ function firstTokenSerializationType(value: ComponentValue): TokenSerializationT
       return TokenSerializationType.Other;
 
     default:
-      return tokenSerializationType(value);
+      return tokenSerializationType(component);
   }
 }
 
-function lastTokenSerializationType(value: ComponentValue): TokenSerializationType {
-  return isComponentBlock(value)
+function lastTokenSerializationType(component: ComponentValue): TokenSerializationType {
+  return isComponentBlock(component)
     ? TokenSerializationType.Other
-    : tokenSerializationType(value);
+    : tokenSerializationType(component);
 }
 
-// CSS Syntax §9, token-pair serialization table.
+// https://drafts.csswg.org/css-syntax-3/#serialization
 function needsSeparator(
   before: TokenSerializationType,
   after: TokenSerializationType,
@@ -475,6 +495,11 @@ function needsSeparator(
     case TokenSerializationType.Slash:
       return after === TokenSerializationType.Asterisk;
 
+    case TokenSerializationType.LessThan:
+      // The informative pair table omits this three-token hazard: < ! --.
+      // Separating < and ! also prevents a following --name from making a CDO.
+      return after === TokenSerializationType.Exclamation;
+
     default:
       return false;
   }
@@ -501,10 +526,12 @@ enum TokenSerializationType {
   Dot,
   Plus,
   Slash,
+  LessThan,
+  Exclamation,
 }
 
-function tokenSerializationType(value: PreservedToken): TokenSerializationType {
-  switch (value.type) {
+function tokenSerializationType(token: PreservedToken): TokenSerializationType {
+  switch (token.type) {
     case TokenKind.Ident:
       return TokenSerializationType.Ident;
 
@@ -536,7 +563,7 @@ function tokenSerializationType(value: PreservedToken): TokenSerializationType {
       return TokenSerializationType.CDC;
 
     case TokenKind.Delim:
-      switch (value.value) {
+      switch (token.value) {
         case '-': return TokenSerializationType.Hyphen;
         case '#': return TokenSerializationType.HashDelim;
         case '@': return TokenSerializationType.AtDelim;
@@ -545,6 +572,8 @@ function tokenSerializationType(value: PreservedToken): TokenSerializationType {
         case '/': return TokenSerializationType.Slash;
         case '*': return TokenSerializationType.Asterisk;
         case '%': return TokenSerializationType.Percent;
+        case '<': return TokenSerializationType.LessThan;
+        case '!': return TokenSerializationType.Exclamation;
       }
   }
 

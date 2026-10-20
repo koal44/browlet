@@ -118,7 +118,7 @@ export function serializePropertyDeclaration(
     return {
       name: declaration.name,
       value: declaration.originalText ??
-        serializeComponentValues(declaration.value.components),
+        serializeComponentValues(declaration.value.components.tokens),
       important: declaration.important,
     };
   }

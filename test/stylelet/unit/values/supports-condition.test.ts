@@ -19,7 +19,7 @@ describe('<supports-condition>', () => {
       },
     });
     if (value?.type === 'boolean-test') {
-      expect(serializeComponentValues(value.value.declaration.value))
+      expect(serializeComponentValues(value.value.declaration.value.tokens))
         .toBe('grid');
     }
   });
@@ -28,7 +28,7 @@ describe('<supports-condition>', () => {
     expect(parseSupportsCondition('(display:)')).toMatchObject({
       type: 'boolean-test',
       value: {
-        declaration: { value: [] },
+        declaration: { value: { tokens: [] } },
       },
     });
   });

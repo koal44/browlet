@@ -72,7 +72,7 @@ describe('custom property', () => {
       type: 'raw',
       declaration: {
         type: 'declaration-value',
-        components: [],
+        components: { tokens: [] },
       },
     });
     expect(value?.serialize()).toBe('');

@@ -49,9 +49,9 @@ function expectDone(c: TokenCursor): void {
 function expectNextIdent(c: TokenCursor, expected: string): void {
   consumeWhitespace(c);
 
-  const value = c.peek();
+  const token = c.peek();
 
-  expect(value).toMatchObject({
+  expect(token).toMatchObject({
     type: TokenKind.Ident,
     value: expected,
   });
@@ -60,9 +60,9 @@ function expectNextIdent(c: TokenCursor, expected: string): void {
 function expectNextComma(c: TokenCursor): void {
   consumeWhitespace(c);
 
-  const value = c.peek();
+  const token = c.peek();
 
-  expect(value).toMatchObject({
+  expect(token).toMatchObject({
     type: TokenKind.Comma,
   });
 }

@@ -3,18 +3,19 @@ import {
   type ComponentValue, type PreservedToken, type SimpleBlockKind, isComponentBlock,
 } from './component-value';
 import { parseListOfComponentValues, type ParserInput } from './parser';
-import { TokenKind, type StaticToken, type Token } from './tokens';
+import { TokenKind, type StaticToken, type Token, type TokenList, type NonEmptyTokenList } from './tokens';
 
 /*
  * <any-value>
  */
+// https://drafts.csswg.org/css-syntax-3/#any-value
 
 export type AnyValue = {
   type: 'any-value';
   components: AnyValueComponents;
 };
 
-export type AnyValueComponents = [AnyValueComponent, ...AnyValueComponent[]];
+export type AnyValueComponents = NonEmptyTokenList<AnyValueComponent>;
 
 export type AnyValueComponent =
   | AnyValueToken
@@ -22,7 +23,7 @@ export type AnyValueComponent =
   | { type: TokenKind.FunctionBlock; name: string; value: AnyValueContents; };
 
 type AnyValueToken = Exclude<PreservedToken, InvalidAnyValueToken>;
-export type AnyValueContents = AnyValueComponent[];
+export type AnyValueContents = TokenList<AnyValueComponent>;
 
 type InvalidAnyValueToken =
   | StaticToken<TokenKind.BadString>
@@ -32,9 +33,9 @@ type InvalidAnyValueToken =
   | StaticToken<TokenKind.RightBrace>;
 
 export function parseAnyValue(input: ParserInput): AnyValue | null {
-  const components = parseListOfComponentValues(input);
-  return isAnyValueComponents(components)
-    ? { type: 'any-value', components }
+  const list = parseListOfComponentValues(input);
+  return isAnyValueComponents(list)
+    ? { type: 'any-value', components: list }
     : null;
 }
 
@@ -45,41 +46,48 @@ export function consumeAnyValue(
 
   if (!isAnyValueComponent(first)) return null;
 
+  const start = c.pos();
   c.next();
-  const components: AnyValueComponents = [first];
+  const list: AnyValueComponents = {
+    tokens: [first],
+    text: c.source.text,
+    ranges: [c.sourceRange(start, c.pos())],
+  };
 
   while (true) {
     const component = c.peek();
 
     if (!isAnyValueComponent(component)) break;
 
-    components.push(component);
+    const start = c.pos();
     c.next();
+    list.tokens.push(component);
+    list.ranges.push(c.sourceRange(start, c.pos()));
   }
 
-  return { type: 'any-value', components };
+  return { type: 'any-value', components: list };
 }
 
 export function isAnyValueComponents(
-  components: ComponentValue[],
-): components is AnyValueComponents {
-  return components.length > 0 && isAnyValueContents(components);
+  list: TokenList<ComponentValue>,
+): list is AnyValueComponents {
+  return list.tokens.length > 0 && isAnyValueContents(list);
 }
 
 export function isAnyValueContents(
-  components: ComponentValue[],
-): components is AnyValueContents {
-  return components.every(isAnyValueComponent);
+  list: TokenList<ComponentValue>,
+): list is AnyValueContents {
+  return list.tokens.every(isAnyValueComponent);
 }
 
 function isAnyValueComponent(
-  component: Token,
-): component is AnyValueComponent {
-  if (isComponentBlock(component)) {
-    return isAnyValueContents(component.value);
+  token: Token,
+): token is AnyValueComponent {
+  if (isComponentBlock(token)) {
+    return isAnyValueContents(token.value);
   }
 
-  switch (component.type) {
+  switch (token.type) {
     case TokenKind.BadString:
     case TokenKind.BadUrl:
     case TokenKind.RightParen:

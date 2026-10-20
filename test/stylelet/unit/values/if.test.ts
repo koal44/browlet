@@ -30,7 +30,7 @@ describe('<if()>', () => {
       ],
     });
     expect(value?.branches.map(({ value: branchValue }) =>
-      serializeComponentValues(branchValue.components).trim()
+      serializeComponentValues(branchValue.components.tokens).trim()
     )).toEqual(['red', 'blue']);
   });
 
@@ -91,13 +91,13 @@ describe('<if()>', () => {
     const value = parseIf(input);
 
     expect(value).not.toBeNull();
-    expect(value!.branches[0].value.components.length > 0).toBe(hasComponents);
+    expect(value!.branches[0].value.components.tokens.length > 0).toBe(hasComponents);
   });
 
   it('uses braces to bound a value containing a top-level comma', () => {
     const value = parseIf('if(else: {Times, serif})');
 
-    expect(serializeComponentValues(value!.branches[0].value.components))
+    expect(serializeComponentValues(value!.branches[0].value.components.tokens))
       .toBe('Times, serif');
   });
 
@@ -129,8 +129,8 @@ describe('<if-args>', () => {
     );
 
     expect(value?.branches.map(({ condition, value: branchValue }) => [
-      serializeComponentValues(condition.components).trim(),
-      serializeComponentValues(branchValue.components).trim(),
+      serializeComponentValues(condition.components.tokens).trim(),
+      serializeComponentValues(branchValue.components.tokens).trim(),
     ])).toEqual([
       ['var(--condition)', 'var(--when-true)'],
       ['else', 'var(--fallback)'],
