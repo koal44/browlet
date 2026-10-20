@@ -28,7 +28,7 @@ const RESERVED_CUSTOM_IDENT_KEYWORDS: ReadonlySet<string> = new Set([
 export function parseCustomIdent(
   input: ParserInput,
   excluded: string[] = [],
-  context: unknown = undefined,
+  context: unknown,
 ): CustomIdentValue | null {
   return parseAsComponentGrammar(
     input,

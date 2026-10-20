@@ -28,7 +28,7 @@ export type LengthPercentageResolutionContext = LengthResolutionContext & {
 
 export function parseLengthPercentage(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): LengthPercentageLiteral | null {
   return lengthPercentageParser(input, context);
 }

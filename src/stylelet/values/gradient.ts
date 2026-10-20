@@ -4,7 +4,7 @@ import { InternalError } from '../../infra/internal-error';
 import {
   createFunctionalNotationConsumer, consumeComma, adaptConsumer, one, oneOf, opt, repeat,
   requiredSequenceOf, requiredSomeOf, sequenceOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
@@ -206,13 +206,13 @@ type ConicGradientSyntax = Omit<ConicGradient, 'type' | 'gradientType' | 'repeat
 
 export function parseGradient(
   input: ParserInput,
-  context: GradientValueContext = {},
+  context: GradientValueContext,
 ): GradientValue | null {
   return gradientParser(input, context);
 }
 
 export function consumeGradient(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, GradientValueContext>,
 ): TryConsumerResult<GradientValue> {
   return gradientConsumer(c);
 }
@@ -224,9 +224,9 @@ export function consumeGradient(
 const MAX_COLOR_STOPS = 2_048;
 
 function createGradientStopListConsumer<Offset>(
-  consumeStop: TryConsumer<GradientColorStop<Offset>>,
-  consumeHint: TryConsumer<GradientColorHint<Offset>>,
-): TryConsumer<GradientStops<Offset>> {
+  consumeStop: TryConsumer<GradientColorStop<Offset>, GradientValueContext>,
+  consumeHint: TryConsumer<GradientColorHint<Offset>, GradientValueContext>,
+): TryConsumer<GradientStops<Offset>, GradientValueContext> {
   return sequenceOf(
     [
       one(consumeStop),
@@ -265,7 +265,7 @@ function createGradientStopListConsumer<Offset>(
 }
 
 // <color-stop-length> = <length-percentage>{1,2}
-const colorStopLengthConsumer: TryConsumer<ColorStopLength> = sequenceOf(
+const colorStopLengthConsumer: TryConsumer<ColorStopLength, GradientValueContext> = sequenceOf(
   [
     one(consumeLengthPercentage),
     opt(withTrivia(consumeLengthPercentage)),
@@ -274,13 +274,13 @@ const colorStopLengthConsumer: TryConsumer<ColorStopLength> = sequenceOf(
 );
 
 // <linear-color-hint> = <length-percentage>
-const linearColorHintConsumer: TryConsumer<LinearColorHint> = adaptConsumer(
+const linearColorHintConsumer: TryConsumer<LinearColorHint, GradientValueContext> = adaptConsumer(
   consumeLengthPercentage,
   (offset) => ({ type: 'color-hint', offset }),
 );
 
 // <linear-color-stop> = <color> <color-stop-length>?
-const linearColorStopConsumer: TryConsumer<LinearColorStop> = sequenceOf(
+const linearColorStopConsumer: TryConsumer<LinearColorStop, GradientValueContext> = sequenceOf(
   [
     one(consumeColor),
     opt(withTrivia(colorStopLengthConsumer)),
@@ -293,13 +293,13 @@ const linearColorStopConsumer: TryConsumer<LinearColorStop> = sequenceOf(
 );
 
 // <angle-percentage> | <zero>
-const angularColorStopOffsetConsumer: TryConsumer<AngularColorStopOffset> = oneOf(
+const angularColorStopOffsetConsumer: TryConsumer<AngularColorStopOffset, GradientValueContext> = oneOf(
   [one(consumeAnglePercentage), one(consumeZero)],
   ([offset]) => offset,
 );
 
 // <color-stop-angle> = [ <angle-percentage> | <zero> ]{1,2}
-const colorStopAngleConsumer: TryConsumer<ColorStopAngle> = sequenceOf(
+const colorStopAngleConsumer: TryConsumer<ColorStopAngle, GradientValueContext> = sequenceOf(
   [
     one(angularColorStopOffsetConsumer),
     opt(withTrivia(angularColorStopOffsetConsumer)),
@@ -308,14 +308,14 @@ const colorStopAngleConsumer: TryConsumer<ColorStopAngle> = sequenceOf(
 );
 
 // <angular-color-hint> = <angle-percentage> | <zero>
-const angularColorHintConsumer: TryConsumer<GradientColorHint<AngularColorStopOffset>> =
+const angularColorHintConsumer: TryConsumer<GradientColorHint<AngularColorStopOffset>, GradientValueContext> =
   adaptConsumer(
     angularColorStopOffsetConsumer,
     (offset) => ({ type: 'color-hint', offset }),
   );
 
 // <angular-color-stop> = <color> <color-stop-angle>?
-const angularColorStopConsumer: TryConsumer<GradientColorStop<AngularColorStopOffset>> =
+const angularColorStopConsumer: TryConsumer<GradientColorStop<AngularColorStopOffset>, GradientValueContext> =
   sequenceOf(
     [
       one(consumeColor),
@@ -330,16 +330,16 @@ const angularColorStopConsumer: TryConsumer<GradientColorStop<AngularColorStopOf
 
 // <color-stop-list> = <linear-color-stop> , [ <linear-color-hint>? , <linear-color-stop> ]#?
 // Comma-explicit: <linear-color-stop> [ , [ <linear-color-hint> ,]? <linear-color-stop> ]*
-const colorStopListConsumer: TryConsumer<ColorStops> =
+const colorStopListConsumer: TryConsumer<ColorStops, GradientValueContext> =
   createGradientStopListConsumer(linearColorStopConsumer, linearColorHintConsumer);
 
 // <angular-color-stop-list> = <angular-color-stop> , [ <angular-color-hint>? , <angular-color-stop> ]#?
 // Comma-explicit: <angular-color-stop> [ , [ <angular-color-hint> ,]? <angular-color-stop> ]*
-const angularColorStopListConsumer: TryConsumer<GradientStops<AngularColorStopOffset>> =
+const angularColorStopListConsumer: TryConsumer<GradientStops<AngularColorStopOffset>, GradientValueContext> =
   createGradientStopListConsumer(angularColorStopConsumer, angularColorHintConsumer);
 
 // <side-or-corner> = [left | right] || [top | bottom]
-const sideOrCornerConsumer: TryConsumer<SideOrCorner> = requiredSomeOf(
+const sideOrCornerConsumer: TryConsumer<SideOrCorner, GradientValueContext> = requiredSomeOf(
   [
     one(withTrivia(createKeywordConsumer('left', 'right'))),
     one(withTrivia(createKeywordConsumer('top', 'bottom'))),
@@ -369,7 +369,7 @@ const radialExtentConsumer = createKeywordConsumer(
 const radialShapeConsumer = createKeywordConsumer('circle', 'ellipse');
 
 // <radial-size> = <radial-extent>{1,2} | <length-percentage [0,infinity]>{1,2}
-const radialSizeConsumer: TryConsumer<RadialSize> = oneOf(
+const radialSizeConsumer: TryConsumer<RadialSize, GradientValueContext> = oneOf(
   [
     one(sequenceOf(
       [
@@ -397,7 +397,7 @@ const radialSizeConsumer: TryConsumer<RadialSize> = oneOf(
 
 // <linear-gradient-syntax> = [ [ <angle> | <zero> | to <side-or-corner> ] || <color-interpolation-method> ]? , <color-stop-list>
 // Comma-explicit: [ [ [ <angle> | <zero> | to <side-or-corner> ] || <color-interpolation-method> ] ,]? <color-stop-list>
-const linearGradientSyntaxConsumer: TryConsumer<LinearGradientSyntax> = sequenceOf(
+const linearGradientSyntaxConsumer: TryConsumer<LinearGradientSyntax, GradientValueContext> = sequenceOf(
   [
     opt(sequenceOf(
       [
@@ -442,7 +442,7 @@ const linearGradientSyntaxConsumer: TryConsumer<LinearGradientSyntax> = sequence
 
 // <radial-gradient-syntax> = [ [ [ <radial-shape> || <radial-size> ]? [ at <position> ]? ] || <color-interpolation-method> ]? , <color-stop-list>
 // Comma-explicit: [ [ [ [ <radial-shape> || <radial-size> ]? [ at <position> ]? ] || <color-interpolation-method> ] ,]? <color-stop-list>
-const radialGradientSyntaxConsumer: TryConsumer<RadialGradientSyntax> = sequenceOf(
+const radialGradientSyntaxConsumer: TryConsumer<RadialGradientSyntax, GradientValueContext> = sequenceOf(
   [
     opt(sequenceOf(
       [
@@ -513,7 +513,7 @@ const radialGradientSyntaxConsumer: TryConsumer<RadialGradientSyntax> = sequence
 
 // <conic-gradient-syntax> = [ [ [ from [ <angle> | <zero> ] ]? [ at <position> ]? ] || <color-interpolation-method> ]? , <angular-color-stop-list>
 // Comma-explicit: [ [ [ [ from [ <angle> | <zero> ] ]? [ at <position> ]? ] || <color-interpolation-method> ] ,]? <angular-color-stop-list>
-const conicGradientSyntaxConsumer: TryConsumer<ConicGradientSyntax> = sequenceOf(
+const conicGradientSyntaxConsumer: TryConsumer<ConicGradientSyntax, GradientValueContext> = sequenceOf(
   [
     opt(sequenceOf(
       [
@@ -641,7 +641,7 @@ const repeatingConicGradientFnConsumer = createFunctionalNotationConsumer(
 );
 
 // <gradient> = <linear-gradient()> | <repeating-linear-gradient()> | <radial-gradient()> | <repeating-radial-gradient()> | <conic-gradient()> | <repeating-conic-gradient()>
-const gradientConsumer: TryConsumer<GradientValue> = oneOf(
+const gradientConsumer: TryConsumer<GradientValue, GradientValueContext> = oneOf(
   [
     one(linearGradientFnConsumer),
     one(repeatingLinearGradientFnConsumer),

@@ -20,6 +20,7 @@ export function createSubstitutionValue<Value, Context = unknown>(
   declaration: DeclarationValue,
   parseInput: (
     input: ParserInput,
+    context: Context,
   ) => RawWholeValue<Value, Context> | null,
 ): SubstitutionValue<Value, Context> {
   const value: SubstitutionValue<Value, Context> = {
@@ -81,6 +82,7 @@ function resolveSubstitutionValue<Value, Context>(
   value: SubstitutionValue<Value, Context>,
   parseInput: (
     input: ParserInput,
+    context: Context,
   ) => RawWholeValue<Value, Context> | null,
   stage: ValueStage,
   context: Context,
@@ -94,7 +96,7 @@ function resolveSubstitutionValue<Value, Context>(
 
   if ('type' in substituted) return substituted;
 
-  const parsedResult = parseInput(substituted)?.resolve(stage, context) ?? null;
+  const parsedResult = parseInput(substituted, context)?.resolve(stage, context) ?? null;
 
   if (parsedResult === null) {
     throw new InternalError('Handling substituted parse failure is not implemented');

@@ -1,42 +1,26 @@
 import { asciiLower } from '../../infra/ascii';
 
+import type { PropertyDeclaration } from '../css/index';
+import type { CSSRuleImpl, StylesheetContext } from '../cssom/index';
+
 import {
   isBraceBlock, isComponentValue, isDelimToken, isIdentToken, isTokenKind,
   isWhitespaceToken,
   type ComponentValue, type FunctionBlock, type SimpleBlock,
 } from './component-value';
-import { emptyParsingContext, TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
+import { TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { createTokenList, tokenize, TokenKind, type Token, type TokenList } from './tokens';
 
-/** A generic CSS rule, before selector and property grammar interpretation. */
-// CSS Syntax parsing results: https://drafts.csswg.org/css-syntax-3/#css-tree
-export type Rule =
-  | AtRule
-  | QualifiedRule;
-
-export type AtRule =
-  | StatementAtRule
-  | BlockAtRule;
-
+/** Statement syntax supplied to the owning stylesheet's rule interpretation. */
+// https://drafts.csswg.org/css-syntax-3/#css-tree
 export type StatementAtRule = {
   type: 'statement-at-rule';
   name: string;
   prelude: TokenList<ComponentValue>;
 };
 
-export type BlockAtRule = {
-  type: 'block-at-rule';
-  name: string;
-  prelude: TokenList<ComponentValue>;
-  block: BlockContents;
-};
-
-export type QualifiedRule = {
-  type: 'qualified-rule';
-  prelude: TokenList<ComponentValue>;
-  block: BlockContents;
-};
-
+/** A property or descriptor's syntax, before its grammar is interpreted. */
+// https://drafts.csswg.org/css-syntax-3/#declaration
 export type Declaration = {
   name: string;
   value: TokenList<ComponentValue>;
@@ -45,61 +29,33 @@ export type Declaration = {
   originalText?: string;
 };
 
-/** Preserve source order until the owning rule interprets declaration runs and child rules. */
+/** Interpreted declaration runs and CSSOM rules in source order. */
 // https://drafts.csswg.org/css-syntax-3/#block-contents
-export type BlockContents<ParsedRule extends object = Rule, ParsedDeclaration = Declaration> =
-  Array<ParsedDeclaration[] | ParsedRule>;
-export type DeclarationList = Declaration[];
-export type QualifiedRuleList = QualifiedRule[];
-export type AtRuleList = AtRule[];
-export type DeclarationRuleList = Array<DeclarationList | AtRule>;
-export type RuleList = Array<QualifiedRule | AtRule>;
+export type BlockContents = Array<PropertyDeclaration[] | CSSRuleImpl>;
 
 /** CSS text, tokens/components, or a stream at its current position; decode bytes first. */
 export type ParserInput = string | TokenList | TokenCursor<Token>;
 
-/** Grammar decisions made while consuming one rule list, supplied by its owning context. */
-// CSS Syntax deliberately leaves context passing to implementations:
-// https://drafts.csswg.org/css-syntax-3/#parser-algorithms
-export interface ParsingContext<ParsedRule extends object = object, ParsedDeclaration = unknown> {
-  /** Reject invalid declarations before the parser decides whether to retry as a rule. */
-  interpretDeclaration(declaration: Declaration): ParsedDeclaration | null;
-  /** Check statement grammar and placement against already consumed siblings. */
-  interpretStatementAtRule(
-    rule: StatementAtRule,
-    preceding: BlockContents<ParsedRule, ParsedDeclaration>,
-  ): ParsedRule | null;
-  /** Interpret the whole rule, consuming or discarding the block at the cursor. */
-  interpretBlockAtRule(
-    name: string,
-    prelude: TokenList<ComponentValue>,
-    preceding: BlockContents<ParsedRule, ParsedDeclaration>,
-    c: TokenCursor<Token>,
-  ): ParsedRule | null;
-  /** Interpret the prelude and block; consume the block even when returning null. */
-  interpretQualifiedRule(prelude: TokenList<ComponentValue>, c: TokenCursor<Token>): ParsedRule | null;
-}
-
 /** Bind a component grammar to a parser entry point. */
-export function createComponentParser<T>(
-  consumer: TryConsumer<T>,
+export function createComponentParser<T, Context>(
+  consumer: TryConsumer<T, Context>,
 ): (
   input: ParserInput,
-  context?: unknown,
+  context: Context,
 ) => TryConsumerResult<T> {
-  return (input, context = emptyParsingContext) =>
+  return (input, context) =>
     parseAsComponentGrammar(input, consumer, context);
 }
 
 /** Match the entire remaining input against a grammar, returning null on failure. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-grammar
-export function parseAsComponentGrammar<T>(
+export function parseAsComponentGrammar<T, Context>(
   input: ParserInput,
-  consumer: TryConsumer<T>,
-  context: unknown = emptyParsingContext,
+  consumer: TryConsumer<T, Context>,
+  context: Context,
 ): TryConsumerResult<T> {
-  const list = parseListOfComponentValues(input);
-  const c = new TokenCursor(list, input instanceof TokenCursor ? input.context : context);
+  const list = parseListOfComponentValues(input, context);
+  const c = new TokenCursor(list, context);
   const result = consumer(c);
 
   if (result === null) return null;
@@ -110,13 +66,12 @@ export function parseAsComponentGrammar<T>(
 
 /** Match comma-separated items independently; a failed item contributes null. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-list
-export function parseListAsComponentGrammar<T>(
+export function parseListAsComponentGrammar<T, Context>(
   input: ParserInput,
-  consumer: TryConsumer<T>,
-  context: unknown = emptyParsingContext,
+  consumer: TryConsumer<T, Context>,
+  context: Context,
 ): (TryConsumerResult<T>)[] {
-  const lists = parseCommaSeparatedListOfComponentValues(input);
-  const grammarContext = input instanceof TokenCursor ? input.context : context;
+  const lists = parseCommaSeparatedListOfComponentValues(input, context);
 
   if (
     lists.length === 1 &&
@@ -126,33 +81,33 @@ export function parseListAsComponentGrammar<T>(
     return [];
   }
 
-  return lists.map((item) => parseAsComponentGrammar(item, consumer, grammarContext));
+  return lists.map((item) => parseAsComponentGrammar(item, consumer, context));
 }
 
 /** Parse stylesheet contents using the owning grammar's interpretation of each rule. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-stylesheet-contents
-export function parseStylesheetContents<ParsedRule extends object, ParsedDeclaration>(
+export function parseStylesheetContents(
   input: ParserInput,
-  context: ParsingContext<ParsedRule, ParsedDeclaration>,
-): ParsedRule[] {
+  context: StylesheetContext,
+): CSSRuleImpl[] {
   return consumeInput(input, context, consumeStylesheetContents);
 }
 
 /** Parse mixed declaration/rule content, stopping before an unmatched closing brace. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-block-contents
-export function parseBlockContents<ParsedRule extends object, ParsedDeclaration>(
+export function parseBlockContents(
   input: ParserInput,
-  context: ParsingContext<ParsedRule, ParsedDeclaration>,
-): BlockContents<ParsedRule, ParsedDeclaration> {
+  context: StylesheetContext,
+): BlockContents {
   return consumeInput(input, context, consumeBlockContents);
 }
 
 /** Parse exactly one rule in its grammar context; return null on invalid or extra input. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-rule
-export function parseRule<ParsedRule extends object, ParsedDeclaration>(
+export function parseRule(
   input: ParserInput,
-  context: ParsingContext<ParsedRule, ParsedDeclaration>,
-): ParsedRule | null {
+  context: StylesheetContext,
+): CSSRuleImpl | null {
   return consumeInput(input, context, consumeSingleRule);
 }
 
@@ -164,43 +119,27 @@ export function parseDeclaration<Context>(input: ParserInput, context: Context):
 
 /** Parse exactly one component value, allowing surrounding whitespace; return null otherwise. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-component-value
-export function parseComponentValue(input: ParserInput): ComponentValue | null {
-  const c = getTokenCursor(input);
-
-  consumeTrivia(c);
-  if (c.eof()) return null;
-
-  const component = consumeComponentValue(c);
-
-  consumeTrivia(c);
-  return c.eof() ? component : null;
+export function parseComponentValue<Context>(input: ParserInput, context: Context): ComponentValue | null {
+  return consumeInput(input, context, consumeSingleComponentValue);
 }
 
 /** Consume all remaining components, reusing blocks that have already been parsed. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-list-of-component-values
-export function parseListOfComponentValues(input: ParserInput): TokenList<ComponentValue> {
+export function parseListOfComponentValues<Context>(input: ParserInput, context: Context): TokenList<ComponentValue> {
   if (typeof input !== 'string' && !(input instanceof TokenCursor) && isComponentList(input)) {
     return input;
   }
 
-  const c = getTokenCursor(input);
-  return consumeListOfComponentValues(c);
+  return consumeInput(input, context, consumeListOfComponentValues);
 }
 
 /** Split on top-level commas, retaining empty arms except for an empty trailing arm. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-separated-list-of-component-values
-export function parseCommaSeparatedListOfComponentValues(
+export function parseCommaSeparatedListOfComponentValues<Context>(
   input: ParserInput,
+  context: Context,
 ): TokenList<ComponentValue>[] {
-  const c = getTokenCursor(input);
-  const groups: TokenList<ComponentValue>[] = [];
-
-  while (!c.eof()) {
-    groups.push(consumeListOfComponentValues(c, TokenKind.Comma));
-    c.next();
-  }
-
-  return groups;
+  return consumeInput(input, context, consumeCommaSeparatedListOfComponentValues);
 }
 
 /**
@@ -223,9 +162,9 @@ export function discardRuleBlock<Value extends Token>(c: TokenCursor<Value>): vo
 
 /** Consume a brace-delimited block, including its closing brace when present. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block
-export function consumeBlock<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
-  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
-): BlockContents<ParsedRule, ParsedDeclaration> {
+export function consumeBlock<Value extends Token>(
+  c: TokenCursor<Value, StylesheetContext>,
+): BlockContents {
   const opening = c.peek();
 
   if (isBraceBlock(opening)) {
@@ -283,9 +222,27 @@ function discardAtRule(c: TokenCursor<Token>): void {
   }
 }
 
-/** Reuse an existing cursor unchanged, or create one for context-free component parsing. */
-function getTokenCursor(input: ParserInput): TokenCursor<Token> {
-  return input instanceof TokenCursor ? input : normalize(input, emptyParsingContext);
+/** Consume one complete component, allowing surrounding trivia. */
+function consumeSingleComponentValue(c: TokenCursor<Token>): ComponentValue | null {
+  consumeTrivia(c);
+  if (c.eof()) return null;
+
+  const component = consumeComponentValue(c);
+
+  consumeTrivia(c);
+  return c.eof() ? component : null;
+}
+
+/** Consume comma-delimited component lists without manufacturing a final empty arm. */
+function consumeCommaSeparatedListOfComponentValues(c: TokenCursor<Token>): TokenList<ComponentValue>[] {
+  const groups: TokenList<ComponentValue>[] = [];
+
+  while (!c.eof()) {
+    groups.push(consumeListOfComponentValues(c, TokenKind.Comma));
+    c.next();
+  }
+
+  return groups;
 }
 
 /** Consume with the selected context, restoring it only when the cursor belongs to the caller. */
@@ -319,10 +276,10 @@ function consumeTrivia<Value extends Token>(c: TokenCursor<Value>): void {
 
 /** Consume whole-sheet rules, ignoring top-level CDO/CDC tokens and malformed rules. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-stylesheet-contents
-function consumeStylesheetContents<ParsedRule extends object, ParsedDeclaration>(
-  c: TokenCursor<Token, ParsingContext<ParsedRule, ParsedDeclaration>>,
-): ParsedRule[] {
-  const rules: ParsedRule[] = [];
+function consumeStylesheetContents(
+  c: TokenCursor<Token, StylesheetContext>,
+): CSSRuleImpl[] {
+  const rules: CSSRuleImpl[] = [];
 
   while (true) {
     switch (c.peek().type) {
@@ -351,9 +308,9 @@ function consumeStylesheetContents<ParsedRule extends object, ParsedDeclaration>
 
 /** Apply the single-rule entry algorithm using the supplied grammar context. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#parse-rule
-function consumeSingleRule<ParsedRule extends object, ParsedDeclaration>(
-  c: TokenCursor<Token, ParsingContext<ParsedRule, ParsedDeclaration>>,
-): ParsedRule | null {
+function consumeSingleRule(
+  c: TokenCursor<Token, StylesheetContext>,
+): CSSRuleImpl | null {
   consumeTrivia(c);
   if (c.eof()) return null;
 
@@ -369,11 +326,11 @@ function consumeSingleRule<ParsedRule extends object, ParsedDeclaration>(
 
 /** Consume and validate an at-rule; nested input leaves the containing closing brace unread. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-at-rule
-function consumeAtRule<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
-  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
+function consumeAtRule<Value extends Token>(
+  c: TokenCursor<Value, StylesheetContext>,
   nested: boolean,
-  preceding: BlockContents<ParsedRule, ParsedDeclaration>,
-): ParsedRule | null {
+  preceding: BlockContents,
+): CSSRuleImpl | null {
   const token = c.next();
 
   if (token.type !== TokenKind.AtKeyword) {
@@ -411,11 +368,11 @@ function consumeAtRule<Value extends Token, ParsedRule extends object, ParsedDec
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-qualified-rule
 // SPEC_CLASH(css-invalid-rule-declaration-runs): A rejected rule returns null,
 // just like an incomplete rule, so discarded rules do not split declaration runs.
-function consumeQualifiedRule<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
-  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
+function consumeQualifiedRule<Value extends Token>(
+  c: TokenCursor<Value, StylesheetContext>,
   stopToken?: TokenKind,
   nested = false,
-): ParsedRule | null {
+): CSSRuleImpl | null {
   const prelude = createTokenList<ComponentValue>(c.source.text);
 
   while (true) {
@@ -465,11 +422,11 @@ function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
 
 /** Consume ordered declaration runs and rules, leaving a containing closing brace unread. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block-contents
-function consumeBlockContents<Value extends Token, ParsedRule extends object, ParsedDeclaration>(
-  c: TokenCursor<Value, ParsingContext<ParsedRule, ParsedDeclaration>>,
-): BlockContents<ParsedRule, ParsedDeclaration> {
-  const contents: BlockContents<ParsedRule, ParsedDeclaration> = [];
-  let declarations: ParsedDeclaration[] = [];
+function consumeBlockContents<Value extends Token>(
+  c: TokenCursor<Value, StylesheetContext>,
+): BlockContents {
+  const contents: BlockContents = [];
+  let declarations: PropertyDeclaration[] = [];
 
   const flushDeclarations = (): void => {
     if (declarations.length === 0) return;
@@ -571,7 +528,7 @@ function consumeDeclaration<Value extends Token>(
     return null;
   } else if (asciiLower(declaration.name) === 'unicode-range') {
     const originalText = c.sourceText(valueStart, valueEnd);
-    declaration.value = consumeUnicodeRangeDescriptorValue(originalText);
+    declaration.value = consumeUnicodeRangeDescriptorValue(originalText, c.context);
   }
 
   return declaration;
@@ -775,6 +732,6 @@ function consumeFunction<Value extends Token>(
 
 /** Retokenize a unicode-range descriptor's source; its grammar validates the resulting ranges. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-value
-function consumeUnicodeRangeDescriptorValue(input: string): TokenList<ComponentValue> {
-  return parseListOfComponentValues(tokenize(input, true));
+function consumeUnicodeRangeDescriptorValue<Context>(input: string, context: Context): TokenList<ComponentValue> {
+  return parseListOfComponentValues(tokenize(input, true), context);
 }

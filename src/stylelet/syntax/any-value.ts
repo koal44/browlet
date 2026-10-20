@@ -32,8 +32,8 @@ type InvalidAnyValueToken =
   | StaticToken<TokenKind.RightBracket>
   | StaticToken<TokenKind.RightBrace>;
 
-export function parseAnyValue(input: ParserInput): AnyValue | null {
-  const list = parseListOfComponentValues(input);
+export function parseAnyValue(input: ParserInput, context: unknown): AnyValue | null {
+  const list = parseListOfComponentValues(input, context);
   return isAnyValueComponents(list)
     ? { type: 'any-value', components: list }
     : null;

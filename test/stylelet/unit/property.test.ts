@@ -1,14 +1,28 @@
 import { describe, expect, it } from 'vitest';
 import { colorProperty } from '../../../src/stylelet/props/color';
 import { propertyRegistry } from '../../../src/stylelet/css/property';
+import { parseDeclarationBlock } from '../../../src/stylelet/css/declaration-block';
 import { ValueStage } from '../../../src/stylelet/value-processing/stage';
 import { colorDef, ColorKind } from '../../../src/stylelet/values/color';
 import { defineProperty } from '../../../src/stylelet/values/whole-value';
 
 describe('property value', () => {
+  it('carries property context from declaration parsing into the declared value', () => {
+    const context = {
+      numericVariables: new Map([['progress', {
+        valueType: 'number' as const,
+        value: { type: 'number' as const, value: 0.5 },
+      }]]),
+    };
+    const declarations = parseDeclarationBlock('opacity: calc(progress)', context);
+
+    expect(declarations).toMatchObject([{ name: 'opacity', value: { type: 'ordinary' } }]);
+    expect(parseDeclarationBlock('opacity: calc(progress)', {})).toEqual([]);
+  });
+
   it('preserves an exact property definition through the registry', () => {
     const definition: typeof colorProperty = propertyRegistry.color;
-    const raw = definition.parse('red');
+    const raw = definition.parse('red', {});
     const computed = raw?.resolve(ValueStage.Computed, {});
 
     expect(raw?.serialize()).toBe('red');
@@ -21,7 +35,7 @@ describe('property value', () => {
 
   describe('ordinary value', () => {
     it('creates a raw value, then resolves and serializes a color value instance', () => {
-      const raw = colorProperty.parse('red');
+      const raw = colorProperty.parse('red', {});
 
       expect(raw).toMatchObject({
         type: 'raw',
@@ -46,7 +60,7 @@ describe('property value', () => {
     });
 
     it('rejects a free-form brace wrapper during declared resolution', () => {
-      const input = colorProperty.parse('{red}');
+      const input = colorProperty.parse('{red}', {});
 
       expect(input).not.toBeNull();
       expect(input?.resolve(ValueStage.Declared, {})).toBeNull();
@@ -56,7 +70,7 @@ describe('property value', () => {
   describe('whole-value notation', () => {
     it('creates a host-bound consumer from only the value definition', () => {
       const { parse } = defineProperty(colorDef);
-      const parsed = parse('first-valid(10px, red)');
+      const parsed = parse('first-valid(10px, red)', {});
 
       expect(parsed?.resolve(ValueStage.Computed, {})).toMatchObject({
         type: 'ordinary',
@@ -67,7 +81,7 @@ describe('property value', () => {
     });
 
     it('selects the first argument valid for the property', () => {
-      const input = colorProperty.parse('first-valid(10px, red)');
+      const input = colorProperty.parse('first-valid(10px, red)', {});
       const specified = input?.resolve(ValueStage.Specified, {});
 
       expect(input).not.toBeNull();
@@ -83,7 +97,7 @@ describe('property value', () => {
     });
 
     it('becomes guaranteed-invalid when no argument is valid', () => {
-      const input = colorProperty.parse('first-valid(10px, 20px)');
+      const input = colorProperty.parse('first-valid(10px, 20px)', {});
 
       expect(input).not.toBeNull();
       expect(input?.resolve(ValueStage.Computed, {})).toMatchObject({
@@ -92,7 +106,7 @@ describe('property value', () => {
     });
 
     it('resolves each argument through the complete property pipeline', () => {
-      const input = colorProperty.parse('first-valid(inherit, red)');
+      const input = colorProperty.parse('first-valid(inherit, red)', {});
 
       expect(input?.resolve(ValueStage.Computed, {})).toMatchObject({
         type: 'css-wide',
@@ -103,7 +117,7 @@ describe('property value', () => {
 
   describe('CSS-wide value', () => {
     it('recognizes a CSS-wide keyword as the entire property value', () => {
-      const input = colorProperty.parse(' InHeRiT ');
+      const input = colorProperty.parse(' InHeRiT ', {});
       const declared = input?.resolve(ValueStage.Declared, {});
 
       expect(declared).toMatchObject({
@@ -114,16 +128,16 @@ describe('property value', () => {
     });
 
     it('does not recognize a CSS-wide keyword as part of another value', () => {
-      expect(colorProperty.parse('inherit red')?.resolve(ValueStage.Declared, {}))
+      expect(colorProperty.parse('inherit red', {})?.resolve(ValueStage.Declared, {}))
         .toBeNull();
-      expect(colorProperty.parse('red inherit')?.resolve(ValueStage.Declared, {}))
+      expect(colorProperty.parse('red inherit', {})?.resolve(ValueStage.Declared, {}))
         .toBeNull();
     });
   });
 
   describe('substitution value', () => {
     it('preserves a top-level arbitrary substitution function', () => {
-      const input = colorProperty.parse('var(--color)');
+      const input = colorProperty.parse('var(--color)', {});
       const value = input?.resolve(ValueStage.Declared, {});
 
       expect(value).toMatchObject({
@@ -137,7 +151,7 @@ describe('property value', () => {
     });
 
     it('preserves arbitrary substitution nested inside property syntax', () => {
-      const value = colorProperty.parse('rgb(var(--channels))')
+      const value = colorProperty.parse('rgb(var(--channels))', {})
         ?.resolve(ValueStage.Declared, {});
 
       expect(value).toMatchObject({
@@ -151,7 +165,7 @@ describe('property value', () => {
 
     it('defers a potentially invalid value containing substitution', () => {
       expect(
-        colorProperty.parse('red var(--extra)')
+        colorProperty.parse('red var(--extra)', {})
           ?.resolve(ValueStage.Declared, {}),
       ).toMatchObject({ type: 'substitution-value' });
     });
@@ -159,7 +173,7 @@ describe('property value', () => {
 
   describe('invalid value', () => {
     it('rejects an empty ordinary property value during declared resolution', () => {
-      const input = colorProperty.parse('');
+      const input = colorProperty.parse('', {});
 
       expect(input).not.toBeNull();
       expect(input?.resolve(ValueStage.Declared, {})).toBeNull();
@@ -167,15 +181,15 @@ describe('property value', () => {
 
     it('rejects invalid property syntax during declared resolution', () => {
       expect(
-        colorProperty.parse('definitely-not-a-color')
+        colorProperty.parse('definitely-not-a-color', {})
           ?.resolve(ValueStage.Declared, {}),
       ).toBeNull();
-      expect(colorProperty.parse('red blue')?.resolve(ValueStage.Declared, {}))
+      expect(colorProperty.parse('red blue', {})?.resolve(ValueStage.Declared, {}))
         .toBeNull();
     });
 
     it('rejects an invalid declaration value during input parsing', () => {
-      expect(colorProperty.parse('red ! blue')).toBeNull();
+      expect(colorProperty.parse('red ! blue', {})).toBeNull();
     });
   });
 });

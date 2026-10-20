@@ -38,8 +38,8 @@ describe('selector matching', () => {
       </main>
       <span id="other" class="child"></span>
     `);
-    const parent = parseSelectorList('.parent')!;
-    const nested = parseNestedSelectorList('.child', parent)!;
+    const parent = parseSelectorList('.parent', {})!;
+    const nested = parseNestedSelectorList('.child', parent, {})!;
 
     expect(matchSelectorList(nested, document.getElementById('target')!, new StyleletContext(document, document.env)))
       .toEqual({ a: 0, b: 2, c: 0 });
@@ -51,8 +51,8 @@ describe('selector matching', () => {
     const document = createBrowletDocument(`
       <main><span id="target" class="child"></span></main>
     `);
-    const parent = parseSelectorList('#missing, main')!;
-    const nested = parseNestedSelectorList('> .child', parent)!;
+    const parent = parseSelectorList('#missing, main', {})!;
+    const nested = parseNestedSelectorList('> .child', parent, {})!;
 
     expect(matchSelectorList(nested, document.getElementById('target')!, new StyleletContext(document, document.env)))
       .toEqual({ a: 1, b: 1, c: 0 });
@@ -65,7 +65,7 @@ describe('selector matching', () => {
       </main>
     `);
     const target = document.getElementById('target')!;
-    const selectors = parseSelectorList('MAIN.warning > section span#target')!;
+    const selectors = parseSelectorList('MAIN.warning > section span#target', {})!;
 
     expect(matchSelectorList(selectors, target, new StyleletContext(target.nodeDocument, target.env))).toEqual({
       a: 1,
@@ -218,8 +218,8 @@ describe('selector matching', () => {
     const target = document.getElementById('target')!;
     const version = vi.fn(() => 1);
     const context = new StyleletContext(document, createStyleletEnvironment({ dom: { ...browletDOM, treeVersion: version } }));
-    const simpleSelectors = parseSelectorList('#target')!;
-    const structuralSelectors = parseSelectorList(':nth-child(1)')!;
+    const simpleSelectors = parseSelectorList('#target', {})!;
+    const structuralSelectors = parseSelectorList(':nth-child(1)', {})!;
     const simple = compileSelectorList(simpleSelectors, context);
     const structural = compileSelectorList(structuralSelectors, context);
 
@@ -248,14 +248,14 @@ describe('selector matching', () => {
     const document = createBrowletDocument('<main></main>');
     const context = new StyleletContext(document, document.env);
 
-    const simple = compileSelectorList(parseSelectorList('main')!, context);
-    const host = compileSelectorList(parseSelectorList(':host')!, context);
+    const simple = compileSelectorList(parseSelectorList('main', {})!, context);
+    const host = compileSelectorList(parseSelectorList(':host', {})!, context);
     const nestedHost = compileSelectorList(
-      parseSelectorList(':is(.item, :host)')!,
+      parseSelectorList(':is(.item, :host)', {})!,
       context,
     );
     const pseudoElement = compileSelectorList(
-      parseSelectorList('main::before')!,
+      parseSelectorList('main::before', {})!,
       context,
     );
 
@@ -274,5 +274,5 @@ describe('selector matching', () => {
 });
 
 function match(selector: string, element: ElementImpl) {
-  return matchSelectorList(parseSelectorList(selector)!, element, new StyleletContext(element.nodeDocument, element.env));
+  return matchSelectorList(parseSelectorList(selector, {})!, element, new StyleletContext(element.nodeDocument, element.env));
 }

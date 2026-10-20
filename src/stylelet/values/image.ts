@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import type { ValueStage, ValueDefinition } from '../value-processing/index';
 
@@ -28,13 +28,13 @@ export const imageDef: ValueDefinition<ImageValue, ImageValueContext> = {
 
 export function parseImage(
   input: ParserInput,
-  context: ImageValueContext = {},
+  context: ImageValueContext,
 ): ImageValue | null {
   return imageParser(input, context);
 }
 
 export function consumeImage(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, ImageValueContext>,
 ): TryConsumerResult<ImageValue> {
   return imageConsumer(c);
 }
@@ -54,7 +54,7 @@ export function serializeImage(value: ImageValue): string {
 }
 
 // <image> = <url> | <gradient>
-const imageConsumer: TryConsumer<ImageValue> = oneOf(
+const imageConsumer: TryConsumer<ImageValue, ImageValueContext> = oneOf(
   [
     one(consumeUrl),
     one(consumeGradient),

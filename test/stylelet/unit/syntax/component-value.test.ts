@@ -17,7 +17,7 @@ describe('component value serialization', () => {
     '+/**/1',
     '//**/*',
   ])('separates token pairs that would otherwise combine: %s', (input) => {
-    expect(serializeComponentValues(parseListOfComponentValues(input).tokens)).toBe(input);
+    expect(serializeComponentValues(parseListOfComponentValues(input, {}).tokens)).toBe(input);
   });
 
   it.each([
@@ -29,11 +29,11 @@ describe('component value serialization', () => {
     '/%',
     '(value)ident',
   ])('does not separate token pairs that cannot combine: %s', (input) => {
-    expect(serializeComponentValues(parseListOfComponentValues(input).tokens)).toBe(input);
+    expect(serializeComponentValues(parseListOfComponentValues(input, {}).tokens)).toBe(input);
   });
 
   it('preserves leading and trailing whitespace components', () => {
-    expect(serializeComponentValues(parseListOfComponentValues(' ident ').tokens)).toBe(' ident ');
+    expect(serializeComponentValues(parseListOfComponentValues(' ident ', {}).tokens)).toBe(' ident ');
   });
 
   it('uses name escaping for unrestricted hashes and identifier escaping for ID hashes', () => {
@@ -46,15 +46,15 @@ describe('component value serialization', () => {
       const character = String.fromCodePoint(code);
       expect(serializeCssIdentifier(character)).toBe(`\\${character}`);
       for (const prefix of ['', '@', '#', '#1', '1']) {
-        const list = parseListOfComponentValues(`${prefix}\\${code.toString(16)} `);
+        const list = parseListOfComponentValues(`${prefix}\\${code.toString(16)} `, {});
         const serialized = serializeComponentValues(list.tokens);
-        expect(parseListOfComponentValues(serialized).tokens).toEqual(list.tokens);
+        expect(parseListOfComponentValues(serialized, {}).tokens).toEqual(list.tokens);
       }
 
-      const list = parseListOfComponentValues(`\\${code.toString(16)} ()`);
+      const list = parseListOfComponentValues(`\\${code.toString(16)} ()`, {});
       const serialized = serializeComponentValues(list.tokens);
       expect(serialized).toBe(`\\${character}()`);
-      expect(parseListOfComponentValues(serialized).tokens).toMatchObject([
+      expect(parseListOfComponentValues(serialized, {}).tokens).toMatchObject([
         { type: TokenKind.FunctionBlock, name: character, value: { tokens: [] } },
       ]);
     },
@@ -98,9 +98,9 @@ describe('component value serialization', () => {
     String.raw`#\200e `,
     String.raw`1\d7 `,
   ])('round-trips the component structure of %j', (input) => {
-    const list = parseListOfComponentValues(input);
+    const list = parseListOfComponentValues(input, {});
     const serialized = serializeComponentValues(list.tokens);
 
-    expect(parseListOfComponentValues(serialized).tokens).toEqual(list.tokens);
+    expect(parseListOfComponentValues(serialized, {}).tokens).toEqual(list.tokens);
   });
 });

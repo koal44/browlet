@@ -34,8 +34,9 @@ export type SupportsDeclaration = {
 
 export function parseSupportsCondition(
   input: ParserInput,
+  context: unknown,
 ): SupportsCondition | null {
-  return supportsConditionParser(input);
+  return supportsConditionParser(input, context);
 }
 
 export function consumeSupportsCondition(

@@ -5,7 +5,7 @@ import {
   propertyRegistry,
   type BuiltInPropertyDeclaration, type CustomPropertyDeclaration,
 } from '../../../../src/stylelet/css/property';
-import { CSSParsingContext } from '../../../../src/stylelet/cssom/parser';
+import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
 import { parseListOfComponentValues, parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
 import { parseOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
@@ -15,7 +15,7 @@ import {
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 
-const context = new CSSParsingContext(null, false, env);
+const context = new StylesheetContext(null, false, env);
 
 describe('CSS rule construction', () => {
   it('preserves the registry association in a built-in declaration', () => {
@@ -23,7 +23,7 @@ describe('CSS rule construction', () => {
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: propertyRegistry.color.parse('red')!,
+      value: propertyRegistry.color.parse('red', {})!,
       important: false,
     };
     const resolved = declaration.value.resolve(ValueStage.Computed, {});
@@ -39,14 +39,14 @@ describe('CSS rule construction', () => {
       type: 'property-declaration',
       custom: true,
       name: '--accent',
-      value: parseOptionalDeclarationValue('red')!,
+      value: parseOptionalDeclarationValue('red', {})!,
       important: false,
     };
-    const rule = new CSSStyleRuleImpl(parseSelectorList('*')!, [{
+    const rule = new CSSStyleRuleImpl(parseSelectorList('*', {})!, [{
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: propertyRegistry.color.parse('var(--accent)')!,
+      value: propertyRegistry.color.parse('var(--accent)', {})!,
       important: false,
     }, custom], env);
 
@@ -85,6 +85,52 @@ describe('CSS rule construction', () => {
       important: true,
       originalText: 'red',
     }]);
+  });
+
+  it('carries supplied namespaces through nested rule contexts', () => {
+    const namespaceContext = new StylesheetContext(null, false, env);
+    namespaceContext.namespacePrefixes = new Map([['svg', 'http://www.w3.org/2000/svg']]);
+    namespaceContext.defaultNamespace = 'http://www.w3.org/1999/xhtml';
+
+    const [parent] = parseStylesheetContents(
+      'svg|a { > span { > svg|text { color: red; } } }',
+      namespaceContext,
+    );
+    if (!(parent instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+    const child = parent.cssRules.item(0);
+    if (!(child instanceof CSSStyleRuleImpl)) throw new Error('Expected a nested style rule');
+
+    expect(parent.selectors.arms[0]!.parts[0]!.unit.compound?.typeSelector)
+      .toMatchObject({ name: 'a', namespaceURI: 'http://www.w3.org/2000/svg' });
+    expect(child.selectors.arms[0]!.parts[1]!.unit.compound?.typeSelector)
+      .toMatchObject({ name: 'span', namespaceURI: 'http://www.w3.org/1999/xhtml' });
+
+    const grandchild = child.cssRules.item(0);
+    if (!(grandchild instanceof CSSStyleRuleImpl)) throw new Error('Expected a nested style rule');
+    expect(grandchild.selectors.arms[0]!.parts[1]!.unit.compound?.typeSelector)
+      .toMatchObject({ name: 'text', namespaceURI: 'http://www.w3.org/2000/svg' });
+  });
+
+  // TODO: @namespace interpretation and CSSNamespaceRule construction are not implemented.
+  // https://drafts.csswg.org/css-namespaces-3/#scope
+  it.fails('applies @namespace declarations to parent and nested selectors', () => {
+    const rules = parseStylesheetContents(`
+      @namespace svg "http://www.w3.org/2000/svg";
+      svg|a { > svg|b { color: red; } }
+    `, context);
+
+    expect(rules).toHaveLength(2);
+    const parent = rules[1];
+    if (!(parent instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+    const child = parent.cssRules.item(0);
+    if (!(child instanceof CSSStyleRuleImpl)) throw new Error('Expected a nested style rule');
+
+    expect(serializeSelectorList(parent.selectors)).toBe('svg|a');
+    expect(serializeSelectorList(child.selectors)).toBe('& > svg|b');
+    expect(parent.selectors.arms[0]!.parts[0]!.unit.compound?.typeSelector)
+      .toMatchObject({ name: 'a', namespaceURI: 'http://www.w3.org/2000/svg' });
+    expect(child.selectors.arms[0]!.parts[1]!.unit.compound?.typeSelector)
+      .toMatchObject({ name: 'b', namespaceURI: 'http://www.w3.org/2000/svg' });
   });
 
   it('discards invalid style rules and unrecognized at-rules, including @charset', () => {
@@ -135,7 +181,7 @@ describe('CSS rule construction', () => {
   });
 
   it('preserves custom-property spelling in prebuilt nested rule blocks', () => {
-    const list = parseListOfComponentValues('.parent { --x: fn(a) /**/ foo\\62 ar; & .child { --y: [b] b\\61 z } }');
+    const list = parseListOfComponentValues('.parent { --x: fn(a) /**/ foo\\62 ar; & .child { --y: [b] b\\61 z } }', {});
     const [rule] = parseStylesheetContents(list, context);
     if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
     const child = rule.cssRules.item(0);

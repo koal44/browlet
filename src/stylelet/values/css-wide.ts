@@ -31,7 +31,7 @@ export type CssWideValue<Value = unknown, Context = unknown> = {
 
 export function parseCssWideValue<Value = unknown, Context = unknown>(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): CssWideValue<Value, Context> | null {
   return parseAsComponentGrammar(
     input,

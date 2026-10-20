@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import {
   accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
@@ -60,13 +60,13 @@ import {
 import type { MathContext } from '../../../../src/stylelet/values/math-value';
 
 function expectLiteralResolution<Value>(
-  parse: (input: string) => Value | null,
+  parse: (input: string, context: MathContext) => Value | null,
   resolve: (value: Value, stage: ValueStage, context: MathContext) => Value,
   input: string,
   computed: unknown,
   context: MathContext = {},
 ): void {
-  const value = parse(input);
+  const value = parse(input, context);
 
   expect(value).not.toBeNull();
   expect(resolve(value!, ValueStage.Specified, context)).toBe(value);
@@ -110,7 +110,7 @@ describe('dimensional value literals', () => {
   });
 
   it('preserves a relative length until its context is available', () => {
-    const value = parseLength('2em')!;
+    const value = parseLength('2em', {})!;
 
     expect(resolveLength(value, ValueStage.Specified, {
       length: { em: 16 },
@@ -124,9 +124,9 @@ describe('dimensional value literals', () => {
 
 describe('dimension values', () => {
   it('delegates recognized dimension categories to their value modules', () => {
-    const length = parseDimension('1in')!;
-    const resolution = parseDimension('96dpi')!;
-    const math = parseDimension('calc(1in + 96px)')!;
+    const length = parseDimension('1in', {})!;
+    const resolution = parseDimension('96dpi', {})!;
+    const math = parseDimension('calc(1in + 96px)', {})!;
 
     expect(serializeDimension(length)).toBe('1in');
     expect(serializeDimension(resolveDimension(length, ValueStage.Computed)))
@@ -139,7 +139,7 @@ describe('dimension values', () => {
   });
 
   it('preserves an unrecognized dimension as the generic fallback', () => {
-    const value = parseDimension('1unknown')!;
+    const value = parseDimension('1unknown', {})!;
 
     expect(value).toEqual({ type: 'dimension', value: 1, unit: 'unknown' });
     expect(resolveDimension(value, ValueStage.Computed)).toBe(value);
@@ -149,21 +149,21 @@ describe('dimension values', () => {
 
 describe('number values', () => {
   it('retains finite values from long CSS number tokens', () => {
-    expect(parseNumber(`0.${'1'.repeat(400)}`)).toEqual({
+    expect(parseNumber(`0.${'1'.repeat(400)}`, {})).toEqual({
       type: 'number',
       value: 0.1111111111111111,
     });
   });
 
   it('parses a number literal', () => {
-    expect(parseNumber('1.25')).toEqual({
+    expect(parseNumber('1.25', {})).toEqual({
       type: 'number',
       value: 1.25,
     });
   });
 
   it('parses and serializes a number-valued math function', () => {
-    const value = parseNumber('calc(1 + 2)');
+    const value = parseNumber('calc(1 + 2)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -179,7 +179,7 @@ describe('number values', () => {
   });
 
   it('resolves a math value to a number at computed-value time', () => {
-    const value = parseNumber('calc(1 + 2)')!;
+    const value = parseNumber('calc(1 + 2)', {})!;
 
     expect(resolveNumber(value, ValueStage.Declared)).toEqual(value);
     expect(resolveNumber(value, ValueStage.Declared, { unwrapMathAt: ValueStage.Declared })).toEqual({
@@ -193,7 +193,7 @@ describe('number values', () => {
   });
 
   it('accepts math functions other than calc()', () => {
-    expect(parseNumber('min(1, 2)')).toMatchObject({
+    expect(parseNumber('min(1, 2)', {})).toMatchObject({
       type: 'math',
       calculation: {
         type: 'number',
@@ -204,7 +204,7 @@ describe('number values', () => {
 
   it('rejects a math function with a non-number result', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(1px)'), emptyParsingContext,
+      parseListOfComponentValues('calc(1px)', {}), {},
     );
 
     expect(consumeNumber(c)).toBeNull();
@@ -213,11 +213,11 @@ describe('number values', () => {
 
   it('applies consumer ranges to literals and math functions at their stages', () => {
     const consume = createNumberConsumer({ min: 0, max: 1 });
-    const literal = new TokenCursor(parseListOfComponentValues('2'), emptyParsingContext);
+    const literal = new TokenCursor(parseListOfComponentValues('2', {}), {});
     const specifiedMath = new TokenCursor(
-      parseListOfComponentValues('calc(2)'), emptyParsingContext,
+      parseListOfComponentValues('calc(2)', {}), {},
     );
-    const math = parseNumber('calc(2)')!;
+    const math = parseNumber('calc(2)', {})!;
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).not.toBeNull();
@@ -233,9 +233,9 @@ describe('number values', () => {
   });
 
   it('does not mutate the surrounding calculation context', () => {
-    const context = { marker: true } as const;
+    const context = { range: [0, 5] as [number, number], marker: true };
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(1 + 2)'),
+      parseListOfComponentValues('calc(1 + 2)', {}),
       context,
     );
 
@@ -244,8 +244,8 @@ describe('number values', () => {
   });
 
   it('combines two literals without creating a math value', () => {
-    const a = parseNumber('2')!;
-    const b = parseNumber('4')!;
+    const a = parseNumber('2', {})!;
+    const b = parseNumber('4', {})!;
 
     expect(addNumbers(a, b)).toEqual({ type: 'number', value: 6 });
     expect(interpolateNumbers(a, b, 0.25))
@@ -255,8 +255,8 @@ describe('number values', () => {
   });
 
   it('promotes a literal when adding it to a math value', () => {
-    const literal = parseNumber('2')!;
-    const math = parseNumber('calc(4)')!;
+    const literal = parseNumber('2', {})!;
+    const math = parseNumber('calc(4)', {})!;
 
     const forward = addNumbers(literal, math);
     const reverse = addNumbers(math, literal);
@@ -268,8 +268,8 @@ describe('number values', () => {
   });
 
   it('promotes literals for interpolation and accumulation with math values', () => {
-    const literal = parseNumber('2')!;
-    const math = parseNumber('calc(4)')!;
+    const literal = parseNumber('2', {})!;
+    const math = parseNumber('calc(4)', {})!;
     const interpolated = interpolateNumbers(literal, math, 0.25);
     const accumulated = accumulateNumbers(literal, math);
 
@@ -282,9 +282,9 @@ describe('number values', () => {
 
 describe('angle values', () => {
   it('accepts angle-valued math and rejects other categories', () => {
-    const value = parseAngle('min(1deg, 2deg)');
+    const value = parseAngle('min(1deg, 2deg)', {});
     const other = new TokenCursor(
-      parseListOfComponentValues('calc(1s)'), emptyParsingContext,
+      parseListOfComponentValues('calc(1s)', {}), {},
     );
 
     expect(serializeAngle(value!)).toBe('calc(1deg)');
@@ -293,7 +293,7 @@ describe('angle values', () => {
   });
 
   it('resolves math values as canonical angles at the computed-value stage', () => {
-    const value = parseAngle('calc(.5turn + 180deg)')!;
+    const value = parseAngle('calc(.5turn + 180deg)', {})!;
 
     expect(resolveAngle(value, ValueStage.Declared)).toEqual(value);
     expect(resolveAngle(value, ValueStage.Computed)).toEqual({
@@ -304,9 +304,9 @@ describe('angle values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseAngle('1deg')!;
-    const b = parseAngle('2deg')!;
-    const math = parseAngle('calc(2deg)')!;
+    const a = parseAngle('1deg', {})!;
+    const b = parseAngle('2deg', {})!;
+    const math = parseAngle('calc(2deg)', {})!;
 
     expect(addAngles(a, b))
       .toEqual({ type: 'angle', value: 3, unit: 'deg' });
@@ -319,9 +319,9 @@ describe('angle values', () => {
 
 describe('frequency values', () => {
   it('accepts frequency-valued math and rejects other categories', () => {
-    const value = parseFrequency('min(1hz, 2hz)');
+    const value = parseFrequency('min(1hz, 2hz)', {});
     const other = new TokenCursor(
-      parseListOfComponentValues('calc(1s)'), emptyParsingContext,
+      parseListOfComponentValues('calc(1s)', {}), {},
     );
 
     expect(serializeFrequency(value!)).toBe('calc(1hz)');
@@ -330,7 +330,7 @@ describe('frequency values', () => {
   });
 
   it('resolves math values as canonical frequencies at the computed-value stage', () => {
-    const value = parseFrequency('calc(1khz + 500hz)')!;
+    const value = parseFrequency('calc(1khz + 500hz)', {})!;
 
     expect(resolveFrequency(value, ValueStage.Declared)).toEqual(value);
     expect(resolveFrequency(value, ValueStage.Computed)).toEqual({
@@ -341,9 +341,9 @@ describe('frequency values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseFrequency('1hz')!;
-    const b = parseFrequency('2hz')!;
-    const math = parseFrequency('calc(2hz)')!;
+    const a = parseFrequency('1hz', {})!;
+    const b = parseFrequency('2hz', {})!;
+    const math = parseFrequency('calc(2hz)', {})!;
 
     expect(addFrequencies(a, b))
       .toEqual({ type: 'frequency', value: 3, unit: 'hz' });
@@ -357,9 +357,9 @@ describe('frequency values', () => {
 
 describe('length values', () => {
   it('accepts length-valued math and rejects other categories', () => {
-    const value = parseLength('min(1px, 2px)');
+    const value = parseLength('min(1px, 2px)', {});
     const other = new TokenCursor(
-      parseListOfComponentValues('calc(1deg)'), emptyParsingContext,
+      parseListOfComponentValues('calc(1deg)', {}), {},
     );
 
     expect(serializeLength(value!)).toBe('calc(1px)');
@@ -368,7 +368,7 @@ describe('length values', () => {
   });
 
   it('resolves math values as canonical lengths at the computed-value stage', () => {
-    const value = parseLength('calc(1in + 96px)')!;
+    const value = parseLength('calc(1in + 96px)', {})!;
 
     expect(resolveLength(value, ValueStage.Declared)).toEqual(value);
     expect(resolveLength(value, ValueStage.Computed)).toEqual({
@@ -379,9 +379,9 @@ describe('length values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseLength('1px')!;
-    const b = parseLength('2px')!;
-    const math = parseLength('calc(2px)')!;
+    const a = parseLength('1px', {})!;
+    const b = parseLength('2px', {})!;
+    const math = parseLength('calc(2px)', {})!;
 
     expect(addLengths(a, b))
       .toEqual({ type: 'length', value: 3, unit: 'px' });
@@ -394,9 +394,9 @@ describe('length values', () => {
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createLengthConsumer({ min: 0 });
     const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-1px)'), emptyParsingContext,
+      parseListOfComponentValues('calc(-1px)', {}), {},
     );
-    const math = parseLength('calc(-1px)')!;
+    const math = parseLength('calc(-1px)', {})!;
 
     expect(consume(specified)).not.toBeNull();
     expect(resolveLength(math, ValueStage.Computed, {
@@ -411,9 +411,9 @@ describe('length values', () => {
 
 describe('resolution values', () => {
   it('accepts resolution-valued math and rejects other categories', () => {
-    const value = parseResolution('min(1dppx, 2dppx)');
+    const value = parseResolution('min(1dppx, 2dppx)', {});
     const other = new TokenCursor(
-      parseListOfComponentValues('calc(1hz)'), emptyParsingContext,
+      parseListOfComponentValues('calc(1hz)', {}), {},
     );
 
     expect(serializeResolution(value!)).toBe('calc(1dppx)');
@@ -422,7 +422,7 @@ describe('resolution values', () => {
   });
 
   it('resolves math values as canonical resolutions at the computed-value stage', () => {
-    const value = parseResolution('calc(96dpi + 1dppx)')!;
+    const value = parseResolution('calc(96dpi + 1dppx)', {})!;
 
     expect(resolveResolution(value, ValueStage.Declared)).toEqual(value);
     expect(resolveResolution(value, ValueStage.Computed)).toEqual({
@@ -433,9 +433,9 @@ describe('resolution values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseResolution('1dppx')!;
-    const b = parseResolution('2dppx')!;
-    const math = parseResolution('calc(2dppx)')!;
+    const a = parseResolution('1dppx', {})!;
+    const b = parseResolution('2dppx', {})!;
+    const math = parseResolution('calc(2dppx)', {})!;
 
     expect(addResolutions(a, b))
       .toEqual({ type: 'resolution', value: 3, unit: 'dppx' });
@@ -449,7 +449,7 @@ describe('resolution values', () => {
 
   it('clamps math results to the nonnegative resolution range', () => {
     const value = resolveResolution(
-      parseResolution('calc(-1dppx)')!,
+      parseResolution('calc(-1dppx)', {})!,
       ValueStage.Computed,
       {
         range: [0, Infinity],
@@ -470,9 +470,9 @@ describe('resolution values', () => {
 
 describe('time values', () => {
   it('accepts time-valued math and rejects other categories', () => {
-    const value = parseTime('min(1s, 2s)');
+    const value = parseTime('min(1s, 2s)', {});
     const other = new TokenCursor(
-      parseListOfComponentValues('calc(1hz)'), emptyParsingContext,
+      parseListOfComponentValues('calc(1hz)', {}), {},
     );
 
     expect(serializeTime(value!)).toBe('calc(1s)');
@@ -481,7 +481,7 @@ describe('time values', () => {
   });
 
   it('resolves math values as canonical times at the computed-value stage', () => {
-    const value = parseTime('calc(1000ms + 1s)')!;
+    const value = parseTime('calc(1000ms + 1s)', {})!;
 
     expect(resolveTime(value, ValueStage.Declared)).toEqual(value);
     expect(resolveTime(value, ValueStage.Computed)).toEqual({
@@ -492,9 +492,9 @@ describe('time values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseTime('1s')!;
-    const b = parseTime('2s')!;
-    const math = parseTime('calc(2s)')!;
+    const a = parseTime('1s', {})!;
+    const b = parseTime('2s', {})!;
+    const math = parseTime('calc(2s)', {})!;
 
     expect(addTimes(a, b))
       .toEqual({ type: 'time', value: 3, unit: 's' });
@@ -507,12 +507,12 @@ describe('time values', () => {
 
 describe('integer values', () => {
   it('parses integer literals and number-valued math functions', () => {
-    expect(parseInteger('2')).toEqual({
+    expect(parseInteger('2', {})).toEqual({
       type: 'integer',
       value: 2,
     });
 
-    const value = parseInteger('calc(1.5)');
+    const value = parseInteger('calc(1.5)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -526,7 +526,7 @@ describe('integer values', () => {
 
   it('rounds math results at the computed-value stage', () => {
     const value = resolveInteger(
-      parseInteger('calc(1.5)')!,
+      parseInteger('calc(1.5)', {})!,
       ValueStage.Computed,
       { unwrapMathAt: ValueStage.Actual },
     );
@@ -544,7 +544,7 @@ describe('integer values', () => {
   });
 
   it('resolves math values as integers at the computed-value stage', () => {
-    const value = parseInteger('calc(1.5)')!;
+    const value = parseInteger('calc(1.5)', {})!;
 
     expect(resolveInteger(value, ValueStage.Declared)).toEqual(value);
     expect(resolveInteger(value, ValueStage.Computed)).toEqual({
@@ -555,7 +555,7 @@ describe('integer values', () => {
 
   it('rejects non-number math results', () => {
     for (const input of ['calc(1px)', 'calc(1%)']) {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
 
       expect(consumeInteger(c)).toBeNull();
       expect(c.pos()).toBe(0);
@@ -564,11 +564,11 @@ describe('integer values', () => {
 
   it('applies ranges to literals and math functions at their stages', () => {
     const consume = createIntegerConsumer({ min: 0, max: 2 });
-    const literal = new TokenCursor(parseListOfComponentValues('3'), emptyParsingContext);
+    const literal = new TokenCursor(parseListOfComponentValues('3', {}), {});
     const specifiedMath = new TokenCursor(
-      parseListOfComponentValues('calc(3)'), emptyParsingContext,
+      parseListOfComponentValues('calc(3)', {}), {},
     );
-    const math = parseInteger('calc(3)')!;
+    const math = parseInteger('calc(3)', {})!;
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).not.toBeNull();
@@ -581,9 +581,9 @@ describe('integer values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseInteger('1')!;
-    const b = parseInteger('2')!;
-    const math = parseInteger('calc(2)')!;
+    const a = parseInteger('1', {})!;
+    const b = parseInteger('2', {})!;
+    const math = parseInteger('calc(2)', {})!;
 
     expect(addIntegers(a, b)).toEqual({ type: 'integer', value: 3 });
     expect(interpolateIntegers(a, b, 0.5))
@@ -607,12 +607,12 @@ describe('integer values', () => {
 
 describe('percentage values', () => {
   it('parses and serializes percentage literals and math functions', () => {
-    expect(parsePercentage('25%')).toEqual({
+    expect(parsePercentage('25%', {})).toEqual({
       type: 'percentage',
       value: 25,
     });
 
-    const value = parsePercentage('calc(10% + 20%)');
+    const value = parsePercentage('calc(10% + 20%)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -628,7 +628,7 @@ describe('percentage values', () => {
   });
 
   it('resolves math values as percentages at the computed-value stage', () => {
-    const value = parsePercentage('calc(10% + 20%)')!;
+    const value = parsePercentage('calc(10% + 20%)', {})!;
 
     expect(resolvePercentage(value, ValueStage.Declared)).toEqual(value);
     expect(resolvePercentage(value, ValueStage.Computed, {
@@ -641,7 +641,7 @@ describe('percentage values', () => {
 
   it('rejects non-percentage math results', () => {
     for (const input of ['calc(1)', 'calc(1px)']) {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
 
       expect(consumePercentage(c)).toBeNull();
       expect(c.pos()).toBe(0);
@@ -653,7 +653,7 @@ describe('percentage values', () => {
       percentHint: 'length',
     } as const;
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(25%)'),
+      parseListOfComponentValues('calc(25%)', {}),
       context,
     );
 
@@ -668,11 +668,11 @@ describe('percentage values', () => {
 
   it('applies ranges to literals and math functions at their stages', () => {
     const consume = createPercentageConsumer({ min: 0, max: 100 });
-    const literal = new TokenCursor(parseListOfComponentValues('125%'), emptyParsingContext);
+    const literal = new TokenCursor(parseListOfComponentValues('125%', {}), {});
     const specifiedMath = new TokenCursor(
-      parseListOfComponentValues('calc(125%)'), emptyParsingContext,
+      parseListOfComponentValues('calc(125%)', {}), {},
     );
-    const math = parsePercentage('calc(125%)')!;
+    const math = parsePercentage('calc(125%)', {})!;
 
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).not.toBeNull();
@@ -685,9 +685,9 @@ describe('percentage values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parsePercentage('10%')!;
-    const b = parsePercentage('20%')!;
-    const math = parsePercentage('calc(20%)')!;
+    const a = parsePercentage('10%', {})!;
+    const b = parsePercentage('20%', {})!;
+    const math = parsePercentage('calc(20%)', {})!;
 
     expect(addPercentages(a, b))
       .toEqual({ type: 'percentage', value: 30 });
@@ -706,19 +706,19 @@ describe('percentage values', () => {
 
 describe('angle-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseAnglePercentage('10deg')).toEqual({
+    expect(parseAnglePercentage('10deg', {})).toEqual({
       type: 'angle',
       value: 10,
       unit: 'deg',
     });
-    expect(parseAnglePercentage('25%')).toEqual({
+    expect(parseAnglePercentage('25%', {})).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseAnglePercentage('calc(10deg + 25%)');
+    const value = parseAnglePercentage('calc(10deg + 25%)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -730,8 +730,8 @@ describe('angle-percentage values', () => {
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseAnglePercentage('calc(10deg + 25%)')!;
-    const percentage = parseAnglePercentage('calc(25%)')!;
+    const mixed = parseAnglePercentage('calc(10deg + 25%)', {})!;
+    const percentage = parseAnglePercentage('calc(25%)', {})!;
 
     expect(resolveAnglePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
     expect(resolveAnglePercentage(mixed, ValueStage.Computed, {
@@ -742,7 +742,7 @@ describe('angle-percentage values', () => {
   });
 
   it('canonicalizes literal angles at the computed-value stage', () => {
-    const angle = parseAnglePercentage('0.5turn')!;
+    const angle = parseAnglePercentage('0.5turn', {})!;
 
     expect(resolveAnglePercentage(angle, ValueStage.Specified)).toBe(angle);
     expect(resolveAnglePercentage(angle, ValueStage.Computed))
@@ -750,7 +750,7 @@ describe('angle-percentage values', () => {
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseAnglePercentage('25%')!;
+    const percentage = parseAnglePercentage('25%', {})!;
     const context = {
       percentageReferenceValue: { type: 'angle', value: 200, unit: 'deg' },
     } as const;
@@ -765,7 +765,7 @@ describe('angle-percentage values', () => {
 
   it('rejects calculations from another dimensional category', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10px + 25%)'), emptyParsingContext,
+      parseListOfComponentValues('calc(10px + 25%)', {}), {},
     );
 
     expect(consumeAnglePercentage(c)).toBeNull();
@@ -777,7 +777,7 @@ describe('angle-percentage values', () => {
       percentHint: 'length',
     } as const;
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10deg + 25%)'),
+      parseListOfComponentValues('calc(10deg + 25%)', {}),
       context,
     );
 
@@ -786,10 +786,10 @@ describe('angle-percentage values', () => {
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const angleA = parseAnglePercentage('10deg')!;
-    const angleB = parseAnglePercentage('20deg')!;
-    const percentageA = parseAnglePercentage('10%')!;
-    const percentageB = parseAnglePercentage('20%')!;
+    const angleA = parseAnglePercentage('10deg', {})!;
+    const angleB = parseAnglePercentage('20deg', {})!;
+    const percentageA = parseAnglePercentage('10%', {})!;
+    const percentageB = parseAnglePercentage('20%', {})!;
 
     expect(addAnglePercentages(angleA, angleB))
       .toEqual({ type: 'angle', value: 30, unit: 'deg' });
@@ -803,8 +803,8 @@ describe('angle-percentage values', () => {
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const angle = parseAnglePercentage('10deg')!;
-    const percentage = parseAnglePercentage('20%')!;
+    const angle = parseAnglePercentage('10deg', {})!;
+    const percentage = parseAnglePercentage('20%', {})!;
 
     expect(serializeAnglePercentage(addAnglePercentages(angle, percentage)))
       .toBe('calc(20% + 10deg)');
@@ -822,9 +822,9 @@ describe('angle-percentage values', () => {
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createAnglePercentageConsumer({ min: 0 });
     const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10deg)'), emptyParsingContext,
+      parseListOfComponentValues('calc(-10deg)', {}), {},
     );
-    const math = parseAnglePercentage('calc(-10deg)')!;
+    const math = parseAnglePercentage('calc(-10deg)', {})!;
 
     expect(consume(specified)).not.toBeNull();
     expect(resolveAnglePercentage(math, ValueStage.Computed, {
@@ -839,19 +839,19 @@ describe('angle-percentage values', () => {
 
 describe('length-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseLengthPercentage('10px')).toEqual({
+    expect(parseLengthPercentage('10px', {})).toEqual({
       type: 'length',
       value: 10,
       unit: 'px',
     });
-    expect(parseLengthPercentage('25%')).toEqual({
+    expect(parseLengthPercentage('25%', {})).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseLengthPercentage('calc(10px + 25%)');
+    const value = parseLengthPercentage('calc(10px + 25%)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -863,8 +863,8 @@ describe('length-percentage values', () => {
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseLengthPercentage('calc(10px + 25%)')!;
-    const percentage = parseLengthPercentage('calc(25%)')!;
+    const mixed = parseLengthPercentage('calc(10px + 25%)', {})!;
+    const percentage = parseLengthPercentage('calc(25%)', {})!;
 
     expect(resolveLengthPercentage(mixed, ValueStage.Computed)).toEqual(mixed);
     expect(resolveLengthPercentage(mixed, ValueStage.Computed, {
@@ -875,8 +875,8 @@ describe('length-percentage values', () => {
   });
 
   it('resolves literal lengths to computed absolute lengths', () => {
-    const absolute = parseLengthPercentage('1in')!;
-    const relative = parseLengthPercentage('2em')!;
+    const absolute = parseLengthPercentage('1in', {})!;
+    const relative = parseLengthPercentage('2em', {})!;
 
     expect(resolveLengthPercentage(absolute, ValueStage.Specified))
       .toEqual(absolute);
@@ -890,7 +890,7 @@ describe('length-percentage values', () => {
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseLengthPercentage('25%')!;
+    const percentage = parseLengthPercentage('25%', {})!;
 
     expect(resolveLengthPercentage(percentage, ValueStage.Computed))
       .toEqual(percentage);
@@ -901,7 +901,7 @@ describe('length-percentage values', () => {
 
   it('rejects calculations from another dimensional category', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10deg + 25%)'), emptyParsingContext,
+      parseListOfComponentValues('calc(10deg + 25%)', {}), {},
     );
 
     expect(consumeLengthPercentage(c)).toBeNull();
@@ -913,7 +913,7 @@ describe('length-percentage values', () => {
       percentHint: 'angle',
     } as const;
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10px + 25%)'),
+      parseListOfComponentValues('calc(10px + 25%)', {}),
       context,
     );
 
@@ -922,10 +922,10 @@ describe('length-percentage values', () => {
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const lengthA = parseLengthPercentage('10px')!;
-    const lengthB = parseLengthPercentage('20px')!;
-    const percentageA = parseLengthPercentage('10%')!;
-    const percentageB = parseLengthPercentage('20%')!;
+    const lengthA = parseLengthPercentage('10px', {})!;
+    const lengthB = parseLengthPercentage('20px', {})!;
+    const percentageA = parseLengthPercentage('10%', {})!;
+    const percentageB = parseLengthPercentage('20%', {})!;
 
     expect(addLengthPercentages(lengthA, lengthB))
       .toEqual({ type: 'length', value: 30, unit: 'px' });
@@ -939,8 +939,8 @@ describe('length-percentage values', () => {
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const length = parseLengthPercentage('10px')!;
-    const percentage = parseLengthPercentage('20%')!;
+    const length = parseLengthPercentage('10px', {})!;
+    const percentage = parseLengthPercentage('20%', {})!;
 
     expect(serializeLengthPercentage(addLengthPercentages(
       length,
@@ -960,9 +960,9 @@ describe('length-percentage values', () => {
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createLengthPercentageConsumer({ min: 0 });
     const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10px)'), emptyParsingContext,
+      parseListOfComponentValues('calc(-10px)', {}), {},
     );
-    const math = parseLengthPercentage('calc(-10px)')!;
+    const math = parseLengthPercentage('calc(-10px)', {})!;
 
     expect(consume(specified)).not.toBeNull();
     expect(resolveLengthPercentage(math, ValueStage.Computed, {
@@ -977,19 +977,19 @@ describe('length-percentage values', () => {
 
 describe('frequency-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseFrequencyPercentage('10hz')).toEqual({
+    expect(parseFrequencyPercentage('10hz', {})).toEqual({
       type: 'frequency',
       value: 10,
       unit: 'hz',
     });
-    expect(parseFrequencyPercentage('25%')).toEqual({
+    expect(parseFrequencyPercentage('25%', {})).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseFrequencyPercentage('calc(10hz + 25%)');
+    const value = parseFrequencyPercentage('calc(10hz + 25%)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -1001,8 +1001,8 @@ describe('frequency-percentage values', () => {
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseFrequencyPercentage('calc(10hz + 25%)')!;
-    const percentage = parseFrequencyPercentage('calc(25%)')!;
+    const mixed = parseFrequencyPercentage('calc(10hz + 25%)', {})!;
+    const percentage = parseFrequencyPercentage('calc(25%)', {})!;
 
     expect(resolveFrequencyPercentage(mixed, ValueStage.Computed))
       .toEqual(mixed);
@@ -1014,7 +1014,7 @@ describe('frequency-percentage values', () => {
   });
 
   it('canonicalizes literal frequencies at the computed-value stage', () => {
-    const frequency = parseFrequencyPercentage('1khz')!;
+    const frequency = parseFrequencyPercentage('1khz', {})!;
 
     expect(resolveFrequencyPercentage(frequency, ValueStage.Specified))
       .toBe(frequency);
@@ -1023,7 +1023,7 @@ describe('frequency-percentage values', () => {
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseFrequencyPercentage('25%')!;
+    const percentage = parseFrequencyPercentage('25%', {})!;
     const context = {
       percentageReferenceValue: { type: 'frequency', value: 200, unit: 'hz' },
     } as const;
@@ -1038,7 +1038,7 @@ describe('frequency-percentage values', () => {
 
   it('rejects calculations from another dimensional category', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10s + 25%)'), emptyParsingContext,
+      parseListOfComponentValues('calc(10s + 25%)', {}), {},
     );
 
     expect(consumeFrequencyPercentage(c)).toBeNull();
@@ -1050,7 +1050,7 @@ describe('frequency-percentage values', () => {
       percentHint: 'length',
     } as const;
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10hz + 25%)'),
+      parseListOfComponentValues('calc(10hz + 25%)', {}),
       context,
     );
 
@@ -1059,10 +1059,10 @@ describe('frequency-percentage values', () => {
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const frequencyA = parseFrequencyPercentage('10hz')!;
-    const frequencyB = parseFrequencyPercentage('20hz')!;
-    const percentageA = parseFrequencyPercentage('10%')!;
-    const percentageB = parseFrequencyPercentage('20%')!;
+    const frequencyA = parseFrequencyPercentage('10hz', {})!;
+    const frequencyB = parseFrequencyPercentage('20hz', {})!;
+    const percentageA = parseFrequencyPercentage('10%', {})!;
+    const percentageB = parseFrequencyPercentage('20%', {})!;
 
     expect(addFrequencyPercentages(frequencyA, frequencyB))
       .toEqual({ type: 'frequency', value: 30, unit: 'hz' });
@@ -1076,8 +1076,8 @@ describe('frequency-percentage values', () => {
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const frequency = parseFrequencyPercentage('10hz')!;
-    const percentage = parseFrequencyPercentage('20%')!;
+    const frequency = parseFrequencyPercentage('10hz', {})!;
+    const percentage = parseFrequencyPercentage('20%', {})!;
 
     expect(serializeFrequencyPercentage(addFrequencyPercentages(
       frequency,
@@ -1097,9 +1097,9 @@ describe('frequency-percentage values', () => {
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createFrequencyPercentageConsumer({ min: 0 });
     const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10hz)'), emptyParsingContext,
+      parseListOfComponentValues('calc(-10hz)', {}), {},
     );
-    const math = parseFrequencyPercentage('calc(-10hz)')!;
+    const math = parseFrequencyPercentage('calc(-10hz)', {})!;
 
     expect(consume(specified)).not.toBeNull();
     expect(resolveFrequencyPercentage(math, ValueStage.Computed, {
@@ -1114,19 +1114,19 @@ describe('frequency-percentage values', () => {
 
 describe('time-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseTimePercentage('10s')).toEqual({
+    expect(parseTimePercentage('10s', {})).toEqual({
       type: 'time',
       value: 10,
       unit: 's',
     });
-    expect(parseTimePercentage('25%')).toEqual({
+    expect(parseTimePercentage('25%', {})).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseTimePercentage('calc(10s + 25%)');
+    const value = parseTimePercentage('calc(10s + 25%)', {});
 
     expect(value).toMatchObject({
       type: 'math',
@@ -1138,8 +1138,8 @@ describe('time-percentage values', () => {
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseTimePercentage('calc(10s + 25%)')!;
-    const percentage = parseTimePercentage('calc(25%)')!;
+    const mixed = parseTimePercentage('calc(10s + 25%)', {})!;
+    const percentage = parseTimePercentage('calc(25%)', {})!;
 
     expect(resolveTimePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
     expect(resolveTimePercentage(mixed, ValueStage.Computed, {
@@ -1150,7 +1150,7 @@ describe('time-percentage values', () => {
   });
 
   it('canonicalizes literal times at the computed-value stage', () => {
-    const time = parseTimePercentage('250ms')!;
+    const time = parseTimePercentage('250ms', {})!;
 
     expect(resolveTimePercentage(time, ValueStage.Specified)).toBe(time);
     expect(resolveTimePercentage(time, ValueStage.Computed))
@@ -1158,7 +1158,7 @@ describe('time-percentage values', () => {
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseTimePercentage('25%')!;
+    const percentage = parseTimePercentage('25%', {})!;
     const context = {
       percentageReferenceValue: { type: 'time', value: 200, unit: 's' },
     } as const;
@@ -1173,7 +1173,7 @@ describe('time-percentage values', () => {
 
   it('rejects calculations from another dimensional category', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10hz + 25%)'), emptyParsingContext,
+      parseListOfComponentValues('calc(10hz + 25%)', {}), {},
     );
 
     expect(consumeTimePercentage(c)).toBeNull();
@@ -1185,7 +1185,7 @@ describe('time-percentage values', () => {
       percentHint: 'length',
     } as const;
     const c = new TokenCursor(
-      parseListOfComponentValues('calc(10s + 25%)'),
+      parseListOfComponentValues('calc(10s + 25%)', {}),
       context,
     );
 
@@ -1194,10 +1194,10 @@ describe('time-percentage values', () => {
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const timeA = parseTimePercentage('10s')!;
-    const timeB = parseTimePercentage('20s')!;
-    const percentageA = parseTimePercentage('10%')!;
-    const percentageB = parseTimePercentage('20%')!;
+    const timeA = parseTimePercentage('10s', {})!;
+    const timeB = parseTimePercentage('20s', {})!;
+    const percentageA = parseTimePercentage('10%', {})!;
+    const percentageB = parseTimePercentage('20%', {})!;
 
     expect(addTimePercentages(timeA, timeB))
       .toEqual({ type: 'time', value: 30, unit: 's' });
@@ -1211,8 +1211,8 @@ describe('time-percentage values', () => {
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const time = parseTimePercentage('10s')!;
-    const percentage = parseTimePercentage('20%')!;
+    const time = parseTimePercentage('10s', {})!;
+    const percentage = parseTimePercentage('20%', {})!;
 
     expect(serializeTimePercentage(addTimePercentages(
       time,
@@ -1232,9 +1232,9 @@ describe('time-percentage values', () => {
   it('applies ranges to math at the computed-value stage', () => {
     const consume = createTimePercentageConsumer({ min: 0 });
     const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10s)'), emptyParsingContext,
+      parseListOfComponentValues('calc(-10s)', {}), {},
     );
-    const math = parseTimePercentage('calc(-10s)')!;
+    const math = parseTimePercentage('calc(-10s)', {})!;
 
     expect(consume(specified)).not.toBeNull();
     expect(resolveTimePercentage(math, ValueStage.Computed, {

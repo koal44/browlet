@@ -15,7 +15,7 @@ export type ZeroValue = NumberLiteral & {
 
 export function parseZero(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): ZeroValue | null {
   return zeroParser(input, context);
 }

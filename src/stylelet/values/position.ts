@@ -2,7 +2,7 @@ import { mapTuple } from '../../infra/util';
 
 import {
   adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 
@@ -145,13 +145,13 @@ function isPositionKeyword(
 
 export function parsePosition(
   input: ParserInput,
-  context: PositionValueContext = {},
+  context: PositionValueContext,
 ): PositionValue | null {
   return positionParser(input, context);
 }
 
 export function consumePosition(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, PositionValueContext>,
 ): TryConsumerResult<PositionValue> {
   return positionConsumer(c);
 }
@@ -161,7 +161,7 @@ export function consumePosition(
 // =============================================================================
 
 // <position-one> = left | center | right | top | bottom | x-start | x-end | y-start | y-end | block-start | block-end | inline-start | inline-end | <length-percentage>
-const positionOneConsumer: TryConsumer<PositionOne> = oneOf(
+const positionOneConsumer: TryConsumer<PositionOne, PositionValueContext> = oneOf(
   [
     one(createKeywordConsumer(
       'left', 'center', 'right', 'top', 'bottom',
@@ -178,7 +178,7 @@ const positionOneConsumer: TryConsumer<PositionOne> = oneOf(
 );
 
 // <position-two> = [ [ left | center | right | x-start | x-end ] && [ top | center | bottom | y-start | y-end ] | [ left | center | right | x-start | x-end | <length-percentage> ] [ top | center | bottom | y-start | y-end | <length-percentage> ] | [ block-start | center | block-end ] && [ inline-start | center | inline-end ] | [ start | center | end ]{2} ]
-const positionTwoConsumer: TryConsumer<PositionTwo> = oneOf(
+const positionTwoConsumer: TryConsumer<PositionTwo, PositionValueContext> = oneOf(
   // Expand the unordered conjunctions because both operands can consume
   // `center`: H && V = H V | V H, and B && I = B I | I B.
   [
@@ -250,7 +250,7 @@ const positionTwoConsumer: TryConsumer<PositionTwo> = oneOf(
 );
 
 // <position-four> = [ [ [ left | right | x-start | x-end ] <length-percentage> ] && [ [ top | bottom | y-start | y-end ] <length-percentage> ] | [ [ block-start | block-end ] <length-percentage> ] && [ [ inline-start | inline-end ] <length-percentage> ] | [ [ start | end ] <length-percentage> ]{2} ]
-const positionFourConsumer: TryConsumer<PositionFour> = oneOf(
+const positionFourConsumer: TryConsumer<PositionFour, PositionValueContext> = oneOf(
   [
     one(allOf(
       [
@@ -325,7 +325,7 @@ const positionFourConsumer: TryConsumer<PositionFour> = oneOf(
 );
 
 // <position> = <position-one> | <position-two> | <position-four>
-const positionConsumer: TryConsumer<PositionValue> = oneOf(
+const positionConsumer: TryConsumer<PositionValue, PositionValueContext> = oneOf(
   [
     one(positionFourConsumer),
     one(positionTwoConsumer),

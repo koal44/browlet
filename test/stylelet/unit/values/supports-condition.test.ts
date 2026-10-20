@@ -6,7 +6,7 @@ import { serializeComponentValues } from '../../../../src/stylelet/syntax/compon
 
 describe('<supports-condition>', () => {
   it('parses a declaration feature', () => {
-    const value = parseSupportsCondition('(display: grid)');
+    const value = parseSupportsCondition('(display: grid)', {});
 
     expect(value).toMatchObject({
       type: 'boolean-test',
@@ -25,7 +25,7 @@ describe('<supports-condition>', () => {
   });
 
   it('allows an empty declaration value', () => {
-    expect(parseSupportsCondition('(display:)')).toMatchObject({
+    expect(parseSupportsCondition('(display:)', {})).toMatchObject({
       type: 'boolean-test',
       value: {
         declaration: { value: { tokens: [] } },
@@ -34,7 +34,7 @@ describe('<supports-condition>', () => {
   });
 
   it('parses a declaration important flag', () => {
-    expect(parseSupportsCondition('(display: grid !important)'))
+    expect(parseSupportsCondition('(display: grid !important)', {}))
       .toMatchObject({
         type: 'boolean-test',
         value: {
@@ -46,12 +46,12 @@ describe('<supports-condition>', () => {
   });
 
   it('parses negation, conjunction, and disjunction', () => {
-    expect(parseSupportsCondition('not (display: grid)'))
+    expect(parseSupportsCondition('not (display: grid)', {}))
       .toMatchObject({
         type: 'boolean-not',
         value: { type: 'boolean-test' },
       });
-    expect(parseSupportsCondition('(display: grid) and (color: red)'))
+    expect(parseSupportsCondition('(display: grid) and (color: red)', {}))
       .toMatchObject({
         type: 'boolean-and',
         values: [
@@ -59,7 +59,7 @@ describe('<supports-condition>', () => {
           { type: 'boolean-test' },
         ],
       });
-    expect(parseSupportsCondition('(display: grid) or (display: flex)'))
+    expect(parseSupportsCondition('(display: grid) or (display: flex)', {}))
       .toMatchObject({
         type: 'boolean-or',
         values: [
@@ -70,10 +70,10 @@ describe('<supports-condition>', () => {
   });
 
   it('retains future syntax as general-enclosed', () => {
-    expect(parseSupportsCondition('future(feature)')).toMatchObject({
+    expect(parseSupportsCondition('future(feature)', {})).toMatchObject({
       type: 'general-enclosed',
     });
-    expect(parseSupportsCondition('(display: grid;)')).toMatchObject({
+    expect(parseSupportsCondition('(display: grid;)', {})).toMatchObject({
       type: 'general-enclosed',
     });
   });
@@ -85,6 +85,6 @@ describe('<supports-condition>', () => {
     '(display: grid) and',
     '(display: grid) and (color: red) or (width: 1px)',
   ])('rejects %j', (input) => {
-    expect(parseSupportsCondition(input)).toBeNull();
+    expect(parseSupportsCondition(input, {})).toBeNull();
   });
 });

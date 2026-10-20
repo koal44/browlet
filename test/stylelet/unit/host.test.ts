@@ -157,7 +157,7 @@ describe('Stylelet DOM hosts', () => {
         const main = dom.firstElementChild(dom.body(document)!)!;
         const styles = new Stylelet(document, { dom });
 
-        expect(matchSelectorList(parseSelectorList(':dir(rtl)')!, main, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':dir(rtl)', {})!, main, styles.context)).not.toBeNull();
         expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('0.25');
         dom.setAttribute(main, 'style', 'opacity: 0.75');
         expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('0.75');
@@ -173,11 +173,11 @@ describe('Stylelet DOM hosts', () => {
         const child = dom.firstElementChild(main)!;
         const styles = new Stylelet(document, { dom });
         dom.setAttributeNS(main, XML_NAMESPACE, 'xml:lang', 'fr');
-        expect(matchSelectorList(parseSelectorList(':lang(fr)')!, child, styles.context)).not.toBeNull();
-        expect(matchSelectorList(parseSelectorList(':lang(en)')!, child, styles.context)).toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(fr)', {})!, child, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(en)', {})!, child, styles.context)).toBeNull();
         dom.setAttributeNS(main, XML_NAMESPACE, 'xml:lang', '');
-        expect(matchSelectorList(parseSelectorList(':lang("")')!, child, styles.context)).not.toBeNull();
-        expect(matchSelectorList(parseSelectorList(':lang("*")')!, child, styles.context)).toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang("")', {})!, child, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang("*")', {})!, child, styles.context)).toBeNull();
       } finally { close(); }
     });
 
@@ -186,10 +186,10 @@ describe('Stylelet DOM hosts', () => {
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
         const styles = new Stylelet(document, { dom });
-        expect(matchSelectorList(parseSelectorList(':lang(KO)')!, main, styles.context)).not.toBeNull();
-        expect(matchSelectorList(parseSelectorList(':lang(Ko)')!, main, styles.context)).toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(KO)', {})!, main, styles.context)).not.toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(Ko)', {})!, main, styles.context)).toBeNull();
         dom.setAttribute(main, 'lang', 'Ko');
-        expect(matchSelectorList(parseSelectorList(':lang(ko)')!, main, styles.context)).toBeNull();
+        expect(matchSelectorList(parseSelectorList(':lang(ko)', {})!, main, styles.context)).toBeNull();
       } finally { close(); }
     });
 
@@ -229,10 +229,10 @@ describe('Stylelet DOM hosts', () => {
     }
     expect(context.dom.isHTMLElement(document.createElementNS('urn:test', 'main'))).toBe(false);
 
-    expect(matchSelectorList(parseSelectorList('MAIN')!, main, context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList('MAIN', {})!, main, context)).not.toBeNull();
     const circle = document.getElementsByTagName('circle').item(0)!;
-    expect(matchSelectorList(parseSelectorList('CIRCLE')!, circle, context)).toBeNull();
-    expect(matchSelectorList(parseSelectorList('circle')!, circle, context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList('CIRCLE', {})!, circle, context)).toBeNull();
+    expect(matchSelectorList(parseSelectorList('circle', {})!, circle, context)).not.toBeNull();
     expect(getNamespaceURI).not.toHaveBeenCalled();
   });
 
@@ -241,12 +241,12 @@ describe('Stylelet DOM hosts', () => {
     const main = document.querySelector('main')!;
     const styles = document.getCSSEngine();
     document.contentLanguage = 'fr';
-    expect(matchSelectorList(parseSelectorList(':lang(fr)')!, main, styles.context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList(':lang(fr)', {})!, main, styles.context)).not.toBeNull();
     document.pragmaLanguage = 'de';
-    expect(matchSelectorList(parseSelectorList(':lang(de)')!, main, styles.context)).not.toBeNull();
-    expect(matchSelectorList(parseSelectorList(':lang(fr)')!, main, styles.context)).toBeNull();
+    expect(matchSelectorList(parseSelectorList(':lang(de)', {})!, main, styles.context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList(':lang(fr)', {})!, main, styles.context)).toBeNull();
     main.setAttribute('lang', '');
-    expect(matchSelectorList(parseSelectorList(':lang("")')!, main, styles.context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList(':lang("")', {})!, main, styles.context)).not.toBeNull();
   });
 
   it('uses namespace classification across raw jsdom realms without constructors', () => {
@@ -258,9 +258,9 @@ describe('Stylelet DOM hosts', () => {
       const secondMain = implForWrapper(second.window.document.querySelector('main')!);
       const circle = implForWrapper(first.window.document.querySelector<Element>('circle')!);
 
-      expect(matchSelectorList(parseSelectorList('MAIN')!, firstMain, context)).not.toBeNull();
-      expect(matchSelectorList(parseSelectorList('MAIN')!, secondMain, context)).not.toBeNull();
-      expect(matchSelectorList(parseSelectorList('CIRCLE')!, circle, context)).toBeNull();
+      expect(matchSelectorList(parseSelectorList('MAIN', {})!, firstMain, context)).not.toBeNull();
+      expect(matchSelectorList(parseSelectorList('MAIN', {})!, secondMain, context)).not.toBeNull();
+      expect(matchSelectorList(parseSelectorList('CIRCLE', {})!, circle, context)).toBeNull();
     } finally {
       first.window.close();
       second.window.close();
@@ -275,14 +275,14 @@ describe('Stylelet DOM hosts', () => {
       const input = window.document.querySelector('input')!;
       const implementation = implForWrapper(input);
       const styles = new Stylelet(document, { dom });
-      const checked = parseSelectorList(':checked')!;
+      const checked = parseSelectorList(':checked', {})!;
 
       expect(matchSelectorList(checked, implementation, styles.context)).not.toBeNull();
       input.checked = false;
       expect(input.hasAttribute('checked')).toBe(true);
       expect(matchSelectorList(checked, implementation, styles.context)).toBeNull();
       input.indeterminate = true;
-      expect(matchSelectorList(parseSelectorList(':indeterminate')!, implementation, styles.context)).not.toBeNull();
+      expect(matchSelectorList(parseSelectorList(':indeterminate', {})!, implementation, styles.context)).not.toBeNull();
     } finally {
       window.close();
     }
@@ -297,9 +297,9 @@ describe('Stylelet DOM hosts', () => {
       const styles = new Stylelet(document, { dom });
 
       Object.defineProperty(document, 'location', { get() { throw new Error('Unexpected Location access'); } });
-      expect(matchSelectorList(parseSelectorList(':target')!, main, styles.context)).not.toBeNull();
+      expect(matchSelectorList(parseSelectorList(':target', {})!, main, styles.context)).not.toBeNull();
       window.history.replaceState(null, '', '#other');
-      expect(matchSelectorList(parseSelectorList(':target')!, main, styles.context)).toBeNull();
+      expect(matchSelectorList(parseSelectorList(':target', {})!, main, styles.context)).toBeNull();
     } finally {
       window.close();
     }
@@ -317,8 +317,8 @@ describe('Stylelet DOM hosts', () => {
       },
     });
 
-    expect(matchSelectorList(parseSelectorList(':focus:defined')!, element, styles.context)).not.toBeNull();
-    expect(matchSelectorList(parseSelectorList(':focus-within')!, document.body!, styles.context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList(':focus:defined', {})!, element, styles.context)).not.toBeNull();
+    expect(matchSelectorList(parseSelectorList(':focus-within', {})!, document.body!, styles.context)).not.toBeNull();
   });
 });
 

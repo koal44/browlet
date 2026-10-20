@@ -25,7 +25,7 @@ export type TimePercentageResolutionContext = {
 
 export function parseTimePercentage(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): TimePercentageLiteral | null {
   return timePercentageParser(input, context);
 }

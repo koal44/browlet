@@ -15,7 +15,7 @@ runScenarios('style syntax identifier serialization', 'normal', [
       const selectors = excludedCharacters.map((character) => {
         const selector = `#${serializeCssIdentifier(character)}`;
         expect(selector).toBe(`#\\${character}`);
-        const parsed = parseSelectorList(selector);
+        const parsed = parseSelectorList(selector, {});
         expect(parsed).not.toBeNull();
         expect(serializeSelectorList(parsed!)).toBe(selector);
         return selector;

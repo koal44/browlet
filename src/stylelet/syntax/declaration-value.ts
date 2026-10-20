@@ -28,8 +28,8 @@ export type DeclarationComponent = Exclude<
   StaticToken<TokenKind.Semicolon>
 >;
 
-export function parseDeclarationValue(input: ParserInput): DeclarationValue | null {
-  const list = parseListOfComponentValues(input);
+export function parseDeclarationValue(input: ParserInput, context: unknown): DeclarationValue | null {
+  const list = parseListOfComponentValues(input, context);
   if (isNonEmptyDeclarationValueContents(list)) {
     return { type: 'declaration-value', components: list };
   }
@@ -56,8 +56,9 @@ export function consumeDeclarationValue(
 
 export function parseOptionalDeclarationValue(
   input: ParserInput,
+  context: unknown,
 ): OptionalDeclarationValue | null {
-  const list = parseListOfComponentValues(input);
+  const list = parseListOfComponentValues(input, context);
   return isDeclarationValueContents(list)
     ? { type: 'declaration-value', components: list }
     : null;

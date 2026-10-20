@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import type { PropertyContext } from '../../../../src/stylelet/css/property';
@@ -14,7 +14,7 @@ import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
 
 describe('<if()>', () => {
   it('parses a nonempty semicolon-separated branch list', () => {
-    const value = parseIf('if(future(): red; else: blue;)');
+    const value = parseIf('if(future(): red; else: blue;)', {});
 
     expect(value).toMatchObject({
       type: 'if',
@@ -35,7 +35,7 @@ describe('<if()>', () => {
   });
 
   it('parses Boolean expressions around supports tests', () => {
-    expect(parseIf('if(not supports(display: grid): red; else: blue)'))
+    expect(parseIf('if(not supports(display: grid): red; else: blue)', {}))
       .toMatchObject({
         branches: [
           {
@@ -57,7 +57,7 @@ describe('<if()>', () => {
 
   it('parses a supports condition as a supports test', () => {
     expect(parseIf(
-      'if(supports((display: grid) and (color: red)): yes; else: no)',
+      'if(supports((display: grid) and (color: red)): yes; else: no)', {},
     )?.branches[0]).toMatchObject({
       condition: {
         type: 'boolean-test',
@@ -71,12 +71,12 @@ describe('<if()>', () => {
 
   it('retains unsupported media and style tests as general-enclosed', () => {
     expect(
-      parseIf('if(media(width > 10px): wide; else: narrow)')?.branches[0],
+      parseIf('if(media(width > 10px): wide; else: narrow)', {})?.branches[0],
     ).toMatchObject({
       condition: { type: 'general-enclosed' },
     });
     expect(
-      parseIf('if(style(--scheme: dark): dark; else: light)')?.branches[0],
+      parseIf('if(style(--scheme: dark): dark; else: light)', {})?.branches[0],
     ).toMatchObject({
       condition: { type: 'general-enclosed' },
     });
@@ -88,14 +88,14 @@ describe('<if()>', () => {
     ['if(else:{})', false],
     ['if(else: red)', true],
   ])('parses an optional branch value in %j', (input, hasComponents) => {
-    const value = parseIf(input);
+    const value = parseIf(input, {});
 
     expect(value).not.toBeNull();
     expect(value!.branches[0].value.components.tokens.length > 0).toBe(hasComponents);
   });
 
   it('uses braces to bound a value containing a top-level comma', () => {
-    const value = parseIf('if(else: {Times, serif})');
+    const value = parseIf('if(else: {Times, serif})', {});
 
     expect(serializeComponentValues(value!.branches[0].value.components.tokens))
       .toBe('Times, serif');
@@ -109,12 +109,12 @@ describe('<if()>', () => {
     'if(else: red;; else: blue)',
     'if(else: red ! blue)',
   ])('rejects %j', (input) => {
-    expect(parseIf(input)).toBeNull();
+    expect(parseIf(input, {})).toBeNull();
   });
 
   it('consumes one notation without consuming following input', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('if(else: red) trailing'), emptyParsingContext,
+      parseListOfComponentValues('if(else: red) trailing', {}), {},
     );
 
     expect(consumeIf(c)?.type).toBe('if');
@@ -125,7 +125,7 @@ describe('<if()>', () => {
 describe('<if-args>', () => {
   it('divides branches without parsing their conditions', () => {
     const value = parseIfArguments(
-      'if(var(--condition): var(--when-true); else: var(--fallback))',
+      'if(var(--condition): var(--when-true); else: var(--fallback))', {},
     );
 
     expect(value?.branches.map(({ condition, value: branchValue }) => [
@@ -138,15 +138,15 @@ describe('<if-args>', () => {
   });
 
   it('requires the literal colon and semicolon branch boundaries', () => {
-    expect(parseIfArguments('if(var(--branch); else: green;)')).toBeNull();
+    expect(parseIfArguments('if(var(--branch); else: green;)', {})).toBeNull();
   });
 });
 
 describe('if() replacement', () => {
-  const property = defineCustomProperty({ syntax: parseSyntax('<color>')! });
+  const property = defineCustomProperty({ syntax: parseSyntax('<color>', {})! });
 
   function resolve(input: string, context: PropertyContext = {}) {
-    return property.parse(input)?.resolve(ValueStage.Computed, context);
+    return property.parse(input, context)?.resolve(ValueStage.Computed, context);
   }
 
   it.fails('selects the first branch whose supports test is true', () => {

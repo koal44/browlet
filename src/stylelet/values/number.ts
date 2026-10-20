@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import type { ValueStage, ValueDefinition } from '../value-processing/index';
 import {
@@ -30,13 +30,13 @@ export const numberDef: ValueDefinition<NumberValue, MathContext> = {
 
 export function parseNumber(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): NumberValue | null {
   return numberParser(input, context);
 }
 
 export function consumeNumber(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<NumberValue> {
   return numberConsumer(c);
 }
@@ -45,7 +45,7 @@ export type NumberConsumerOptions = NumberLiteralConsumerOptions;
 
 export function createNumberConsumer(
   options: NumberConsumerOptions = {},
-): TryConsumer<NumberValue> {
+): TryConsumer<NumberValue, MathContext> {
   const literalConsumer = createNumberLiteralConsumer(options);
   const range = numberRange(options);
 

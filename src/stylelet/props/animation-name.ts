@@ -31,7 +31,7 @@ export type KeyframesNameValue =
 
 export function parseAnimationNameValue(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): AnimationNameValue | null {
   return animationNameParser(input, context);
 }

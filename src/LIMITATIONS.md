@@ -185,7 +185,7 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   from passing direct resolver tests.
 - **Stylesheet rules:** unknown at-rules are discarded; recognized unfinished
   grammars, including namespace declarations and conditional groups, now stop
-  with an explicit InternalError in CSSParsingContext. Nested style rules are retained
+  with an explicit InternalError in StylesheetContext. Nested style rules are retained
   in CSSOM implementation lists, but their cascade participation and Platform
   projection remain unfinished. Direct nested
   selector tests therefore do not establish nested stylesheet support. See the

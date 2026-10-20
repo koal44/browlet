@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
@@ -28,20 +28,20 @@ export type FrequencyPercentageValue =
 
 export function parseFrequencyPercentage(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): FrequencyPercentageValue | null {
   return frequencyPercentageParser(input, context);
 }
 
 export function consumeFrequencyPercentage(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<FrequencyPercentageValue> {
   return frequencyPercentageConsumer(c);
 }
 
 export function createFrequencyPercentageConsumer(
   options: FrequencyPercentageConsumerOptions = {},
-): TryConsumer<FrequencyPercentageValue> {
+): TryConsumer<FrequencyPercentageValue, MathContext> {
   const literalConsumer = createFrequencyPercentageLiteralConsumer(options);
   const range = frequencyPercentageRange(options);
 

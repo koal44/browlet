@@ -1,7 +1,7 @@
 import { InternalError } from '../../infra/internal-error';
 
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
-import { isWhitespaceToken } from './component-value';
+import { isWhitespaceToken, type ComponentValue } from './component-value';
 import { TokenKind } from './tokens';
 
 // =============================================================================
@@ -24,20 +24,21 @@ type AtLeast<T, Minimum extends number> =
   Minimum extends 4 ? [T, T, T, T, ...T[]] :
   T[];
 
-type Multiplier<T, Output extends T[] = T[]> = TryConsumer<Output> & {
-  base: TryConsumer<T>;
+type Multiplier<T, Output extends T[], Context> = TryConsumer<Output, Context> & {
+  base: TryConsumer<T, Context>;
   min: number;
   max: number;
   separator: 'none' | 'comma';
-  contextAfter?: ContextAfter<T>;
+  contextAfter?: ContextAfter<T, Context>;
 };
 
-type MultiplierOptions<T> = {
-  contextAfter?: ContextAfter<T>;
+type MultiplierOptions<T, Context> = {
+  contextAfter?: ContextAfter<T, Context>;
 };
 
-type ContextAfter<T> =
-  (value: T, context: unknown) => unknown;
+/** Update this production's settings without discarding context required by its siblings. */
+type ContextAfter<T, Context> =
+  <SelectedContext extends Context>(value: T, context: SelectedContext) => SelectedContext;
 
 type SequenceValue<P extends AnyMultiplier[]> = {
   [I in keyof P]: MultiplierOutputOf<P[I]>;
@@ -52,13 +53,22 @@ type SomeOfValue<P extends AnyMultiplier[]> = {
 type AlternativeValue<P extends AnyMultiplier[]> =
   MultiplierOutputOf<P[number]>;
 
-type AnyMultiplier = Multiplier<any, any>;
+type AnyMultiplier = Multiplier<any, any, any>;
+
+/** A composition requires the context accepted by every participating grammar. */
+type GrammarContext<P extends AnyMultiplier[]> =
+  ContextRequirement<P[number]> extends (context: infer Context) => void
+    ? Context
+    : unknown;
+
+type ContextRequirement<P> =
+  P extends Multiplier<any, any, infer Context> ? (context: Context) => void : never;
 
 type MultiplierOutputOf<P> =
-  P extends Multiplier<any, infer Output> ? Output : never;
+  P extends Multiplier<any, infer Output, any> ? Output : never;
 
-type Projector<Value, R> =
-  (value: Value, context: unknown) => TryConsumerResult<R>;
+type Projector<Value, R, Context> =
+  (value: Value, context: Context) => TryConsumerResult<R>;
 
 // =============================================================================
 // Structural grammar combinators
@@ -70,10 +80,10 @@ type Projector<Value, R> =
  * Multipliers are greedy. Callers must factor productions where an earlier
  * multiplier can consume input required by a later component.
  */
-export function sequenceOf<const P extends AnyMultiplier[], R>(
+export function sequenceOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<SequenceValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<SequenceValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return consumeSequenceOf(false, consumers, project);
 }
 
@@ -82,18 +92,18 @@ export function sequenceOf<const P extends AnyMultiplier[], R>(
  *
  * Shares the greedy multiplier behavior of `sequenceOf`.
  */
-export function requiredSequenceOf<const P extends AnyMultiplier[], R>(
+export function requiredSequenceOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<SequenceValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<SequenceValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return consumeSequenceOf(true, consumers, project);
 }
 
-function consumeSequenceOf<const P extends AnyMultiplier[], R>(
+function consumeSequenceOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   requireAnyValue: boolean,
   consumers: P,
-  project: Projector<SequenceValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<SequenceValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return (c): TryConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
@@ -143,10 +153,10 @@ function consumeSequenceOf<const P extends AnyMultiplier[], R>(
  * Alternatives are tried in order and commit to the first success. Callers
  * must factor productions where one alternative can accept a prefix of another.
  */
-export function oneOf<const P extends AnyMultiplier[], R>(
+export function oneOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<AlternativeValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<AlternativeValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return (c): TryConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
@@ -196,10 +206,10 @@ export function oneOf<const P extends AnyMultiplier[], R>(
  * Components are tried in declaration order. Callers must factor productions
  * whose components can consume the same leading input.
  */
-export function allOf<const P extends AnyMultiplier[], R>(
+export function allOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<AllOfValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<AllOfValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return consumeAllOf(false, consumers, project);
 }
 
@@ -208,18 +218,18 @@ export function allOf<const P extends AnyMultiplier[], R>(
  *
  * Shares the overlapping-component constraint of `allOf`.
  */
-export function requiredAllOf<const P extends AnyMultiplier[], R>(
+export function requiredAllOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<AllOfValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<AllOfValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return consumeAllOf(true, consumers, project);
 }
 
-function consumeAllOf<const P extends AnyMultiplier[], R>(
+function consumeAllOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   requireAnyValue: boolean,
   consumers: P,
-  project: Projector<AllOfValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<AllOfValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return (c): TryConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
@@ -269,10 +279,10 @@ function consumeAllOf<const P extends AnyMultiplier[], R>(
  * Components are tried in declaration order. Callers must factor productions
  * whose components can consume the same leading input.
  */
-export function someOf<const P extends AnyMultiplier[], R>(
+export function someOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<SomeOfValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<SomeOfValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return consumeSomeOf(false, consumers, project);
 }
 
@@ -281,18 +291,18 @@ export function someOf<const P extends AnyMultiplier[], R>(
  *
  * Shares the overlapping-component constraint of `someOf`.
  */
-export function requiredSomeOf<const P extends AnyMultiplier[], R>(
+export function requiredSomeOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   consumers: P,
-  project: Projector<SomeOfValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<SomeOfValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return consumeSomeOf(true, consumers, project);
 }
 
-function consumeSomeOf<const P extends AnyMultiplier[], R>(
+function consumeSomeOf<const P extends AnyMultiplier[], R, Context = GrammarContext<P>>(
   requireAnyValue: boolean,
   consumers: P,
-  project: Projector<SomeOfValue<P>, R>,
-): TryConsumer<R> {
+  project: Projector<SomeOfValue<P>, R, Context>,
+): TryConsumer<R, Context & GrammarContext<P>> {
   return (c): TryConsumerResult<R> => {
     const start = c.pos();
     const outerContext = c.context;
@@ -344,12 +354,12 @@ function consumeSomeOf<const P extends AnyMultiplier[], R>(
 // Required consumer adapter
 // =============================================================================
 
-type RequiredComponentConsumer<T> = (c: TokenCursor) => T;
+type RequiredComponentConsumer<T, Context> = (c: TokenCursor<ComponentValue, Context>) => T;
 
-export function required<T>(
-  consume: TryConsumer<T>,
+export function required<T, Context = unknown>(
+  consume: TryConsumer<T, Context>,
   expected: string,
-): RequiredComponentConsumer<T> {
+): RequiredComponentConsumer<T, Context> {
   return (c): T => {
     const start = c.pos();
     const outerContext = c.context;
@@ -378,41 +388,41 @@ export const DEFAULT_REPEAT_LIMIT = 20;
 /**
  * CSS value default multiplicity: `a`.
  */
-export function one<T>(
-  consumer: TryConsumer<T>,
-  options?: MultiplierOptions<T>,
-): Multiplier<T, [T]> {
-  return createMultiplier<T, [T]>(consumer, 1, 1, 'none', options);
+export function one<T, Context = unknown>(
+  consumer: TryConsumer<T, Context>,
+  options?: MultiplierOptions<T, Context>,
+): Multiplier<T, [T], Context> {
+  return createMultiplier<T, [T], Context>(consumer, 1, 1, 'none', options);
 }
 
 /**
  * CSS value optional multiplicity: `a?`.
  */
-export function opt<T>(
-  consumer: TryConsumer<T>,
-  options?: MultiplierOptions<T>,
-): Multiplier<T, OptionalValue<T>> {
-  return createMultiplier<T, OptionalValue<T>>(consumer, 0, 1, 'none', options);
+export function opt<T, Context = unknown>(
+  consumer: TryConsumer<T, Context>,
+  options?: MultiplierOptions<T, Context>,
+): Multiplier<T, OptionalValue<T>, Context> {
+  return createMultiplier<T, OptionalValue<T>, Context>(consumer, 0, 1, 'none', options);
 }
 
 /**
  * CSS value zero-or-more multiplicity: `a*`.
  */
-export function any<T>(
-  consumer: TryConsumer<T>,
-  options?: MultiplierOptions<T>,
-): Multiplier<T, T[]> {
-  return createMultiplier<T, T[]>(consumer, 0, DEFAULT_REPEAT_LIMIT, 'none', options);
+export function any<T, Context = unknown>(
+  consumer: TryConsumer<T, Context>,
+  options?: MultiplierOptions<T, Context>,
+): Multiplier<T, T[], Context> {
+  return createMultiplier<T, T[], Context>(consumer, 0, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
 
 /**
  * CSS value one-or-more multiplicity: `a+`.
  */
-export function plus<T>(
-  consumer: TryConsumer<T>,
-  options?: MultiplierOptions<T>,
-): Multiplier<T, NonEmptyArray<T>> {
-  return createMultiplier<T, NonEmptyArray<T>>(consumer, 1, DEFAULT_REPEAT_LIMIT, 'none', options);
+export function plus<T, Context = unknown>(
+  consumer: TryConsumer<T, Context>,
+  options?: MultiplierOptions<T, Context>,
+): Multiplier<T, NonEmptyArray<T>, Context> {
+  return createMultiplier<T, NonEmptyArray<T>, Context>(consumer, 1, DEFAULT_REPEAT_LIMIT, 'none', options);
 }
 
 /**
@@ -421,9 +431,9 @@ export function plus<T>(
  * The consumer is greedy. Backtracking support can later be attached here by
  * exposing repetition choices without changing the public shape.
  */
-export function repeat<T, const Count extends number>(item: TryConsumer<T>, min: Count, max: NoInfer<Count>, options?: MultiplierOptions<T>): Multiplier<T, Tuple<T, Count>>;
-export function repeat<T, const Minimum extends number>(item: TryConsumer<T>, min: Minimum, max?: number, options?: MultiplierOptions<T>): Multiplier<T, AtLeast<T, Minimum>>;
-export function repeat<T, Output extends T[]>(item: TryConsumer<T>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
+export function repeat<T, const Count extends number, Context = unknown>(item: TryConsumer<T, Context>, min: Count, max: NoInfer<Count>, options?: MultiplierOptions<T, Context>): Multiplier<T, Tuple<T, Count>, Context>;
+export function repeat<T, const Minimum extends number, Context = unknown>(item: TryConsumer<T, Context>, min: Minimum, max?: number, options?: MultiplierOptions<T, Context>): Multiplier<T, AtLeast<T, Minimum>, Context>;
+export function repeat<T, Output extends T[], Context>(item: TryConsumer<T, Context>, min: number, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T, Context>): Multiplier<T, Output, Context> {
   if (!Number.isInteger(min) || min < 0) {
     throw new InternalError(`Invalid repeat minimum ${min}`);
   }
@@ -432,16 +442,16 @@ export function repeat<T, Output extends T[]>(item: TryConsumer<T>, min: number,
     throw new InternalError(`Invalid repeat maximum ${max}`);
   }
 
-  return createMultiplier<T, Output>(item, min, max, 'none', options);
+  return createMultiplier<T, Output, Context>(item, min, max, 'none', options);
 }
 
 /**
  * CSS value comma multiplier: `a#` / `a#{min,max}`.
  */
-export function commaRepeat<T>(item: TryConsumer<T>, options?: MultiplierOptions<T>): Multiplier<T, NonEmptyArray<T>>;
-export function commaRepeat<T, const Count extends number>(item: TryConsumer<T>, min: Count, max: NoInfer<Count>, options?: MultiplierOptions<T>): Multiplier<T, Tuple<T, Count>>;
-export function commaRepeat<T, const Minimum extends number>(item: TryConsumer<T>, min: Minimum, max?: number, options?: MultiplierOptions<T>): Multiplier<T, AtLeast<T, Minimum>>;
-export function commaRepeat<T, Output extends T[]>(item: TryConsumer<T>, minOrOptions: number | MultiplierOptions<T> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T>): Multiplier<T, Output> {
+export function commaRepeat<T, Context = unknown>(item: TryConsumer<T, Context>, options?: MultiplierOptions<T, Context>): Multiplier<T, NonEmptyArray<T>, Context>;
+export function commaRepeat<T, const Count extends number, Context = unknown>(item: TryConsumer<T, Context>, min: Count, max: NoInfer<Count>, options?: MultiplierOptions<T, Context>): Multiplier<T, Tuple<T, Count>, Context>;
+export function commaRepeat<T, const Minimum extends number, Context = unknown>(item: TryConsumer<T, Context>, min: Minimum, max?: number, options?: MultiplierOptions<T, Context>): Multiplier<T, AtLeast<T, Minimum>, Context>;
+export function commaRepeat<T, Output extends T[], Context>(item: TryConsumer<T, Context>, minOrOptions: number | MultiplierOptions<T, Context> = 1, max = DEFAULT_REPEAT_LIMIT, options?: MultiplierOptions<T, Context>): Multiplier<T, Output, Context> {
   const min =
     typeof minOrOptions === 'number'
       ? minOrOptions
@@ -460,7 +470,7 @@ export function commaRepeat<T, Output extends T[]>(item: TryConsumer<T>, minOrOp
     throw new InternalError(`Invalid comma repeat maximum ${max}`);
   }
 
-  return createMultiplier<T, Output>(
+  return createMultiplier<T, Output, Context>(
     item,
     min,
     max,
@@ -469,16 +479,16 @@ export function commaRepeat<T, Output extends T[]>(item: TryConsumer<T>, minOrOp
   );
 }
 
-function createMultiplier<T, Output extends T[]>(
-  base: TryConsumer<T>,
+function createMultiplier<T, Output extends T[], Context>(
+  base: TryConsumer<T, Context>,
   min: number,
   max: number,
   separator: 'none' | 'comma',
-  options?: MultiplierOptions<T>,
-): Multiplier<T, Output> {
-  const multiplier = ((c: TokenCursor): TryConsumerResult<Output> => {
+  options?: MultiplierOptions<T, Context>,
+): Multiplier<T, Output, Context> {
+  const multiplier = ((c: TokenCursor<ComponentValue, Context>): TryConsumerResult<Output> => {
     return consumeMultiplier(c, multiplier);
-  }) as Multiplier<T, Output>;
+  }) as Multiplier<T, Output, Context>;
 
   multiplier.base = base;
   multiplier.min = min;
@@ -503,11 +513,11 @@ export type AdaptConsumerOptions = {
  *
  * The `complete` option requires consumption through eof.
  */
-export function adaptConsumer<Input, Output>(
-  consume: TryConsumer<Input>,
-  projector: Projector<Input, Output>,
+export function adaptConsumer<Input, Output, Context = unknown>(
+  consume: TryConsumer<Input, Context>,
+  projector: Projector<Input, Output, Context>,
   options: AdaptConsumerOptions = {},
-): TryConsumer<Output> {
+): TryConsumer<Output, Context> {
   return (c): TryConsumerResult<Output> => {
     const start = c.pos();
     const outerContext = c.context;
@@ -542,7 +552,7 @@ export function adaptConsumer<Input, Output>(
   };
 }
 
-export function withTrivia<T>(consume: TryConsumer<T>): TryConsumer<T> {
+export function withTrivia<T, Context = unknown>(consume: TryConsumer<T, Context>): TryConsumer<T, Context> {
   return (c) => {
     const start = c.pos();
     const outerContext = c.context;
@@ -573,14 +583,14 @@ export function withTrivia<T>(consume: TryConsumer<T>): TryConsumer<T> {
  * A recursive branch must consume input or enter a nested component cursor
  * before invoking that reference again.
  */
-export function recursive<T>(
-  create: (self: TryConsumer<T>) => TryConsumer<T>,
-): TryConsumer<T> {
+export function recursive<T, Context = unknown>(
+  create: (self: TryConsumer<T, Context>) => TryConsumer<T, Context>,
+): TryConsumer<T, Context> {
   const reference: {
-    consume?: TryConsumer<T>;
+    consume?: TryConsumer<T, Context>;
   } = {};
 
-  const self: TryConsumer<T> = (c) => {
+  const self: TryConsumer<T, Context> = (c) => {
     const consume = reference.consume;
 
     if (consume === undefined) {
@@ -599,18 +609,18 @@ export function recursive<T>(
 // Grammar execution helpers
 // =============================================================================
 
-function consumeMultiplier<T, Output extends T[]>(
-  c: TokenCursor,
-  multiplier: Multiplier<T, Output>,
+function consumeMultiplier<T, Output extends T[], Context>(
+  c: TokenCursor<ComponentValue, Context>,
+  multiplier: Multiplier<T, Output, Context>,
 ): TryConsumerResult<Output> {
   return multiplier.separator === 'comma'
     ? consumeCommaMultiplier(c, multiplier)
     : consumePlainMultiplier(c, multiplier);
 }
 
-function consumePlainMultiplier<T, Output extends T[]>(
-  c: TokenCursor,
-  multiplier: Multiplier<T, Output>,
+function consumePlainMultiplier<T, Output extends T[], Context>(
+  c: TokenCursor<ComponentValue, Context>,
+  multiplier: Multiplier<T, Output, Context>,
 ): TryConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
@@ -648,9 +658,9 @@ function consumePlainMultiplier<T, Output extends T[]>(
   return values as Output;
 }
 
-function consumeCommaMultiplier<T, Output extends T[]>(
-  c: TokenCursor,
-  multiplier: Multiplier<T, Output>,
+function consumeCommaMultiplier<T, Output extends T[], Context>(
+  c: TokenCursor<ComponentValue, Context>,
+  multiplier: Multiplier<T, Output, Context>,
 ): TryConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
@@ -731,9 +741,9 @@ function consumeCommaMultiplier<T, Output extends T[]>(
   return values as Output;
 }
 
-function consumeEmpty<T, Output extends T[]>(
-  c: TokenCursor,
-  multiplier: Multiplier<T, Output>,
+function consumeEmpty<T, Output extends T[], Context>(
+  c: TokenCursor<ComponentValue, Context>,
+  multiplier: Multiplier<T, Output, Context>,
 ): TryConsumerResult<Output> {
   const start = c.pos();
   const outerContext = c.context;
@@ -761,7 +771,7 @@ type UnorderedConsumeResult = {
 };
 
 function consumeUnordered<const P extends AnyMultiplier[]>(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, GrammarContext<P>>,
   consumers: P,
 ): UnorderedConsumeResult {
   const remaining = consumers.map((consumer, index) => ({ consumer, index }));

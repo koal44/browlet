@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
@@ -28,20 +28,20 @@ export type AnglePercentageValue =
 
 export function parseAnglePercentage(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): AnglePercentageValue | null {
   return anglePercentageParser(input, context);
 }
 
 export function consumeAnglePercentage(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<AnglePercentageValue> {
   return anglePercentageConsumer(c);
 }
 
 export function createAnglePercentageConsumer(
   options: DimensionPercentageConsumerOptions = {},
-): TryConsumer<AnglePercentageValue> {
+): TryConsumer<AnglePercentageValue, MathContext> {
   const literalConsumer = createAnglePercentageLiteralConsumer(options);
   const range = anglePercentageRange(options);
 

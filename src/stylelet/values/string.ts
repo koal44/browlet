@@ -21,7 +21,7 @@ export const stringDef: ValueDefinition<StringValue> = {
 
 export function parseString(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): StringValue | null {
   return stringParser(input, context);
 }

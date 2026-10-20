@@ -1,7 +1,7 @@
-import { parseDeclarationList, type ParserInput, type ParsingContext } from '../syntax/index';
+import { parseDeclarationList, type ParserInput } from '../syntax/index';
 
 import {
-  interpretPropertyDeclarations, serializePropertyDeclaration, type PropertyDeclaration,
+  interpretPropertyDeclarations, serializePropertyDeclaration, type PropertyDeclaration, type PropertyContext,
 } from './property';
 
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
@@ -23,7 +23,7 @@ export class CSSDeclarationBlock {
   }
 
   /** Replace the block with parsed attribute or CSSOM text. */
-  setText(value: string, context: Partial<ParsingContext>): void {
+  setText(value: string, context: PropertyContext): void {
     this.#replace(parseDeclarationBlock(value, context));
   }
 
@@ -74,8 +74,8 @@ export class CSSDeclarationBlock {
 /** Parse supported property declarations without interpreting nested style rules. */
 // https://drafts.csswg.org/cssom/#parse-a-css-declaration-block
 // TODO: retain per-declaration parse-time URL bases when URL-valued properties are registered.
-export function parseDeclarationBlock(input: ParserInput, context: Partial<ParsingContext>): PropertyDeclaration[] {
-  return interpretPropertyDeclarations(parseDeclarationList(input, context));
+export function parseDeclarationBlock(input: ParserInput, context: PropertyContext): PropertyDeclaration[] {
+  return interpretPropertyDeclarations(parseDeclarationList(input, context), context);
 }
 
 /** Serialize one declaration without changing its value stage. */

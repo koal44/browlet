@@ -98,7 +98,7 @@ export function lengthLiteral(
 
 export function parseLength(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): LengthLiteral | null {
   return lengthParser(input, context);
 }

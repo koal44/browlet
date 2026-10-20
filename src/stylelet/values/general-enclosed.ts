@@ -20,8 +20,8 @@ export type GeneralEnclosedBlock =
   | FunctionBlock<AnyValue | undefined>
   | ParensBlock<AnyValue | undefined>;
 
-export function parseGeneralEnclosed(input: ParserInput): GeneralEnclosedValue | null {
-  return generalEnclosedParser(input);
+export function parseGeneralEnclosed(input: ParserInput, context: unknown): GeneralEnclosedValue | null {
+  return generalEnclosedParser(input, context);
 }
 
 export function consumeGeneralEnclosed(
@@ -59,10 +59,10 @@ const generalEnclosedConsumer = oneOf(
     one(consumeFunctionBlock),
     one(consumeParensBlock),
   ],
-  ([component]): GeneralEnclosedValue | null => {
+  ([component], context): GeneralEnclosedValue | null => {
     const value = component.value.tokens.length === 0
       ? undefined
-      : parseAnyValue(component.value);
+      : parseAnyValue(component.value, context);
 
     return value === null
       ? null

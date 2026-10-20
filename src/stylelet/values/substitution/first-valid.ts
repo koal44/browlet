@@ -10,8 +10,8 @@ export type FirstValidValue = {
   arguments: [DeclarationValue, ...DeclarationValue[]];
 };
 
-export function parseFirstValid(input: ParserInput): FirstValidValue | null {
-  return firstValidParser(input);
+export function parseFirstValid(input: ParserInput, context: unknown): FirstValidValue | null {
+  return firstValidParser(input, context);
 }
 
 export function consumeFirstValid(

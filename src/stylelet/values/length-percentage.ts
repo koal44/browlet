@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage, type ValueDefinition } from '../value-processing/index';
 import {
@@ -34,20 +34,20 @@ export const lengthPercentageDef: ValueDefinition<LengthPercentageValue, MathCon
 
 export function parseLengthPercentage(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): LengthPercentageValue | null {
   return lengthPercentageParser(input, context);
 }
 
 export function consumeLengthPercentage(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<LengthPercentageValue> {
   return lengthPercentageConsumer(c);
 }
 
 export function createLengthPercentageConsumer(
   options: LengthPercentageConsumerOptions = {},
-): TryConsumer<LengthPercentageValue> {
+): TryConsumer<LengthPercentageValue, MathContext> {
   const literalConsumer = createLengthPercentageLiteralConsumer(options);
   const range = lengthPercentageRange(options);
 

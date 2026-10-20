@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   isTokenKind, serializeComponentValues,
 } from '../../../../src/stylelet/syntax/component-value';
@@ -11,7 +11,7 @@ import {
 
 describe('<first-valid()>', () => {
   it('parses a nonempty comma-separated list of declaration values', () => {
-    const value = parseFirstValid('first-valid(red, 1px, rgb(0, 0, 0))');
+    const value = parseFirstValid('first-valid(red, 1px, rgb(0, 0, 0))', {});
 
     expect(value?.type).toBe('first-valid');
     expect(value?.arguments.map((argument) =>
@@ -20,12 +20,12 @@ describe('<first-valid()>', () => {
   });
 
   it('matches the function name case-insensitively with outer trivia', () => {
-    expect(parseFirstValid('  FIRST-VALID(red)  ')?.type).toBe('first-valid');
+    expect(parseFirstValid('  FIRST-VALID(red)  ', {})?.type).toBe('first-valid');
   });
 
   it('uses braces to bound an argument containing top-level commas', () => {
     const value = parseFirstValid(
-      'first-valid({Times, serif}, sans-serif)',
+      'first-valid({Times, serif}, sans-serif)', {},
     );
 
     expect(value?.arguments.map((argument) =>
@@ -34,7 +34,7 @@ describe('<first-valid()>', () => {
   });
 
   it('allows braces around an argument that does not require them', () => {
-    const value = parseFirstValid('first-valid({red}, blue)');
+    const value = parseFirstValid('first-valid({red}, blue)', {});
 
     expect(value?.arguments.map((argument) =>
       serializeComponentValues(argument.components.tokens)
@@ -43,7 +43,7 @@ describe('<first-valid()>', () => {
   });
 
   it('preserves braces required to bound a free-form argument', () => {
-    const value = parseFirstValid('first-valid({Times, serif}, sans-serif)');
+    const value = parseFirstValid('first-valid({Times, serif}, sans-serif)', {});
 
     expect(serializeFirstValid(value!))
       .toBe('first-valid({Times, serif}, sans-serif)');
@@ -57,12 +57,12 @@ describe('<first-valid()>', () => {
     'first-valid(red; blue, green)',
     'first-valid(red {blue}, green)',
   ])('rejects %j', (input) => {
-    expect(parseFirstValid(input)).toBeNull();
+    expect(parseFirstValid(input, {})).toBeNull();
   });
 
   it('consumes one notation without consuming following input', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('first-valid(red, blue) trailing'), emptyParsingContext,
+      parseListOfComponentValues('first-valid(red, blue) trailing', {}), {},
     );
 
     expect(consumeFirstValid(c)?.type).toBe('first-valid');
@@ -71,7 +71,7 @@ describe('<first-valid()>', () => {
 
   it('restores the cursor when the notation does not match', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('first-valid(red,)'), emptyParsingContext,
+      parseListOfComponentValues('first-valid(red,)', {}), {},
     );
 
     expect(consumeFirstValid(c)).toBeNull();

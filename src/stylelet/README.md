@@ -60,7 +60,7 @@ Use these responsibilities when adding or reviewing parsing code:
    consumption calls it before deciding whether to retry input as a rule;
    `interpretPropertyDeclarations()` applies it to declaration-only syntax lists.
 3. **CSSOM rule interpretation** in [cssom/parser.ts](cssom/parser.ts) recognizes
-   rule grammars through `CSSParsingContext`, producing implementations with
+   rule grammars through `StylesheetContext`, producing implementations with
    parsed selectors and interpreted declarations. It selects child grammars
    before entering blocks. Each context method consumes and interprets the whole
    rule; `createStyleRule()` assembles already interpreted declarations and children.

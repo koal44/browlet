@@ -126,12 +126,12 @@ const syntaxTypeDefs = {
 type DefinedSyntaxTypeName = keyof typeof syntaxTypeDefs;
 
 type DefValue<Definition> =
-  Definition extends { consume: TryConsumer<infer Value>; }
+  Definition extends { consume: TryConsumer<infer Value, never>; }
     ? Value
     : never;
 
-export function parseSyntax(input: ParserInput): SyntaxValue | null {
-  return syntaxParser(input);
+export function parseSyntax(input: ParserInput, context: unknown): SyntaxValue | null {
+  return syntaxParser(input, context);
 }
 
 export function consumeSyntax(
@@ -142,7 +142,7 @@ export function consumeSyntax(
 
 export function createSyntaxConsumer(
   syntax: SyntaxValue,
-): TryConsumer<ParsedSyntaxValue> {
+): TryConsumer<ParsedSyntaxValue, PropertyContext> {
   if (syntax.type === 'universal-syntax') {
     return universalSyntaxValueConsumer;
   }
@@ -311,7 +311,7 @@ const syntaxCombinatorConsumer = consumePipeDelim;
 // <syntax-string> = <string> whose value parses as <syntax>
 const syntaxStringConsumer = adaptConsumer(
   consumeStringToken,
-  (token) => parseSyntax(token.value),
+  (token, context) => parseSyntax(token.value, context),
 );
 
 /*
@@ -428,8 +428,8 @@ function serializeParsedSyntaxType(value: ParsedSyntaxType): string {
 
 function createSyntaxComponentConsumer(
   component: SyntaxComponent,
-): TryConsumer<ParsedSyntaxValue> {
-  const consume: TryConsumer<ParsedSyntaxComponent> =
+): TryConsumer<ParsedSyntaxValue, PropertyContext> {
+  const consume: TryConsumer<ParsedSyntaxComponent, PropertyContext> =
     component.type === 'syntax-type'
       ? createSyntaxTypeConsumer(component.name)
       : adaptConsumer(
@@ -468,7 +468,7 @@ function createSyntaxComponentConsumer(
 
 function createSyntaxTypeConsumer(
   name: SyntaxTypeName,
-): TryConsumer<ParsedSyntaxType> {
+): TryConsumer<ParsedSyntaxType, PropertyContext> {
   switch (name) {
     case 'length':
       return adaptConsumer(syntaxTypeDefs.length.consume, (value): ParsedSyntaxType => ({

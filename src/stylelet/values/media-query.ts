@@ -4,8 +4,8 @@ import {
   consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeLessDelim,
   consumeParensBlock, adaptConsumer, any, one, oneOf, opt, plus, sequenceOf, withTrivia,
   serializeCssIdentifier, createComponentParser, parseAsComponentGrammar, parseListAsComponentGrammar,
-  parseListOfComponentValues, TokenCursor, TokenKind,
-  type ParensBlock, type ParserInput, type TryConsumer, type TryConsumerResult,
+  parseListOfComponentValues, TokenKind,
+  type ComponentValue, type TokenCursor, type ParensBlock, type ParserInput, type TryConsumer, type TryConsumerResult,
 } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
 
@@ -125,7 +125,7 @@ type MediaFeatureComparison = '<' | '<=' | '>' | '>=' | '=';
 // https://drafts.csswg.org/mediaqueries-4/#mq-syntax
 export function parseMediaQuery(
   input: ParserInput,
-  context: unknown = undefined,
+  context: MathContext,
 ): MediaQuery | null {
   return mediaQueryParser(input, context);
 }
@@ -135,11 +135,10 @@ export function parseMediaQuery(
 // https://drafts.csswg.org/mediaqueries-4/#mq-syntax
 export function parseMediaQueryList(
   input: ParserInput,
-  context: unknown = undefined,
+  context: MathContext,
 ): MediaQuery[] {
-  const list = parseListOfComponentValues(input);
-  const grammarContext = input instanceof TokenCursor ? input.context : context;
-  const queries = parseListAsComponentGrammar(list, withTrivia(mediaQueryConsumer), grammarContext)
+  const list = parseListOfComponentValues(input, context);
+  const queries = parseListAsComponentGrammar(list, withTrivia(mediaQueryConsumer), context)
     .map((query) => query ?? invalidMediaQuery());
 
   // SPEC_CLASH(media-query-trailing-comma): Follow browsers by retaining the
@@ -150,7 +149,7 @@ export function parseMediaQueryList(
 }
 
 export function consumeMediaQuery(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<MediaQuery> {
   return mediaQueryConsumer(c);
 }
@@ -607,8 +606,8 @@ const mediaFeatureRangeConsumer = oneOf(
 );
 
 function createMediaFeatureIntervalConsumer(
-  comparisonConsumer: TryConsumer<'<' | '<=' | '>' | '>='>,
-): TryConsumer<MediaFeatureRange> {
+  comparisonConsumer: TryConsumer<'<' | '<=' | '>' | '>=', MathContext>,
+): TryConsumer<MediaFeatureRange, MathContext> {
   return sequenceOf(
     [
       one(mediaFeatureValueConsumer),
@@ -644,11 +643,11 @@ const mediaFeatureConsumer = oneOf(
 );
 
 // <media-in-parens> = ( <media-condition> ) | ( <media-feature> ) | <general-enclosed>
-const mediaInParensConsumer: TryConsumer<MediaInParens> = oneOf(
+const mediaInParensConsumer: TryConsumer<MediaInParens, MathContext> = oneOf(
   [
     one(adaptConsumer(
       consumeParensBlock,
-      (component, context): MediaConditionBlock | null => {
+      (component, context: MathContext): MediaConditionBlock | null => {
         const value = parseAsComponentGrammar(
           component.value,
           withTrivia(mediaConditionConsumer),
@@ -660,7 +659,7 @@ const mediaInParensConsumer: TryConsumer<MediaInParens> = oneOf(
     )),
     one(adaptConsumer(
       consumeParensBlock,
-      (component, context): MediaFeatureBlock | null => {
+      (component, context: MathContext): MediaFeatureBlock | null => {
         const value = parseAsComponentGrammar(
           component.value,
           withTrivia(mediaFeatureConsumer),
@@ -706,7 +705,7 @@ const mediaOrConsumer = sequenceOf(
 );
 
 // <media-condition-without-or> = <media-not> | <media-in-parens> <media-and>*
-const mediaConditionWithoutOrConsumer: TryConsumer<MediaConditionWithoutOr> = oneOf(
+const mediaConditionWithoutOrConsumer: TryConsumer<MediaConditionWithoutOr, MathContext> = oneOf(
   [
     one(mediaNotConsumer),
     one(sequenceOf(
@@ -736,7 +735,7 @@ const mediaConditionWithoutOrConsumer: TryConsumer<MediaConditionWithoutOr> = on
  *                   | <media-in-parens> <media-or>+
  *                   | <media-in-parens>
  */
-const mediaConditionConsumer: TryConsumer<MediaCondition> = oneOf(
+const mediaConditionConsumer: TryConsumer<MediaCondition, MathContext> = oneOf(
   [
     one(mediaNotConsumer),
     one(sequenceOf(
@@ -778,7 +777,7 @@ const mediaTypeConsumer = adaptConsumer(
 // <media-query> = <media-condition>
 //               | [ not | only ]? <media-type>
 //                 [ and <media-condition-without-or> ]?
-const mediaQueryConsumer: TryConsumer<MediaQuery> = oneOf(
+const mediaQueryConsumer: TryConsumer<MediaQuery, MathContext> = oneOf(
   [
     one(adaptConsumer(
       mediaConditionConsumer,

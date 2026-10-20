@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { InternalError } from '../../../../src/infra/internal-error';
 import {
-  emptyParsingContext, TokenCursor, type TryConsumer,
+  TokenCursor, type TryConsumer,
   type TryConsumerResult,
 } from '../../../../src/stylelet/syntax/token-cursor';
 import { consumeWhitespace } from '../../../../src/stylelet/syntax/component-consumers';
-import { isIdentToken } from '../../../../src/stylelet/syntax/component-value';
+import { isIdentToken, type ComponentValue } from '../../../../src/stylelet/syntax/component-value';
 import { parseAsComponentGrammar, parseListAsComponentGrammar, parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { EOFToken, TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
@@ -14,8 +14,11 @@ import {
   sequenceOf, someOf, withTrivia,
 } from '../../../../src/stylelet/syntax/component-grammar';
 
-const cursor = (css: string, context: unknown = emptyParsingContext): TokenCursor =>
-  new TokenCursor(parseListOfComponentValues(css), context);
+function cursor(css: string): TokenCursor;
+function cursor<Context>(css: string, context: Context): TokenCursor<ComponentValue, Context>;
+function cursor(css: string, context: unknown = {}): TokenCursor {
+  return new TokenCursor(parseListOfComponentValues(css, context), context);
+}
 
 const literalConsumer = <T extends string>(expected: T): TryConsumer<T> => {
   return (c: TokenCursor): TryConsumerResult<T> => {
@@ -1235,6 +1238,45 @@ describe('component combinator null projections', () => {
 });
 
 describe('component grammar context plumbing', () => {
+  it.each([parseAsComponentGrammar, parseListAsComponentGrammar])(
+    'uses the selected context when parsing an existing cursor (%#)',
+    (parse) => {
+      const previous = { mode: 'previous' };
+      const selected = { mode: 'selected' };
+      const c = cursor('skip a', previous);
+      c.restore(2);
+      const seen: unknown[] = [];
+      const consume: TryConsumer<'a'> = (inner) => {
+        seen.push(inner.context);
+        return consumeA(inner);
+      };
+
+      parse(c, consume, selected);
+
+      expect(seen).toEqual([selected]);
+      expect(c.context).toBe(previous);
+      expect(c.eof()).toBe(true);
+    },
+  );
+
+  it.each([parseAsComponentGrammar, parseListAsComponentGrammar])(
+    'preserves the caller context when the selected grammar throws (%#)',
+    (parse) => {
+      const previous = { mode: 'previous' };
+      const selected = { mode: 'selected' };
+      const c = cursor('a', previous);
+      const failure = new InternalError('Grammar failed');
+      const seen: unknown[] = [];
+
+      expect(() => parse(c, (inner) => {
+        seen.push(inner.context);
+        throw failure;
+      }, selected)).toThrow(failure);
+      expect(seen).toEqual([selected]);
+      expect(c.context).toBe(previous);
+    },
+  );
+
   it('preserves an existing stream position and context through grammar entry points', () => {
     const context = { mode: 'stream-test' };
     const seen: unknown[] = [];
@@ -1244,12 +1286,12 @@ describe('component grammar context plumbing', () => {
     };
     const single = cursor('skip a', context);
     single.restore(2);
-    expect(parseAsComponentGrammar(single, consume)).toBe('a');
+    expect(parseAsComponentGrammar(single, consume, single.context)).toBe('a');
     expect(single.eof()).toBe(true);
 
     const list = cursor('skip a, a', context);
     list.restore(2);
-    expect(parseListAsComponentGrammar(list, consume)).toEqual(['a', 'a']);
+    expect(parseListAsComponentGrammar(list, consume, list.context)).toEqual(['a', 'a']);
     expect(list.eof()).toBe(true);
     expect(seen).toEqual([context, context, context]);
   });
@@ -1387,11 +1429,9 @@ const contextConsumer = <T extends string, R extends string>(
   expectedMode: string,
   literal: T,
   value: R,
-): TryConsumer<R> => {
+): TryConsumer<R, DemoContext> => {
   return (c) => {
-    const context = c.context as DemoContext;
-
-    if (context.mode !== expectedMode) {
+    if (c.context.mode !== expectedMode) {
       return null;
     }
 
@@ -1407,7 +1447,7 @@ const contextConsumer = <T extends string, R extends string>(
 
 const contextLeakingNullConsumer = (
   mode: string,
-): TryConsumer<'leaked'> => {
+): TryConsumer<'leaked', DemoContext> => {
   return (c) => {
     c.context = { mode };
     return null;
@@ -1420,9 +1460,9 @@ describe('component grammar contextAfter', () => {
 
     const consume = sequenceOf(
       [
-        one(consumeA, {
+        one<'a', DemoContext>(consumeA, {
           contextAfter: (value, context) => ({
-            ...(context as DemoContext),
+            ...context,
             mode: value,
           }),
         }),
@@ -1448,9 +1488,9 @@ describe('component grammar contextAfter', () => {
 
     const consume = sequenceOf(
       [
-        one(consumeA, {
+        one<'a', DemoContext>(consumeA, {
           contextAfter: (value, context) => ({
-            ...(context as DemoContext),
+            ...context,
             mode: value,
           }),
         }),
@@ -1461,7 +1501,7 @@ describe('component grammar contextAfter', () => {
       },
     );
 
-    const c = cursor('a', baseContext);
+    const c = new TokenCursor(parseListOfComponentValues('a', baseContext), baseContext);
 
     expect(consume(c)).toEqual(['a']);
     expect(seen).toEqual([{ mode: 'a' }]);
@@ -1480,9 +1520,9 @@ describe('component grammar contextAfter', () => {
 
     const consume = sequenceOf(
       [
-        one(consumeA, {
+        one<'a', DemoContext>(consumeA, {
           contextAfter: (value, context) => ({
-            ...(context as DemoContext),
+            ...context,
             mode: value,
           }),
         }),
@@ -1507,8 +1547,8 @@ describe('component grammar contextAfter', () => {
 
     const consume = oneOf(
       [
-        one(consumeA, {
-          contextAfter: () => ({ mode: 'first' }),
+        one<'a', DemoContext>(consumeA, {
+          contextAfter: (_value, context) => ({ ...context, mode: 'first' }),
         }),
         one(contextConsumer('first', 'a', 'leaked')),
       ],
@@ -1540,20 +1580,18 @@ describe('component grammar contextAfter', () => {
 
     const consume = sequenceOf(
       [
-        any(consumeA, {
+        any<'a', ItemContext>(consumeA, {
           contextAfter: (value, context) => {
-            const current = context as ItemContext;
-
             return {
-              ...current,
-              values: [...current.values, value],
+              ...context,
+              values: [...context.values, value],
             };
           },
         }),
       ],
       ([values], context) => ({
         values,
-        contextValues: (context as ItemContext).values,
+        contextValues: context.values,
       }),
     );
 
@@ -1573,8 +1611,8 @@ describe('component grammar contextAfter', () => {
       mode: 'base',
     };
 
-    const consumeContextMutatingA: TryConsumer<string> = (c) => {
-      const mode = (c.context as DemoContext).mode ?? 'missing';
+    const consumeContextMutatingA: TryConsumer<string, DemoContext> = (c) => {
+      const mode = c.context.mode ?? 'missing';
 
       const value = consumeA(c);
 
@@ -1593,12 +1631,10 @@ describe('component grammar contextAfter', () => {
       [
         any(consumeContextMutatingA, {
           contextAfter: (_value, context) => {
-            const current = context as DemoContext;
-
             return {
-              ...current,
+              ...context,
               mode:
-                current.mode === 'base'
+                context.mode === 'base'
                   ? 'after-first'
                   : 'after-second',
             };
@@ -1632,20 +1668,18 @@ describe('component grammar contextAfter', () => {
 
     const consume = sequenceOf(
       [
-        commaRepeat(consumeA, {
+        commaRepeat<'a', ItemContext>(consumeA, {
           contextAfter: (value, context) => {
-            const current = context as ItemContext;
-
             return {
-              ...current,
-              values: [...current.values, value],
+              ...context,
+              values: [...context.values, value],
             };
           },
         }),
       ],
       ([values], context) => ({
         values,
-        contextValues: (context as ItemContext).values,
+        contextValues: context.values,
       }),
     );
 
@@ -1711,9 +1745,9 @@ describe('component grammar context restoration', () => {
       mode: 'base',
     };
 
-    const consume = repeat(consumeA, 2, 2, {
+    const consume = repeat<'a', 2, DemoContext>(consumeA, 2, 2, {
       contextAfter: (_value, context) => ({
-        ...(context as DemoContext),
+        ...context,
         mode: 'advanced',
       }),
     });

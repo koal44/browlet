@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
@@ -24,20 +24,20 @@ export type FrequencyValue = FrequencyLiteral | MathValue<'frequency'>;
 
 export function parseFrequency(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): FrequencyValue | null {
   return frequencyParser(input, context);
 }
 
 export function consumeFrequency(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<FrequencyValue> {
   return frequencyConsumer(c);
 }
 
 export function createFrequencyConsumer(
   options: FrequencyConsumerOptions = {},
-): TryConsumer<FrequencyValue> {
+): TryConsumer<FrequencyValue, MathContext> {
   const literalConsumer = createFrequencyLiteralConsumer(options);
   const range = frequencyRange(options);
 

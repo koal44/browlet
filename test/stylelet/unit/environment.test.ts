@@ -92,8 +92,8 @@ describe('Stylelet URL integration', () => {
     const engine = styles.documentScope.cascade;
     const cascaded = engine.getCascadedProperty('--image', styles.documentScope)!;
     const context = engine.getPropertyContext(cascaded);
-    const definition = defineCustomProperty({ syntax: parseSyntax('<url>')! });
-    const value = definition.parse('url("icon.svg")')!.resolve(ValueStage.Computed, context)!;
+    const definition = defineCustomProperty({ syntax: parseSyntax('<url>', {})! });
+    const value = definition.parse('url("icon.svg")', {})!.resolve(ValueStage.Computed, context)!;
 
     expect(styles.context.env.userAgent.URL).toBe(HostURL);
     if (source === 'environment') expect(styles.context.env).toBe(env);

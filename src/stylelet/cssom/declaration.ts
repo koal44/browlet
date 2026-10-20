@@ -5,11 +5,10 @@ import type { StyleletEnvironment } from '../environment';
 import { parseDeclaration } from '../syntax/index';
 import {
   interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration, CSSDeclarationBlock,
-  type PropertyDeclaration,
+  type PropertyDeclaration, type PropertyContext,
 } from '../css/index';
 
 import type { CSSRuleImpl } from './rule';
-import { CSSParsingContext } from './parser';
 
 /*
  * [Exposed=Window]
@@ -69,7 +68,7 @@ export class CSSStyleDeclarationImpl {
 
   set cssText(value: string) {
     this.#assertMutable();
-    this.#block.setText(String(value), new CSSParsingContext(null, false, this.#env));
+    this.#block.setText(String(value), {});
     this.#commit();
   }
 
@@ -136,7 +135,7 @@ export class CSSStyleDeclarationImpl {
       name,
       value,
       priority !== '',
-      new CSSParsingContext(null, false, this.#env),
+      {},
     );
     if (declaration === null || !this.#block.set(declaration)) return;
 
@@ -166,7 +165,7 @@ export class CSSStyleDeclarationImpl {
     if (this.#computed || this.#updating) return;
     if (localName !== 'style' || namespace !== null) return;
 
-    this.#block.setText(value ?? '', new CSSParsingContext(null, false, this.#env));
+    this.#block.setText(value ?? '', {});
     this.synchronizeIndices();
   }
 
@@ -227,13 +226,13 @@ function parsePropertyDeclaration(
   property: string,
   value: string,
   important: boolean,
-  context: CSSParsingContext,
+  context: PropertyContext,
 ): PropertyDeclaration | null {
   const syntaxDeclaration = parseDeclaration(`${property}: ${value}`, context);
   if (syntaxDeclaration === null || syntaxDeclaration.important) return null;
 
   syntaxDeclaration.important = important;
-  return interpretPropertyDeclaration(syntaxDeclaration);
+  return interpretPropertyDeclaration(syntaxDeclaration, context);
 }
 
 function normalizePropertyName(name: string): string {

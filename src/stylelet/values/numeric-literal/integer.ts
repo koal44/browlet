@@ -19,7 +19,7 @@ export function integerLiteral(value: number): IntegerLiteral {
 
 export function parseInteger(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): IntegerLiteral | null {
   return integerParser(input, context);
 }

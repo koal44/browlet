@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import { serializePropertyDeclaration } from '../../../../src/stylelet/css/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
-import { CSSParsingContext } from '../../../../src/stylelet/cssom/parser';
+import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import type { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
@@ -267,7 +267,7 @@ function addStyleSheet(
       alternate: false,
       originClean: options.originClean ?? true,
     },
-    parseStylesheetContents(source, new CSSParsingContext(null, false, scope.cascade.context.env)),
+    parseStylesheetContents(source, new StylesheetContext(null, false, scope.cascade.context.env)),
   );
 
   scope.addTreeStyleSheet(styleSheet);

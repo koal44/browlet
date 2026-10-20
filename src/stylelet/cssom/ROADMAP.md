@@ -103,7 +103,7 @@ CSSOM's legacy numeric
 constants are not a complete list of rule types.
 
 At present, unknown at-rules are discarded. Recognized unfinished at-rules stop
-at CSSParsingContext's explicit statement/block dependencies rather than being
+at StylesheetContext's explicit statement/block dependencies rather than being
 silently discarded. Those methods receive preludes and preceding siblings;
 block preparation must supply the child grammar and final validity/construction
 step. Replacement discards imports as required by CSSOM. `insertRule()` rejects

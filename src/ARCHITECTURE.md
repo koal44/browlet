@@ -238,16 +238,24 @@ provenance, and rule attachment/removal updates parent-sheet associations throug
 their children. Binding projects these implementations rather than creating a
 second representation of their state.
 
-Stylelet's CSSParsingContext supplies rule grammar decisions to Syntax during
+Stylelet's StylesheetContext supplies rule grammar decisions to Syntax during
 consumption. It retains the existing environment for CSSOM allocation and the
-enclosing selector context for nested rules; it is per-parse state, not a host
-service on the environment. TokenCursor carries a typed context, temporarily
-selecting child contexts and restoring the parent on completion or failure.
-ParsingContext is the complete interpretation contract, required by rule entry
-points and their internal consumers. Declaration-block APIs use Partial<ParsingContext>;
-primitive component grammars can use the shared empty context. Declaration syntax
-readers preserve the caller's context without
-injecting an identity interpreter. Each block interpretation method owns child
+enclosing selectors for nested rules; it is per-parse state, not a host service
+on the environment. Selector and property grammars receive that same object
+directly. Child rule contexts retain the environment and constructed-sheet
+status while selecting their enclosing
+selectors. Declaration-block parsing accepts PropertyContext directly and does
+not construct a CSSOM rule context.
+Rule entry points and their consumers use StylesheetContext through a
+type-only import and return CSSOM rules and interpreted property declarations.
+Selector and value grammars declare their own context requirements; generic
+consumer adapters and combinators preserve those requirements.
+All parser entry points require an explicit context; root callers with no
+settings pass `{}`. Consumers read and forward their context from TokenCursor.
+An explicit parser argument takes precedence over the input cursor's context;
+withContext restores the caller's context on return or failure. Declaration syntax
+readers preserve that context without injecting an identity interpreter.
+Each block interpretation method owns child
 consumption and whole-rule validation. CSSOM supplies constructed-sheet status
 as data on the same context class; the environment carries no per-operation
 import permission.

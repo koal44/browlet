@@ -19,8 +19,8 @@ import { createTokenList, HashTokenFlag, NumberTokenFlag, TokenKind } from './to
 // Consumer creators
 // =============================================================================
 
-export type FunctionalNotationConsumerOptions = {
-  contextForArguments?: (context: unknown) => unknown;
+export type FunctionalNotationConsumerOptions<Context, ArgumentContext> = {
+  contextForArguments: (context: Context) => ArgumentContext;
 };
 
 // TODO: Fold free-form production handling into functional-notation argument
@@ -28,29 +28,27 @@ export type FunctionalNotationConsumerOptions = {
 // the sole public entry point for that machinery, without caller-applied wrappers.
 
 // <function-token matching name> <argument-value> )
-export function createFunctionalNotationConsumer<ArgumentValue, Value>(
+export function createFunctionalNotationConsumer<ArgumentValue, Value, Context = unknown>(name: string, consumeArgumentValue: TryConsumer<ArgumentValue, Context>, projectValue: (value: ArgumentValue, context: Context) => TryConsumerResult<Value>): TryConsumer<Value, Context>;
+export function createFunctionalNotationConsumer<ArgumentValue, Value, Context, ArgumentContext>(name: string, consumeArgumentValue: TryConsumer<ArgumentValue, ArgumentContext>, projectValue: (value: ArgumentValue, context: Context) => TryConsumerResult<Value>, options: FunctionalNotationConsumerOptions<Context, ArgumentContext>): TryConsumer<Value, Context>;
+export function createFunctionalNotationConsumer<ArgumentValue, Value, Context, ArgumentContext = Context>(
   name: string,
-  consumeArgumentValue: TryConsumer<ArgumentValue>,
+  consumeArgumentValue: TryConsumer<ArgumentValue, Context> | TryConsumer<ArgumentValue, ArgumentContext>,
   projectValue: (
     value: ArgumentValue,
-    context: unknown,
+    context: Context,
   ) => TryConsumerResult<Value>,
-  options: FunctionalNotationConsumerOptions = {},
-): TryConsumer<Value> {
+  options?: FunctionalNotationConsumerOptions<Context, ArgumentContext>,
+): TryConsumer<Value, Context> {
   const normalizedName = asciiLower(name);
 
-  return adaptConsumer(consumeFunctionBlock, (fn, context) => {
+  return adaptConsumer(consumeFunctionBlock, (fn, context: Context) => {
     if (asciiLower(fn.name) !== normalizedName) return null;
     if (!isAnyValueContents(fn.value)) return null;
 
-    const argumentContext = options.contextForArguments === undefined
-      ? context
-      : options.contextForArguments(context);
-    const argumentValue = parseAsComponentGrammar(
-      fn.value,
-      withTrivia(consumeArgumentValue),
-      argumentContext,
-    );
+    // The overloads pair each consumer with either the original or selected context.
+    const argumentValue = options === undefined
+      ? parseAsComponentGrammar(fn.value, withTrivia(consumeArgumentValue as TryConsumer<ArgumentValue, Context>), context)
+      : parseAsComponentGrammar(fn.value, withTrivia(consumeArgumentValue as TryConsumer<ArgumentValue, ArgumentContext>), options.contextForArguments(context));
 
     return argumentValue === null
       ? null
@@ -64,10 +62,10 @@ export type FreeFormConsumerOptions = {
 };
 
 // <free-form[ <value> ]>
-export function createFreeFormConsumer<Value>(
-  consumeValue: TryConsumer<Value>,
+export function createFreeFormConsumer<Value, Context = unknown>(
+  consumeValue: TryConsumer<Value, Context>,
   options: FreeFormConsumerOptions = {},
-): TryConsumer<Value> {
+): TryConsumer<Value, Context> {
   const strict = options.strict ?? true;
 
   return (c) => {
@@ -364,8 +362,8 @@ export function consumeAnyValueFunctionBlock(
 
 const anyValueFunctionBlockConsumer = adaptConsumer(
   consumeFunctionBlock,
-  (fn) => {
-    const value = parseAsComponentGrammar(fn.value, consumeAnyValue);
+  (fn, context) => {
+    const value = parseAsComponentGrammar(fn.value, consumeAnyValue, context);
 
     return value === null
       ? null

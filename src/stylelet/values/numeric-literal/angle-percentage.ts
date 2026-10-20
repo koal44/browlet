@@ -25,7 +25,7 @@ export type AnglePercentageResolutionContext = {
 
 export function parseAnglePercentage(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): AnglePercentageLiteral | null {
   return anglePercentageParser(input, context);
 }

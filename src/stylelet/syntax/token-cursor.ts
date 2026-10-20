@@ -7,13 +7,10 @@ export type TokenCursorOptions = {
   position?: number;
 };
 
-/** Shared context for component grammars that need no contextual state. */
-export const emptyParsingContext = Object.freeze({});
-
 export type TokenPredicate<Value extends Token> = (token: Value) => boolean;
 
-export type TryConsumer<T> =
-  (c: TokenCursor<ComponentValue>) => TryConsumerResult<T>;
+export type TryConsumer<T, Context = unknown> =
+  (c: TokenCursor<ComponentValue, Context>) => TryConsumerResult<T>;
 
 /**
  * Try consumers use two channels:

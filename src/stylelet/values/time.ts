@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage, type ValueDefinition } from '../value-processing/index';
 import {
@@ -29,20 +29,20 @@ export const timeDef: ValueDefinition<TimeValue, MathContext> = {
 
 export function parseTime(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): TimeValue | null {
   return timeParser(input, context);
 }
 
 export function consumeTime(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<TimeValue> {
   return timeConsumer(c);
 }
 
 export function createTimeConsumer(
   options: TimeConsumerOptions = {},
-): TryConsumer<TimeValue> {
+): TryConsumer<TimeValue, MathContext> {
   const literalConsumer = createTimeLiteralConsumer(options);
   const range = timeRange(options);
 

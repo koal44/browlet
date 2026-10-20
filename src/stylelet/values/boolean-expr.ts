@@ -57,13 +57,15 @@ export type BooleanExprContext<Test> = {
   preserveUnknown?: boolean;
 };
 
-export function parseBooleanExpr<Test>(
+export function parseBooleanExpr<Test, Context>(
   input: ParserInput,
-  testConsumer: TryConsumer<Test>,
+  testConsumer: TryConsumer<Test, Context>,
+  context: Context,
 ): BooleanExprValue<Test> | null {
   return parseAsComponentGrammar(
     input,
     withTrivia(createBooleanExprConsumer(testConsumer)),
+    context,
   );
 }
 
@@ -76,10 +78,10 @@ export function parseBooleanExpr<Test>(
  * <boolean-expr-group> =
  *   <test> | ( <boolean-expr[ <test> ]> ) | <general-enclosed>
  */
-export function createBooleanExprConsumer<Test>(
-  consumeTest: TryConsumer<Test>,
-): TryConsumer<BooleanExprValue<Test>> {
-  return recursive((consumeExpr) => {
+export function createBooleanExprConsumer<Test, Context>(
+  consumeTest: TryConsumer<Test, Context>,
+): TryConsumer<BooleanExprValue<Test>, Context> {
+  return recursive<BooleanExprValue<Test>, Context>((consumeExpr) => {
     // <test>
     const testConsumer = adaptConsumer(
       consumeTest,
@@ -178,10 +180,10 @@ export function createBooleanExprConsumer<Test>(
 }
 
 // ( <contents> )
-function createParensConsumer<Test>(
-  valueConsumer: TryConsumer<BooleanExprValue<Test>>,
-): TryConsumer<BooleanExprParens<Test>> {
-  return adaptConsumer(consumeParensBlock, (component, context) => {
+function createParensConsumer<Test, Context>(
+  valueConsumer: TryConsumer<BooleanExprValue<Test>, Context>,
+): TryConsumer<BooleanExprParens<Test>, Context> {
+  return adaptConsumer(consumeParensBlock, (component, context: Context) => {
     const value = parseAsComponentGrammar(
       component.value,
       withTrivia(valueConsumer),

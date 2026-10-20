@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
@@ -57,16 +57,16 @@ describe('position values', () => {
       'inline-start',
       'inline-end',
     ] as const)('parses the %s keyword', (keyword) => {
-      expect(parsePosition(keyword)).toEqual(position([keyword]));
+      expect(parsePosition(keyword, {})).toEqual(position([keyword]));
     });
 
     it('parses a length-percentage', () => {
-      expect(parsePosition('25%')).toEqual(position([percentage(25)]));
-      expect(parsePosition('10px')).toEqual(position([length(10)]));
+      expect(parsePosition('25%', {})).toEqual(position([percentage(25)]));
+      expect(parsePosition('10px', {})).toEqual(position([length(10)]));
     });
 
     it('parses keywords case-insensitively', () => {
-      expect(parsePosition('InLiNe-EnD')).toEqual(position(['inline-end']));
+      expect(parsePosition('InLiNe-EnD', {})).toEqual(position(['inline-end']));
     });
   });
 
@@ -81,7 +81,7 @@ describe('position values', () => {
       ['x-end y-start', ['x-end', 'y-start']],
       ['y-start x-end', ['x-end', 'y-start']],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(parsePosition(input)).toEqual(position([...components]));
+      expect(parsePosition(input, {})).toEqual(position([...components]));
     });
 
     it.each([
@@ -92,7 +92,7 @@ describe('position values', () => {
       ['x-start 10px', ['x-start', length(10)]],
       ['10px y-start', [length(10), 'y-start']],
     ] as const)('parses the ordered form %s', (input, components) => {
-      expect(parsePosition(input)).toEqual(position([...components]));
+      expect(parsePosition(input, {})).toEqual(position([...components]));
     });
 
     it.each([
@@ -103,7 +103,7 @@ describe('position values', () => {
       ['start end', ['start', 'end']],
       ['end start', ['end', 'start']],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(parsePosition(input)).toEqual(position([...components]));
+      expect(parsePosition(input, {})).toEqual(position([...components]));
     });
   });
 
@@ -134,7 +134,7 @@ describe('position values', () => {
         ['start', length(1), 'end', percentage(25)],
       ],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(parsePosition(input)).toEqual(position([...components]));
+      expect(parsePosition(input, {})).toEqual(position([...components]));
     });
   });
 
@@ -157,15 +157,15 @@ describe('position values', () => {
     'start inline-end',
     'start 10px end',
   ])('rejects %j as a complete position', (input) => {
-    expect(parsePosition(input)).toBeNull();
+    expect(parsePosition(input, {})).toBeNull();
   });
 
   it('prefers the longest viable position production', () => {
-    expect(parsePosition('left 10px')).toEqual(position([
+    expect(parsePosition('left 10px', {})).toEqual(position([
       'left',
       length(10),
     ]));
-    expect(parsePosition('left 10px top 20px')).toEqual(position([
+    expect(parsePosition('left 10px top 20px', {})).toEqual(position([
       'left',
       length(10),
       'top',
@@ -175,9 +175,9 @@ describe('position values', () => {
 
   it('greedily consumes a position while leaving following components', () => {
     const four = new TokenCursor(parseListOfComponentValues(
-      'left 10px top 20px red',
-    ), emptyParsingContext);
-    const one = new TokenCursor(parseListOfComponentValues('top 50px'), emptyParsingContext);
+      'left 10px top 20px red', {},
+    ), {});
+    const one = new TokenCursor(parseListOfComponentValues('top 50px', {}), {});
 
     expect(consumePosition(four))
       .toEqual(position(['left', length(10), 'top', length(20)]));
@@ -191,7 +191,7 @@ describe('position values', () => {
 describe('position resolution', () => {
   it('represents normalized positions as offsets rather than syntax components', () => {
     expect(resolvePosition(
-      parsePosition('center')!,
+      parsePosition('center', {})!,
       ValueStage.Computed,
     )).toEqual({
       type: 'position',
@@ -210,7 +210,7 @@ describe('position resolution', () => {
     ['right 20px bottom 10px', 'calc(100% - 20px) calc(100% - 10px)'],
   ])('resolves %s to top-left offsets', (input, expected) => {
     expect(serializePosition(resolvePosition(
-      parsePosition(input)!,
+      parsePosition(input, {})!,
       ValueStage.Computed,
     ))).toBe(expected);
   });
@@ -270,7 +270,7 @@ describe('position resolution', () => {
     yEnd,
   ) => {
     const resolve = (input: string) => serializePosition(resolvePosition(
-      parsePosition(input)!,
+      parsePosition(input, context)!,
       ValueStage.Computed,
       context,
     ));
@@ -287,7 +287,7 @@ describe('position resolution', () => {
     ['left 10px y-end 20%', '10px 80%'],
   ])('resolves %s with the default horizontal writing context', (input, expected) => {
     expect(serializePosition(resolvePosition(
-      parsePosition(input)!,
+      parsePosition(input, {})!,
       ValueStage.Computed,
       { writingMode: 'horizontal-tb', direction: 'ltr' },
     ))).toBe(expected);
@@ -300,19 +300,19 @@ describe('position resolution', () => {
     };
 
     expect(serializePosition(resolvePosition(
-      parsePosition('block-start inline-end')!,
+      parsePosition('block-start inline-end', {})!,
       ValueStage.Computed,
       context,
     ))).toBe('100% 100%');
     expect(serializePosition(resolvePosition(
-      parsePosition('start end')!,
+      parsePosition('start end', {})!,
       ValueStage.Computed,
       context,
     ))).toBe('100% 100%');
   });
 
   it('does not claim offsets when logical context is unavailable', () => {
-    const value = parsePosition('block-start inline-end')!;
+    const value = parsePosition('block-start inline-end', {})!;
 
     expect(resolvePosition(value, ValueStage.Computed)).toEqual(value);
     expect(tryResolvePositionOffsets(value, ValueStage.Computed)).toBeNull();
@@ -331,7 +331,7 @@ describe('position serialization', () => {
     ['bottom right', 'right bottom'],
     ['bottom 10% right 20%', 'right 20% bottom 10%'],
   ])('serializes %s as %s', (input, expected) => {
-    expect(serializePosition(parsePosition(input)!)).toBe(expected);
+    expect(serializePosition(parsePosition(input, {})!)).toBe(expected);
   });
 });
 

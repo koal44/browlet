@@ -9,7 +9,7 @@ rule-specific grammars, loading, and the consuming value/API specifications.
 
 ## Work at the syntax boundary
 
-- [ ] Implement CSSParsingContext's throwing at-rule interpretation
+- [ ] Implement StylesheetContext's throwing at-rule interpretation
   dependencies. Syntax calls them while consuming, with the enclosing context,
   prelude, and earlier siblings. Each block supplies its declaration/rule grammar
   and final validity check. Follow

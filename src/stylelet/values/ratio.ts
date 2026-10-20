@@ -2,7 +2,7 @@ import { InternalError } from '../../infra/internal-error';
 
 import {
   consumeSlashDelim, adaptConsumer, one, oneOf, opt, sequenceOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import type { ValueDefinition, ValueStage } from '../value-processing/index';
 import { createNumberConsumer, numberLiteral, serializeCssNumber } from './numeric-literal/index';
@@ -32,7 +32,7 @@ export const ratioDef: ValueDefinition<RatioValue> = {
 
 export function parseRatio(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): RatioValue | null {
   return ratioParser(input, context);
 }
@@ -48,13 +48,13 @@ export function consumeRatio(
  */
 export function parseNumberOrRatio(
   input: ParserInput,
-  context: unknown = undefined,
+  context: MathContext,
 ): NumberOrRatioValue | null {
   return numberOrRatioParser(input, context);
 }
 
 export function consumeNumberOrRatio(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<NumberOrRatioValue> {
   return numberOrRatioConsumer(c);
 }
@@ -159,7 +159,7 @@ const ratioConsumer: TryConsumer<RatioValue> = adaptConsumer(
 );
 
 // <number> | <ratio>
-const nonnegativeNumberOrRatioConsumer: TryConsumer<NumberOrRatioValue> = adaptConsumer(
+const nonnegativeNumberOrRatioConsumer: TryConsumer<NumberOrRatioValue, MathContext> = adaptConsumer(
   ratioSyntaxConsumer,
   ({ numerator, denominator }) => denominator === undefined
     ? numberLiteral(numerator)
@@ -168,7 +168,7 @@ const nonnegativeNumberOrRatioConsumer: TryConsumer<NumberOrRatioValue> = adaptC
 
 // The <number> alternative additionally accepts negative values, which cannot
 // be the numerator of <ratio>.
-const numberOrRatioConsumer: TryConsumer<NumberOrRatioValue> = oneOf(
+const numberOrRatioConsumer: TryConsumer<NumberOrRatioValue, MathContext> = oneOf(
   [
     one(nonnegativeNumberOrRatioConsumer),
     one(consumeNumber),

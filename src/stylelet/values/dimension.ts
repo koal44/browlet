@@ -2,7 +2,7 @@ import { InternalError } from '../../infra/internal-error';
 
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import type { ValueDefinition, ValueStage } from '../value-processing/index';
 import {
@@ -41,13 +41,13 @@ export const dimensionDef: ValueDefinition<DimensionValue, MathContext> = {
 
 export function parseDimension(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): DimensionValue | null {
   return dimensionParser(input, context);
 }
 
 export function consumeDimension(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<DimensionValue> {
   return dimensionConsumer(c);
 }

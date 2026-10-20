@@ -6,7 +6,7 @@ import { parseRule, parseStylesheetContents } from '../syntax/index';
 import type { StyleletContext } from '../context';
 
 import { CSSRuleListImpl } from './rule-list';
-import { CSSParsingContext } from './parser';
+import { StylesheetContext } from './parser';
 import { StyleSheetImpl } from './stylesheet';
 import type { CSSRuleImpl } from './rule';
 import type { MediaListImpl } from './media-list';
@@ -120,7 +120,7 @@ export class CSSStyleSheetImpl
     }
 
     // https://drafts.csswg.org/cssom/#dom-cssstylesheet-insertrule
-    const context = new CSSParsingContext(null, this.#constructed, this.env);
+    const context = new StylesheetContext(null, this.#constructed, this.env);
     const cssRule = parseRule(rule, context);
     if (cssRule === null) {
       throw new this.env.exec.DOMException(
@@ -170,7 +170,7 @@ export class CSSStyleSheetImpl
     this.env.exec.runInParallel(() => {
       try {
         // CSSOM removes imports from replacement input; discard them during parsing.
-        const rules = parseStylesheetContents(text, new CSSParsingContext(null, this.#constructed, this.env));
+        const rules = parseStylesheetContents(text, new StylesheetContext(null, this.#constructed, this.env));
         this.env.exec.queueTask('dom-manipulation', () => {
           try {
             this.replaceRules(rules);
@@ -197,7 +197,7 @@ export class CSSStyleSheetImpl
 
     // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replacesync
     // Imports are excluded from replacement, independently of import support.
-    this.replaceRules(parseStylesheetContents(text, new CSSParsingContext(null, this.#constructed, this.env)));
+    this.replaceRules(parseStylesheetContents(text, new StylesheetContext(null, this.#constructed, this.env)));
   }
 
   /** Install parsed rules without applying the author API's access and construction checks. */

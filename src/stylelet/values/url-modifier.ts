@@ -86,7 +86,7 @@ export type ReferrerPolicy =
 
 export function parseUrlModifier(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): UrlModifierValue | null {
   return urlModifierParser(input, context);
 }

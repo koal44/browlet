@@ -6,7 +6,7 @@ import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 
 describe('image values', () => {
   it('parses URL images', () => {
-    expect(parseImage('url("image.png")')).toEqual(parseUrl('url("image.png")'));
+    expect(parseImage('url("image.png")', {})).toEqual(parseUrl('url("image.png")', {}));
   });
 
   it.each([
@@ -15,7 +15,7 @@ describe('image values', () => {
     'conic-gradient(red, blue)',
   ])('parses the gradient image %j', (input) => {
 
-    expect(parseImage(input)).toEqual(parseGradient(input));
+    expect(parseImage(input, {})).toEqual(parseGradient(input, {}));
   });
 
   it.each([
@@ -25,18 +25,18 @@ describe('image values', () => {
     'image.png',
     'linear-gradient()',
   ])('rejects %j', (input) => {
-    expect(parseImage(input)).toBeNull();
+    expect(parseImage(input, {})).toBeNull();
   });
 
   it('resolves and serializes gradient images', () => {
     expect(serializeImage(resolveImage(
-      parseImage('linear-gradient(red, blue)')!,
+      parseImage('linear-gradient(red, blue)', {})!,
       ValueStage.Computed,
     ))).toBe('linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
   });
 
   it('resolves and serializes URL images', () => {
-    const value = parseImage('url("image.png")')!;
+    const value = parseImage('url("image.png")', {})!;
     const resolved = resolveImage(value, ValueStage.Computed, {
       URL,
       baseUrl: new URL('https://example.com/styles/site.css'),

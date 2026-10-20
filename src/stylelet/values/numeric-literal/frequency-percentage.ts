@@ -27,7 +27,7 @@ export type FrequencyPercentageResolutionContext = {
 
 export function parseFrequencyPercentage(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): FrequencyPercentageLiteral | null {
   return frequencyPercentageParser(input, context);
 }

@@ -45,7 +45,7 @@ export function dimensionLiteral<
 
 export function parseDimension(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): DimensionLiteral | null {
   return dimensionParser(input, context);
 }

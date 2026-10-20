@@ -4,9 +4,10 @@ import { InternalError } from '../../infra/internal-error';
 
 import {
   consumeWhitespace, createFunctionalNotationConsumer, consumeAsteriskDelim, consumeComma,
-  consumeIdentToken, consumeParensBlock, consumeSlashDelim, commaRepeat, one, oneOf, opt, adaptConsumer,
-  repeat, sequenceOf, withTrivia, isDelimToken, serializeCssIdentifier, parseAsComponentGrammar, TokenKind,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  consumeIdentToken, consumeParensBlock, consumeSlashDelim, commaRepeat, one, oneOf, opt,
+  adaptConsumer, repeat, sequenceOf, withTrivia, isDelimToken, serializeCssIdentifier,
+  parseAsComponentGrammar, TokenKind,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
@@ -101,7 +102,7 @@ export type NumericVariable = {
 export function parseMathValue<Type extends MathValueType>(
   input: ParserInput,
   expectedType: Type,
-  context: MathContext = {},
+  context: MathContext,
 ): MathValue<Type> | null {
   return parseAsComponentGrammar(
     input,
@@ -181,28 +182,13 @@ type MathValueConsumerOptions<Type extends MathValueType = MathValueType> = {
 
 export function createMathValueConsumer<Type extends MathValueType>(
   options: MathValueConsumerOptions<Type>,
-): TryConsumer<MathValue<Type>> {
-  return (c) => {
-    const outerContext = c.context;
-    const mathContext = outerContext === null || outerContext === undefined
-      ? {}
-      : outerContext as InternalMathContext;
-
-    try {
-      c.context = {
-        ...mathContext,
-        expectedType: options.expectedType,
-        ...(options.range === undefined ? {} : { range: options.range }),
-        ...(options.percentHint === undefined ? {} : { percentHint: options.percentHint }),
-      };
-
-      return mathValueConsumer(c) as TryConsumerResult<
-        MathValue<Type>
-      >;
-    } finally {
-      c.context = outerContext;
-    }
-  };
+): TryConsumer<MathValue<Type>, MathContext> {
+  return (c) => c.withContext({
+    ...c.context,
+    expectedType: options.expectedType,
+    ...(options.range === undefined ? {} : { range: options.range }),
+    ...(options.percentHint === undefined ? {} : { percentHint: options.percentHint }),
+  }, mathValueConsumer) as TryConsumerResult<MathValue<Type>>;
 }
 
 export function resolveMathValue<Type extends MathValueType>(
@@ -535,7 +521,7 @@ type UnaryMathFunctionName =
   | 'sign';
 
 function consumeCalc(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<MathValue> {
   return calcConsumer(c);
 }
@@ -555,15 +541,15 @@ const calcCalculationConsumer = createFunctionalNotationConsumer(
 
 const calcConsumer = adaptConsumer(
   calcCalculationConsumer,
-  (result, rawContext) => {
-    const context = mathContextFor(rawContext);
+  (result, context: InternalMathContext) => {
+
     const mathHints = mathHintsOf(result);
 
     if (!context.insideCalculation && mathCategory(mathHints) === null) {
       return null;
     }
 
-    const expectedType = requiredExpectedType(rawContext as InternalMathContext);
+    const expectedType = requiredExpectedType(context);
 
     if (
       !context.insideCalculation &&
@@ -676,7 +662,8 @@ const signConsumer = createUnaryMathFunctionConsumer(
 );
 
 const nonCalcMathFunctionConsumer: TryConsumer<
-  MathFunctionNode | NumericLeaf
+  MathFunctionNode | NumericLeaf,
+  InternalMathContext
 > =
   oneOf(
     [
@@ -715,7 +702,8 @@ function createVariadicMathFunctionConsumer<
 >(
   name: Name,
 ): TryConsumer<
-  MathVariadicFunctionNode<Name> | NumericLeaf
+  MathVariadicFunctionNode<Name> | NumericLeaf,
+  InternalMathContext
 > {
   const consumeArguments = adaptConsumer(
     commaRepeat(consumeCalcSum, 1, CALC_TERM_LIMIT),
@@ -738,7 +726,8 @@ function createBinaryMathFunctionConsumer<
   typeRule: MathFunctionTypeRule,
   argumentCategories?: MathCategory[],
 ): TryConsumer<
-  MathBinaryFunctionNode<Name> | NumericLeaf
+  MathBinaryFunctionNode<Name> | NumericLeaf,
+  InternalMathContext
 > {
   const consumeArguments = adaptConsumer(
     commaRepeat(consumeCalcSum, 2, 2),
@@ -764,7 +753,8 @@ function createUnaryMathFunctionConsumer<
   typeRule: MathFunctionTypeRule,
   argumentCategories?: MathCategory[],
 ): TryConsumer<
-  MathUnaryFunctionNode<Name> | NumericLeaf
+  MathUnaryFunctionNode<Name> | NumericLeaf,
+  InternalMathContext
 > {
   const consumeArguments = adaptConsumer(
     consumeCalcSum,
@@ -782,9 +772,10 @@ function createUnaryMathFunctionConsumer<
 }
 
 function createClampConsumer(): TryConsumer<
-  MathClampNode | NumericLeaf
+  MathClampNode | NumericLeaf,
+  InternalMathContext
 > {
-  const consumeArgument: TryConsumer<CalculationTree | 'none'> = oneOf(
+  const consumeArgument: TryConsumer<CalculationTree | 'none', InternalMathContext> = oneOf(
     [
       one(consumeCalcSum),
       one(createKeywordConsumer('none')),
@@ -825,7 +816,8 @@ function createClampConsumer(): TryConsumer<
 }
 
 function createRoundConsumer(): TryConsumer<
-  MathRoundNode | NumericLeaf
+  MathRoundNode | NumericLeaf,
+  InternalMathContext
 > {
   const consumeArguments = sequenceOf(
     [
@@ -863,7 +855,8 @@ function createRoundConsumer(): TryConsumer<
 }
 
 function createLogConsumer(): TryConsumer<
-  MathLogNode | NumericLeaf
+  MathLogNode | NumericLeaf,
+  InternalMathContext
 > {
   const consumeArguments = adaptConsumer(
     commaRepeat(consumeCalcSum, 1, 2),
@@ -887,13 +880,13 @@ function createLogConsumer(): TryConsumer<
 
 function createMathFunctionConsumer<Node extends MathFunctionNode>(
   name: string,
-  consumeArguments: TryConsumer<Node>,
-): TryConsumer<Node | NumericLeaf> {
+  consumeArguments: TryConsumer<Node, InternalMathContext>,
+): TryConsumer<Node | NumericLeaf, InternalMathContext> {
   return createFunctionalNotationConsumer(
     name,
     consumeArguments,
-    (result, rawContext) => {
-      const context = mathContextFor(rawContext);
+    (result, context: InternalMathContext) => {
+
 
       if (!context.insideCalculation && mathCategory(result.hints) === null) {
         return null;
@@ -901,7 +894,7 @@ function createMathFunctionConsumer<Node extends MathFunctionNode>(
 
       const valueType = context.insideCalculation
         ? undefined
-        : requiredExpectedType(rawContext as InternalMathContext);
+        : requiredExpectedType(context);
 
       if (
         valueType !== undefined &&
@@ -993,11 +986,11 @@ function createMathFunctionNode<
   } as Node;
 }
 
-const roundingStrategyConsumer: TryConsumer<RoundingStrategy> =
+const roundingStrategyConsumer: TryConsumer<RoundingStrategy, InternalMathContext> =
   createKeywordConsumer('nearest', 'up', 'down', 'to-zero', 'line-width');
 
 function consumeRoundingStrategyPrefix(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<RoundingStrategy> {
   return roundingStrategyPrefixConsumer(c);
 }
@@ -1035,13 +1028,13 @@ type CalcSumTail = {
 };
 
 function consumeCalcSum(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<CalculationTree> {
   return calcSumConsumer(c);
 }
 
 // Repeated <calc-sum> fragment: [ '+' | '-' ] <calc-product>
-const calcSumTailConsumer: TryConsumer<CalcSumTail> = sequenceOf(
+const calcSumTailConsumer: TryConsumer<CalcSumTail, InternalMathContext> = sequenceOf(
   [
     one(consumeCalcSumOperator),
     one(consumeCalcProduct),
@@ -1049,7 +1042,7 @@ const calcSumTailConsumer: TryConsumer<CalcSumTail> = sequenceOf(
   ([[operator], [value]]) => ({ operator, value }),
 );
 
-const calcSumConsumer: TryConsumer<CalculationTree> = sequenceOf(
+const calcSumConsumer: TryConsumer<CalculationTree, InternalMathContext> = sequenceOf(
   [
     one(consumeCalcProduct),
     repeat(calcSumTailConsumer, 0, CALC_TERM_LIMIT - 1),
@@ -1095,7 +1088,7 @@ const calcSumConsumer: TryConsumer<CalculationTree> = sequenceOf(
 );
 
 function consumeCalcSumOperator(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<'+' | '-'> {
   const start = c.pos();
 
@@ -1147,12 +1140,12 @@ type CalcProductTail = {
 };
 
 function consumeCalcProduct(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<CalculationTree> {
   return calcProductConsumer(c);
 }
 
-const calcProductOperatorConsumer: TryConsumer<'*' | '/'> = oneOf(
+const calcProductOperatorConsumer: TryConsumer<'*' | '/', InternalMathContext> = oneOf(
   [
     one(consumeAsteriskDelim),
     one(consumeSlashDelim),
@@ -1161,7 +1154,7 @@ const calcProductOperatorConsumer: TryConsumer<'*' | '/'> = oneOf(
 );
 
 // Repeated <calc-product> fragment: [ '*' | '/' ] <calc-value>
-const calcProductTailConsumer: TryConsumer<CalcProductTail> = sequenceOf(
+const calcProductTailConsumer: TryConsumer<CalcProductTail, InternalMathContext> = sequenceOf(
   [
     one(withTrivia(calcProductOperatorConsumer)),
     one(withTrivia(consumeCalcValue)),
@@ -1169,7 +1162,7 @@ const calcProductTailConsumer: TryConsumer<CalcProductTail> = sequenceOf(
   ([[operator], [value]]) => ({ operator, value }),
 );
 
-const calcProductConsumer: TryConsumer<CalculationTree> = sequenceOf(
+const calcProductConsumer: TryConsumer<CalculationTree, InternalMathContext> = sequenceOf(
   [
     one(consumeCalcValue),
     repeat(calcProductTailConsumer, 0, CALC_TERM_LIMIT - 1),
@@ -1224,12 +1217,12 @@ const calcProductConsumer: TryConsumer<CalculationTree> = sequenceOf(
  */
 
 function consumeCalcValue(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<CalculationTree> {
   return calcValueConsumer(c);
 }
 
-const mathFunctionCalculationConsumer: TryConsumer<CalculationTree> =
+const mathFunctionCalculationConsumer: TryConsumer<CalculationTree, InternalMathContext> =
   oneOf(
     [
       one(consumeCalcCalculation),
@@ -1238,27 +1231,27 @@ const mathFunctionCalculationConsumer: TryConsumer<CalculationTree> =
     ([value]) => value,
   );
 
-const mathValueConsumer: TryConsumer<MathValue> = adaptConsumer(
+const mathValueConsumer: TryConsumer<MathValue, InternalMathContext> = adaptConsumer(
   mathFunctionCalculationConsumer,
-  (calculation, context) => createMathValue(
+  (calculation, context: InternalMathContext) => createMathValue(
     calculation,
-    requiredExpectedType(context as InternalMathContext),
+    requiredExpectedType(context),
   ),
 );
 
-const calcNumericLeafConsumer: TryConsumer<NumericLeaf> = oneOf(
+const calcNumericLeafConsumer: TryConsumer<NumericLeaf, InternalMathContext> = oneOf(
   [
     one(consumeNumber),
     one(consumeDimension),
     one(consumePercentage),
   ],
-  ([value], context) => {
+  ([value], context: InternalMathContext) => {
     const normalized = value.value === 0
       ? { ...value, value: 0 }
       : value;
     const mathHints = mathHintsFromValue(
       normalized,
-      mathContextFor(context),
+      context,
     );
 
     return mathHints === null
@@ -1267,15 +1260,15 @@ const calcNumericLeafConsumer: TryConsumer<NumericLeaf> = oneOf(
   },
 );
 
-const calcValueConsumer: TryConsumer<CalculationTree> = oneOf(
+const calcValueConsumer: TryConsumer<CalculationTree, InternalMathContext> = oneOf(
   [
     one(calcNumericLeafConsumer),
     one(consumeCalcKeyword),
     one(consumeParenthesizedCalcSum),
     one(mathFunctionCalculationConsumer),
   ],
-  ([result], rawContext) => {
-    const context = rawContext as InternalMathContext;
+  ([result], context: InternalMathContext) => {
+
 
     if (
       context.termCount !== undefined &&
@@ -1293,14 +1286,14 @@ const calcValueConsumer: TryConsumer<CalculationTree> = oneOf(
 );
 
 function consumeParenthesizedCalcSum(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<CalculationTree> {
   return parenthesizedCalcSumConsumer(c);
 }
 
 const parenthesizedCalcSumConsumer = adaptConsumer(
   consumeParensBlock,
-  (component, context) => parseAsComponentGrammar(
+  (component, context: InternalMathContext) => parseAsComponentGrammar(
     component.value,
     withTrivia(consumeCalcSum),
     context,
@@ -1308,10 +1301,10 @@ const parenthesizedCalcSumConsumer = adaptConsumer(
 );
 
 function consumeCalcCalculation(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<CalculationTree> {
   return (
-    mathContextFor(c.context).insideCalculation
+    c.context.insideCalculation
       ? nestedCalcCalculationConsumer
       : topLevelCalcCalculationConsumer
   )(c);
@@ -1326,10 +1319,10 @@ const topLevelCalcCalculationConsumer = adaptConsumer(
 
 const nestedCalcCalculationConsumer = adaptConsumer(
   calcCalculationConsumer,
-  (calculation, context) => simplifyCalculationTree(
+  (calculation, context: InternalMathContext) => simplifyCalculationTree(
     calculation,
     ValueStage.Declared,
-    mathContextFor(context),
+    context,
   ),
 );
 
@@ -1340,14 +1333,14 @@ const nestedCalcCalculationConsumer = adaptConsumer(
  */
 
 function consumeCalcKeyword(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, InternalMathContext>,
 ): TryConsumerResult<NumericLeaf | VariableLeaf> {
   return calcKeywordConsumer(c);
 }
 
-const calcKeywordConsumer: TryConsumer<NumericLeaf | VariableLeaf> = adaptConsumer(
+const calcKeywordConsumer: TryConsumer<NumericLeaf | VariableLeaf, InternalMathContext> = adaptConsumer(
   consumeIdentToken,
-  (token, rawContext) => {
+  (token, context: InternalMathContext) => {
     const name = asciiLower(token.value);
     let value: number | undefined;
 
@@ -1368,7 +1361,6 @@ const calcKeywordConsumer: TryConsumer<NumericLeaf | VariableLeaf> = adaptConsum
       );
     }
 
-    const context = mathContextFor(rawContext);
     const variable = context.numericVariables?.get(name);
 
     if (variable === undefined) return null;
@@ -1922,14 +1914,6 @@ function containMixedPercentAndDimension(
   );
 }
 
-function mathContextFor(
-  context: unknown,
-): InternalMathContext {
-  return context === null || context === undefined
-    ? {}
-    : context;
-}
-
 function requiredExpectedType(
   context?: InternalMathContext,
 ): MathValueType {
@@ -1941,20 +1925,17 @@ function requiredExpectedType(
 }
 
 function enterCalculationContext(
-  context: unknown,
-): unknown {
-  const mathContext = mathContextFor(context);
-  const parserContext = context as InternalMathContext;
-
+  context: InternalMathContext,
+): InternalMathContext {
   if (
-    mathContext.insideCalculation &&
-    parserContext.termCount !== undefined
+    context.insideCalculation &&
+    context.termCount !== undefined
   ) {
     return context;
   }
 
   return {
-    ...mathContext,
+    ...context,
     insideCalculation: true,
     termCount: 0,
   };

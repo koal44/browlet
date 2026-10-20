@@ -64,8 +64,8 @@ type ParsedWholeValue<Value, Context> =
   | FirstValidWholeValue<Value, Context>;
 
 export type WholeValueDefinition<Value, Context> = {
-  parse: (input: ParserInput) => RawWholeValue<Value, Context> | null;
-  consume: TryConsumer<ParsedWholeValue<Value, Context>>;
+  parse: (input: ParserInput, context: Context) => RawWholeValue<Value, Context> | null;
+  consume: TryConsumer<ParsedWholeValue<Value, Context>, Context>;
 };
 
 export type GuaranteedInvalidValue = {
@@ -94,8 +94,8 @@ export function defineCustomProperty(definition: { syntax: SyntaxValue; }) {
 export function defineProperty<Value, Context>(
   definition: ValueDefinition<Value, Context>,
 ): WholeValueDefinition<Value, Context> {
-  function parse(input: ParserInput): RawWholeValue<Value, Context> | null {
-    const declaration = parseOptionalDeclarationValue(input);
+  function parse(input: ParserInput, context: Context): RawWholeValue<Value, Context> | null {
+    const declaration = parseOptionalDeclarationValue(input, context);
 
     if (declaration === null) return null;
 
@@ -117,7 +117,7 @@ export function defineProperty<Value, Context>(
     definition.consume,
     (value) => createOrdinaryWholeValue(value, definition),
   );
-  const consume: TryConsumer<ParsedWholeValue<Value, Context>> =
+  const consume: TryConsumer<ParsedWholeValue<Value, Context>, Context> =
     (c) => consumeCssWideValue(c) ?? firstValidWholeConsumer(c) ?? ordinaryConsumer(c);
 
   function resolveRaw(
@@ -153,6 +153,7 @@ function createFirstValidWholeValue<Value, Context>(
   node: FirstValidValue,
   parseInput: (
     input: ParserInput,
+    context: Context,
   ) => RawWholeValue<Value, Context> | null,
 ): FirstValidWholeValue<Value, Context> {
   const value: FirstValidWholeValue<Value, Context> = {
@@ -173,6 +174,7 @@ function resolveFirstValidWholeValue<Value, Context>(
   value: FirstValidWholeValue<Value, Context>,
   parseInput: (
     input: ParserInput,
+    context: Context,
   ) => RawWholeValue<Value, Context> | null,
   stage: ValueStage,
   context: Context,
@@ -180,7 +182,7 @@ function resolveFirstValidWholeValue<Value, Context>(
   if (stage < ValueStage.Computed) return value;
 
   for (const argument of value.arguments) {
-    const resolved = parseInput(argument.components)
+    const resolved = parseInput(argument.components, context)
       ?.resolve(stage, context) ?? null;
 
     if (resolved !== null && resolved.type !== 'guaranteed-invalid') {

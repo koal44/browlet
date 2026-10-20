@@ -10,7 +10,7 @@ import { defineCustomProperty, guaranteedInvalidValue } from '../../../../src/st
 import { parseSyntax, type SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 
 function syntax(input: string): SyntaxValue {
-  const value = parseSyntax(input);
+  const value = parseSyntax(input, {});
   expect(value).not.toBeNull();
   return value!;
 }
@@ -19,7 +19,7 @@ describe('custom property', () => {
   it('holds a synthesized definition and initial whole value in a registration', () => {
     const syntaxValue = syntax('<color>');
     const definition = defineCustomProperty({ syntax: syntaxValue });
-    const initialValue = definition.parse('red')!;
+    const initialValue = definition.parse('red', {})!;
     const registration: CustomPropertyRegistration = {
       name: '--accent',
       syntax: syntaxValue,
@@ -39,7 +39,7 @@ describe('custom property', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
 
     for (const input of ['red', '10px']) {
-      const raw = property.parse(input);
+      const raw = property.parse(input, {});
       const value = raw?.resolve(ValueStage.Specified, {});
 
       expect(value).toBe(raw);
@@ -51,7 +51,7 @@ describe('custom property', () => {
 
   it('represents a custom property requiring substitution as a substitution value', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
-    const value = property.parse('var(--color)')
+    const value = property.parse('var(--color)', {})
       ?.resolve(ValueStage.Declared, {});
 
     expect(value).toMatchObject({
@@ -66,7 +66,7 @@ describe('custom property', () => {
 
   it('distinguishes an empty custom property from the guaranteed-invalid value', () => {
     const property = defineCustomProperty({ syntax: syntax('*') });
-    const value = property.parse('')?.resolve(ValueStage.Declared, {});
+    const value = property.parse('', {})?.resolve(ValueStage.Declared, {});
 
     expect(value).toMatchObject({
       type: 'raw',
@@ -83,7 +83,7 @@ describe('custom property', () => {
   it('rejects an invalid nonempty declaration value', () => {
     const property = defineCustomProperty({ syntax: syntax('*') });
 
-    expect(property.parse('red ! blue')).toBeNull();
+    expect(property.parse('red ! blue', {})).toBeNull();
   });
 
   // CSS Properties and Values API 1, 2.3. Specified Value-Time Behavior
@@ -92,7 +92,7 @@ describe('custom property', () => {
     (keyword) => {
       const property = defineCustomProperty({ syntax: syntax('<color>') });
 
-      expect(property.parse(keyword)?.resolve(ValueStage.Declared, {}))
+      expect(property.parse(keyword, {})?.resolve(ValueStage.Declared, {}))
         .toMatchObject({
           type: 'css-wide',
           keyword,
@@ -103,7 +103,7 @@ describe('custom property', () => {
   // CSS Properties and Values API 1, 2.4. Computed Value-Time Behavior
   it('parses a valid registered value at the computed stage', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
-    const value = property.parse('red');
+    const value = property.parse('red', {});
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
       type: 'ordinary',
@@ -130,7 +130,7 @@ describe('custom property', () => {
     'parses, resolves, and serializes calculated %s value %s',
     (syntaxText, input, context, serialized) => {
       const property = defineCustomProperty({ syntax: syntax(syntaxText) });
-      const declared = property.parse(input);
+      const declared = property.parse(input, context);
 
       expect(declared?.serialize()).toBe(input);
       expect(declared?.resolve(ValueStage.Computed, context)?.serialize())
@@ -148,7 +148,7 @@ describe('custom property', () => {
       `resolves and serializes literal ${syntaxText} value ${input}`,
       () => {
         const property = defineCustomProperty({ syntax: syntax(syntaxText) });
-        const declared = property.parse(input);
+        const declared = property.parse(input, {});
 
         expect(declared?.serialize()).toBe(input);
         expect(declared?.resolve(ValueStage.Computed, context)?.serialize())
@@ -159,7 +159,7 @@ describe('custom property', () => {
 
   it('resolves and serializes a registered color with property context', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
-    const declared = property.parse('light-dark(white, black)');
+    const declared = property.parse('light-dark(white, black)', {});
 
     expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' })?.serialize())
       .toBe('rgb(0, 0, 0)');
@@ -168,7 +168,7 @@ describe('custom property', () => {
   it('resolves and serializes every item in a multiplied syntax value', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>#') });
     const declared = property.parse(
-      'light-dark(white, black), light-dark(red, blue)',
+      'light-dark(white, black), light-dark(red, blue)', {},
     );
 
     expect(declared?.resolve(ValueStage.Computed, { colorScheme: 'dark' })?.serialize())
@@ -188,7 +188,7 @@ describe('custom property', () => {
     (syntaxText, input, serialized) => {
       const property = defineCustomProperty({ syntax: syntax(syntaxText) });
 
-      expect(property.parse(input)?.resolve(ValueStage.Computed, { URL })?.serialize())
+      expect(property.parse(input, {})?.resolve(ValueStage.Computed, { URL })?.serialize())
         .toBe(serialized);
     },
   );
@@ -196,7 +196,7 @@ describe('custom property', () => {
   it('computes a registered image value', () => {
     const property = defineCustomProperty({ syntax: syntax('<image>') });
 
-    expect(property.parse('linear-gradient(red, blue)')
+    expect(property.parse('linear-gradient(red, blue)', {})
       ?.resolve(ValueStage.Computed, {})
       ?.serialize())
       .toBe('linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
@@ -209,7 +209,7 @@ describe('custom property', () => {
       baseUrl: new URL('https://example.com/styles/site.css'),
     };
 
-    expect(property.parse('url("image.png")')
+    expect(property.parse('url("image.png")', {})
       ?.resolve(ValueStage.Computed, context)
       ?.serialize())
       .toBe('url("https://example.com/styles/image.png")');
@@ -223,7 +223,7 @@ describe('custom property', () => {
     (syntaxText, input, serialized) => {
       const property = defineCustomProperty({ syntax: syntax(syntaxText) });
 
-      expect(property.parse(input)?.resolve(ValueStage.Computed, {
+      expect(property.parse(input, {})?.resolve(ValueStage.Computed, {
         length: { em: 16 },
       })?.serialize()).toBe(serialized);
     },
@@ -238,21 +238,21 @@ describe('custom property', () => {
     (syntaxText, input, serialized) => {
       const property = defineCustomProperty({ syntax: syntax(syntaxText) });
 
-      expect(property.parse(input)?.resolve(ValueStage.Computed, {})?.serialize())
+      expect(property.parse(input, {})?.resolve(ValueStage.Computed, {})?.serialize())
         .toBe(serialized);
     },
   );
 
   it('makes a registered value with invalid syntax guaranteed-invalid at computation', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>') });
-    const value = property.parse('10px');
+    const value = property.parse('10px', {});
 
     expect(value?.resolve(ValueStage.Computed, {})).toBe(guaranteedInvalidValue);
   });
 
   it('returns the first syntax alternative that matches the entire value', () => {
     const property = defineCustomProperty({ syntax: syntax('red | <color>') });
-    const value = property.parse('red');
+    const value = property.parse('red', {});
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
       type: 'ordinary',
@@ -266,13 +266,13 @@ describe('custom property', () => {
   it('matches syntax keywords codepoint-wise', () => {
     const property = defineCustomProperty({ syntax: syntax('Red | <color>') });
 
-    expect(property.parse('Red')?.resolve(ValueStage.Computed, {})).toMatchObject({
+    expect(property.parse('Red', {})?.resolve(ValueStage.Computed, {})).toMatchObject({
       value: {
         type: 'parsed-syntax-keyword',
         name: 'Red',
       },
     });
-    expect(property.parse('red')?.resolve(ValueStage.Computed, {})).toMatchObject({
+    expect(property.parse('red', {})?.resolve(ValueStage.Computed, {})).toMatchObject({
       value: {
         type: 'parsed-syntax-type',
         name: 'color',
@@ -282,7 +282,7 @@ describe('custom property', () => {
 
   it('does not commit to an alternative that matches only a prefix', () => {
     const property = defineCustomProperty({ syntax: syntax('auto | <custom-ident>+') });
-    const value = property.parse('auto extra');
+    const value = property.parse('auto extra', {});
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
       type: 'ordinary',
@@ -299,7 +299,7 @@ describe('custom property', () => {
 
   it('preserves the separator and values of a multiplied syntax component', () => {
     const property = defineCustomProperty({ syntax: syntax('<color>#') });
-    const value = property.parse('red, blue');
+    const value = property.parse('red, blue', {});
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
       type: 'ordinary',
@@ -316,7 +316,7 @@ describe('custom property', () => {
 
   it('preserves a value parsed with the universal syntax', () => {
     const property = defineCustomProperty({ syntax: syntax('*') });
-    const value = property.parse('10px / anything');
+    const value = property.parse('10px / anything', {});
 
     expect(value?.resolve(ValueStage.Computed, {})).toMatchObject({
       type: 'ordinary',

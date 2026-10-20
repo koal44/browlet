@@ -11,7 +11,7 @@ import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   BadUrlToken, RightParenToken, identToken, TokenKind,
 } from '../../../../src/stylelet/syntax/tokens';
@@ -110,14 +110,14 @@ describe('keyword', () => {
     const consumeAuto = createKeywordConsumer('auto');
     const consumeStrategy = createKeywordConsumer('nearest', 'up', 'to-zero');
 
-    expect(consumeAuto(new TokenCursor(parseListOfComponentValues('AUTO'), emptyParsingContext)))
+    expect(consumeAuto(new TokenCursor(parseListOfComponentValues('AUTO', {}), {})))
       .toBe('auto');
-    expect(consumeStrategy(new TokenCursor(parseListOfComponentValues('To-ZeRo'), emptyParsingContext)))
+    expect(consumeStrategy(new TokenCursor(parseListOfComponentValues('To-ZeRo', {}), {})))
       .toBe('to-zero');
   });
 
   it('leaves component trivia to the caller', () => {
-    const cursor = new TokenCursor(parseListOfComponentValues(' auto'), emptyParsingContext);
+    const cursor = new TokenCursor(parseListOfComponentValues(' auto', {}), {});
 
     expect(createKeywordConsumer('auto')(cursor)).toBeNull();
     expect(cursor.pos()).toBe(0);
@@ -132,7 +132,7 @@ describe('auto', () => {
 
 describe('CSS-wide value', () => {
   it('parses keywords case-insensitively and serializes their canonical spelling', () => {
-    const value = parseCssWideValue(' ReVeRt-LaYeR ');
+    const value = parseCssWideValue(' ReVeRt-LaYeR ', {});
 
     expect(value).toMatchObject({
       type: 'css-wide',
@@ -143,13 +143,13 @@ describe('CSS-wide value', () => {
   });
 
   it('rejects other identifiers and additional components', () => {
-    expect(parseCssWideValue('default')).toBeNull();
-    expect(parseCssWideValue('inherit initial')).toBeNull();
+    expect(parseCssWideValue('default', {})).toBeNull();
+    expect(parseCssWideValue('inherit initial', {})).toBeNull();
   });
 
   it('consumes one CSS-wide keyword without requiring the end of input', () => {
-    const list = parseListOfComponentValues('inherit initial');
-    const c = new TokenCursor(list, emptyParsingContext);
+    const list = parseListOfComponentValues('inherit initial', {});
+    const c = new TokenCursor(list, {});
 
     expect(consumeCssWideValue(c)).toMatchObject({
       type: 'css-wide',
@@ -163,21 +163,21 @@ describe('CSS-wide value', () => {
 
 describe('any-value', () => {
   it('parses a nonempty sequence of arbitrary component values', () => {
-    const expected = parseListOfComponentValues('a ! b; fn() []');
-    expect(parseAnyValue('a ! b; fn() []')).toEqual({
+    const expected = parseListOfComponentValues('a ! b; fn() []', {});
+    expect(parseAnyValue('a ! b; fn() []', {})).toEqual({
       type: 'any-value',
       components: expected,
     });
   });
 
   it('returns the original component values after validating them', () => {
-    const list = parseListOfComponentValues('a fn(b)');
-    expect(parseAnyValue(list)?.components).toBe(list);
+    const list = parseListOfComponentValues('a fn(b)', {});
+    expect(parseAnyValue(list, {})?.components).toBe(list);
   });
 
   it('consumes the remaining nonempty component-value sequence', () => {
-    const list = parseListOfComponentValues('a fn(b)');
-    const c = new TokenCursor(list, emptyParsingContext);
+    const list = parseListOfComponentValues('a fn(b)', {});
+    const c = new TokenCursor(list, {});
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
@@ -187,8 +187,8 @@ describe('any-value', () => {
   });
 
   it('stops before a component that cannot belong to the production', () => {
-    const list = parseListOfComponentValues('a)');
-    const c = new TokenCursor(list, emptyParsingContext);
+    const list = parseListOfComponentValues('a)', {});
+    const c = new TokenCursor(list, {});
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
@@ -203,8 +203,8 @@ describe('any-value', () => {
   });
 
   it('restores the cursor when its first component does not match', () => {
-    const empty = new TokenCursor(parseListOfComponentValues(''), emptyParsingContext);
-    const invalid = new TokenCursor(parseListOfComponentValues(') a'), emptyParsingContext);
+    const empty = new TokenCursor(parseListOfComponentValues('', {}), {});
+    const invalid = new TokenCursor(parseListOfComponentValues(') a', {}), {});
 
     expect(consumeAnyValue(empty)).toBeNull();
     expect(empty.pos()).toBe(0);
@@ -213,34 +213,34 @@ describe('any-value', () => {
   });
 
   it('accepts empty nested block contents', () => {
-    expect(parseAnyValue('fn()')).not.toBeNull();
-    expect(parseAnyValue('[]')).not.toBeNull();
+    expect(parseAnyValue('fn()', {})).not.toBeNull();
+    expect(parseAnyValue('[]', {})).not.toBeNull();
   });
 
   it('rejects an empty production', () => {
-    expect(parseAnyValue('')).toBeNull();
+    expect(parseAnyValue('', {})).toBeNull();
   });
 
   it('rejects bad tokens recursively', () => {
-    expect(parseAnyValue('"x\ny"')).toBeNull();
-    expect(parseAnyValue('fn("x\ny")')).toBeNull();
-    expect(parseAnyValue('url(foo"bar)')).toBeNull();
-    expect(parseAnyValue('fn(url(foo"bar))')).toBeNull();
+    expect(parseAnyValue('"x\ny"', {})).toBeNull();
+    expect(parseAnyValue('fn("x\ny")', {})).toBeNull();
+    expect(parseAnyValue('url(foo"bar)', {})).toBeNull();
+    expect(parseAnyValue('fn(url(foo"bar))', {})).toBeNull();
   });
 
   it('rejects unmatched closing tokens recursively', () => {
-    expect(parseAnyValue(')')).toBeNull();
-    expect(parseAnyValue(']')).toBeNull();
-    expect(parseAnyValue('}')).toBeNull();
-    expect(parseAnyValue('fn(])')).toBeNull();
-    expect(parseAnyValue('[)]')).toBeNull();
+    expect(parseAnyValue(')', {})).toBeNull();
+    expect(parseAnyValue(']', {})).toBeNull();
+    expect(parseAnyValue('}', {})).toBeNull();
+    expect(parseAnyValue('fn(])', {})).toBeNull();
+    expect(parseAnyValue('[)]', {})).toBeNull();
   });
 });
 
 describe('declaration-value', () => {
   it('parses a nonempty sequence of declaration component values', () => {
-    const list = parseListOfComponentValues('red 1px url(foo.png)');
-    const value = parseDeclarationValue(list);
+    const list = parseListOfComponentValues('red 1px url(foo.png)', {});
+    const value = parseDeclarationValue(list, {});
 
     expect(value).toEqual({
       type: 'declaration-value',
@@ -250,56 +250,56 @@ describe('declaration-value', () => {
   });
 
   it('consumes a nonempty declaration value', () => {
-    const list = parseListOfComponentValues('red 1px url(foo.png)');
+    const list = parseListOfComponentValues('red 1px url(foo.png)', {});
 
-    expect(consumeDeclarationValue(new TokenCursor(list, emptyParsingContext))).toEqual({
+    expect(consumeDeclarationValue(new TokenCursor(list, {}))).toEqual({
       type: 'declaration-value',
       components: list,
     });
   });
 
   it('rejects an empty production', () => {
-    expect(parseDeclarationValue('')).toBeNull();
+    expect(parseDeclarationValue('', {})).toBeNull();
   });
 
   it('represents an omitted optional declaration value with empty components', () => {
-    expect(parseOptionalDeclarationValue('')).toEqual({
+    expect(parseOptionalDeclarationValue('', {})).toEqual({
       type: 'declaration-value',
-      components: parseListOfComponentValues(''),
+      components: parseListOfComponentValues('', {}),
     });
-    expect(consumeOptionalDeclarationValue(new TokenCursor(parseListOfComponentValues(''), emptyParsingContext))).toEqual({
+    expect(consumeOptionalDeclarationValue(new TokenCursor(parseListOfComponentValues('', {}), {}))).toEqual({
       type: 'declaration-value',
-      components: parseListOfComponentValues(''),
+      components: parseListOfComponentValues('', {}),
     });
   });
 
   it('distinguishes an invalid optional declaration value from an omitted one', () => {
-    expect(parseOptionalDeclarationValue('a ! b')).toBeNull();
+    expect(parseOptionalDeclarationValue('a ! b', {})).toBeNull();
   });
 
   it('rejects top-level semicolons and bangs', () => {
-    expect(parseDeclarationValue('a ! b')).toBeNull();
-    expect(parseDeclarationValue('a; b')).toBeNull();
+    expect(parseDeclarationValue('a ! b', {})).toBeNull();
+    expect(parseDeclarationValue('a; b', {})).toBeNull();
   });
 
   it('restores after consuming an invalid declaration value', () => {
-    const c = new TokenCursor(parseListOfComponentValues('a ! b'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('a ! b', {}), {});
 
     expect(consumeDeclarationValue(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('allows semicolons and bangs inside blocks', () => {
-    expect(parseDeclarationValue('fn(a ! b; c)')).not.toBeNull();
-    expect(parseDeclarationValue('[a ! b; c]')).not.toBeNull();
-    expect(parseDeclarationValue('(a ! b; c)')).not.toBeNull();
+    expect(parseDeclarationValue('fn(a ! b; c)', {})).not.toBeNull();
+    expect(parseDeclarationValue('[a ! b; c]', {})).not.toBeNull();
+    expect(parseDeclarationValue('(a ! b; c)', {})).not.toBeNull();
   });
 
   it('rejects invalid component values recursively', () => {
-    expect(parseDeclarationValue('"x\ny"')).toBeNull();
-    expect(parseDeclarationValue('fn(url(foo"bar))')).toBeNull();
-    expect(parseDeclarationValue('fn(])')).toBeNull();
-    expect(parseDeclarationValue('[)]')).toBeNull();
+    expect(parseDeclarationValue('"x\ny"', {})).toBeNull();
+    expect(parseDeclarationValue('fn(url(foo"bar))', {})).toBeNull();
+    expect(parseDeclarationValue('fn(])', {})).toBeNull();
+    expect(parseDeclarationValue('[)]', {})).toBeNull();
   });
 });
 
@@ -307,24 +307,24 @@ describe('declaration-value', () => {
 
 describe('ident', () => {
   it('parses an ident token into its semantic value', () => {
-    expect(parseIdent('foo')).toEqual({ type: 'ident', value: 'foo' });
-    expect(parseIdent(String.raw`foo\ bar`)).toEqual({
+    expect(parseIdent('foo', {})).toEqual({ type: 'ident', value: 'foo' });
+    expect(parseIdent(String.raw`foo\ bar`, {})).toEqual({
       type: 'ident',
       value: 'foo bar',
     });
-    expect(parseIdent(String.raw`\31 abc`)).toEqual({
+    expect(parseIdent(String.raw`\31 abc`, {})).toEqual({
       type: 'ident',
       value: '1abc',
     });
   });
 
   it('accepts trivia and identifiers with no custom-ident restrictions', () => {
-    expect(parseIdent(' /* before */ default /* after */ ')).toEqual({
+    expect(parseIdent(' /* before */ default /* after */ ', {})).toEqual({
       type: 'ident',
       value: 'default',
     });
-    expect(parseIdent('inherit')).not.toBeNull();
-    expect(parseIdent('--custom')).not.toBeNull();
+    expect(parseIdent('inherit', {})).not.toBeNull();
+    expect(parseIdent('--custom', {})).not.toBeNull();
   });
 
   it.each([
@@ -335,7 +335,7 @@ describe('ident', () => {
     'fn()',
     '"foo"',
   ])('rejects %j as an ident production', (input) => {
-    expect(parseIdent(input)).toBeNull();
+    expect(parseIdent(input, {})).toBeNull();
   });
 
   it.each([
@@ -373,7 +373,7 @@ describe('ident', () => {
     'f\u00F6o',
     '\u{1F600}',
   ])('round-trips the semantic identifier %j', (value) => {
-    expect(parseIdent(serializeCssIdentifier(value))).toEqual({
+    expect(parseIdent(serializeCssIdentifier(value), {})).toEqual({
       type: 'ident',
       value,
     });
@@ -382,11 +382,11 @@ describe('ident', () => {
 
 describe('custom-ident', () => {
   it('parses an author-defined identifier case-sensitively', () => {
-    expect(parseCustomIdent('MyName')).toEqual({
+    expect(parseCustomIdent('MyName', [], {})).toEqual({
       type: 'custom-ident',
       value: 'MyName',
     });
-    expect(parseCustomIdent(String.raw`my\ name`)).toEqual({
+    expect(parseCustomIdent(String.raw`my\ name`, [], {})).toEqual({
       type: 'custom-ident',
       value: 'my name',
     });
@@ -402,17 +402,17 @@ describe('custom-ident', () => {
     'DeFaUlT',
     String.raw`\64 efault`,
   ])('rejects the globally reserved keyword %j', (input) => {
-    expect(parseCustomIdent(input)).toBeNull();
+    expect(parseCustomIdent(input, [], {})).toBeNull();
   });
 
   it('rejects caller-supplied keywords ASCII case-insensitively', () => {
-    expect(parseCustomIdent('none', ['none'])).toBeNull();
-    expect(parseCustomIdent('NoNe', ['none'])).toBeNull();
-    expect(parseCustomIdent(String.raw`\6e one`, ['none'])).toBeNull();
+    expect(parseCustomIdent('none', ['none'], {})).toBeNull();
+    expect(parseCustomIdent('NoNe', ['none'], {})).toBeNull();
+    expect(parseCustomIdent(String.raw`\6e one`, ['none'], {})).toBeNull();
   });
 
   it('does not exclude property-specific keywords unless requested', () => {
-    expect(parseCustomIdent('none')).toEqual({
+    expect(parseCustomIdent('none', [], {})).toEqual({
       type: 'custom-ident',
       value: 'none',
     });
@@ -430,7 +430,7 @@ describe('dashed-ident', () => {
     ['--', '--'],
     [String.raw`\2d -escaped`, '--escaped'],
   ])('parses %j as the semantic value %j', (input, value) => {
-    expect(parseDashedIdent(input)).toEqual({
+    expect(parseDashedIdent(input, {})).toEqual({
       type: 'dashed-ident',
       value,
     });
@@ -444,7 +444,7 @@ describe('dashed-ident', () => {
     'inherit',
     '"--name"',
   ])('rejects %j', (input) => {
-    expect(parseDashedIdent(input)).toBeNull();
+    expect(parseDashedIdent(input, {})).toBeNull();
   });
 
   it('serializes through the generic identifier algorithm', () => {
@@ -456,29 +456,29 @@ describe('dashed-ident', () => {
 
   it('round-trips a semantic dashed identifier', () => {
     const value = { type: 'dashed-ident', value: '--foo bar' } as const;
-    expect(parseDashedIdent(serializeDashedIdent(value))).toEqual(value);
+    expect(parseDashedIdent(serializeDashedIdent(value), {})).toEqual(value);
   });
 });
 
 describe('string', () => {
   it('parses a string token into its semantic value', () => {
-    expect(parseString('"foo"')).toEqual({
+    expect(parseString('"foo"', {})).toEqual({
       type: 'string',
       value: 'foo',
     });
-    expect(parseString(String.raw`'foo\20 bar'`)).toEqual({
+    expect(parseString(String.raw`'foo\20 bar'`, {})).toEqual({
       type: 'string',
       value: 'foo bar',
     });
     expect(parseString(String.raw`"foo\
-bar"`)).toEqual({
+bar"`, {})).toEqual({
       type: 'string',
       value: 'foobar',
     });
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseString(' /* before */ "foo" /* after */ ')).toEqual({
+    expect(parseString(' /* before */ "foo" /* after */ ', {})).toEqual({
       type: 'string',
       value: 'foo',
     });
@@ -490,7 +490,7 @@ bar"`)).toEqual({
     '"foo" "bar"',
     '"foo\nbar"',
   ])('rejects %j as a string production', (input) => {
-    expect(parseString(input)).toBeNull();
+    expect(parseString(input, {})).toBeNull();
   });
 
   it.each([
@@ -521,7 +521,7 @@ bar"`)).toEqual({
     'f\u00F6o',
     '\u{1F600}',
   ])('round-trips the semantic string %j', (value) => {
-    expect(parseString(serializeCssString(value))).toEqual({
+    expect(parseString(serializeCssString(value), {})).toEqual({
       type: 'string',
       value,
     });
@@ -530,14 +530,14 @@ bar"`)).toEqual({
 
 describe('url-modifier', () => {
   it('parses an identifier modifier through its value grammar', () => {
-    expect(parseUrlModifier('cross-origin')).toEqual({
+    expect(parseUrlModifier('cross-origin', {})).toEqual({
       type: 'ident',
       value: 'cross-origin',
     });
   });
 
   it('parses unknown functional notation as a function block', () => {
-    expect(parseUrlModifier('future-modifier(value)')).toEqual({
+    expect(parseUrlModifier('future-modifier(value)', {})).toEqual({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
       value: {
@@ -562,7 +562,7 @@ describe('url-modifier', () => {
       { type: 'referrer-policy-modifier', value: 'strict-origin' },
     ],
   ])('parses the recognized request modifier %j', (input, expected) => {
-    expect(parseUrlModifier(input)).toEqual(expected);
+    expect(parseUrlModifier(input, {})).toEqual(expected);
   });
 
   it.each([
@@ -589,12 +589,12 @@ describe('url-modifier', () => {
     'integrity("sha256-test" extra)',
     'referrer-policy(unknown)',
   ])('rejects the malformed recognized request modifier %j', (input) => {
-    expect(parseUrlModifier(input)).toBeNull();
+    expect(parseUrlModifier(input, {})).toBeNull();
   });
 
   it('commits after recognizing a request modifier with invalid arguments', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('cross-origin(unknown)'), emptyParsingContext,
+      parseListOfComponentValues('cross-origin(unknown)', {}), {},
     );
 
     expect(consumeUrlModifier(c)).toBeNull();
@@ -602,17 +602,17 @@ describe('url-modifier', () => {
   });
 
   it('rejects unknown functional notation containing a bad token', () => {
-    const list = parseListOfComponentValues('future-modifier("bad\n)');
+    const list = parseListOfComponentValues('future-modifier("bad\n)', {});
 
-    expect(parseUrlModifier(list)).toBeNull();
+    expect(parseUrlModifier(list, {})).toBeNull();
 
-    const c = new TokenCursor(list, emptyParsingContext);
+    const c = new TokenCursor(list, {});
     expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('consumes a URL modifier through the component grammar', () => {
-    const c = new TokenCursor(parseListOfComponentValues('future-modifier()'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('future-modifier()', {}), {});
 
     expect(consumeUrlModifier(c)).toEqual({
       type: TokenKind.FunctionBlock,
@@ -623,7 +623,7 @@ describe('url-modifier', () => {
   });
 
   it('returns null without advancing for anything outside the modifier syntax', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1px'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1px', {}), {});
 
     expect(consumeUrlModifier(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -634,13 +634,13 @@ describe('url', () => {
   it.each(['#paint', '#xywh=0,0,10,10'])(
     'sets the local URL flag on the fragment-only URL %j',
     (fragment) => {
-      expect(parseUrl(`url("${fragment}")`))
+      expect(parseUrl(`url("${fragment}")`, {}))
         .toHaveProperty('local', true);
     },
   );
 
   it('captures the active tree scope independently for each use', () => {
-    const value = parseUrl('url("#paint")')!;
+    const value = parseUrl('url("#paint")', {})!;
     const { documentScope, shadowScope } = createUrlTreeScopes();
     const documentValue = resolveUrl(
       value,
@@ -660,7 +660,7 @@ describe('url', () => {
   it('retains the captured tree scope through inheritance', () => {
     const { documentScope, shadowScope } = createUrlTreeScopes();
     const specified = resolveUrl(
-      parseUrl('url("#paint")')!,
+      parseUrl('url("#paint")', {})!,
       ValueStage.Specified,
       { treeScope: documentScope },
     );
@@ -674,7 +674,7 @@ describe('url', () => {
   });
 
   it('resolves a relative URL against its computed-value context', () => {
-    const value = parseUrl('url("../image.png")')!;
+    const value = parseUrl('url("../image.png")', {})!;
 
     expect(resolveUrl(value, ValueStage.Computed, {
       URL,
@@ -686,7 +686,7 @@ describe('url', () => {
   });
 
   it('does not resolve a URL before the computed-value stage', () => {
-    const value = parseUrl('url("image.png")')!;
+    const value = parseUrl('url("image.png")', {})!;
 
     expect(resolveUrl(value, ValueStage.Specified, {
       baseUrl: new URL('https://example.com/styles/site.css'),
@@ -696,7 +696,7 @@ describe('url', () => {
   it.each(['url("")', 'src("")', 'url("#fragment")'])(
     'preserves the special computed URL %j',
     (input) => {
-      const value = parseUrl(input)!;
+      const value = parseUrl(input, {})!;
 
       expect(resolveUrl(value, ValueStage.Computed, {
         baseUrl: new URL('https://example.com/styles/site.css'),
@@ -705,20 +705,20 @@ describe('url', () => {
   );
 
   it('retains a relative URL when no base URL is available', () => {
-    const value = parseUrl('url("image.png")')!;
+    const value = parseUrl('url("image.png")', {})!;
 
     expect(resolveUrl(value, ValueStage.Computed, { URL })).toBe(value);
   });
 
   it('requires a selected provider when computing a resource URL', () => {
-    const value = parseUrl('url("https://example.com/image.png")')!;
+    const value = parseUrl('url("https://example.com/image.png")', {})!;
 
     expect(() => resolveUrl(value, ValueStage.Computed))
       .toThrow('URL resolution requires a host URL constructor');
   });
 
   it('preserves substitution in src() but not in url()', () => {
-    expect(parseListOfComponentValues('src(var(--foo))').tokens).toMatchObject([
+    expect(parseListOfComponentValues('src(var(--foo))', {}).tokens).toMatchObject([
       {
         type: TokenKind.FunctionBlock,
         name: 'src',
@@ -734,7 +734,7 @@ describe('url', () => {
       },
     ]);
 
-    expect(parseListOfComponentValues('url(var(--foo))').tokens).toEqual([
+    expect(parseListOfComponentValues('url(var(--foo))', {}).tokens).toEqual([
       BadUrlToken,
       RightParenToken,
     ]);
@@ -751,7 +751,7 @@ describe('url', () => {
     ['src("")', 'src', '', false],
     ['url(#fragment)', 'url', '#fragment', true],
   ])('parses %j', (input, notation, value, local) => {
-    expect(parseUrl(input)).toEqual({
+    expect(parseUrl(input, {})).toEqual({
       type: 'url',
       notation,
       value,
@@ -769,7 +769,7 @@ describe('url', () => {
     [String.raw`url("a\"b\\c")`, String.raw`url("a\"b\\c")`],
     ['url("image.png" future-modifier())', 'url("image.png")'],
   ])('serializes %j as %j', (input, expected) => {
-    expect(serializeUrl(parseUrl(input)!)).toBe(expected);
+    expect(serializeUrl(parseUrl(input, {})!)).toBe(expected);
   });
 
   it('serializes request URL modifiers in grammar order', () => {
@@ -778,7 +778,7 @@ describe('url', () => {
       'referrer-policy(no-referrer)',
       'integrity("sha256-test")',
       'cross-origin(use-credentials))',
-    ].join(' '))!;
+    ].join(' '), {})!;
 
     expect(serializeUrl(value)).toBe([
       'url("image.png"',
@@ -793,14 +793,14 @@ describe('url', () => {
       'src("image.png"',
       'referrer-policy(origin)',
       'cross-origin(anonymous))',
-    ].join(' '))!;
+    ].join(' '), {})!;
     const serialized = serializeUrl(value);
 
-    expect(serializeUrl(parseUrl(serialized)!)).toBe(serialized);
+    expect(serializeUrl(parseUrl(serialized, {})!)).toBe(serialized);
   });
 
   it('accepts component trivia around and inside functional notation', () => {
-    expect(parseUrl(' /* before */ src( /* inner */ "image.png" ) /* after */ '))
+    expect(parseUrl(' /* before */ src( /* inner */ "image.png" ) /* after */ ', {}))
       .toEqual({
         type: 'url',
         notation: 'src',
@@ -814,7 +814,7 @@ describe('url', () => {
     'url("image.png" future-modifier())',
     'url("image.png" unknown another-unknown())',
   ])('ignores unrecognized URL modifiers in %j', (input) => {
-    expect(parseUrl(input)).toEqual({
+    expect(parseUrl(input, {})).toEqual({
       type: 'url',
       notation: 'url',
       value: 'image.png',
@@ -829,7 +829,7 @@ describe('url', () => {
       'unknown',
       'integrity("sha256-test")',
       'cross-origin(use-credentials))',
-    ].join(' '))).toEqual({
+    ].join(' '), {})).toEqual({
       type: 'url',
       notation: 'url',
       value: 'image.png',
@@ -860,7 +860,7 @@ describe('url', () => {
       'CROSS-ORIGIN(use-credentials))',
     ].join(' '),
   ])('rejects the duplicate request URL modifier in %j', (input) => {
-    expect(parseUrl(input)).toBeNull();
+    expect(parseUrl(input, {})).toBeNull();
   });
 
   it('commits after consuming a duplicate request URL modifier', () => {
@@ -869,14 +869,14 @@ describe('url', () => {
       'referrer-policy(no-referrer)',
       'unknown()',
       'REFERRER-POLICY(origin))',
-    ].join(' ')), emptyParsingContext);
+    ].join(' '), {}), {});
 
     expect(consumeUrl(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('rejects an unknown functional modifier containing a bad token', () => {
-    expect(parseUrl('url("image.png" future-modifier("bad\n))')).toBeNull();
+    expect(parseUrl('url("image.png" future-modifier("bad\n))', {})).toBeNull();
   });
 
   it.each([
@@ -889,12 +889,12 @@ describe('url', () => {
     'url("image.png" 1px)',
     'url(foo"bar)',
   ])('rejects %j', (input) => {
-    expect(parseUrl(input)).toBeNull();
+    expect(parseUrl(input, {})).toBeNull();
   });
 
   it('commits after recognizing a function with invalid arguments', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('url("image.png" 1px)'), emptyParsingContext,
+      parseListOfComponentValues('url("image.png" 1px)', {}), {},
     );
     const result = consumeUrl(c);
 
@@ -931,14 +931,14 @@ describe('integer', () => {
     ['-12', -12],
     ['0012', 12],
   ] as const)('parses %j as the integer %d', (input, expected) => {
-    expect(parseInteger(input)).toEqual({
+    expect(parseInteger(input, {})).toEqual({
       type: 'integer',
       value: expected,
     });
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseInteger(' /* before */ -12 /* after */ ')).toEqual({
+    expect(parseInteger(' /* before */ -12 /* after */ ', {})).toEqual({
       type: 'integer',
       value: -12,
     });
@@ -954,11 +954,11 @@ describe('integer', () => {
     '1 2',
     'integer',
   ])('rejects %j as an integer production', (input) => {
-    expect(parseInteger(input)).toBeNull();
+    expect(parseInteger(input, {})).toBeNull();
   });
 
   it('consumes one integer from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('12 13'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('12 13', {}), {});
 
     expect(consumeInteger(c)).toEqual({
       type: 'integer',
@@ -968,14 +968,14 @@ describe('integer', () => {
   });
 
   it('returns null without advancing for a non-integer number token', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1.0'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1.0', {}), {});
 
     expect(consumeInteger(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it.each([-2, 0, 3])('includes the range boundary %d', (value) => {
-    const c = new TokenCursor(parseListOfComponentValues(String(value)), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(String(value), {}), {});
     const consume = createIntegerConsumer({ min: -2, max: 3 });
 
     expect(consume(c)).toEqual({
@@ -985,7 +985,7 @@ describe('integer', () => {
   });
 
   it.each([-3, 4])('returns null without advancing for out-of-range integer %d', (value) => {
-    const c = new TokenCursor(parseListOfComponentValues(String(value)), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(String(value), {}), {});
     const consume = createIntegerConsumer({ min: -2, max: 3 });
 
     expect(consume(c)).toBeNull();
@@ -1046,7 +1046,7 @@ describe('integer', () => {
   });
 
   it.each([0, 12, -12, 1_000_000])('round-trips the semantic integer %d', (value) => {
-    expect(parseInteger(serializeInteger({ type: 'integer', value }))).toEqual({
+    expect(parseInteger(serializeInteger({ type: 'integer', value }), {})).toEqual({
       type: 'integer',
       value,
     });
@@ -1065,14 +1065,14 @@ describe('number', () => {
     ['1e0', 1],
     ['1.5e2', 150],
   ] as const)('parses %j as the number %d', (input, expected) => {
-    expect(parseNumber(input)).toEqual({
+    expect(parseNumber(input, {})).toEqual({
       type: 'number',
       value: expected,
     });
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseNumber(' /* before */ -1.25 /* after */ ')).toEqual({
+    expect(parseNumber(' /* before */ -1.25 /* after */ ', {})).toEqual({
       type: 'number',
       value: -1.25,
     });
@@ -1085,11 +1085,11 @@ describe('number', () => {
     '1 2',
     'number',
   ])('rejects %j as a number production', (input) => {
-    expect(parseNumber(input)).toBeNull();
+    expect(parseNumber(input, {})).toBeNull();
   });
 
   it('consumes one number from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1.25 2'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1.25 2', {}), {});
 
     expect(consumeNumber(c)).toEqual({
       type: 'number',
@@ -1099,7 +1099,7 @@ describe('number', () => {
   });
 
   it.each([-1.5, 0, 2.5])('includes the range boundary %d', (value) => {
-    const c = new TokenCursor(parseListOfComponentValues(String(value)), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(String(value), {}), {});
     const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
 
     expect(consume(c)).toEqual({
@@ -1109,7 +1109,7 @@ describe('number', () => {
   });
 
   it.each([-1.6, 2.6])('returns null without advancing for out-of-range number %d', (value) => {
-    const c = new TokenCursor(parseListOfComponentValues(String(value)), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(String(value), {}), {});
     const consume = createNumberConsumer({ min: -1.5, max: 2.5 });
 
     expect(consume(c)).toBeNull();
@@ -1162,7 +1162,7 @@ describe('number', () => {
   });
 
   it.each([0, 1.25, -1.25, 0.000001])('round-trips the semantic number %d', (value) => {
-    expect(parseNumber(serializeNumber({ type: 'number', value }))).toEqual({
+    expect(parseNumber(serializeNumber({ type: 'number', value }), {})).toEqual({
       type: 'number',
       value,
     });
@@ -1178,7 +1178,7 @@ describe('zero', () => {
     '.0',
     '0e0',
   ])('parses the literal zero %j', (input) => {
-    expect(parseZero(input)).toEqual({
+    expect(parseZero(input, {})).toEqual({
       type: 'number',
       value: 0,
     });
@@ -1191,11 +1191,11 @@ describe('zero', () => {
     '0px',
     '0 0',
   ])('rejects %j as a zero production', (input) => {
-    expect(parseZero(input)).toBeNull();
+    expect(parseZero(input, {})).toBeNull();
   });
 
   it('consumes one literal zero from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('0.0 1'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('0.0 1', {}), {});
 
     expect(consumeZero(c)).toEqual({
       type: 'number',
@@ -1205,14 +1205,14 @@ describe('zero', () => {
   });
 
   it('returns null without advancing for a nonzero number', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1', {}), {});
 
     expect(consumeZero(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('participates in number operations without a zero-specific operation', () => {
-    const zero = parseZero('0');
+    const zero = parseZero('0', {});
 
     expect(zero).not.toBeNull();
     expect(addNumbers(
@@ -1233,7 +1233,7 @@ describe('dimension', () => {
     ['1\\65 2', 1, 'e2'],
     ['1.2--fem', 1.2, '--fem'],
   ] as const)('parses %j as the dimension %d%s', (input, value, unit) => {
-    expect(parseDimension(input)).toEqual({
+    expect(parseDimension(input, {})).toEqual({
       type: 'dimension',
       value,
       unit,
@@ -1241,7 +1241,7 @@ describe('dimension', () => {
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseDimension(' /* before */ -1.25rem /* after */ ')).toEqual({
+    expect(parseDimension(' /* before */ -1.25rem /* after */ ', {})).toEqual({
       type: 'dimension',
       value: -1.25,
       unit: 'rem',
@@ -1256,11 +1256,11 @@ describe('dimension', () => {
     '1 px',
     '1px 2px',
   ])('rejects %j as a dimension production', (input) => {
-    expect(parseDimension(input)).toBeNull();
+    expect(parseDimension(input, {})).toBeNull();
   });
 
   it('consumes one dimension from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1.25em 2s'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1.25em 2s', {}), {});
 
     expect(consumeDimension(c)).toEqual({
       type: 'dimension',
@@ -1271,7 +1271,7 @@ describe('dimension', () => {
   });
 
   it('returns null without advancing for a non-dimension component', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1%'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1%', {}), {});
 
     expect(consumeDimension(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -1339,7 +1339,7 @@ describe('dimension', () => {
     { type: 'dimension', value: 1, unit: 'e2' },
     { type: 'dimension', value: 1.2, unit: '--fem' },
   ] as const)('round-trips the semantic dimension %j', (value) => {
-    expect(parseDimension(serializeDimension(value))).toEqual(value);
+    expect(parseDimension(serializeDimension(value), {})).toEqual(value);
   });
 });
 
@@ -1352,14 +1352,14 @@ describe('percentage', () => {
     ['.5%', 0.5],
     ['1e2%', 100],
   ] as const)('parses %j as the percentage %d', (input, expected) => {
-    expect(parsePercentage(input)).toEqual({
+    expect(parsePercentage(input, {})).toEqual({
       type: 'percentage',
       value: expected,
     });
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parsePercentage(' /* before */ -12.5% /* after */ ')).toEqual({
+    expect(parsePercentage(' /* before */ -12.5% /* after */ ', {})).toEqual({
       type: 'percentage',
       value: -12.5,
     });
@@ -1373,11 +1373,11 @@ describe('percentage', () => {
     '1 %',
     '1% 2%',
   ])('rejects %j as a percentage production', (input) => {
-    expect(parsePercentage(input)).toBeNull();
+    expect(parsePercentage(input, {})).toBeNull();
   });
 
   it('consumes one percentage from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('12.5% 25%'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('12.5% 25%', {}), {});
 
     expect(consumePercentage(c)).toEqual({
       type: 'percentage',
@@ -1387,14 +1387,14 @@ describe('percentage', () => {
   });
 
   it('returns null without advancing for a non-percentage component', () => {
-    const c = new TokenCursor(parseListOfComponentValues('12.5'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('12.5', {}), {});
 
     expect(consumePercentage(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it.each([-10, 0, 125])('includes the numeric range boundary %d', (value) => {
-    const c = new TokenCursor(parseListOfComponentValues(`${value}%`), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(`${value}%`, {}), {});
     const consume = createPercentageConsumer({ min: -10, max: 125 });
 
     expect(consume(c)).toEqual({
@@ -1406,7 +1406,7 @@ describe('percentage', () => {
   it.each([-10.1, 125.1])(
     'returns null without advancing for out-of-range value %d',
     (value) => {
-      const c = new TokenCursor(parseListOfComponentValues(`${value}%`), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(`${value}%`, {}), {});
       const consume = createPercentageConsumer({ min: -10, max: 125 });
 
       expect(consume(c)).toBeNull();
@@ -1457,7 +1457,7 @@ describe('percentage', () => {
       expect(parsePercentage(serializePercentage({
         type: 'percentage',
         value,
-      }))).toEqual({
+      }), {})).toEqual({
         type: 'percentage',
         value,
       });
@@ -1471,18 +1471,18 @@ describe('length-percentage', () => {
     ['25%', { type: 'percentage', value: 25 }],
     ['0', { type: 'length', value: 0, unit: '' }],
   ] as const)('parses %j', (input, expected) => {
-    expect(parseLengthPercentage(input)).toEqual(expected);
+    expect(parseLengthPercentage(input, {})).toEqual(expected);
   });
 
   it.each(['', 'auto', '1', '1s', '1px 2px'])(
     'rejects %j as a length-percentage production',
     (input) => {
-      expect(parseLengthPercentage(input)).toBeNull();
+      expect(parseLengthPercentage(input, {})).toBeNull();
     },
   );
 
   it('consumes one length-percentage from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('25% 1px'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('25% 1px', {}), {});
 
     expect(consumeLengthPercentage(c)).toEqual({
       type: 'percentage',
@@ -1494,7 +1494,7 @@ describe('length-percentage', () => {
   it.each(['0', '1em', '150%'])(
     'applies a nonnegative range to either alternative for %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createLengthPercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1505,7 +1505,7 @@ describe('length-percentage', () => {
   it.each(['-1em', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createLengthPercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1598,18 +1598,18 @@ describe('angle-percentage', () => {
     ['90deg', { type: 'angle', value: 90, unit: 'deg' }],
     ['25%', { type: 'percentage', value: 25 }],
   ] as const)('parses %j', (input, expected) => {
-    expect(parseAnglePercentage(input)).toEqual(expected);
+    expect(parseAnglePercentage(input, {})).toEqual(expected);
   });
 
   it.each(['', '0', '1', 'auto', '1px', '1deg 25%'])(
     'rejects %j as an angle-percentage production',
     (input) => {
-      expect(parseAnglePercentage(input)).toBeNull();
+      expect(parseAnglePercentage(input, {})).toBeNull();
     },
   );
 
   it('consumes one angle-percentage from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('25% 90deg'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('25% 90deg', {}), {});
 
     expect(consumeAnglePercentage(c)).toEqual({
       type: 'percentage',
@@ -1621,7 +1621,7 @@ describe('angle-percentage', () => {
   it.each(['1deg', '150%'])(
     'accepts the nonnegative angle-percentage %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createAnglePercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1632,7 +1632,7 @@ describe('angle-percentage', () => {
   it.each(['-1deg', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createAnglePercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1701,18 +1701,18 @@ describe('frequency-percentage', () => {
     ['1khz', { type: 'frequency', value: 1, unit: 'khz' }],
     ['25%', { type: 'percentage', value: 25 }],
   ] as const)('parses %j', (input, expected) => {
-    expect(parseFrequencyPercentage(input)).toEqual(expected);
+    expect(parseFrequencyPercentage(input, {})).toEqual(expected);
   });
 
   it.each(['', '0', '1', 'auto', '1s', '1khz 25%'])(
     'rejects %j as a frequency-percentage production',
     (input) => {
-      expect(parseFrequencyPercentage(input)).toBeNull();
+      expect(parseFrequencyPercentage(input, {})).toBeNull();
     },
   );
 
   it('consumes one frequency-percentage from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('25% 1khz'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('25% 1khz', {}), {});
 
     expect(consumeFrequencyPercentage(c)).toEqual({
       type: 'percentage',
@@ -1724,7 +1724,7 @@ describe('frequency-percentage', () => {
   it.each(['1hz', '150%'])(
     'accepts the nonnegative frequency-percentage %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createFrequencyPercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1735,7 +1735,7 @@ describe('frequency-percentage', () => {
   it.each(['-1hz', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createFrequencyPercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1804,18 +1804,18 @@ describe('time-percentage', () => {
     ['250ms', { type: 'time', value: 250, unit: 'ms' }],
     ['25%', { type: 'percentage', value: 25 }],
   ] as const)('parses %j', (input, expected) => {
-    expect(parseTimePercentage(input)).toEqual(expected);
+    expect(parseTimePercentage(input, {})).toEqual(expected);
   });
 
   it.each(['', '0', '1', 'auto', '1deg', '1s 25%'])(
     'rejects %j as a time-percentage production',
     (input) => {
-      expect(parseTimePercentage(input)).toBeNull();
+      expect(parseTimePercentage(input, {})).toBeNull();
     },
   );
 
   it('consumes one time-percentage from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('25% 1s'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('25% 1s', {}), {});
 
     expect(consumeTimePercentage(c)).toEqual({
       type: 'percentage',
@@ -1827,7 +1827,7 @@ describe('time-percentage', () => {
   it.each(['1s', '150%'])(
     'accepts the nonnegative time-percentage %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createTimePercentageConsumer({ min: 0 });
 
       expect(consume(c)).not.toBeNull();
@@ -1838,7 +1838,7 @@ describe('time-percentage', () => {
   it.each(['-1s', '-10%'])(
     'returns null without advancing for the negative value %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createTimePercentageConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -1911,11 +1911,11 @@ describe('ratio', () => {
     ['3', { type: 'ratio', numerator: 3, denominator: 1 }],
     ['0 / 0', { type: 'ratio', numerator: 0, denominator: 0 }],
   ] as const)('parses %j', (input, expected) => {
-    expect(parseRatio(input)).toEqual(expected);
+    expect(parseRatio(input, {})).toEqual(expected);
   });
 
   it('accepts surrounding and component trivia', () => {
-    expect(parseRatio(' /* before */ 3 /* middle */ / 2 /* after */ ')).toEqual({
+    expect(parseRatio(' /* before */ 3 /* middle */ / 2 /* after */ ', {})).toEqual({
       type: 'ratio',
       numerator: 3,
       denominator: 2,
@@ -1932,11 +1932,11 @@ describe('ratio', () => {
     '1 2',
     '1px / 2',
   ])('rejects %j as a ratio production', (input) => {
-    expect(parseRatio(input)).toBeNull();
+    expect(parseRatio(input, {})).toBeNull();
   });
 
   it('consumes one ratio from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('3/2 4'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('3/2 4', {}), {});
 
     expect(consumeRatio(c)).toEqual({
       type: 'ratio',
@@ -1947,7 +1947,7 @@ describe('ratio', () => {
   });
 
   it('defaults an omitted denominator while leaving the next component', () => {
-    const c = new TokenCursor(parseListOfComponentValues('3 4'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('3 4', {}), {});
 
     expect(consumeRatio(c)).toEqual({
       type: 'ratio',
@@ -1958,30 +1958,30 @@ describe('ratio', () => {
   });
 
   it('distinguishes number syntax from a ratio with an explicit slash', () => {
-    expect(parseNumberOrRatio('3')).toEqual({
+    expect(parseNumberOrRatio('3', {})).toEqual({
       type: 'number',
       value: 3,
     });
-    expect(parseNumberOrRatio('3 / 1')).toEqual({
+    expect(parseNumberOrRatio('3 / 1', {})).toEqual({
       type: 'ratio',
       numerator: 3,
       denominator: 1,
     });
-    expect(parseNumberOrRatio('-3')).toEqual({
+    expect(parseNumberOrRatio('-3', {})).toEqual({
       type: 'number',
       value: -3,
     });
-    expect(serializeNumberOrRatio(parseNumberOrRatio('calc(1 + 2)')!))
+    expect(serializeNumberOrRatio(parseNumberOrRatio('calc(1 + 2)', {})!))
       .toBe('calc(3)');
     expect(serializeNumberOrRatio(resolveNumberOrRatio(
-      parseNumberOrRatio('calc(1 + 2)')!,
+      parseNumberOrRatio('calc(1 + 2)', {})!,
       ValueStage.Computed,
     ))).toBe('3');
   });
 
   it('consumes the reusable number-or-ratio union', () => {
-    const numberCursor = new TokenCursor(parseListOfComponentValues('3 4'), emptyParsingContext);
-    const ratioCursor = new TokenCursor(parseListOfComponentValues('3 / 1 4'), emptyParsingContext);
+    const numberCursor = new TokenCursor(parseListOfComponentValues('3 4', {}), {});
+    const ratioCursor = new TokenCursor(parseListOfComponentValues('3 / 1 4', {}), {});
 
     expect(consumeNumberOrRatio(numberCursor)).toEqual({
       type: 'number',
@@ -2046,7 +2046,7 @@ describe('ratio', () => {
     { type: 'ratio', numerator: 1.5, denominator: 1 },
     { type: 'ratio', numerator: 0, denominator: 4 },
   ] as const)('round-trips the semantic ratio %j', (value) => {
-    expect(parseRatio(serializeRatio(value))).toEqual(value);
+    expect(parseRatio(serializeRatio(value), {})).toEqual(value);
   });
 });
 
@@ -2057,7 +2057,7 @@ describe('length', () => {
     input: string,
     context: LengthResolutionContext = {},
   ) => {
-    const value = parseLength(input);
+    const value = parseLength(input, context);
 
     if (value === null) {
       throw new Error(`Invalid length test input: ${input}`);
@@ -2067,7 +2067,7 @@ describe('length', () => {
   };
 
   it.each(LENGTH_UNITS)('parses the %s length unit', (unit) => {
-    expect(parseLength(`1${unit}`)).toEqual({
+    expect(parseLength(`1${unit}`, {})).toEqual({
       type: 'length',
       value: 1,
       unit,
@@ -2080,7 +2080,7 @@ describe('length', () => {
     ['1\\72 cap', 1, 'rcap'],
     ['1CQMAX', 1, 'cqmax'],
   ] as const)('normalizes the unit in %j to %j', (input, value, unit) => {
-    expect(parseLength(input)).toEqual({
+    expect(parseLength(input, {})).toEqual({
       type: 'length',
       value,
       unit,
@@ -2095,7 +2095,7 @@ describe('length', () => {
     '.0',
     '0e0',
   ])('parses unitless zero %j as a length', (input) => {
-    expect(parseLength(input)).toEqual({
+    expect(parseLength(input, {})).toEqual({
       type: 'length',
       value: 0,
       unit: '',
@@ -2103,7 +2103,7 @@ describe('length', () => {
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseLength(' /* before */ -1.25rem /* after */ ')).toEqual({
+    expect(parseLength(' /* before */ -1.25rem /* after */ ', {})).toEqual({
       type: 'length',
       value: -1.25,
       unit: 'rem',
@@ -2120,11 +2120,11 @@ describe('length', () => {
     '1 px',
     '1px 2px',
   ])('rejects %j as a length production', (input) => {
-    expect(parseLength(input)).toBeNull();
+    expect(parseLength(input, {})).toBeNull();
   });
 
   it('consumes one length from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1.25em 2px'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1.25em 2px', {}), {});
 
     expect(consumeLength(c)).toEqual({
       type: 'length',
@@ -2137,7 +2137,7 @@ describe('length', () => {
   it.each(['1s', '1', '1%'])(
     'returns null without advancing for %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
 
       expect(consumeLength(c)).toBeNull();
       expect(c.pos()).toBe(0);
@@ -2151,7 +2151,7 @@ describe('length', () => {
   ] as const)(
     'accepts the nonnegative length %j without resolving it',
     (input, value, unit) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createLengthConsumer({ min: 0 });
 
       expect(consume(c)).toEqual({
@@ -2165,7 +2165,7 @@ describe('length', () => {
   it.each(['-1px', '-1em', '-1vw'])(
     'returns null without advancing for the negative length %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createLengthConsumer({ min: 0 });
 
       expect(consume(c)).toBeNull();
@@ -2326,7 +2326,7 @@ describe('length', () => {
     { type: 'length', value: 1.25, unit: 'em' },
     { type: 'length', value: -2.5, unit: 'cqmax' },
   ] as const)('round-trips the semantic length %j', (value) => {
-    expect(parseLength(serializeLength(value))).toEqual(value);
+    expect(parseLength(serializeLength(value), {})).toEqual(value);
   });
 });
 
@@ -2334,7 +2334,7 @@ describe('length', () => {
 
 describe('angle', () => {
   it.each(ANGLE_UNITS)('parses the %s angle unit', (unit) => {
-    expect(parseAngle(`1${unit}`)).toEqual({
+    expect(parseAngle(`1${unit}`, {})).toEqual({
       type: 'angle',
       value: 1,
       unit,
@@ -2342,7 +2342,7 @@ describe('angle', () => {
   });
 
   it('normalizes angle units to ASCII lowercase', () => {
-    expect(parseAngle('-1.25TuRn')).toEqual({
+    expect(parseAngle('-1.25TuRn', {})).toEqual({
       type: 'angle',
       value: -1.25,
       unit: 'turn',
@@ -2350,7 +2350,7 @@ describe('angle', () => {
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseAngle(' /* before */ 100grad /* after */ ')).toEqual({
+    expect(parseAngle(' /* before */ 100grad /* after */ ', {})).toEqual({
       type: 'angle',
       value: 100,
       unit: 'grad',
@@ -2365,11 +2365,11 @@ describe('angle', () => {
     '1px',
     '1deg 2deg',
   ])('rejects %j as an angle production', (input) => {
-    expect(parseAngle(input)).toBeNull();
+    expect(parseAngle(input, {})).toBeNull();
   });
 
   it('consumes one angle from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('0.25turn 90deg'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('0.25turn 90deg', {}), {});
 
     expect(consumeAngle(c)).toEqual({
       type: 'angle',
@@ -2380,7 +2380,7 @@ describe('angle', () => {
   });
 
   it('returns null without advancing for a non-angle dimension', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1px'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1px', {}), {});
 
     expect(consumeAngle(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -2391,7 +2391,7 @@ describe('angle', () => {
     `${Math.PI}rad`,
     '0.5turn',
   ])('accepts the angle %j within a canonical range', (input) => {
-    const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
     const consume = createAngleConsumer({ min: 90, max: 180 });
 
     expect(consume(c)).not.toBeNull();
@@ -2401,7 +2401,7 @@ describe('angle', () => {
   it.each(['0.2turn', '4rad'])(
     'returns null without advancing for the out-of-range angle %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createAngleConsumer({ min: 90, max: 180 });
 
       expect(consume(c)).toBeNull();
@@ -2443,13 +2443,13 @@ describe('angle', () => {
     { type: 'angle', value: -100, unit: 'grad' },
     { type: 'angle', value: 0.5, unit: 'turn' },
   ] as const)('round-trips the semantic angle %j', (value) => {
-    expect(parseAngle(serializeAngle(value))).toEqual(value);
+    expect(parseAngle(serializeAngle(value), {})).toEqual(value);
   });
 });
 
 describe('time', () => {
   it.each(TIME_UNITS)('parses the %s time unit', (unit) => {
-    expect(parseTime(`1${unit}`)).toEqual({
+    expect(parseTime(`1${unit}`, {})).toEqual({
       type: 'time',
       value: 1,
       unit,
@@ -2457,7 +2457,7 @@ describe('time', () => {
   });
 
   it('normalizes time units to ASCII lowercase', () => {
-    expect(parseTime('-250MS')).toEqual({
+    expect(parseTime('-250MS', {})).toEqual({
       type: 'time',
       value: -250,
       unit: 'ms',
@@ -2465,7 +2465,7 @@ describe('time', () => {
   });
 
   it('accepts surrounding trivia', () => {
-    expect(parseTime(' /* before */ 1.5s /* after */ ')).toEqual({
+    expect(parseTime(' /* before */ 1.5s /* after */ ', {})).toEqual({
       type: 'time',
       value: 1.5,
       unit: 's',
@@ -2475,12 +2475,12 @@ describe('time', () => {
   it.each(['', '0', '1', '1%', '1deg', '1s 2s'])(
     'rejects %j as a time production',
     (input) => {
-      expect(parseTime(input)).toBeNull();
+      expect(parseTime(input, {})).toBeNull();
     },
   );
 
   it('consumes one time from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('250ms 1s'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('250ms 1s', {}), {});
 
     expect(consumeTime(c)).toEqual({
       type: 'time',
@@ -2491,7 +2491,7 @@ describe('time', () => {
   });
 
   it('returns null without advancing for a non-time dimension', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1deg'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1deg', {}), {});
 
     expect(consumeTime(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -2500,7 +2500,7 @@ describe('time', () => {
   it.each(['500ms', '2s'])(
     'accepts the time %j within a canonical range',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createTimeConsumer({ min: 0.5, max: 2 });
 
       expect(consume(c)).not.toBeNull();
@@ -2511,7 +2511,7 @@ describe('time', () => {
   it.each(['499ms', '2.001s'])(
     'returns null without advancing for the out-of-range time %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createTimeConsumer({ min: 0.5, max: 2 });
 
       expect(consume(c)).toBeNull();
@@ -2549,13 +2549,13 @@ describe('time', () => {
     { type: 'time', value: 1.5, unit: 's' },
     { type: 'time', value: -250, unit: 'ms' },
   ] as const)('round-trips the semantic time %j', (value) => {
-    expect(parseTime(serializeTime(value))).toEqual(value);
+    expect(parseTime(serializeTime(value), {})).toEqual(value);
   });
 });
 
 describe('frequency', () => {
   it.each(FREQUENCY_UNITS)('parses the %s frequency unit', (unit) => {
-    expect(parseFrequency(`1${unit}`)).toEqual({
+    expect(parseFrequency(`1${unit}`, {})).toEqual({
       type: 'frequency',
       value: 1,
       unit,
@@ -2563,7 +2563,7 @@ describe('frequency', () => {
   });
 
   it('normalizes frequency units to ASCII lowercase', () => {
-    expect(parseFrequency('6kHz')).toEqual({
+    expect(parseFrequency('6kHz', {})).toEqual({
       type: 'frequency',
       value: 6,
       unit: 'khz',
@@ -2573,12 +2573,12 @@ describe('frequency', () => {
   it.each(['', '0', '1', '1%', '1s', '1hz 2hz'])(
     'rejects %j as a frequency production',
     (input) => {
-      expect(parseFrequency(input)).toBeNull();
+      expect(parseFrequency(input, {})).toBeNull();
     },
   );
 
   it('consumes one frequency from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('1khz 500hz'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('1khz 500hz', {}), {});
 
     expect(consumeFrequency(c)).toEqual({
       type: 'frequency',
@@ -2591,7 +2591,7 @@ describe('frequency', () => {
   it.each(['1000hz', '2khz'])(
     'accepts the frequency %j within a canonical range',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createFrequencyConsumer({ min: 1000, max: 2000 });
 
       expect(consume(c)).not.toBeNull();
@@ -2600,7 +2600,7 @@ describe('frequency', () => {
   );
 
   it('returns null without advancing for an out-of-range frequency', () => {
-    const c = new TokenCursor(parseListOfComponentValues('0.5khz'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('0.5khz', {}), {});
     const consume = createFrequencyConsumer({ min: 1000 });
 
     expect(consume(c)).toBeNull();
@@ -2637,13 +2637,13 @@ describe('frequency', () => {
     { type: 'frequency', value: 200, unit: 'hz' },
     { type: 'frequency', value: 6, unit: 'khz' },
   ] as const)('round-trips the semantic frequency %j', (value) => {
-    expect(parseFrequency(serializeFrequency(value))).toEqual(value);
+    expect(parseFrequency(serializeFrequency(value), {})).toEqual(value);
   });
 });
 
 describe('resolution', () => {
   it.each(RESOLUTION_UNITS)('parses the %s resolution unit', (unit) => {
-    expect(parseResolution(`1${unit}`)).toEqual({
+    expect(parseResolution(`1${unit}`, {})).toEqual({
       type: 'resolution',
       value: 1,
       unit,
@@ -2651,7 +2651,7 @@ describe('resolution', () => {
   });
 
   it('normalizes resolution units to ASCII lowercase', () => {
-    expect(parseResolution('96DPI')).toEqual({
+    expect(parseResolution('96DPI', {})).toEqual({
       type: 'resolution',
       value: 96,
       unit: 'dpi',
@@ -2659,7 +2659,7 @@ describe('resolution', () => {
   });
 
   it('accepts zero resolution with a unit', () => {
-    expect(parseResolution('0x')).toEqual({
+    expect(parseResolution('0x', {})).toEqual({
       type: 'resolution',
       value: 0,
       unit: 'x',
@@ -2669,19 +2669,19 @@ describe('resolution', () => {
   it.each(['', '0', '1', '1%', '1hz', '1dpi 2dpi'])(
     'rejects %j as a resolution production',
     (input) => {
-      expect(parseResolution(input)).toBeNull();
+      expect(parseResolution(input, {})).toBeNull();
     },
   );
 
   it.each(['-1dpi', '-1dpcm', '-1dppx', '-1x'])(
     'rejects the negative resolution %j',
     (input) => {
-      expect(parseResolution(input)).toBeNull();
+      expect(parseResolution(input, {})).toBeNull();
     },
   );
 
   it('consumes one resolution from the current cursor position', () => {
-    const c = new TokenCursor(parseListOfComponentValues('2dppx 96dpi'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('2dppx 96dpi', {}), {});
 
     expect(consumeResolution(c)).toEqual({
       type: 'resolution',
@@ -2694,7 +2694,7 @@ describe('resolution', () => {
   it.each(['96dpi', '1dppx', '2x'])(
     'accepts the resolution %j within a canonical range',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createResolutionConsumer({ min: 1, max: 2 });
 
       expect(consume(c)).not.toBeNull();
@@ -2705,7 +2705,7 @@ describe('resolution', () => {
   it.each(['95dpi', '2.1x'])(
     'returns null without advancing for the out-of-range resolution %j',
     (input) => {
-      const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+      const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
       const consume = createResolutionConsumer({ min: 1, max: 2 });
 
       expect(consume(c)).toBeNull();
@@ -2747,7 +2747,7 @@ describe('resolution', () => {
     { type: 'resolution', value: 2, unit: 'dppx' },
     { type: 'resolution', value: 2, unit: 'x' },
   ] as const)('round-trips the semantic resolution %j', (value) => {
-    expect(parseResolution(serializeResolution(value))).toEqual(value);
+    expect(parseResolution(serializeResolution(value), {})).toEqual(value);
   });
 });
 
@@ -2786,7 +2786,7 @@ describe.skip('animation-name', () => {
   const stringValue = (value: string) => ({ type: 'string', value });
 
   function valueOf(css: string): unknown {
-    return parseAnimationNameValue(css) ?? undefined;
+    return parseAnimationNameValue(css, {}) ?? undefined;
   }
 
   it('parses none', () => {
@@ -2838,14 +2838,14 @@ describe('opacity values', () => {
     ['0.5', { type: 'number', value: 0.5 }],
     ['50%', { type: 'number', value: 0.5 }],
   ] as const)('parses and normalizes the literal opacity value %s', (input, expected) => {
-    expect(parseOpacityValue(input)).toEqual(expected);
+    expect(parseOpacityValue(input, {})).toEqual(expected);
   });
 
   it.each([
     ['calc(0.25 + 0.25)', 'number'],
     ['calc(25% + 25%)', 'percentage'],
   ] as const)('parses the calculated opacity value %s', (input, expectedType) => {
-    expect(parseOpacityValue(input)).toMatchObject({
+    expect(parseOpacityValue(input, {})).toMatchObject({
       type: 'math',
       valueType: expectedType,
     });
@@ -2857,11 +2857,11 @@ describe('opacity values', () => {
     'calc(1px)',
     '0.5 1',
   ])('rejects the invalid opacity value %s', (input) => {
-    expect(parseOpacityValue(input)).toBeNull();
+    expect(parseOpacityValue(input, {})).toBeNull();
   });
 
   it('normalizes literal opacity percentages without early clamping', () => {
-    const number = parseOpacityValue('2')!;
+    const number = parseOpacityValue('2', {})!;
     const percentage = { type: 'percentage', value: 200 } as const;
 
     expect(resolveOpacityValue(number, ValueStage.Specified))
@@ -2890,7 +2890,7 @@ describe('opacity values', () => {
     'converts and clamps the computed opacity value %s',
     (input, expected) => {
       expect(resolveOpacityValue(
-        parseOpacityValue(input)!,
+        parseOpacityValue(input, {})!,
         ValueStage.Computed,
       )).toEqual({
         type: 'number',
@@ -2912,7 +2912,7 @@ describe('opacity values', () => {
     'resolves and clamps the computed opacity value %s',
     (input, expected) => {
       expect(resolveOpacityValue(
-        parseOpacityValue(input)!,
+        parseOpacityValue(input, {})!,
         ValueStage.Computed,
       )).toEqual({
         type: 'number',
@@ -2922,7 +2922,7 @@ describe('opacity values', () => {
   );
 
   it('uses the caller math-unwrapping policy', () => {
-    const value = parseOpacityValue('calc(0.25 + 0.25)')!;
+    const value = parseOpacityValue('calc(0.25 + 0.25)', {})!;
 
     expect(resolveOpacityValue(value, ValueStage.Computed, {
       unwrapMathAt: ValueStage.Used,
@@ -2954,7 +2954,7 @@ describe('opacity values', () => {
     input,
     expected,
   ) => {
-    expect(serializeOpacityValue(parseOpacityValue(input)!))
+    expect(serializeOpacityValue(parseOpacityValue(input, {})!))
       .toBe(expected);
   });
 
@@ -2965,7 +2965,7 @@ describe('opacity values', () => {
     input,
     expected,
   ) => {
-    expect(serializeOpacityValue(parseOpacityValue(input)!))
+    expect(serializeOpacityValue(parseOpacityValue(input, {})!))
       .toBe(expected);
   });
 
@@ -2975,7 +2975,7 @@ describe('opacity values', () => {
   ] as const)(
     'serializes %s according to its resolved stage',
     (input, specified, computed) => {
-      const value = parseOpacityValue(input)!;
+      const value = parseOpacityValue(input, {})!;
 
       expect(serializeOpacityValue(value)).toBe(specified);
       expect(serializeOpacityValue(resolveOpacityValue(value, ValueStage.Computed))).toBe(computed);

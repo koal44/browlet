@@ -87,20 +87,30 @@ Location and parse-time base URL belong to the sheet, independently of its rules
 
 ### Rule parsing
 
-[CSSParsingContext](parser.ts) supplies the complete interpretation contract to
+[StylesheetContext](parser.ts) supplies the complete interpretation contract to
 Syntax consumption and constructs unattached implementations directly. It does not retain a second
 interpreted tree or whole sheet source string. Selector/value records remain internal parsed data;
 custom-property source text is retained where its representation needs it.
 
-CSSOM and loading callers create CSSParsingContext with the enclosing selectors,
+CSSOM and loading callers create StylesheetContext with the enclosing selectors,
 constructed-sheet flag, and environment. The same class handles both sheet kinds:
 ordinary imports reach the explicit unfinished grammar; constructed-sheet
 insertion rejects imports and replacement discards them. Parsing helpers receive
 the context, extracting its environment when allocating retained CSSOM objects.
-Declaration callers also supply a context explicitly; syntax reading does not
-replace it with a private identity interpreter.
+Selector/property grammars receive the same context object directly.
+The class carries optional namespace prefixes and a default namespace.
+Nested contexts share the prefix map and retain the default namespace.
+Sheet parsing supplies no outer numeric bindings; value grammars introduce
+their own bindings, such as relative-color channels.
+Each child context selects its enclosing selectors and retains the environment
+and constructed-sheet flag. Populating namespace state from stylesheet text
+remains part of the unfinished `@namespace` integration, covered by an expected-failure
+test with actual stylesheet input. Declaration-only callers supply `PropertyContext`
+directly, passing `{}` when no settings are needed. They do
+not construct a rule context. Syntax reading does not replace the caller's
+context with a private identity interpreter.
 
-`CSSParsingContext` methods apply selector/property grammars, consume each block
+`StylesheetContext` methods apply selector/property grammars, consume each block
 under its child context, and return the completed rule. `createStyleRule()` assembles
 the interpreted declarations and children without repeating grammar work. These
 helpers implement CSS Syntax's [rule interpretation requirements](https://drafts.csswg.org/css-syntax-3/#css-stylesheets)

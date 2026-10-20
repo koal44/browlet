@@ -5,7 +5,7 @@ import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
-import { CSSParsingContext } from '../../../../src/stylelet/cssom/parser';
+import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
 import { CSSPropertyRuleImpl } from '../../../../src/stylelet/cssom/rules';
@@ -225,7 +225,7 @@ function registration(
   inherits = false,
   syntaxText = '<color>',
 ): CustomPropertyRegistration {
-  const syntax = parseSyntax(syntaxText)!;
+  const syntax = parseSyntax(syntaxText, {})!;
   const definition = defineCustomProperty({ syntax });
 
   return {
@@ -233,7 +233,7 @@ function registration(
     syntax,
     definition,
     inherits,
-    initialValue: definition.parse(initial)!,
+    initialValue: definition.parse(initial, {})!,
   };
 }
 
@@ -259,7 +259,7 @@ function resolveRegisteredCustomProperty(
 ) {
   if (!cascaded.declaration.custom) return null;
 
-  return registration.definition.parse(cascaded.declaration.value.components)
+  return registration.definition.parse(cascaded.declaration.value.components, {})
     ?.resolve(ValueStage.Computed, engine.getPropertyContext(cascaded)) ?? null;
 }
 
@@ -282,7 +282,7 @@ function resolveCustomProperty(
   }
 
   const declaration = cascaded.declaration;
-  const inheritedValue = registration.definition.parse(inherited)
+  const inheritedValue = registration.definition.parse(inherited, {})
     ?.resolve(ValueStage.Computed, { URL: engine.context.env.userAgent.URL });
   const context: PropertyContext & {
     customProperty: {
@@ -295,7 +295,7 @@ function resolveCustomProperty(
     customProperty: { engine, registration, inheritedValue },
   };
 
-  return registration.definition.parse(declaration.value.components)
+  return registration.definition.parse(declaration.value.components, {})
     ?.resolve(stage, context)
     ?.serialize() ?? null;
 }
@@ -340,7 +340,7 @@ function addStyleSheet(
       alternate: false,
       originClean: true,
     },
-    typeof source === 'string' ? parseStylesheetContents(source, new CSSParsingContext(null, false, scope.cascade.context.env)) : source,
+    typeof source === 'string' ? parseStylesheetContents(source, new StylesheetContext(null, false, scope.cascade.context.env)) : source,
   );
 
   scope.addTreeStyleSheet(styleSheet);

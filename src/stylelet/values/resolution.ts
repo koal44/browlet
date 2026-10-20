@@ -1,6 +1,6 @@
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage, type ValueDefinition } from '../value-processing/index';
 import {
@@ -31,20 +31,20 @@ export const resolutionDef: ValueDefinition<ResolutionValue, MathContext> = {
 
 export function parseResolution(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): ResolutionValue | null {
   return resolutionParser(input, context);
 }
 
 export function consumeResolution(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<ResolutionValue> {
   return resolutionConsumer(c);
 }
 
 export function createResolutionConsumer(
   options: ResolutionConsumerOptions = {},
-): TryConsumer<ResolutionValue> {
+): TryConsumer<ResolutionValue, MathContext> {
   const literalConsumer = createResolutionLiteralConsumer(options);
 
   return oneOf(

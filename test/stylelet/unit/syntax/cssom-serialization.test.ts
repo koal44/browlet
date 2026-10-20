@@ -35,7 +35,7 @@ describe('CSSOM common serialization', () => {
     expect(serializeCssFunction('F?O', '1em, "UPPER"')).toBe('f\\?o(1em, "UPPER")');
     expect(serializeCssFunction('F', '')).toBe('f()');
     // Generic syntax has no value grammar and must retain the name's spelling.
-    expect(serializeComponentValues(parseListOfComponentValues('UPPER()').tokens)).toBe('UPPER()');
+    expect(serializeComponentValues(parseListOfComponentValues('UPPER()', {}).tokens)).toBe('UPPER()');
   });
 
   it('serializes local font names as quoted strings', () => {

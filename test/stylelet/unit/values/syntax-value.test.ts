@@ -1,4 +1,4 @@
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
@@ -14,11 +14,11 @@ const lengthSyntax: SyntaxValue = {
 
 describe('<syntax>', () => {
   it('parses the universal syntax definition', () => {
-    expect(parseSyntax('*')).toEqual({ type: 'universal-syntax' });
+    expect(parseSyntax('*', {})).toEqual({ type: 'universal-syntax' });
   });
 
   it('distinguishes syntax types from keyword components', () => {
-    expect(parseSyntax('<length> | length')).toEqual({
+    expect(parseSyntax('<length> | length', {})).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length' },
@@ -28,7 +28,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves the specified order of alternatives', () => {
-    expect(parseSyntax('<percentage> | <number> | auto')).toEqual({
+    expect(parseSyntax('<percentage> | <number> | auto', {})).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'percentage' },
@@ -39,7 +39,7 @@ describe('<syntax>', () => {
   });
 
   it('parses syntax multipliers without intervening whitespace', () => {
-    expect(parseSyntax('<length>+ | auto#')).toEqual({
+    expect(parseSyntax('<length>+ | auto#', {})).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length', multiplier: '+' },
@@ -49,7 +49,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves the pre-multiplied transform-list type', () => {
-    expect(parseSyntax('<transform-list>')).toEqual({
+    expect(parseSyntax('<transform-list>', {})).toEqual({
       type: 'syntax-definition',
       components: [{
         type: 'syntax-type',
@@ -59,7 +59,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves syntax keyword case and accepts dashed custom identifiers', () => {
-    expect(parseSyntax('Foo | --bar')).toEqual({
+    expect(parseSyntax('Foo | --bar', {})).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-keyword', name: 'Foo' },
@@ -69,13 +69,13 @@ describe('<syntax>', () => {
   });
 
   it('normalizes the historical string form to the same value', () => {
-    expect(parseSyntax('"<length> | auto"')).toEqual(
-      parseSyntax('<length> | auto'),
+    expect(parseSyntax('"<length> | auto"', {})).toEqual(
+      parseSyntax('<length> | auto', {}),
     );
   });
 
   it('accepts insignificant outer and combinator whitespace', () => {
-    expect(parseSyntax('  <length>|auto  ')).toEqual({
+    expect(parseSyntax('  <length>|auto  ', {})).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length' },
@@ -85,7 +85,7 @@ describe('<syntax>', () => {
   });
 
   it('matches type names as CSS identifiers', () => {
-    expect(parseSyntax('<\\6c ength>')).toEqual(lengthSyntax);
+    expect(parseSyntax('<\\6c ength>', {})).toEqual(lengthSyntax);
   });
 
   it.each([
@@ -109,12 +109,12 @@ describe('<syntax>', () => {
     'initial',
     'default',
   ])('rejects %j as a complete syntax definition', (input) => {
-    expect(parseSyntax(input)).toBeNull();
+    expect(parseSyntax(input, {})).toBeNull();
   });
 
   it('consumes one syntax value without consuming following input', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('<length> trailing'), emptyParsingContext,
+      parseListOfComponentValues('<length> trailing', {}), {},
     );
 
     expect(consumeSyntax(c)).toEqual(lengthSyntax);
@@ -125,7 +125,7 @@ describe('<syntax>', () => {
 
   it('restores the cursor when the syntax does not match', () => {
     const c = new TokenCursor(
-      parseListOfComponentValues('<length >'), emptyParsingContext,
+      parseListOfComponentValues('<length >', {}), {},
     );
 
     expect(consumeSyntax(c)).toBeNull();

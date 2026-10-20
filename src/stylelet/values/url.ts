@@ -60,7 +60,7 @@ export const urlDef: ValueDefinition<UrlValue, UrlContext> = {
 
 export function parseUrl(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): UrlValue | null {
   return urlParser(input, context);
 }
@@ -121,7 +121,7 @@ export function serializeUrl(value: UrlValue): string {
   return serializeCssFunction(value.notation, args.join(' '));
 }
 
-type UrlFunctionParserContext = {
+type UrlFunctionContext = {
   seenRequestModifiers?: ReadonlySet<RequestUrlModifierValue['type']>;
 };
 
@@ -139,7 +139,7 @@ function createUrlValue(
   };
 }
 
-function contextForUrlFunctionArguments(): UrlFunctionParserContext {
+function contextForUrlFunctionArguments(): UrlFunctionContext {
   return {};
 }
 
@@ -169,20 +169,18 @@ function urlModifiersFromArray(
   return modifiers;
 }
 
-function contextAfterUrlFunctionModifier(
+function contextAfterUrlFunctionModifier<Context extends UrlFunctionContext>(
   value: UrlModifierValue,
-  context: unknown,
-): UrlFunctionParserContext {
-  const urlContext = context as UrlFunctionParserContext;
-
+  context: Context,
+): Context {
   if (!isRequestUrlModifierValue(value)) {
-    return urlContext;
+    return context;
   }
 
   return {
-    ...urlContext,
+    ...context,
     seenRequestModifiers: new Set([
-      ...(urlContext.seenRequestModifiers ?? []),
+      ...(context.seenRequestModifiers ?? []),
       value.type,
     ]),
   };
@@ -195,9 +193,9 @@ function contextAfterUrlFunctionModifier(
 // Implementation adapter rejecting duplicate recognized request modifiers.
 const urlFunctionModifierConsumer = adaptConsumer(
   consumeUrlModifier,
-  (value, context) => (
+  (value, context: UrlFunctionContext) => (
     isRequestUrlModifierValue(value) &&
-    (context as UrlFunctionParserContext).seenRequestModifiers?.has(value.type) === true
+    context.seenRequestModifiers?.has(value.type) === true
   )
     ? null
     : value,

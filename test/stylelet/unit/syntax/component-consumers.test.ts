@@ -2,7 +2,7 @@ import {
   describe, expect,
   it,
 } from 'vitest';
-import { emptyParsingContext, TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
   consumeWhitespace, createFreeFormConsumer,
   createFunctionalNotationConsumer, consumeAnyValueFunctionBlock, consumeBraceBlock,
@@ -17,7 +17,7 @@ import { ColorKind, consumeColor } from '../../../../src/stylelet/values/color';
 
 describe('consumeWhitespace', () => {
   it('consumes consecutive whitespace components', () => {
-    const c = new TokenCursor(parseListOfComponentValues('  value'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('  value', {}), {});
 
     consumeWhitespace(c);
 
@@ -41,7 +41,7 @@ describe('createFreeFormConsumer', () => {
     '{ red }',
     ' { red } ',
   ])('parses %j as the same value', (input) => {
-    const value = parseAsComponentGrammar(input, consumeFreeFormColor);
+    const value = parseAsComponentGrammar(input, consumeFreeFormColor, {});
 
     expect(value).toMatchObject({
       kind: ColorKind.Named,
@@ -50,7 +50,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('stops an unwrapped value before a top-level comma', () => {
-    const c = new TokenCursor(parseListOfComponentValues('red, blue'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
 
     expect(consumeFreeFormColor(c)).toMatchObject({
       kind: ColorKind.Named,
@@ -60,7 +60,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('requires the unwrapped partition to match the complete value grammar', () => {
-    const c = new TokenCursor(parseListOfComponentValues('red blue'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red blue', {}), {});
 
     expect(consumeFreeFormColor(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -70,7 +70,7 @@ describe('createFreeFormConsumer', () => {
     const consume = createFreeFormConsumer(consumeColor, {
       stopBefore: (component) => isTokenKind(component, TokenKind.Colon),
     });
-    const c = new TokenCursor(parseListOfComponentValues('red: blue'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red: blue', {}), {});
 
     expect(consume(c)).toMatchObject({
       kind: ColorKind.Named,
@@ -80,7 +80,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('prevents a strict any-value from crossing a top-level comma', () => {
-    const c = new TokenCursor(parseListOfComponentValues('red, blue'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
     const consume = createFreeFormConsumer(consumeAnyValue);
 
     expect(consume(c)).toMatchObject({
@@ -91,7 +91,7 @@ describe('createFreeFormConsumer', () => {
 
   it('allows top-level commas in a non-strict any-value', () => {
     const consume = createFreeFormConsumer(consumeAnyValue, { strict: false });
-    const c = new TokenCursor(parseListOfComponentValues('red, blue'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
 
     expect(consume(c)).toMatchObject({
       type: 'any-value',
@@ -101,7 +101,7 @@ describe('createFreeFormConsumer', () => {
 
   it('includes a top-level comma in a non-strict partition', () => {
     const consume = createFreeFormConsumer(consumeColor, { strict: false });
-    const c = new TokenCursor(parseListOfComponentValues('red, blue'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
 
     expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -109,7 +109,7 @@ describe('createFreeFormConsumer', () => {
 
   it('includes a brace block in a non-strict partition', () => {
     const consume = createFreeFormConsumer(consumeColor, { strict: false });
-    const c = new TokenCursor(parseListOfComponentValues('red {blue}'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('red {blue}', {}), {});
 
     expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -117,18 +117,18 @@ describe('createFreeFormConsumer', () => {
 
   it('delegates an empty partition to an optional declaration-value grammar', () => {
     const consume = createFreeFormConsumer(consumeOptionalDeclarationValue);
-    const c = new TokenCursor(parseListOfComponentValues(''), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('', {}), {});
 
     expect(consume(c)).toEqual({
       type: 'declaration-value',
-      components: parseListOfComponentValues(''),
+      components: parseListOfComponentValues('', {}),
     });
   });
 });
 
 describe('consumeAnyValueFunctionBlock', () => {
   it('consumes one functional notation and leaves following components', () => {
-    const c = new TokenCursor(parseListOfComponentValues('fn(value) other'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('fn(value) other', {}), {});
 
     expect(consumeAnyValueFunctionBlock(c)).toMatchObject({
       type: TokenKind.FunctionBlock,
@@ -141,7 +141,7 @@ describe('consumeAnyValueFunctionBlock', () => {
   });
 
   it('accepts a function that CSS Syntax automatically closes at EOF', () => {
-    const c = new TokenCursor(parseListOfComponentValues('fn(value'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('fn(value', {}), {});
 
     expect(consumeAnyValueFunctionBlock(c)).toMatchObject({
       type: TokenKind.FunctionBlock,
@@ -151,7 +151,7 @@ describe('consumeAnyValueFunctionBlock', () => {
   });
 
   it.each(['fn()', 'fn(])'])('returns null without advancing for %j', (input) => {
-    const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
 
     expect(consumeAnyValueFunctionBlock(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -165,7 +165,7 @@ describe('block consumers', () => {
     ['(value) other', consumeParensBlock, TokenKind.ParensBlock],
     ['fn(value) other', consumeFunctionBlock, TokenKind.FunctionBlock],
   ] as const)('consumes one block from %j and leaves following components', (input, consume, block) => {
-    const c = new TokenCursor(parseListOfComponentValues(input), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
 
     expect(consume(c)).toMatchObject({ type: block });
     expect(c.pos()).toBe(1);
@@ -177,7 +177,7 @@ describe('block consumers', () => {
     consumeParensBlock,
     consumeFunctionBlock,
   ])('returns null without advancing when the block kind differs', (consume) => {
-    const c = new TokenCursor(parseListOfComponentValues('ident'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('ident', {}), {});
 
     expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -186,7 +186,7 @@ describe('block consumers', () => {
 
 describe('createFunctionalNotationConsumer', () => {
   it('returns null when the matched function has invalid components', () => {
-    const c = new TokenCursor(parseListOfComponentValues('fn("bad\n)'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('fn("bad\n)', {}), {});
     const consume = createFunctionalNotationConsumer(
       'fn',
       (args) => args.next(),
@@ -198,7 +198,7 @@ describe('createFunctionalNotationConsumer', () => {
   });
 
   it('returns null when the arguments do not match their grammar', () => {
-    const c = new TokenCursor(parseListOfComponentValues('fn(other)'), emptyParsingContext);
+    const c = new TokenCursor(parseListOfComponentValues('fn(other)', {}), {});
     const consume = createFunctionalNotationConsumer(
       'fn',
       consumeSlashDelim,

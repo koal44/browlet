@@ -1,4 +1,4 @@
-import { one, oneOf, type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/index';
+import { one, oneOf, type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/index';
 import type { ValueDefinition } from '../value-processing/index';
 import {
   serializeAuto, consumeAuto, resolveLengthPercentage, serializeLengthPercentage, consumeLengthPercentage,
@@ -20,7 +20,7 @@ type MarginSideValue = LengthPercentageValue | AutoValue;
 
 const marginSideDef: ValueDefinition<MarginSideValue, MathContext> = {
   consume: consumeMarginSideValue,
-  resolve: (value, stage, context) => value.type === 'auto'
+  resolve: (value, stage, context: MathContext) => value.type === 'auto'
     ? value
     : resolveLengthPercentage(value, stage, context),
   serialize: serializeMarginSideValue,
@@ -32,7 +32,7 @@ export const marginBottomProperty = defineProperty(marginSideDef);
 export const marginLeftProperty = defineProperty(marginSideDef);
 
 function consumeMarginSideValue(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<MarginSideValue> {
   return marginSideValueConsumer(c);
 }
@@ -44,7 +44,7 @@ function serializeMarginSideValue(value: MarginSideValue): string {
 }
 
 // <margin-top>, <margin-right>, <margin-bottom>, <margin-left> = <length-percentage> | auto
-const marginSideValueConsumer: TryConsumer<MarginSideValue> = oneOf(
+const marginSideValueConsumer: TryConsumer<MarginSideValue, MathContext> = oneOf(
   [
     one(consumeLengthPercentage),
     one(consumeAuto),

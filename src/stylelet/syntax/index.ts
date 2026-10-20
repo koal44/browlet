@@ -11,7 +11,7 @@ export {
   adaptConsumer, withTrivia, commaRepeat, one, oneOf, sequenceOf, opt, plus, recursive, allOf, repeat,
   requiredSequenceOf, requiredSomeOf, any,
 } from './component-grammar';
-export { emptyParsingContext, TokenCursor, type TryConsumerResult, type TryConsumer } from './token-cursor';
+export { TokenCursor, type TryConsumerResult, type TryConsumer } from './token-cursor';
 export {
   isTokenKind, serializeComponentValues, serializeCssIdentifier, isDelimToken, serializeCssDimensionUnit,
   serializeCssString, serializeCssFunction, serializeCssLocal,
@@ -21,8 +21,7 @@ export {
   createComponentParser, parseAsComponentGrammar, parseDeclarationList, consumeBlock, discardRuleBlock,
   parseStylesheetContents, parseRule, parseDeclaration, parseListAsComponentGrammar, parseListOfComponentValues,
   parseCommaSeparatedListOfComponentValues,
-  type ParserInput, type Declaration, type BlockContents, type QualifiedRule, type Rule,
-  type StatementAtRule, type ParsingContext,
+  type ParserInput, type Declaration, type BlockContents, type StatementAtRule,
 } from './parser';
 export {
   TokenKind, NumericSign, NumberTokenFlag,

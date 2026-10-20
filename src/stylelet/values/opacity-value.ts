@@ -2,7 +2,7 @@ import { clamp } from '../../infra/util';
 
 import {
   one, oneOf, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumerResult, type ParserInput,
+  type ComponentValue, type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 
@@ -24,13 +24,13 @@ export type OpacityValue = NumberValue | PercentageValue;
 
 export function parseOpacityValue(
   input: ParserInput,
-  context: MathContext = {},
+  context: MathContext,
 ): OpacityValue | null {
   return opacityValueParser(input, context);
 }
 
 export function consumeOpacityValue(
-  c: TokenCursor,
+  c: TokenCursor<ComponentValue, MathContext>,
 ): TryConsumerResult<OpacityValue> {
   return opacityValueConsumer(c);
 }

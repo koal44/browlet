@@ -34,7 +34,7 @@ export function angleLiteral(
 
 export function parseAngle(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): AngleLiteral | null {
   return angleParser(input, context);
 }

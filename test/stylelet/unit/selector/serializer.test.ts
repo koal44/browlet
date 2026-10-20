@@ -54,7 +54,7 @@ describe('selector serialization', () => {
     ['&.active', '&.active'],
   ])('absolutizes the nested selector %s as %s', (input, expected) => {
     const parent = parse('.parent');
-    const selector = parseNestedSelectorList(input, parent);
+    const selector = parseNestedSelectorList(input, parent, {});
 
     expect(selector).not.toBeNull();
     expect(serializeSelectorList(selector!)).toBe(expected);
@@ -64,7 +64,7 @@ describe('selector serialization', () => {
     const parent = parse('.parent');
     const selector = parseNestedSelectorList(
       ':is(:unknown(&), .bar)',
-      parent,
+      parent, {},
     );
 
     expect(selector).not.toBeNull();
@@ -76,7 +76,7 @@ describe('selector serialization', () => {
     const parent = parse('.parent');
     const selector = parseNestedSelectorList(
       ':is( :unknown( & ) , .bar )',
-      parent,
+      parent, {},
     );
 
     expect(selector).not.toBeNull();

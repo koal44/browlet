@@ -5,7 +5,7 @@ import {
 
 import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
-  type MediaQuery,
+  type MathContext, type MediaQuery,
 } from '../values/index';
 
 /** Retain and edit a media query list; device matching belongs to Conditional Rules. */
@@ -24,7 +24,7 @@ export class MediaListImpl {
   }
 
   set mediaText(value: string) {
-    this.#queries = parseMediaQueryList(value);
+    this.#queries = parseMediaQueryList(value, {});
   }
 
   // https://drafts.csswg.org/cssom/#dom-medialist-length
@@ -44,7 +44,7 @@ export class MediaListImpl {
   // SPEC_CLASH(media-list-mutation-comparison): Follow CSSOM/Chromium's no-op
   // for duplicates; Firefox moves the query to the end and WebKit appends it.
   appendMedium(medium: string): void {
-    const query = parseSingleMediaQuery(medium);
+    const query = parseSingleMediaQuery(medium, {});
     if (query === null) return;
 
     const serialized = serializeMediaQuery(query);
@@ -58,7 +58,7 @@ export class MediaListImpl {
   // SPEC_CLASH(media-list-mutation-comparison): Remove all matches, following
   // CSSOM/Chromium/Firefox; WebKit removes only one. See the CSSOM roadmap.
   deleteMedium(medium: string): void {
-    const query = parseSingleMediaQuery(medium);
+    const query = parseSingleMediaQuery(medium, {});
     if (query === null) return;
 
     const serialized = serializeMediaQuery(query);
@@ -106,7 +106,7 @@ export const mediaListIDL = defineInterface({
 // https://drafts.csswg.org/cssom/#parse-a-media-query
 // SPEC_CLASH(media-list-mutation-input): Follow CSSOM/Chromium's list recovery
 // and ignore empty/multiple-query input. Firefox/WebKit differ; see the roadmap.
-function parseSingleMediaQuery(input: string): MediaQuery | null {
-  const queries = parseMediaQueryList(input);
+function parseSingleMediaQuery(input: string, context: MathContext): MediaQuery | null {
+  const queries = parseMediaQueryList(input, context);
   return queries.length === 1 ? queries[0]! : null;
 }

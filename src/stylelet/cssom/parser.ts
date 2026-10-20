@@ -5,10 +5,12 @@ import type { StyleletEnvironment } from '../environment';
 import {
   consumeBlock, discardRuleBlock,
   type Declaration, type StatementAtRule, type ComponentValue,
-  type BlockContents, type TokenList, type ParsingContext, type TokenCursor, type Token,
+  type BlockContents, type TokenList, type TokenCursor, type Token,
 } from '../syntax/index';
-import { parseNestedSelectorList, parseSelectorList, type SelectorList } from '../selector/index';
-import { interpretPropertyDeclaration, type PropertyDeclaration } from '../css/index';
+import {
+  parseNestedSelectorList, parseSelectorList, type SelectorList, type SelectorContext,
+} from '../selector/index';
+import { interpretPropertyDeclaration, type PropertyDeclaration, type PropertyContext } from '../css/index';
 
 import { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from './rules';
 import type { CSSRuleImpl } from './rule';
@@ -17,13 +19,26 @@ import type { CSSRuleImpl } from './rule';
 // https://drafts.csswg.org/css-syntax-3/#parser-algorithms
 // The context is per parse, not a host facility on StyleletEnvironment. Each
 // nested block selects its own context before any declarations are consumed.
-export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDeclaration> {
+export class StylesheetContext implements SelectorContext, PropertyContext {
   env: StyleletEnvironment;
+
+  // TODO: Populate these fields when interpreting @namespace declarations.
+  /** Namespace names indexed by their declared prefix. */
+  namespacePrefixes?: Map<string, string>;
+  /** Namespace applied to unprefixed type selectors, when declared. */
+  defaultNamespace?: string;
+
+  // Numeric bindings belong to individual value grammars, such as relative colors.
+  declare numericVariables: undefined;
 
   #parentSelectors: SelectorList | null;
   #isConstructed: boolean;
 
-  constructor(parentSelectors: SelectorList | null, isConstructed: boolean, env: StyleletEnvironment) {
+  constructor(
+    parentSelectors: SelectorList | null,
+    isConstructed: boolean,
+    env: StyleletEnvironment,
+  ) {
     this.env = env;
     this.#parentSelectors = parentSelectors;
     this.#isConstructed = isConstructed;
@@ -31,14 +46,14 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
 
   /** Validate and interpret a property once, before declaration-versus-rule recovery. */
   interpretDeclaration(declaration: Declaration): PropertyDeclaration | null {
-    return interpretPropertyDeclaration(declaration);
+    return interpretPropertyDeclaration(declaration, this);
   }
 
   /** Select statement-at-rule interpretation with its enclosing context and earlier siblings. */
   // https://drafts.csswg.org/css-syntax-3/#consume-at-rule
   interpretStatementAtRule(
     rule: StatementAtRule,
-    preceding: BlockContents<CSSRuleImpl, PropertyDeclaration>,
+    preceding: BlockContents,
   ): CSSRuleImpl | null {
     switch (asciiLower(rule.name)) {
       case 'import':
@@ -62,7 +77,7 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
   interpretBlockAtRule(
     name: string,
     prelude: TokenList<ComponentValue>,
-    preceding: BlockContents<CSSRuleImpl, PropertyDeclaration>,
+    preceding: BlockContents,
     c: TokenCursor<Token>,
   ): CSSRuleImpl | null {
     switch (asciiLower(name)) {
@@ -89,23 +104,25 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
   // CSS Nesting; §8.1 still says <declaration-list>, despite allowing nested rules.
   interpretQualifiedRule(prelude: TokenList<ComponentValue>, c: TokenCursor<Token>): CSSStyleRuleImpl | null {
     const selectors = this.#parentSelectors === null
-      ? parseSelectorList(prelude)
-      : parseNestedSelectorList(prelude, this.#parentSelectors);
+      ? parseSelectorList(prelude, this)
+      : parseNestedSelectorList(prelude, this.#parentSelectors, this);
     if (selectors === null) {
       discardRuleBlock(c);
       return null;
     }
 
-    const context = new CSSParsingContext(selectors, this.#isConstructed, this.env);
-    const contents = c.withContext(context, consumeBlock);
-    return createStyleRule(selectors, contents, context);
+    const childContext = new StylesheetContext(selectors, this.#isConstructed, this.env);
+    childContext.namespacePrefixes = this.namespacePrefixes;
+    childContext.defaultNamespace = this.defaultNamespace;
+    const contents = c.withContext(childContext, consumeBlock);
+    return createStyleRule(selectors, contents, childContext);
   }
 
   /** Interpret a recognized statement; unlike unknown syntax, missing support is an implementation error. */
   // Rule-specific dependencies: css/ROADMAP.md#missing-rule-contracts
   #interpretStatementAtRule(
     rule: StatementAtRule,
-    _preceding: BlockContents<CSSRuleImpl, PropertyDeclaration>,
+    _preceding: BlockContents,
   ): CSSRuleImpl | null {
     // TODO: Validate the named rule's prelude and placement, then construct its CSSOM rule.
     throw new InternalError(`@${rule.name} statement grammar and CSSOM construction are not implemented`);
@@ -116,7 +133,7 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
   #interpretBlockAtRule(
     name: string,
     _prelude: TokenList<ComponentValue>,
-    _preceding: BlockContents<CSSRuleImpl, PropertyDeclaration>,
+    _preceding: BlockContents,
     _c: TokenCursor<Token>,
   ): CSSRuleImpl | null {
     // TODO: Select this rule's child context, consume its block, validate, and construct its rule.
@@ -130,8 +147,8 @@ export class CSSParsingContext implements ParsingContext<CSSRuleImpl, PropertyDe
 // CSS Nesting: https://drafts.csswg.org/css-nesting-1/#nested-declarations
 function createStyleRule(
   selectors: SelectorList,
-  contents: BlockContents<CSSRuleImpl, PropertyDeclaration>,
-  context: CSSParsingContext,
+  contents: BlockContents,
+  context: StylesheetContext,
 ): CSSStyleRuleImpl {
   const declarations: PropertyDeclaration[] = [];
   const children: CSSRuleImpl[] = [];

@@ -64,8 +64,8 @@ type IfArgumentsBranch = {
   value: OptionalDeclarationValue;
 };
 
-export function parseIf(input: ParserInput): IfValue | null {
-  return ifParser(input);
+export function parseIf(input: ParserInput, context: unknown): IfValue | null {
+  return ifParser(input, context);
 }
 
 export function consumeIf(
@@ -74,8 +74,8 @@ export function consumeIf(
   return ifConsumer(c);
 }
 
-export function parseIfArguments(input: ParserInput): IfArguments | null {
-  return ifArgumentsParser(input);
+export function parseIfArguments(input: ParserInput, context: unknown): IfArguments | null {
+  return ifArgumentsParser(input, context);
 }
 
 export function consumeIfArguments(

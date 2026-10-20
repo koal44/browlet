@@ -35,7 +35,7 @@ export function resolutionLiteral(
 
 export function parseResolution(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): ResolutionLiteral | null {
   return resolutionParser(input, context);
 }

@@ -32,7 +32,7 @@ export function timeLiteral(
 
 export function parseTime(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): TimeLiteral | null {
   return timeParser(input, context);
 }

@@ -18,6 +18,8 @@ in source order through `interpretPropertyDeclaration()`, which recognizes
 installed built-ins and custom properties. The declaration-block parser uses the
 list helper; CSSOM's parsing context calls the same single-declaration interpreter
 during consumption. See the [parsing pipeline](../README.md#parsing-and-object-construction).
+Both paths accept `PropertyContext`, carrying property/value settings without
+rule-interpretation hooks. Specialized grammars remain with their owning modules.
 Unknown properties and invalid values are discarded without invalidating their
 containing rule. Built-in names are ASCII-lowercased;
 custom names retain case and their component values remain available for later

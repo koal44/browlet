@@ -1,6 +1,6 @@
 import {
-  CSSDeclarationBlock, CSSStyleDeclarationImpl, CSSParsingContext, type CSSStyleSheetImpl, type TreeScope,
-  type StyleletEnvironment,
+  CSSDeclarationBlock, CSSStyleDeclarationImpl,
+  type CSSStyleSheetImpl, type TreeScope, type StyleletEnvironment,
 } from '../../stylelet/index';
 
 import type { ElementImpl, NodeImpl } from '../dom/nodes/index';
@@ -44,7 +44,7 @@ export class ElementCSSInlineStyleMixin {
       // raw attribute and prior accepted declarations; Firefox clears both.
       if (this.#element.nodeDocument.env.policyContainer.cspList!
         .isStyleAttributeBlocked(this.#element, value)) return;
-      (this.#block ??= new CSSDeclarationBlock()).setText(value, new CSSParsingContext(null, false, this.#env));
+      (this.#block ??= new CSSDeclarationBlock()).setText(value, {});
     }
     this.#style?.synchronizeIndices();
   }

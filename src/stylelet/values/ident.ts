@@ -21,7 +21,7 @@ export const identDef: ValueDefinition<IdentValue> = {
 
 export function parseIdent(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): IdentValue | null {
   return identParser(input, context);
 }

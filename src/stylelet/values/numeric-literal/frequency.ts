@@ -32,7 +32,7 @@ export function frequencyLiteral(
 
 export function parseFrequency(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): FrequencyLiteral | null {
   return frequencyParser(input, context);
 }

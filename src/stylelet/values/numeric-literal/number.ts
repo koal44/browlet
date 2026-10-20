@@ -20,7 +20,7 @@ export function numberLiteral(value: number): NumberLiteral {
 
 export function parseNumber(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): NumberLiteral | null {
   return numberParser(input, context);
 }

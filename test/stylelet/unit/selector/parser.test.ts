@@ -1,7 +1,9 @@
+import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
+import { tokenize } from '../../../../src/stylelet/syntax/tokens';
 import { describe, expect, it } from 'vitest';
 import type {
   AttributeSelector, AttrMatcher, AttrModifier, Combinator, ComplexSelector, ComplexSelectorList,
-  SelectorParserContext, WqName,
+  SelectorContext, WqName,
 } from '../../../../src/stylelet/selector/parser';
 import {
   parseComplexSelectorList, parseNestedSelectorList, parseSelectorList, PseudoArgumentKind,
@@ -17,7 +19,7 @@ function rethrowFromCaller(error: unknown, caller: Function): never {
   throw error;
 }
 
-function expectComplexSelectorList(css: string, context: SelectorParserContext = {}): ComplexSelectorList {
+function expectComplexSelectorList(css: string, context: SelectorContext = {}): ComplexSelectorList {
   try {
     const result = parseComplexSelectorList(css, context);
 
@@ -29,7 +31,7 @@ function expectComplexSelectorList(css: string, context: SelectorParserContext =
   }
 }
 
-function expectComplexSelector(css: string, context: SelectorParserContext = {}): ComplexSelector {
+function expectComplexSelector(css: string, context: SelectorContext = {}): ComplexSelector {
   try {
     const result = expectComplexSelectorList(css, context);
 
@@ -41,7 +43,7 @@ function expectComplexSelector(css: string, context: SelectorParserContext = {})
   }
 }
 
-function expectInvalidSelector(css: string, context: SelectorParserContext = {}): void {
+function expectInvalidSelector(css: string, context: SelectorContext = {}): void {
   try {
     const result = parseSelectorList(css, context);
     expect(result, `Expected selector to be invalid: ${css}`).toBeNull();
@@ -50,7 +52,7 @@ function expectInvalidSelector(css: string, context: SelectorParserContext = {})
   }
 }
 
-function expectValidSelector(css: string, context: SelectorParserContext = {}): ComplexSelectorList {
+function expectValidSelector(css: string, context: SelectorContext = {}): ComplexSelectorList {
   try {
     const result = parseSelectorList(css, context);
     expect(result, `Expected selector to be valid: ${css}`).not.toBeNull();
@@ -216,7 +218,7 @@ const specificity = (a: number, b: number, c: number) => ({
 });
 
 // pre-defined context
-const namespaceContext: SelectorParserContext = {
+const namespaceContext: SelectorContext = {
   namespacePrefixes: new Map([
     ['svg', 'http://www.w3.org/2000/svg'],
     ['xlink', 'http://www.w3.org/1999/xlink'],
@@ -1823,10 +1825,23 @@ describe('specificity', () => {
   });
 
   it('inherits nesting-selector specificity from its parent selectors', () => {
-    const parent = parseSelectorList('article, #featured')!;
-    const nested = parseNestedSelectorList('&.active', parent)!;
+    const parent = parseSelectorList('article, #featured', {})!;
+    const nested = parseNestedSelectorList('&.active', parent, {})!;
 
     expect(nested.specificity).toEqual(specificity(1, 1, 0));
+  });
+
+  it('uses the selected nesting context and reads an existing cursor only once', () => {
+    const parent = parseSelectorList('article, #featured', {})!;
+    const input = '&.active, > span, :is(&)';
+    const previous = { insideHas: true };
+    const c = new TokenCursor(tokenize(`skip ${input}`), previous);
+    c.restore(2);
+
+    expect(parseNestedSelectorList(c, parent, {}))
+      .toEqual(parseNestedSelectorList(input, parent, {}));
+    expect(c.eof()).toBe(true);
+    expect(c.context).toBe(previous);
   });
 
   it('sums specificity across compound and complex selectors', () => {

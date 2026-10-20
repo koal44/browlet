@@ -16,7 +16,7 @@ export type DashedIdentValue = {
 
 export function parseDashedIdent(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): DashedIdentValue | null {
   return dashedIdentParser(input, context);
 }

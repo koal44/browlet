@@ -20,7 +20,7 @@ export function percentageLiteral(value: number): PercentageLiteral {
 
 export function parsePercentage(
   input: ParserInput,
-  context: unknown = undefined,
+  context: unknown,
 ): PercentageLiteral | null {
   return percentageParser(input, context);
 }
