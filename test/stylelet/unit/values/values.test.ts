@@ -131,15 +131,13 @@ describe('auto', () => {
 });
 
 describe('CSS-wide value', () => {
-  it('parses keywords case-insensitively and serializes their canonical spelling', () => {
+  it('parses keywords case-insensitively into their canonical spelling', () => {
     const value = parseCssWideValue(' ReVeRt-LaYeR ', {});
 
     expect(value).toMatchObject({
       type: 'css-wide',
       keyword: 'revert-layer',
     });
-    expect(value!.serialize()).toBe('revert-layer');
-    expect(value!.resolve(ValueStage.Computed, {})).toBe(value);
   });
 
   it('rejects other identifiers and additional components', () => {
@@ -2834,6 +2832,11 @@ describe.skip('animation-name', () => {
 });
 
 describe('opacity values', () => {
+  it('uses the supplied normalization context during consumption', () => {
+    expect(parseOpacityValue('calc(150%)', { unwrapMathAt: ValueStage.Declared }))
+      .toEqual({ type: 'number', value: 1.5 });
+  });
+
   it.each([
     ['0.5', { type: 'number', value: 0.5 }],
     ['50%', { type: 'number', value: 0.5 }],

@@ -110,7 +110,7 @@ const opacityValueConsumer = oneOf(
     one(consumeNumber),
     one(consumePercentage),
   ],
-  ([value]) => resolveOpacityValue(value, ValueStage.Declared),
+  ([value], context: MathContext) => resolveOpacityValue(value, ValueStage.Declared, context),
 );
 
 const opacityValueParser = createComponentParser(withTrivia(opacityValueConsumer));

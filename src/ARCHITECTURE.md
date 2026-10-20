@@ -238,6 +238,19 @@ provenance, and rule attachment/removal updates parent-sheet associations throug
 their children. Binding projects these implementations rather than creating a
 second representation of their state.
 
+Stylelet whole values retain data, while whole-value definitions own shared
+parsing, resolution, and serialization operations. Built-in property records pair
+that value definition with inheritance and typed initial-value metadata; their
+registry keys supply the property names. The records live in the property-family
+modules. Custom-property registrations retain their own definitions and metadata.
+Initial values remain shared Declared representations; resolution must not
+mutate them. Engine defaulting and inheritance remain unfinished.
+Property parsing returns values ready to retain in a declaration: ordinary
+grammars prepare the Declared representation, while deferred forms retain
+their syntax. Registered-property grammar validation waits until Computed.
+Resolution receives stage and context at invocation. Serialization describes
+the retained representation without resolving it or selecting a later stage.
+
 Stylelet's StylesheetContext supplies rule grammar decisions to Syntax during
 consumption. It retains the existing environment for CSSOM allocation and the
 enclosing selectors for nested rules; it is per-parse state, not a host service

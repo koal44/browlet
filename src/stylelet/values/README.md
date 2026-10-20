@@ -7,17 +7,41 @@ behavior. Parser breadth is not installed-property support.
 ## Whole values and definitions
 
 [whole-value.ts](whole-value.ts) adapts a
-[ValueDefinition](../value-processing/definition.ts) to a whole property value.
-Its main representations are:
+[ValueDefinition](../value-processing/definition.ts) to a shared
+WholeValueDefinition. The definition owns parsing, resolution,
+and serialization; each WholeValue retains only data, without lifecycle
+methods, a definition reference, or a context type parameter.
+
+`definition.parse(input, context)` returns a value ready to retain in a
+declaration, or null for invalid ordinary property syntax. It reads generic
+declaration syntax through `parseOptionalDeclarationValue`, then applies the
+property's grammar. The grammar's consumer prepares its Declared representation;
+callers do not need a second Declared-stage resolution to finish parsing.
+Existing component lists enter the same path without being tokenized again.
+
+Later callers use `definition.resolve(value, stage, context)` and
+`definition.serialize(value)`. Resolution returns a value, including explicit
+GuaranteedInvalidValue where appropriate; null belongs to initial parse rejection.
+Built-in declarations select the definition by
+property name; registered custom properties retain it in their registration.
+Keep that association when carrying values into later processing: an ordinary
+value alone does not identify its property's grammar or defaulting rules.
+
+The main representations are:
 
 | Representation | Current role |
 | --- | --- |
-| RawWholeValue | Retains declaration components and delays selection of the property grammar until resolution. |
-| OrdinaryWholeValue | Holds a concrete parsed value and delegates resolution/serialization to its definition. |
+| RawWholeValue | Retains registered custom-property components without trying the registered grammar before Computed. |
+| OrdinaryWholeValue | Holds a concrete parsed value; its shared definition delegates resolution/serialization to the underlying ValueDefinition. |
 | CssWideValue | Recognizes `initial`, `inherit`, `unset`, `revert`, and `revert-layer`; resolution currently returns the keyword unchanged. |
 | SubstitutionValue | Retains a value containing a recognized arbitrary-substitution function. Before Computed it remains unresolved; at Computed replacement throws as unimplemented. |
-| FirstValidWholeValue | Retains alternatives before Computed, then tries the property's parser/resolver for each until one succeeds. It is not independent of the substitution/defaulting gaps. |
+| FirstValidValue | Retains alternatives before Computed; the property definition then tries its parser/resolver for each until one succeeds. It is not independent of the substitution/defaulting gaps. |
 | GuaranteedInvalidValue | Represents invalidity distinctly from an ordinary value; serializes as an empty string. It does not perform registration or property fallback. |
+
+Resolution receives the requested stage and current context on every call.
+Parsing recognizes CSS-wide keywords, first-valid alternatives, and substitution
+values while leaving their deferred dependencies intact. Later resolution
+interprets deferred syntax when due; serialization never advances a value's stage.
 
 [substitution-value.ts](substitution-value.ts) recognizes `var`, `attr`, `env`,
 `if`, `inherit`, `random-item`, and dashed custom-function names, including in
@@ -33,8 +57,9 @@ and serialized through their individual definitions; lists retain their items
 and separator kind. Transform type names are accepted in syntax definitions,
 but creating their value consumer explicitly throws as unfinished.
 
-`defineCustomProperty()` supplies a grammar wrapper for a known registration.
-It retains ordinary raw input before Computed, then checks registered syntax
+`defineCustomWholeValue()` supplies a grammar wrapper for a known registration.
+It retains ordinary raw input without consulting that grammar's dependencies
+before Computed, then checks registered syntax
 and resolves supported values; syntax failure becomes GuaranteedInvalidValue.
 This does not implement `CSS.registerProperty()`, inheritance, `var()`, or
 computed-time fallback. The [engine inventory](../engine/README.md#registration-lookup)

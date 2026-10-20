@@ -1,11 +1,14 @@
-export { ColorRgba, absoluteColorFromRgba, colorDef, type ColorContext, type AbsoluteColor } from './color';
+export {
+  ColorKind, ColorRgba, absoluteColorFromRgba, colorDef,
+  type ColorContext, type ColorValueContext, type ColorValue, type AbsoluteColor,
+} from './color';
 export type { GradientContext } from './gradient';
 export type { MathContext } from './math-value';
 export type { PositionContext } from './position';
 export type { ParsedSyntaxValue, SyntaxValue } from './syntax-value';
 export type { UrlContext } from './url';
 export type { SupportsContext } from './supports-condition';
-export { defineProperty, type WholeValue, type WholeValueDefinition } from './whole-value';
+export { defineWholeValue, type WholeValue, type WholeValueDefinition } from './whole-value';
 export {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MediaQuery,

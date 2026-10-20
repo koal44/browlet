@@ -4,29 +4,38 @@ import {
   parseOptionalDeclarationValue, serializeComponentValues,
   type OptionalDeclarationValue, type Declaration,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
+import type { ValueStage } from '../value-processing/index';
 import type {
   ColorContext, GradientContext, MathContext, PositionContext, ParsedSyntaxValue, SyntaxValue, UrlContext,
   WholeValue, WholeValueDefinition, SupportsContext,
 } from '../values/index';
 import {
-  colorProperty, marginBottomProperty, marginLeftProperty, marginRightProperty, marginTopProperty,
-  opacityProperty,
+  backgroundColorProperty, colorProperty, opacityProperty,
+  marginBottomProperty, marginLeftProperty, marginRightProperty, marginTopProperty,
 } from '../props/index';
 
-export type PropertyDeclaration =
-  | BuiltInPropertyDeclaration
+/** Shared built-in property record; its registry key supplies the name. */
+export type PropertyRecord<Value, Context> = {
+  definition: WholeValueDefinition<Value, Context>;
+  /** Whether defaulting inherits the parent's computed value. */
+  inherits: boolean;
+  /** Shared Declared representation; resolution must leave this value unchanged. */
+  initialValue: WholeValue<Value>;
+};
+
+export type PropertyDeclaration<Name extends PropertyName = PropertyName> =
+  | BuiltInPropertyDeclaration<Name>
   | CustomPropertyDeclaration;
 
-export type BuiltInPropertyDeclaration = {
-  [Name in PropertyName]: {
+export type BuiltInPropertyDeclaration<Name extends PropertyName = PropertyName> = {
+  [Key in Name]: {
     type: 'property-declaration';
     custom: false;
-    name: Name;
-    value: PropertyValue<Name>;
+    name: Key;
+    value: PropertyValue<Key>;
     important: boolean;
   };
-}[PropertyName];
+}[Name];
 
 export type CustomPropertyDeclaration = {
   type: 'property-declaration';
@@ -44,12 +53,22 @@ export type SerializedPropertyDeclaration = {
 };
 
 export type PropertyValue<Name extends PropertyName> =
-  WholeValueFor<(typeof propertyRegistry)[Name]>;
+  WholeValue<PropertyData[Name]>;
 
-type WholeValueFor<Definition> =
-  Definition extends WholeValueDefinition<infer Value, infer Context>
-    ? WholeValue<Value, Context>
+type PropertyData = {
+  [Name in PropertyName]: ValueFor<(typeof propertyRegistry)[Name]>;
+};
+
+type ValueFor<Property> =
+  Property extends PropertyRecord<infer Value, PropertyContext>
+    ? Value
     : never;
+
+// This mapped view keeps each registry key paired with its value type during
+// generic lookup. It describes the existing registry, not another registration.
+type PropertyRecords = {
+  [Name in PropertyName]: PropertyRecord<PropertyData[Name], PropertyContext>;
+};
 
 export type PropertyContext =
   & MathContext
@@ -60,7 +79,7 @@ export type PropertyContext =
   & SupportsContext;
 
 export const propertyRegistry = {
-  'background-color': colorProperty,
+  'background-color': backgroundColorProperty,
   color: colorProperty,
   'margin-bottom': marginBottomProperty,
   'margin-left': marginLeftProperty,
@@ -78,7 +97,7 @@ export type CustomPropertyRegistration = {
   syntax: SyntaxValue;
   definition: WholeValueDefinition<ParsedSyntaxValue, PropertyContext>;
   inherits: boolean;
-  initialValue: WholeValue<ParsedSyntaxValue, PropertyContext>;
+  initialValue: WholeValue<ParsedSyntaxValue>;
 };
 
 export type CustomPropertyRegistry = ReadonlyMap<
@@ -115,8 +134,8 @@ export function interpretPropertyDeclaration(
   return interpretBuiltInPropertyDeclaration(declaration, name, context);
 }
 
-export function serializePropertyDeclaration(
-  declaration: PropertyDeclaration,
+export function serializePropertyDeclaration<Name extends PropertyName>(
+  declaration: PropertyDeclaration<Name>,
 ): SerializedPropertyDeclaration {
   if (declaration.custom) {
     return {
@@ -127,24 +146,23 @@ export function serializePropertyDeclaration(
     };
   }
 
+  const property: PropertyRecords[Name] = propertyRegistry[declaration.name];
   return {
     name: declaration.name,
-    value: declaration.value.serialize(),
+    value: property.definition.serialize(declaration.value),
     important: declaration.important,
   };
 }
 
-export function resolveBuiltInPropertyDeclaration(
-  declaration: BuiltInPropertyDeclaration,
+export function resolveBuiltInPropertyDeclaration<Name extends PropertyName>(
+  declaration: BuiltInPropertyDeclaration<Name>,
   stage: ValueStage,
   context: PropertyContext = {},
-): BuiltInPropertyDeclaration | null {
-  const value = declaration.value.resolve(stage, context);
-  if (value === null) return null;
+): BuiltInPropertyDeclaration<Name> {
+  const property: PropertyRecords[Name] = propertyRegistry[declaration.name];
+  const value = property.definition.resolve(declaration.value, stage, context);
 
-  // TypeScript does not preserve the correlation between a property name and
-  // its value while resolving a union of built-in declarations.
-  return { ...declaration, value } as BuiltInPropertyDeclaration;
+  return { ...declaration, value };
 }
 
 function interpretCustomPropertyDeclaration(
@@ -171,25 +189,20 @@ function interpretBuiltInPropertyDeclaration<Name extends PropertyName>(
   declaration: Declaration,
   name: Name,
   context: PropertyContext,
-): BuiltInPropertyDeclarationFor<Name> | null {
-  const raw = propertyRegistry[name].parse(declaration.value, context);
-  const value = raw?.resolve(ValueStage.Declared, context);
+): BuiltInPropertyDeclaration<Name> | null {
+  const property: PropertyRecords[Name] = propertyRegistry[name];
+  const value = property.definition.parse(declaration.value, context);
 
-  if (value === null || value === undefined) return null;
+  if (value === null) return null;
 
-  // TypeScript does not preserve the correlation between a generic registry
-  // key and the value returned by that entry through indexed access.
   return {
     type: 'property-declaration',
     custom: false,
     name,
     value,
     important: declaration.important,
-  } as BuiltInPropertyDeclarationFor<Name>;
+  };
 }
-
-type BuiltInPropertyDeclarationFor<Name extends PropertyName> =
-  Extract<BuiltInPropertyDeclaration, { name: Name; }>;
 
 function isPropertyName(name: string): name is PropertyName {
   return Object.hasOwn(propertyRegistry, name);

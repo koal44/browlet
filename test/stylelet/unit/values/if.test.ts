@@ -8,7 +8,7 @@ import {
   consumeIf, parseIf, parseIfArguments,
 } from '../../../../src/stylelet/values/substitution/if';
 import {
-  defineCustomProperty, guaranteedInvalidValue,
+  defineCustomWholeValue, guaranteedInvalidValue,
 } from '../../../../src/stylelet/values/whole-value';
 import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
 
@@ -143,10 +143,11 @@ describe('<if-args>', () => {
 });
 
 describe('if() replacement', () => {
-  const property = defineCustomProperty({ syntax: parseSyntax('<color>', {})! });
+  const property = defineCustomWholeValue({ syntax: parseSyntax('<color>', {})! });
 
   function resolve(input: string, context: PropertyContext = {}) {
-    return property.parse(input, context)?.resolve(ValueStage.Computed, context);
+    const raw = property.parse(input, context);
+    return raw === null ? null : property.resolve(raw, ValueStage.Computed, context);
   }
 
   it.fails('selects the first branch whose supports test is true', () => {
@@ -156,7 +157,7 @@ describe('if() replacement', () => {
       { supports },
     );
 
-    expect(value?.serialize()).toBe('rgb(255, 0, 0)');
+    expect(property.serialize(value!)).toBe('rgb(255, 0, 0)');
     expect(supports).toHaveBeenCalledTimes(1);
   });
 
@@ -167,7 +168,7 @@ describe('if() replacement', () => {
       { supports },
     );
 
-    expect(value?.serialize()).toBe('rgb(255, 0, 0)');
+    expect(property.serialize(value!)).toBe('rgb(255, 0, 0)');
     expect(supports).toHaveBeenCalledTimes(1);
   });
 
@@ -178,23 +179,23 @@ describe('if() replacement', () => {
       { supports },
     );
 
-    expect(value?.serialize()).toBe('rgb(255, 0, 0)');
+    expect(property.serialize(value!)).toBe('rgb(255, 0, 0)');
     expect(supports).not.toHaveBeenCalled();
   });
 
   it.fails('skips a condition that does not parse after substitution', () => {
-    expect(resolve('if(not-a-condition: blue; else: red)')?.serialize())
-      .toBe('rgb(255, 0, 0)');
+    const value = resolve('if(not-a-condition: blue; else: red)')!;
+    expect(property.serialize(value)).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('does not substitute the value of a false branch', () => {
-    expect(resolve('if(future(): var(--missing); else: red)')?.serialize())
-      .toBe('rgb(255, 0, 0)');
+    const value = resolve('if(future(): var(--missing); else: red)')!;
+    expect(property.serialize(value)).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('substitutes arbitrary functions in the selected value', () => {
-    expect(resolve('if(else: if(else: red))')?.serialize())
-      .toBe('rgb(255, 0, 0)');
+    const value = resolve('if(else: if(else: red))')!;
+    expect(property.serialize(value)).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('returns an empty sequence when no branch matches', () => {

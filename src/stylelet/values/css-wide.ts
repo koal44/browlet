@@ -2,10 +2,8 @@ import {
   withTrivia, parseAsComponentGrammar,
   type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueStage } from '../value-processing/index';
 
 import { createKeywordConsumer } from './keyword';
-import type { WholeValue } from './whole-value';
 
 /*
  * CSS-wide keywords:
@@ -22,45 +20,30 @@ export const CSS_WIDE_KEYWORDS = [
 
 export type CssWideKeyword = (typeof CSS_WIDE_KEYWORDS)[number];
 
-export type CssWideValue<Value = unknown, Context = unknown> = {
+export type CssWideValue = {
   type: 'css-wide';
   keyword: CssWideKeyword;
-  resolve: (stage: ValueStage, context: Context) => WholeValue<Value, Context>;
-  serialize: () => string;
 };
 
-export function parseCssWideValue<Value = unknown, Context = unknown>(
+export function parseCssWideValue(
   input: ParserInput,
   context: unknown,
-): CssWideValue<Value, Context> | null {
+): CssWideValue | null {
   return parseAsComponentGrammar(
     input,
-    withTrivia(consumeCssWideValue<Value, Context>),
+    withTrivia(consumeCssWideValue),
     context,
   );
 }
 
-export function consumeCssWideValue<Value, Context>(
+export function consumeCssWideValue(
   c: TokenCursor,
-): TryConsumerResult<CssWideValue<Value, Context>> {
+): TryConsumerResult<CssWideValue> {
   const keyword = cssWideKeywordConsumer(c);
 
   if (keyword === null) return null;
 
-  return createCssWideValue(keyword);
-}
-
-function createCssWideValue<Value, Context>(
-  keyword: CssWideKeyword,
-): CssWideValue<Value, Context> {
-  const value: CssWideValue<Value, Context> = {
-    type: 'css-wide',
-    keyword,
-    resolve: () => value,
-    serialize: () => keyword,
-  };
-
-  return value;
+  return { type: 'css-wide', keyword };
 }
 
 // <css-wide-keyword> = inherit | initial | unset | revert | revert-layer

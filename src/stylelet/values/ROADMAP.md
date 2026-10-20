@@ -69,7 +69,8 @@ roadmaps; these tasks concern the resulting values.
   recheck current draft algorithms before implementing them.
 - [ ] Provide typed registered-property interpolation when an actual consumer
   needs it: computed-value dispatch, equal-length lists, and transform-specific
-  behavior. Existing optional WholeValue combination fields are not wired.
+  behavior. WholeValue stores data; add shared definition operations when a
+  consumer needs them, using the existing type-specific combination helpers.
   [Registration interpolation](https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties)
   does not require this folder to own timelines or animation scheduling.
 - [ ] Implement [Typed OM reification](https://drafts.css-houdini.org/css-typed-om-1/#reify-stylevalue)

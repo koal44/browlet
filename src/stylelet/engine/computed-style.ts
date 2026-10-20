@@ -51,6 +51,7 @@ export function computeStyle(
       context = engine.getPropertyContext(cascaded);
     }
 
+    // TODO: Apply the property's initial/inherited metadata and CSS-wide defaulting.
     if (selected === undefined || selected.custom) continue;
 
     const resolved = resolveBuiltInPropertyDeclaration(
@@ -58,7 +59,7 @@ export function computeStyle(
       ValueStage.Computed,
       context,
     );
-    if (resolved !== null) computed.push(resolved);
+    computed.push(resolved);
   }
 
   return new CSSStyleDeclarationImpl({

@@ -30,10 +30,11 @@ together. Level 6 supplements the earlier level.
 and [defaulting](https://drafts.csswg.org/css-cascade-5/#defaulting) require more
 than calling a selected value's resolver.
 
-- [ ] Obtain initial values, inherited flags, and computed-value rules from
-  property definitions. Defaults and explicit CSS-wide keywords must work even
-  when no declaration won. The [lifecycle roadmap](../value-processing/ROADMAP.md)
-  records the missing metadata and stage contracts.
+- [ ] Consume initial values and inherited flags from the installed property
+  records, and connect property-specific computed-value rules. Defaults and
+  explicit CSS-wide keywords must work even when no declaration won. The
+  [lifecycle roadmap](../value-processing/ROADMAP.md) records remaining metadata
+  and stage contracts.
 - [ ] Resolve inherited computed values using the flat-tree parent, with root
   defaults and pseudo-element-specific inheritance. Identify the existing DOM
   owner supplying that relation; layout boxes are not the inheritance tree.

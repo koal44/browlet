@@ -9,6 +9,7 @@ separate interpreted stylesheet tree.
 
 | Representation | Responsibility |
 | --- | --- |
+| `PropertyRecord` | Shared value definition, inherited flag, and typed initial value; family modules supply records and the registry supplies their names |
 | `PropertyDeclaration` | Name, importance, and parsed value; built-in names preserve their registry/value type relationship |
 | `CustomPropertyRegistration` | Syntax, inheritance, definition, and initial value used by registration lookup; author registration and `@property` parsing remain unfinished |
 | [CSSDeclarationBlock](declaration-block.ts) | Declaration order, lookup, text parsing/serialization, and mutation; shared by the inline owner and its current CSSOM object |

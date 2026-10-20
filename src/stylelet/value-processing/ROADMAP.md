@@ -21,13 +21,13 @@ Sources: [Cascade stages/defaulting](https://drafts.csswg.org/css-cascade-5/#val
 [Values 5 property substitution](https://drafts.csswg.org/css-values-5/#resolve-property).
 Individual algorithms in these sections still need implementation review.
 
-## Property definitions and failure states
+## Property metadata and failure states
 
-- [ ] Add the property information needed by actual consumers: initial value,
-  inherited flag, computed-value rule, applicability, percentage behavior,
-  shorthand relationships, and logical groups. Do not turn ValueDefinition's
-  shared grammar operations into a duplicate table of every property fact.
-  Decide the concrete shape while connecting the first defaulting cases.
+- [ ] Connect engine defaulting to the initial values and inherited flags in
+  the seven installed [property records](../props/README.md).
+  Add further facts when their consumers are implemented: computed-value rules,
+  applicability, percentage behavior, shorthand relationships, and logical
+  groups. Keep shared value grammar operations in each record's `definition`.
 - [ ] Preserve different outcomes: invalid syntax is discarded before cascade;
   an invalid substituted winner follows computed-time fallback, not an earlier
   declaration; a rollback keyword deliberately revisits cascade candidates.

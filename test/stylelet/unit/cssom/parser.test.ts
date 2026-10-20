@@ -23,13 +23,15 @@ describe('CSS rule construction', () => {
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: propertyRegistry.color.parse('red', {})!,
+      value: propertyRegistry.color.definition.parse('red', {})!,
       important: false,
     };
-    const resolved = declaration.value.resolve(ValueStage.Computed, {});
+    const resolved = propertyRegistry[declaration.name].definition.resolve(
+      declaration.value, ValueStage.Computed, {},
+    );
 
-    expect(resolved?.type).toBe('ordinary');
-    if (resolved?.type === 'ordinary') {
+    expect(resolved.type).toBe('ordinary');
+    if (resolved.type === 'ordinary') {
       expect(resolved.value.kind).toBe(ColorKind.Absolute);
     }
   });
@@ -46,7 +48,7 @@ describe('CSS rule construction', () => {
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: propertyRegistry.color.parse('var(--accent)', {})!,
+      value: propertyRegistry.color.definition.parse('var(--accent)', {})!,
       important: false,
     }, custom], env);
 
