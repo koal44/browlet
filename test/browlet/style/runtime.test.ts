@@ -27,9 +27,9 @@ describe('Stylelet execution integration', () => {
     const sheet = styles.createStyleSheet({ baseURL: 'https://example.test/assets/' });
 
     expect(styles.context.env.userAgent.URL).toBe(URLImpl);
-    expect(sheet.interpretedStyleSheet.location).toBeInstanceOf(URLImpl);
-    expect(sheet.interpretedStyleSheet.baseUrl).toBeInstanceOf(URLImpl);
-    expect(sheet.interpretedStyleSheet.baseUrl?.href).toBe('https://example.test/assets/');
+    expect(sheet.location).toBeInstanceOf(URLImpl);
+    expect(sheet.baseURL).toBeInstanceOf(URLImpl);
+    expect(sheet.baseURL?.href).toBe('https://example.test/assets/');
     expect(typeof sheet.href).toBe('string');
   });
 

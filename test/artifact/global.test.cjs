@@ -62,7 +62,7 @@ if (typeof stlt.createStyleSheet !== "function") {
 }
 
 const sheet = stlt.createStyleSheet({ baseURL: "https://example.test/assets/" });
-if (sheet.href !== "about:blank" || sheet.interpretedStyleSheet.baseUrl.href !== "https://example.test/assets/") {
+if (sheet.href !== "about:blank" || sheet.baseURL.href !== "https://example.test/assets/") {
   throw new Error("Expected standalone stylesheet URL resolution through the native provider");
 }
 

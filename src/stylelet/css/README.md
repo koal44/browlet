@@ -1,76 +1,46 @@
-# Interpreted CSS and declaration data
+# Property declarations and storage
 
-This folder recognizes CSS rules and property declarations after structural
-parsing. It holds the installed property registry and the current declaration
-storage. These records are distinct from CSSOM implementations and their
-eventual Platform objects. The [roadmap](ROADMAP.md) records missing rule
-contracts and state-ownership questions.
+This folder recognizes property declarations, holds the installed property
+registry, and provides the current declaration storage. Stylesheet and rule
+state belongs to the [CSSOM implementations](../cssom/README.md); there is no
+separate interpreted stylesheet tree.
 
-## Current path
+## Current representations
 
-1. [parseStylesheet()](stylesheet.ts) calls the
-   [syntax parser](../syntax/parser.ts), then interprets its records.
-2. A valid top-level qualified rule becomes a `StyleRule` with parsed selectors
-   and a `StyleBlock`. Invalid selector lists discard the rule.
-3. [interpretPropertyDeclaration()](property.ts) recognizes installed built-in
-   properties and custom properties. Unknown properties and invalid values are
-   discarded without invalidating their containing rule.
-4. [CSSStyleSheetImpl](../cssom/css-stylesheet.ts) retains the interpreted sheet
-   and builds CSSOM rule implementations. The
-   [cascade](../engine/cascade.ts) reads interpreted rules directly.
-
-| Representation | Current contents |
+| Representation | Responsibility |
 | --- | --- |
-| `InterpretedStyleSheet` | Ordered rules, optional location/base URL, and retained source text |
-| `StyleRule` | A parsed selector list and mixed block of property declarations/nested style rules |
 | `PropertyDeclaration` | Name, importance, and parsed value; built-in names preserve their registry/value type relationship |
-| `PropertyRule` | A custom-property registration record type; no stylesheet parser or CSSOM rule construction currently produces it |
-| [CSSDeclarationBlock](declaration-block.ts) | Current declaration data, order, serialization, and mutation container; ownership remains under CSSOM review |
+| `CustomPropertyRegistration` | Syntax, inheritance, definition, and initial value used by registration lookup; author registration and `@property` parsing remain unfinished |
+| [CSSDeclarationBlock](declaration-block.ts) | Declaration order, lookup, text parsing/serialization, and mutation; shared by the inline owner and its current CSSOM object |
 
-Built-in names are ASCII-lowercased during interpretation and values enter the
-declared stage. Custom-property names retain case and their component values
-remain available for later substitution; original value text can be retained.
+[interpretPropertyDeclarations()](property.ts) interprets syntax declarations
+in source order through `interpretPropertyDeclaration()`, which recognizes
+installed built-ins and custom properties. The declaration-block and CSSOM
+parsers share this step; see the [parsing pipeline](../README.md#parsing-and-object-construction).
+Unknown properties and invalid values are discarded without invalidating their
+containing rule. Built-in names are ASCII-lowercased;
+custom names retain case and their component values remain available for later
+substitution. Custom values can retain original text.
+
 The installed built-ins are color/background-color, opacity, and four margin
 longhands. Broader value parsers do not register additional properties.
 
-## Rule support stops at different layers
+## Consumers and boundaries
 
-| Construct | Interpreter | CSSOM / engine consequence |
-| --- | --- | --- |
-| Ordinary style rule | Retained | Declaration edits and top-level matching exist; selector/rule serialization and mutation are incomplete. |
-| Nested style rule | Retained recursively; implicit `&` and parent-dependent specificity are represented | Selector tests can match it directly, but CSSOM child lists are not populated and the cascade does not visit nested rules. |
-| Declarations after a nested rule | Kept in mixed source order, but syntax declaration runs are flattened into individual entries | No `CSSNestedDeclarations` representation; CSSOM currently collects all direct declarations into the parent's `.style`. |
-| Statement/block at-rules | Discarded at both top level and nested level | No `@namespace`, import, conditional, layer, scope, or descriptor-rule participation follows from structural parsing. |
-| `@charset` in parsed CSS | Discarded | Intentional: encoding detection recognizes its initial byte pattern; it is not a CSS rule needing an implementation. |
+[CSSOM's parser](../cssom/parser.ts) converts generic syntax records directly
+into rule implementations, using this folder for property interpretation.
+Nested style rules and later declaration runs retain their own implementations;
+the engine reads their current declaration data without copying it back to a
+second tree. See the [CSSOM inventory](../cssom/README.md#rule-parsing).
 
-Namespace support currently requires explicitly supplied selector-parser
-context. Stylesheet interpretation neither processes `@namespace` nor supplies
-that context. Likewise, the declaration-based condition grammar in
-[values/supports-condition.ts](../values/supports-condition.ts) is not an implemented
-`@supports` rule or projected `CSS.supports()` API.
+The separate declaration block is still under review alongside
+`CSSStyleDeclaration` and the missing `CSSStyleProperties` implementation.
+It currently stores one declaration list, not a synchronized duplicate.
+Its shared inline ownership and the mixin's manual index synchronization are
+the next ownership questions; see the [CSSOM roadmap](../cssom/ROADMAP.md).
 
-## Mutation and participation
-
-`CSSStyleRuleImpl` copies direct declarations into its current declaration
-block. Its change callback replaces the interpreted block with declarations.
-That arrangement needs review together with nested-rule preservation and the
-future `CSSStyleProperties` owner; passing simple-rule tests does not settle it.
-See the [CSSOM mutation work](../cssom/ROADMAP.md#rule-mutation-ownership).
-
-The cascade currently filters disabled sheets and matches top-level style
-rules. It compares importance, matching specificity, and appearance order for
-supported declarations. It does not traverse nested rules or evaluate group
-conditions, layers, or `@scope`. The [engine roadmap](../engine/ROADMAP.md)
-owns full cascade participation and evaluation.
-
-## Evidence and next work
-
-The [stylesheet tests](../../../test/stylelet/unit/css/stylesheet.test.ts) cover
-interpretation, invalid/unknown input, declaration ordering, retained custom
-values, and recursive nested-selector binding. The
-[matcher tests](../../../test/stylelet/unit/selector/match.test.ts) exercise
-nested selectors independently of engine traversal. Both passed in the
-[syntax and selector baseline](../README.md#syntax-rules-and-selectors).
-
-The [roadmap](ROADMAP.md) maps missing rules to their specifications and owners.
-End-to-end nesting and complete rule conformance remain unverified.
+The [rule roadmap](ROADMAP.md) maps unfinished grammars and their consumers.
+[Rule construction tests](../../../test/stylelet/unit/cssom/parser.test.ts)
+cover invalid/unknown input, declaration ordering, retained custom values,
+and recursive nested-selector binding. End-to-end nesting, all rule grammars,
+and complete CSSOM conformance remain unfinished.

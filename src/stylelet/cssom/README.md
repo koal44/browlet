@@ -10,8 +10,10 @@ observable behavior, rather than private storage choices, constrains its replace
 | Implementation | Current responsibility and limit |
 | --- | --- |
 | [StyleSheetImpl](stylesheet.ts) | Common metadata, owner/parent references, retained `MediaList`, disabled state; abstract base |
-| [CSSStyleSheetImpl](css-stylesheet.ts) | Constructed/associated sheet creation, origin-clean and modification checks, insert/delete/replace operations, retained rule-list identity, and an interpreted sheet used by the engine |
-| [CSSRuleImpl](rule.ts), [CSSStyleRuleImpl](rules.ts) | Base rule identity/constants and style-rule declarations. Parent associations are TODOs; selector text is a placeholder and serialization/nested mutation throw. |
+| [CSSStyleSheetImpl](css-stylesheet.ts) | Owns the rule tree, location/base URL, metadata, and construction/access flags; retains list identity through insert/delete/replace operations |
+| [CSSRuleImpl](rule.ts), [CSSGroupingRuleImpl](rules.ts) | Rule identity/constants, parent associations, and retained child lists; nested insertion/deletion remain throwing stubs |
+| [CSSStyleRuleImpl](rules.ts), [CSSNestedDeclarationsImpl](rules.ts) | Parsed selectors, leading declarations, and separate later declaration runs; style-rule selector text and serialization remain unfinished |
+| [CSSPropertyRuleImpl](rules.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
 | [CSSStyleDeclarationImpl](declaration.ts) | Declaration queries, mutation, CSS text, owner write-back, and readonly/computed flags. It currently also installs the property accessors expected from the missing `CSSStyleProperties` interface. |
 | [MediaListImpl](media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation; does not evaluate media against a device |
 | [CSSRuleListImpl](rule-list.ts), [StyleSheetListImpl](stylesheet-list.ts) | Retained ordered collections with manually synchronized numeric properties |
@@ -42,7 +44,7 @@ There are three current uses of declaration state:
 | Use | Data and change path |
 | --- | --- |
 | Inline style | Browlet's permanent element mixin retains a block and lazily creates the declaration object around it. Attribute input changes the block; CSSOM writes serialize back to the owner with an updating flag. |
-| Style-rule declarations | `CSSStyleRuleImpl` copies declarations from the interpreted rule into a block. Its `onChange` callback replaces the interpreted rule's block with the declaration array. Shared ownership and nested contents need review. |
+| Style-rule declarations | Each style or nested-declarations rule owns its declaration object. The engine reads that object's parsed declarations directly; edits do not replace child rules or synchronize a second tree. |
 | Computed result | The engine creates a separate block and readonly/computed declaration object for each query. The object contains a snapshot and has no owner node or update mechanism. |
 
 Construction itself does not read an owner's attribute. A standalone host
@@ -60,12 +62,38 @@ does not currently maintain an observer list.
 
 ## Sheets, collections, and execution
 
-`CSSStyleSheetImpl` retains both interpreted rules for the engine and CSSOM rule
-objects. `replaceSync()` replaces their contents while keeping the list object;
+`CSSStyleSheetImpl.ruleList` is the authoritative rule collection. Internal
+engine reads use it directly, including for non-origin-clean sheets;
+the author-facing `cssRules` getter retains its security check.
+`replaceSync()` replaces contents while keeping the list object;
 `replace()` uses the owning environment's background execution, task delivery,
 and `InternalPromise`. Modification locking spans the asynchronous replacement.
-Only style rules have a working construction path. At-rules are discarded by
-interpretation, and insertion of an import is currently rejected for every sheet.
+Parent-sheet associations propagate through children on attachment/removal.
+Location and parse-time base URL belong to the sheet, independently of its rules.
+
+### Rule parsing
+
+[parseCSSRules()](parser.ts) parses generic syntax and constructs unattached
+implementations directly. It does not retain a second interpreted tree or whole
+sheet source string. Selector/value records remain internal parsed data;
+custom-property source text is retained where its representation needs it.
+
+`interpretCSSRule()` dispatches generic rules; `interpretStyleRule()` applies
+selector/property grammars and constructs style-rule implementations. These
+helpers implement CSS Syntax's [rule interpretation requirements](https://drafts.csswg.org/css-syntax-3/#css-stylesheets)
+and CSS Nesting's declaration placement; they are not separate named spec algorithms.
+
+| Construct | Current result / limit |
+| --- | --- |
+| Ordinary style rule | CSSStyleRuleImpl with parsed selectors and a declaration object |
+| Nested style rule | Child CSSStyleRuleImpl with parent-bound selectors and specificity; engine matching of nested style rules remains unfinished |
+| Declarations after a retained child rule | Separate CSSNestedDeclarationsImpl children, in order; the cascade reads them with the parent's matching result |
+| At-rules | Discarded; recognized rule grammars, namespace context, grouping applicability, and imports are unfinished |
+| `@charset` in parsed text | Intentionally discarded; encoding detection uses its initial byte pattern, not a live rule |
+
+Invalid selector lists discard the rule. Invalid/unsupported declarations do
+not discard its valid siblings. Top-level import insertion is still rejected
+for every sheet; nested insertion/deletion remain explicit stubs.
 
 [TreeScope](../engine/tree-scope.ts) orders header sheets before tree-associated
 sheets, then adds adopted sheets for cascade order. It tracks preferred/selected
@@ -100,12 +128,17 @@ storage or to accept author inputs that Binding should already have converted.
 
 ## Validation baseline
 
-On 2026-10-19, **11 files, 111 tests passed** on the custom Node 27 compatibility
-runtime. The run covered the first five rows above and the IDL contribution test:
+On 2026-10-19, the rule-ownership cleanup passed **138 tests across 14 files**
+on the custom Node 27 compatibility runtime. Seven pre-existing custom-property
+defaulting/substitution cases remained skipped. These two focused commands cover
+rule construction, mutation, engine reads, host integration, CSP, and the current
+IDL contribution:
 
 ```text
-node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/cssom test/stylelet/unit/engine/tree-scope.test.ts test/stylelet/unit/web-idl.test.ts test/stylelet/unit/environment.test.ts test/stylelet/unit/host.test.ts test/browlet/style test/browlet/browsing/policy/csp/style-attribute.test.ts
+node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/cssom test/stylelet/unit/engine test/stylelet/unit/environment.test.ts test/stylelet/unit/host.test.ts test/browlet/style
+node scripts/with-node.mjs vitest run --project=unit test/browlet/browsing/policy/csp/style-attribute.test.ts test/stylelet/unit/web-idl.test.ts
 ```
 
+The Stylelet package build and global-artifact smoke test also passed.
 This baseline does not establish CSSOM interface exposure, cross-realm borrowing,
 live computed values, complete parsing/serialization, or layout-dependent results.

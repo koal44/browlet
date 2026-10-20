@@ -41,7 +41,6 @@ export class CSSStyleDeclarationImpl {
   #readonly: boolean;
   #parentRule: CSSRuleImpl | null;
   #ownerNode: Element | null;
-  #onChange: (declarations: readonly PropertyDeclaration[]) => void;
   #updating = false;
   #env: StyleletEnvironment;
 
@@ -53,14 +52,12 @@ export class CSSStyleDeclarationImpl {
     readonly = false,
     parentRule = null,
     ownerNode = null,
-    onChange = () => {},
   }: CSSStyleDeclarationOptions, env: StyleletEnvironment) {
     this.#env = env;
     this.#computed = computed;
     this.#readonly = readonly;
     this.#parentRule = parentRule;
     this.#ownerNode = ownerNode;
-    this.#onChange = onChange;
     this.#block = block;
     this.synchronizeIndices();
   }
@@ -83,6 +80,11 @@ export class CSSStyleDeclarationImpl {
     return this.#parentRule;
   }
 
+  /** Read the current parsed declarations without serializing or projecting them. */
+  get declarations(): readonly PropertyDeclaration[] {
+    return this.#block.declarations;
+  }
+
   /** Whether CSSOM is writing the owner attribute; hosts must bypass their input policy during write-back. */
   get updating(): boolean {
     return this.#updating;
@@ -90,6 +92,11 @@ export class CSSStyleDeclarationImpl {
 
   item(index: number): string {
     return this.#block.declarations[index]?.name ?? '';
+  }
+
+  /** Find a declaration by its already-normalized property name. */
+  getDeclaration(name: string): PropertyDeclaration | undefined {
+    return this.#block.find(name);
   }
 
   getPropertyValue(property: string): string {
@@ -159,7 +166,6 @@ export class CSSStyleDeclarationImpl {
 
     this.#block.setText(value ?? '');
     this.synchronizeIndices();
-    this.#onChange(this.#block.declarations);
   }
 
   /** Update exposed numeric properties after the owner changes the shared block. */
@@ -193,7 +199,6 @@ export class CSSStyleDeclarationImpl {
 
   #commit(): void {
     this.synchronizeIndices();
-    this.#onChange(this.#block.declarations);
     this.#updateStyleAttribute();
   }
 
@@ -214,7 +219,6 @@ type CSSStyleDeclarationOptions = {
   parentRule?: CSSRuleImpl | null;
   /** Attribute write-back target; attaching an owner does not read its current attribute. */
   ownerNode?: Element | null;
-  onChange?: (declarations: readonly PropertyDeclaration[]) => void;
 };
 
 function parsePropertyDeclaration(

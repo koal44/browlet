@@ -1,7 +1,7 @@
 import {
   consumeParensBlock, adaptConsumer, withTrivia, isTokenKind, consumeDeclaration, createComponentParser,
   parseAsComponentGrammar, TokenKind,
-  type TokenCursor, type TryConsumerResult, type ParserInput, type SyntaxDeclaration,
+  type TokenCursor, type TryConsumerResult, type ParserInput, type Declaration,
 } from '../syntax/index';
 
 import { createBooleanExprConsumer, type BooleanExprValue } from './boolean-expr';
@@ -22,14 +22,14 @@ import { createBooleanExprConsumer, type BooleanExprValue } from './boolean-expr
 export type SupportsCondition = BooleanExprValue<SupportsFeature>;
 
 export type SupportsContext = {
-  supports?: (declaration: SyntaxDeclaration) => boolean;
+  supports?: (declaration: Declaration) => boolean;
 };
 
 type SupportsFeature = SupportsDeclaration;
 
 export type SupportsDeclaration = {
   type: 'supports-declaration';
-  declaration: SyntaxDeclaration;
+  declaration: Declaration;
 };
 
 export function parseSupportsCondition(

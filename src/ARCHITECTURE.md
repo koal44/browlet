@@ -227,6 +227,14 @@ its getter lets hosts recognize write-back without introducing another flag.
 Removal clears an existing declaration without CSP checking or new allocation.
 Stylelet has no attribute-policy callback; other hosts apply their own policy
 before delivering input.
+
+Stylelet's stylesheet and rule implementations own one retained rule tree.
+Syntax records are temporary inputs to CSSOM's rule construction; the cascade
+reads the same implementations that CSSOM mutates. Sheets own location/base URL
+provenance, and rule attachment/removal updates parent-sheet associations through
+their children. Binding projects these implementations rather than creating a
+second representation of their state.
+
 The required `getLanguage()` operation supplies the host's determined element
 language. Browlet delegates to `NodeImpl`, including document defaults.
 `standardDOM` reads language attributes and ancestry, crossing shadow roots to

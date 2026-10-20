@@ -18,10 +18,9 @@ export {
 } from './component-value';
 export {
   consumeDeclaration, createComponentParser, parseAsComponentGrammar, parseDeclarationList,
-  parseSyntaxStylesheet, parseRule, parseDeclaration, parseListAsComponentGrammar,
+  parseStylesheetContents, parseRule, parseDeclaration, parseListAsComponentGrammar,
   parseCommaSeparatedListOfComponentValues,
-  type ParserInput, type SyntaxDeclaration, type SyntaxBlockContents, type SyntaxQualifiedRule,
-  type SyntaxRule, type SyntaxStyleSheet,
+  type ParserInput, type Declaration, type BlockContents, type QualifiedRule, type Rule,
 } from './parser';
 export {
   TokenKind, NumericSign, NumberTokenFlag,

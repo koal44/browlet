@@ -2,9 +2,9 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
 import { serializePropertyDeclaration } from '../../../../src/stylelet/css/property';
-import {
-  parseStylesheet, type StyleSheetOptions,
-} from '../../../../src/stylelet/css/stylesheet';
+import type { StyleletURL } from '../../../../src/stylelet/environment';
+import { parseCSSRules } from '../../../../src/stylelet/cssom/parser';
+import type { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import {
   CascadeEngine, type CascadeEngineOptions,
@@ -158,7 +158,7 @@ describe('cascade engine', () => {
     expect(engine.getCascadedProperty('color', scope)?.declaration)
       .toMatchObject({ name: 'color' });
 
-    const rule = styleSheet.cssRules.item(0) as CSSStyleRule;
+    const rule = styleSheet.cssRules.item(0) as CSSStyleRuleImpl;
     rule.style.setProperty('color', 'blue');
     expect(serializePropertyDeclaration(
       engine.getCascadedProperty('color', scope)!.declaration,
@@ -198,6 +198,40 @@ describe('cascade engine', () => {
     expect(serializePropertyDeclaration(result!.declaration).value)
       .toBe('blue');
   });
+
+  it('reads non-origin-clean rules without using the restricted CSSOM getter', () => {
+    const { engine, scope } = createCascade();
+    const sheet = addStyleSheet(scope, '* { color: red }', { originClean: false });
+
+    expect(() => sheet.cssRules).toThrow('The stylesheet is not origin-clean.');
+    expect(serializePropertyDeclaration(
+      engine.getCascadedProperty('color', scope)!.declaration,
+    ).value).toBe('red');
+  });
+
+  it('reads declarations after nested rules in order without copying parent edits over them', () => {
+    const { engine, scope } = createCascade();
+    const sheet = addStyleSheet(scope, `
+      * {
+        color: red;
+        .child { opacity: 0.5 }
+        color: blue;
+      }
+    `);
+    const parent = sheet.cssRules.item(0) as CSSStyleRuleImpl;
+    const following = parent.cssRules.item(1) as CSSNestedDeclarationsImpl;
+    const color = () => engine.getCascadedProperty('color', scope)!.declaration;
+
+    expect(color()).toBe(following.style.getDeclaration('color'));
+    parent.style.setProperty('color', 'green');
+    expect(color()).toBe(following.style.getDeclaration('color'));
+    parent.style.setProperty('color', 'green', 'important');
+    expect(color()).toBe(parent.style.getDeclaration('color'));
+    following.style.setProperty('color', 'blue', 'important');
+    expect(color()).toBe(following.style.getDeclaration('color'));
+    following.style.removeProperty('color');
+    expect(color()).toBe(parent.style.getDeclaration('color'));
+  });
 });
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
@@ -222,18 +256,25 @@ function addStyleSheet(
   const styleSheet = CSSStyleSheetImpl.create(
     scope.cascade.context,
     {
-      location: options.location?.href ?? null,
+      location: options.location ?? null,
+      baseURL: options.baseUrl,
       parentStyleSheet: null,
       ownerNode: null,
       ownerRule: null,
       media: '',
       title: '',
       alternate: false,
-      originClean: true,
+      originClean: options.originClean ?? true,
     },
-    parseStylesheet(source, options),
+    parseCSSRules(source, scope.cascade.context.env),
   );
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;
 }
+
+type StyleSheetOptions = {
+  location?: StyleletURL;
+  baseUrl?: StyleletURL;
+  originClean?: boolean;
+};

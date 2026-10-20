@@ -4,9 +4,10 @@ import { describe, expect, it } from 'vitest';
 import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
 } from '../../../../src/stylelet/css/property';
-import {
-  parseStylesheet, type InterpretedStyleSheet,
-} from '../../../../src/stylelet/css/stylesheet';
+import type { StyleletURL } from '../../../../src/stylelet/environment';
+import { parseCSSRules } from '../../../../src/stylelet/cssom/parser';
+import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
+import { CSSPropertyRuleImpl } from '../../../../src/stylelet/cssom/rules';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import type { CascadedProperty } from '../../../../src/stylelet/engine/cascade';
 import {
@@ -26,7 +27,7 @@ describe('custom property registration', () => {
     const { engine, scope } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    addStyleSheet(scope, styleSheet(declared));
+    addStyleSheet(scope, propertyRules(scope, declared));
 
     expect(engine.getCustomPropertyRegistration('--accent', scope))
       .toBe(registered);
@@ -37,8 +38,8 @@ describe('custom property registration', () => {
     const second = registration('--accent', 'green');
     const last = registration('--accent', 'blue');
     const { engine, scope } = createCascade();
-    addStyleSheet(scope, styleSheet(first, second));
-    addStyleSheet(scope, styleSheet(last));
+    addStyleSheet(scope, propertyRules(scope, first, second));
+    addStyleSheet(scope, propertyRules(scope, last));
 
     expect(engine.getCustomPropertyRegistration('--accent', scope)).toBe(last);
   });
@@ -51,12 +52,11 @@ describe('custom property registration', () => {
 
   // CSS Properties and Values API 1, 2.2. Parse-Time Behavior
   it('retains a declaration that violates a later registration', () => {
-    const sheet = parseStylesheet('* { --accent: 10px }');
     const registered = registration('--accent', 'red');
     const { engine, scope } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    const cssStyleSheet = addStyleSheet(scope, sheet);
+    const cssStyleSheet = addStyleSheet(scope, '* { --accent: 10px }');
 
     expect(engine.getCustomPropertyRegistration('--accent', scope))
       .toBe(registered);
@@ -86,7 +86,7 @@ describe('custom property registration', () => {
       });
       addStyleSheet(
         scope,
-        parseStylesheet(`* { --accent: ${keyword} }`),
+        `* { --accent: ${keyword} }`,
       );
 
       expect(resolveSpecifiedCustomProperty(
@@ -112,10 +112,10 @@ describe('custom property registration', () => {
       environmentBaseUrl: new URL('https://example.com/document/'),
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    addStyleSheet(scope, parseStylesheet(
+    addStyleSheet(scope,
       '* { --image: url("image.png") }',
-      { location },
-    ));
+      location,
+    );
 
     expect(resolveCustomProperty(
       engine,
@@ -184,7 +184,7 @@ describe('custom property registration', () => {
       const { engine, scope } = createCascade({
         registeredPropertySet: new Map([[registered.name, registered]]),
       });
-      addStyleSheet(scope, parseStylesheet('* { --accent: 10px }'));
+      addStyleSheet(scope, '* { --accent: 10px }');
 
       expect(resolveCustomProperty(
         engine,
@@ -201,12 +201,12 @@ describe('custom property registration', () => {
     const { engine, scope } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
-    addStyleSheet(scope, parseStylesheet(`
+    addStyleSheet(scope, `
       * {
         --base: red;
         --accent: var(--base);
       }
-    `));
+    `);
 
     expect(resolveCustomProperty(
       engine,
@@ -299,15 +299,13 @@ function resolveCustomProperty(
     ?.serialize() ?? null;
 }
 
-function styleSheet(
+function propertyRules(
+  scope: TreeScope,
   ...registrations: CustomPropertyRegistration[]
-): InterpretedStyleSheet {
-  return {
-    rules: registrations.map((registration) => ({
-      type: 'property-rule',
-      registration,
-    })),
-  };
+): CSSPropertyRuleImpl[] {
+  return registrations.map((registration) =>
+    new CSSPropertyRuleImpl(registration, scope.cascade.context.env)
+  );
 }
 
 function createCascade(options: Partial<CascadeEngineOptions> = {}) {
@@ -326,12 +324,13 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 
 function addStyleSheet(
   scope: TreeScope,
-  sheet: InterpretedStyleSheet,
+  source: string | CSSRuleImpl[],
+  location?: StyleletURL,
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.create(
     scope.cascade.context,
     {
-      location: sheet.location?.href ?? null,
+      location: location ?? null,
       parentStyleSheet: null,
       ownerNode: null,
       ownerRule: null,
@@ -340,7 +339,7 @@ function addStyleSheet(
       alternate: false,
       originClean: true,
     },
-    sheet,
+    typeof source === 'string' ? parseCSSRules(source, scope.cascade.context.env) : source,
   );
 
   scope.addTreeStyleSheet(styleSheet);

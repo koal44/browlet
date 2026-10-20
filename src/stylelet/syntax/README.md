@@ -15,13 +15,23 @@ conformance.
 | Bytes | [tokens.ts](tokens.ts), `decodeStylesheetBytes()` | Chooses a fallback from transport metadata, the initial `@charset` byte sequence, environment encoding, then UTF-8; the supplied decoder handles decoding, including BOM precedence. Callers decode before using the string parser. |
 | Code points and tokens | `filterCodePoints()`, `tokenize()`, `tokenizeWithSource()` | CSS newline/replacement preprocessing and tokens; the source-aware path also supplies ranges for retained text. |
 | Components | [parser.ts](parser.ts), [component-value.ts](component-value.ts) | Preserved tokens, nested blocks, and functions. These are syntax, not resolved CSS values. |
-| Stylesheet syntax | `parseSyntaxStylesheet()` | `SyntaxStyleSheet` with qualified/at-rules and optional location/source text. An at-rule record does not establish support for that rule. |
+| Stylesheet contents | `parseStylesheetContents()` | `Rule[]` containing qualified/at-rule records. An at-rule record does not establish support for that rule. |
 | Block syntax | `parseBlockContents()` | Declaration runs interleaved with rules. This preserves the structural distinction needed by nesting. |
-| CSS interpretation | [stylesheet.ts](../css/stylesheet.ts) | Recognized selectors/properties and interpreted rules; see the [rule inventory](../css/README.md). |
+| CSS rule construction | [CSSOM parser](../cssom/parser.ts) | Recognizes selectors/properties and constructs rule implementations directly; see the [rule inventory](../cssom/README.md#rule-parsing). |
 
 `ParserInput` is currently a string or token array, not a byte stream. Token
 inputs can reuse earlier tokenization; string inputs take the preprocessing
 path. Decoding exists independently of the unfinished external-sheet loader.
+
+Records use the specification's plain names: `Rule`, `QualifiedRule`, `AtRule`,
+and `Declaration`. The syntax folder identifies their stage; `CSSRuleImpl` and
+`PropertyDeclaration` identify the later interpreted results.
+
+There is no separate syntax stylesheet container. The specification's
+[parse a stylesheet](https://drafts.csswg.org/css-syntax-3/#parse-stylesheet)
+operation spans contents parsing here and sheet creation in CSSOM. Callers use
+`parseCSSRules()` to interpret the contents and `CSSStyleSheetImpl` to own the
+resulting rules and location.
 
 ## Choosing an entry point
 

@@ -1,7 +1,5 @@
 import { asciiLower } from '../../infra/ascii';
 
-import type { StyleletURL } from '../environment';
-
 import {
   isBraceBlock, isComponentValue, isDelimToken, isIdentToken, isTokenKind,
   isWhitespaceToken,
@@ -10,53 +8,50 @@ import {
 import { TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { tokenize, tokenizeWithSource, TokenKind, type Token } from './tokens';
 
-export type SyntaxStyleSheet = {
-  rules: SyntaxRule[];
-  location?: StyleletURL;
-  originalText?: string;
-};
+/** A generic CSS rule, before selector and property grammar interpretation. */
+// CSS Syntax parsing results: https://drafts.csswg.org/css-syntax-3/#css-tree
+export type Rule =
+  | AtRule
+  | QualifiedRule;
 
-export type SyntaxRule =
-  | SyntaxAtRule
-  | SyntaxQualifiedRule;
+export type AtRule =
+  | StatementAtRule
+  | BlockAtRule;
 
-export type SyntaxAtRule =
-  | SyntaxStatementAtRule
-  | SyntaxBlockAtRule;
-
-export type SyntaxStatementAtRule = {
+export type StatementAtRule = {
   type: 'statement-at-rule';
   name: string;
   prelude: ComponentValue[];
 };
 
-export type SyntaxBlockAtRule = {
+export type BlockAtRule = {
   type: 'block-at-rule';
   name: string;
   prelude: ComponentValue[];
-  block: SyntaxBlockContents;
+  block: BlockContents;
 };
 
-export type SyntaxQualifiedRule = {
+export type QualifiedRule = {
   type: 'qualified-rule';
   prelude: ComponentValue[];
-  block: SyntaxBlockContents;
+  block: BlockContents;
 };
 
-export type SyntaxDeclaration = {
+export type Declaration = {
   name: string;
   value: ComponentValue[];
   important: boolean;
   originalText?: string;
 };
 
-export type SyntaxBlockContents = Array<SyntaxDeclarationList | SyntaxRule>;
-export type SyntaxDeclarationList = SyntaxDeclaration[];
-export type SyntaxQualifiedRuleList = SyntaxQualifiedRule[];
-export type SyntaxAtRuleList = SyntaxAtRule[];
-export type SyntaxDeclarationRuleList = Array<SyntaxDeclarationList | SyntaxAtRule>;
-export type SyntaxRuleList = Array<SyntaxQualifiedRule | SyntaxAtRule>;
+export type BlockContents = Array<DeclarationList | Rule>;
+export type DeclarationList = Declaration[];
+export type QualifiedRuleList = QualifiedRule[];
+export type AtRuleList = AtRule[];
+export type DeclarationRuleList = Array<DeclarationList | AtRule>;
+export type RuleList = Array<QualifiedRule | AtRule>;
 
+/** CSS text or an existing token sequence; byte decoding is a separate step. */
 export type ParserInput = string | Token[];
 
 export function createComponentParser<T>(
@@ -69,7 +64,7 @@ export function createComponentParser<T>(
     parseAsComponentGrammar(input, consumer, context);
 }
 
-// 5.4.1. Parse something according to a CSS grammar
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-grammar
 export function parseAsComponentGrammar<T>(
   input: ParserInput,
   consumer: TryConsumer<T>,
@@ -85,7 +80,7 @@ export function parseAsComponentGrammar<T>(
   return c.eof() ? result : null;
 }
 
-// 5.4.2. Parse a comma-separated list according to a CSS grammar
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-list
 export function parseListAsComponentGrammar<T>(
   input: ParserInput,
   consumer: TryConsumer<T>,
@@ -104,58 +99,22 @@ export function parseListAsComponentGrammar<T>(
   return lists.map((item) => parseAsComponentGrammar(item, consumer, context));
 }
 
-// 5.4.3. Parse a stylesheet
-export function parseSyntaxStylesheet(
-  input: ParserInput,
-  location?: StyleletURL,
-): SyntaxStyleSheet {
-  return {
-    rules: consumeStylesheetContents(normalize(input)),
-    ...(location === undefined ? {} : { location }),
-    ...(typeof input === 'string' ? { originalText: input } : {}),
-  };
-}
-
-// 5.4.4. Parse a stylesheet's contents
-export function parseSyntaxStylesheetContents(input: ParserInput): SyntaxRule[] {
+/** Parse stylesheet contents into generic rules, leaving sheet creation to CSSOM. */
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-stylesheet-contents
+export function parseStylesheetContents(input: ParserInput): Rule[] {
   return consumeStylesheetContents(normalize(input));
 }
 
-// Legacy name retained for callers using the former specification terminology.
-export const parseListOfRules = parseSyntaxStylesheetContents;
-
-// 5.4.5. Parse a block's contents
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-block-contents
 export function parseBlockContents(
   input: ParserInput,
   context: unknown = undefined,
-): SyntaxBlockContents {
+): BlockContents {
   return consumeBlockContents(normalize(input, context));
 }
 
-/** Parse declaration-only input, recovering through semicolons without admitting nested style rules. */
-// https://drafts.csswg.org/css-style-attr/#syntax
-// SPEC_CLASH(css-style-attribute-parsing): Follow CSS Style Attributes and all
-// three engines. CSSOM's newer block-contents reference also admits nested rules
-// and treats an unmatched closing brace as the end of the whole input.
-export function parseDeclarationList(input: ParserInput): SyntaxDeclaration[] {
-  const c = normalize(input);
-  const declarations: SyntaxDeclaration[] = [];
-  while (!c.eof()) {
-    const type = c.peek().type;
-    if (type === TokenKind.Whitespace || type === TokenKind.Semicolon) {
-      c.next();
-    } else if (type === TokenKind.AtKeyword) {
-      consumeAtRule(c);
-    } else {
-      const declaration = consumeDeclaration(c);
-      if (declaration !== null) declarations.push(declaration);
-    }
-  }
-  return declarations;
-}
-
-// 5.4.6. Parse a rule
-export function parseRule(input: ParserInput): SyntaxRule | null {
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-rule
+export function parseRule(input: ParserInput): Rule | null {
   const c = normalize(input);
 
   consumeTrivia(c);
@@ -171,17 +130,17 @@ export function parseRule(input: ParserInput): SyntaxRule | null {
   return c.eof() ? rule : null;
 }
 
-// 5.4.7. Parse a declaration
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-declaration
 export function parseDeclaration(
   input: ParserInput,
   context: unknown = undefined,
-): SyntaxDeclaration | null {
+): Declaration | null {
   const c = normalize(input, context);
   consumeTrivia(c);
   return consumeDeclaration(c);
 }
 
-// 5.4.8. Parse a component value
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-component-value
 export function parseComponentValue(input: ParserInput): ComponentValue | null {
   const c = normalize(input);
 
@@ -194,7 +153,7 @@ export function parseComponentValue(input: ParserInput): ComponentValue | null {
   return c.eof() ? value : null;
 }
 
-// 5.4.9. Parse a list of component values
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-list-of-component-values
 export function parseListOfComponentValues(input: ParserInput): ComponentValue[] {
   if (typeof input !== 'string' && input.every(isComponentValue)) {
     return input;
@@ -203,7 +162,7 @@ export function parseListOfComponentValues(input: ParserInput): ComponentValue[]
   return consumeListOfComponentValues(normalize(input));
 }
 
-// 5.4.10. Parse a comma-separated list of component values
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-comma-separated-list-of-component-values
 export function parseCommaSeparatedListOfComponentValues(
   input: ParserInput,
 ): ComponentValue[][] {
@@ -218,6 +177,33 @@ export function parseCommaSeparatedListOfComponentValues(
   return groups;
 }
 
+/**
+ * Parse declaration-only input into syntax records, without validating property names or values.
+ * Recover through semicolons without admitting nested style rules.
+ */
+// CSS Style Attributes: https://drafts.csswg.org/css-style-attr/#syntax
+// This entry point implements that grammar using the shared CSS Syntax consumers.
+// SPEC_CLASH(css-style-attribute-parsing): Follow CSS Style Attributes and all
+// three engines. CSSOM's newer block-contents reference also admits nested rules
+// and treats an unmatched closing brace as the end of the whole input.
+export function parseDeclarationList(input: ParserInput): Declaration[] {
+  const c = normalize(input);
+  const declarations: Declaration[] = [];
+  while (!c.eof()) {
+    const type = c.peek().type;
+    if (type === TokenKind.Whitespace || type === TokenKind.Semicolon) {
+      c.next();
+    } else if (type === TokenKind.AtKeyword) {
+      consumeAtRule(c);
+    } else {
+      const declaration = consumeDeclaration(c);
+      if (declaration !== null) declarations.push(declaration);
+    }
+  }
+  return declarations;
+}
+
+/** Tokenize text with source locations, or wrap supplied tokens in a cursor. */
 function normalize(input: ParserInput, context: unknown = undefined): TokenCursor<Token> {
   if (typeof input !== 'string') return new TokenCursor(input, { context });
 
@@ -235,15 +221,15 @@ function consumeTrivia<Value extends Token>(c: TokenCursor<Value>): void {
 // TODO: Sections 5.5.2, 5.5.3, 5.5.6, and 7 describe validating rules and
 // declarations in their current context while consuming them. This parser
 // currently performs only the structural checks needed for generic CSS syntax
-// and defers property-, descriptor-, and rule-specific validity to semantic
+// and defers property-, descriptor-, and rule-specific validity to later
 // interpretation. The specification's implementation note suggests that
 // grammar-aware checks mainly enable earlier exits and avoid reparsing. Revisit
 // this when those contexts exist, and verify that deferred validation still
 // preserves invalid-rule recovery and declaration-list boundaries.
 
-// 5.5.1. Consume a stylesheet's contents
-function consumeStylesheetContents(c: TokenCursor<Token>): SyntaxRule[] {
-  const rules: SyntaxRule[] = [];
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-stylesheet-contents
+function consumeStylesheetContents(c: TokenCursor<Token>): Rule[] {
+  const rules: Rule[] = [];
 
   while (true) {
     switch (c.peek().type) {
@@ -268,11 +254,11 @@ function consumeStylesheetContents(c: TokenCursor<Token>): SyntaxRule[] {
   }
 }
 
-// 5.5.2. Consume an at-rule
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-at-rule
 function consumeAtRule<Value extends Token>(
   c: TokenCursor<Value>,
   nested = false,
-): SyntaxAtRule {
+): AtRule {
   const token = c.next();
 
   if (token.type !== TokenKind.AtKeyword) {
@@ -311,12 +297,12 @@ function consumeAtRule<Value extends Token>(
   }
 }
 
-// 5.5.3. Consume a qualified rule
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-qualified-rule
 function consumeQualifiedRule<Value extends Token>(
   c: TokenCursor<Value>,
   stopToken?: TokenKind,
   nested = false,
-): SyntaxQualifiedRule | null {
+): QualifiedRule | null {
   const prelude: ComponentValue[] = [];
 
   while (true) {
@@ -366,8 +352,8 @@ function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
     isTokenKind(values[1]!, TokenKind.Colon);
 }
 
-// 5.5.4. Consume a block
-function consumeBlock<Value extends Token>(c: TokenCursor<Value>): SyntaxBlockContents {
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block
+function consumeBlock<Value extends Token>(c: TokenCursor<Value>): BlockContents {
   const opening = c.peek();
 
   if (isBraceBlock(opening)) {
@@ -385,10 +371,10 @@ function consumeBlock<Value extends Token>(c: TokenCursor<Value>): SyntaxBlockCo
   return contents;
 }
 
-// 5.5.5. Consume a block's contents
-function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): SyntaxBlockContents {
-  const contents: SyntaxBlockContents = [];
-  let declarations: SyntaxDeclaration[] = [];
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block-contents
+function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): BlockContents {
+  const contents: BlockContents = [];
+  let declarations: Declaration[] = [];
 
   const flushDeclarations = (): void => {
     if (declarations.length === 0) return;
@@ -437,11 +423,11 @@ function consumeBlockContents<Value extends Token>(c: TokenCursor<Value>): Synta
   }
 }
 
-// 5.5.6. Consume a declaration
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-declaration
 export function consumeDeclaration<Value extends Token>(
   c: TokenCursor<Value>,
   nested = false,
-): SyntaxDeclaration | null {
+): Declaration | null {
   const token = c.peek();
 
   if (!isIdentToken(token)) {
@@ -451,7 +437,7 @@ export function consumeDeclaration<Value extends Token>(
 
   c.next();
 
-  const declaration: SyntaxDeclaration = {
+  const declaration: Declaration = {
     name: token.value,
     value: [],
     important: false,
@@ -517,7 +503,7 @@ function consumeBadDeclarationRemnants<Value extends Token>(
   }
 }
 
-function consumeImportantFlag(declaration: SyntaxDeclaration): number {
+function consumeImportantFlag(declaration: Declaration): number {
   const value = declaration.value;
   const importantIndex = lastNonWhitespaceIndex(value, value.length - 1);
   if (importantIndex < 0) return 0;
@@ -570,7 +556,7 @@ function hasDisallowedTopLevelBraceBlock(values: ComponentValue[]): boolean {
   return braces.length > 0 && (significant.length !== 1 || braces.length !== 1);
 }
 
-// 5.5.7. Consume a list of component values
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-list-of-components
 function consumeListOfComponentValues<Value extends Token>(
   c: TokenCursor<Value>,
   stopToken?: TokenKind,
@@ -593,7 +579,7 @@ function consumeListOfComponentValues<Value extends Token>(
   }
 }
 
-// 5.5.8. Consume a component value
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-component-value
 // The parser uses one cursor abstraction for both lexical token streams and
 // component-value streams. Consuming a component value folds opening and
 // function tokens into blocks; grammar consumers then reuse the same cursor
@@ -618,7 +604,7 @@ function consumeComponentValue<Value extends Token>(
   }
 }
 
-// 5.5.9. Consume a simple block
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-simple-block
 function consumeSimpleBlock<Value extends Token>(
   c: TokenCursor<Value>,
 ): SimpleBlock {
@@ -660,7 +646,7 @@ function consumeSimpleBlock<Value extends Token>(
   }
 }
 
-// 5.5.10. Consume a function
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-function
 function consumeFunction<Value extends Token>(
   c: TokenCursor<Value>,
 ): FunctionBlock {

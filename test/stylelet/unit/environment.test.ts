@@ -65,8 +65,8 @@ describe('Stylelet URL integration', () => {
     const sheet = styles.createStyleSheet({ baseURL: '../assets/' });
 
     expect(styles.context.env.userAgent.URL).toBe(URL);
-    expect(sheet.interpretedStyleSheet.location).toBeInstanceOf(URL);
-    expect(sheet.interpretedStyleSheet.baseUrl?.href).toBe('https://example.test/assets/');
+    expect(sheet.location).toBeInstanceOf(URL);
+    expect(sheet.baseURL?.href).toBe('https://example.test/assets/');
     expect(sheet.href).toBe('https://example.test/document/');
   });
 
@@ -97,12 +97,12 @@ describe('Stylelet URL integration', () => {
 
     expect(styles.context.env.userAgent.URL).toBe(HostURL);
     if (source === 'environment') expect(styles.context.env).toBe(env);
-    expect(sheet.interpretedStyleSheet.location).toBeInstanceOf(HostURL);
-    expect(sheet.interpretedStyleSheet.baseUrl).toBeInstanceOf(HostURL);
+    expect(sheet.location).toBeInstanceOf(HostURL);
+    expect(sheet.baseURL).toBeInstanceOf(HostURL);
     expect(value.serialize()).toBe('url("https://example.test/assets/icon.svg")');
     expect(calls).toContainEqual(['icon.svg', 'https://example.test/assets/']);
 
     const embedded = styles.documentScope.createStyleElementStyleSheet(document.querySelector('style')!, '');
-    expect(embedded.interpretedStyleSheet.baseUrl).toBeInstanceOf(HostURL);
+    expect(embedded.baseURL).toBeInstanceOf(HostURL);
   });
 });

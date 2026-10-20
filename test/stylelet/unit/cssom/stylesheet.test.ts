@@ -52,7 +52,7 @@ describe('CSSStyleSheetImpl', () => {
     const document = createBrowletDocument();
     const stylelet = new Stylelet(document, { dom: browletDOM });
     const sheet = CSSStyleSheetImpl.create(stylelet.context, {
-      location: 'https://example.com/style.css',
+      location: new URL('https://example.com/style.css'),
       parentStyleSheet: null,
       ownerNode: null,
       ownerRule: null,
@@ -76,13 +76,13 @@ describe('CSSStyleSheetImpl', () => {
   it('resolves a relative constructor base through the standalone URL provider', () => {
     const sheet = createStyleSheet({ baseURL: '../css/' });
 
-    expect(sheet.interpretedStyleSheet.location).toBeInstanceOf(URL);
-    expect(sheet.interpretedStyleSheet.location?.href).toBe('https://example.com/document/');
-    expect(sheet.interpretedStyleSheet.baseUrl).toBeInstanceOf(URL);
-    expect(sheet.interpretedStyleSheet.baseUrl?.href).toBe('https://example.com/css/');
+    expect(sheet.location).toBeInstanceOf(URL);
+    expect(sheet.location?.href).toBe('https://example.com/document/');
+    expect(sheet.baseURL).toBeInstanceOf(URL);
+    expect(sheet.baseURL?.href).toBe('https://example.com/css/');
   });
 
-  it('projects semantic property declarations into CSSOM declarations', () => {
+  it('constructs style rules with parsed declarations', () => {
     const sheet = createStyleSheet();
     sheet.replaceSync(`
       .example {
@@ -157,6 +157,45 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet.cssRules).toBe(rules);
     expect(rules).toHaveLength(2);
     expect(rules.item(1)).toBe(rules[1]);
+  });
+
+  it('preserves nested rules when the parent declarations change', () => {
+    const sheet = createStyleSheet();
+    sheet.replaceSync('.parent { color: red; .child { opacity: 0.5 } }');
+    const parent = sheet.cssRules.item(0) as CSSStyleRuleImpl;
+
+    parent.style.setProperty('color', 'blue');
+
+    expect(parent.cssRules.length).toBe(1);
+    const child = parent.cssRules.item(0) as CSSStyleRuleImpl;
+    expect(child.style.getPropertyValue('opacity')).toBe('0.5');
+
+    parent.style.cssText = 'margin-top: 1px';
+
+    expect(parent.cssRules.item(0)).toBe(child);
+    expect(child.style.getPropertyValue('opacity')).toBe('0.5');
+  });
+
+  it.each(['delete', 'replace'] as const)('detaches the nested rule tree on %s', (operation) => {
+    const sheet = createStyleSheet();
+    sheet.replaceSync('.parent { .child { color: red } opacity: 0.5 }');
+    const parent = sheet.cssRules.item(0) as CSSStyleRuleImpl;
+    const children = [...parent.cssRules];
+
+    expect(parent.parentStyleSheet).toBe(sheet);
+    for (const child of children) {
+      expect(child.parentRule).toBe(parent);
+      expect(child.parentStyleSheet).toBe(sheet);
+    }
+
+    if (operation === 'delete') sheet.deleteRule(0);
+    else sheet.replaceSync('.replacement {}');
+
+    expect(parent.parentStyleSheet).toBeNull();
+    for (const child of children) {
+      expect(child.parentRule).toBe(parent);
+      expect(child.parentStyleSheet).toBeNull();
+    }
   });
 
   it('inserts and deletes rules through the live rule list', () => {

@@ -21,17 +21,19 @@ collections and registration lookup are different state with different owners.
 
 ## Declaration selection
 
-[cascade.ts](cascade.ts) visits top-level interpreted style rules and their
-direct property declarations. With an element, selector matching supplies the
+[cascade.ts](cascade.ts) visits each sheet's authoritative rule list and reads
+declarations from CSSStyleRuleImpl and its later CSSNestedDeclarationsImpl
+children. CSSOM edits change the same data without a copy-back callback.
+With an element, selector matching supplies the
 matching specificity. Importance wins first, then specificity; later equal
 candidates replace earlier ones. The result retains the declaration, sheet,
 and TreeScope so a later value operation can recover its provenance.
 
-This handles author normal/important declarations. Nested rules are retained by
-the interpreter but not visited here; at-rules are dropped earlier. Origins,
+This handles author normal/important declarations. Nested style rules are
+retained but not matched here; at-rules are dropped earlier. Origins,
 encapsulation precedence, layers, scope proximity, animation, and transition
 contributions are not represented by this selection algorithm. See the
-[rule inventory](../css/README.md) for the earlier boundary.
+[rule inventory](../cssom/README.md#rule-parsing) for the earlier boundary.
 
 ## Current computed-style path
 
@@ -62,9 +64,9 @@ Inline style does not own computed state.
 ## Registration lookup
 
 [custom-property.ts](custom-property.ts) first checks the engine registration
-map, then takes the last matching PropertyRule in active sheets. Those rules
-can be supplied as interpreted records, but stylesheet parsing does not create
-them. The engine map stands in for document registration state; there is no
+map, then takes the last matching CSSPropertyRuleImpl in active sheets. Those
+implementations can be constructed directly, but stylesheet parsing does not
+create them. The engine map stands in for document registration state; there is no
 connected `CSS.registerProperty()` API or per-element custom-property pipeline.
 
 The [registration tests](../../../test/stylelet/unit/engine/custom-property.test.ts)

@@ -1,7 +1,7 @@
 import { parseDeclarationList, type ParserInput } from '../syntax/index';
 
 import {
-  interpretPropertyDeclaration, serializePropertyDeclaration, type PropertyDeclaration,
+  interpretPropertyDeclarations, serializePropertyDeclaration, type PropertyDeclaration,
 } from './property';
 
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
@@ -75,12 +75,7 @@ export class CSSDeclarationBlock {
 // https://drafts.csswg.org/cssom/#parse-a-css-declaration-block
 // TODO: retain per-declaration parse-time URL bases when URL-valued properties are registered.
 export function parseDeclarationBlock(input: ParserInput): PropertyDeclaration[] {
-  const declarations: PropertyDeclaration[] = [];
-  for (const syntaxDeclaration of parseDeclarationList(input)) {
-    const declaration = interpretPropertyDeclaration(syntaxDeclaration);
-    if (declaration !== null) declarations.push(declaration);
-  }
-  return declarations;
+  return interpretPropertyDeclarations(parseDeclarationList(input));
 }
 
 /** Serialize one declaration without changing its value stage. */

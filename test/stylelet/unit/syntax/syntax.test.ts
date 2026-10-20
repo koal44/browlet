@@ -4,10 +4,9 @@ import {
 } from '../../../../src/stylelet/syntax/component-value';
 import {
   parseBlockContents, parseCommaSeparatedListOfComponentValues, parseComponentValue,
-  parseDeclaration, parseListOfComponentValues, parseRule, parseSyntaxStylesheet,
-  parseSyntaxStylesheetContents, type SyntaxBlockAtRule, type SyntaxBlockContents,
-  type SyntaxDeclaration, type SyntaxQualifiedRule, type SyntaxRule,
-  type SyntaxStatementAtRule,
+  parseDeclaration, parseListOfComponentValues, parseRule, parseStylesheetContents,
+  type BlockAtRule, type BlockContents, type Declaration, type QualifiedRule,
+  type Rule, type StatementAtRule,
 } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 
@@ -17,44 +16,44 @@ function preservedKinds(values: ComponentValue[]): TokenKind[] {
     .map((value) => value.type);
 }
 
-function expectRule(value: SyntaxRule | SyntaxDeclaration[] | null | undefined): SyntaxRule {
+function expectRule(value: Rule | Declaration[] | null | undefined): Rule {
   expect(value).toBeTruthy();
   expect(Array.isArray(value)).toBe(false);
-  return value as SyntaxRule;
+  return value as Rule;
 }
 
 function expectStatementAtRule(
-  value: SyntaxRule | SyntaxDeclaration[] | null | undefined,
-): SyntaxStatementAtRule {
+  value: Rule | Declaration[] | null | undefined,
+): StatementAtRule {
   const rule = expectRule(value);
   expect(rule.type).toBe('statement-at-rule');
-  return rule as SyntaxStatementAtRule;
+  return rule as StatementAtRule;
 }
 
 function expectBlockAtRule(
-  value: SyntaxRule | SyntaxDeclaration[] | null | undefined,
-): SyntaxBlockAtRule {
+  value: Rule | Declaration[] | null | undefined,
+): BlockAtRule {
   const rule = expectRule(value);
   expect(rule.type).toBe('block-at-rule');
-  return rule as SyntaxBlockAtRule;
+  return rule as BlockAtRule;
 }
 
 function expectQualifiedRule(
-  value: SyntaxRule | SyntaxDeclaration[] | null | undefined,
-): SyntaxQualifiedRule {
+  value: Rule | Declaration[] | null | undefined,
+): QualifiedRule {
   const rule = expectRule(value);
   expect(rule.type).toBe('qualified-rule');
-  return rule as SyntaxQualifiedRule;
+  return rule as QualifiedRule;
 }
 
 function expectDeclarations(
-  value: SyntaxRule | SyntaxDeclaration[] | null | undefined,
-): SyntaxDeclaration[] {
+  value: Rule | Declaration[] | null | undefined,
+): Declaration[] {
   expect(Array.isArray(value)).toBe(true);
-  return value as SyntaxDeclaration[];
+  return value as Declaration[];
 }
 
-function expectDeclaration(value: SyntaxDeclaration | null | undefined): SyntaxDeclaration {
+function expectDeclaration(value: Declaration | null | undefined): Declaration {
   expect(value).toBeTruthy();
   return value!;
 }
@@ -89,17 +88,10 @@ function expectFunctionBlock(
 }
 
 describe('5.4 parser entry points', () => {
-  test('retains the optional stylesheet location', () => {
-    const location = new URL('https://example.com/styles/site.css');
+  test('parses stylesheet contents', () => {
+    const rules = parseStylesheetContents('@layer reset; .a { color: red }');
 
-    expect(parseSyntaxStylesheet('* {}', location).location).toBe(location);
-  });
-
-  test('parses a stylesheet and its contents', () => {
-    const sheet = parseSyntaxStylesheet('@layer reset; .a { color: red }');
-    const rules = parseSyntaxStylesheetContents('@layer reset; .a { color: red }');
-
-    expect(sheet.rules).toEqual(rules);
+    expect(rules).toHaveLength(2);
     expectStatementAtRule(rules[0]);
 
     const style = expectQualifiedRule(rules[1]);
@@ -108,7 +100,7 @@ describe('5.4 parser entry points', () => {
   });
 
   test('ignores whitespace, CDO, and CDC in stylesheet contents', () => {
-    const rules = parseSyntaxStylesheetContents('<!-- .a {} --> @layer x;');
+    const rules = parseStylesheetContents('<!-- .a {} --> @layer x;');
 
     expect(rules).toHaveLength(2);
     expectQualifiedRule(rules[0]);
@@ -475,7 +467,7 @@ describe('mixed token and component-value input', () => {
   });
 });
 
-function expectBlockContents(_contents: SyntaxBlockContents): void {
+function expectBlockContents(_contents: BlockContents): void {
   // Compile-time assertion that the public entry point exposes the spec shape.
 }
 

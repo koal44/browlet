@@ -2,7 +2,7 @@ import { asciiLower } from '../../infra/ascii';
 
 import {
   parseOptionalDeclarationValue, serializeComponentValues,
-  type OptionalDeclarationValue, type SyntaxDeclaration,
+  type OptionalDeclarationValue, type Declaration,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import type {
@@ -81,18 +81,25 @@ export type CustomPropertyRegistration = {
   initialValue: WholeValue<ParsedSyntaxValue, PropertyContext>;
 };
 
-export type PropertyRule = {
-  type: 'property-rule';
-  registration: CustomPropertyRegistration;
-};
-
 export type CustomPropertyRegistry = ReadonlyMap<
   CustomPropertyName,
   CustomPropertyRegistration
 >;
 
+/** Interpret declarations in source order, discarding unsupported properties and invalid values. */
+// CSS Syntax: https://drafts.csswg.org/css-syntax-3/#style-rules
+// This helper applies property grammars to already-parsed declaration records.
+export function interpretPropertyDeclarations(syntax: Declaration[]): PropertyDeclaration[] {
+  const declarations: PropertyDeclaration[] = [];
+  for (const item of syntax) {
+    const declaration = interpretPropertyDeclaration(item);
+    if (declaration !== null) declarations.push(declaration);
+  }
+  return declarations;
+}
+
 export function interpretPropertyDeclaration(
-  declaration: SyntaxDeclaration,
+  declaration: Declaration,
 ): PropertyDeclaration | null {
   if (isCustomPropertyName(declaration.name)) {
     return interpretCustomPropertyDeclaration(declaration, declaration.name);
@@ -137,7 +144,7 @@ export function resolveBuiltInPropertyDeclaration(
 }
 
 function interpretCustomPropertyDeclaration(
-  declaration: SyntaxDeclaration,
+  declaration: Declaration,
   name: CustomPropertyName,
 ): CustomPropertyDeclaration | null {
   const value = parseOptionalDeclarationValue(declaration.value);
@@ -156,7 +163,7 @@ function interpretCustomPropertyDeclaration(
 }
 
 function interpretBuiltInPropertyDeclaration<Name extends PropertyName>(
-  declaration: SyntaxDeclaration,
+  declaration: Declaration,
   name: Name,
 ): BuiltInPropertyDeclarationFor<Name> | null {
   const raw = propertyRegistry[name].parse(declaration.value);

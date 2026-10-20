@@ -6,8 +6,7 @@ import {
 } from '../../infra/observable-array';
 import { TypeError } from '../../infra/exceptions';
 
-import { parseStylesheet } from '../css/index';
-import { CSSStyleSheetImpl, StyleSheetListImpl } from '../cssom/index';
+import { CSSStyleSheetImpl, StyleSheetListImpl, parseCSSRules } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
 
@@ -82,6 +81,7 @@ export class TreeScope {
       context,
       {
         location: null,
+        baseURL: new context.env.userAgent.URL(context.dom.baseURI(context.dom.ownerDocument(this.root) ?? this.root)),
         parentStyleSheet: null,
         ownerNode,
         ownerRule: null,
@@ -90,9 +90,7 @@ export class TreeScope {
         alternate: false,
         originClean: true,
       },
-      parseStylesheet(source, {
-        baseUrl: new context.env.userAgent.URL(context.dom.baseURI(context.dom.ownerDocument(this.root) ?? this.root)),
-      }),
+      parseCSSRules(source, context.env),
     );
     this.addTreeStyleSheet(styleSheet);
     return styleSheet;

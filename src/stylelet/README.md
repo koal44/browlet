@@ -19,14 +19,14 @@ entry points and implementation types.
 | Home | Existing responsibility |
 | --- | --- |
 | [syntax/](syntax/README.md) | CSS input, tokens, component values, and generic syntax rules/declarations |
-| [css/](css/README.md) | Interpreted sheets and style rules, property declarations, the installed property registry, and declaration storage |
+| [css/](css/README.md) | Property declarations, the installed property registry, and declaration storage |
 | [selector/](selector/README.md) | Selector parsing, serialization, specificity, stylesheet matching, and its caches; separate from Selectlet's selector engine |
 | [values/](values/README.md) | Reusable value grammars, representations, resolution, and serialization, including media queries and supports conditions |
 | [value-processing/](value-processing/README.md) | Value stages and shared processing contracts; complete element-level orchestration remains missing |
 | [props/](props/README.md) | Seven installed property definitions; color/background-color, opacity, and the four margin longhands. Animation-name has a separate unregistered parser. |
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
-| [cssom/](cssom/README.md) | CSS interface implementations, their collections, and mutation behavior |
+| [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |
 | [web-idl.ts](web-idl.ts) | Neutral declaration contributions; currently three mixin/partial contributions with provisional result types |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
 
@@ -38,18 +38,39 @@ hosts supplying `exec.Promise`. Implementation modules import it directly from I
 
 The provisional [component order](../../scripts/eslint/import-hierarchy.mjs) puts
 syntax and value-processing contracts below numeric literals, values, conditions,
-property definitions/selectors, interpreted CSS, CSSOM, and the engine. Streams
+property definitions/selectors, declaration data, CSSOM, and the engine. Streams
 and Selectlet precede Stylelet; this does not add dependencies on either one.
 Selector parsing consumes generic syntax and value grammars from this higher
 layer. Supports conditions stay with reusable value grammars; `conditional/`
 owns future evaluation and applicability work. `npm run lint:imports` checks
 these boundaries; new findings require an ownership review before changing the map.
 
-These layers represent different things. A `SyntaxStyleSheet` contains syntax
-records. An `InterpretedStyleSheet` contains recognized rules and property values.
-A `CSSStyleSheetImpl` implements CSSOM operations over sheet state. The host's
-Binding machinery must provide the realm-owned `CSSStyleSheet` Platform object;
-that last boundary is still incomplete.
+## Parsing and object construction
+
+Use these responsibilities when adding or reviewing parsing code:
+
+1. **Syntax parsing** in [syntax/parser.ts](syntax/parser.ts) consumes CSS text
+   or existing tokens and produces generic rule/declaration records. It handles
+   syntax and recovery without deciding which properties or values are supported.
+2. **Property interpretation** in [css/property.ts](css/property.ts) applies
+   the installed property grammars and produces `PropertyDeclaration` values.
+   `interpretPropertyDeclarations()` shares this step between declaration-only
+   input and stylesheet rules. `parseDeclarationBlock()` first obtains syntax
+   declarations; callers that already have them use the interpreter directly.
+3. **CSSOM rule interpretation** in [cssom/parser.ts](cssom/parser.ts) recognizes
+   rule grammars through `interpretCSSRule()` and `interpretStyleRule()`, producing
+   implementations with parsed selectors and interpreted declarations.
+
+Use plain specification names for syntax records (`Rule`, `QualifiedRule`,
+`Declaration`), `interpret…` for applying the relevant grammars, and `…Impl` for
+implementations of Platform interfaces. Keep named parsing entry points aligned
+with their source algorithms, such as `parseStylesheetContents()`.
+
+These are processing stages. `CSSStyleSheetImpl` owns the resulting rule tree
+and its URL provenance; the engine and CSSOM mutation use that same tree.
+There is no retained intermediate stylesheet tree. The host's Binding machinery
+must provide the realm-owned `CSSStyleSheet` Platform object; that last boundary
+is still incomplete.
 
 The same distinction applies to declarations. `PropertyDeclaration` is internal
 data; `CSSDeclarationBlock` is the current retained data container;
@@ -90,7 +111,7 @@ Generic value support is broader than the installed property registry. A value
 parser's presence does not imply that a property using it participates in a
 stylesheet, cascade, CSSOM access, or computed style.
 
-The stylesheet interpreter recognizes style rules, including nested style-rule
+The CSSOM parser recognizes style rules, including nested style-rule
 data, but currently discards at-rules. The cascade visits only top-level style
 rules; nested-selector tests do not establish nested-rule participation.
 CSSOM's rule objects are less complete:

@@ -1,7 +1,7 @@
 import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
 import { TypeError } from '../../infra/exceptions';
 
-import type { StyleletEnvironment } from '../environment';
+import type { StyleletEnvironment, StyleletURL } from '../environment';
 
 import { MediaListImpl } from './media-list';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
@@ -20,9 +20,11 @@ import type { CSSOMString } from './string';
  * };
  */
 export abstract class StyleSheetImpl {
+  /** Parsed location retained for internal URL resolution; href exposes its string. */
+  location: StyleletURL | null = null;
+
   protected env: StyleletEnvironment;
   #type: CSSOMString;
-  #location: string | null;
   #ownerNode: DOMElement | DOMProcessingInstruction | null;
   #parentStyleSheet: CSSStyleSheetImpl | null;
   #title: string;
@@ -36,7 +38,6 @@ export abstract class StyleSheetImpl {
 
     this.env = env;
     this.#type = 'text/css';
-    this.#location = null;
     this.#ownerNode = null;
     this.#parentStyleSheet = null;
     this.#title = '';
@@ -49,7 +50,7 @@ export abstract class StyleSheetImpl {
   }
 
   get href(): string | null {
-    return this.#location;
+    return this.location?.href ?? null;
   }
 
   get ownerNode(): DOMElement | DOMProcessingInstruction | null {
@@ -78,10 +79,6 @@ export abstract class StyleSheetImpl {
 
   set disabled(value: boolean) {
     this.#disabled = value;
-  }
-
-  protected setLocation(location: string | null): void {
-    this.#location = location;
   }
 
   protected setOwnerNode(

@@ -31,7 +31,7 @@ or Platform behavior have been verified.
 | [Style sheets](https://drafts.csswg.org/cssom/#css-style-sheets) | Metadata, construction, origin-clean/modification guards, replacement, simple insertion/deletion, and legacy aliases. | Complete typed interfaces/dictionaries, method-realm errors/promises, import handling, rule hierarchy, and actual response-derived origin/base state. |
 | [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document sheets, adopted-sheet checks, preferred/selected sets, and retained lists. | Complete ShadowRoot scopes, binding-owned `ObservableArray<CSSStyleSheet>`, Default-Style/Link response processing, script blocking, and resource completion. |
 | [Association and fetching](https://drafts.csswg.org/cssom/#style-sheet-association) | HTML/SVG inline style elements associate sheets through Browlet's LinkStyle mixin. | `<link>`, `xml-stylesheet`, HTTP Link, imports, cancellation, MIME/CORS/encoding, policy, and load events belong at their host/loader boundary. Collection helpers alone do not satisfy these algorithms. |
-| [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | CSSRule base, live rule list, and partial CSSStyleRule declarations. | Parent links, selector mutation, rule serialization, grouping and nested declarations, hierarchy checks, and supported at-rule representations. See rule work below. |
+| [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | A single implementation tree, parent links, live lists, and separate style/nested declarations. | Selector mutation, rule serialization, nested insertion/deletion, hierarchy checks, and supported at-rule grammars. See rule work below. |
 | [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | Retained declarations, importance/order handling, queries/edits, attribute write-back, and readonly checks. | CSSStyleProperties, generated property accessors, shorthand/longhand and logical-group rules, URL provenance, descriptors, and the final mutation owner. |
 | [CSS values](https://drafts.csswg.org/cssom/#css-values) | Registry-driven value parsing/serialization and broader reusable value machinery. | Complete property grammar coverage, shorthand serialization, custom-property processing, and stage-correct representations through the value-lifecycle owner. |
 | [ElementCSSInlineStyle](https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin) | Permanent HTML/SVG/MathML mixins, explicit attribute input, stable lazy `.style`, and CSP gating in Browlet. | Return a projected CSSStyleProperties; remove manual index synchronization from the mixin; audit clone/import and parse-time URL behavior. |
@@ -42,19 +42,21 @@ or Platform behavior have been verified.
 
 ### Rule and interface coverage
 
-The local CSSOM source defines `CSSStyleRule` as a `CSSGroupingRule`, while the
-current implementation derives directly from `CSSRuleImpl`. Its child list is
-not populated from interpreted nested rules. `selectorText` is currently an
-ordinary empty field; both `cssText` accessors and nested mutation throw. The
+`CSSStyleRuleImpl` derives from `CSSGroupingRuleImpl` and retains nested style
+and declaration-rule children. `selectorText` is currently an ordinary empty
+field; both style-rule `cssText` accessors and nested mutation throw. The
 specification's `CSSRule.cssText` setter is a no-op, not a replacement operation.
 These are unfinished contracts to cover with regressions during implementation.
 
-Missing implementations include `CSSGroupingRule`, `CSSImportRule`,
+Missing implementations include `CSSImportRule`,
 `CSSPageRule`, `CSSPageDescriptors`, `CSSMarginRule`, its descriptor interface,
 and `CSSNamespaceRule`. CSSMediaRule is defined by Conditional Rules; font,
 animation, supports, layer, nesting, and other rule interfaces have contributing
 specifications. The [rule roadmap](../css/ROADMAP.md) now records those
-contributions, including CSSNestedDeclarations. CSSOM's legacy numeric
+contributions. CSSNestedDeclarationsImpl already retains later declaration runs;
+its CSSStyleProperties result and Binding remain unfinished. CSSPropertyRuleImpl
+currently supports direct registration fixtures, not parsed `@property` input.
+CSSOM's legacy numeric
 constants are not a complete list of rule types.
 
 At present, stylesheet interpretation drops at-rules. `insertRule()` rejects
@@ -99,16 +101,16 @@ requirement while reconsidering the objects that carry it.
 
 ### Rule mutation ownership
 
-- [ ] Trace a CSSOM declaration edit through the interpreted rule into the
-  cascade. Review the current copy-in/copy-back callback rather than promoting
-  it to an invariant.
-- [ ] Add a focused regression before changing the mixed declaration/nested-rule
-  path: current copy-back assigns a declaration-only array to `rule.block`.
-  The existing simple-rule tests do not establish that nested contents survive edits.
-- [ ] Maintain parent rule/sheet associations across insertion, deletion, and
-  replacement, including references retained by author code after removal.
+- [ ] Extend parent-association coverage to nested insertion/deletion and
+  supported group rules. Existing parsing and top-level mutation propagate
+  sheet attachment/removal through the retained child tree.
 - [ ] Complete selector and rule serialization behavior using the underlying
   algorithms, then nested mutation and rule-type hierarchy constraints.
+
+Declaration edits already update the state the engine reads. Regressions cover
+nested-rule survival, separate later declaration runs, and parent-sheet links
+after removal/replacement. There is no declaration copy-back callback or
+independent interpreted tree to keep synchronized.
 
 ## Computed results and external facts
 

@@ -1,3 +1,5 @@
+import type { StyleletEnvironment } from '../environment';
+
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 
 /** Common state and contract for CSS rule implementations. */
@@ -16,11 +18,21 @@ export abstract class CSSRuleImpl {
   SUPPORTS_RULE = 12 as const;
   FONT_FEATURE_VALUES_RULE = 14 as const;
 
-  // TODO: Maintain these associations when rules are inserted, moved, or removed.
   parentRule: CSSRuleImpl | null = null;
   parentStyleSheet: CSSStyleSheetImpl | null = null;
-
   abstract type: number;
+
+  protected env: StyleletEnvironment;
+
+  constructor(env: StyleletEnvironment) {
+    this.env = env;
+  }
+
   abstract get cssText(): string;
   abstract set cssText(value: string);
+
+  /** Associate this rule with its containing sheet, or detach it from that sheet. */
+  setParentStyleSheet(sheet: CSSStyleSheetImpl | null): void {
+    this.parentStyleSheet = sheet;
+  }
 }

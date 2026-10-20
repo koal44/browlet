@@ -1,16 +1,12 @@
 import type { DOMDocument as Document } from '../../infra/index';
 import { internalType, type InternalPromise } from '../../infra/promises';
 
-import type { StyleletEnvironment } from '../environment';
-import { parseRule, type SyntaxRule } from '../syntax/index';
+import type { StyleletURL } from '../environment';
+import { parseRule, type Rule } from '../syntax/index';
 import type { StyleletContext } from '../context';
-import {
-  interpretStylesheet, parseStylesheet,
-  type InterpretedRule, type InterpretedStyleSheet,
-} from '../css/index';
 
 import { CSSRuleListImpl } from './rule-list';
-import { CSSStyleRuleImpl } from './rules';
+import { interpretCSSRule, parseCSSRules } from './parser';
 import { StyleSheetImpl } from './stylesheet';
 import type { CSSRuleImpl } from './rule';
 import type { MediaListImpl } from './media-list';
@@ -33,13 +29,13 @@ import type { CSSOMString } from './string';
 export class CSSStyleSheetImpl
   extends StyleSheetImpl
 {
-  #rules: CSSRuleListImpl;
-  #interpretedStyleSheet: InterpretedStyleSheet;
+  /** Authoritative rules, also available internally for non-origin-clean sheets. */
+  ruleList = new CSSRuleListImpl();
+  /** Parse-time base URL, independent of the public stylesheet location. */
+  baseURL?: StyleletURL;
 
   #ownerRule: CSSRuleImpl | null;
   #constructorDocument: Document | null;
-  // eslint-disable-next-line no-unused-private-class-members -- CSSOM state
-  #stylesheetBaseURL: string | null;
 
   #alternate: boolean;
   #originClean: boolean;
@@ -53,13 +49,10 @@ export class CSSStyleSheetImpl
     super(context.env);
 
     const document = context.document;
-    const location = new this.env.userAgent.URL(context.dom.baseURI(document));
-    this.#rules = new CSSRuleListImpl();
-    this.#interpretedStyleSheet = { location, rules: [] };
+    this.location = new this.env.userAgent.URL(context.dom.baseURI(document));
 
     this.#ownerRule = null;
     this.#constructorDocument = document;
-    this.#stylesheetBaseURL = null;
 
     this.#alternate = false;
     this.#originClean = true;
@@ -72,11 +65,9 @@ export class CSSStyleSheetImpl
       disabled = false,
     } = options;
 
-    this.#stylesheetBaseURL = baseURL;
     if (baseURL !== null) {
-      this.#interpretedStyleSheet.baseUrl = new this.env.userAgent.URL(baseURL, location.href);
+      this.baseURL = new this.env.userAgent.URL(baseURL, this.location.href);
     }
-    this.setLocation(location.href);
     this.setMedia(media);
     this.setDisabled(disabled);
   }
@@ -84,11 +75,12 @@ export class CSSStyleSheetImpl
   static create(
     context: StyleletContext,
     properties: CSSStyleSheetProperties,
-    rules?: InterpretedStyleSheet,
+    rules?: CSSRuleImpl[],
   ): CSSStyleSheetImpl {
     const sheet = new CSSStyleSheetImpl(context);
 
-    sheet.setLocation(properties.location);
+    sheet.location = properties.location;
+    sheet.baseURL = properties.baseURL;
     sheet.setParentStyleSheet(properties.parentStyleSheet);
     sheet.setOwnerNode(properties.ownerNode);
     sheet.#ownerRule = properties.ownerRule;
@@ -98,8 +90,7 @@ export class CSSStyleSheetImpl
     sheet.#originClean = properties.originClean;
     sheet.#constructed = false;
     sheet.#constructorDocument = null;
-    sheet.#stylesheetBaseURL = null;
-    if (rules) sheet.#replaceInterpretedStyleSheet(rules);
+    if (rules) sheet.replaceRules(rules);
 
     return sheet;
   }
@@ -110,11 +101,7 @@ export class CSSStyleSheetImpl
 
   get cssRules(): CSSRuleListImpl {
     this.#assertOriginClean();
-    return this.#rules;
-  }
-
-  get interpretedStyleSheet(): InterpretedStyleSheet {
-    return this.#interpretedStyleSheet;
+    return this.ruleList;
   }
 
   // Deprecated CSSStyleSheet members ----------------------------------------
@@ -128,7 +115,7 @@ export class CSSStyleSheetImpl
     this.#assertOriginClean();
     this.#assertModificationAllowed();
 
-    if (index > this.#rules.length) {
+    if (index > this.ruleList.length) {
       throw new this.env.exec.DOMException(
         `Index ${index} exceeds the rule-list length.`,
         'IndexSizeError',
@@ -143,8 +130,8 @@ export class CSSStyleSheetImpl
       );
     }
 
-    const rulePair = createCSSRule(parsedRule, this.env);
-    if (rulePair === null) {
+    const cssRule = interpretCSSRule(parsedRule, this.env);
+    if (cssRule === null) {
       // Remove this boundary as the remaining CSSRule interfaces are added.
       throw new this.env.exec.DOMException(
         `The parsed rule is not supported: ${rule}`,
@@ -152,8 +139,8 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.#interpretedStyleSheet.rules.splice(index, 0, rulePair.interpretedRule);
-    this.#rules.insert(index, rulePair.cssRule);
+    cssRule.setParentStyleSheet(this);
+    this.ruleList.insert(index, cssRule);
     return index;
   }
 
@@ -161,15 +148,15 @@ export class CSSStyleSheetImpl
     this.#assertOriginClean();
     this.#assertModificationAllowed();
 
-    if (index >= this.#rules.length) {
+    if (index >= this.ruleList.length) {
       throw new this.env.exec.DOMException(
         `Index ${index} does not identify a rule.`,
         'IndexSizeError',
       );
     }
 
-    this.#interpretedStyleSheet.rules.splice(index, 1);
-    this.#rules.remove(index);
+    this.ruleList.item(index)!.setParentStyleSheet(null);
+    this.ruleList.remove(index);
   }
 
   replace(text: string): InternalPromise<CSSStyleSheetImpl> {
@@ -192,10 +179,10 @@ export class CSSStyleSheetImpl
     // CSSOM leaves the task source unspecified; use DOM manipulation delivery.
     this.env.exec.runInParallel(() => {
       try {
-        const rules = this.#parseRules(text);
+        const rules = parseCSSRules(text, this.env);
         this.env.exec.queueTask('dom-manipulation', () => {
           try {
-            this.#replaceInterpretedStyleSheet(rules);
+            this.replaceRules(rules);
             this.#disallowModification = false;
             result.resolve(this);
           } catch (error) {
@@ -217,7 +204,14 @@ export class CSSStyleSheetImpl
       );
     }
 
-    this.#replaceInterpretedStyleSheet(this.#parseRules(text));
+    this.replaceRules(parseCSSRules(text, this.env));
+  }
+
+  /** Install parsed rules without applying the author API's access and construction checks. */
+  replaceRules(rules: CSSRuleImpl[]): void {
+    for (const rule of this.ruleList) rule.setParentStyleSheet(null);
+    for (const rule of rules) rule.setParentStyleSheet(this);
+    this.ruleList.replace(rules);
   }
 
   isAlternate(): boolean {
@@ -246,7 +240,7 @@ export class CSSStyleSheetImpl
   addRule(
     selector = 'undefined',
     style = 'undefined',
-    index = this.#rules.length,
+    index = this.ruleList.length,
   ): number {
     const block = style === '' ? '' : `${style} `;
     this.insertRule(`${selector} { ${block}}`, index);
@@ -256,26 +250,6 @@ export class CSSStyleSheetImpl
   /** @deprecated Use deleteRule() instead. */
   removeRule(index = 0): void {
     this.deleteRule(index);
-  }
-
-  // Private helpers ---------------------------------------------------------
-
-  #parseRules(text: string): InterpretedStyleSheet {
-    return parseStylesheet(text, {
-      ...(this.#interpretedStyleSheet.location === undefined
-        ? {}
-        : { location: this.#interpretedStyleSheet.location }),
-      ...(this.#interpretedStyleSheet.baseUrl === undefined
-        ? {}
-        : { baseUrl: this.#interpretedStyleSheet.baseUrl }),
-    });
-  }
-
-  #replaceInterpretedStyleSheet(
-    styleSheet: InterpretedStyleSheet,
-  ): void {
-    this.#interpretedStyleSheet = styleSheet;
-    this.#rules.replace(buildCSSRules(styleSheet, this.env));
   }
 
   #assertOriginClean(): void {
@@ -311,7 +285,8 @@ export type CSSStyleSheetInit = {
 };
 
 type CSSStyleSheetProperties = {
-  location: string | null;
+  location: StyleletURL | null;
+  baseURL?: StyleletURL;
   parentStyleSheet: CSSStyleSheetImpl | null;
   ownerNode: StyleSheetImpl['ownerNode'];
   ownerRule: CSSRuleImpl | null;
@@ -321,34 +296,7 @@ type CSSStyleSheetProperties = {
   originClean: boolean;
 };
 
-function buildCSSRules(sheet: InterpretedStyleSheet, env: StyleletEnvironment): CSSRuleImpl[] {
-  return sheet.rules.flatMap((rule) => {
-    const cssRule = createCSSRuleFromInterpretedRule(rule, env);
-    return cssRule === null ? [] : [cssRule];
-  });
-}
-
-function createCSSRule(rule: SyntaxRule, env: StyleletEnvironment): RulePair | null {
-  const sheet = interpretStylesheet({ rules: [rule] });
-  const interpretedRule = sheet.rules[0];
-  if (interpretedRule === undefined) return null;
-
-  const cssRule = createCSSRuleFromInterpretedRule(interpretedRule, env);
-  return cssRule === null ? null : { cssRule, interpretedRule };
-}
-
-function createCSSRuleFromInterpretedRule(rule: InterpretedRule, env: StyleletEnvironment): CSSRuleImpl | null {
-  switch (rule.type) {
-    case 'style-rule': return new CSSStyleRuleImpl(rule, env);
-    case 'property-rule': return null;
-  }
-}
-
-function isImportRule(rule: SyntaxRule): boolean {
+/** Recognize the import syntax excluded by the current insertion path. */
+function isImportRule(rule: Rule): boolean {
   return rule.type === 'statement-at-rule' && rule.name === 'import';
 }
-
-type RulePair = {
-  cssRule: CSSRuleImpl;
-  interpretedRule: InterpretedRule;
-};

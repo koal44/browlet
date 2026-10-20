@@ -1,13 +1,13 @@
 # Stylesheet rule roadmap
 
-The [README](README.md) describes the existing interpreter. This roadmap connects
+The [README](README.md) describes declaration data. This roadmap connects
 Syntax, Namespaces, Nesting and Cascade/Conditional requirements to interpretation,
 CSSOM state and engine reads. Property-family descriptors and complete cascade
 evaluation retain their own owners.
 
 ## Missing rule contracts
 
-All at-rules below are currently discarded by the interpreter. A future rule
+All at-rules below are currently discarded by the [CSSOM parser](../cssom/parser.ts). A future rule
 needs its permitted syntax/context, retained representation, CSSOM behavior,
 and actual consumer accounted for together; not every rule contributes element
 declarations to the cascade.
@@ -22,7 +22,7 @@ declarations to the cascade.
 | [`@scope`](https://drafts.csswg.org/css-cascade-6/#scoped-styles) | Roots/limits, matching context, nesting interactions, proximity in cascade selection, and CSSScopeRule. This is not the existing document/shadow `TreeScope`. |
 | [`@container`](https://drafts.csswg.org/css-conditional-5/#container-rule) | Per-element container selection, condition representation, CSSContainerRule, and query evaluation. Computed-style facts belong to style processing; size/scroll facts and their freshness require explicit external owners. |
 | [Conditional 5 extensions](https://drafts.csswg.org/css-conditional-5/#at-supports-ext) | Additional support-query forms, `@when`/`@else` chains, and named `@supports-condition` queries. Review the draft's open issues and select the supported forms before designing their implementation. |
-| `@property` | Registration interpretation/CSSPropertyRule in the Properties and Values API; existing record/registry types do not connect stylesheet input. See the [registration roadmap](../engine/ROADMAP.md#custom-property-registration). |
+| `@property` | Parse and validate descriptors into CSSPropertyRuleImpl, currently constructed only by registration fixtures; finish its syntax/initialValue/serialization members. See the [registration roadmap](../engine/ROADMAP.md#custom-property-registration). |
 | Font, keyframe, page/margin, counter-style, and other family rules | Descriptor/property distinctions, family-specific grammars, CSSOM interfaces, and consumers belong to their contributing modules. Follow the [property families](../props/ROADMAP.md), [fonts](../../fonts/ROADMAP.md), and [animation](../../animation/ROADMAP.md) owners; do not route every declaration through the element-property registry. |
 
 ## Nesting and shared rule state
@@ -30,21 +30,20 @@ declarations to the cascade.
 [Nesting 1](https://drafts.csswg.org/css-nesting-1/) supplies concrete requirements
 beyond selector expansion:
 
-- [ ] Preserve the first declaration run separately from later runs represented
-  by [nested declarations rules](https://drafts.csswg.org/css-nesting-1/#nested-declarations).
-  They retain parent matching/specificity, including pseudo-elements; an invented
-  `& { ... }` rule is not equivalent. Add `CSSNestedDeclarations` and its
-  CSSStyleProperties result at the CSSOM boundary.
+- [ ] Complete [nested declarations rules](https://drafts.csswg.org/css-nesting-1/#nested-declarations)
+  across group rules and projected CSSStyleProperties. Style rules already
+  retain leading declarations separately from later CSSNestedDeclarationsImpl
+  children. Preserve parent matching/specificity, including pseudo-elements;
+  an invented `& { ... }` rule is not equivalent.
 - [ ] Interpret nested group rules with the nearest enclosing style rule's
   nesting context. Direct declarations in those groups need the same run
   representation; unknown children must not discard a valid group.
 - [ ] Connect retained nested rules to engine participation in correct order.
   Current direct matcher tests do not exercise this missing traversal.
-- [ ] Connect CSSOM child lists, parent associations, insertion/deletion, and
-  declaration mutation to the same retained rule state. Before changing the
-  current copy-back callback, reproduce its nested-content loss with a focused
-  regression. The [CSSOM roadmap](../cssom/ROADMAP.md#rule-mutation-ownership)
-  owns that implementation review.
+- [ ] Implement nested insertion/deletion and their parent-association updates
+  on the retained CSSOM rule tree. Parsing, whole-sheet replacement, top-level
+  insertion/deletion, and declaration edits already use that tree directly.
+  The [CSSOM roadmap](../cssom/ROADMAP.md#rule-mutation-ownership) owns mutation.
 - [ ] Reparse `selectorText` with sheet namespace and parent nesting context;
   preserve rule identity and update dependent child selectors/matcher caches.
   Audit serialization against [Nesting's CSSOM additions](https://drafts.csswg.org/css-nesting-1/#cssom).

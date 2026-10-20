@@ -43,26 +43,21 @@ describe('Stylelet DOM hosts', () => {
       const { document, dom, opaque, window } = host;
       const element = opaque(window.document.querySelector('main')!);
       const styles = new Stylelet(document, { dom });
-      const onChange = vi.fn();
-      const declaration = new CSSStyleDeclarationImpl({ ownerNode: element, onChange }, styles.context.env);
+      const declaration = new CSSStyleDeclarationImpl({ ownerNode: element }, styles.context.env);
 
       expect(declaration.cssText).toBe('');
-      expect(onChange).not.toHaveBeenCalled();
 
       declaration.attributeChanged('style', dom.getAttributeNS(element, null, 'style'));
       expect(declaration.cssText).toBe('opacity: 0.25; color: red;');
-      expect(onChange).toHaveBeenCalledTimes(1);
       expect(dom.getAttributeNS(element, null, 'style')).toBe('opacity: .25; color: red');
 
       dom.setAttributeNS(element, null, 'style', 'color: blue');
       declaration.attributeChanged('style', dom.getAttributeNS(element, null, 'style'));
       expect(declaration.cssText).toBe('color: blue;');
-      expect(onChange).toHaveBeenCalledTimes(2);
 
       dom.removeAttribute(element, 'style');
       declaration.attributeChanged('style', null);
       expect(declaration.cssText).toBe('');
-      expect(onChange).toHaveBeenCalledTimes(3);
     } finally { host.close(); }
   });
 

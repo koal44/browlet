@@ -1,4 +1,5 @@
 import type { CustomPropertyName, CustomPropertyRegistration } from '../css/index';
+import { CSSPropertyRuleImpl } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
@@ -15,8 +16,8 @@ export function getCustomPropertyRegistration(
   let declared = null;
 
   for (const styleSheet of engine.getActiveStyleSheets(scope)) {
-    for (const rule of styleSheet.interpretedStyleSheet.rules) {
-      if (rule.type === 'property-rule' && rule.registration.name === name) {
+    for (const rule of styleSheet.ruleList) {
+      if (rule instanceof CSSPropertyRuleImpl && rule.registration.name === name) {
         declared = rule.registration;
       }
     }
