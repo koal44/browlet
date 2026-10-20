@@ -7,4 +7,4 @@ export {
 } from './rules';
 export { CSSParsingContext } from './parser';
 export { StylePropertyMapImpl } from './style-property-map';
-export { MediaListImpl } from './media-list';
+export { MediaListImpl, mediaListIDL } from './media-list';

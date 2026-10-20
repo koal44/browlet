@@ -1,3 +1,5 @@
+import { asciiLower } from '../../infra/ascii';
+
 import {
   HashTokenFlag, NumericSign, NumberTokenFlag, TokenKind, isNonAsciiIdentCodePoint,
   type BlockKind, type BraceBlock, type BracketBlock, type ComponentBlock, type ComponentValue,
@@ -287,6 +289,12 @@ export function serializeCssIdentifier(value: string): string {
   return result;
 }
 
+/** Format an interpreted function; its grammar supplies serialized contents at the current value stage. */
+// https://drafts.csswg.org/cssom/#serialize-a-function
+export function serializeCssFunction(name: string, contents: string): string {
+  return `${serializeCssIdentifier(asciiLower(name))}(${contents})`;
+}
+
 /** Serializes a CSS string, including its surrounding double quotes. */
 // https://drafts.csswg.org/cssom/#serialize-a-string
 export function serializeCssString(value: string): string {
@@ -310,6 +318,12 @@ export function serializeCssString(value: string): string {
   }
 
   return `${result}"`;
+}
+
+/** Serialize a local font name; font lookup and descriptor interpretation are separate work. */
+// https://drafts.csswg.org/cssom/#serialize-a-local
+export function serializeCssLocal(name: string): string {
+  return serializeCssFunction('local', serializeCssString(name));
 }
 
 /** Escapes a name without the leading-character restrictions of an identifier. */

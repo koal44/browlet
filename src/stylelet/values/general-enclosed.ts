@@ -36,6 +36,11 @@ export function resolveGeneralEnclosed(
   return value;
 }
 
+/** Serialize an opaque condition from its tokens, without interpreting an unknown grammar. */
+// https://drafts.csswg.org/mediaqueries-4/#typedef-general-enclosed
+// SPEC_GAP(media-general-enclosed-serialization): CSSOM has no serializer for
+// this newer production. Retain token-based formatting, as WebKit does;
+// Chromium/Firefox preserve exact source text. See cssom/ROADMAP.md.
 export function serializeGeneralEnclosed(value: GeneralEnclosedValue): string {
   const block = value.value;
   const contents = block.value === undefined ? '' : serializeComponentValues(block.value.components.tokens);

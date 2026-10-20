@@ -57,6 +57,8 @@ export type EventHandler = EventHandlerNonNull | null;
 
 export type TimerHandler = string | Function;
 
+export type CSSOMString = string;
+
 export type ReadableStreamController = ReadableStreamDefaultController | ReadableByteStreamController;
 
 export type ReadableStreamReader = ReadableStreamDefaultReader | ReadableStreamBYOBReader;
@@ -1627,6 +1629,7 @@ export interface Window extends EventTarget {
   XMLDocument: XMLDocumentConstructor;
   DOMImplementation: DOMImplementationConstructor;
   Element: ElementConstructor;
+  MediaList: MediaListConstructor;
   ByteLengthQueuingStrategy: ByteLengthQueuingStrategyConstructor;
   CountQueuingStrategy: CountQueuingStrategyConstructor;
   ReadableStream: ReadableStreamConstructor;
@@ -2326,6 +2329,22 @@ export interface Element extends Node {
 export interface ElementConstructor extends Ctor<NodeConstructor> {
   readonly prototype: Element;
   [Symbol.hasInstance](value: unknown): value is Element;
+}
+
+export interface MediaList {
+  mediaText: string;
+  toString(): string;
+  readonly length: number;
+  item(index: number): string | null;
+  appendMedium(medium: string): void;
+  deleteMedium(medium: string): void;
+  readonly [index: number]: string | null | undefined;
+  [Symbol.iterator](): IterableIterator<string | null>;
+}
+
+export interface MediaListConstructor {
+  readonly prototype: MediaList;
+  [Symbol.hasInstance](value: unknown): value is MediaList;
 }
 
 export interface ByteLengthQueuingStrategy {

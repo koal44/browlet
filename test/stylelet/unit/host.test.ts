@@ -369,7 +369,7 @@ describe('Stylelet execution', () => {
     expect(sheet.insertRule('.third {}')).toBe(0);
   });
 
-  it('uses host exceptions in sheets, media lists, declarations, and adoption', async () => {
+  it('uses interim host exceptions in unbound sheets, declarations, and adoption', async () => {
     class HostDOMException extends DOMException {}
     const exec: StyleletExecution = {
       ...defaultStyleletExecution,
@@ -380,7 +380,6 @@ describe('Stylelet execution', () => {
     const sheet = styles.createStyleSheet();
 
     expect(() => sheet.deleteRule(0)).toThrow(HostDOMException);
-    expect(() => sheet.media.deleteMedium('screen')).toThrow(HostDOMException);
     const declaration = styles.getComputedStyle(document.querySelector('main')!);
     expect(() => declaration.setProperty('color', 'red')).toThrow(HostDOMException);
     const foreign = new Stylelet(new JSDOM().window.document).createStyleSheet();
@@ -390,7 +389,6 @@ describe('Stylelet execution', () => {
       document.createElement('style'), '',
     );
     expect(() => embedded.replaceSync('')).toThrow(HostDOMException);
-    expect(() => embedded.media.deleteMedium('screen')).toThrow(HostDOMException);
     await expect(observe(embedded.replace(''))).rejects.toBeInstanceOf(HostDOMException);
   });
 });

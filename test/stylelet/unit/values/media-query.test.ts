@@ -59,6 +59,19 @@ describe('<media-query>', () => {
     });
   });
 
+  it.each([
+    ['ORIENTATION', 'LANDSCAPE', 'landscape'],
+    ['orientation', 'PORTRAIT', 'portrait'],
+    ['SCAN', 'INTERLACE', 'interlace'],
+    ['scan', 'PROGRESSIVE', 'progressive'],
+  ])('interprets the keyword in (%s: %s)', (name, keyword, expected) => {
+    const query = parseMediaQuery(`(${name}: ${keyword})`)!;
+    expect(query).toMatchObject({
+      condition: { value: { value: { type: 'ident', value: expected } } },
+    });
+    expect(serializeMediaQuery(query)).toBe(`(${name.toLowerCase()}: ${expected})`);
+  });
+
   it('parses a one-sided range with the name first', () => {
     expect(parseMediaQuery('(width >= 10px)')).toMatchObject({
       type: 'media-condition-query',
@@ -204,16 +217,16 @@ describe('<media-query>', () => {
     });
   });
 
-  it('folds media feature names but preserves ident values until resolution', () => {
-    expect(parseMediaQuery('(ORIENTATION: LANDSCAPE)')).toMatchObject({
+  it('folds unknown media feature names without changing their ident values', () => {
+    expect(parseMediaQuery('(FUTURE-FEATURE: CUSTOM)')).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
           type: 'media-feature-plain',
-          name: 'orientation',
+          name: 'future-feature',
           value: {
             type: 'ident',
-            value: 'LANDSCAPE',
+            value: 'CUSTOM',
           },
         },
       },
@@ -293,29 +306,39 @@ describe('<media-query-list>', () => {
     ]);
   });
 
-  it('replaces the empty entry before a lone comma with not all', () => {
+  it('replaces both empty entries around a lone comma with not all', () => {
     expect(parseMediaQueryList(',')).toMatchObject([
+      { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
     ]);
   });
 
-  it('recovers independently across leading and consecutive empty entries', () => {
+  it('recovers independently across leading, consecutive, and trailing empty entries', () => {
     expect(parseMediaQueryList(', screen,, print,')).toMatchObject([
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', mediaType: 'print' },
+      { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
     ]);
+  });
+
+  it.each(['screen,', 'screen,/**/', 'screen, '])('retains a final empty query in %j', (input) => {
+    expect(serializeMediaQueryList(parseMediaQueryList(input))).toBe('screen, not all');
+  });
+
+  it('does not mistake a comma inside an unclosed function for a list separator', () => {
+    expect(serializeMediaQueryList(parseMediaQueryList('future(a,'))).toBe('future(a,)');
   });
 });
 
 describe('media query resolution', () => {
-  it('delegates ident values without imposing feature policy', () => {
+  it('retains interpreted keywords through value resolution', () => {
     const query = parseMediaQuery('(ORIENTATION: LANDSCAPE)')!;
 
     expect(resolveMediaQuery(query, ValueStage.Declared)).toEqual(query);
     expect(serializeMediaQuery(resolveMediaQuery(query, ValueStage.Computed)))
-      .toBe('(orientation: LANDSCAPE)');
+      .toBe('(orientation: landscape)');
   });
 
   it('delegates known dimensions to their value resolvers', () => {

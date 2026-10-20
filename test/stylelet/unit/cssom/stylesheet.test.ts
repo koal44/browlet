@@ -6,9 +6,7 @@ import { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
 import type { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules';
 import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
-import {
-  defaultStyleletEnvironment, Stylelet, type InternalPromise,
-} from '../../../../src/stylelet/index';
+import { Stylelet, type InternalPromise } from '../../../../src/stylelet/index';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('StyleSheetImpl', () => {
@@ -22,7 +20,7 @@ describe('StyleSheetImpl', () => {
 
 describe('CSSStyleSheetImpl', () => {
   it('initializes the StyleSheet state from its constructor options', () => {
-    const media = new MediaListImpl('screen', defaultStyleletEnvironment);
+    const media = new MediaListImpl('screen');
     const sheet = createStyleSheet({
       baseURL: 'https://example.com/css/',
       media,

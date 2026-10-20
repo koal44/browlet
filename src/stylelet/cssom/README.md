@@ -15,15 +15,29 @@ observable behavior, rather than private storage choices, constrains its replace
 | [CSSStyleRuleImpl](rules.ts), [CSSNestedDeclarationsImpl](rules.ts) | Parsed selectors, leading declarations, and separate later declaration runs; style-rule selector text and serialization remain unfinished |
 | [CSSPropertyRuleImpl](rules.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
 | [CSSStyleDeclarationImpl](declaration.ts) | Declaration queries, mutation, CSS text, owner write-back, and readonly/computed flags. It currently also installs the property accessors expected from the missing `CSSStyleProperties` interface. |
-| [MediaListImpl](media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation; does not evaluate media against a device |
+| [MediaListImpl](media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation, with a real MediaList declaration; does not evaluate media against a device |
 | [CSSRuleListImpl](rule-list.ts), [StyleSheetListImpl](stylesheet-list.ts) | Retained ordered collections with manually synchronized numeric properties |
 | [StylePropertyMapImpl](style-property-map.ts) | Explicit throwing placeholder for Typed OM; no working typed map API |
 
-[web-idl.ts](../web-idl.ts) currently contributes `ElementCSSInlineStyle`,
-`LinkStyle`, and the stylesheet members of `DocumentOrShadowRoot`. Their return
-types are still `object`/`any`. It does not yet declare the primary CSSOM
-interfaces in the table. An IDL comment or TypeScript `implements` clause does
-not create a realm-owned Platform interface.
+[web-idl.ts](../web-idl.ts) exports `typedef DOMString CSSOMString`, `MediaList`,
+`ElementCSSInlineStyle`, `LinkStyle`, and the stylesheet members of
+`DocumentOrShadowRoot`. The mixin return types are still `object`/`any`;
+sheet/rule/declaration projection remains unfinished. An IDL comment or
+TypeScript `implements` clause does not create a Platform interface.
+
+MediaList's binding owns numeric properties, iteration, stringification,
+conversion, receiver checks, and exception realization. Its implementation
+accepts strings and converted indices, exposes supported indices, and throws
+realm-neutral DOMExceptionImpl failures. Other hosts bind the same declaration
+using their own runtime. The existing raw stylesheet return path still needs
+the section 6 bindings before `.media` reaches this Platform interface.
+
+Common identifier, string, function, and LOCAL formatting lives in
+`syntax/component-value.ts`. Function formatting receives a name and contents
+already serialized by the value's grammar; it performs no value resolution.
+`values/url.ts` supplies URL notation and modifiers. Generic component-value
+serialization remains distinct: without a grammar it preserves function names.
+List owners use `join(', ')` or `join(' ')` for CSSOM's separators.
 
 ## Declaration data and mutation
 
@@ -113,8 +127,9 @@ those resources are fetched.
 
 All CSSOM objects that need execution retain the supplied
 [StyleletEnvironment](../environment.ts). Standalone defaults and Browlet's
-environment both work through this boundary. Current direct exposure allocates
-exceptions through `env.exec`; proper method-realm projection remains pending.
+environment both work through this boundary. Unbound sheet/declaration APIs
+still allocate exceptions through `env.exec`. MediaList needs no execution
+owner; its host binding realizes errors in the invoked method's realm.
 
 ## Existing evidence and its limits
 
@@ -126,7 +141,9 @@ exceptions through `env.exec`; proper method-realm projection remains pending.
 | [Browlet style tests](../../../test/browlet/style/) | Inline/stylesheet association, mutation, cascade reads, adopted sheets, and selected calls through `Browlet.evaluate()` |
 | [CSP style tests](../../../test/browlet/browsing/policy/csp/style-attribute.test.ts) | Raw-source authorization, reporting, accepted state, parser input, and adoption |
 | [Style-attribute browser scenarios](../../../test/stylelet/scenarios/style-attribute.test.ts) | Stylelet's declaration parsing compared with native behavior; not included in the baseline below |
-| [IDL contribution test](../../../test/stylelet/unit/web-idl.test.ts) | Serialization of the current provisional declarations, not CSSOM Platform conformance |
+| [MediaList binding tests](../../../test/browlet/style/media-list.test.ts) | Real interface exposure, identity, conversions, live indices/iteration, author overrides, and borrowed-method exception realms |
+| [Media-list browser scenarios](../../../test/stylelet/scenarios/media-list.test.ts) | Stylelet parsing/mutation against Chromium, Firefox, and WebKit, with documented disagreements |
+| [IDL contribution test](../../../test/stylelet/unit/web-idl.test.ts) | Serialization of the typedef, MediaList, and provisional mixins |
 
 Several tests intentionally pin current representation details: block identity,
 no `.style` getter call during cascade reads, numeric own properties, direct
@@ -137,17 +154,18 @@ storage or to accept author inputs that Binding should already have converted.
 
 ## Validation baseline
 
-On 2026-10-19, the rule-ownership cleanup passed **138 tests across 14 files**
-on the custom Node 27 compatibility runtime. Seven pre-existing custom-property
-defaulting/substitution cases remained skipped. These two focused commands cover
-rule construction, mutation, engine reads, host integration, CSP, and the current
-IDL contribution:
+The 2026-10-19 sections 1–5 audit passed **3,001 tests across 45 files** on
+the custom Node 27 compatibility runtime, with 7 pre-existing expected failures
+and 14 pre-existing skips. This covers Stylelet units, Browlet style integration,
+CSP, and MediaList's real Binding boundary:
 
 ```text
-node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/cssom test/stylelet/unit/engine test/stylelet/unit/environment.test.ts test/stylelet/unit/host.test.ts test/browlet/style
-node scripts/with-node.mjs vitest run --project=unit test/browlet/browsing/policy/csp/style-attribute.test.ts test/stylelet/unit/web-idl.test.ts
+node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit test/browlet/style test/browlet/browsing/policy/csp/style-attribute.test.ts
 ```
 
-The Stylelet package build and global-artifact smoke test also passed.
-This baseline does not establish CSSOM interface exposure, cross-realm borrowing,
-live computed values, complete parsing/serialization, or layout-dependent results.
+Full lint/typecheck, the Stylelet package build, and global-artifact smoke test
+also passed. The MediaList browser run completed all 19 scenarios: 7 passed
+normally and 12 matched the approved expected failures for documented browser
+differences. The build still reports the existing declaration/parser/rules
+import cycle. Broader CSSOM projection, live computed values, complete property
+grammars, and layout-dependent results remain unfinished.

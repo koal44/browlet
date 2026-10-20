@@ -3,7 +3,7 @@ import { InternalError } from '../../infra/internal-error';
 import type { StyleletURL, StyleletURLConstructor } from '../environment';
 import {
   createFunctionalNotationConsumer, consumeUrlToken, any, one, oneOf, adaptConsumer, sequenceOf, withTrivia,
-  createComponentParser, serializeCssString,
+  createComponentParser, serializeCssString, serializeCssFunction,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage, type ValueDefinition } from '../value-processing/index';
@@ -109,13 +109,16 @@ export function resolveUrl(
   }
 }
 
+/** Serialize the retained URL value and its modifiers without resolving against a new base. */
+// https://drafts.csswg.org/cssom/#serialize-a-url
+// CSS Values extends URL notation with src() and request modifiers.
 export function serializeUrl(value: UrlValue): string {
   const args = [
     serializeCssString(value.value),
     ...serializeRequestUrlModifiers(value.modifiers),
   ];
 
-  return `${value.notation}(${args.join(' ')})`;
+  return serializeCssFunction(value.notation, args.join(' '));
 }
 
 type UrlFunctionParserContext = {

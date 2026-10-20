@@ -5,7 +5,6 @@ import type { StyleletEnvironment, StyleletURL } from '../environment';
 
 import { MediaListImpl } from './media-list';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
-import type { CSSOMString } from './string';
 
 /*
  * [Exposed=Window]
@@ -24,7 +23,7 @@ export abstract class StyleSheetImpl {
   location: StyleletURL | null = null;
 
   protected env: StyleletEnvironment;
-  #type: CSSOMString;
+  #type: string;
   #ownerNode: DOMElement | DOMProcessingInstruction | null;
   #parentStyleSheet: CSSStyleSheetImpl | null;
   #title: string;
@@ -41,11 +40,11 @@ export abstract class StyleSheetImpl {
     this.#ownerNode = null;
     this.#parentStyleSheet = null;
     this.#title = '';
-    this.#media = new MediaListImpl('', env);
+    this.#media = new MediaListImpl('');
     this.#disabled = false;
   }
 
-  get type(): CSSOMString {
+  get type(): string {
     return this.#type;
   }
 
@@ -101,7 +100,7 @@ export abstract class StyleSheetImpl {
     this.#disabled = disabled;
   }
 
-  protected setMedia(media: CSSOMString | MediaListImpl): void {
+  protected setMedia(media: string | MediaListImpl): void {
     this.#media.mediaText = typeof media === 'string'
       ? media
       : media.mediaText;

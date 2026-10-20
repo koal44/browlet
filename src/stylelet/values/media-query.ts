@@ -4,7 +4,8 @@ import {
   consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeLessDelim,
   consumeParensBlock, adaptConsumer, any, one, oneOf, opt, plus, sequenceOf, withTrivia,
   serializeCssIdentifier, createComponentParser, parseAsComponentGrammar, parseListAsComponentGrammar,
-  type ParensBlock, type ParserInput, type TokenCursor, type TryConsumer, type TryConsumerResult,
+  parseListOfComponentValues, TokenCursor, TokenKind,
+  type ParensBlock, type ParserInput, type TryConsumer, type TryConsumerResult,
 } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
 
@@ -120,6 +121,8 @@ type MediaFeatureValue =
 
 type MediaFeatureComparison = '<' | '<=' | '>' | '>=' | '=';
 
+/** Match one complete media-query grammar, without list error recovery. */
+// https://drafts.csswg.org/mediaqueries-4/#mq-syntax
 export function parseMediaQuery(
   input: ParserInput,
   context: unknown = undefined,
@@ -127,12 +130,23 @@ export function parseMediaQuery(
   return mediaQueryParser(input, context);
 }
 
+/** Parse independent queries, replacing invalid entries with `not all`. */
+// https://drafts.csswg.org/cssom/#parse-a-media-query-list
+// https://drafts.csswg.org/mediaqueries-4/#mq-syntax
 export function parseMediaQueryList(
   input: ParserInput,
   context: unknown = undefined,
 ): MediaQuery[] {
-  return parseListAsComponentGrammar(input, withTrivia(mediaQueryConsumer), context)
+  const list = parseListOfComponentValues(input);
+  const grammarContext = input instanceof TokenCursor ? input.context : context;
+  const queries = parseListAsComponentGrammar(list, withTrivia(mediaQueryConsumer), grammarContext)
     .map((query) => query ?? invalidMediaQuery());
+
+  // SPEC_CLASH(media-query-trailing-comma): Follow browsers by retaining the
+  // final empty query; Syntax's comma-list algorithm drops it. Inspect folded
+  // components so a comma inside an unclosed function/block is not a separator.
+  if (list.tokens.at(-1)?.type === TokenKind.Comma) queries.push(invalidMediaQuery());
+  return queries;
 }
 
 export function consumeMediaQuery(
@@ -169,12 +183,16 @@ export function resolveMediaQueryList(
   return queries.map((query) => resolveMediaQuery(query, stage, context));
 }
 
+/** Serialize an interpreted query without resolving its values. */
+// https://drafts.csswg.org/cssom/#serialize-a-media-query
 export function serializeMediaQuery(query: MediaQuery): string {
   if (query.type === 'media-condition-query') {
     return serializeMediaCondition(query.condition);
   }
 
   const mediaType = serializeCssIdentifier(query.mediaType);
+  // SPEC_CLASH(media-query-only-serialization): Preserve `only`, as all three
+  // browsers do; CSSOM's written serializer only accounts for `not`.
   const head = query.modifier === undefined
     ? mediaType
     : `${query.modifier} ${mediaType}`;
@@ -429,6 +447,22 @@ function invalidMediaQuery(): MediaTypeQuery {
   };
 }
 
+/** Canonicalize the keyword productions specified by CSSOM; preserve unknown values. */
+// https://drafts.csswg.org/cssom/#serialize-a-media-feature-value
+// Remaining feature grammars belong to Conditional Rules, not this generic parser.
+function canonicalizeMediaFeatureValue(name: string, value: MediaFeatureValue): MediaFeatureValue {
+  if (value.type !== 'ident' || (name !== 'orientation' && name !== 'scan')) return value;
+
+  const keyword = asciiLower(value.value);
+  if (name === 'orientation'
+    ? keyword === 'landscape' || keyword === 'portrait'
+    : keyword === 'progressive' || keyword === 'interlace'
+  ) {
+    return { type: 'ident', value: keyword };
+  }
+  return value;
+}
+
 // =============================================================================
 // Syntax
 // =============================================================================
@@ -521,7 +555,7 @@ const mediaFeaturePlainConsumer = sequenceOf(
   ([[name], , [value]]): MediaFeaturePlain => ({
     type: 'media-feature-plain',
     name,
-    value,
+    value: canonicalizeMediaFeatureValue(name, value),
   }),
 );
 

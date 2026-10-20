@@ -1,7 +1,17 @@
 import {
-  attr, defineInterfaceMixin, definePartialInterfaceMixin, idlType, nullable, roAttr, xattr,
+  attr, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef, idlType, nullable, roAttr, xattr,
   type Definition,
 } from '../web-idl/core/index';
+
+import { mediaListIDL } from './cssom/index';
+
+// CSSOM permits either DOMString or USVString. Keep DOMString conversion;
+// CSS input preprocessing separately replaces lone surrogates during parsing.
+// https://drafts.csswg.org/cssom/#cssomstring-type
+/*
+ * typedef DOMString CSSOMString;
+ */
+const cssomStringIDL = defineTypedef({ name: 'CSSOMString', type: idlType.DOMString });
 
 // These object-typed CSSOM members are provisional. Stylelet must define and
 // export the CSSOM interfaces before Browlet can project their semantic
@@ -48,6 +58,8 @@ const linkStyleIDL = defineInterfaceMixin({
 });
 
 export const styleletIDLDefinitions: Definition[] = [
+  cssomStringIDL,
+  mediaListIDL,
   cssomDocumentOrShadowRootIDL,
   elementCSSInlineStyleIDL,
   linkStyleIDL,

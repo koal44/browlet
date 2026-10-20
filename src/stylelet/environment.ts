@@ -33,9 +33,9 @@ export interface StyleletURLConstructor {
 }
 
 /** Shared scheduling and host exception construction for stylesheet updates. */
-// PROVISIONAL: Browlet's direct CSSOM APIs use the owning environment's
-// platform exceptions. Revisit method-realm allocation when CSSOM gains
-// member bindings (browlet/style/ROADMAP.md).
+// PROVISIONAL: Unbound sheet/declaration APIs use the owning environment's
+// platform exceptions. Their member bindings must replace this path, as
+// MediaList already does (browlet/style/ROADMAP.md).
 export interface StyleletExecution extends AsyncExecution, WebIDLExecution {}
 
 /** Host configuration for an existing environment or standalone execution. */

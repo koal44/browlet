@@ -201,6 +201,9 @@ export function parseNestedSelectorList(
  */
 export type SelectorList = ComplexSelectorList;
 
+/** Parse a complete selector list using the caller's namespace and nesting context. */
+// https://drafts.csswg.org/cssom/#parse-a-group-of-selectors
+// https://drafts.csswg.org/selectors-4/#parse-selector
 export function parseSelectorList(
   input: ParserInput,
   context: SelectorParserContext = {},
@@ -2839,12 +2842,14 @@ function listSpecificity(arms: { specificity: Specificity; }[]): Specificity {
 // ██    ██ ██       ██    ██   ██  ██     ██ ██
 //  ██████  ████████ ██     ██ ████ ██     ██ ████████
 
-// CSSOM, "serialize a group of selectors".
+/** Serialize interpreted selectors in list order with canonical separators. */
+// https://drafts.csswg.org/cssom/#serialize-a-group-of-selectors
 export function serializeSelectorList(selectors: SelectorList): string {
   return serializeComplexSelectorList(selectors);
 }
 
-// CSSOM, "serialize a selector".
+/** Serialize an interpreted selector, retaining its namespace and pseudo-element structure. */
+// https://drafts.csswg.org/cssom/#serialize-a-selector
 export function serializeSelector(selector: ComplexSelector): string {
   return selector.parts.map(({ combinator, unit }) => {
     const serialized = serializeComplexSelectorUnit(unit);

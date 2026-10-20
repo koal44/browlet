@@ -10,7 +10,6 @@ import { CSSParsingContext } from './parser';
 import { StyleSheetImpl } from './stylesheet';
 import type { CSSRuleImpl } from './rule';
 import type { MediaListImpl } from './media-list';
-import type { CSSOMString } from './string';
 
 /*
  * [Exposed=Window]
@@ -222,7 +221,7 @@ export class CSSStyleSheetImpl
     this.#ownerRule = null;
   }
 
-  setAssociatedMedia(media: CSSOMString): void {
+  setAssociatedMedia(media: string): void {
     this.setMedia(media);
   }
 
@@ -274,7 +273,7 @@ export class CSSStyleSheetImpl
  */
 export type CSSStyleSheetInit = {
   baseURL?: string | null;
-  media?: MediaListImpl | CSSOMString;
+  media?: MediaListImpl | string;
   disabled?: boolean;
 };
 
@@ -284,7 +283,7 @@ type CSSStyleSheetProperties = {
   parentStyleSheet: CSSStyleSheetImpl | null;
   ownerNode: StyleSheetImpl['ownerNode'];
   ownerRule: CSSRuleImpl | null;
-  media: CSSOMString | MediaListImpl;
+  media: string | MediaListImpl;
   title: string;
   alternate: boolean;
   originClean: boolean;

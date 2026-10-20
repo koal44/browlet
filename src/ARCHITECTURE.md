@@ -180,6 +180,9 @@ carries timer nesting levels without moving timer initialization into Infra.
 constructor creates platform exceptions in the owning environment while CSSOM
 implementations remain directly exposed. Full CSSOM member bindings must replace
 this interim allocation with method-realm exception projection.
+MediaList now follows that final arrangement: its implementation reports
+Core DOMExceptionImpl failures, and its host binding realizes them in the
+invoked method's realm. It no longer needs an environment solely for errors.
 The constructor's result uses Core's shared `DOMException` contract for
 `name`, `message`, and `code` while retaining the host-created exception.
 Infra's `TimerHost` describes a native wake-up request returning a `TaskHandle`.

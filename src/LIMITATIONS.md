@@ -163,8 +163,10 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   incomplete, including the missing CSSStyleProperties implementation/interface.
   `.style` still exposes the declaration implementation through `object`;
   `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
-  interface brand check. Direct CSSOM APIs currently allocate exceptions in the
+  interface brand check. Unbound CSSOM APIs allocate exceptions in the
   owning environment; method-realm selection awaits their member bindings.
+  MediaList's declaration and binding are implemented, including method-realm
+  exceptions, but the raw stylesheet return path still awaits section 6 bindings.
   The [CSSOM roadmap](stylelet/cssom/ROADMAP.md#projection-and-declaration-lifecycle)
   owns the shared interface and declaration-state review.
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)

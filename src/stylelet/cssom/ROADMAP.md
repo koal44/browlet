@@ -14,7 +14,7 @@ style attribute. The reference roots are listed in the
 The [selector](../selector/ROADMAP.md), [rule](../css/ROADMAP.md),
 [value-lifecycle](../value-processing/ROADMAP.md), [property](../props/ROADMAP.md)
 and [Typed OM](typed/ROADMAP.md) guides own the related contracts.
-Detailed algorithm review remains open. Existing browser evidence stays in
+Sections 1–5 have been audited; the remaining algorithm review stays open. Related browser evidence lives in
 the [Browlet style roadmap](../../browlet/style/ROADMAP.md) and
 [CSP roadmap](../../browlet/browsing/policy/csp/ROADMAP.md#style-attribute-consumer).
 
@@ -25,9 +25,10 @@ or Platform behavior have been verified.
 
 | CSSOM area | Current coverage | Remaining contract / next owner |
 | --- | --- | --- |
-| [Common idioms and CSSOMString](https://drafts.csswg.org/cssom/#common-serializing-idioms) | Identifier/string/component serialization exists in `syntax/component-value.ts`; `cssom/string.ts` chooses DOMString's UTF-16 behavior. | Audit conversion separately from CSS input preprocessing; finish serialization coverage against value stages. |
-| [Media queries and MediaList](https://drafts.csswg.org/cssom/#media-queries) | Partial parsing, serialization, comparison, and collection behavior; focused tests pass. | Project `MediaList`, move index/coercion exposure to Binding, and audit modern Media Queries additions. Device matching is a separate dependency. |
-| [Selectors](https://drafts.csswg.org/cssom/#selectors) | Parser and serializer exist in `selector/parser.ts`. | Connect CSSStyleRule getters/setters with the correct namespace/nesting context and complete the [consumer review](../selector/ROADMAP.md#parser-to-consumer-coverage). |
+| Introduction and terminology | CSS is the supported styling language; the property registry identifies supported built-ins. Binding separates author overrides from internal calls, covered for MediaList. | Implicit `::before`/`::after` existence belongs to pseudo-element matching/computed-style work, independently of box generation. |
+| [Common idioms and CSSOMString](https://drafts.csswg.org/cssom/#common-serializing-idioms) | Identifier/string escaping, function/LOCAL formatting, URL serialization, and list separators; real DOMString typedef with conversion distinct from CSS preprocessing. | Function arguments remain the owning value grammar's responsibility. LOCAL formatting is ready for the missing font-source descriptor consumer. Preserve the reviewed [identifier clash](../syntax/ROADMAP.md#identifier-serialization-disagreement). |
+| [Media queries and MediaList](https://drafts.csswg.org/cssom/#media-queries) | List parsing/recovery, serialization/comparison, mutation, complete IDL, and real Binding regressions. Modern conditions/ranges use the Media Queries grammar. | Finish the sheet/rule bindings that return MediaList. Device matching and additional feature interpretation belong to [Conditional Rules](../conditional/ROADMAP.md); serialization alone does not establish support. See disagreements below. |
+| [Selectors](https://drafts.csswg.org/cssom/#selectors) | Section 5 parsing and serialization use `selector/parser.ts`, with namespace, combinator, attribute, pseudo-element, functional pseudo-class, and An+B coverage. | Connect CSSStyleRule getters/setters with the correct namespace/nesting context and complete the [consumer review](../selector/ROADMAP.md#parser-to-consumer-coverage). |
 | [Style sheets](https://drafts.csswg.org/cssom/#css-style-sheets) | Metadata, construction, origin-clean/modification guards, replacement, simple insertion/deletion, and legacy aliases. | Complete typed interfaces/dictionaries, method-realm errors/promises, import handling, rule hierarchy, and actual response-derived origin/base state. |
 | [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document sheets, adopted-sheet checks, preferred/selected sets, and retained lists. | Complete ShadowRoot scopes, binding-owned `ObservableArray<CSSStyleSheet>`, Default-Style/Link response processing, script blocking, and resource completion. |
 | [Association and fetching](https://drafts.csswg.org/cssom/#style-sheet-association) | HTML/SVG inline style elements associate sheets through Browlet's LinkStyle mixin. | `<link>`, `xml-stylesheet`, HTTP Link, imports, cancellation, MIME/CORS/encoding, policy, and load events belong at their host/loader boundary. Collection helpers alone do not satisfy these algorithms. |
@@ -39,6 +40,48 @@ or Platform behavior have been verified.
 | [CSS.escape](https://drafts.csswg.org/cssom/#the-css.escape()-method) | `serializeCssIdentifier()` supplies the underlying primitive, with the [Syntax/CSSOM non-ASCII conflict](../syntax/ROADMAP.md#identifier-serialization-disagreement) recorded. | Add the CSS namespace declaration/binding and author conversion tests; review that conflict for the projected API. Other specs' CSS namespace members retain their own owners. |
 | [Resolved values](https://drafts.csswg.org/cssom/#resolved-values) | Current engine requests `ValueStage.Computed`. | Apply each property's resolved-value rule; some require used values and layout facts. Keep Typed OM computed values distinct. |
 | IANA, change history, security/privacy notes | Reviewed for additional obligations. | Default-Style handling is already accounted for under sheet collections; registry metadata and editorial history need no separate runtime module. Origin-clean/privacy constraints remain part of observable API review. |
+
+### Media-query disagreements
+
+Three-engine probes and the retained media-list browser regressions establish
+the following choices. Revisit the markers when the specifications or engines converge.
+
+- `SPEC_CLASH(media-query-only-serialization)`: CSSOM's
+  [serializer](https://drafts.csswg.org/cssom/#serialize-a-media-query) only emits
+  `not`. Preserve `only`, following Chromium, Firefox, and WebKit; for example,
+  `ONLY Screen AND (color)` becomes `only screen and (color)`.
+- `SPEC_CLASH(media-query-trailing-comma)`: Media Queries delegates list splitting
+  to Syntax's [comma-list algorithm](https://drafts.csswg.org/css-syntax-3/#parse-comma-separated-list-of-component-values),
+  which drops the final empty arm. Preserve it specifically for media queries,
+  as all three engines do: `screen,` becomes `screen, not all`. The general
+  Syntax entry point is unchanged. A comma inside a folded block is not a separator.
+- `SPEC_GAP(media-general-enclosed-serialization)`: Media Queries defines
+  [`<general-enclosed>`](https://drafts.csswg.org/mediaqueries-4/#typedef-general-enclosed),
+  but CSSOM's older serializer does not cover it. Retain token-based serialization,
+  as WebKit does: `future(a,` becomes `future(a,)`, and repeated whitespace
+  collapses. Chromium and Firefox preserve source text, including missing
+  closers and comments. Unknown grammar remains opaque; its function names
+  are not treated as interpreted CSS function keywords.
+- `SPEC_CLASH(media-list-mutation-comparison)`: Keep CSSOM's
+  [append](https://drafts.csswg.org/cssom/#dom-medialist-appendmedium) and
+  [delete](https://drafts.csswg.org/cssom/#dom-medialist-deletemedium) behavior,
+  matching Chromium: an equivalent append leaves order unchanged; deletion
+  removes all matching entries. Firefox moves an existing query to the end on
+  append; WebKit appends a duplicate and deletes only one match.
+- `SPEC_CLASH(media-list-mutation-input)`: Keep CSSOM's
+  [single-query parsing](https://drafts.csswg.org/cssom/#parse-a-media-query)
+  and Chromium's mutations: empty or multiple-query inputs are no-ops; invalid
+  single queries recover as `not all`. The table below records the other engines.
+  Each browser/input pair has a separate expected failure so convergence surfaces.
+
+Starting from `screen`, append and then delete the same input:
+
+| Input | Firefox | WebKit |
+| --- | --- | --- |
+| Empty string | Both operations throw NotFoundError; unchanged. | Append does nothing; delete throws NotFoundError. |
+| `,` | Append does nothing; delete throws NotFoundError. | Appends two `not all` entries; delete throws NotFoundError, retaining them. |
+| `screen, print` | Append does nothing; delete removes `screen`. | Appends both entries, including duplicate `screen`; delete throws NotFoundError. |
+| `&` | Append does nothing; delete throws NotFoundError. | Appends `not all`; delete throws NotFoundError, retaining it. |
 
 ### Rule and interface coverage
 
@@ -74,6 +117,9 @@ and fetching must be accounted for separately as each rule is added.
   declared interfaces, with implementation members and complete adjacent IDL.
   Keep shared declaration operations separate from property-specific accessors
   and descriptor interfaces. Reuse existing behavior only after reviewing it.
+  Remove `cssPropertyToIDLAttribute`, `installPropertyAccessor`, and manual
+  index synchronization as their real Binding replacements land; these are
+  legacy Platform emulation, not another required implementation layer.
 - [ ] Replace provisional `object` results with concrete references and test
   Platform prototypes, receiver checks, SameObject/PutForwards, conversions,
   reactions, supported indices, and exception realms through real bindings.

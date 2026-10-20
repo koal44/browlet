@@ -14,11 +14,12 @@ export {
 export { emptyParsingContext, TokenCursor, type TryConsumerResult, type TryConsumer } from './token-cursor';
 export {
   isTokenKind, serializeComponentValues, serializeCssIdentifier, isDelimToken, serializeCssDimensionUnit,
-  serializeCssString, isComponentBlock, isFunctionBlock, isBraceBlock, isWhitespaceToken,
+  serializeCssString, serializeCssFunction, serializeCssLocal,
+  isComponentBlock, isFunctionBlock, isBraceBlock, isWhitespaceToken,
 } from './component-value';
 export {
   createComponentParser, parseAsComponentGrammar, parseDeclarationList, consumeBlock, discardRuleBlock,
-  parseStylesheetContents, parseRule, parseDeclaration, parseListAsComponentGrammar,
+  parseStylesheetContents, parseRule, parseDeclaration, parseListAsComponentGrammar, parseListOfComponentValues,
   parseCommaSeparatedListOfComponentValues,
   type ParserInput, type Declaration, type BlockContents, type QualifiedRule, type Rule,
   type StatementAtRule, type ParsingContext,
