@@ -1,7 +1,11 @@
 import type { DOMDocument as Document } from '../../infra/index';
-import { internalType, type InternalPromise } from '../../infra/promises';
+import type { InternalPromise } from '../../infra/promises';
+import {
+  arg, ctor, defineDictionary, defineInterface, definePartialInterface, dictMember, DOMExceptionImpl,
+  emptyDictionary, idlType, impl, implementationType, integer, nullable, op, promise, reference, roAttr, union, xattr,
+} from '../../web-idl/core/index';
 
-import type { StyleletURL } from '../environment';
+import type { StyleletEnvironment, StyleletURL } from '../environment';
 import { parseRule, parseStylesheetContents } from '../syntax/index';
 import type { StyleletContext } from '../context';
 
@@ -9,7 +13,7 @@ import { CSSRuleListImpl } from './rule-list';
 import { StylesheetContext } from './parser';
 import { StyleSheetImpl } from './stylesheet';
 import type { CSSRuleImpl } from './rule';
-import type { MediaListImpl } from './media-list';
+import { MediaListImpl } from './media-list';
 
 /*
  * [Exposed=Window]
@@ -33,42 +37,64 @@ export class CSSStyleSheetImpl
   /** Parse-time base URL, independent of the public stylesheet location. */
   baseURL?: StyleletURL;
 
-  #ownerRule: CSSRuleImpl | null;
+  ownerRule: CSSRuleImpl | null;
+
   #constructorDocument: Document | null;
 
   #alternate: boolean;
   #originClean: boolean;
   #constructed: boolean;
-  #disallowModification: boolean;
+  #disallowModification = false;
 
-  constructor(
-    context: StyleletContext,
-    options: CSSStyleSheetInit = {},
-  ) {
-    super(context.env);
+  /** Initialize a sheet once, whether constructed or supplied by a resource owner. */
+  constructor(properties: CSSStyleSheetProperties, env: StyleletEnvironment) {
+    super(typeof properties.media === 'string' ? properties.media : properties.media.mediaText, env);
+    this.location = properties.location;
+    this.baseURL = properties.baseURL;
+    this.parentStyleSheet = properties.parentStyleSheet;
+    this.ownerNode = properties.ownerNode;
+    this.ownerRule = properties.ownerRule;
+    this.titleText = properties.title;
+    this.disabled = properties.disabled ?? false;
+    this.#alternate = properties.alternate;
+    this.#originClean = properties.originClean;
+    this.#constructorDocument = properties.constructorDocument ?? null;
+    this.#constructed = this.#constructorDocument !== null;
+  }
 
-    const document = context.document;
-    this.location = new this.env.userAgent.URL(context.dom.baseURI(document));
-
-    this.#ownerRule = null;
-    this.#constructorDocument = document;
-
-    this.#alternate = false;
-    this.#originClean = true;
-    this.#constructed = true;
-    this.#disallowModification = false;
-
-    const {
-      baseURL = null,
-      media = '',
-      disabled = false,
-    } = options;
-
-    if (baseURL !== null) {
-      this.baseURL = new this.env.userAgent.URL(baseURL, this.location.href);
+  /** Construct a sheet for the document selected by the host's constructor binding. */
+  // https://drafts.csswg.org/cssom/#create-a-constructed-cssstylesheet
+  // SPEC_MISMATCH: create a constructed CSSStyleSheet(options) -> CSSStyleSheet
+  // The host supplies the associated Document explicitly; Stylelet does not discover globals.
+  static createConstructed(
+    options: CSSStyleSheetInitRecord,
+    document: Document,
+    env: StyleletEnvironment,
+  ): CSSStyleSheetImpl {
+    const documentBaseURL = env.userAgent.dom.baseURI(document);
+    let baseURL: StyleletURL;
+    try {
+      baseURL = new env.userAgent.URL(options.baseURL ?? documentBaseURL, documentBaseURL);
+    } catch {
+      // SPEC_GAP(constructed-sheet-invalid-base-url): CSSOM omits validation.
+      // Follow Firefox/WebKit and Chromium's gated implementation with NotAllowedError.
+      throw new DOMExceptionImpl('The stylesheet base URL is invalid.', 'NotAllowedError');
     }
-    this.setMedia(media);
-    this.setDisabled(disabled);
+    return new CSSStyleSheetImpl({
+      // SPEC_CLASH(constructed-sheet-location): All three browsers expose null href;
+      // §6.1 instead assigns the document base URL to location. Retain it as the parse base.
+      location: null,
+      baseURL,
+      parentStyleSheet: null,
+      ownerNode: null,
+      ownerRule: null,
+      title: '',
+      media: options.media,
+      disabled: options.disabled,
+      alternate: false,
+      originClean: true,
+      constructorDocument: document,
+    }, env);
   }
 
   static create(
@@ -76,26 +102,10 @@ export class CSSStyleSheetImpl
     properties: CSSStyleSheetProperties,
     rules?: CSSRuleImpl[],
   ): CSSStyleSheetImpl {
-    const sheet = new CSSStyleSheetImpl(context);
-
-    sheet.location = properties.location;
-    sheet.baseURL = properties.baseURL;
-    sheet.setParentStyleSheet(properties.parentStyleSheet);
-    sheet.setOwnerNode(properties.ownerNode);
-    sheet.#ownerRule = properties.ownerRule;
-    sheet.setMedia(properties.media);
-    sheet.setTitle(properties.title);
-    sheet.#alternate = properties.alternate;
-    sheet.#originClean = properties.originClean;
-    sheet.#constructed = false;
-    sheet.#constructorDocument = null;
+    const sheet = new CSSStyleSheetImpl(properties, context.env);
     if (rules) sheet.replaceRules(rules);
 
     return sheet;
-  }
-
-  get ownerRule(): CSSRuleImpl | null {
-    return this.#ownerRule;
   }
 
   get cssRules(): CSSRuleListImpl {
@@ -112,8 +122,10 @@ export class CSSStyleSheetImpl
     this.#assertOriginClean();
     this.#assertModificationAllowed();
 
+    // SPEC_CLASH(sheet-insert-error-order): All three browsers and the insertion
+    // helper check the index first; §6.1's insertRule prose parses first.
     if (index > this.ruleList.length) {
-      throw new this.env.exec.DOMException(
+      throw new DOMExceptionImpl(
         `Index ${index} exceeds the rule-list length.`,
         'IndexSizeError',
       );
@@ -123,7 +135,7 @@ export class CSSStyleSheetImpl
     const context = new StylesheetContext(null, this.#constructed, this.env);
     const cssRule = parseRule(rule, context);
     if (cssRule === null) {
-      throw new this.env.exec.DOMException(
+      throw new DOMExceptionImpl(
         `Failed to parse the rule: ${rule}`,
         'SyntaxError',
       );
@@ -139,7 +151,7 @@ export class CSSStyleSheetImpl
     this.#assertModificationAllowed();
 
     if (index >= this.ruleList.length) {
-      throw new this.env.exec.DOMException(
+      throw new DOMExceptionImpl(
         `Index ${index} does not identify a rule.`,
         'IndexSizeError',
       );
@@ -151,15 +163,15 @@ export class CSSStyleSheetImpl
 
   replace(text: string): InternalPromise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
-      return this.env.exec.Promise.reject(new this.env.exec.DOMException(
+      return this.env.exec.Promise.reject(new DOMExceptionImpl(
         'This stylesheet cannot be replaced.',
         'NotAllowedError',
-      ), internalType<CSSStyleSheetImpl>());
+      ), reference(CSSStyleSheetImpl));
     }
 
     this.#disallowModification = true;
 
-    const result = this.env.exec.Promise.withResolvers(internalType<CSSStyleSheetImpl>());
+    const result = this.env.exec.Promise.withResolvers(reference(CSSStyleSheetImpl));
     const reject = (error: unknown): void => {
       this.#disallowModification = false;
       result.reject(error);
@@ -189,7 +201,7 @@ export class CSSStyleSheetImpl
 
   replaceSync(text: string): void {
     if (!this.#constructed || this.#disallowModification) {
-      throw new this.env.exec.DOMException(
+      throw new DOMExceptionImpl(
         'This stylesheet cannot be replaced.',
         'NotAllowedError',
       );
@@ -216,17 +228,17 @@ export class CSSStyleSheetImpl
   }
 
   clearAssociation(): void {
-    this.setParentStyleSheet(null);
-    this.setOwnerNode(null);
-    this.#ownerRule = null;
+    this.parentStyleSheet = null;
+    this.ownerNode = null;
+    this.ownerRule = null;
   }
 
   setAssociatedMedia(media: string): void {
-    this.setMedia(media);
+    this.media.mediaText = media;
   }
 
   setAssociatedTitle(title: string): void {
-    this.setTitle(title);
+    this.titleText = title;
   }
 
   /** @deprecated Use insertRule() instead. */
@@ -247,7 +259,7 @@ export class CSSStyleSheetImpl
 
   #assertOriginClean(): void {
     if (!this.#originClean) {
-      throw new this.env.exec.DOMException(
+      throw new DOMExceptionImpl(
         'The stylesheet is not origin-clean.',
         'SecurityError',
       );
@@ -256,7 +268,7 @@ export class CSSStyleSheetImpl
 
   #assertModificationAllowed(): void {
     if (this.#disallowModification) {
-      throw new this.env.exec.DOMException(
+      throw new DOMExceptionImpl(
         'The stylesheet cannot currently be modified.',
         'NotAllowedError',
       );
@@ -271,11 +283,14 @@ export class CSSStyleSheetImpl
  *   boolean disabled = false;
  * };
  */
-export type CSSStyleSheetInit = {
-  baseURL?: string | null;
-  media?: MediaListImpl | string;
-  disabled?: boolean;
+export type CSSStyleSheetInitRecord = {
+  baseURL: string | null;
+  media: MediaListImpl | string;
+  disabled: boolean;
 };
+
+/** Standalone implementation callers may omit the dictionary's defaulted members. */
+export type CSSStyleSheetInit = Partial<CSSStyleSheetInitRecord>;
 
 type CSSStyleSheetProperties = {
   location: StyleletURL | null;
@@ -287,4 +302,59 @@ type CSSStyleSheetProperties = {
   title: string;
   alternate: boolean;
   originClean: boolean;
+  disabled?: boolean;
+  constructorDocument?: Document;
 };
+
+export const cssStyleSheetIDL = defineInterface<StyleletEnvironment>({
+  name: 'CSSStyleSheet',
+  inherits: 'StyleSheet',
+  exposed: 'Window',
+  implementation: impl(CSSStyleSheetImpl),
+  members: [
+    ctor(
+      [arg('options', implementationType<CSSStyleSheetInitRecord>(reference('CSSStyleSheetInit')), {
+        default: emptyDictionary, optional: true,
+      })],
+      {
+        construct(env, options) {
+          return CSSStyleSheetImpl.createConstructed(options, env.getAssociatedDocument()!, env);
+        },
+      },
+    ),
+    roAttr('ownerRule', nullable(reference('CSSRule'))),
+    roAttr('cssRules', reference(CSSRuleListImpl), xattr('SameObject')),
+    op('insertRule', idlType.unsignedLong, [
+      arg('rule', reference('CSSOMString')),
+      arg('index', idlType.unsignedLong, { optional: true, default: integer(0) }),
+    ]),
+    op('deleteRule', idlType.undefined, [arg('index', idlType.unsignedLong)]),
+    op('replace', promise(reference(CSSStyleSheetImpl)), [arg('text', idlType.USVString)]),
+    op('replaceSync', idlType.undefined, [arg('text', idlType.USVString)]),
+  ],
+});
+
+export const cssStyleSheetInitIDL = defineDictionary({
+  name: 'CSSStyleSheetInit',
+  members: [
+    dictMember('baseURL', nullable(idlType.DOMString), { default: null }),
+    dictMember('media', union(reference(MediaListImpl), idlType.DOMString), { default: '' }),
+    dictMember('disabled', idlType.boolean, { default: false }),
+  ],
+});
+
+// https://drafts.csswg.org/cssom/#legacy-css-style-sheet-members
+export const legacyCSSStyleSheetIDL = definePartialInterface({
+  name: 'CSSStyleSheet',
+  members: [
+    roAttr('rules', reference(CSSRuleListImpl), xattr('SameObject')),
+    op('addRule', idlType.long, [
+      arg('selector', idlType.DOMString, { optional: true, default: 'undefined' }),
+      arg('style', idlType.DOMString, { optional: true, default: 'undefined' }),
+      arg('index', idlType.unsignedLong, { optional: true }),
+    ]),
+    op('removeRule', idlType.undefined,
+      [arg('index', idlType.unsignedLong, { optional: true, default: integer(0) })],
+    ),
+  ],
+});

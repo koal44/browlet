@@ -1,5 +1,9 @@
 import type { DOMElement as Element } from '../../infra/index';
 import { asciiLower } from '../../infra/ascii';
+import {
+  annotated, arg, attr, defineInterface, DOMExceptionImpl, idlType, impl, indexedGetter, nullable, op,
+  reference, roAttr, xattr,
+} from '../../web-idl/core/index';
 
 import type { StyleletEnvironment } from '../environment';
 import { parseDeclaration } from '../syntax/index';
@@ -26,17 +30,9 @@ import type { CSSRuleImpl } from './rule';
  *   [CEReactions] CSSOMString removeProperty(CSSOMString property);
  *   readonly attribute CSSRule? parentRule;
  * };
- *
- * [Exposed=Window]
- * interface CSSStyleProperties : CSSStyleDeclaration {
- *   [CEReactions] attribute [LegacyNullToEmptyString] CSSOMString cssFloat;
- * };
  */
 export class CSSStyleDeclarationImpl {
-  [index: number]: string;
-
   #block: CSSDeclarationBlock;
-  #indexedLength = 0;
   #computed: boolean;
   #readonly: boolean;
   #parentRule: CSSRuleImpl | null;
@@ -59,7 +55,6 @@ export class CSSStyleDeclarationImpl {
     this.#parentRule = parentRule;
     this.#ownerNode = ownerNode;
     this.#block = block;
-    this.synchronizeIndices();
   }
 
   get cssText(): string {
@@ -68,7 +63,7 @@ export class CSSStyleDeclarationImpl {
 
   set cssText(value: string) {
     this.#assertMutable();
-    this.#block.setText(String(value), {});
+    this.#block.setText(value, {});
     this.#commit();
   }
 
@@ -100,35 +95,33 @@ export class CSSStyleDeclarationImpl {
   }
 
   getPropertyValue(property: string): string {
-    const declaration = this.#block.find(normalizePropertyName(String(property)));
+    const declaration = this.#block.find(normalizePropertyName(property));
     return declaration === undefined
       ? ''
       : serializePropertyDeclaration(declaration).value;
   }
 
   getPropertyPriority(property: string): string {
-    return this.#block.find(normalizePropertyName(String(property)))?.important
+    return this.#block.find(normalizePropertyName(property))?.important
       ? 'important'
       : '';
   }
 
   setProperty(
     property: string,
-    value: string | null,
-    priority: string | null = '',
+    value: string,
+    priority = '',
   ): void {
     this.#assertMutable();
 
-    const name = normalizePropertyName(String(property));
+    const name = normalizePropertyName(property);
     if (!isCustomPropertyName(name) && !isSupportedPropertyName(name)) return;
 
-    value = String(value ?? '');
     if (value === '') {
       this.removeProperty(name);
       return;
     }
 
-    priority = String(priority ?? '');
     if (priority !== '' && asciiLower(priority) !== 'important') return;
 
     const declaration = parsePropertyDeclaration(
@@ -145,7 +138,7 @@ export class CSSStyleDeclarationImpl {
   removeProperty(property: string): string {
     this.#assertMutable();
 
-    const name = normalizePropertyName(String(property));
+    const name = normalizePropertyName(property);
     const value = this.getPropertyValue(name);
     if (!this.#block.remove(name)) return value;
     this.#commit();
@@ -166,25 +159,11 @@ export class CSSStyleDeclarationImpl {
     if (localName !== 'style' || namespace !== null) return;
 
     this.#block.setText(value ?? '', {});
-    this.synchronizeIndices();
   }
 
-  /** Update exposed numeric properties after the owner changes the shared block. */
-  // PROVISIONAL: indexed properties belong to Binding once CSSOM projection is complete.
-  synchronizeIndices(): void {
-    const length = this.length;
-    for (let index = this.#indexedLength; index < length; index++) {
-      Object.defineProperty(this, index, {
-        configurable: true,
-        enumerable: true,
-        get: () => this.item(index),
-      });
-    }
-
-    for (let index = length; index < this.#indexedLength; index++) {
-      Reflect.deleteProperty(this, String(index));
-    }
-    this.#indexedLength = length;
+  /** Read the shared block's current indices; attribute changes need no synchronization. */
+  getSupportedPropertyIndices(): Iterable<number> {
+    return this.#block.declarations.keys();
   }
 
   #updateStyleAttribute(): void {
@@ -199,14 +178,13 @@ export class CSSStyleDeclarationImpl {
   }
 
   #commit(): void {
-    this.synchronizeIndices();
     this.#updateStyleAttribute();
   }
 
   #assertMutable(): void {
     if (!this.#readonly) return;
 
-    throw new this.#env.exec.DOMException(
+    throw new DOMExceptionImpl(
       'The CSS declaration block is read-only.',
       'NoModificationAllowedError',
     );
@@ -249,35 +227,34 @@ function isCustomPropertyName(name: string): name is `--${string}` {
   return name.startsWith('--');
 }
 
-function installPropertyAccessors(): void {
-  installPropertyAccessor('cssFloat', 'float');
-
-  for (const property of Object.keys(propertyRegistry)) {
-    installPropertyAccessor(cssPropertyToIDLAttribute(property), property);
-    if (property.includes('-')) installPropertyAccessor(property, property);
-  }
-}
-
-function installPropertyAccessor(attribute: string, property: string): void {
-  if (Object.hasOwn(CSSStyleDeclarationImpl.prototype, attribute)) return;
-
-  Object.defineProperty(CSSStyleDeclarationImpl.prototype, attribute, {
-    configurable: true,
-    enumerable: true,
-    get(this: CSSStyleDeclarationImpl) {
-      return this.getPropertyValue(property);
-    },
-    set(this: CSSStyleDeclarationImpl, value: string | null) {
-      this.setProperty(property, value);
-    },
-  });
-}
-
-function cssPropertyToIDLAttribute(property: string): string {
-  return property.replace(
-    /-([a-z])/g,
-    (_, letter: string) => letter.toUpperCase(),
-  );
-}
-
-installPropertyAccessors();
+// https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
+export const cssStyleDeclarationIDL = defineInterface({
+  name: 'CSSStyleDeclaration',
+  exposed: 'Window',
+  implementation: impl(CSSStyleDeclarationImpl),
+  members: [
+    attr('cssText', reference('CSSOMString'), xattr('CEReactions')),
+    roAttr('length', idlType.unsignedLong),
+    op('item', reference('CSSOMString'),
+      [arg('index', idlType.unsignedLong)],
+      indexedGetter((style: CSSStyleDeclarationImpl) => style.getSupportedPropertyIndices(), {
+        supportsIndex: (style, index) => index < style.length,
+      }),
+    ),
+    op('getPropertyValue', reference('CSSOMString'), [arg('property', reference('CSSOMString'))]),
+    op('getPropertyPriority', reference('CSSOMString'), [arg('property', reference('CSSOMString'))]),
+    op('setProperty', idlType.undefined,
+      [
+        arg('property', reference('CSSOMString')),
+        arg('value', annotated(reference('CSSOMString'), xattr('LegacyNullToEmptyString'))),
+        arg('priority', annotated(reference('CSSOMString'), xattr('LegacyNullToEmptyString')), { optional: true, default: '' }),
+      ],
+      xattr('CEReactions'),
+    ),
+    op('removeProperty', reference('CSSOMString'),
+      [arg('property', reference('CSSOMString'))],
+      xattr('CEReactions'),
+    ),
+    roAttr('parentRule', nullable(reference('CSSRule'))),
+  ],
+});

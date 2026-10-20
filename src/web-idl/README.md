@@ -946,11 +946,12 @@ Inputs describe conventional IDL-shaped values, not every JavaScript coercion.
 Sequences accept iterables and return arrays; callbacks reverse the conversion
 directions. Output dictionaries use separate `Result` interfaces and do not promise
 input defaults. Named property getters have no string index signature, which would
-conflict with ordinary members. Opaque declarations stay opaque, including current
-CSSOM placeholders. WPT and projected runtime tests still establish behavior;
+conflict with ordinary members. `PutForwards` requires a declared interface and
+resolves the assignment type through its target attribute; an opaque `object`
+is an error. WPT and projected runtime tests still establish behavior;
 declaration generation does not certify that unfinished bindings are implemented.
 
-CSSOM projection and restoring `ObservableArray<CSSStyleSheet>` remain with
+Restoring `ObservableArray<CSSStyleSheet>` remains with
 [style integration](../browlet/style/ROADMAP.md#next-boundary-change).
 `[CEReactions]` belongs to [HTML custom elements](../browlet/dom/nodes/html/custom-elements/ROADMAP.md),
 security policy to [Window](../browlet/browsing/window/ROADMAP.md), and new platform

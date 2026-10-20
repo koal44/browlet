@@ -1,6 +1,6 @@
 import { MATHML_NAMESPACE } from '../../../../infra/index';
 import { defineIncludes, defineInterface, impl } from '../../../../web-idl/core/index';
-import type { CSSDeclarationBlock, CSSStyleDeclarationImpl } from '../../../../stylelet/index';
+import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../stylelet/index';
 
 import { ElementTag, ContentCategory } from '../element-definitions/index';
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
@@ -25,7 +25,7 @@ export class MathMLElementImpl extends ElementImpl {
   get nonce(): string { return this.#htmlOrSVGOrMathMLElementMixin.nonce; }
   set nonce(value: string) { this.#htmlOrSVGOrMathMLElementMixin.nonce = value; }
 
-  get style(): CSSStyleDeclarationImpl {
+  get style(): CSSStylePropertiesImpl {
     return this.#inlineStyleMixin.style;
   }
 

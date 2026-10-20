@@ -2,6 +2,7 @@ import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
+import { DOMExceptionImpl } from '../../../src/web-idl/core/index';
 import {
   CSSStyleDeclarationImpl, defaultStyleletExecution, Stylelet, type InternalPromise, type StyleletExecution,
 } from '../../../src/stylelet/index';
@@ -369,7 +370,7 @@ describe('Stylelet execution', () => {
     expect(sheet.insertRule('.third {}')).toBe(0);
   });
 
-  it('uses interim host exceptions in unbound sheets, declarations, and adoption', async () => {
+  it('keeps sheet/declaration failures neutral while adoption awaits its binding audit', async () => {
     class HostDOMException extends DOMException {}
     const exec: StyleletExecution = {
       ...defaultStyleletExecution,
@@ -379,17 +380,17 @@ describe('Stylelet execution', () => {
     const styles = new Stylelet(document, { exec });
     const sheet = styles.createStyleSheet();
 
-    expect(() => sheet.deleteRule(0)).toThrow(HostDOMException);
+    expect(() => sheet.deleteRule(0)).toThrow(DOMExceptionImpl);
     const declaration = styles.getComputedStyle(document.querySelector('main')!);
-    expect(() => declaration.setProperty('color', 'red')).toThrow(HostDOMException);
+    expect(() => declaration.setProperty('color', 'red')).toThrow(DOMExceptionImpl);
     const foreign = new Stylelet(new JSDOM().window.document).createStyleSheet();
     expect(() => styles.documentScope.setAdoptedStyleSheets([foreign])).toThrow(HostDOMException);
 
     const embedded = styles.documentScope.createStyleElementStyleSheet(
       document.createElement('style'), '',
     );
-    expect(() => embedded.replaceSync('')).toThrow(HostDOMException);
-    await expect(observe(embedded.replace(''))).rejects.toBeInstanceOf(HostDOMException);
+    expect(() => embedded.replaceSync('')).toThrow(DOMExceptionImpl);
+    await expect(observe(embedded.replace(''))).rejects.toBeInstanceOf(DOMExceptionImpl);
   });
 });
 

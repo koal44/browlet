@@ -257,9 +257,6 @@ class PlatformTypeGenerator {
         const lines = input === undefined ? [`readonly ${name}: ${output};`]
           : input === output ? [`${name}: ${output};`]
             : [`get ${name}(): ${output};`, `set ${name}(value: ${input});`];
-        if (member.type.kind === 'object' && hasExtendedAttribute(member.extendedAttributes, 'PutForwards')) {
-          lines.unshift('/** The declaration leaves the forwarded property opaque; its assignment type is unknown. */');
-        }
         if (member.stringifier) lines.push('toString(): string;');
         return lines;
       }
@@ -280,9 +277,6 @@ class PlatformTypeGenerator {
       hasExtendedAttribute(member.extendedAttributes, 'LegacyLenientSetter')) return 'unknown';
     const forwards = member.extendedAttributes?.find((attribute) => attribute.kind === 'identifier' && attribute.name === 'PutForwards');
     if (forwards?.kind === 'identifier') {
-      // Some unfinished integrations deliberately declare their exposed object as opaque.
-      // Its forwarded property's type is unavailable, just like any other property of `object`.
-      if (member.type.kind === 'object') return 'unknown';
       if (member.type.kind !== 'interface') throw new InternalError(`PutForwards needs an interface: ${member.name}`);
       for (const ancestor of member.type.assembled.getInheritanceChain().toReversed()) {
         for (const entry of ancestor.members) {

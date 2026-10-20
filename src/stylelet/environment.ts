@@ -1,4 +1,4 @@
-import { standardDOM, type DOMOperations } from '../infra/index';
+import { standardDOM, type DOMDocument, type DOMOperations } from '../infra/index';
 import { createAsyncExecution, nativeTimerHost, type AsyncExecution } from '../infra/execution';
 import type { DOMExceptionConstructor, WebIDLExecution } from '../web-idl/core/index';
 import { decodeNative, type DecodeText } from '../encoding/core/index';
@@ -9,6 +9,8 @@ export interface StyleletEnvironment {
   exec: StyleletExecution;
   /** Host facilities shared across this owner's documents and engines. */
   userAgent: StyleletUserAgent;
+  /** The owning global's Document; unbound and non-Window environments have none. */
+  getAssociatedDocument(): DOMDocument | null;
 }
 
 /** DOM, URL, and text decoding shared by this host's documents and engines. */
@@ -33,9 +35,8 @@ export interface StyleletURLConstructor {
 }
 
 /** Shared scheduling and host exception construction for stylesheet updates. */
-// PROVISIONAL: Unbound sheet/declaration APIs use the owning environment's
-// platform exceptions. Their member bindings must replace this path, as
-// MediaList already does (browlet/style/ROADMAP.md).
+// PROVISIONAL: The unbound adopted-sheet collection still uses host exceptions;
+// its §6.2 binding must replace that path (browlet/style/ROADMAP.md).
 export interface StyleletExecution extends AsyncExecution, WebIDLExecution {}
 
 /** Host configuration for an existing environment or standalone execution. */
@@ -63,6 +64,7 @@ export function createStyleletEnvironment(options: StyleletOptions = {}): Stylel
       decodeText: options.decodeText ?? decodeNative,
     },
     exec: options.exec ?? defaultStyleletExecution,
+    getAssociatedDocument: () => null,
   };
 }
 

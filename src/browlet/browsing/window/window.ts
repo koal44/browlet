@@ -6,7 +6,7 @@ import {
   defineIncludes, defineInterface, definePartialInterface, idlType,
   impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/core/index';
-import type { CSSStyleDeclarationImpl } from '../../../stylelet/index';
+import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 
 import type { SpeculationRulesParseResult, TimerAction } from '../../scripting/index';
@@ -80,9 +80,8 @@ export class WindowImpl extends EventTargetImpl {
   getComputedStyle(
     element: ElementImpl,
     pseudoElement?: string | null,
-  ): CSSStyleDeclarationImpl {
-    // PROVISIONAL: move this author operation onto Stylelet's Window
-    // partial once CSSStyleDeclaration has a projected interface.
+  ): CSSStylePropertiesImpl {
+    // TODO: §7.2 target-document selection, pseudo-elements, and live resolved values.
     if (pseudoElement !== null && pseudoElement !== undefined) {
       throw new InternalError('Pseudo-element computed style is not implemented');
     }

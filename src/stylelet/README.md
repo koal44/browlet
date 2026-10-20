@@ -27,7 +27,7 @@ entry points and implementation types.
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |
-| [web-idl.ts](web-idl.ts) | Neutral declaration contributions; currently three mixin/partial contributions with provisional result types |
+| [web-idl.ts](web-idl.ts) | CSSOM declarations and host contributions; adoption's collection binding remains provisional |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
 
 Each implemented component has an explicit `index.ts`; imports across its boundary use that
@@ -79,9 +79,9 @@ is still incomplete.
 
 The same distinction applies to declarations. `PropertyDeclaration` is internal
 data; `CSSDeclarationBlock` is the current retained data container;
-`CSSStyleDeclarationImpl` provides mutation/query behavior. CSSOM also requires
-`CSSStyleProperties`, which is not yet implemented as its own interface and
-Implementation. The existing container and class split remains under review.
+`CSSStyleDeclarationImpl` provides mutation/query behavior, and
+`CSSStylePropertiesImpl` supplies the property-facing subtype. Both interfaces
+are bound; the existing container and class split remains under review.
 
 ## Host boundary and state ownership
 

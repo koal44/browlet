@@ -168,6 +168,9 @@ UserAgent. Do not put ordinary imports behind environment properties or copy
 another owner's complete API into a facade. Stylelet consumes the existing
 `StyleletEnvironment` view: `userAgent.dom` supplies host DOM operations,
 `userAgent.URL` supplies URL construction, and `exec` supplies execution.
+`getAssociatedDocument()` supplies the owning global's Document as Infra's
+`DOMDocument`, or null for unbound and non-Window environments. Browlet forwards
+the query to its realm; standalone engines already retain their explicit Document.
 Browlet supplies `URLImpl`; standalone composition captures the native constructor
 or accepts a supplied provider. Stylelet retains only the `StyleletURL` contract
 (`href`) and passes the selected constructor through CSS value contexts. Resource

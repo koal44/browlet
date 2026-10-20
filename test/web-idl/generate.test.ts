@@ -607,30 +607,44 @@ describe('platform declaration generation', () => {
   it('models forwarded setters and requires an explicit proxy surface', () => {
     const assembly = new DefinitionAssembly([
       defineInterface({ name: 'Location', members: [attr('href', idlType.USVString)] }),
+      defineInterface({ name: 'CSSStyleDeclaration', members: [attr('cssText', idlType.DOMString)] }),
+      defineInterface({ name: 'CSSStyleProperties', inherits: 'CSSStyleDeclaration', members: [] }),
       defineInterface({
         name: 'Window', members: [
           roAttr('location', reference('Location'), xattr(['PutForwards', 'href'])),
           roAttr('self', reference('WindowProxy'), xattr('Replaceable')),
-          roAttr('style', idlType.object, xattr(['PutForwards', 'cssText'])),
+          roAttr('style', reference('CSSStyleProperties'), xattr(['PutForwards', 'cssText'])),
         ],
       }),
       defineProxyObject({ name: 'WindowProxy', getHandle: () => undefined, getProxy: () => undefined }),
     ]);
     expect(() => generatePlatformTypes(assembly)).toThrow('proxyInterfaces');
     const declarations = generatePlatformTypes(assembly, { proxyInterfaces: { WindowProxy: 'Window' } });
-    expect(declarations).toContain('forwarded property opaque');
     expect(compile(declarations, `
-      import type { WindowProxy, Location } from './platform';
+      import type { WindowProxy, Location, CSSStyleProperties } from './platform';
       declare const window: WindowProxy;
       const location: Location = window.location;
       window.location = 'https://example.test/';
       window.self = 5;
-      const style: object = window.style;
+      const style: CSSStyleProperties = window.style;
+      const text: string = window.style.cssText;
+      window.style = 'color: red;';
       // @ts-expect-error forwarding uses href's input type
       window.location = 42;
-      // @ts-expect-error the declaration does not describe CSSOM's shape yet
-      window.style.cssText;
+      // @ts-expect-error forwarding uses the inherited cssText attribute's input type
+      window.style = 42;
     `)).toEqual([]);
+  });
+
+  it('rejects opaque PutForwards targets', () => {
+    const assembly = new DefinitionAssembly([
+      defineInterface({
+        name: 'Element', members: [
+          roAttr('style', idlType.object, xattr(['PutForwards', 'cssText'])),
+        ],
+      }),
+    ]);
+    expect(() => generatePlatformTypes(assembly)).toThrow('PutForwards needs an interface: style');
   });
 
   it('keeps buffer sharing, escaped names, and generated-name collisions typed', () => {

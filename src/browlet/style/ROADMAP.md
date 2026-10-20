@@ -22,25 +22,17 @@ declaration-state review.
   [§3.1.6 mechanism](../html/ROADMAP.md#section-316-render-blocking) and shared
   disconnection/attribute cleanup are implemented; the current inline sheet
   association does not supply the complete resource-loading lifecycle.
-- [ ] Finish projecting `CSSStyleSheet` and the CSSOM objects it exposes through
-  the active host's Web IDL binding. Stylelet retains their implementation
-  state and mutation behavior. Verify the declared API surface as well as
-  behavior: ambient `implements` clauses do not check the implementation's
-  converted values, and declarations alone do not establish conformance.
-- [ ] Replace the provisional `projectWindow()` installation of `getComputedStyle`
-  with Stylelet's CSSOM Window partial and projected CSSStyleProperties results.
-  Its current adapter only unwraps the Element; it does not complete Web IDL
-  conversion.
-- [ ] Restore `ObservableArray<CSSStyleSheet>` for `adoptedStyleSheets` once
-  those platform objects exist. Web IDL already supports observable arrays;
+- [ ] Complete §6.2's adopted-sheet binding. CSSStyleSheet, StyleSheetList,
+  the rule/declaration graph, and Window's getComputedStyle result now project
+  through real declarations. Their later behavioral audits remain open.
+- [ ] Restore `ObservableArray<CSSStyleSheet>` for `adoptedStyleSheets`.
+  Web IDL already supports observable arrays;
   `TreeScope` should retain only the backing collection and CSSOM mutation
   steps, with conversion and proxy ownership in the binding. Move the proxy
   factory into Web IDL and remove `src/infra/observable-array.ts`.
-- [ ] Exercise CSSOM exception and promise boundaries through the projected
-  APIs, including borrowed cross-realm calls. Replace the interim owner-realm
-  exception construction with projection of DOMException implementations in the
-  operation's realm, preserving author-thrown exceptions. Complete CSSOM
-  projection is still required to exercise this boundary.
+- [ ] Replace adopted-sheet host exceptions with the completed binding's
+  realization boundary. Sheet/declaration failures and replacement promises
+  already have projected and borrowed-call regressions.
 - [ ] Supply ShadowRoot's missing style scope and connect tree-scope selection
   to matching. Shared DocumentOrShadowRoot declarations do not establish a
   working shadow stylesheet implementation.
@@ -85,7 +77,7 @@ feature. Test retained lists and notifications through the real host boundary.
 The [current lifecycle](README.md#inline-style-lifecycle) separates raw attribute
 input, accepted declaration data, CSSOM access, and cascade reads. Its objects
 remain under review; preserve the observable input/policy/write-back boundaries
-while completing CSSStyleProperties and its Binding.
+while auditing the now-bound CSSStyleProperties implementation.
 The [CSP roadmap](../browsing/policy/csp/ROADMAP.md#style-attribute-consumer)
 records enforcement, reporting, hashes, and the approved browser differences.
 

@@ -1,5 +1,5 @@
 import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
-import { TypeError } from '../../infra/exceptions';
+import { attr, defineInterface, idlType, impl, nullable, reference, roAttr, union, xattr } from '../../web-idl/core/index';
 
 import type { StyleletEnvironment, StyleletURL } from '../environment';
 
@@ -19,90 +19,42 @@ import type { CSSStyleSheetImpl } from './css-stylesheet';
  * };
  */
 export abstract class StyleSheetImpl {
+  type = 'text/css';
   /** Parsed location retained for internal URL resolution; href exposes its string. */
   location: StyleletURL | null = null;
+  ownerNode: DOMElement | DOMProcessingInstruction | null = null;
+  parentStyleSheet: CSSStyleSheetImpl | null = null;
+  media: MediaListImpl;
+  disabled = false;
 
+  protected titleText = '';
   protected env: StyleletEnvironment;
-  #type: string;
-  #ownerNode: DOMElement | DOMProcessingInstruction | null;
-  #parentStyleSheet: CSSStyleSheetImpl | null;
-  #title: string;
-  #media: MediaListImpl;
-  #disabled: boolean;
 
-  protected constructor(env: StyleletEnvironment) {
-    if (new.target === StyleSheetImpl) {
-      throw new TypeError('Illegal constructor');
-    }
-
+  constructor(media: string, env: StyleletEnvironment) {
     this.env = env;
-    this.#type = 'text/css';
-    this.#ownerNode = null;
-    this.#parentStyleSheet = null;
-    this.#title = '';
-    this.#media = new MediaListImpl('');
-    this.#disabled = false;
-  }
-
-  get type(): string {
-    return this.#type;
+    this.media = new MediaListImpl(media);
   }
 
   get href(): string | null {
     return this.location?.href ?? null;
   }
 
-  get ownerNode(): DOMElement | DOMProcessingInstruction | null {
-    return this.#ownerNode;
-  }
-
-  get parentStyleSheet(): CSSStyleSheetImpl | null {
-    return this.#parentStyleSheet;
-  }
-
   get title(): string | null {
-    return this.#title === '' ? null : this.#title;
-  }
-
-  get media(): MediaListImpl {
-    return this.#media;
-  }
-
-  set media(mediaText: string) {
-    this.setMedia(mediaText);
-  }
-
-  get disabled(): boolean {
-    return this.#disabled;
-  }
-
-  set disabled(value: boolean) {
-    this.#disabled = value;
-  }
-
-  protected setOwnerNode(
-    ownerNode: DOMElement | DOMProcessingInstruction | null,
-  ): void {
-    this.#ownerNode = ownerNode;
-  }
-
-  protected setParentStyleSheet(
-    parentStyleSheet: CSSStyleSheetImpl | null,
-  ): void {
-    this.#parentStyleSheet = parentStyleSheet;
-  }
-
-  protected setTitle(title: string): void {
-    this.#title = title;
-  }
-
-  protected setDisabled(disabled: boolean): void {
-    this.#disabled = disabled;
-  }
-
-  protected setMedia(media: string | MediaListImpl): void {
-    this.#media.mediaText = typeof media === 'string'
-      ? media
-      : media.mediaText;
+    return this.titleText === '' ? null : this.titleText;
   }
 }
+
+export const styleSheetIDL = defineInterface({
+  name: 'StyleSheet',
+  exposed: 'Window',
+  implementation: impl(StyleSheetImpl),
+  members: [
+    roAttr('type', reference('CSSOMString')),
+    roAttr('href', nullable(idlType.USVString)),
+    roAttr('ownerNode', nullable(union(reference('Element'), reference('ProcessingInstruction')))),
+    roAttr('parentStyleSheet', nullable(reference('CSSStyleSheet'))),
+    roAttr('title', nullable(idlType.DOMString)),
+    roAttr('media', reference(MediaListImpl), xattr('SameObject', ['PutForwards', 'mediaText'])),
+    attr('disabled', idlType.boolean),
+  ],
+});

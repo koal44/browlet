@@ -1,5 +1,5 @@
 import {
-  CSSDeclarationBlock, CSSStyleDeclarationImpl,
+  CSSDeclarationBlock, CSSStylePropertiesImpl,
   type CSSStyleSheetImpl, type TreeScope, type StyleletEnvironment,
 } from '../../stylelet/index';
 
@@ -11,7 +11,7 @@ export class ElementCSSInlineStyleMixin {
   #element: ElementImpl;
   #env: StyleletEnvironment;
   #block?: CSSDeclarationBlock;
-  #style?: CSSStyleDeclarationImpl;
+  #style?: CSSStylePropertiesImpl;
 
   /** Retain the owner without allocating a declaration or reading its attributes. */
   constructor(element: ElementImpl, env: StyleletEnvironment) {
@@ -20,8 +20,8 @@ export class ElementCSSInlineStyleMixin {
   }
 
   /** Obtain the retained CSSOM object without reading or reparsing the attribute. */
-  get style(): CSSStyleDeclarationImpl {
-    return this.#style ??= new CSSStyleDeclarationImpl({
+  get style(): CSSStylePropertiesImpl {
+    return this.#style ??= new CSSStylePropertiesImpl({
       block: this.#block ??= new CSSDeclarationBlock(),
       ownerNode: this.#element,
     }, this.#env);
@@ -46,7 +46,6 @@ export class ElementCSSInlineStyleMixin {
         .isStyleAttributeBlocked(this.#element, value)) return;
       (this.#block ??= new CSSDeclarationBlock()).setText(value, {});
     }
-    this.#style?.synchronizeIndices();
   }
 }
 

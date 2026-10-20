@@ -469,6 +469,7 @@ describe('Browlet DOM binding', () => {
     expect(ownKeys(getPrototype(browlet, 'HTMLStyleElement'))).toEqual([
       'blocking',
       'constructor',
+      'media',
       'sheet',
     ]);
     expect(ownKeys(getPrototype(browlet, 'CharacterData'))).toEqual([

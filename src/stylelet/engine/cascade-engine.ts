@@ -35,7 +35,11 @@ export class CascadeEngine {
   }
 
   createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheetImpl {
-    return new CSSStyleSheetImpl(this.context, options);
+    return CSSStyleSheetImpl.createConstructed({
+      baseURL: options.baseURL ?? null,
+      media: options.media ?? '',
+      disabled: options.disabled ?? false,
+    }, this.context.document, this.context.env);
   }
 
   *getActiveStyleSheets(

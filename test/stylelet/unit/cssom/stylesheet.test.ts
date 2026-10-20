@@ -9,15 +9,6 @@ import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import { Stylelet, type InternalPromise } from '../../../../src/stylelet/index';
 import { createBrowletDocument } from '../../browlet-document';
 
-describe('StyleSheetImpl', () => {
-  it('is an exposed prototype but not a directly constructible interface', () => {
-    expect(() => {
-      Reflect.construct(StyleSheetImpl, []);
-    })
-      .toThrowError(new TypeError('Illegal constructor'));
-  });
-});
-
 describe('CSSStyleSheetImpl', () => {
   it('initializes the StyleSheet state from its constructor options', () => {
     const media = new MediaListImpl('screen');
@@ -30,7 +21,8 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet.type).toBe('text/css');
     expect(sheet).toBeInstanceOf(CSSStyleSheetImpl);
     expect(sheet).toBeInstanceOf(StyleSheetImpl);
-    expect(sheet.href).toBe('https://example.com/document/');
+    expect(sheet.href).toBeNull();
+    expect(sheet.baseURL?.href).toBe('https://example.com/css/');
     expect(sheet.ownerNode).toBeNull();
     expect(sheet.parentStyleSheet).toBeNull();
     expect(sheet.title).toBeNull();
@@ -39,7 +31,7 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet.disabled).toBe(true);
 
     sheet.disabled = false;
-    sheet.media = 'print';
+    sheet.media.mediaText = 'print';
 
     expect(sheet.disabled).toBe(false);
     expect(sheet.media.mediaText).toBe('print');
@@ -79,8 +71,7 @@ describe('CSSStyleSheetImpl', () => {
   it('resolves a relative constructor base through the standalone URL provider', () => {
     const sheet = createStyleSheet({ baseURL: '../css/' });
 
-    expect(sheet.location).toBeInstanceOf(URL);
-    expect(sheet.location?.href).toBe('https://example.com/document/');
+    expect(sheet.location).toBeNull();
     expect(sheet.baseURL).toBeInstanceOf(URL);
     expect(sheet.baseURL?.href).toBe('https://example.com/css/');
   });
@@ -131,14 +122,14 @@ describe('CSSStyleSheetImpl', () => {
 
     style.setProperty('opacity', '50%', 'IMPORTANT');
 
-    expect(Reflect.get(style, 'opacity')).toBe('0.5');
+    expect(style.getPropertyValue('opacity')).toBe('0.5');
     expect(style.getPropertyPriority('opacity')).toBe('important');
-    expect(style[1]).toBe('opacity');
+    expect(style.item(1)).toBe('opacity');
     expect(style.cssText).toBe('color: red; opacity: 0.5 !important;');
 
     expect(style.removeProperty('color')).toBe('red');
-    expect(style[0]).toBe('opacity');
-    expect(style[1]).toBeUndefined();
+    expect(style.item(0)).toBe('opacity');
+    expect(style.item(1)).toBe('');
 
     style.cssText = 'margin-top: 1px; color: blue';
 
@@ -159,7 +150,7 @@ describe('CSSStyleSheetImpl', () => {
 
     expect(sheet.cssRules).toBe(rules);
     expect(rules).toHaveLength(2);
-    expect(rules.item(1)).toBe(rules[1]);
+    expect(rules.item(1)).toBe([...rules][1]);
   });
 
   it.each(['replaceSync', 'replace'] as const)('discards imports during %s', async (method) => {
@@ -247,11 +238,21 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet.cssRules).toHaveLength(0);
   });
 
+  // SPEC_CLASH(sheet-insert-error-order): Follow the three browsers' index-first check.
+  it('checks the insertion index before invalid rule syntax', () => {
+    const sheet = createStyleSheet();
+
+    expect(() => sheet.insertRule('not a rule', 1)).toThrowError(
+      expect.objectContaining({ name: 'IndexSizeError' }),
+    );
+    expect(sheet.cssRules).toHaveLength(0);
+  });
+
   it('replaces rules asynchronously while disallowing concurrent mutation', async () => {
     const sheet = createStyleSheet();
     const replacement = sheet.replace('.example {}');
 
-    expect(() => sheet.insertRule('.other {}')).toThrowError(DOMException);
+    expect(() => sheet.insertRule('.other {}')).toThrowError(expect.objectContaining({ name: 'NotAllowedError' }));
     await expect(observe(replacement)).resolves.toBe(sheet);
     expect(sheet.cssRules).toHaveLength(1);
   });

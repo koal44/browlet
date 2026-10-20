@@ -14,23 +14,25 @@ observable behavior, rather than private storage choices, constrains its replace
 | [CSSRuleImpl](rule.ts), [CSSGroupingRuleImpl](rules.ts) | Rule identity/constants, parent associations, and retained child lists; nested insertion/deletion remain throwing stubs |
 | [CSSStyleRuleImpl](rules.ts), [CSSNestedDeclarationsImpl](rules.ts) | Parsed selectors, leading declarations, and separate later declaration runs; style-rule selector text and serialization remain unfinished |
 | [CSSPropertyRuleImpl](rules.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
-| [CSSStyleDeclarationImpl](declaration.ts) | Declaration queries, mutation, CSS text, owner write-back, and readonly/computed flags. It currently also installs the property accessors expected from the missing `CSSStyleProperties` interface. |
+| [CSSStyleDeclarationImpl](declaration.ts), [CSSStylePropertiesImpl](style-properties.ts) | Shared declaration operations and the property-facing subtype; Binding supplies numeric and supported-property attributes |
 | [MediaListImpl](media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation, with a real MediaList declaration; does not evaluate media against a device |
-| [CSSRuleListImpl](rule-list.ts), [StyleSheetListImpl](stylesheet-list.ts) | Retained ordered collections with manually synchronized numeric properties |
+| [CSSRuleListImpl](rule-list.ts), [StyleSheetListImpl](stylesheet-list.ts) | Retained ordered collections; Binding supplies live supported indices and projects entries |
 | [StylePropertyMapImpl](style-property-map.ts) | Explicit throwing placeholder for Typed OM; no working typed map API |
 
-[web-idl.ts](../web-idl.ts) exports `typedef DOMString CSSOMString`, `MediaList`,
-`ElementCSSInlineStyle`, `LinkStyle`, and the stylesheet members of
-`DocumentOrShadowRoot`. The mixin return types are still `object`/`any`;
-sheet/rule/declaration projection remains unfinished. An IDL comment or
-TypeScript `implements` clause does not create a Platform interface.
+[web-idl.ts](../web-idl.ts) exports the CSSOM string typedef, common sheet,
+rule, list, and declaration interfaces, and the host mixin/partial contributions.
+`CSSStyleSheet` and `CSSStyleProperties` are declared beside their implementations.
+The constructor obtains its Document through `env.getAssociatedDocument()`;
+property attributes call the declaration's `getPropertyValue()`/`setProperty()`.
+Their explicit hooks currently import full Web IDL, exposing a TypeScript project
+boundary error. Returning these declarations to Core is pending the
+[declaration-hook work](ROADMAP.md#declaration-hook-boundary).
 
-MediaList's binding owns numeric properties, iteration, stringification,
-conversion, receiver checks, and exception realization. Its implementation
-accepts strings and converted indices, exposes supported indices, and throws
-realm-neutral DOMExceptionImpl failures. Other hosts bind the same declaration
-using their own runtime. The existing raw stylesheet return path still needs
-the section 6 bindings before `.media` reaches this Platform interface.
+Bindings own conversion, receiver checks, indexed properties, and exception
+realization. Implementations accept converted values and throw realm-neutral
+DOMExceptionImpl failures. Sheet, rule, and declaration results project through
+their declared references; DocumentOrShadowRoot's adopted-sheet collection
+retains a provisional `any` declaration until the §6.2 audit.
 
 Common identifier, string, function, and LOCAL formatting lives in
 `syntax/component-value.ts`. Function formatting receives a name and contents
@@ -48,10 +50,10 @@ environment, or CSSOM identity. Supported built-ins come from the small
 [property registry](../css/property.ts); custom-property token values are stored
 separately from built-in value representations.
 
-`CSSStyleDeclarationImpl` holds a block and supplies CSSOM-shaped operations.
-It currently performs some author conversion itself and installs numeric and
-property-name accessors directly on implementation objects/prototypes. Those
-parts predate complete Binding integration.
+`CSSStyleDeclarationImpl` holds a block and supplies CSSOM operations.
+`CSSStylePropertiesImpl` adds the projected subtype identity; supported property
+attributes forward to `getPropertyValue()`/`setProperty()` at the host binding.
+Neither implementation installs numeric or property-name accessors.
 
 There are three current uses of declaration state:
 
@@ -68,11 +70,9 @@ checks CSP there. Its `.style` getter does not reread raw input. This preserves
 accepted declarations after a blocked replacement and avoids a second parsing
 path on first access.
 
-The CSSOM object updates its indices on its own mutations. Browlet also calls
-`synchronizeIndices()` when attribute input changes an existing object's block.
-This coupling is an acknowledged consequence of manual indexed exposure;
-Binding's supported-index machinery is the intended review point. The block
-does not currently maintain an observer list.
+Binding reads supported indices from the current declarations. Attribute input
+therefore needs no `synchronizeIndices()` call or block observer to update the
+already-retained Platform object.
 
 ## Sheets, collections, and execution
 
@@ -81,9 +81,12 @@ engine reads use it directly, including for non-origin-clean sheets;
 the author-facing `cssRules` getter retains its security check.
 `replaceSync()` replaces contents while keeping the list object;
 `replace()` uses the owning environment's background execution, task delivery,
-and `InternalPromise`. Modification locking spans the asynchronous replacement.
+and a `Promise<CSSStyleSheet>`-typed InternalPromise. Modification locking spans the asynchronous replacement.
 Parent-sheet associations propagate through children on attachment/removal.
 Location and parse-time base URL belong to the sheet, independently of its rules.
+Constructed sheets expose null `href`, retain their Document and resolved base
+internally, and clone MediaList constructor input. Ordinary sheets initialize
+their own metadata directly rather than first constructing an author sheet.
 
 ### Rule parsing
 
@@ -125,8 +128,9 @@ and CSS Nesting's declaration placement; they are not separate named spec algori
 | `@charset` in parsed text | Intentionally discarded; encoding detection uses its initial byte pattern, not a live rule |
 
 Invalid selector lists discard the rule. Invalid/unsupported declarations do
-not discard its valid siblings. Top-level import insertion is still rejected
-for every sheet; nested insertion/deletion remain explicit stubs.
+not discard its valid siblings. Constructed sheets reject inserted imports;
+ordinary imports reach the explicit unfinished grammar. Nested
+insertion/deletion remain explicit stubs.
 
 [TreeScope](../engine/tree-scope.ts) orders header sheets before tree-associated
 sheets, then adds adopted sheets for cascade order. It tracks preferred/selected
@@ -137,9 +141,10 @@ those resources are fetched.
 
 All CSSOM objects that need execution retain the supplied
 [StyleletEnvironment](../environment.ts). Standalone defaults and Browlet's
-environment both work through this boundary. Unbound sheet/declaration APIs
-still allocate exceptions through `env.exec`. MediaList needs no execution
-owner; its host binding realizes errors in the invoked method's realm.
+environment both work through this boundary. Sheet/declaration bindings realize
+synchronous failures at the method boundary; replacement promises retain their
+owning environment and typed result projection. The unbound adopted-sheet
+collection still uses the host's DOMException constructor pending §6.2.
 
 ## Existing evidence and its limits
 
@@ -148,7 +153,7 @@ owner; its host binding realizes errors in the invoked method's realm.
 | [CSSOM unit suites](../../../test/stylelet/unit/cssom/) | Direct implementation construction, sheet/list identity, declaration edits, media lists, and asynchronous replacement |
 | [Tree-scope tests](../../../test/stylelet/unit/engine/tree-scope.test.ts) | Ordering and stylesheet-set selection using explicit sheet inputs |
 | [Host tests](../../../test/stylelet/unit/host.test.ts), [environment tests](../../../test/stylelet/unit/environment.test.ts) | Host-neutral DOM access, explicit initialization, empty-provider semantics, URL/decoding/execution facilities, and interim exceptions |
-| [Browlet style tests](../../../test/browlet/style/) | Inline/stylesheet association, mutation, cascade reads, adopted sheets, and selected calls through `Browlet.evaluate()` |
+| [Browlet style tests](../../../test/browlet/style/) | Inline/stylesheet association, cascade reads, and real CSSOM conversion, identity, supported indices, borrowed calls, and promises |
 | [CSP style tests](../../../test/browlet/browsing/policy/csp/style-attribute.test.ts) | Raw-source authorization, reporting, accepted state, parser input, and adoption |
 | [Style-attribute browser scenarios](../../../test/stylelet/scenarios/style-attribute.test.ts) | Stylelet's declaration parsing compared with native behavior; not included in the baseline below |
 | [MediaList binding tests](../../../test/browlet/style/media-list.test.ts) | Real interface exposure, identity, conversions, live indices/iteration, author overrides, and borrowed-method exception realms |
@@ -176,6 +181,12 @@ node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit test/bro
 Full lint/typecheck, the Stylelet package build, and global-artifact smoke test
 also passed. The MediaList browser run completed all 19 scenarios: 7 passed
 normally and 12 matched the approved expected failures for documented browser
-differences. The build still reports the existing declaration/parser/rules
-import cycle. Broader CSSOM projection, live computed values, complete property
-grammars, and layout-dependent results remain unfinished.
+differences.
+
+The 2026-10-20 §6.1 audit passed **168 tests across 16 focused files**, with one
+existing expected failure and seven existing skips. The final binding/IDL
+recheck passed all 11 tests. Full lint/typecheck and the Stylelet build passed.
+All 16 CSSOM, style-attribute, and constructed-sheet scenarios passed in
+Chromium, Firefox, and WebKit.
+Adoption, later rule/declaration algorithms, live computed values, complete
+property grammars, and layout-dependent results remain unfinished.

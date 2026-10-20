@@ -11,7 +11,7 @@ export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from
 export { TreeScope } from './engine/index';
 export {
   CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, StylesheetContext,
-  MediaListImpl, StyleSheetListImpl,
+  MediaListImpl, StyleSheetListImpl, CSSStylePropertiesImpl,
   type CSSStyleSheetInit,
 } from './cssom/index';
 export { CSSDeclarationBlock } from './css/index';

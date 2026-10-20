@@ -35,7 +35,7 @@ import { trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/inde
 import { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import {
   DocumentImpl, htmlDocumentIDL, documentReadyStateIDL, documentVisibilityStateIDL,
-  htmlOrSVGScriptElementIDL, htmlDocumentOrShadowRootIDL, ElementImpl, htmlAllCollectionIDL,
+  htmlOrSVGScriptElementIDL, htmlDocumentOrShadowRootIDL, htmlAllCollectionIDL,
 } from './dom/nodes/index';
 import { htmlIDLDefinitions } from './dom/nodes/html/index';
 import { mathMLIDLDefinitions } from './dom/nodes/mathml/index';
@@ -214,23 +214,7 @@ function projectWindow(
   window: WindowImpl,
   allocation?: GlobalObjectAllocation,
 ): StampedPlatformObject<Window> {
-  const object = context.projectGlobalObject(window, 'Window', allocation) as StampedPlatformObject<Window>;
-  // PROVISIONAL: bypasses Web IDL until Stylelet supplies its CSSOM Window
-  // partial and CSSStyleDeclaration projection (see style/ROADMAP.md).
-  Object.defineProperty(object, 'getComputedStyle', {
-    configurable: true,
-    enumerable: true,
-    writable: true,
-    value: (element: unknown, pseudoElement?: string | null) => {
-      const implementation = context.unwrap(element, ElementImpl);
-      if (!implementation) {
-        const { exec } = context.getEnvironment();
-        throw new exec.TypeError('getComputedStyle requires an Element.');
-      }
-      return window.getComputedStyle(implementation, pseudoElement);
-    },
-  });
-  return object;
+  return context.projectGlobalObject(window, 'Window', allocation) as StampedPlatformObject<Window>;
 }
 
 // -- Shared declarations and world --------------------------------------

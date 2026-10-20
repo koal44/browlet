@@ -20,18 +20,21 @@ the implementation objects currently being exposed.
   internal inline-data query but does not include ElementCSSInlineStyle.
 - [DOM operations](../integration/dom.ts) let Stylelet query Browlet
   implementations without Platform conversion or structural node wrappers.
-- [Stylelet's declarations](../../stylelet/web-idl.ts) supply the neutral
-  mixin/partial IDL. Browlet composes host behavior into its existing
-  implementations. The CSSOM result types remain provisional `object`/`any`.
-- [Window projection](../bindings.ts) temporarily installs `getComputedStyle`
-  directly. It unwraps the element but does not provide the complete CSSOM
-  Window partial or projected result.
+- [Stylelet's declarations](../../stylelet/web-idl.ts) supply common CSSOM
+  interfaces and mixin/partial contributions, including sheet construction and
+  CSSStyleProperties accessors. Browlet's environment supplies
+  `getAssociatedDocument()` for the constructor. The pending Core hook boundary
+  is recorded in the [CSSOM roadmap](../../stylelet/cssom/ROADMAP.md#declaration-hook-boundary).
+  Adoption still awaits its §6.2 binding.
+- Window's CSSOM partial projects `getComputedStyle()` results and converts its
+  arguments. The algorithm still returns a limited snapshot; complete computed
+  values and liveness remain unfinished.
 
 ## Inline-style lifecycle
 
 Each HTML/SVG/MathML element has its mixin from construction. The current mixin
 retains an optional `CSSDeclarationBlock` and an optional
-`CSSStyleDeclarationImpl`. Construction allocates neither and reads no attribute.
+`CSSStylePropertiesImpl`. Construction allocates neither and reads no attribute.
 
 | Input or query | Current behavior |
 | --- | --- |
@@ -49,11 +52,10 @@ CSS or selectively allow property names. Hash matching precedes CSS parsing
 because source spelling matters. Policy is read from the current node document,
 including after adoption. See the [CSP evidence](../browsing/policy/csp/ROADMAP.md#style-attribute-consumer).
 
-Attribute input updates an already-created declaration's numeric properties via
-`synchronizeIndices()`. This is provisional coupling to the current manual
-indexed-property implementation. The final declaration ownership and Binding
-arrangement remain under review. The mixin never stores computed style; engine
-queries currently produce a separate snapshot object.
+Binding reads numeric properties from the current declaration list, so attribute
+input needs no index synchronization. The declaration-data ownership remains
+under review. The mixin never stores computed style; engine queries currently
+produce a separate snapshot object.
 
 ## Sheet association and execution
 
@@ -68,14 +70,14 @@ helpers.
 Documents and CSSOM implementations use their existing environment through
 `StyleletEnvironment`. UserAgent provides DOM operations, URL construction, and
 decoding. `env.exec` supplies promises, background work, and owner task delivery.
-There is no separate document execution adapter. The current CSSOM exception
-constructor is also supplied through execution because much of CSSOM is still
-directly exposed; proper member-realm projection is pending.
+There is no separate document execution adapter. Sheet and declaration failures
+use DOMException implementations and Binding realization. The adopted-sheet
+collection still constructs host exceptions until its §6.2 binding is completed.
 
 The distinction between inline declaration data, inline CSSOM, and computed
 results is real. Their present class/container arrangement is a working trial.
 Existing storage-identity and allocation tests describe that trial; they do not
-require the coming `CSSStyleProperties` implementation to preserve it.
+require the declaration audit to preserve it.
 
 ## Verification
 

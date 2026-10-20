@@ -5,7 +5,7 @@ import {
   propertyRegistry, resolveBuiltInPropertyDeclaration, CSSDeclarationBlock, parseDeclarationBlock,
   type PropertyContext, type PropertyDeclaration, type PropertyName,
 } from '../css/index';
-import { CSSStyleDeclarationImpl } from '../cssom/index';
+import { CSSStylePropertiesImpl } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
@@ -14,7 +14,7 @@ export function computeStyle(
   engine: CascadeEngine,
   element: Element,
   scope: TreeScope,
-): CSSStyleDeclarationImpl {
+): CSSStylePropertiesImpl {
   const dom = engine.context.dom;
   const block = dom.inlineStyleBlock?.(element);
   // An absent provider permits text fallback; a provider's empty result is authoritative.
@@ -62,7 +62,7 @@ export function computeStyle(
     computed.push(resolved);
   }
 
-  return new CSSStyleDeclarationImpl({
+  return new CSSStylePropertiesImpl({
     computed: true,
     block: new CSSDeclarationBlock(computed),
     readonly: true,

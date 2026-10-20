@@ -1,9 +1,15 @@
 import {
-  attr, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef, idlType, nullable, roAttr, xattr,
+  arg, attr, defineInterfaceMixin, definePartialInterface, definePartialInterfaceMixin, defineTypedef,
+  idlType, nullable, op, reference, roAttr, xattr,
   type Definition,
 } from '../web-idl/core/index';
 
-import { mediaListIDL } from './cssom/index';
+import type { StyleletEnvironment } from './environment';
+import {
+  mediaListIDL, styleSheetIDL, styleSheetListIDL, cssStyleSheetIDL, cssStyleSheetInitIDL, legacyCSSStyleSheetIDL, StyleSheetListImpl,
+  cssRuleIDL, cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
+  cssStyleDeclarationIDL, cssStylePropertiesIDL, CSSStylePropertiesImpl, CSSStyleSheetImpl,
+} from './cssom/index';
 
 // CSSOM permits either DOMString or USVString. Keep DOMString conversion;
 // CSS input preprocessing separately replaces lone surrogates during parsing.
@@ -13,9 +19,7 @@ import { mediaListIDL } from './cssom/index';
  */
 const cssomStringIDL = defineTypedef({ name: 'CSSOMString', type: idlType.DOMString });
 
-// These object-typed CSSOM members are provisional. Stylelet must define and
-// export the CSSOM interfaces before Browlet can project their semantic
-// implementations; do not patch individual host returns around that boundary.
+// Adoption still awaits its §6.2 binding.
 
 /*
  * partial interface mixin DocumentOrShadowRoot {
@@ -26,9 +30,9 @@ const cssomStringIDL = defineTypedef({ name: 'CSSOMString', type: idlType.DOMStr
 const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
   name: 'DocumentOrShadowRoot',
   members: [
-    roAttr('styleSheets', idlType.object, xattr('SameObject')),
+    roAttr('styleSheets', reference(StyleSheetListImpl), xattr('SameObject')),
     // TODO(CSSOM interface projection): Restore ObservableArray<CSSStyleSheet>
-    // when CSSStyleSheet projection and adoption mutation steps are bound.
+    // when adoption mutation steps are bound.
     attr('adoptedStyleSheets', idlType.any),
   ],
 });
@@ -41,7 +45,7 @@ const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
  */
 const elementCSSInlineStyleIDL = defineInterfaceMixin({
   name: 'ElementCSSInlineStyle',
-  members: [roAttr('style', idlType.object, xattr(
+  members: [roAttr('style', reference(CSSStylePropertiesImpl), xattr(
     'SameObject',
     ['PutForwards', 'cssText'],
   ))],
@@ -54,13 +58,34 @@ const elementCSSInlineStyleIDL = defineInterfaceMixin({
  */
 const linkStyleIDL = defineInterfaceMixin({
   name: 'LinkStyle',
-  members: [roAttr('sheet', nullable(idlType.object))],
+  members: [roAttr('sheet', nullable(reference(CSSStyleSheetImpl)))],
 });
 
-export const styleletIDLDefinitions: Definition[] = [
+// The implementation still returns a limited computed snapshot. This declaration
+// establishes projection and author conversion, not the complete §7.2 algorithm.
+// https://drafts.csswg.org/cssom/#extensions-to-the-window-interface
+const cssomWindowIDL = definePartialInterface({
+  name: 'Window',
+  members: [
+    op('getComputedStyle', reference(CSSStylePropertiesImpl),
+      [
+        arg('elt', reference('Element')),
+        arg('pseudoElt', nullable(reference('CSSOMString')), { optional: true }),
+      ],
+      xattr('NewObject'),
+    ),
+  ],
+});
+
+export const styleletIDLDefinitions: Definition<StyleletEnvironment>[] = [
   cssomStringIDL,
   mediaListIDL,
+  styleSheetIDL, styleSheetListIDL, cssStyleSheetInitIDL, legacyCSSStyleSheetIDL,
+  cssRuleIDL, cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
+  cssStyleDeclarationIDL,
   cssomDocumentOrShadowRootIDL,
   elementCSSInlineStyleIDL,
   linkStyleIDL,
+  cssomWindowIDL,
+  cssStyleSheetIDL, cssStylePropertiesIDL,
 ];

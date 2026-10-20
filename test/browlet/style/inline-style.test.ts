@@ -28,13 +28,13 @@ describe('ElementCSSInlineStyle', () => {
         const style = target.style;
         expect(target.getInlineStyleBlock()).toBe(block);
         expect(style.getPropertyValue('opacity')).toBe('0.4');
-        expect(style[0]).toBe('opacity');
+        expect(style.item(0)).toBe('opacity');
 
         target.setAttribute('style', 'color: red; opacity: .6');
         expect(target.getInlineStyleBlock()).toBe(block);
         expect(getStyle).toHaveBeenCalledOnce();
-        expect(style[0]).toBe('color');
-        expect(style[1]).toBe('opacity');
+        expect(style.item(0)).toBe('color');
+        expect(style.item(1)).toBe('opacity');
         expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.6');
 
         target.removeAttribute('style');

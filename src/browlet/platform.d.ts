@@ -188,6 +188,12 @@ export interface ShadowRootInit {
   slotAssignment?: SlotAssignmentMode;
 }
 
+export interface CSSStyleSheetInit {
+  baseURL?: string | null;
+  disabled?: boolean;
+  media?: MediaList | string;
+}
+
 export interface QueuingStrategy {
   highWaterMark?: number;
   size?: QueuingStrategySize;
@@ -495,9 +501,8 @@ export interface HTMLElement extends Element {
   accessKey: string;
   headingOffset: number;
   headingReset: boolean;
-  /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
-  get style(): object;
-  set style(value: unknown);
+  get style(): CSSStyleProperties;
+  set style(value: string);
   nonce: string;
   autofocus: boolean;
 }
@@ -616,9 +621,10 @@ export interface HTMLMetaElementConstructor extends Ctor<HTMLElementConstructor>
 }
 
 export interface HTMLStyleElement extends HTMLElement {
+  media: string;
   get blocking(): DOMTokenList;
   set blocking(value: string);
-  readonly sheet: object | null;
+  readonly sheet: CSSStyleSheet | null;
 }
 
 export interface HTMLStyleElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -633,7 +639,7 @@ export interface HTMLLinkElement extends HTMLElement {
   get blocking(): DOMTokenList;
   set blocking(value: string);
   fetchPriority: string;
-  readonly sheet: object | null;
+  readonly sheet: CSSStyleSheet | null;
 }
 
 export interface HTMLLinkElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -1272,9 +1278,8 @@ export interface HTMLParamElementConstructor extends Ctor<HTMLElementConstructor
 }
 
 export interface SVGElement extends Element {
-  /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
-  get style(): object;
-  set style(value: unknown);
+  get style(): CSSStyleProperties;
+  set style(value: string);
   nonce: string;
   autofocus: boolean;
 }
@@ -1303,7 +1308,7 @@ export interface SVGSVGElementConstructor extends Ctor<SVGGraphicsElementConstru
 }
 
 export interface SVGStyleElement extends SVGElement {
-  readonly sheet: object | null;
+  readonly sheet: CSSStyleSheet | null;
 }
 
 export interface SVGStyleElementConstructor extends Ctor<SVGElementConstructor> {
@@ -1330,9 +1335,8 @@ export interface SVGTitleElementConstructor extends Ctor<SVGElementConstructor> 
 }
 
 export interface MathMLElement extends Element {
-  /** The declaration leaves the forwarded property opaque; its assignment type is unknown. */
-  get style(): object;
-  set style(value: unknown);
+  get style(): CSSStyleProperties;
+  set style(value: string);
   nonce: string;
   autofocus: boolean;
 }
@@ -1491,6 +1495,7 @@ export interface Window extends EventTarget {
   set location(value: string);
   get event(): Event | undefined;
   set event(value: unknown);
+  getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
   readonly isSecureContext: boolean;
   setTimeout(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
   clearTimeout(id?: number): void;
@@ -1630,6 +1635,17 @@ export interface Window extends EventTarget {
   DOMImplementation: DOMImplementationConstructor;
   Element: ElementConstructor;
   MediaList: MediaListConstructor;
+  StyleSheet: StyleSheetConstructor;
+  StyleSheetList: StyleSheetListConstructor;
+  CSSRule: CSSRuleConstructor;
+  CSSRuleList: CSSRuleListConstructor;
+  CSSGroupingRule: CSSGroupingRuleConstructor;
+  CSSStyleRule: CSSStyleRuleConstructor;
+  CSSNestedDeclarations: CSSNestedDeclarationsConstructor;
+  CSSPropertyRule: CSSPropertyRuleConstructor;
+  CSSStyleDeclaration: CSSStyleDeclarationConstructor;
+  CSSStyleSheet: CSSStyleSheetConstructor;
+  CSSStyleProperties: CSSStylePropertiesConstructor;
   ByteLengthQueuingStrategy: ByteLengthQueuingStrategyConstructor;
   CountQueuingStrategy: CountQueuingStrategyConstructor;
   ReadableStream: ReadableStreamConstructor;
@@ -2168,7 +2184,7 @@ export interface ShadowRoot extends DocumentFragment {
   onslotchange: EventHandlerNonNull | null;
   readonly customElementRegistry: CustomElementRegistry | null;
   readonly activeElement: Element | null;
-  readonly styleSheets: object;
+  readonly styleSheets: StyleSheetList;
   adoptedStyleSheets: any;
 }
 
@@ -2239,7 +2255,7 @@ export interface Document extends Node {
   getElementById(elementId: string): Element | null;
   readonly customElementRegistry: CustomElementRegistry | null;
   readonly activeElement: Element | null;
-  readonly styleSheets: object;
+  readonly styleSheets: StyleSheetList;
   adoptedStyleSheets: any;
 }
 
@@ -2345,6 +2361,187 @@ export interface MediaList {
 export interface MediaListConstructor {
   readonly prototype: MediaList;
   [Symbol.hasInstance](value: unknown): value is MediaList;
+}
+
+export interface StyleSheet {
+  readonly type: string;
+  readonly href: string | null;
+  readonly ownerNode: Element | ProcessingInstruction | null;
+  readonly parentStyleSheet: CSSStyleSheet | null;
+  readonly title: string | null;
+  get media(): MediaList;
+  set media(value: string);
+  disabled: boolean;
+}
+
+export interface StyleSheetConstructor {
+  readonly prototype: StyleSheet;
+  [Symbol.hasInstance](value: unknown): value is StyleSheet;
+}
+
+export interface StyleSheetList {
+  item(index: number): CSSStyleSheet | null;
+  readonly length: number;
+  readonly [index: number]: CSSStyleSheet | null | undefined;
+  [Symbol.iterator](): IterableIterator<CSSStyleSheet | null>;
+}
+
+export interface StyleSheetListConstructor {
+  readonly prototype: StyleSheetList;
+  [Symbol.hasInstance](value: unknown): value is StyleSheetList;
+}
+
+export interface CSSRule {
+  cssText: string;
+  readonly parentRule: CSSRule | null;
+  readonly parentStyleSheet: CSSStyleSheet | null;
+  readonly type: number;
+  readonly STYLE_RULE: 1;
+  readonly CHARSET_RULE: 2;
+  readonly IMPORT_RULE: 3;
+  readonly MEDIA_RULE: 4;
+  readonly FONT_FACE_RULE: 5;
+  readonly PAGE_RULE: 6;
+  readonly MARGIN_RULE: 9;
+  readonly NAMESPACE_RULE: 10;
+  readonly KEYFRAMES_RULE: 7;
+  readonly KEYFRAME_RULE: 8;
+  readonly COUNTER_STYLE_RULE: 11;
+  readonly SUPPORTS_RULE: 12;
+  readonly FONT_FEATURE_VALUES_RULE: 14;
+}
+
+export interface CSSRuleConstructor {
+  readonly prototype: CSSRule;
+  [Symbol.hasInstance](value: unknown): value is CSSRule;
+  readonly STYLE_RULE: 1;
+  readonly CHARSET_RULE: 2;
+  readonly IMPORT_RULE: 3;
+  readonly MEDIA_RULE: 4;
+  readonly FONT_FACE_RULE: 5;
+  readonly PAGE_RULE: 6;
+  readonly MARGIN_RULE: 9;
+  readonly NAMESPACE_RULE: 10;
+  readonly KEYFRAMES_RULE: 7;
+  readonly KEYFRAME_RULE: 8;
+  readonly COUNTER_STYLE_RULE: 11;
+  readonly SUPPORTS_RULE: 12;
+  readonly FONT_FEATURE_VALUES_RULE: 14;
+}
+
+export interface CSSRuleList {
+  item(index: number): CSSRule | null;
+  readonly length: number;
+  readonly [index: number]: CSSRule | null | undefined;
+  [Symbol.iterator](): IterableIterator<CSSRule | null>;
+}
+
+export interface CSSRuleListConstructor {
+  readonly prototype: CSSRuleList;
+  [Symbol.hasInstance](value: unknown): value is CSSRuleList;
+}
+
+export interface CSSGroupingRule extends CSSRule {
+  readonly cssRules: CSSRuleList;
+  insertRule(rule: string, index?: number): number;
+  deleteRule(index: number): void;
+}
+
+export interface CSSGroupingRuleConstructor extends Ctor<CSSRuleConstructor> {
+  readonly prototype: CSSGroupingRule;
+  [Symbol.hasInstance](value: unknown): value is CSSGroupingRule;
+}
+
+export interface CSSStyleRule extends CSSGroupingRule {
+  selectorText: string;
+  get style(): CSSStyleProperties;
+  set style(value: string);
+}
+
+export interface CSSStyleRuleConstructor extends Ctor<CSSGroupingRuleConstructor> {
+  readonly prototype: CSSStyleRule;
+  [Symbol.hasInstance](value: unknown): value is CSSStyleRule;
+}
+
+export interface CSSNestedDeclarations extends CSSRule {
+  get style(): CSSStyleProperties;
+  set style(value: string);
+}
+
+export interface CSSNestedDeclarationsConstructor extends Ctor<CSSRuleConstructor> {
+  readonly prototype: CSSNestedDeclarations;
+  [Symbol.hasInstance](value: unknown): value is CSSNestedDeclarations;
+}
+
+export interface CSSPropertyRule extends CSSRule {
+  readonly name: string;
+  readonly syntax: string;
+  readonly inherits: boolean;
+  readonly initialValue: string | null;
+}
+
+export interface CSSPropertyRuleConstructor extends Ctor<CSSRuleConstructor> {
+  readonly prototype: CSSPropertyRule;
+  [Symbol.hasInstance](value: unknown): value is CSSPropertyRule;
+}
+
+export interface CSSStyleDeclaration {
+  cssText: string;
+  readonly length: number;
+  item(index: number): string;
+  getPropertyValue(property: string): string;
+  getPropertyPriority(property: string): string;
+  setProperty(property: string, value: string, priority?: string): void;
+  removeProperty(property: string): string;
+  readonly parentRule: CSSRule | null;
+  readonly [index: number]: string | undefined;
+  [Symbol.iterator](): IterableIterator<string>;
+}
+
+export interface CSSStyleDeclarationConstructor {
+  readonly prototype: CSSStyleDeclaration;
+  [Symbol.hasInstance](value: unknown): value is CSSStyleDeclaration;
+}
+
+export interface CSSStyleSheet extends StyleSheet {
+  readonly ownerRule: CSSRule | null;
+  readonly cssRules: CSSRuleList;
+  insertRule(rule: string, index?: number): number;
+  deleteRule(index: number): void;
+  replace(text: string): Promise<CSSStyleSheet>;
+  replaceSync(text: string): void;
+  readonly rules: CSSRuleList;
+  addRule(selector?: string, style?: string, index?: number): number;
+  removeRule(index?: number): void;
+}
+
+export interface CSSStyleSheetConstructor extends Ctor<StyleSheetConstructor> {
+  readonly prototype: CSSStyleSheet;
+  [Symbol.hasInstance](value: unknown): value is CSSStyleSheet;
+  new (options?: CSSStyleSheetInit): CSSStyleSheet;
+}
+
+export interface CSSStyleProperties extends CSSStyleDeclaration {
+  cssFloat: string;
+  backgroundColor: string;
+  "background-color": string;
+  color: string;
+  marginBottom: string;
+  "margin-bottom": string;
+  marginLeft: string;
+  "margin-left": string;
+  marginRight: string;
+  "margin-right": string;
+  marginTop: string;
+  "margin-top": string;
+  opacity: string;
+  readonly [index: number]: string | undefined;
+  [Symbol.iterator](): IterableIterator<string>;
+}
+
+export interface CSSStylePropertiesConstructor extends Ctor<CSSStyleDeclarationConstructor> {
+  readonly prototype: CSSStyleProperties;
+  [Symbol.hasInstance](value: unknown): value is CSSStyleProperties;
 }
 
 export interface ByteLengthQueuingStrategy {

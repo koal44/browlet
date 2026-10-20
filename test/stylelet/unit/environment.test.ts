@@ -65,9 +65,9 @@ describe('Stylelet URL integration', () => {
     const sheet = styles.createStyleSheet({ baseURL: '../assets/' });
 
     expect(styles.context.env.userAgent.URL).toBe(URL);
-    expect(sheet.location).toBeInstanceOf(URL);
+    expect(sheet.location).toBeNull();
     expect(sheet.baseURL?.href).toBe('https://example.test/assets/');
-    expect(sheet.href).toBe('https://example.test/document/');
+    expect(sheet.href).toBeNull();
   });
 
   it.each(['option', 'environment'] as const)('uses the %s provider for sheet and computed resource URLs', (source) => {
@@ -98,7 +98,7 @@ describe('Stylelet URL integration', () => {
 
     expect(styles.context.env.userAgent.URL).toBe(HostURL);
     if (source === 'environment') expect(styles.context.env).toBe(env);
-    expect(sheet.location).toBeInstanceOf(HostURL);
+    expect(sheet.location).toBeNull();
     expect(sheet.baseURL).toBeInstanceOf(HostURL);
     expect(definition.serialize(value)).toBe('url("https://example.test/assets/icon.svg")');
     expect(calls).toContainEqual(['icon.svg', 'https://example.test/assets/']);

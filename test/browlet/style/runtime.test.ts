@@ -27,10 +27,10 @@ describe('Stylelet execution integration', () => {
     const sheet = styles.createStyleSheet({ baseURL: 'https://example.test/assets/' });
 
     expect(styles.context.env.userAgent.URL).toBe(URLImpl);
-    expect(sheet.location).toBeInstanceOf(URLImpl);
+    expect(sheet.location).toBeNull();
     expect(sheet.baseURL).toBeInstanceOf(URLImpl);
     expect(sheet.baseURL?.href).toBe('https://example.test/assets/');
-    expect(typeof sheet.href).toBe('string');
+    expect(sheet.href).toBeNull();
   });
 
   it('exposes computed-style failures in the owning realm through the provisional CSSOM API', async () => {

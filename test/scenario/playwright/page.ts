@@ -856,7 +856,7 @@ export function installBrowserHelpers(): void {
   }
 
   function getRule(sheet: CssomSheet, index: number): CssomRule {
-    const rule = sheet.cssRules[index];
+    const rule = sheet.cssRules.item(index);
     if (!rule) throw new Error(`No CSS rule at index ${index}`);
     return rule;
   }

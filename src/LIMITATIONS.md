@@ -159,14 +159,11 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   Revisit when the specification supplies selection rules. The
   [overload](../test/web-idl/binding/realm/overload.test.ts) and
   [union conversion](../test/web-idl/converters/union.test.ts) regressions cover this choice.
-- **CSSOM projection:** CSSStyleSheet and related platform interfaces remain
-  incomplete, including the missing CSSStyleProperties implementation/interface.
-  `.style` still exposes the declaration implementation through `object`;
-  `adoptedStyleSheets` is temporarily `any`, bypassing its eventual
-  interface brand check. Unbound CSSOM APIs allocate exceptions in the
-  owning environment; method-realm selection awaits their member bindings.
-  MediaList's declaration and binding are implemented, including method-realm
-  exceptions, but the raw stylesheet return path still awaits section 6 bindings.
+- **CSSOM projection:** Sheets, rules, declaration results, and MediaList use
+  real bindings. DocumentOrShadowRoot's `adoptedStyleSheets` is `any`, bypassing adoption's
+  eventual interface conversion. That collection also retains host exception
+  construction. CSSStyleProperties exposes the small implemented property set;
+  its complete behavior and declaration-state ownership still need review.
   The [CSSOM roadmap](stylelet/cssom/ROADMAP.md#projection-and-declaration-lifecycle)
   owns the shared interface and declaration-state review.
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
@@ -186,8 +183,7 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 - **Stylesheet rules:** unknown at-rules are discarded; recognized unfinished
   grammars, including namespace declarations and conditional groups, now stop
   with an explicit InternalError in StylesheetContext. Nested style rules are retained
-  in CSSOM implementation lists, but their cascade participation and Platform
-  projection remain unfinished. Direct nested
+  in projected CSSOM lists, but their cascade participation remains unfinished. Direct nested
   selector tests therefore do not establish nested stylesheet support. See the
   [rule inventory](stylelet/css/README.md#rule-support-stops-at-different-layers)
   and [remaining contracts](stylelet/css/ROADMAP.md).

@@ -1,6 +1,6 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
 import {
-  ctor, defineIncludes, defineInterface, impl, reference, reflectTokens, roAttr, xattr,
+  attr, ctor, defineIncludes, defineInterface, idlType, impl, reference, reflect, reflectTokens, roAttr, xattr,
 } from '../../../../../web-idl/core/index';
 import type { CSSStyleSheetImpl } from '../../../../../stylelet/index';
 
@@ -95,6 +95,7 @@ export const htmlStyleElementIDL = defineInterface({
   localNames: ['style'],
   members: [
     ctor([], xattr('HTMLConstructor')),
+    attr('media', idlType.DOMString, xattr('CEReactions', reflect())),
     roAttr('blocking', reference('DOMTokenList'),
       xattr('SameObject', ['PutForwards', 'value'], reflectTokens(blockingAttribute)),
     ),

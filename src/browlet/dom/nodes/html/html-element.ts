@@ -2,7 +2,7 @@ import {
   asciiWhitespacePattern, firstStrongDirection, getContainedTextDirection, normalizeNewlines, type TextDirection,
 } from '../../../../infra/index';
 import { InternalError } from '../../../../infra/internal-error';
-import type { CSSDeclarationBlock, CSSStyleDeclarationImpl } from '../../../../stylelet/index';
+import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../stylelet/index';
 
 import { ContentCategory, type ElementSanitization } from '../element-definitions/index';
 import { ElementCSSInlineStyleMixin } from '../../../style/index';
@@ -64,7 +64,7 @@ export class HTMLElementImpl extends ElementImpl {
   get nonce(): string { return this.#htmlOrSVGOrMathMLElementMixin.nonce; }
   set nonce(value: string) { this.#htmlOrSVGOrMathMLElementMixin.nonce = value; }
 
-  get style(): CSSStyleDeclarationImpl {
+  get style(): CSSStylePropertiesImpl {
     return this.#inlineStyleMixin.style;
   }
 

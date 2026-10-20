@@ -1,3 +1,5 @@
+import { arg, defineInterface, idlType, impl, indexedGetter, nullable, op, reference, roAttr } from '../../web-idl/core/index';
+
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 
 /*
@@ -10,8 +12,6 @@ import type { CSSStyleSheetImpl } from './css-stylesheet';
 export class StyleSheetListImpl<
   T extends CSSStyleSheetImpl = CSSStyleSheetImpl,
 > {
-  [index: number]: T;
-
   #styleSheets: T[] = [];
 
   get length(): number {
@@ -28,7 +28,6 @@ export class StyleSheetListImpl<
 
   insert(index: number, styleSheet: T): void {
     this.#styleSheets.splice(index, 0, styleSheet);
-    this.#defineIndex(this.#styleSheets.length - 1);
   }
 
   remove(styleSheet: T): boolean {
@@ -36,15 +35,25 @@ export class StyleSheetListImpl<
     if (index < 0) return false;
 
     this.#styleSheets.splice(index, 1);
-    Reflect.deleteProperty(this, String(this.#styleSheets.length));
     return true;
   }
 
-  #defineIndex(index: number): void {
-    Object.defineProperty(this, index, {
-      configurable: true,
-      enumerable: true,
-      get: () => this.item(index),
-    });
+  /** Enumerate the live collection's supported platform indices. */
+  getSupportedPropertyIndices(): Iterable<number> {
+    return this.#styleSheets.keys();
   }
 }
+
+// https://drafts.csswg.org/cssom/#the-stylesheetlist-interface
+export const styleSheetListIDL = defineInterface({
+  name: 'StyleSheetList',
+  exposed: 'Window',
+  implementation: impl(StyleSheetListImpl),
+  members: [
+    op('item', nullable(reference('CSSStyleSheet')),
+      [arg('index', idlType.unsignedLong)],
+      indexedGetter((list: StyleSheetListImpl) => list.getSupportedPropertyIndices(), { unsupportedValue: null }),
+    ),
+    roAttr('length', idlType.unsignedLong),
+  ],
+});

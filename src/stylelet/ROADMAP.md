@@ -6,17 +6,17 @@ This roadmap maps outstanding CSS work to its owners;
 
 ## Review starting point
 
-Audit CSSStyleDeclaration/CSSStyleProperties and ElementCSSInlineStyle together:
-declaration state, attribute input, CSSOM mutation, engine reads and the typed
-Platform boundary. The [CSSOM review order](cssom/ROADMAP.md#next-review-order)
-then follows those declarations into rules, sheets and style queries. Missing
-resource/layout consumers remain explicit at their owners.
+Continue the CSSOM audit from §6.1 into collections/adoption and association,
+then rule and declaration behavior. Sheets and their result graph now use
+real bindings. The [CSSOM review order](cssom/ROADMAP.md#next-review-order)
+keeps declaration state, attribute input, mutation and engine reads together.
+Missing resource/layout consumers remain explicit at their owners.
 
 ## Missing contracts
 
 | Missing or incomplete contract | Owning work and stopping point |
 | --- | --- |
-| CSSOM Platform interfaces | Stylelet supplies implementations and neutral IDL; the active host binds them. Complete typed results, identity, receivers, conversion, indexed exposure, promises, and exception realms. See [CSSOM projection](cssom/ROADMAP.md#projection-and-declaration-lifecycle). |
+| CSSOM Platform interfaces | Sheets, rules, lists, and declarations are bound; adoption still needs its typed observable-array boundary. Continue later interface and behavior audits. See [CSSOM projection](cssom/ROADMAP.md#projection-and-declaration-lifecycle). |
 | Declaration mutation ownership | Review the current separate block alongside CSSStyleDeclaration/CSSStyleProperties. Rule edits and the engine already use one implementation tree. Preserve observable behavior without treating current storage tests as architecture requirements. |
 | Stylesheet rule participation | Unknown at-rules are discarded; recognized unfinished grammars stop at explicit context methods. Nested style rules are retained but not matched by the cascade. Namespace context, grouping, layers, imports, and scope need connected consumers. Later declaration runs are separate child implementations. See the [rule roadmap](css/ROADMAP.md). |
 | Selector context and support | Parsing covers more than runtime matching. Preserve namespace/nesting context, stylesheet tree scope, pseudo-element subjects, and dynamic host facts; review overlap with Selectlet through existing DOMOperations. See the [selector roadmap](selector/ROADMAP.md). |

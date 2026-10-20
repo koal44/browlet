@@ -172,6 +172,11 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentRecord implem
     return this.realm.agent.eventLoop;
   }
 
+  /** The owning global's Document, when this is a Window environment. */
+  getAssociatedDocument(): DocumentImpl | null {
+    return this.realm.getAssociatedDocument();
+  }
+
   /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */
   relativeHighResolutionTime(time: number): number {
     return this.timing.relativeHighResolutionTime(new UnsafeMoment(monotonicClock, time)).milliseconds;
