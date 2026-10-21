@@ -54,7 +54,7 @@ export class EventImpl {
   // https://dom.spec.whatwg.org/#dom-event-event
   constructor(
     type: string,
-    eventInitDict: EventInitRecord | null = {},
+    eventInitDict: EventInit | null = {},
     timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
     const init = eventInitDict ?? {};
@@ -228,7 +228,7 @@ export class EventImpl {
   }
 
   /** Set dispatch flags during internal event creation, retaining its trusted status. */
-  setFlags(init: EventInitRecord): void {
+  setFlags(init: EventInit): void {
     this.bubbles = init.bubbles ?? false;
     this.cancelable = init.cancelable ?? false;
     this.composed = init.composed ?? false;
@@ -366,7 +366,7 @@ export const eventIDL = defineInterface<DOMEnvironment>({
 });
 
 /** Event flags accepted by constructors and internal event creation. */
-export type EventInitRecord = {
+export type EventInit = {
   bubbles?: boolean;
   cancelable?: boolean;
   composed?: boolean;
@@ -397,7 +397,7 @@ export class CustomEventImpl<T = unknown> extends EventImpl {
   // https://dom.spec.whatwg.org/#dom-customevent-customevent
   constructor(
     type: string,
-    eventInitDict: CustomEventInitRecord<T> | null = {},
+    eventInitDict: CustomEventInit<T> | null = {},
     timeStamp = unsafeSharedCurrentTime().milliseconds,
   ) {
     const init = eventInitDict ?? {};
@@ -461,7 +461,7 @@ export const customEventIDL = defineInterface<DOMEnvironment>({
 });
 
 /** Event flags and payload accepted by custom-event creation. */
-export interface CustomEventInitRecord<T = unknown> extends EventInitRecord {
+export interface CustomEventInit<T = unknown> extends EventInit {
   detail?: T;
 }
 

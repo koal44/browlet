@@ -8,6 +8,7 @@ import type { StyleletEnvironment } from './environment';
 import {
   mediaListIDL, styleSheetIDL, styleSheetListIDL, cssStyleSheetIDL, cssStyleSheetInitIDL, legacyCSSStyleSheetIDL, StyleSheetListImpl,
   cssRuleIDL, cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
+  cssAnimationsRuleIDL, cssCounterStylesRuleIDL, cssConditionalRuleIDL, cssFontsRuleIDL,
   cssStyleDeclarationIDL, cssStylePropertiesIDL, CSSStylePropertiesImpl, CSSStyleSheetImpl,
 } from './cssom/index';
 
@@ -20,7 +21,7 @@ import {
 const cssomStringIDL = defineTypedef({ name: 'CSSOMString', type: idlType.DOMString });
 
 // Adoption still awaits its §6.2 binding.
-
+// https://drafts.csswg.org/cssom/#extensions-to-the-document-or-shadow-root-interface
 /*
  * partial interface mixin DocumentOrShadowRoot {
  *   [SameObject] readonly attribute StyleSheetList styleSheets;
@@ -37,6 +38,7 @@ const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
   ],
 });
 
+// https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin
 /*
  * interface mixin ElementCSSInlineStyle {
  *   [SameObject, PutForwards=cssText]
@@ -51,6 +53,7 @@ const elementCSSInlineStyleIDL = defineInterfaceMixin({
   ))],
 });
 
+// https://drafts.csswg.org/cssom/#the-linkstyle-interface
 /*
  * interface mixin LinkStyle {
  *   readonly attribute CSSStyleSheet? sheet;
@@ -64,6 +67,11 @@ const linkStyleIDL = defineInterfaceMixin({
 // The implementation still returns a limited computed snapshot. This declaration
 // establishes projection and author conversion, not the complete §7.2 algorithm.
 // https://drafts.csswg.org/cssom/#extensions-to-the-window-interface
+/*
+ * partial interface Window {
+ *   [NewObject] CSSStyleProperties getComputedStyle(Element elt, optional CSSOMString? pseudoElt);
+ * };
+ */
 const cssomWindowIDL = definePartialInterface({
   name: 'Window',
   members: [
@@ -77,11 +85,13 @@ const cssomWindowIDL = definePartialInterface({
   ],
 });
 
+/** CSSOM interfaces and host amendments supplied to the host's Web IDL assembly. */
 export const styleletIDLDefinitions: Definition<StyleletEnvironment>[] = [
   cssomStringIDL,
   mediaListIDL,
   styleSheetIDL, styleSheetListIDL, cssStyleSheetInitIDL, legacyCSSStyleSheetIDL,
-  cssRuleIDL, cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
+  cssRuleIDL, cssAnimationsRuleIDL, cssCounterStylesRuleIDL, cssConditionalRuleIDL, cssFontsRuleIDL,
+  cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
   cssStyleDeclarationIDL,
   cssomDocumentOrShadowRootIDL,
   elementCSSInlineStyleIDL,

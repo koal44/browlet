@@ -7,8 +7,10 @@ import {
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
 // https://drafts.csswg.org/cssom/#css-declaration-blocks
 export class CSSDeclarationBlock {
+  /** Winning declaration for each property, retaining the block's property order. */
   #declarations: PropertyDeclaration[] = [];
 
+  /** Collect the initial declarations with source-order and importance handling. */
   constructor(declarations: readonly PropertyDeclaration[] = []) {
     this.#replace(declarations);
   }
@@ -18,6 +20,8 @@ export class CSSDeclarationBlock {
     return this.#declarations;
   }
 
+  /** Serialize the retained declarations at their current value stage. */
+  // https://drafts.csswg.org/cssom/#serialize-a-css-declaration-block
   get cssText(): string {
     return this.#declarations.map(serializeDeclaration).join(' ');
   }

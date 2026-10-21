@@ -15,20 +15,8 @@ import { StyleSheetImpl } from './stylesheet';
 import type { CSSRuleImpl } from './rule';
 import { MediaListImpl } from './media-list';
 
-/*
- * [Exposed=Window]
- * interface CSSStyleSheet : StyleSheet {
- *   constructor(optional CSSStyleSheetInit options = {});
- *
- *   readonly attribute CSSRule? ownerRule;
- *   [SameObject] readonly attribute CSSRuleList cssRules;
- *   unsigned long insertRule(CSSOMString rule, optional unsigned long index = 0);
- *   undefined deleteRule(unsigned long index);
- *
- *   Promise<CSSStyleSheet> replace(USVString text);
- *   undefined replaceSync(USVString text);
- * };
- */
+/** A CSS stylesheet's rule tree, resource associations, and author-mutation state. */
+// https://drafts.csswg.org/cssom/#the-cssstylesheet-interface
 export class CSSStyleSheetImpl
   extends StyleSheetImpl
 {
@@ -37,13 +25,19 @@ export class CSSStyleSheetImpl
   /** Parse-time base URL, independent of the public stylesheet location. */
   baseURL?: StyleletURL;
 
+  /** Import rule that owns the sheet, or null for a sheet that was not imported. */
   ownerRule: CSSRuleImpl | null;
 
+  /** Document that constructed the sheet, or null for a resource-owned sheet. */
   #constructorDocument: Document | null;
 
+  /** Whether the sheet belongs to an alternate stylesheet set. */
   #alternate: boolean;
+  /** Whether the sheet's rules may be exposed through author-facing CSSOM operations. */
   #originClean: boolean;
+  /** Whether author construction enables replacement and restricts imports. */
   #constructed: boolean;
+  /** Mutation lock held until an asynchronous replacement settles. */
   #disallowModification = false;
 
   /** Initialize a sheet once, whether constructed or supplied by a resource owner. */
@@ -67,7 +61,7 @@ export class CSSStyleSheetImpl
   // SPEC_MISMATCH: create a constructed CSSStyleSheet(options) -> CSSStyleSheet
   // The host supplies the associated Document explicitly; Stylelet does not discover globals.
   static createConstructed(
-    options: CSSStyleSheetInitRecord,
+    options: CSSStyleSheetInit,
     document: Document,
     env: StyleletEnvironment,
   ): CSSStyleSheetImpl {
@@ -97,6 +91,7 @@ export class CSSStyleSheetImpl
     }, env);
   }
 
+  /** Create a sheet in the supplied Stylelet context and attach any initial rules. */
   static create(
     context: StyleletContext,
     properties: CSSStyleSheetProperties,
@@ -108,16 +103,21 @@ export class CSSStyleSheetImpl
     return sheet;
   }
 
+  /** Retained rule list, exposed only when the sheet is origin-clean. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-cssrules
   get cssRules(): CSSRuleListImpl {
     this.#assertOriginClean();
     return this.ruleList;
   }
 
-  /** @deprecated Use cssRules instead. */
+  /** @deprecated Alias for cssRules, including its origin-clean check. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-rules
   get rules(): CSSRuleListImpl {
     return this.cssRules;
   }
 
+  /** Parse and insert one rule into a mutable, origin-clean sheet, returning its index. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-insertrule
   insertRule(rule: string, index = 0): number {
     this.#assertOriginClean();
     this.#assertModificationAllowed();
@@ -131,7 +131,6 @@ export class CSSStyleSheetImpl
       );
     }
 
-    // https://drafts.csswg.org/cssom/#dom-cssstylesheet-insertrule
     const context = new StylesheetContext(null, this.#constructed, this.env);
     const cssRule = parseRule(rule, context);
     if (cssRule === null) {
@@ -146,6 +145,8 @@ export class CSSStyleSheetImpl
     return index;
   }
 
+  /** Remove an existing rule and detach its subtree from the sheet. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-deleterule
   deleteRule(index: number): void {
     this.#assertOriginClean();
     this.#assertModificationAllowed();
@@ -161,6 +162,8 @@ export class CSSStyleSheetImpl
     this.ruleList.remove(index);
   }
 
+  /** Replace a constructed sheet asynchronously, locking mutations until completion. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
   replace(text: string): InternalPromise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
       return this.env.exec.Promise.reject(new DOMExceptionImpl(
@@ -176,7 +179,6 @@ export class CSSStyleSheetImpl
       this.#disallowModification = false;
       result.reject(error);
     };
-    // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
     // Parse in parallel; return to the owner before changing rules or settling the promise.
     // CSSOM leaves the task source unspecified; use DOM manipulation delivery.
     this.env.exec.runInParallel(() => {
@@ -199,6 +201,8 @@ export class CSSStyleSheetImpl
     return result.promise;
   }
 
+  /** Replace an unlocked constructed sheet's rules synchronously, discarding imports. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replacesync
   replaceSync(text: string): void {
     if (!this.#constructed || this.#disallowModification) {
       throw new DOMExceptionImpl(
@@ -207,7 +211,6 @@ export class CSSStyleSheetImpl
       );
     }
 
-    // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replacesync
     // Imports are excluded from replacement, independently of import support.
     this.replaceRules(parseStylesheetContents(text, new StylesheetContext(null, this.#constructed, this.env)));
   }
@@ -219,29 +222,35 @@ export class CSSStyleSheetImpl
     this.ruleList.replace(rules);
   }
 
+  /** Whether stylesheet-set selection should treat this sheet as an alternate. */
   isAlternate(): boolean {
     return this.#alternate;
   }
 
+  /** Whether this document constructed the sheet and can adopt it. */
   isConstructedFor(document: Document): boolean {
     return this.#constructed && this.#constructorDocument === document;
   }
 
+  /** Detach the sheet from its importing sheet, owner node, and owner rule. */
   clearAssociation(): void {
     this.parentStyleSheet = null;
     this.ownerNode = null;
     this.ownerRule = null;
   }
 
+  /** Replace the owner-supplied media conditions without replacing the MediaList. */
   setAssociatedMedia(media: string): void {
     this.media.mediaText = media;
   }
 
+  /** Update the stylesheet-set title supplied by the sheet's owner. */
   setAssociatedTitle(title: string): void {
     this.titleText = title;
   }
 
-  /** @deprecated Use insertRule() instead. */
+  /** @deprecated Insert a style rule from selector/declaration text and return the legacy -1 result. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-addrule
   addRule(
     selector = 'undefined',
     style = 'undefined',
@@ -252,11 +261,13 @@ export class CSSStyleSheetImpl
     return -1;
   }
 
-  /** @deprecated Use deleteRule() instead. */
+  /** @deprecated Delete a rule, defaulting to the first entry. */
+  // https://drafts.csswg.org/cssom/#dom-cssstylesheet-removerule
   removeRule(index = 0): void {
     this.deleteRule(index);
   }
 
+  /** Reject author access to rules whose resource origin does not permit inspection. */
   #assertOriginClean(): void {
     if (!this.#originClean) {
       throw new DOMExceptionImpl(
@@ -266,6 +277,7 @@ export class CSSStyleSheetImpl
     }
   }
 
+  /** Reject mutations while an asynchronous replacement owns the rule list. */
   #assertModificationAllowed(): void {
     if (this.#disallowModification) {
       throw new DOMExceptionImpl(
@@ -276,36 +288,57 @@ export class CSSStyleSheetImpl
   }
 }
 
-/*
- * dictionary CSSStyleSheetInit {
- *   DOMString? baseURL = null;
- *   (MediaList or DOMString) media = "";
- *   boolean disabled = false;
- * };
- */
-export type CSSStyleSheetInitRecord = {
+/** Converted constructor options, including the defaults supplied by Web IDL. */
+// https://drafts.csswg.org/cssom/#dictdef-cssstylesheetinit
+export type CSSStyleSheetInit = {
+  /** Base URL override, or null to use the constructing document's base URL. */
   baseURL: string | null;
+  /** Initial media conditions; an existing list is copied by its serialized value. */
   media: MediaListImpl | string;
+  /** Whether the constructed sheet starts disabled. */
   disabled: boolean;
 };
 
-/** Standalone implementation callers may omit the dictionary's defaulted members. */
-export type CSSStyleSheetInit = Partial<CSSStyleSheetInitRecord>;
-
+/** Initial metadata for either a constructed sheet or a sheet supplied by a resource owner. */
 type CSSStyleSheetProperties = {
+  /** Resource URL exposed by href, or null when no location is assigned. */
   location: StyleletURL | null;
+  /** Base URL retained for relative references in the sheet's contents. */
   baseURL?: StyleletURL;
+  /** Sheet containing the import that created this sheet, or null. */
   parentStyleSheet: CSSStyleSheetImpl | null;
+  /** Element or processing instruction responsible for the sheet, or null. */
   ownerNode: StyleSheetImpl['ownerNode'];
+  /** Import rule responsible for the sheet, or null. */
   ownerRule: CSSRuleImpl | null;
+  /** Initial media conditions, parsed or copied into the sheet's own MediaList. */
   media: string | MediaListImpl;
+  /** Stylesheet-set title; empty when no title is assigned. */
   title: string;
+  /** Whether the sheet is an alternate for stylesheet-set selection. */
   alternate: boolean;
+  /** Whether author CSSOM operations may inspect the sheet's rules. */
   originClean: boolean;
+  /** Initial disabled state; omitted means enabled. */
   disabled?: boolean;
+  /** Constructing document; omitted for sheets supplied by a resource owner. */
   constructorDocument?: Document;
 };
 
+/*
+ * [Exposed=Window]
+ * interface CSSStyleSheet : StyleSheet {
+ *   constructor(optional CSSStyleSheetInit options = {});
+ *
+ *   readonly attribute CSSRule? ownerRule;
+ *   [SameObject] readonly attribute CSSRuleList cssRules;
+ *   unsigned long insertRule(CSSOMString rule, optional unsigned long index = 0);
+ *   undefined deleteRule(unsigned long index);
+ *
+ *   Promise<CSSStyleSheet> replace(USVString text);
+ *   undefined replaceSync(USVString text);
+ * };
+ */
 export const cssStyleSheetIDL = defineInterface<StyleletEnvironment>({
   name: 'CSSStyleSheet',
   inherits: 'StyleSheet',
@@ -313,7 +346,7 @@ export const cssStyleSheetIDL = defineInterface<StyleletEnvironment>({
   implementation: impl(CSSStyleSheetImpl),
   members: [
     ctor(
-      [arg('options', implementationType<CSSStyleSheetInitRecord>(reference('CSSStyleSheetInit')), {
+      [arg('options', implementationType<CSSStyleSheetInit>(reference('CSSStyleSheetInit')), {
         default: emptyDictionary, optional: true,
       })],
       {
@@ -334,6 +367,13 @@ export const cssStyleSheetIDL = defineInterface<StyleletEnvironment>({
   ],
 });
 
+/*
+ * dictionary CSSStyleSheetInit {
+ *   DOMString? baseURL = null;
+ *   (MediaList or DOMString) media = "";
+ *   boolean disabled = false;
+ * };
+ */
 export const cssStyleSheetInitIDL = defineDictionary({
   name: 'CSSStyleSheetInit',
   members: [
@@ -344,6 +384,13 @@ export const cssStyleSheetInitIDL = defineDictionary({
 });
 
 // https://drafts.csswg.org/cssom/#legacy-css-style-sheet-members
+/*
+ * partial interface CSSStyleSheet {
+ *   [SameObject] readonly attribute CSSRuleList rules;
+ *   long addRule(optional DOMString selector = "undefined", optional DOMString style = "undefined", optional unsigned long index);
+ *   undefined removeRule(optional unsigned long index = 0);
+ * };
+ */
 export const legacyCSSStyleSheetIDL = definePartialInterface({
   name: 'CSSStyleSheet',
   members: [

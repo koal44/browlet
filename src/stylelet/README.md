@@ -73,15 +73,21 @@ with their source algorithms, such as `parseStylesheetContents()`.
 These responsibilities cooperate during parsing, rather than requiring complete
 independent passes. `CSSStyleSheetImpl` owns the resulting rule tree
 and its URL provenance; the engine and CSSOM mutation use that same tree.
-There is no retained intermediate stylesheet tree. The host's Binding machinery
-must provide the realm-owned `CSSStyleSheet` Platform object; that last boundary
-is still incomplete.
+There is no retained intermediate stylesheet tree. Core declarations describe
+the sheet/rule/declaration interfaces; the host's Binding machinery supplies
+their realm-owned Platform objects.
 
 The same distinction applies to declarations. `PropertyDeclaration` is internal
 data; `CSSDeclarationBlock` is the current retained data container;
 `CSSStyleDeclarationImpl` provides mutation/query behavior, and
 `CSSStylePropertiesImpl` supplies the property-facing subtype. Both interfaces
 are bound; the existing container and class split remains under review.
+
+Keep implementation contracts in JSDoc, with specification URLs in ordinary
+comments. Copied Web IDL belongs in a plain multiline comment immediately above
+its `define…` declaration. Describe retained fields by their meaning and ownership,
+including private state; mark unfinished behavior explicitly rather than describing
+it as implemented.
 
 ## Host boundary and state ownership
 
@@ -105,10 +111,10 @@ provider returning null means authoritative empty state. This distinction keeps
 a CSP-blocked raw attribute from becoming active during a style query. See the
 [Browlet integration README](../browlet/style/README.md) for the complete path.
 
-Implementation objects are currently exposed directly through several
-`object`/`any`-typed members. Manual numeric properties, property accessors, and
-the adopted-sheet proxy partly perform work that belongs in Binding. These are
-transitional mechanisms, not the intended standalone-host or Platform contract.
+Sheet, rule, and declaration members now project through concrete interface
+references. Binding also supplies numeric indices and supported-property
+attributes. The adopted-sheet collection still uses a provisional `any` member
+and an implementation-side observable-array proxy pending the §6.2 audit.
 
 ## Current reach
 

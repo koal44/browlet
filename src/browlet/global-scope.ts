@@ -12,7 +12,7 @@ import { TrustedTypePolicyFactoryImpl } from './browsing/policy/trusted-types/in
 import type { DocumentImpl } from './dom/nodes/index';
 import { PerformanceImpl } from './performance/index';
 import type { BrowletEnvironment } from './environment';
-import type { StructuredSerializeOptionsRecord } from './scripting/structured-data/index';
+import type { StructuredSerializeOptions } from './scripting/structured-data/index';
 
 /** Owns timers, performance, reporting, and resource lifetimes for one global. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
@@ -90,7 +90,7 @@ export class WindowOrWorkerGlobalScopeMixin {
 
   structuredClone(
     value: unknown,
-    options: StructuredSerializeOptionsRecord = { transfer: [] },
+    options: StructuredSerializeOptions = { transfer: [] },
   ): unknown {
     return this.env.exec.clone(value, options.transfer);
   }

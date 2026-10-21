@@ -3,7 +3,7 @@ import {
 } from '../../../web-idl/core/index';
 
 /** Objects selected for transfer by a structured-clone operation. */
-export type StructuredSerializeOptionsRecord = {
+export type StructuredSerializeOptions = {
   transfer?: object[];
 };
 

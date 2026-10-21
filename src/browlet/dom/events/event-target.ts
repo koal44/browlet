@@ -36,7 +36,7 @@ export class EventTargetImpl {
   addEventListener(
     type: string,
     callback: EventListenerValue | EventListenerCallback | null,
-    options: AddListenerOptionsRecord | boolean = { capture: false, once: false },
+    options: AddEventListenerOptions | boolean = { capture: false, once: false },
   ): void {
     // https://dom.spec.whatwg.org/#event-flatten-more
     if (typeof options === 'boolean') options = { capture: options, once: false };
@@ -60,7 +60,7 @@ export class EventTargetImpl {
   removeEventListener(
     type: string,
     callback: EventListenerValue | EventListenerCallback | null,
-    options: ListenerOptionsRecord | boolean = { capture: false },
+    options: EventListenerOptions | boolean = { capture: false },
   ): void {
     // https://dom.spec.whatwg.org/#concept-flatten-options
     const capture = typeof options === 'boolean' ? options : options.capture;
@@ -656,11 +656,11 @@ type EventListenerRecord = {
 
 type InvocationPhase = 'capturing' | 'bubbling';
 
-interface ListenerOptionsRecord {
+interface EventListenerOptions {
   capture: boolean;
 }
 
-interface AddListenerOptionsRecord extends ListenerOptionsRecord {
+interface AddEventListenerOptions extends EventListenerOptions {
   once: boolean;
   passive?: boolean;
   signal?: AbortSignalImpl;

@@ -259,7 +259,7 @@ describe('CSSStyleSheetImpl', () => {
 });
 
 function createStyleSheet(
-  options: CSSStyleSheetInit = {},
+  options: Partial<CSSStyleSheetInit> = {},
 ): CSSStyleSheetImpl {
   const document = createBrowletDocument();
   Object.defineProperty(document, 'baseURI', {

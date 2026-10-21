@@ -173,7 +173,7 @@ export abstract class NodeImpl extends EventTargetImpl {
 
   /** Return the tree root, crossing shadow hosts when composed is true. */
   // https://dom.spec.whatwg.org/#dom-node-getrootnode
-  getRootNode(options?: GetRootNodeOptionsRecord): NodeImpl {
+  getRootNode(options?: GetRootNodeOptions): NodeImpl {
     return options?.composed ? this.getShadowIncludingRoot() : this.getRoot();
   }
 
@@ -1328,7 +1328,7 @@ export const nodeIDL = defineInterface({
 });
 
 /** Select whether root lookup crosses shadow hosts. */
-export type GetRootNodeOptionsRecord = {
+export type GetRootNodeOptions = {
   composed?: boolean;
 };
 

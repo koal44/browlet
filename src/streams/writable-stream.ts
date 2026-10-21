@@ -11,7 +11,7 @@ import {
 
 import {
   extractHighWaterMark, extractSizeAlgorithm,
-  type QueuingStrategyRecord, type QueuingStrategySize,
+  type QueuingStrategy, type QueuingStrategySize,
 } from './queuing-strategy';
 import { QueueWithSizes } from './queue-with-sizes';
 import type { StreamsEnvironment } from './environment';
@@ -45,7 +45,7 @@ export class WritableStreamImpl {
    */
   constructor(
     underlyingSink: UnderlyingSink | null = {},
-    strategy: QueuingStrategyRecord = {},
+    strategy: QueuingStrategy = {},
     public env: StreamsEnvironment,
   ) {
     if (underlyingSink === null) return;

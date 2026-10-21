@@ -11,13 +11,16 @@ import {
 /** Retain and edit a media query list; device matching belongs to Conditional Rules. */
 // https://drafts.csswg.org/cssom/#the-medialist-interface
 export class MediaListImpl {
+  /** Parsed queries in list order, including invalid queries recovered as `not all`. */
   #queries: MediaQuery[] = [];
 
+  /** Parse the initial media-query text into this list. */
   // https://drafts.csswg.org/cssom/#create-a-medialist-object
   constructor(text: string) {
     this.mediaText = text;
   }
 
+  /** Serialized query list; assignment replaces its contents with newly parsed queries. */
   // https://drafts.csswg.org/cssom/#dom-medialist-mediatext
   get mediaText(): string {
     return serializeMediaQueryList(this.#queries);
@@ -27,6 +30,7 @@ export class MediaListImpl {
     this.#queries = parseMediaQueryList(value, {});
   }
 
+  /** Current number of media queries, including duplicates retained from parsed input. */
   // https://drafts.csswg.org/cssom/#dom-medialist-length
   get length(): number {
     return this.#queries.length;

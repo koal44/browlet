@@ -10,6 +10,7 @@ UTF-8; legacy output encodings are available through the internal operations.
 | Location | Responsibility |
 | --- | --- |
 | `index.ts` | Entry point for other subsystems. |
+| `web-idl.ts` | Collects interface, dictionary, and mixin declarations for the host binding. |
 | `core/index.ts` | Portable labels, canonical encoding types, BOM detection, and the host decoding contract/native adapter. |
 | `encodings.ts` | Codec factories and complete-input/queue operations. |
 | `codecs/` | Encoder and decoder algorithms, including state retained across input chunks. |

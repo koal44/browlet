@@ -21,7 +21,7 @@ export {
   createDocument, type DocumentConstructionOptions, DocumentImpl, documentIDL, htmlDocumentIDL,
   documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
   XMLDocumentImpl, xmlDocumentIDL, type ImportNodeOptions, importNodeOptionsIDL,
-  type ElementCreationOptionsRecord, elementCreationOptionsIDL, documentIncludesParentNodeIDL,
+  type ElementCreationOptions, elementCreationOptionsIDL, documentIncludesParentNodeIDL,
   documentIncludesNonElementParentNodeIDL,
   documentIncludesDocumentOrShadowRootIDL, type DOMNodeFactory, directDOMNodeFactory, type DocumentWriter,
   type DocumentReadyState, type DocumentVisibilityState, type DocumentType, DocumentMode, type ModuleMap,
@@ -38,12 +38,12 @@ export {
 } from './lookups';
 export { NamedNodeMapImpl, namedNodeMapIDL } from './named-node-map';
 export {
-  MutationObserverImpl, type MutationCallback, type MutationObserverInitRecord, type RegisteredObserver,
+  MutationObserverImpl, type MutationCallback, type MutationObserverInit, type RegisteredObserver,
   mutationObserverIDL, mutationCallbackIDL, mutationObserverInitIDL,
 } from './mutation-observer';
 export { MutationRecordImpl, type MutationType, mutationRecordIDL } from './mutation-record';
 export {
-  NodeImpl, nodeIDL, type InsertionParent, type GetRootNodeOptionsRecord, getRootNodeOptionsIDL, NodeType,
+  NodeImpl, nodeIDL, type InsertionParent, type GetRootNodeOptions, getRootNodeOptionsIDL, NodeType,
 } from './node';
 export { NonDocumentTypeChildNodeMixin, nonDocumentTypeChildNodeIDL } from './non-document-type-child-node';
 export { nonElementParentNodeIDL } from './non-element-parent-node';

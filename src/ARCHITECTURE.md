@@ -708,17 +708,31 @@ type-only dependencies do not load node implementation classes. Future Range
 parsing and geometry integrations must be reviewed against those boundaries.
 
 A partial interface/dictionary/namespace amends its primary implementation.
-Co-locate its members when practical; an external package can export a declaration
+Keep each contribution as a separate partial declaration with its feature owner,
+or beside the primary declaration until that owner exists. Its implementation
+members belong to the primary object. An external package can export a declaration
 contribution and use an explicit integration seam. A stateful interface mixin
 gets a `FooMixin` composed into each includer. Includers forward its members through
 their own API; callers do not need access to the composed mixin. Declaration-only
 mixins need no runtime class. Binding projects this complete implementation graph.
 
-Use `Impl` for a projected implementation, `Record` for specification records,
+Use `Impl` for a projected implementation, `Record` for a distinct record role,
 `Value` for retained converted values, `Steps` for callable algorithms,
 `Capability` for narrow cross-owner behavior, and `Host`/`Port` for external
 effects. `Context` needs cohesive identity or lifecycle; `Environment` names a
 real environment. Avoid generic `Semantic`/`Resolved` substitutes for these roles.
+
+Dictionary implementation types use their specified names, such as
+`CSSStyleSheetInit` and `GetRootNodeOptions`. Their fields describe converted
+values; a convenience API may accept `Partial<CSSStyleSheetInit>` and supply
+defaults before entering the implementation. A mechanical `Record` suffix adds
+no distinction here. Keep meaningful names such as `URLRecord`, `PropertyRecord`,
+and `BrowletEnvironmentRecord`.
+
+Keep `index.ts` barrels export-only. A subsystem's `web-idl.ts` collects its
+declarations for assembly and can own declarations without an implementation
+owner. Individual declarations stay beside their implementations; the barrel
+re-exports the collection.
 
 ## Review and evidence
 

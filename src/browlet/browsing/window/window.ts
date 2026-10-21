@@ -16,7 +16,7 @@ import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
 import type { WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
-import type { StructuredSerializeOptionsRecord } from '../../scripting/structured-data/index';
+import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
 
 import { LocationImpl } from './location';
 import type { WindowProxyHandle } from './window-proxy';
@@ -138,7 +138,7 @@ export class WindowImpl extends EventTargetImpl {
   /** Clone a value using this Window's execution facilities and transfer options. */
   structuredClone<T>(
     value: T,
-    options?: StructuredSerializeOptionsRecord,
+    options?: StructuredSerializeOptions,
   ): T {
     return this.getWindowOrWorkerGlobalScopeMixin()
       .structuredClone(value, options) as T;

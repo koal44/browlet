@@ -20,6 +20,7 @@ import type { CSSRuleImpl } from './rule';
 // The context is per parse, not a host facility on StyleletEnvironment. Each
 // nested block selects its own context before any declarations are consumed.
 export class StylesheetContext implements SelectorContext, PropertyContext {
+  /** Environment that owns the rule implementations created during this parse. */
   env: StyleletEnvironment;
 
   // TODO: Populate these fields when interpreting @namespace declarations.
@@ -28,12 +29,15 @@ export class StylesheetContext implements SelectorContext, PropertyContext {
   /** Namespace applied to unprefixed type selectors, when declared. */
   defaultNamespace?: string;
 
-  // Numeric bindings belong to individual value grammars, such as relative colors.
+  /** No sheet-level numeric bindings; individual value grammars introduce their own. */
   declare numericVariables: undefined;
 
+  /** Enclosing style rule's selectors, or null outside a style-rule block. */
   #parentSelectors: SelectorList | null;
+  /** Whether the sheet was constructed, which excludes @import from its grammar. */
   #isConstructed: boolean;
 
+  /** Select this rule list's enclosing selectors, sheet kind, and allocation owner. */
   constructor(
     parentSelectors: SelectorList | null,
     isConstructed: boolean,

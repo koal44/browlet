@@ -11,7 +11,7 @@ import { AbstractRangeImpl } from './abstract-range';
 /** A snapshot of supplied boundary points, with no live mutation registration. */
 // https://dom.spec.whatwg.org/#interface-staticrange
 export class StaticRangeImpl extends AbstractRangeImpl {
-  constructor(init: StaticRangeInitRecord, env: DOMEnvironment) {
+  constructor(init: StaticRangeInit, env: DOMEnvironment) {
     const { startContainer, startOffset, endContainer, endOffset } = init;
     if (startContainer.isDocumentType() || startContainer.isAttribute() ||
       endContainer.isDocumentType() || endContainer.isAttribute()) {
@@ -33,7 +33,7 @@ export class StaticRangeImpl extends AbstractRangeImpl {
   }
 }
 
-export type StaticRangeInitRecord = {
+export type StaticRangeInit = {
   startContainer: NodeImpl;
   startOffset: number;
   endContainer: NodeImpl;

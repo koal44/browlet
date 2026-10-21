@@ -33,7 +33,7 @@ export class MutationObserverImpl {
 
   /** Register or replace this observer's options for a target. */
   // https://dom.spec.whatwg.org/#dom-mutationobserver-observe
-  observe(target: NodeImpl, options: MutationObserverInitRecord): void {
+  observe(target: NodeImpl, options: MutationObserverInit): void {
     if ((options.attributeOldValue !== undefined || options.attributeFilter !== undefined) &&
       options.attributes === undefined) options.attributes = true;
     if (options.characterDataOldValue !== undefined && options.characterData === undefined) {
@@ -148,12 +148,12 @@ export type MutationCallback = (
 // https://dom.spec.whatwg.org/#registered-observer
 export type RegisteredObserver = {
   observer: MutationObserverImpl;
-  options: MutationObserverInitRecord;
+  options: MutationObserverInit;
   source?: RegisteredObserver;
 };
 
 /** Post-conversion observation options; optional flags are normalized by observe(). */
-export type MutationObserverInitRecord = {
+export type MutationObserverInit = {
   childList: boolean;
   attributes?: boolean;
   characterData?: boolean;

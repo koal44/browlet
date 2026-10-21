@@ -8,7 +8,7 @@ import { copyURL, stripURLForReporting, type URLRecord } from '../../../../url/i
 import { FetchRequest, fetch } from '../../../../fetch/index';
 
 import type { DOMHighResTimeStamp } from '../../../timing/index';
-import { EventImpl, type EventInitRecord } from '../../../dom/events/index';
+import { EventImpl, type EventInit } from '../../../dom/events/index';
 import { ReportBodyImpl } from '../../../reporting/index';
 import type { ElementImpl, DocumentImpl } from '../../../dom/nodes/index';
 import type { DOMEnvironment } from '../../../dom/index';
@@ -256,13 +256,13 @@ export class SecurityPolicyViolationEventImpl extends EventImpl {
   /** Source column, or zero when unavailable. */
   columnNumber = 0;
 
-  constructor(type: string, init: SecurityPolicyViolationEventInitRecord = {}, timeStamp?: DOMHighResTimeStamp) {
+  constructor(type: string, init: SecurityPolicyViolationEventInit = {}, timeStamp?: DOMHighResTimeStamp) {
     super(type, init, timeStamp);
     this.initialize(init);
   }
 
   /** Initialize attributes on an internally created event before dispatch. */
-  initialize(init: SecurityPolicyViolationEventInitRecord): void {
+  initialize(init: SecurityPolicyViolationEventInit): void {
     this.documentURI = init.documentURI ?? '';
     this.referrer = init.referrer ?? '';
     this.blockedURI = init.blockedURI ?? '';
@@ -280,7 +280,7 @@ export class SecurityPolicyViolationEventImpl extends EventImpl {
 }
 
 /** Event dictionaries also enter through DOM's internal event-creation path. */
-export interface SecurityPolicyViolationEventInitRecord extends EventInitRecord {
+export interface SecurityPolicyViolationEventInit extends EventInit {
   documentURI?: string;
   referrer?: string;
   blockedURI?: string;

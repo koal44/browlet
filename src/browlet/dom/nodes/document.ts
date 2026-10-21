@@ -761,7 +761,7 @@ export class DocumentImpl extends NodeImpl {
   // https://dom.spec.whatwg.org/#dom-document-createelement
   createElement(
     localName: string,
-    options: string | ElementCreationOptionsRecord = {},
+    options: string | ElementCreationOptions = {},
   ): ElementImpl {
     if (!isValidElementLocalName(localName)) {
       throw new DOMExceptionImpl('', DOMExceptionNames.invalidCharacter);
@@ -776,7 +776,7 @@ export class DocumentImpl extends NodeImpl {
   createElementNS(
     namespaceURI: string | null,
     qualifiedName: string,
-    options: string | ElementCreationOptionsRecord = {},
+    options: string | ElementCreationOptions = {},
   ): ElementImpl {
     const [namespace, prefix, localName] = validateAndExtract(namespaceURI, qualifiedName, 'element');
     const [registry, isValue] = this.#extractElementCreationOptions(options);
@@ -1642,7 +1642,7 @@ export class DocumentImpl extends NodeImpl {
   }
 
   #extractElementCreationOptions(
-    options: string | ElementCreationOptionsRecord,
+    options: string | ElementCreationOptions,
   ): [CustomElementRegistryImpl | null, string | null] {
     let registry = this.customElementRegistry;
     let isValue: string | null = null;
@@ -1937,7 +1937,7 @@ export const htmlDocumentIDL = definePartialInterface({
 });
 
 /** Converted element-creation options supported by the current declaration. */
-export type ElementCreationOptionsRecord = {
+export type ElementCreationOptions = {
   customElementRegistry?: CustomElementRegistryImpl | null;
   is?: string;
 };

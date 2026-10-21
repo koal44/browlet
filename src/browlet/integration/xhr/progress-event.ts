@@ -4,7 +4,7 @@ import {
 } from '../../../web-idl/core/index';
 
 import type { DOMHighResTimeStamp } from '../../timing/index';
-import { EventImpl, type EventInitRecord, type EventTargetImpl } from '../../dom/events/index';
+import { EventImpl, type EventInit, type EventTargetImpl } from '../../dom/events/index';
 import type { DOMEnvironment } from '../../dom/index';
 
 /** Reports completed work and, when known, its total amount. */
@@ -19,7 +19,7 @@ export class ProgressEventImpl extends EventImpl {
 
   constructor(
     type: string,
-    eventInitDict: ProgressEventInitRecord = {},
+    eventInitDict: ProgressEventInit = {},
     timeStamp?: DOMHighResTimeStamp,
   ) {
     super(type, eventInitDict, timeStamp);
@@ -96,7 +96,7 @@ export const progressEventInitIDL = defineDictionary({
 });
 
 /** Event flags and progress measurements accepted by event creation. */
-interface ProgressEventInitRecord extends EventInitRecord {
+interface ProgressEventInit extends EventInit {
   lengthComputable?: boolean;
   loaded?: number;
   total?: number;

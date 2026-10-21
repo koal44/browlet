@@ -2,14 +2,14 @@ import { createEnvironment } from '../../js-engine/execution-fixture';
 import type { InternalPromise } from '../../../src/infra/promises';
 import { TestRealm } from '../../support/web-idl-realm';
 import {
-  type QueuingStrategyRecord, TransformStreamImpl, type TransformerRecord,
+  type QueuingStrategy, TransformStreamImpl, type Transformer,
   WritableStreamImpl, type UnderlyingSink,
 } from '../../../src/streams/index';
 
 export function createTransformStream(
-  transformer: TransformerRecord | null = {},
-  writableStrategy: QueuingStrategyRecord = {},
-  readableStrategy: QueuingStrategyRecord = {},
+  transformer: Transformer | null = {},
+  writableStrategy: QueuingStrategy = {},
+  readableStrategy: QueuingStrategy = {},
 ): TransformStreamImpl {
   return new TransformStreamImpl(
     transformer, writableStrategy, readableStrategy, createEnvironment(),
@@ -18,7 +18,7 @@ export function createTransformStream(
 
 export function createWritableStream(
   sink: UnderlyingSink | null = {},
-  strategy: QueuingStrategyRecord = {},
+  strategy: QueuingStrategy = {},
 ): WritableStreamImpl {
   return new WritableStreamImpl(sink, strategy, createEnvironment());
 }

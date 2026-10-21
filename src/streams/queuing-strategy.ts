@@ -11,14 +11,14 @@ import {
  *   QueuingStrategySize size;
  * };
  */
-export type QueuingStrategyRecord = {
+export type QueuingStrategy = {
   highWaterMark?: number;
   size?: QueuingStrategySize;
 };
 
 /** Streams §7.4, ExtractHighWaterMark. */
 export function extractHighWaterMark(
-  strategy: QueuingStrategyRecord,
+  strategy: QueuingStrategy,
   defaultHighWaterMark: number,
 ): number {
   const { highWaterMark } = strategy;
@@ -31,7 +31,7 @@ export function extractHighWaterMark(
 
 /** Streams §7.4, ExtractSizeAlgorithm. */
 export function extractSizeAlgorithm<Value>(
-  strategy: QueuingStrategyRecord,
+  strategy: QueuingStrategy,
 ): QueuingStrategySize<Value> {
   const { size } = strategy;
   if (size === undefined) return () => 1;

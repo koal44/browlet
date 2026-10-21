@@ -1,17 +1,3 @@
-import type { Definition } from '../web-idl/core/index';
-
-import type { FetchEnvironment } from './environment';
-import { headersIDL, headersInitIDL } from './headers';
-import { bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from './body';
-import {
-  requestIDL, requestIncludesBodyIDL, requestInitIDL, requestInfoIDL, requestCacheIDL,
-  requestCredentialsIDL, requestDestinationIDL, requestDuplexIDL, requestModeIDL,
-  requestPriorityIDL, requestRedirectIDL,
-} from './request';
-import { referrerPolicyIDL } from './policy';
-import { responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL } from './response';
-import { fetchGlobalScopeIDL } from './fetch-global';
-
 export { FetchController, deserializeAbortReason } from './controller';
 export { fetch, type FetchOptions } from './fetch';
 export { fetchForGlobal } from './fetch-global';
@@ -45,15 +31,4 @@ export {
   referrerPolicyIDL, referrerPolicyValues, type ReferrerPolicy, type FetchIntegrityPolicy, type IntegrityViolationReportBody,
 } from './policy';
 export { isLocalScheme, isLocalURL } from './url';
-
-export const fetchIDLDefinitions: Definition<FetchEnvironment>[] = [
-  headersInitIDL,
-  headersIDL,
-  xmlHttpRequestBodyInitIDL, bodyInitIDL, bodyIDL,
-  requestInfoIDL, requestInitIDL, requestDestinationIDL, requestModeIDL,
-  requestCredentialsIDL, requestCacheIDL, requestRedirectIDL, requestDuplexIDL, requestPriorityIDL,
-  referrerPolicyIDL,
-  requestIDL, requestIncludesBodyIDL,
-  responseInitIDL, responseTypeIDL, responseIDL, responseIncludesBodyIDL,
-  fetchGlobalScopeIDL,
-];
+export { fetchIDLDefinitions } from './web-idl';

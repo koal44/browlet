@@ -9,7 +9,7 @@ import { RequestImpl, FetchRequest } from '../../src/fetch/request';
 import { ResponseImpl, FetchResponse } from '../../src/fetch/response';
 import { fileIDLDefinitions } from '../../src/file/index';
 import { streamsIDLDefinitions, ReadableStreamImpl } from '../../src/streams/index';
-import { urlIDLDefinitions } from '../../src/url/api';
+import { urlIDLDefinitions } from '../../src/url/index';
 import { parseURL } from '../../src/url/url';
 import { BindingWorld, defineInterface } from '../../src/web-idl/index';
 import { xhrIDLDefinitions } from '../../src/xhr/index';

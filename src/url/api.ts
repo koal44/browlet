@@ -1,7 +1,7 @@
 import { TypeError } from '../infra/exceptions';
 import {
   arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
-  sequence, staticOp, stringifier, union, xattr, type Definition,
+  sequence, staticOp, stringifier, union, xattr,
 } from '../web-idl/core/index';
 
 import { serializeHost } from './host';
@@ -489,11 +489,6 @@ export const urlSearchParamsIDL = defineInterface({
     stringifier(),
   ],
 });
-
-export const urlIDLDefinitions: Definition[] = [
-  urlIDL,
-  urlSearchParamsIDL,
-];
 
 export type URLSearchParamsInit =
   | Iterable<Iterable<string>>

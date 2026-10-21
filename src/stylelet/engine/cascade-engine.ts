@@ -17,24 +17,26 @@ import {
 } from './custom-property';
 import type { TreeScope } from './tree-scope';
 
+/** Select declarations from a tree scope and retain the document context used to resolve them. */
 export class CascadeEngine {
-  // A stand-in for the associated Document's [[registeredPropertySet]],
-  // pending integration with a document layer.
+  /** Document-wide custom-property registrations, pending integration with the document's registry. */
   registeredPropertySet: CustomPropertyRegistry;
 
-  // The API base URL of the document-like environment associated with this
-  // engine. It is the final fallback for resolving stylesheet resource URLs.
+  /** Document API base URL used when a declaration's stylesheet supplies neither a base nor a location. */
   environmentBaseUrl: StyleletURL | undefined;
 
+  /** Owning document's matching state and host facilities. */
   context: StyleletContext;
 
+  /** Retain the document context, fallback URL base, and optional registration map. */
   constructor(options: CascadeEngineOptions) {
     this.registeredPropertySet = options.registeredPropertySet ?? new Map();
     this.environmentBaseUrl = options.environmentBaseUrl;
     this.context = options.context;
   }
 
-  createStyleSheet(options: CSSStyleSheetInit = {}): CSSStyleSheetImpl {
+  /** Create a stylesheet constructed for this engine's document. */
+  createStyleSheet(options: Partial<CSSStyleSheetInit> = {}): CSSStyleSheetImpl {
     return CSSStyleSheetImpl.createConstructed({
       baseURL: options.baseURL ?? null,
       media: options.media ?? '',
@@ -42,6 +44,7 @@ export class CascadeEngine {
     }, this.context.document, this.context.env);
   }
 
+  /** Yield enabled associated/adopted sheets; media-condition evaluation remains unfinished. */
   *getActiveStyleSheets(
     scope: TreeScope,
   ): IterableIterator<CSSStyleSheetImpl> {
@@ -50,6 +53,7 @@ export class CascadeEngine {
     }
   }
 
+  /** Build the current limited computed-style snapshot from inline and matched-sheet declarations. */
   getComputedStyle(
     element: Element,
     scope: TreeScope,
@@ -57,6 +61,7 @@ export class CascadeEngine {
     return computeStyle(this, element, scope);
   }
 
+  /** Select a property without an element, treating selector specificity as zero. */
   getCascadedProperty(
     name: PropertyDeclaration['name'],
     scope: TreeScope,
@@ -64,6 +69,7 @@ export class CascadeEngine {
     return findCascadedProperty(this, name, scope);
   }
 
+  /** Select a property from rules matching this element in the supplied scope. */
   getCascadedPropertyForElement(
     name: PropertyDeclaration['name'],
     element: Element,
@@ -77,6 +83,7 @@ export class CascadeEngine {
     );
   }
 
+  /** Recover a selected declaration's URL base and tree scope for value resolution. */
   getPropertyContext(property: CascadedProperty): PropertyContext {
     const { styleSheet, scope } = property;
     const baseUrl = styleSheet.baseURL ??
@@ -90,6 +97,7 @@ export class CascadeEngine {
     };
   }
 
+  /** Find a document registration or the last applicable @property registration in the scope. */
   getCustomPropertyRegistration(
     name: CustomPropertyName,
     scope: TreeScope,
@@ -98,8 +106,12 @@ export class CascadeEngine {
   }
 }
 
+/** Existing document state used when constructing a cascade engine. */
 export type CascadeEngineOptions = {
+  /** Last-resort base URL for stylesheet values. */
   environmentBaseUrl?: StyleletURL;
+  /** Document-level custom-property registrations; omitted creates an empty registry. */
   registeredPropertySet?: CustomPropertyRegistry;
+  /** Document state and host facilities shared with selector matching. */
   context: StyleletContext;
 };

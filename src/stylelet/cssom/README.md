@@ -22,11 +22,15 @@ observable behavior, rather than private storage choices, constrains its replace
 [web-idl.ts](../web-idl.ts) exports the CSSOM string typedef, common sheet,
 rule, list, and declaration interfaces, and the host mixin/partial contributions.
 `CSSStyleSheet` and `CSSStyleProperties` are declared beside their implementations.
+`CSSRule` keeps the Animations, Counter Styles, Conditional Rules, and Fonts
+constants as separate partial declarations beside its primary declaration until
+their feature modules own them. Assembly combines their members into `CSSRule`.
+`CSSStyleSheetInit` describes the converted constructor dictionary; standalone
+`createStyleSheet()` accepts `Partial<CSSStyleSheetInit>` and supplies its defaults.
 The constructor obtains its Document through `env.getAssociatedDocument()`;
 property attributes call the declaration's `getPropertyValue()`/`setProperty()`.
-Their explicit hooks currently import full Web IDL, exposing a TypeScript project
-boundary error. Returning these declarations to Core is pending the
-[declaration-hook work](ROADMAP.md#declaration-hook-boundary).
+Both declarations use Web IDL Core; Binding supplies conversion, invocation,
+and projection without a declaration factory in Browlet.
 
 Bindings own conversion, receiver checks, indexed properties, and exception
 realization. Implementations accept converted values and throw realm-neutral
@@ -52,7 +56,8 @@ separately from built-in value representations.
 
 `CSSStyleDeclarationImpl` holds a block and supplies CSSOM operations.
 `CSSStylePropertiesImpl` adds the projected subtype identity; supported property
-attributes forward to `getPropertyValue()`/`setProperty()` at the host binding.
+attributes declared beside the implementation forward to
+`getPropertyValue()`/`setProperty()` through Binding.
 Neither implementation installs numeric or property-name accessors.
 
 There are three current uses of declaration state:
@@ -160,12 +165,11 @@ collection still uses the host's DOMException constructor pending §6.2.
 | [Media-list browser scenarios](../../../test/stylelet/scenarios/media-list.test.ts) | Stylelet parsing/mutation against Chromium, Firefox, and WebKit, with documented disagreements |
 | [IDL contribution test](../../../test/stylelet/unit/web-idl.test.ts) | Serialization of the typedef, MediaList, and provisional mixins |
 
-Several tests intentionally pin current representation details: block identity,
-no `.style` getter call during cascade reads, numeric own properties, direct
-implementation coercion, and the provisional IDL strings. Review those tests
-when changing ownership or introducing Binding. Preserve their observable
-contracts, but do not require a new implementation to keep the same private
-storage or to accept author inputs that Binding should already have converted.
+Several tests pin representation details such as block identity and avoiding
+`.style` access during cascade reads. Review those assertions when changing
+ownership. Preserve observable contracts without requiring replacement code to
+keep the same private storage. Implementation tests receive converted values;
+author conversion and projection belong in Binding tests.
 
 ## Validation baseline
 

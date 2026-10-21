@@ -1,23 +1,3 @@
-import type { Definition } from '../web-idl/core/index';
-import type { StreamsEnvironment } from '../streams/index';
-
-import {
-  textDecodeOptionsIDL, textDecoderCommonIDL, textDecoderIDL,
-  textDecoderIncludesCommonIDL, textDecoderOptionsIDL,
-} from './text-decoder';
-import {
-  textDecoderStreamIDL, textDecoderStreamIncludesCommonIDL,
-  textDecoderStreamIncludesGenericTransformStreamIDL,
-} from './text-decoder-stream';
-import {
-  textEncoderCommonIDL, textEncoderEncodeIntoResultIDL, textEncoderIDL,
-  textEncoderIncludesCommonIDL,
-} from './text-encoder';
-import {
-  textEncoderStreamIDL, textEncoderStreamIncludesCommonIDL,
-  textEncoderStreamIncludesGenericTransformStreamIDL,
-} from './text-encoder-stream';
-
 export {
   getEncoding, getOutputEncoding, type Encoding, type OutputEncoding, type DecodeText,
 } from './core/index';
@@ -34,21 +14,4 @@ export {
   utf8Encode, utf8EncodeQueue,
 } from './codecs/utf-8';
 export { TextDecoderStreamImpl } from './text-decoder-stream';
-
-export const encodingIDLDefinitions: Definition<StreamsEnvironment>[] = [
-  textDecoderCommonIDL,
-  textDecoderOptionsIDL,
-  textDecodeOptionsIDL,
-  textDecoderIDL,
-  textDecoderIncludesCommonIDL,
-  textEncoderCommonIDL,
-  textEncoderEncodeIntoResultIDL,
-  textEncoderIDL,
-  textEncoderIncludesCommonIDL,
-  textDecoderStreamIDL,
-  textDecoderStreamIncludesCommonIDL,
-  textDecoderStreamIncludesGenericTransformStreamIDL,
-  textEncoderStreamIDL,
-  textEncoderStreamIncludesCommonIDL,
-  textEncoderStreamIncludesGenericTransformStreamIDL,
-];
+export { encodingIDLDefinitions } from './web-idl';

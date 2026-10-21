@@ -108,6 +108,17 @@ type helpers describe the boundary. `serializeDefinitions()` emits IDL syntax.
 `defineInterface()` produces a `PrimaryInterfaceDefinition`; its partials and
 included mixins are combined into an `AssembledInterface` during assembly.
 
+Subsystem `web-idl.ts` modules collect those declarations for assembly and can
+own declarations without a natural implementation owner. Their `index.ts`
+barrels only re-export the collections. Keep contributions from other
+specifications as separate partial declarations, with the contributing feature
+or beside the primary declaration until that feature has an implementation home.
+
+Dictionary implementation types use the dictionary's specified name, without
+automatically appending `Record`. Their fields still describe converted values
+and defaults. A standalone convenience API can accept a partial form and fill
+defaults before calling the implementation; it does not need a second type name.
+
 An interface may also carry `namespaceURI` and `localNames` for element creation.
 These are project metadata, omitted from serialized IDL. They identify each tag's
 public interface. A shared interface can supply

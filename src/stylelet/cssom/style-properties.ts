@@ -7,16 +7,27 @@ import { propertyRegistry } from '../css/index';
 
 import { CSSStyleDeclarationImpl } from './declaration';
 
-/** A property declaration exposes the supported property names through its host binding. */
+/** A declaration object whose supported CSS properties are exposed as attributes by Binding. */
+// https://drafts.csswg.org/cssom/#cssstyleproperties
+export class CSSStylePropertiesImpl extends CSSStyleDeclarationImpl {}
+
 /*
  * [Exposed=Window]
  * interface CSSStyleProperties : CSSStyleDeclaration {
  *   [CEReactions] attribute [LegacyNullToEmptyString] CSSOMString cssFloat;
  * };
+ *
+ * // Per-supported-property fragments; the attribute names below are placeholders.
+ * partial interface CSSStyleProperties {
+ *   [CEReactions] attribute [LegacyNullToEmptyString] CSSOMString _camel_cased_attribute;
+ * };
+ * partial interface CSSStyleProperties {
+ *   [CEReactions] attribute [LegacyNullToEmptyString] CSSOMString _webkit_cased_attribute;
+ * };
+ * partial interface CSSStyleProperties {
+ *   [CEReactions] attribute [LegacyNullToEmptyString] CSSOMString _dashed_attribute;
+ * };
  */
-export class CSSStylePropertiesImpl extends CSSStyleDeclarationImpl {}
-
-// https://drafts.csswg.org/cssom/#the-cssstyleproperties-interface
 export const cssStylePropertiesIDL = defineInterface({
   name: 'CSSStyleProperties',
   inherits: 'CSSStyleDeclaration',
@@ -26,6 +37,8 @@ export const cssStylePropertiesIDL = defineInterface({
 });
 
 /** Declare supported CSS properties using the declaration's existing read/write operations. */
+// https://drafts.csswg.org/cssom/#dom-cssstyleproperties-camel-cased-attribute
+// https://drafts.csswg.org/cssom/#dom-cssstyleproperties-dashed-attribute
 function propertyAttributes(): AttributeMember[] {
   const members = [propertyAttribute('cssFloat', 'float')];
   for (const property of Object.keys(propertyRegistry)) {

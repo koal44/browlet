@@ -10,7 +10,7 @@ import {
 
 import {
   extractHighWaterMark, extractSizeAlgorithm,
-  type QueuingStrategyRecord, type QueuingStrategySize,
+  type QueuingStrategy, type QueuingStrategySize,
 } from './queuing-strategy';
 import { ReadableStreamImpl, ReadableStreamDefaultControllerImpl } from './readable-stream';
 import { WritableStreamImpl } from './writable-stream';
@@ -33,9 +33,9 @@ export class TransformStreamImpl {
 
   /** Streams §6.2.4, TransformStream(); null allocates for a later setUp call. */
   constructor(
-    transformer: TransformerRecord | null = {},
-    writableStrategy: QueuingStrategyRecord = {},
-    readableStrategy: QueuingStrategyRecord = {},
+    transformer: Transformer | null = {},
+    writableStrategy: QueuingStrategy = {},
+    readableStrategy: QueuingStrategy = {},
     public env: StreamsEnvironment,
   ) {
     if (transformer === null) return;
@@ -300,7 +300,7 @@ type TransformStreamState = {
  *   any writableType;
  * };
  */
-export type TransformerRecord = {
+export type Transformer = {
   cancel?: (reason: unknown) => InternalPromise<void> | void;
   flush?: (
     controller: TransformStreamDefaultControllerImpl,
@@ -461,7 +461,7 @@ export class TransformStreamDefaultControllerImpl {
   /** Streams §6.4.2, SetUpTransformStreamDefaultControllerFromTransformer. */
   setUpFromTransformer(
     stream: TransformStreamImpl,
-    transformer: TransformerRecord,
+    transformer: Transformer,
   ): void {
     const { transform, flush, cancel } = transformer;
     this.setUp(

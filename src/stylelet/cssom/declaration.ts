@@ -14,30 +14,22 @@ import {
 
 import type { CSSRuleImpl } from './rule';
 
-/*
- * [Exposed=Window]
- * interface CSSStyleDeclaration {
- *   [CEReactions] attribute CSSOMString cssText;
- *   readonly attribute unsigned long length;
- *   getter CSSOMString item(unsigned long index);
- *   CSSOMString getPropertyValue(CSSOMString property);
- *   CSSOMString getPropertyPriority(CSSOMString property);
- *   [CEReactions] undefined setProperty(
- *     CSSOMString property,
- *     [LegacyNullToEmptyString] CSSOMString value,
- *     optional [LegacyNullToEmptyString] CSSOMString priority = ""
- *   );
- *   [CEReactions] CSSOMString removeProperty(CSSOMString property);
- *   readonly attribute CSSRule? parentRule;
- * };
- */
+/** CSSOM access to a declaration block, with optional rule ownership or element write-back. */
+// https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
 export class CSSStyleDeclarationImpl {
+  /** Parsed declarations shared with the owning rule, inline style, or computed result. */
   #block: CSSDeclarationBlock;
+  /** Whether this object represents a computed result rather than authored declarations. */
   #computed: boolean;
+  /** Whether CSSOM mutation operations must reject changes to the block. */
   #readonly: boolean;
+  /** Rule whose declarations this object exposes, or null outside a rule. */
   #parentRule: CSSRuleImpl | null;
+  /** Element whose style attribute receives CSSOM writes, or null without attribute ownership. */
   #ownerNode: Element | null;
+  /** Whether an attribute notification is the echo of this object's own write-back. */
   #updating = false;
+  /** Owning environment used to write the element's style attribute. */
   #env: StyleletEnvironment;
 
   /** Expose a declaration block; hosts deliver attribute changes explicitly. */
@@ -57,6 +49,8 @@ export class CSSStyleDeclarationImpl {
     this.#block = block;
   }
 
+  /** Serialized declarations, or empty text for computed results; assignment replaces the block. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-csstext
   get cssText(): string {
     return this.#computed ? '' : this.#block.cssText;
   }
@@ -67,10 +61,14 @@ export class CSSStyleDeclarationImpl {
     this.#commit();
   }
 
+  /** Number of property declarations currently retained by the block. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-length
   get length(): number {
     return this.#block.declarations.length;
   }
 
+  /** Rule owning this declaration object, or null for inline/computed declarations. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-parentrule
   get parentRule(): CSSRuleImpl | null {
     return this.#parentRule;
   }
@@ -85,6 +83,8 @@ export class CSSStyleDeclarationImpl {
     return this.#updating;
   }
 
+  /** Property name at an index, or an empty string outside the block. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-item
   item(index: number): string {
     return this.#block.declarations[index]?.name ?? '';
   }
@@ -94,6 +94,8 @@ export class CSSStyleDeclarationImpl {
     return this.#block.find(name);
   }
 
+  /** Serialize a retained property's value, or return empty text when it is absent. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertyvalue
   getPropertyValue(property: string): string {
     const declaration = this.#block.find(normalizePropertyName(property));
     return declaration === undefined
@@ -101,12 +103,16 @@ export class CSSStyleDeclarationImpl {
       : serializePropertyDeclaration(declaration).value;
   }
 
+  /** Return `important` for an important declaration, otherwise an empty string. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertypriority
   getPropertyPriority(property: string): string {
     return this.#block.find(normalizePropertyName(property))?.important
       ? 'important'
       : '';
   }
 
+  /** Set a supported property, ignoring invalid input; an empty value removes it. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-setproperty
   setProperty(
     property: string,
     value: string,
@@ -135,6 +141,8 @@ export class CSSStyleDeclarationImpl {
     this.#commit();
   }
 
+  /** Remove a property and return its previous serialized value. */
+  // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-removeproperty
   removeProperty(property: string): string {
     this.#assertMutable();
 
@@ -145,6 +153,7 @@ export class CSSStyleDeclarationImpl {
     return value;
   }
 
+  /** Iterate a snapshot of the block's property names in declaration order. */
   [Symbol.iterator](): ArrayIterator<string> {
     return this.#block.declarations.map(({ name }) => name)[Symbol.iterator]();
   }
@@ -166,6 +175,8 @@ export class CSSStyleDeclarationImpl {
     return this.#block.declarations.keys();
   }
 
+  /** Write declarations to the owner attribute while suppressing the resulting input echo. */
+  // https://drafts.csswg.org/cssom/#update-style-attribute-for
   #updateStyleAttribute(): void {
     if (this.#ownerNode === null || this.#computed) return;
 
@@ -177,10 +188,12 @@ export class CSSStyleDeclarationImpl {
     }
   }
 
+  /** Publish a successful CSSOM edit to the element that owns this declaration block. */
   #commit(): void {
     this.#updateStyleAttribute();
   }
 
+  /** Reject CSSOM writes when the declaration block is read-only. */
   #assertMutable(): void {
     if (!this.#readonly) return;
 
@@ -191,15 +204,22 @@ export class CSSStyleDeclarationImpl {
   }
 }
 
+/** Declaration state and associations supplied by the owning rule, element, or style query. */
 type CSSStyleDeclarationOptions = {
+  /** Existing declaration data to expose; omitted creates an empty block. */
   block?: CSSDeclarationBlock;
+  /** Whether reads use the computed-declaration rules. */
   computed?: boolean;
+  /** Whether author mutation operations must throw. */
   readonly?: boolean;
+  /** Rule whose declarations this object represents, or null when there is no owning rule. */
   parentRule?: CSSRuleImpl | null;
   /** Attribute write-back target; attaching an owner does not read its current attribute. */
   ownerNode?: Element | null;
 };
 
+/** Parse one property value with a separately supplied priority; reject an embedded !important. */
+// Part of https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-setproperty
 function parsePropertyDeclaration(
   property: string,
   value: string,
@@ -213,21 +233,40 @@ function parsePropertyDeclaration(
   return interpretPropertyDeclaration(syntaxDeclaration, context);
 }
 
+/** Canonicalize a built-in property name while preserving custom-property case. */
 function normalizePropertyName(name: string): string {
   return isCustomPropertyName(name) ? name : asciiLower(name);
 }
 
+/** Whether the built-in property registry supplies this property's grammar and metadata. */
 function isSupportedPropertyName(
   name: string,
 ): name is keyof typeof propertyRegistry {
   return Object.hasOwn(propertyRegistry, name);
 }
 
+/** Whether a name has the custom-property prefix rather than a built-in property's spelling. */
 function isCustomPropertyName(name: string): name is `--${string}` {
   return name.startsWith('--');
 }
 
-// https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
+/*
+ * [Exposed=Window]
+ * interface CSSStyleDeclaration {
+ *   [CEReactions] attribute CSSOMString cssText;
+ *   readonly attribute unsigned long length;
+ *   getter CSSOMString item(unsigned long index);
+ *   CSSOMString getPropertyValue(CSSOMString property);
+ *   CSSOMString getPropertyPriority(CSSOMString property);
+ *   [CEReactions] undefined setProperty(
+ *     CSSOMString property,
+ *     [LegacyNullToEmptyString] CSSOMString value,
+ *     optional [LegacyNullToEmptyString] CSSOMString priority = ""
+ *   );
+ *   [CEReactions] CSSOMString removeProperty(CSSOMString property);
+ *   readonly attribute CSSRule? parentRule;
+ * };
+ */
 export const cssStyleDeclarationIDL = defineInterface({
   name: 'CSSStyleDeclaration',
   exposed: 'Window',

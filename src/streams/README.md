@@ -11,7 +11,8 @@ with attribution in [LICENSE.WHATWG.md](./LICENSE.WHATWG.md).
 
 | Module | Contents |
 | --- | --- |
-| [index.ts](./index.ts) | Entry point for other subsystems; implementation exports and IDL definitions |
+| [index.ts](./index.ts) | Entry point re-exporting implementations and the declaration collection |
+| [web-idl.ts](./web-idl.ts) | Collects the declarations supplied to the host binding |
 | [environment.ts](./environment.ts) | Execution requirements on the stream's existing environment |
 | [readable-stream.ts](./readable-stream.ts) | Stream, iterator, default/byte controllers, readers, BYOB request, pipe/tee algorithms |
 | [writable-stream.ts](./writable-stream.ts) | Stream, writer, controller, write/close/abort algorithms |
