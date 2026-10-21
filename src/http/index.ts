@@ -23,3 +23,4 @@ export {
 } from './cache';
 export { HTTPCookie, type CookieHost, type CookieSameSite, type StoredHTTPCookie } from './cookie';
 export { CookieStore, type CookieSameSiteMode } from './cookie-store';
+export { parseLinkHeader, type HTTPLink } from './link';

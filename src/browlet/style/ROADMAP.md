@@ -25,21 +25,14 @@ declaration-state review.
 - [ ] Connect shadow tree-scope selection and encapsulation precedence to matching.
   ShadowRoot's retained sheet collections and adopted-sheet binding now work;
   Window's current computed-style path still starts from the document scope.
-- [ ] Connect external sheets through their actual producers: HTML `<link>`,
-  XML `xml-stylesheet` processing instructions, HTTP Link headers,
-  and CSS imports. Account for cancellation, response policy, MIME/encoding,
-  origin-clean/base state, load completion, and script/render blocking with the
-  loader and node owners; do not make Stylelet fetch by itself.
+- [ ] Complete HTML `<link>` and CSS import loading using the Fetch-backed
+  [external stylesheet consumer](README.md#sheet-association-and-execution).
 - [ ] Supply CSSOM add-a-sheet step 2 from HTML's resource lifecycle. Document's
   `addScriptBlockingStyleSheet()`/`removeScriptBlockingStyleSheet()` and parser
   wait exist. The producer still needs parser-created state, media applicability,
   and critical-resource completion. Current inline sheets finish synchronously;
   ordinary `@import` reaches an explicit unfinished grammar. The missing
   connection is recorded beside `LinkStyleMixin` association.
-
-The contracts come from CSSOM, CSSOM View, CSS Style Attributes, and HTML's
-style/link processing rather than one WHATWG HTML section. This file records
-the host boundary, not the CSS feature backlog.
 
 ## Stylesheet collection disagreements
 
@@ -71,6 +64,47 @@ cover retained lists, conversion, current-document checks, and host adoption.
 fields before association. The enabled
 [browser comparisons](../../../test/stylelet/scenarios/stylesheet-sets.test.ts)
 exercise Stylelet and retain CSSOM expectations with separate browser failures.
+
+## External stylesheet loading
+
+[CSSOM §6.3](https://drafts.csswg.org/cssom/#style-sheet-association), the
+[2010 XML stylesheet Recommendation](https://www.w3.org/TR/2010/REC-xml-stylesheet-20101028/),
+and [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288.html) supply the contracts.
+PI and header loading are connected; HTML `<link>` remains HTML §4.2.4 work.
+Ordinary `@import` reaches an explicit missing-grammar error; its future loader
+must retain the actual decoded encoding and await child loads. Script/load/render
+blocking remains a separate resource-lifecycle review. CSSOM creates header sheets
+after fetching; Firefox registers pending loads before fetching. HTML's current
+Document blocker set holds elements. Connect pending loads, media applicability,
+and critical-resource completion there; a top-level fetch does not finish imports.
+Document abortion also still reaches FetchGroup.cancel's provisional no-op.
+`SPEC_GAP(http-link-quirks-mode)`: header MIME checks use the document mode at
+response completion. CSSOM leaves early-header/undetermined-mode timing open;
+revisit with HTML loading.
+XML document parsing is unfinished; the DOM-created PI path works independently.
+DTD-contained instructions may be ignored under the XML specification. Its XSLT
+embedded-module reference is informative, not a prerequisite for CSS loading.
+
+Installed Chromium, Firefox, and WebKit were compared on 2026-10-20:
+
+- `SPEC_CLASH(xml-stylesheet-prolog)`: follow CSSOM/Firefox's prolog restriction;
+  Chromium/WebKit also process instructions after the document element.
+- `SPEC_CLASH(xml-stylesheet-fragment)`: fetch fragment URLs normally with CSS
+  MIME checks; Chromium/WebKit skip fragment-only CSS references.
+- `SPEC_CLASH(xml-stylesheet-rejected-association)`: keep CSSOM's null association
+  after rejection; all three browsers retain empty PI sheets for HTTP/MIME errors.
+- `SPEC_CLASH(stylesheet-http-status)`: reject non-success status codes like all
+  three browsers; CSSOM checks network errors and MIME but omits HTTP status.
+- `SPEC_CLASH(http-link-stylesheets)`: implement CSSOM's at-risk Link-header
+  mechanism, as Firefox does; Chromium/WebKit ignore it.
+- `SPEC_GAP(xml-stylesheet-events)`: CSSOM leaves PI load/error events unspecified.
+  Follow Chromium/WebKit by dispatching neither; Firefox dispatches them.
+- Advisory types use MIME essence comparison, accepting `TEXT/CSS; charset=utf-8`
+  like Firefox. Chromium/WebKit reject it; CSSOM permits rejecting unsupported types.
+
+[Network/lifecycle regressions](../../../test/browlet/style/stylesheet-loading.test.ts)
+and [enabled browser comparisons](../../../test/stylelet/scenarios/stylesheet-loading.test.ts)
+cover this boundary. Native expected failures cannot mask project assertions.
 
 ## Media matching
 
@@ -132,10 +166,6 @@ Dependencies still open:
   after a base change, including before the first `.style` read and after an
   equal-value attribute write. Eager parsing here does not claim that missing
   URL pipeline is complete.
-- **CSSOM platform projection:** the existing SameObject/PutForwards `.style`
-  binding still returns the provisional declaration implementation. Complete
-  CSSStyleProperties interfaces, named property access, and method-realm exception
-  behavior remain in the boundary work above.
 - **Rendering:** author-origin inline precedence is already in Stylelet's
   cascade, but layout/painting and author usability without styles are not DOM
   mutation checks. The latter is an author-conformance requirement.
@@ -195,13 +225,8 @@ likewise reads the block through `DOMOperations.inlineStyleBlock`, without
 requesting the inline CSSOM implementation. The previous combined representation
 created CSSOM on accepted attribute input as well as author access.
 
-The [CSSOM test inventory](../../stylelet/cssom/README.md#existing-evidence-and-its-limits)
-separates observable regressions from storage-trial assertions. Existing coverage
-includes explicit host initialization, first/later attribute input, one policy
-check, accepted state after rejection, CSSOM write-back, namespace handling,
-adoption, updating-flag cleanup on host failure, and authoritative empty provider
-results. Do not let identity/allocation tests accidentally require the trial's
-container arrangement when the interface implementation changes.
+The [CSSOM tests](../../stylelet/cssom/README.md#existing-evidence-and-its-limits)
+separate observable behavior from storage-trial assertions; keep containers provisional.
 
 Clone/import behavior needs its own audit: Blink and WebKit explicitly recognize
 cloning and bypass the ordinary CSP gate. Do not infer clone behavior from a
@@ -213,10 +238,8 @@ lowercasing is invalid for nonce/hash payloads and URL paths. Parsed-source
 caching would first need a deliberate policy for the currently mutable `tokens`
 array. These are review concerns, not authorization for a broader CSP rewrite.
 
-Completing the CSSStyleDeclaration/CSSStyleProperties binding boundary must
-establish which conversions belong to the author API and which behavior internal
-callers need. Review the current [declaration-state owners](../../stylelet/cssom/README.md#declaration-data-and-mutation)
-alongside that boundary rather than preserving their split by default.
+Review the current [declaration-state owners](../../stylelet/cssom/README.md#declaration-data-and-mutation)
+alongside the bound CSSStyleDeclaration/CSSStyleProperties API; their split is provisional.
 
 ## Unchanged style type
 

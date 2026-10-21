@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { createManualEventLoop, createManualRealm } from '../../../support/browlet-agent';
 import { createTestDocument } from '../../../support/dom';
 
@@ -19,7 +19,7 @@ import { createSessionHistoryEntry } from '../../../../src/browlet/browsing/navi
 import { monotonicClock } from '../../../../src/browlet/timing/clock';
 import { WindowProxyHandle } from '../../../../src/browlet/browsing/window/window-proxy';
 import { WindowImpl } from '../../../../src/browlet/browsing/window/window';
-import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
+import { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
 import { InternalError } from '../../../../src/infra/internal-error';
 import { FetchBody } from '../../../../src/fetch/body';
 import { FetchController } from '../../../../src/fetch/controller';
@@ -454,6 +454,29 @@ describe('environment settings objects', () => {
 });
 
 describe('navigation response inputs', () => {
+  it('commits early hints before processing the new document\'s pre-media Link headers', () => {
+    const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
+    const params = traversable.createNavigationParamsFromSource(requireURL('https://example.test/page'));
+    const steps: string[] = [];
+    let hintsDocument: DocumentImpl | undefined;
+    params.commitEarlyHints = (document) => {
+      hintsDocument = document;
+      steps.push('early-hints');
+    };
+    const processLinkHeaders = vi.spyOn(DocumentImpl.prototype, 'processLinkHeaders')
+      .mockImplementation((_response, phase) => { steps.push(phase); });
+    try {
+      const document = traversable.createAndInitializeDocument('html', 'text/html', params);
+
+      expect(steps).toEqual(['early-hints', 'pre-media']);
+      expect(hintsDocument).toBe(document);
+      expect(processLinkHeaders).toHaveBeenCalledExactlyOnceWith(params.response, 'pre-media');
+      expect(processLinkHeaders.mock.contexts).toEqual([document]);
+    } finally {
+      processLinkHeaders.mockRestore();
+    }
+  });
+
   it('prepares a document in its own environment before replacing the active document', () => {
     const traversable = TopLevelTraversable.create(new UserAgent(), null, 'destination');
     const previousEntry = traversable.activeSessionHistoryEntry;

@@ -1,9 +1,11 @@
 import {
-  arg, atArg, ctor, defineInterface, idlType, impl, nullable, op, roAttr, sequence,
+  arg, atArg, ctor, defineIncludes, defineInterface, idlType, impl, nullable, op, roAttr, sequence,
   DOMExceptionImpl, DOMExceptionNames,
 } from '../../../web-idl/core/index';
+import type { CSSStyleSheetImpl } from '../../../stylelet/index';
 
 import { isValidAttributeLocalName, isXMLName, parsePseudoAttributes } from '../infra/index';
+import { ProcessingInstructionLinkStyleMixin } from '../../style/index';
 import type { DOMEnvironment } from '../environment';
 
 import { NodeType } from './node';
@@ -15,8 +17,12 @@ import type { DocumentImpl } from './document';
 export class ProcessingInstructionImpl extends CharacterDataImpl {
   /** Application to which this processing instruction is directed. */
   target: string;
+  /** Whether the current data satisfies XML's pseudo-attribute grammar, including after DOM setters. */
+  pseudoAttributesAreWellFormed = true;
   /** Parsed pseudo-attributes; malformed data produces an empty map. */
   #attributeMap = new Map<string, string>();
+  /** CSS association controlled by this instruction's data and prolog membership. */
+  #linkStyleMixin = new ProcessingInstructionLinkStyleMixin(this);
 
   constructor(target: string, data: string, ownerDoc: DocumentImpl) {
     super(NodeType.ProcessingInstruction, data, ownerDoc);
@@ -27,17 +33,31 @@ export class ProcessingInstructionImpl extends CharacterDataImpl {
     this.updateAttributesFromData();
   }
 
+  /** CSS sheet associated with this instruction, if its resource has been accepted. */
+  get sheet(): CSSStyleSheetImpl | null { return this.#linkStyleMixin.sheet; }
+
+  /** Notify the stylesheet owner after the pseudo-attribute map has been updated. */
+  updateStyleSheet(): void { this.#linkStyleMixin.update(); }
+
+  /** Supply document-maintained prolog membership without restarting unchanged instructions. */
+  setInProlog(inProlog: boolean): void { this.#linkStyleMixin.setInProlog(inProlog); }
+
   /** Synchronize pseudo-attributes after character-data replacement. */
   // https://dom.spec.whatwg.org/#update-attributes-from-data
   updateAttributesFromData(): void {
-    this.#attributeMap = parsePseudoAttributes(this.data) ?? new Map<string, string>();
+    const attributes = parsePseudoAttributes(this.data);
+    this.pseudoAttributesAreWellFormed = attributes !== null;
+    this.#attributeMap = attributes ?? new Map<string, string>();
   }
 
   /** Serialize pseudo-attributes and replace character data without parsing them again. */
   // https://dom.spec.whatwg.org/#update-data-from-attributes
   updateDataFromAttributes(): void {
     const attributes: string[] = [];
+    this.pseudoAttributesAreWellFormed = true;
     for (const [name, value] of this.#attributeMap) {
+      // DOM setters accept attribute local names that are not XML Names.
+      if (!isXMLName(name)) this.pseudoAttributesAreWellFormed = false;
       const escaped = value.replace(/&/g, '&amp;').replace(/</g, '&lt;')
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
       attributes.push(`${name}="${escaped}"`);
@@ -87,6 +107,16 @@ export class ProcessingInstructionImpl extends CharacterDataImpl {
 
   /** Whether the parsed map contains name, including an empty value. */
   hasAttribute(name: string): boolean { return this.#attributeMap.has(name); }
+
+  /** Refresh stylesheet participation and order after a state-preserving move. */
+  protected override movingSteps(): void {
+    this.#linkStyleMixin.move();
+  }
+
+  /** Removal cancels resource work even before a later adoption changes the node document. */
+  protected override removingSteps(): void {
+    this.setInProlog(false);
+  }
 }
 
 /*
@@ -126,4 +156,12 @@ export const processingInstructionIDL = defineInterface<DOMEnvironment>({
     ),
     op('hasAttribute', idlType.boolean, [arg('name', idlType.DOMString)]),
   ],
+});
+
+// https://drafts.csswg.org/cssom/#requirements-on-user-agents-implementing-the-xml-stylesheet-processing-instruction
+/*
+ * ProcessingInstruction includes LinkStyle;
+ */
+export const processingInstructionIncludesLinkStyleIDL = defineIncludes({
+  interface: 'ProcessingInstruction', mixin: 'LinkStyle',
 });

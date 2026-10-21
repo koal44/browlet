@@ -23,6 +23,7 @@ import {
   slottableIDL, elementIncludesSlottableIDL, textIDL, textIncludesSlottableIDL,
   mutationObserverIDL, mutationCallbackIDL, mutationObserverInitIDL, mutationRecordIDL,
   cdataSectionIDL, domImplementationIDL, xmlDocumentIDL, importNodeOptionsIDL, processingInstructionIDL,
+  processingInstructionIncludesLinkStyleIDL,
 } from './nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
@@ -72,6 +73,7 @@ export const domIDLDefinitions: Definition<BrowletEnvironment>[] = [
   textIDL,
   cdataSectionIDL,
   processingInstructionIDL,
+  processingInstructionIncludesLinkStyleIDL,
   textIncludesSlottableIDL,
   commentIDL,
   documentFragmentIDL,

@@ -3,6 +3,7 @@ import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEq
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
+import { processDefaultStyleHeaders, processStyleSheetLinkHeaders } from '../../style/index';
 import { obtainSimilarOriginWindowAgent } from '../../scripting/index';
 import { PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
 import { CSPList } from '../policy/csp/index';
@@ -200,6 +201,7 @@ export class Navigable {
   createAndInitializeDocument(
     type: 'html' | 'xml', contentType: string, params: NavigationParams,
   ): DocumentImpl {
+    const { response } = params;
     const browsingContext = this.#obtainBrowsingContext(params);
     const permissionsPolicy = this.#createPermissionsPolicy(params);
     const creationURL = params.request?.currentURL ?? params.url;
@@ -234,7 +236,7 @@ export class Navigable {
     document.setActiveSandboxingFlagSet(params.finalSandboxingFlagSet);
     document.openerPolicy = params.openerPolicy;
     document.initializeLoadTimingInfo(params.startTime);
-    document.wasCreatedViaCrossOriginRedirects = params.response.redirectTaint !== 'same-origin';
+    document.wasCreatedViaCrossOriginRedirects = response.redirectTaint !== 'same-origin';
     document.duringLoadingNavigationID = params.id;
     document.url = creationURL;
     document.currentDocumentReadiness = 'loading';
@@ -249,7 +251,24 @@ export class Navigable {
     document.initializeCSP();
     document.initializeReferrer(params.request);
     document.createNavigationTimingEntry(params);
-    document.processResponseIntegrations(params);
+    document.initializeResponseMetadata(response);
+    processDefaultStyleHeaders(document, response);
+    window.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
+
+    // https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps
+    if (response.headerList.get('Refresh') !== null) {
+      throw new InternalError('Refresh response processing is not implemented');
+    }
+    params.commitEarlyHints?.(document);
+    // CSSOM stylesheet relations are processed once, independently of HTML's two Link phases.
+    processStyleSheetLinkHeaders(document, response);
+    document.processLinkHeaders(response, 'pre-media');
+    // https://html.spec.whatwg.org/multipage/speculative-loading.html#process-the-speculation-rules-header
+    if (this.isTopLevelTraversable && response.headerList.get('Speculation-Rules') !== null) {
+      throw new InternalError('Speculation-Rules response processing is not implemented');
+    }
+    // https://fetch.spec.whatwg.org/#potentially-free-deferred-fetch-quota
+    // TODO(Fetch): potentially free deferred-fetch quota for this document.
     return document;
   }
 

@@ -24,7 +24,7 @@ export {
   type ParserInput, type Declaration, type BlockContents, type StatementAtRule,
 } from './parser';
 export {
-  TokenKind, NumericSign, NumberTokenFlag,
+  TokenKind, NumericSign, NumberTokenFlag, decodeStylesheetBytes,
   type DimensionToken, type IdentToken, type NumberToken, type ParensBlock, type FunctionBlock,
   type ComponentValue, type Token, type TokenList, type NonEmptyTokenList, type TokenSource, type TokenSourceRange,
 } from './tokens';

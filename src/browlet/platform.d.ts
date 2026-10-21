@@ -2136,6 +2136,7 @@ export interface ProcessingInstruction extends CharacterData {
   removeAttribute(name: string): void;
   toggleAttribute(name: string, force?: boolean): boolean;
   hasAttribute(name: string): boolean;
+  readonly sheet: CSSStyleSheet | null;
 }
 
 export interface ProcessingInstructionConstructor extends Ctor<CharacterDataConstructor> {

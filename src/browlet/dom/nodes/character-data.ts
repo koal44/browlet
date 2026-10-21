@@ -87,7 +87,10 @@ export class CharacterDataImpl extends NodeImpl {
     this.queueMutationRecord('characterData', null, null, this.#data, [], [], null, null);
     this.#data = this.#data.slice(0, offset) + data + this.#data.slice(offset + count);
     RangeImpl.adjustForReplaceData(this, offset, count, data.length);
-    if (this.isProcessingInstruction() && !piAttributesAlreadyUpdated) this.updateAttributesFromData();
+    if (this.isProcessingInstruction()) {
+      if (!piAttributesAlreadyUpdated) this.updateAttributesFromData();
+      this.updateStyleSheet();
+    }
     this.notifyParentChildrenChanged();
   }
 

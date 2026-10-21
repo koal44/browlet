@@ -66,9 +66,33 @@ Parser-created elements defer association until their
 text is complete. Text/tree/type changes update association; media/title changes
 can update an existing sheet. TreeScope maintains document order, sheet-set
 selection, and adopted sheets. Document creation applies each `Default-Style`
-response field in order before parsing. External links, XML processing instructions, HTTP
-Link input, and complete resource blocking/loading are not supplied by these
-helpers.
+response field in order before parsing.
+
+[stylesheet-loading.ts](stylesheet-loading.ts) uses Fetch for external CSS,
+including CSP, nosniff, HTTP-status/MIME checks, response filtering, and complete
+body consumption. Accepted bytes use CSS Syntax's decoder with transport,
+`@charset`, and environment encoding inputs. The initial URL supplies `href`;
+the final response URL supplies the parse base. Cross-origin opaque responses
+produce non-origin-clean sheets whose rules cannot be read through CSSOM.
+
+[processing-instruction.ts](processing-instruction.ts) owns PI association,
+replacement, cancellation, and prolog membership. Document child mutations and
+the PI's move hook keep membership current. Moving within the prolog retains and
+reorders the sheet; leaving it cancels loading and removes the association.
+The existing XML pseudo-attribute parser supplies recognition, including XML
+names and character references. DOM setters retain their broader name rules,
+but an invalid XML name prevents stylesheet recognition. ProcessingInstruction's
+LinkStyle inclusion projects the same implementation owned by this lifecycle.
+
+[header-stylesheets.ts](header-stylesheets.ts) handles ordered Default-Style fields
+and stylesheet Link relations. `Navigable.createAndInitializeDocument()` calls
+these owners directly and commits early hints before pre-media Link processing.
+Stylesheet Link handling uses the [HTTP field parser](../../http/link.ts),
+retains field/target order across asynchronous completion, and inserts header
+sheets before tree sheets. First `title`/`media` values and alternate eligibility
+follow CSSOM; anchored links are ignored as RFC 8288 permits. This is separate
+from HTML's still-provisional preload/header phases. See the
+[remaining resource work and disagreements](ROADMAP.md#external-stylesheet-loading).
 
 Documents and CSSOM implementations use their existing environment through
 `StyleletEnvironment`. UserAgent provides DOM operations, URL construction, and
@@ -97,5 +121,5 @@ These suites passed in the 2026-10-19
 [CSSOM baseline](../../stylelet/cssom/README.md#validation-baseline).
 
 Full CSSOM Platform conformance, live computed results, shadow-tree cascade selection,
-external sheets, and rendering remain outside that passing baseline. Keep those
+HTML link/import loading, and rendering remain outside that passing baseline. Keep those
 dependencies visible in the roadmap as implementation proceeds.

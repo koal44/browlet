@@ -15,6 +15,7 @@ export {
   type CSSStyleSheetInit,
 } from './cssom/index';
 export { CSSDeclarationBlock } from './css/index';
+export { decodeStylesheetBytes, parseStylesheetContents } from './syntax/index';
 export { styleletIDLDefinitions } from './web-idl';
 export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor } from './values/index';
 export {

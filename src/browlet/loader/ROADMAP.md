@@ -121,7 +121,11 @@ byte retention for restart, and parser lifecycle remain in the
 `Document.waitForScriptsMayRun()` provisionally resolves immediately because
 present callers commit before parser tasks run. `processLinkHeaders()` is a
 marked no-op in the pre-media and media phases; preload/link processing and
-media selection remain here. Navigation timing retains live Fetch/body/Document
+media selection remain here. CSSOM stylesheet Link relations have a separate
+[response integration](../style/header-stylesheets.ts): they fetch once, retain
+header order, and feed the parsed document's cascade. Script/load blockers remain
+with the [resource-lifecycle review](../style/ROADMAP.md#external-stylesheet-loading),
+including FetchGroup.cancel's unfinished document-abort behavior. Navigation timing retains live Fetch/body/Document
 records, pending public Performance entries. The extra ScriptHandler parameter
 is still a callable-shape review point until script preparation has an owner.
 
@@ -130,7 +134,9 @@ with no supplied type. They determine the MIME type before passing the same
 ResourceReader to the HTML handler, then check parsing, CSP, and live byte counts.
 Both decoding cases also cover comma-separated and repeated Content-Language
 fields: parsed elements inherit the first language, and an explicit lang attribute
-overrides it. They supply navigation inputs, select Fetch's parallel callback queue and sandbox
+overrides it. Stylesheet cases cover repeated and combined Link fields through
+Fetch, document creation, sheet association, and computed style on parsed elements.
+They supply navigation inputs, select Fetch's parallel callback queue and sandbox
 body owner, and commit before parser input tasks run. They do not implement
 HTML §7.4's state machine, general MIME handler selection, Refresh, or
 Speculation-Rules processing. These remain HTML work.

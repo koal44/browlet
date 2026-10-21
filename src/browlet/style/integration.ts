@@ -125,12 +125,10 @@ export class LinkStyleMixin {
     const type = this.#owner.getAttribute('type')?.toLowerCase() ?? '';
     if (!this.#owner.isConnected) return;
 
-    // External links remain unassociated until Browlet exposes a response-
-    // bearing resource loader to HTML's linked-resource processing model.
-    // TODO: Decode stylesheet bytes with the response's charset label and the
-    // referring document's encoding before parsing. Retain the BOM-selected
-    // encoding for @import and the final response URL for relative references.
-    // https://drafts.csswg.org/css-syntax-3/#input-byte-stream
+    // TODO(HTML link processing): Connect HTML's linked-resource lifecycle to
+    // fetchCSSStyleSheet()/createFetchedStyleSheet(), which own Fetch, MIME,
+    // decoding, and URL provenance. This mixin currently handles inline sheets.
+    // https://html.spec.whatwg.org/#link-type-stylesheet
     if (!this.#options.children) return;
 
     if (type !== '' && type !== 'text/css') {

@@ -53,9 +53,9 @@ export class TreeScope {
     yield* this.adoptedStyleSheets;
   }
 
-  /** Append a header-supplied sheet before tree sheets and apply stylesheet-set selection. */
-  addHeaderStyleSheet(styleSheet: CSSStyleSheetImpl): void {
-    this.#styleSheets.insert(this.#headerStyleSheetCount, styleSheet);
+  /** Insert a header sheet in header order, before tree sheets, and apply set selection. */
+  addHeaderStyleSheet(styleSheet: CSSStyleSheetImpl, index = this.#headerStyleSheetCount): void {
+    this.#styleSheets.insert(index, styleSheet);
     this.#headerStyleSheetCount++;
     this.#configureAddedStyleSheet(styleSheet);
   }
@@ -69,6 +69,13 @@ export class TreeScope {
 
     this.#styleSheets.insert(index, styleSheet);
     this.#configureAddedStyleSheet(styleSheet);
+  }
+
+  /** Restore an associated tree sheet's order after its owner moves, preserving its state. */
+  moveTreeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+    this.#styleSheets.remove(styleSheet);
+    const index = findStyleSheetInsertionIndex(this.#styleSheets, styleSheet.ownerNode!, this.cascade.context.dom);
+    this.#styleSheets.insert(index, styleSheet);
   }
 
   /** Parse a style element's text into an origin-clean sheet and associate it with this scope. */

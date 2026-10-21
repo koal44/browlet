@@ -11,6 +11,7 @@ Browlet.
 | --- | --- |
 | [syntax.ts](syntax.ts) | Tokens, whitespace, and Fetch's quoted-string collector |
 | [headers.ts](headers.ts) | HTTP dates, entity tags, conditional fields, Content-Range, and Retry-After |
+| [link.ts](link.ts) | Ordered Link targets and parameters; consumers resolve URLs and interpret relations |
 | [authentication.ts](authentication.ts) | Challenge lists, Basic selection, and credential encoding |
 | [structured-fields.ts](structured-fields.ts) | RFC 9651 records, parsing, and serialization |
 | [cache.ts](cache.ts) | Cache-Control, Vary, freshness, storage permission, request constraints, and invalidation triggers |
@@ -97,7 +98,7 @@ HTTPWG tests use the [upstream fixtures](../../test/http/fixtures/httpwg/README.
 for independent parsing/serialization expectations and provenance. Fetch, MIME,
 authentication, and Reporting tests exercise the actual consumers.
 
-Governing sources are RFC 9110/9111, RFC 5861, RFC 7617, RFC 9651, Fetch's shared
+Governing sources are RFC 9110/9111, RFC 5861, RFC 7617, RFC 8288, RFC 9651, Fetch's shared
 HTTP algorithms, and the layered-cookies draft. Algorithm comments link exact
 sections.
 Remaining work and retained browser evidence belong to [ROADMAP.md](ROADMAP.md).

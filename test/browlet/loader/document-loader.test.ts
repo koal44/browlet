@@ -28,6 +28,57 @@ describe('Navigable HTML response loading', () => {
     expect(document.body?.localName).toBe('body');
   });
 
+  it.each(['combined', 'repeated'])('loads stylesheet Link fields through navigation (%s)', async (format) => {
+    const links = ['</first.css>; rel=stylesheet', '</second.css>; rel=stylesheet'];
+    const server = createServer((request, response) => {
+      if (request.url === '/page') {
+        response.writeHead(200, {
+          'Content-Type': 'text/html; charset=utf-8',
+          Link: format === 'combined' ? links.join(', ') : links,
+        }).end('<!doctype html><p>styled by the response header</p>');
+      } else {
+        response.writeHead(200, { 'Content-Type': 'text/css' })
+          .end(`p { opacity: ${request.url === '/first.css' ? '.2' : '.5'} }`);
+      }
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browlet = new Browlet({ route: () => '' });
+    const env = getRelevantRealm(browlet.window).env;
+    cleanup.push(() => env.userAgent.httpTransport.close());
+    const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
+    const request = new FetchRequest(env.parseURL(`${origin}/page`).url!, env, env.userAgent);
+    request.mode = 'navigate';
+    request.destination = 'document';
+    request.redirectMode = 'manual';
+    request.credentialsMode = 'include';
+    const loading = Promise.withResolvers<DocumentImpl>();
+    const controller = fetch(request, {
+      useParallelQueue: true,
+      processResponse(response) {
+        try {
+          const params = navigable.createNavigationParams(response);
+          params.request = request;
+          params.fetchController = controller;
+          const resource = new ResourceReader(response, env.userAgent);
+          resource.determineMIMEType().then(() => {
+            const document = navigable.loadHTMLDocument(params, () => {}, resource);
+            navigable.finalizeCrossDocumentNavigation('replace', 'browser UI', navigable.createHistoryEntry(document, params));
+            return document;
+          }, undefined, internalType<DocumentImpl>()).observe(loading.resolve, loading.reject);
+        } catch (error) { loading.reject(error); }
+      },
+    }, env.userAgent.sandbox);
+    const document = await loading.promise;
+    await expect.poll(() => document.readyState).toBe('complete');
+    await expect.poll(() => document.styleSheets.length).toBe(2);
+    expect([...document.styleSheets].map((sheet) => [sheet.href, sheet.ownerNode])).toEqual([
+      [`${origin}/first.css`, null], [`${origin}/second.css`, null],
+    ]);
+    // This test commits through Navigable directly, outside Browlet.navigate()'s evaluator setup.
+    expect(browlet.window.getComputedStyle(browlet.document.querySelector('p')!).getPropertyValue('opacity')).toBe('0.5');
+  });
+
   // SPEC_CLASH(language-protocol-fallback): Chromium/WebKit select the first language; HTML says unknown and Firefox matches all.
   it.each([
     { suppliedType: true, languageHeaders: ['fr, en'] },

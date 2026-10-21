@@ -1141,6 +1141,7 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Initialize the document's delivered Content Security Policies. */
+  // https://w3c.github.io/webappsec-csp/#run-document-csp-initialization
   initializeCSP(): void {
     // An inherited list already carries its creator's origin. An empty new
     // list also needs an origin before later meta policies can be added.
@@ -1149,6 +1150,8 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Record the referrer selected by the request that created this document. */
+  // Response-referrer steps extracted from document creation.
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
   initializeReferrer(request: FetchRequest | null): void {
     if (request === null) return;
     if (request.referrer === undefined) throw new InternalError('Navigation request referrer has not been resolved');
@@ -1194,31 +1197,18 @@ export class DocumentImpl extends NodeImpl {
     // not implemented. Both loader phases reach this owner without side effects.
   }
 
-  /** Apply response integrations that require the newly created document. */
-  processResponseIntegrations(navigationParams: NavigationParams): void {
-    const response = navigationParams.response;
+  /** Retain the response's status, modification time, and fallback language. */
+  // Implementation helper collecting response-derived Document state.
+  initializeResponseMetadata(response: FetchResponse): void {
     this.httpStatus = response.status;
+    // https://html.spec.whatwg.org/multipage/dom.html#dom-document-lastmodified
     const lastModified = response.headerList.get('Last-Modified');
     this.lastModificationTime = lastModified === null ? undefined : parseHTTPDate(lastModified, Date.now()) ?? undefined;
     // TODO(file loading): supply filesystem modification times when local-file navigation exists.
+    // https://html.spec.whatwg.org/multipage/dom.html#the-lang-and-xml:lang-attributes
     const languages = response.headerList.getDecodeAndSplit('Content-Language');
     // SPEC_CLASH(language-protocol-fallback): Use the first language like Chromium/WebKit; HTML says unknown and Firefox matches all.
     this.contentLanguage = languages?.find((language) => language !== '') ?? '';
-    // https://drafts.csswg.org/cssom/#the-http-default-style-header
-    // SPEC_CLASH(default-style-response-fields): Follow CSSOM's ordered fields; Chromium/WebKit ignore them and Firefox combines duplicates.
-    for (const [name, value] of response.headerList) {
-      if (asciiLower(name) === 'default-style') this.getStyleScope().changePreferredStyleSheetSetName(value);
-    }
-    this.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
-    if (response.headerList.get('Refresh') !== null) {
-      throw new InternalError('Refresh response processing is not implemented');
-    }
-    this.processLinkHeaders(response, 'pre-media');
-    if (response.headerList.get('Speculation-Rules') !== null) {
-      throw new InternalError('Speculation-Rules response processing is not implemented');
-    }
-    navigationParams.commitEarlyHints?.(this);
-    // TODO(Fetch): potentially free deferred-fetch quota for this document.
   }
 
   /** Parse against this Document's base URL using UTF-8; return null on failure. */
@@ -1546,6 +1536,25 @@ export class DocumentImpl extends NodeImpl {
   protected override cloningSteps(copy: DocumentImpl, subtree: boolean): void {
     super.cloningSteps(copy, subtree);
     copy.aboutBaseURL = this.aboutBaseURL;
+  }
+
+  /** Update PI participation when a mutation changes which children precede the root. */
+  protected override childrenChanged(): void {
+    this.#updateStyleSheetProlog();
+  }
+
+  /** Root moves can change prolog membership without DOM children-changed steps. */
+  protected override childrenMoved(): void {
+    this.#updateStyleSheetProlog();
+  }
+
+  /** Classify document children once, including instructions that have left the prolog. */
+  #updateStyleSheetProlog(): void {
+    let inProlog = true;
+    for (let child = this.firstChild; child; child = child.nextSibling) {
+      if (child.isElement()) inProlog = false;
+      else if (child.isProcessingInstruction()) child.setInProlog(inProlog);
+    }
   }
 
   #getSVGTitle(root: SVGSVGElementImpl): SVGTitleElementImpl | null {

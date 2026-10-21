@@ -402,8 +402,14 @@ selection and a concrete browser MIME-support policy remain unfinished.
 The meta charset extractor is present without the encoding prescan or meta
 element processing. The synchronous source-text
 route also remains. Neither establishes full HTML navigation, encoding restart,
-script readiness, Link/preload processing, load-event ordering, or public timing
+script readiness, HTML preload processing, load-event ordering, or public timing
 entries. Fragment and `javascript:` navigation still need their specified paths.
+
+CSSOM stylesheet Link headers and DOM-created `xml-stylesheet` instructions now
+use Fetch and CSS decoding. HTML `<link>` processing, imports, media applicability,
+and script/load/render blocker ownership remain unfinished; ordinary imports fail
+explicitly. The [style roadmap](browlet/style/ROADMAP.md#external-stylesheet-loading)
+records those boundaries and browser disagreements. This does not supply an XML parser.
 
 Document readiness changes and `readystatechange` now run through the shared
 §3.1.5 algorithm. Existing HTML routes deliver DOMContentLoaded and load with
