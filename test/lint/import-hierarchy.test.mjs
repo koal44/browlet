@@ -13,10 +13,16 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 
 tester.run('dependency-direction', direction, {
   valid: [
+    { filename: sourceFile('stylelet/cssom/rules/style'), code: "import { CSSStylePropertiesImpl } from '../declarations/index';" },
+    { filename: sourceFile('stylelet/cssom/rules/import'), code: "import { MediaListImpl } from '../media/index';" },
+    { filename: sourceFile('stylelet/cssom/typed/style-property-map'), code: "import { CSSDeclarationBlock } from '../declarations/index';" },
     { filename: sourceFile('stylelet/values/color'), code: "import { tokenize } from '../syntax/index';" },
     { filename: sourceFile('stylelet/values/length'), code: "import { lengthLiteral } from './numeric-literal/index';" },
     { filename: sourceFile('stylelet/conditional/example'), code: "import { parseMediaQueryList } from '../values/index';" },
-    { filename: sourceFile('stylelet/cssom/declaration'), code: "import type { StyleletContext } from '../context';" },
+    { filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import type { StyleletContext } from '../../context';" },
+    { filename: sourceFile('stylelet/cssom/rule-list'), code: "import { CSSStyleRuleImpl } from './rules/index';" },
+    { filename: sourceFile('stylelet/cssom/rules/style'), code: "import type { CSSRuleListImpl } from '../rule-list';" },
+    { filename: sourceFile('stylelet/cssom/rules/context'), code: "import type { CSSStyleRuleImpl } from './style';" },
     { filename: sourceFile('stylelet/engine/cascade'), code: "import { CSSStyleSheetImpl } from '../cssom/index';" },
     { filename: sourceFile('stylelet/environment'), code: "import type { StreamsEnvironment } from '../streams/index';" },
     { filename, code: "import { WindowImpl } from '../window/index';" },
@@ -46,6 +52,23 @@ tester.run('dependency-direction', direction, {
   ],
   invalid: [
     {
+      filename: sourceFile('stylelet/cssom/typed/style-property-map'), code: "import { CSSStyleRuleImpl } from '../rules/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/typed', target: 'stylelet/cssom/rules' } }],
+    },
+    {
+      filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import { CSSStyleRuleImpl } from '../rules/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/declarations', target: 'stylelet/cssom/rules' } }],
+    },
+    {
+      filename: sourceFile('stylelet/cssom/media/media-list'), code: "import { CSSImportRuleImpl } from '../rules/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/media', target: 'stylelet/cssom/rules' } }],
+    },
+    {
+      filename: sourceFile('stylelet/props/property'), code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props', target: 'stylelet/cssom/declarations' } }],
+    },
+
+    {
       filename: sourceFile('stylelet/syntax/parser'), code: "import { parseColor } from '../values/index';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/syntax', target: 'stylelet/values' } }],
     },
@@ -54,8 +77,16 @@ tester.run('dependency-direction', direction, {
       errors: [{ messageId: 'upward' }],
     },
     {
-      filename: sourceFile('stylelet/cssom/declaration'), code: "import { computeStyle } from '../engine/index';",
+      filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import { computeStyle } from '../../engine/index';",
       errors: [{ messageId: 'upward' }],
+    },
+    {
+      filename: sourceFile('stylelet/cssom/rules/style'), code: "import { CSSRuleListImpl } from '../rule-list';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/rules', target: 'stylelet/cssom' } }],
+    },
+    {
+      filename: sourceFile('stylelet/cssom/rules/context'), code: "import { CSSStyleRuleImpl } from './style';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/rules/context', target: 'stylelet/cssom/rules' } }],
     },
     {
       filename: sourceFile('streams/readable'), code: "import { Stylelet } from '../stylelet/index';",

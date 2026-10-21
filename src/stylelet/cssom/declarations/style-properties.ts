@@ -1,9 +1,9 @@
 import {
   annotated, attr, defineInterface, impl, reference, xattr,
   type AttributeMember,
-} from '../../web-idl/core/index';
+} from '../../../web-idl/core/index';
 
-import { propertyRegistry } from '../css/index';
+import { propertyRegistry } from '../../props/index';
 
 import { CSSStyleDeclarationImpl } from './declaration';
 

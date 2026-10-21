@@ -1,4 +1,4 @@
-import { CSSStyleSheetImpl, StylesheetContext, decodeStylesheetBytes, parseStylesheetContents } from '../../stylelet/index';
+import { CSSStyleSheetImpl, RuleListContext, decodeStylesheetBytes, parseStylesheetContents } from '../../stylelet/index';
 import { getEncoding, type Encoding } from '../../encoding/index';
 import { serializeURL, type URLRecord } from '../../url/index';
 import { getMIMETypeEssence } from '../../mime/index';
@@ -80,7 +80,7 @@ export function createFetchedStyleSheet(
   // Ordinary @import already enters an explicit unfinished rule consumer.
   // Import fetching and critical-resource completion must join this load before
   // its owner can report success or release its script/load blockers.
-  sheet.replaceRules(parseStylesheetContents(source, new StylesheetContext(null, false, env)));
+  sheet.replaceRules(parseStylesheetContents(source, new RuleListContext(sheet.ruleList, null, false, env)));
   return sheet;
 }
 

@@ -44,7 +44,7 @@ export enum SelectorKind {
   LegacyPseudoElementSelector = 'legacy-pseudo-element-selector',
 }
 
-export type SelectorContext = Readonly<{
+export type SelectorContext = SelectorNamespaces & {
   // Pseudo-element governing pseudo-class validity in this tail.
   pseudoClassTailElement?: PseudoElementName;
 
@@ -54,12 +54,6 @@ export type SelectorContext = Readonly<{
   // Pseudo-element on the left side of the next potential combinator.
   combinatorLeftPseudoElement?: PseudoElementName;
 
-  // Namespace name associated with each declared prefix.
-  namespacePrefixes?: ReadonlyMap<string, string>;
-
-  // Namespace name applied to unprefixed type selectors, when declared.
-  defaultNamespace?: string;
-
   // Strongest selector grammar allowed by the enclosing selector argument.
   selectorRestriction?: SelectorRestriction;
 
@@ -68,7 +62,15 @@ export type SelectorContext = Readonly<{
 
   // Whether this selector is nested anywhere inside a :has() argument.
   insideHas?: boolean;
-}>;
+};
+
+/** Namespace bindings shared by selector parsing and retained rule selectors. */
+export type SelectorNamespaces = {
+  /** Namespace name associated with each declared prefix. */
+  namespacePrefixes?: Map<string, string>;
+  /** Namespace name applied to unprefixed type selectors, when declared. */
+  defaultNamespace?: string;
+};
 
 export type SelectorRestriction = 'complex-real' | 'compound' | 'simple';
 
@@ -900,8 +902,7 @@ const nsPrefixConsumer: TryConsumer<string, SelectorContext> = sequenceOf(
 
     if (value === '' || value === '*') return value;
 
-    return context
-      .namespacePrefixes?.has(value) === true
+    return context.namespacePrefixes?.has(value) === true
       ? value
       : null;
   },

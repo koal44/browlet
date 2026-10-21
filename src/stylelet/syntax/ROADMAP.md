@@ -9,14 +9,14 @@ rule-specific grammars, loading, and the consuming value/API specifications.
 
 ## Work at the syntax boundary
 
-- [ ] Implement StylesheetContext's throwing at-rule interpretation
-  dependencies. Syntax calls them while consuming, with the enclosing context,
+- [ ] Implement the rule list's throwing at-rule interpretation
+  dependencies. Syntax reaches them through RuleListContext while consuming, with the enclosing context,
   prelude, and earlier siblings. Each block supplies its declaration/rule grammar
   and final validity check. Follow
   [block-content grammars](https://drafts.csswg.org/css-syntax-3/#block-contents):
   a style rule, `@font-face`, `@page`, and `@keyframes` accept different kinds
   of content despite sharing structural parsing. Coordinate with the
-  [rule roadmap](../css/ROADMAP.md), without inventing a second property registry.
+  [rule roadmap](../cssom/rules/ROADMAP.md), without inventing a second property registry.
 - [ ] Preserve declaration-run boundaries when adding group/descriptor rules.
   The style-rule interpreter now waits for a surviving child before ending a
   run; retain that behavior when supporting additional rule grammars.
@@ -103,7 +103,7 @@ expectations as expected failures and return to their idle skipped state.
 
 Selector grammar, namespace/nesting context, and parser-to-matcher coverage are
 tracked in the [selector roadmap](../selector/ROADMAP.md). The supported-rule
-inventory and contextual rule validation belong to [css/](../css/ROADMAP.md).
+inventory and contextual rule validation belong to [css/](../cssom/rules/ROADMAP.md).
 The [value](../values/ROADMAP.md) and [lifecycle](../value-processing/ROADMAP.md)
 owners handle property grammars and declared/computed values.
 

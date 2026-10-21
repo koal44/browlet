@@ -5,7 +5,8 @@ import {
   defineWholeValue,
   type AutoValue, type MathContext, type LengthPercentageValue,
 } from '../values/index';
-import type { PropertyRecord } from '../css/index';
+
+import type { PropertyRecord } from './property';
 
 /*
  * <margin-top>, <margin-right>, <margin-bottom>, <margin-left> =

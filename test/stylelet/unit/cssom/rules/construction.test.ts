@@ -1,21 +1,23 @@
 import { describe, expect, it } from 'vitest';
 
-import { defaultStyleletEnvironment as env } from '../../../../src/stylelet/environment';
+import { defaultStyleletEnvironment as env } from '../../../../../src/stylelet/environment';
 import {
   propertyRegistry,
   type BuiltInPropertyDeclaration, type CustomPropertyDeclaration,
-} from '../../../../src/stylelet/css/property';
-import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
-import { parseListOfComponentValues, parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
-import { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
-import { parseOptionalDeclarationValue } from '../../../../src/stylelet/syntax/declaration-value';
+} from '../../../../../src/stylelet/props/property';
+import { RuleListContext } from '../../../../../src/stylelet/cssom/rules/context';
+import { CSSRuleListImpl } from '../../../../../src/stylelet/cssom/rule-list';
+import { parseListOfComponentValues, parseStylesheetContents } from '../../../../../src/stylelet/syntax/parser';
+import { CSSStyleRuleImpl } from '../../../../../src/stylelet/cssom/rules/style';
+import { CSSNestedDeclarationsImpl } from '../../../../../src/stylelet/cssom/rules/nested-declarations';
+import { parseOptionalDeclarationValue } from '../../../../../src/stylelet/syntax/declaration-value';
 import {
   parseSelectorList, serializeSelectorList,
-} from '../../../../src/stylelet/selector/parser';
-import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { ColorKind } from '../../../../src/stylelet/values/color';
+} from '../../../../../src/stylelet/selector/parser';
+import { ValueStage } from '../../../../../src/stylelet/value-processing/stage';
+import { ColorKind } from '../../../../../src/stylelet/values/color';
 
-const context = new StylesheetContext(null, false, env);
+const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
 describe('CSS rule construction', () => {
   it('preserves the registry association in a built-in declaration', () => {
@@ -50,7 +52,7 @@ describe('CSS rule construction', () => {
       name: 'color',
       value: propertyRegistry.color.definition.parse('var(--accent)', {})!,
       important: false,
-    }, custom], env);
+    }, custom], {}, new CSSRuleListImpl(), env);
 
     expect(rule.style.declarations.map((declaration) => declaration.name))
       .toEqual(['color', '--accent']);
@@ -90,7 +92,7 @@ describe('CSS rule construction', () => {
   });
 
   it('carries supplied namespaces through nested rule contexts', () => {
-    const namespaceContext = new StylesheetContext(null, false, env);
+    const namespaceContext = new RuleListContext(new CSSRuleListImpl(), null, false, env);
     namespaceContext.namespacePrefixes = new Map([['svg', 'http://www.w3.org/2000/svg']]);
     namespaceContext.defaultNamespace = 'http://www.w3.org/1999/xhtml';
 
@@ -113,9 +115,8 @@ describe('CSS rule construction', () => {
       .toMatchObject({ name: 'text', namespaceURI: 'http://www.w3.org/2000/svg' });
   });
 
-  // TODO: @namespace interpretation and CSSNamespaceRule construction are not implemented.
   // https://drafts.csswg.org/css-namespaces-3/#scope
-  it.fails('applies @namespace declarations to parent and nested selectors', () => {
+  it('applies @namespace declarations to parent and nested selectors', () => {
     const rules = parseStylesheetContents(`
       @namespace svg "http://www.w3.org/2000/svg";
       svg|a { > svg|b { color: red; } }

@@ -2,9 +2,9 @@ import type { DOMElement as Element } from '../../infra/index';
 
 import { ValueStage } from '../value-processing/index';
 import {
-  propertyRegistry, resolveBuiltInPropertyDeclaration, CSSDeclarationBlock, parseDeclarationBlock,
-  type PropertyContext, type PropertyDeclaration, type PropertyName,
-} from '../css/index';
+  propertyRegistry, resolveBuiltInPropertyDeclaration, type PropertyContext, type PropertyDeclaration, type PropertyName,
+} from '../props/index';
+import { CSSDeclarationBlock, parseDeclarationBlock } from '../cssom/declarations/index';
 import { CSSStylePropertiesImpl } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';

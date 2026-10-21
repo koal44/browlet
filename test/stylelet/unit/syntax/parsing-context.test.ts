@@ -1,9 +1,10 @@
 import { afterEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { defaultStyleletEnvironment as env } from '../../../../src/stylelet/environment';
-import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
-import { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules';
-import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
+import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
+import { CSSRuleListImpl } from '../../../../src/stylelet/cssom/rule-list';
+import { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules/style';
+import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
 import {
   consumeBlock, parseBlockContents, parseDeclaration, parseDeclarationList,
   parseListOfComponentValues, parseRule, parseStylesheetContents, type BlockContents,
@@ -12,7 +13,7 @@ import { serializeComponentValues } from '../../../../src/stylelet/syntax/compon
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { tokenize } from '../../../../src/stylelet/syntax/tokens';
 
-const context = new StylesheetContext(null, false, env);
+const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -21,8 +22,8 @@ describe('stylesheet parsing context', () => {
     ['stylesheet', parseStylesheetContents],
     ['single rule', parseRule],
     ['block contents', parseBlockContents],
-  ] as const)('requires StylesheetContext in the %s signature', (_name, parse) => {
-    expectTypeOf(parse).parameter(1).toEqualTypeOf<StylesheetContext>();
+  ] as const)('requires RuleListContext in the %s signature', (_name, parse) => {
+    expectTypeOf(parse).parameter(1).toEqualTypeOf<RuleListContext>();
   });
 
   it('preserves unsupported declaration syntax with an empty or stylesheet context', () => {
@@ -59,7 +60,7 @@ describe('stylesheet parsing context', () => {
   });
 
   it.each([false, true])('selects child declaration grammar and restores the parent (prebuilt: %s)', (prebuilt) => {
-    const inner = new StylesheetContext(null, false, env);
+    const inner = new RuleListContext(new CSSRuleListImpl(), null, false, env);
     const interpretOuter = context.interpretDeclaration.bind(context);
     const interpretInner = inner.interpretDeclaration.bind(inner);
     vi.spyOn(context, 'interpretDeclaration').mockImplementation((declaration) =>
@@ -90,7 +91,7 @@ describe('stylesheet parsing context', () => {
   it('provides preceding siblings for statement placement and checks semicolon/EOF returns', () => {
     const accepted = parseRule('.accepted {}', context)!;
     vi.spyOn(context, 'interpretStatementAtRule').mockImplementation((_rule, preceding) =>
-      preceding.length === 0 ? accepted : null,
+      preceding === null || preceding.length === 0 ? accepted : null,
     );
 
     expect(parseStylesheetContents('@first; @second', context)).toEqual([accepted]);
@@ -123,7 +124,7 @@ describe('stylesheet parsing context', () => {
     ['single rule', parseRule],
     ['block contents', parseBlockContents],
   ] as const)('restores the caller context when a child grammar throws during %s parsing', (_name, parse) => {
-    const child = new StylesheetContext(null, false, env);
+    const child = new RuleListContext(new CSSRuleListImpl(), null, false, env);
     const failure = new Error('Missing descriptor grammar');
     vi.spyOn(child, 'interpretDeclaration').mockImplementation(() => { throw failure; });
     vi.spyOn(context, 'interpretBlockAtRule').mockImplementation((_name, _prelude, _preceding, c) => {

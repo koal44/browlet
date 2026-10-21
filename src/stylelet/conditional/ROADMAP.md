@@ -67,7 +67,7 @@ Source: [Conditional 5](https://drafts.csswg.org/css-conditional-5/#container-ru
 
 ## Integration and evidence gates
 
-Coordinate rule storage/mutation with the [rule roadmap](../css/ROADMAP.md),
+Coordinate rule storage/mutation with the [rule roadmap](../cssom/rules/ROADMAP.md),
 selection/defaulting with the [engine](../engine/ROADMAP.md), and box/scroll
 freshness with [layout](../../layout/ROADMAP.md#update-and-query-boundaries). Container
 state and device state must not become interchangeable just because both answer

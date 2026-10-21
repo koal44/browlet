@@ -179,13 +179,16 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   helpers are not connected to author registration or per-element computation.
   The [engine inventory](stylelet/engine/README.md) distinguishes these limits
   from passing direct resolver tests.
-- **Stylesheet rules:** unknown at-rules are discarded; recognized unfinished
-  grammars, including namespace declarations and conditional groups, now stop
-  with an explicit InternalError in StylesheetContext. Nested style rules are retained
+- **Stylesheet rules:** namespace declarations, selector edits, style-rule text,
+  and nested insertion/deletion are implemented. Unknown at-rules are discarded;
+  recognized unfinished grammars, including conditional groups and page/margin
+  descriptors, stop explicitly. Plain import preludes are retained, but attachment
+  requires the unfinished import loader; layer/supports clauses also stop explicitly.
+  Nested style rules are retained
   in projected CSSOM lists, but their cascade participation remains unfinished. Direct nested
   selector tests therefore do not establish nested stylesheet support. See the
-  [rule inventory](stylelet/css/README.md#rule-support-stops-at-different-layers)
-  and [remaining contracts](stylelet/css/ROADMAP.md).
+  [rule inventory](stylelet/cssom/rules/README.md#parsing-and-ownership)
+  and [remaining contracts](stylelet/cssom/rules/ROADMAP.md).
 - **Inline CSS values:** style attributes are parsed and checked against CSP on
   mutation, but URL-valued CSS properties are not registered yet. Capturing and
   retaining their parse-time base URLs, including through CSSOM edits and

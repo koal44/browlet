@@ -2,7 +2,7 @@
 
 Planned implementations of Typed OM interfaces, alongside ordinary CSSOM.
 Shared CSS representations and arithmetic remain in [values](../../values/ROADMAP.md).
-StylePropertyMapImpl currently throws, as does CSSStyleRuleImpl.styleMap; there
+[StylePropertyMapImpl](style-property-map.ts) currently throws, as does CSSStyleRuleImpl.styleMap; there
 are no typed value implementations or attributeStyleMap/computedStyleMap paths.
 
 ## Sources and interface families

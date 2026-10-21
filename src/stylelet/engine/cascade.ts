@@ -1,7 +1,7 @@
 import type { DOMElement as Element } from '../../infra/index';
 
+import type { PropertyDeclaration } from '../props/index';
 import { matchSelectorList, type Specificity } from '../selector/index';
-import type { PropertyDeclaration } from '../css/index';
 import {
   CSSStyleRuleImpl, CSSNestedDeclarationsImpl, type CSSStyleSheetImpl,
 } from '../cssom/index';

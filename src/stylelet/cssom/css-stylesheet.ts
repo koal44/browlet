@@ -6,14 +6,13 @@ import {
 } from '../../web-idl/core/index';
 
 import type { StyleletEnvironment, StyleletURL } from '../environment';
-import { parseRule, parseStylesheetContents } from '../syntax/index';
+import { parseStylesheetContents } from '../syntax/index';
 import type { StyleletContext } from '../context';
+import { MediaListImpl } from './media/index';
+import { RuleListContext, type CSSRuleImpl } from './rules/index';
 
 import { CSSRuleListImpl } from './rule-list';
-import { StylesheetContext } from './parser';
 import { StyleSheetImpl } from './stylesheet';
-import type { CSSRuleImpl } from './rule';
-import { MediaListImpl } from './media-list';
 
 /** A CSS stylesheet's rule tree, resource associations, and author-mutation state. */
 // https://drafts.csswg.org/cssom/#the-cssstylesheet-interface
@@ -124,24 +123,11 @@ export class CSSStyleSheetImpl
 
     // SPEC_CLASH(sheet-insert-error-order): All three browsers and the insertion
     // helper check the index first; §6.1's insertRule prose parses first.
-    if (index > this.ruleList.length) {
-      throw new DOMExceptionImpl(
-        `Index ${index} exceeds the rule-list length.`,
-        'IndexSizeError',
-      );
-    }
-
-    const context = new StylesheetContext(null, this.#constructed, this.env);
-    const cssRule = parseRule(rule, context);
-    if (cssRule === null) {
-      throw new DOMExceptionImpl(
-        `Failed to parse the rule: ${rule}`,
-        'SyntaxError',
-      );
-    }
-
-    cssRule.setParentStyleSheet(this);
-    this.ruleList.insert(index, cssRule);
+    const context = new RuleListContext(this.ruleList, null, this.#constructed, this.env);
+    context.useNamespaces(this);
+    const child = this.ruleList.parseRuleForInsertion(rule, index, false, context);
+    child.setParentStyleSheet(this);
+    this.ruleList.insert(index, child);
     return index;
   }
 
@@ -151,14 +137,6 @@ export class CSSStyleSheetImpl
     this.#assertOriginClean();
     this.#assertModificationAllowed();
 
-    if (index >= this.ruleList.length) {
-      throw new DOMExceptionImpl(
-        `Index ${index} does not identify a rule.`,
-        'IndexSizeError',
-      );
-    }
-
-    this.ruleList.item(index)!.setParentStyleSheet(null);
     this.ruleList.remove(index);
   }
 
@@ -184,7 +162,7 @@ export class CSSStyleSheetImpl
     this.env.exec.runInParallel(() => {
       try {
         // CSSOM removes imports from replacement input; discard them during parsing.
-        const rules = parseStylesheetContents(text, new StylesheetContext(null, this.#constructed, this.env));
+        const rules = parseStylesheetContents(text, new RuleListContext(this.ruleList, null, this.#constructed, this.env));
         this.env.exec.queueTask('dom-manipulation', () => {
           try {
             this.replaceRules(rules);
@@ -212,7 +190,7 @@ export class CSSStyleSheetImpl
     }
 
     // Imports are excluded from replacement, independently of import support.
-    this.replaceRules(parseStylesheetContents(text, new StylesheetContext(null, this.#constructed, this.env)));
+    this.replaceRules(parseStylesheetContents(text, new RuleListContext(this.ruleList, null, this.#constructed, this.env)));
   }
 
   /** Install parsed rules without applying the author API's access and construction checks. */

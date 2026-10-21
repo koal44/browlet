@@ -19,14 +19,15 @@ entry points and implementation types.
 | Home | Existing responsibility |
 | --- | --- |
 | [syntax/](syntax/README.md) | CSS input, tokens, component values, and generic syntax rules/declarations |
-| [css/](css/README.md) | Property declarations, the installed property registry, and declaration storage |
 | [selector/](selector/README.md) | Selector parsing, serialization, specificity, stylesheet matching, and its caches; separate from Selectlet's selector engine |
 | [values/](values/README.md) | Reusable value grammars, representations, resolution, and serialization, including media queries and supports conditions |
 | [value-processing/](value-processing/README.md) | Value stages and shared processing contracts; complete element-level orchestration remains missing |
-| [props/](props/README.md) | Seven installed property definitions; color/background-color, opacity, and the four margin longhands. Animation-name has a separate unregistered parser. |
+| [props/](props/README.md) | Property records, the installed registry, and declaration interpretation; seven installed names. Animation-name has a separate unregistered parser. |
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |
+| [cssom/declarations/](cssom/declarations/README.md) | CSSStyleDeclaration, CSSStyleProperties, and their provisional declaration-block storage |
+| [cssom/media/](cssom/media/README.md) | MediaList mutation and serialization, below rules and sheets |
 | [web-idl.ts](web-idl.ts) | CSSOM declarations and host contributions, including observable adopted-sheet mutation steps |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
 
@@ -54,16 +55,17 @@ Use these responsibilities when adding or reviewing parsing code:
    required rule context that makes grammar decisions during consumption.
    Declaration-only and component parsers remain available for narrower grammars,
    including support queries that must retain unsupported declaration syntax.
-2. **Property interpretation** in [css/property.ts](css/property.ts) applies
+2. **Property interpretation** in [props/property.ts](props/property.ts) applies
    the installed property grammars and produces `PropertyDeclaration` values.
    `interpretPropertyDeclaration()` supplies the shared grammar step. Stylesheet
    consumption calls it before deciding whether to retry input as a rule;
    `interpretPropertyDeclarations()` applies it to declaration-only syntax lists.
-3. **CSSOM rule interpretation** in [cssom/parser.ts](cssom/parser.ts) recognizes
-   rule grammars through `StylesheetContext`, producing implementations with
-   parsed selectors and interpreted declarations. It selects child grammars
-   before entering blocks. Each context method consumes and interprets the whole
-   rule; `createStyleRule()` assembles already interpreted declarations and children.
+3. **CSSOM rule interpretation** uses [RuleListContext](cssom/rules/context.ts)
+   to forward grammar decisions through a supplied rule list to the rule/property owners, producing implementations
+   with parsed selectors and interpreted declarations. The owners select child
+   grammars before entering blocks; `CSSStyleRuleImpl.fromContents()` assembles
+   already interpreted declarations and children. The context imports only types;
+   the list owns dispatch, and Syntax retains structural parsing and recovery.
 
 Use plain specification names for syntax records (`Rule`, `QualifiedRule`,
 `Declaration`), `interpret…` for applying the relevant grammars, and `…Impl` for
@@ -127,9 +129,10 @@ The CSSOM parser recognizes style rules, including nested style-rule data.
 Unknown at-rules are discarded; recognized unfinished grammars stop at explicit
 context methods. The cascade visits only top-level style
 rules; nested-selector tests do not establish nested-rule participation.
-CSSOM's rule objects are less complete:
-style declaration edits work, while selector mutation, nested-rule operations,
-and rule serialization remain unfinished.
+CSSOM supports style declaration/selector edits, nested-rule insertion/deletion,
+style-rule serialization, and namespace rules. Import loading, modern import
+conditions, and page/margin descriptor grammars remain explicit dependencies;
+their interface declarations do not imply working consumers.
 
 The engine selects supported declarations from inline state and matched sheets.
 It does not yet provide the complete cascade/defaulting/inheritance pipeline,
@@ -204,7 +207,7 @@ expected failures and skips. Full cascade/defaulting and live queries remain mis
 **9 files, 958 tests passed**, with no skips or expected failures.
 
 ```text
-node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/property.test.ts test/stylelet/unit/values/supports-condition.test.ts test/stylelet/unit/values/color.test.ts test/stylelet/unit/values/gradient.test.ts test/stylelet/unit/values/image.test.ts test/stylelet/unit/values/media-query.test.ts test/stylelet/unit/values/position.test.ts test/stylelet/unit/values/mix.test.ts test/stylelet/unit/values/boolean-expr.test.ts
+node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/props/property.test.ts test/stylelet/unit/values/supports-condition.test.ts test/stylelet/unit/values/color.test.ts test/stylelet/unit/values/gradient.test.ts test/stylelet/unit/values/image.test.ts test/stylelet/unit/values/media-query.test.ts test/stylelet/unit/values/position.test.ts test/stylelet/unit/values/mix.test.ts test/stylelet/unit/values/boolean-expr.test.ts
 ```
 
 This covers installed definitions, value operations and condition grammar.

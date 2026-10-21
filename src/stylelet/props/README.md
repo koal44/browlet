@@ -1,12 +1,13 @@
 # CSS properties
 
-This folder supplies shared property records, their metadata, and value processing.
+This folder supplies shared property records, their registry, declaration
+interpretation, and property-specific value processing.
 The [roadmap](ROADMAP.md) groups missing
 families and their dependencies.
 
 ## Installed properties
 
-The [registry](../css/property.ts) installs exactly seven built-in names:
+The [registry](property.ts) installs exactly seven built-in names:
 
 | Module | Registered names | Current behavior |
 | --- | --- | --- |
@@ -49,17 +50,32 @@ font, viewport, container, color, or geometry fields accepted by the shared
 value helpers. Direct tests can supply those facts independently; see
 [value inputs](../values/ROADMAP.md#context-inputs-and-freshness).
 
+## Declaration interpretation
+
+[interpretPropertyDeclarations()](property.ts) interprets syntax declarations
+in source order through `interpretPropertyDeclaration()`, which recognizes
+installed built-ins and custom properties. The declaration-block parser uses the
+list helper; CSSOM's parsing context calls the same single-declaration interpreter
+during consumption. See the [parsing pipeline](../README.md#parsing-and-object-construction).
+Both paths accept `PropertyContext`, carrying property/value settings without
+rule-interpretation hooks. Specialized grammars remain with their owning modules.
+Unknown properties and invalid values are discarded without invalidating their
+containing rule. Built-in names are ASCII-lowercased;
+custom names retain case and their component values remain available for later
+substitution. Custom values can retain original text.
+
 ## Existing foundations outside this folder
 
 Reusable color, image/gradient, position, math, and numeric-unit machinery lives
-in [values/](../values/README.md#property-family-helpers). Property interpretation
-and declaration storage live in `css/`; selection and computation live in
-`engine/`. The provisional BoxSides tuple supplies physical-side typing, not a
+in [values/](../values/README.md#property-family-helpers). Declaration objects and
+provisional storage live in
+[cssom/declarations/](../cssom/declarations/README.md); selection and computation
+live in `engine/`. The provisional BoxSides tuple supplies physical-side typing, not a
 shorthand parser or a box model.
 
 ## Evidence
 
-The [property tests](../../../test/stylelet/unit/property.test.ts) cover all
+The [property tests](../../../test/stylelet/unit/props/property.test.ts) cover all
 seven initial/inheritance records, shared color grammar, contextual resolution
 without changing the shared initial value, and registry/value typing. They do
 not establish complete CSSOM, inheritance, or used-value behavior. The

@@ -1,18 +1,19 @@
-import type { DOMElement as Element } from '../../infra/index';
-import { asciiLower } from '../../infra/ascii';
+import type { DOMElement as Element } from '../../../infra/index';
+import { asciiLower } from '../../../infra/ascii';
 import {
   annotated, arg, attr, defineInterface, DOMExceptionImpl, idlType, impl, indexedGetter, nullable, op,
   reference, roAttr, xattr,
-} from '../../web-idl/core/index';
+} from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../environment';
-import { parseDeclaration } from '../syntax/index';
+import type { StyleletEnvironment } from '../../environment';
+import { parseDeclaration } from '../../syntax/index';
 import {
-  interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration, CSSDeclarationBlock,
+  interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration,
   type PropertyDeclaration, type PropertyContext,
-} from '../css/index';
+} from '../../props/index';
+import type { CSSRuleImpl } from '../rules/index';
 
-import type { CSSRuleImpl } from './rule';
+import { CSSDeclarationBlock } from './declaration-block';
 
 /** CSSOM access to a declaration block, with optional rule ownership or element write-back. */
 // https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface

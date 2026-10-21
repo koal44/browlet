@@ -13,7 +13,7 @@ contracts. Individual selector algorithms still need implementation review.
 | [Selectors 5](https://drafts.csswg.org/selectors-5/) | Additions to level 4: location, interest, blank input, timeline, custom-state, heading, grid-structural, and reference selectors; many need host-language facts |
 | [Namespaces 3](https://drafts.csswg.org/css-namespaces-3/#scope) and [Nesting 1](https://drafts.csswg.org/css-nesting-1/) | Per-sheet namespace resolution and parent-rule selector context; carried through interpretation, editing, matching, and serialization |
 | [Shadow 1](https://drafts.csswg.org/css-shadow-1/#selectors) | Shadow matching context, featureless hosts, slot/part selection, flat-tree distinctions, and tree-scoped names |
-| [Cascade 6 `@scope`](https://drafts.csswg.org/css-cascade-6/#scoped-styles) | Scoping roots/limits and proximity; rule parsing and cascade participation are tracked in the [rule roadmap](../css/ROADMAP.md) |
+| [Cascade 6 `@scope`](https://drafts.csswg.org/css-cascade-6/#scoped-styles) | Scoping roots/limits and proximity; rule parsing and cascade participation are tracked in the [rule roadmap](../cssom/rules/ROADMAP.md) |
 
 In the inspected local checkout, `css-scoping-1/Overview.html` and
 `css-shadow-parts-1/Overview.html` redirect to CSS Shadow 1, whose local source
@@ -28,12 +28,10 @@ proposal needs its own status and consumer review before implementation.
   and the parsed Selectors 5 forms currently falling through to no match.
   Distinguish missing behavior from selectors that legitimately match nothing
   in a particular host; do not use grammar acceptance as a support query.
-- [ ] Finish CSSStyleRule selector getters/setters with retained namespace and
-  nesting context. Cover invalid edits, changed parent specificity, forgiving
-  arms, pseudo-element chains, and compiled-selector freshness.
-- [ ] Audit selector serialization alongside its parser and actual CSSOM
-  consumer. Existing round-trip tests do not complete unimplemented CSSOM
-  getters, rule serialization, or every contextual invalid-selector case.
+- [ ] Extend the implemented CSSStyleRule getter/setter and child rebinding to
+  future conditional groups. Invalid edits, namespace bindings and changed
+  descendant specificity are covered; broaden forgiving-arm, pseudo-element
+  and matcher-freshness coverage with the corresponding engine consumers.
 - [ ] Supply real host facts for dynamic selectors. Focus indication, form
   state, media/timeline state, interest, heading levels, and grid relationships
   have different owners; a present attribute or guessed layout result is not

@@ -3,7 +3,8 @@ import {
   consumeOpacityValue, resolveOpacityValue, serializeOpacityValue, defineWholeValue,
   type MathContext, type OpacityValue,
 } from '../values/index';
-import type { PropertyRecord } from '../css/index';
+
+import type { PropertyRecord } from './property';
 
 const opacityDef: ValueDefinition<OpacityValue, MathContext> = {
   consume: consumeOpacityValue,

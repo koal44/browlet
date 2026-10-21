@@ -1,7 +1,8 @@
 import {
   colorDef, ColorKind, defineWholeValue, type ColorValue, type ColorValueContext,
 } from '../values/index';
-import type { PropertyRecord } from '../css/index';
+
+import type { PropertyRecord } from './property';
 
 export const colorWholeValueDef = defineWholeValue(colorDef);
 

@@ -1,10 +1,10 @@
 import {
   attr, constant, defineInterface, definePartialInterface, idlType, impl, integer, nullable, reference, roAttr,
-} from '../../web-idl/core/index';
+} from '../../../web-idl/core/index';
 
-import type { StyleletEnvironment } from '../environment';
-
-import type { CSSStyleSheetImpl } from './css-stylesheet';
+import type { StyleletEnvironment } from '../../environment';
+import type { SelectorList } from '../../selector/index';
+import type { CSSStyleSheetImpl } from '../css-stylesheet';
 
 /** Common state and contract for CSS rule implementations. */
 // https://drafts.csswg.org/cssom/#the-cssrule-interface
@@ -32,6 +32,11 @@ export abstract class CSSRuleImpl {
   /** Associate this rule with its containing sheet, or detach it from that sheet. */
   setParentStyleSheet(sheet: CSSStyleSheetImpl | null): void {
     this.parentStyleSheet = sheet;
+  }
+
+  /** Selectors available to nested rules, inherited from the nearest enclosing style rule. */
+  getNestingSelectors(): SelectorList | null {
+    return this.parentRule?.getNestingSelectors() ?? null;
   }
 }
 

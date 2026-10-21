@@ -3,12 +3,12 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   CustomPropertyName, CustomPropertyRegistration, PropertyContext,
-} from '../../../../src/stylelet/css/property';
+} from '../../../../src/stylelet/props/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
-import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
+import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
-import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
-import { CSSPropertyRuleImpl } from '../../../../src/stylelet/cssom/rules';
+import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
+import { CSSPropertyRuleImpl } from '../../../../src/stylelet/cssom/rules/property';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import type { CascadedProperty } from '../../../../src/stylelet/engine/cascade';
 import {
@@ -344,8 +344,9 @@ function addStyleSheet(
       alternate: false,
       originClean: true,
     },
-    typeof source === 'string' ? parseStylesheetContents(source, new StylesheetContext(null, false, scope.cascade.context.env)) : source,
   );
+  const context = new RuleListContext(styleSheet.ruleList, null, false, scope.cascade.context.env);
+  styleSheet.replaceRules(typeof source === 'string' ? parseStylesheetContents(source, context) : source);
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;

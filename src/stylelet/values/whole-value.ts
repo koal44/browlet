@@ -6,7 +6,7 @@ import {
   type TryConsumer, type TokenCursor, type ParserInput, type OptionalDeclarationValue,
 } from '../syntax/index';
 import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import type { PropertyContext } from '../css/index';
+import type { PropertyContext } from '../props/index';
 
 import {
   consumeCssWideValue, type CssWideValue,

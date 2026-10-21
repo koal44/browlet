@@ -40,7 +40,7 @@ This handles author normal/important declarations. Nested style rules are
 retained but not matched here; at-rules are dropped earlier. Origins,
 encapsulation precedence, layers, scope proximity, animation, and transition
 contributions are not represented by this selection algorithm. See the
-[rule inventory](../cssom/README.md#rule-parsing) for the earlier boundary.
+[rule inventory](../cssom/rules/README.md#parsing-and-ownership) for the earlier boundary.
 
 ## Current computed-style path
 

@@ -270,15 +270,27 @@ their syntax. Registered-property grammar validation waits until Computed.
 Resolution receives stage and context at invocation. Serialization describes
 the retained representation without resolving it or selecting a later stage.
 
-Stylelet's StylesheetContext supplies rule grammar decisions to Syntax during
-consumption. It retains the existing environment for CSSOM allocation and the
-enclosing selectors for nested rules; it is per-parse state, not a host service
-on the environment. Selector and property grammars receive that same object
-directly. Child rule contexts retain the environment and constructed-sheet
-status while selecting their enclosing
-selectors. Declaration-block parsing accepts PropertyContext directly and does
+Stylelet's RuleListContext forwards Syntax's interpretation requests to a supplied
+CSSRuleListImpl. The context module imports only types; the list dispatches to
+concrete rule and property grammars. Rule implementations and `context.ts` live
+under `cssom/rules/`; the coordinating `rule-list.ts` remains one level above.
+Property records, their registry, and declaration interpretation live in `props/`.
+The declaration implementations and provisional block storage live together in
+`cssom/declarations/`; MediaList lives in `cssom/media/`. Both families sit below
+rules and sheets, alongside the type-only rule context. Their barrels provide
+narrow entry points without loading the rule dispatcher. ESLint checks these
+dependency directions; parent-rule and parent-sheet references remain type-only.
+The context retains the existing environment for CSSOM
+allocation and the enclosing selectors for nested rules. For each grouping rule,
+the coordinating list creates a child list and supplies it to the concrete rule.
+The rule's child context uses that list during block parsing, and the completed
+rule retains it. Concrete rules import the list only as a type. Interpretation
+does not mutate that list: Syntax supplies the preceding entries from the current
+input, and the owner installs the completed result. Context is per-parse state,
+not a host service on the environment. Selector and property grammars receive
+that same object directly. Declaration-block parsing accepts PropertyContext and does
 not construct a CSSOM rule context.
-Rule entry points and their consumers use StylesheetContext through a
+Rule entry points and their consumers use RuleListContext through a
 type-only import and return CSSOM rules and interpreted property declarations.
 Selector and value grammars declare their own context requirements; generic
 consumer adapters and combinators preserve those requirements.

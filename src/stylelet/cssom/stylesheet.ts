@@ -2,8 +2,8 @@ import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
 import { attr, defineInterface, idlType, impl, nullable, reference, roAttr, union, xattr } from '../../web-idl/core/index';
 
 import type { StyleletEnvironment, StyleletURL } from '../environment';
+import { MediaListImpl } from './media/index';
 
-import { MediaListImpl } from './media-list';
 import type { CSSStyleSheetImpl } from './css-stylesheet';
 
 /** Sheet metadata and the retained media list shared by CSS stylesheets. */

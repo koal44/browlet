@@ -60,7 +60,7 @@ property or referenced specification first.
 2. **Rules, sheets and participation.** Follow declarations into CSSStyleRule,
    then sheet/list identity, adoption, replacement and mutation. Connect nested
    rules and selected group rules to interpretation and cascade; retain namespace,
-   URL and tree-scope context. Follow the [rule](stylelet/css/ROADMAP.md) and
+   URL and tree-scope context. Follow the [rule](stylelet/cssom/rules/ROADMAP.md) and
    [selector](stylelet/selector/ROADMAP.md) gates. Add external sheet loading through
    the existing loader when that consumer is reached, not through another fetcher.
 3. **Complete the value path for supported properties.** Finish cascade ordering,

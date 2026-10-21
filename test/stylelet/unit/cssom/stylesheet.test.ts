@@ -2,9 +2,9 @@ import { browletDOM } from '../../../../src/browlet/integration/dom';
 import { describe, expect, it } from 'vitest';
 
 import { CSSStyleSheetImpl, type CSSStyleSheetInit } from '../../../../src/stylelet/cssom/css-stylesheet';
-import { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
-import type { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules';
-import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
+import { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
+import type { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules/style';
+import { MediaListImpl } from '../../../../src/stylelet/cssom/media/media-list';
 import { StyleSheetImpl } from '../../../../src/stylelet/cssom/stylesheet';
 import { Stylelet, type InternalPromise } from '../../../../src/stylelet/index';
 import { createBrowletDocument } from '../../browlet-document';
@@ -61,11 +61,12 @@ describe('CSSStyleSheetImpl', () => {
     expect(() => sheet.replaceSync('body {}')).toThrowError(
       expect.objectContaining({ name: 'NotAllowedError' }),
     );
-    // Ordinary sheets must reach the import grammar; the constructed-sheet
-    // prohibition must not hide this explicit missing implementation.
+    // Import syntax is retained, but ordinary sheets still need the resource owner.
+    // A failed attachment must not insert a silently unloaded rule.
     expect(() => sheet.insertRule('@import "theme.css";')).toThrowError(
-      '@import statement grammar and CSSOM construction are not implemented',
+      'Imported stylesheet loading and completion are not implemented',
     );
+    expect(sheet.cssRules.length).toBe(0);
   });
 
   it('resolves a relative constructor base through the standalone URL provider', () => {
@@ -151,6 +152,46 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet.cssRules).toBe(rules);
     expect(rules).toHaveLength(2);
     expect(rules.item(1)).toBe([...rules][1]);
+  });
+
+  it.each(['replaceSync', 'replace'] as const)('uses only the new input for namespaces and placement during %s', async (method) => {
+    const sheet = createStyleSheet();
+    sheet.replaceSync('@namespace old "urn:old"; old|a {}');
+    const rules = sheet.cssRules;
+    const previous = rules.item(1)!;
+    const text = '@namespace fresh "urn:fresh"; old|b {} fresh|c {} @namespace late "urn:late"; late|d {}';
+
+    if (method === 'replaceSync') sheet.replaceSync(text);
+    else await observe(sheet.replace(text));
+
+    expect(sheet.cssRules).toBe(rules);
+    expect(rules).toHaveLength(2);
+    expect((rules.item(1) as CSSStyleRuleImpl).selectorText).toBe('fresh|c');
+    expect(rules.item(1)!.parentStyleSheet).toBe(sheet);
+    expect(previous.parentStyleSheet).toBeNull();
+  });
+
+  it.each(['replaceSync', 'replace'] as const)('preserves the live rule tree when %s parsing throws', async (method) => {
+    const sheet = createStyleSheet();
+    sheet.replaceSync('.parent { .child {} }');
+    const rules = sheet.cssRules;
+    const parent = rules.item(0) as CSSStyleRuleImpl;
+    const child = parent.cssRules.item(0)!;
+    const text = '.replacement {} @media screen {}';
+
+    if (method === 'replaceSync') {
+      expect(() => sheet.replaceSync(text)).toThrow('@media prelude, placement, and block grammar are not implemented');
+    } else {
+      await expect(observe(sheet.replace(text))).rejects.toThrow('@media prelude, placement, and block grammar are not implemented');
+    }
+
+    expect(sheet.cssRules).toBe(rules);
+    expect([...rules]).toEqual([parent]);
+    expect(parent.cssRules.item(0)).toBe(child);
+    expect(child.parentRule).toBe(parent);
+    expect(parent.parentStyleSheet).toBe(sheet);
+    expect(child.parentStyleSheet).toBe(sheet);
+    expect(sheet.insertRule('.after {}', 1)).toBe(1);
   });
 
   it.each(['replaceSync', 'replace'] as const)('discards imports during %s', async (method) => {

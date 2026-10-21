@@ -18,7 +18,7 @@ Missing resource/layout consumers remain explicit at their owners.
 | --- | --- |
 | CSSOM Platform interfaces | Sheets, rules, lists, and declarations are bound; adoption still needs its typed observable-array boundary. Continue later interface and behavior audits. See [CSSOM projection](cssom/ROADMAP.md#projection-and-declaration-lifecycle). |
 | Declaration mutation ownership | Review the current separate block alongside CSSStyleDeclaration/CSSStyleProperties. Rule edits and the engine already use one implementation tree. Preserve observable behavior without treating current storage tests as architecture requirements. |
-| Stylesheet rule participation | Unknown at-rules are discarded; recognized unfinished grammars stop at explicit context methods. Nested style rules are retained but not matched by the cascade. Namespace context, grouping, layers, imports, and scope need connected consumers. Later declaration runs are separate child implementations. See the [rule roadmap](css/ROADMAP.md). |
+| Stylesheet rule participation | Unknown at-rules are discarded; recognized unfinished grammars stop at explicit context methods. Nested style rules are retained but not matched by the cascade. Namespace context, grouping, layers, imports, and scope need connected consumers. Later declaration runs are separate child implementations. See the [rule roadmap](cssom/rules/ROADMAP.md). |
 | Selector context and support | Parsing covers more than runtime matching. Preserve namespace/nesting context, stylesheet tree scope, pseudo-element subjects, and dynamic host facts; review overlap with Selectlet through existing DOMOperations. See the [selector roadmap](selector/ROADMAP.md). |
 | Full computed and resolved values | The [engine roadmap](engine/ROADMAP.md) owns complete selection/defaulting/inheritance; the [lifecycle roadmap](value-processing/ROADMAP.md) records property metadata and stage inputs. Connectedness, flat-tree/pseudo-element identity, and rendering facts come from their owners. Live views and caches require explicit freshness/invalidation contracts. |
 | Substitution and registration | The [value roadmap](values/ROADMAP.md) records variable replacement, cycles, fallback, typed registered values, and provenance. Registration lookup and direct value tests exist; document/API registration and per-element computation are not connected. |
@@ -39,8 +39,8 @@ Missing resource/layout consumers remain explicit at their owners.
   implementation APIs. Keep host-specific Platform objects out of Stylelet.
 - Live computed-style queries and any engine-owned cached value state. Neither
   inline style nor a CSSOM result should become an accidental owner of layout.
-- The broad `css/` folder name and stylesheet matcher sharing with Selectlet.
-  Settle the state/consumer boundaries before renaming or merging these owners.
+- Stylesheet matcher sharing with Selectlet. Settle the state/consumer
+  boundaries before merging these owners.
 
 ## Source organization
 

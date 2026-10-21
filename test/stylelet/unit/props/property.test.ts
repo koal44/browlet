@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { colorWholeValueDef } from '../../../src/stylelet/props/color';
+import { colorWholeValueDef } from '../../../../src/stylelet/props/color';
 import {
   propertyRegistry, resolveBuiltInPropertyDeclaration, serializePropertyDeclaration,
-} from '../../../src/stylelet/css/property';
-import { parseDeclarationBlock } from '../../../src/stylelet/css/declaration-block';
-import { ValueStage } from '../../../src/stylelet/value-processing/stage';
+} from '../../../../src/stylelet/props/property';
+import { parseDeclarationBlock } from '../../../../src/stylelet/cssom/declarations/declaration-block';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
   absoluteColorFromRgba, colorDef, ColorKind, ColorRgba,
-} from '../../../src/stylelet/values/color';
-import { defineWholeValue } from '../../../src/stylelet/values/whole-value';
+} from '../../../../src/stylelet/values/color';
+import { defineWholeValue } from '../../../../src/stylelet/values/whole-value';
 
 describe('property records', () => {
   it.each([

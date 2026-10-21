@@ -1,11 +1,12 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import { serializePropertyDeclaration } from '../../../../src/stylelet/css/property';
+import { serializePropertyDeclaration } from '../../../../src/stylelet/props/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
-import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
+import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
-import type { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
+import type { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules/style';
+import type { CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules/nested-declarations';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import {
   CascadeEngine, type CascadeEngineOptions,
@@ -267,8 +268,8 @@ function addStyleSheet(
       alternate: false,
       originClean: options.originClean ?? true,
     },
-    parseStylesheetContents(source, new StylesheetContext(null, false, scope.cascade.context.env)),
   );
+  styleSheet.replaceRules(parseStylesheetContents(source, new RuleListContext(styleSheet.ruleList, null, false, scope.cascade.context.env)));
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;

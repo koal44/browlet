@@ -6,7 +6,7 @@ import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
 import { createFetchedStyleSheet, fetchCSSStyleSheet } from '../../../src/browlet/style/stylesheet-loading';
 import { processStyleSheetLinkHeaders } from '../../../src/browlet/style/header-stylesheets';
 import { FetchResponse } from '../../../src/fetch/response';
-import { CSSStyleRuleImpl } from '../../../src/stylelet/cssom/rules';
+import { CSSStyleRuleImpl } from '../../../src/stylelet/cssom/rules/style';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { closeServer, listen } from '../loader/http-fixture';
 
@@ -156,7 +156,7 @@ describe('CSSOM stylesheet fetching', () => {
     response.headerList.append('Content-Type', 'text/css');
     expect(() => createFetchedStyleSheet(url, response, Buffer.from('@import "other.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document)).toThrow('@import statement grammar and CSSOM construction are not implemented');
+    }, document)).toThrow('Imported stylesheet loading and completion are not implemented');
   });
 
   it('keeps header order ahead of tree sheets when responses finish out of order', async () => {

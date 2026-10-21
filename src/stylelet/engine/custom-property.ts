@@ -1,4 +1,4 @@
-import type { CustomPropertyName, CustomPropertyRegistration } from '../css/index';
+import type { CustomPropertyName, CustomPropertyRegistration } from '../props/index';
 import { CSSPropertyRuleImpl } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';

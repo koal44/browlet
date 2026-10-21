@@ -11,17 +11,17 @@ Primary reading used the local CSSWG `cssom-1/Overview.bs`,
 style attribute. The reference roots are listed in the
 [Stylelet roadmap](../ROADMAP.md#sources-and-reading-depth).
 
-The [selector](../selector/ROADMAP.md), [rule](../css/ROADMAP.md),
+The [selector](../selector/ROADMAP.md), [rule](rules/ROADMAP.md),
 [value-lifecycle](../value-processing/ROADMAP.md), [property](../props/ROADMAP.md)
 and [Typed OM](typed/ROADMAP.md) guides own the related contracts.
-Sections 1–5 and the §6 preface/§6.1–6.3 sheet, collection, and association contracts have been audited.
-Required rule/declaration bindings are present; their behavioral audit remains open. Related browser evidence lives in
+Sections 1–5 and §6.1–6.4 have been reviewed, including explicit rule-family dependencies below.
+Declaration behavior remains under audit. Related browser evidence lives in
 the [Browlet style roadmap](../../browlet/style/ROADMAP.md) and
 [CSP roadmap](../../browlet/browsing/policy/csp/ROADMAP.md#style-attribute-consumer).
 
 ## Declaration boundary
 
-[css-stylesheet.ts](css-stylesheet.ts) and [style-properties.ts](style-properties.ts)
+[css-stylesheet.ts](css-stylesheet.ts) and [style-properties.ts](declarations/style-properties.ts)
 declare their constructor and property accessors through Web IDL Core. Sheet
 construction receives `StyleletEnvironment` directly; property accessors forward
 to implementation operations. Binding owns conversion, realm selection, and
@@ -38,11 +38,11 @@ or Platform behavior have been verified.
 | Introduction and terminology | CSS is the supported styling language; the property registry identifies supported built-ins. Binding separates author overrides from internal calls, covered for MediaList. | Implicit `::before`/`::after` existence belongs to pseudo-element matching/computed-style work, independently of box generation. |
 | [Common idioms and CSSOMString](https://drafts.csswg.org/cssom/#common-serializing-idioms) | Identifier/string escaping, function/LOCAL formatting, URL serialization, and list separators; real DOMString typedef with conversion distinct from CSS preprocessing. | Function arguments remain the owning value grammar's responsibility. LOCAL formatting is ready for the missing font-source descriptor consumer. Preserve the reviewed [identifier clash](../syntax/ROADMAP.md#identifier-serialization-disagreement). |
 | [Media queries and MediaList](https://drafts.csswg.org/cssom/#media-queries) | List parsing/recovery, serialization/comparison, mutation, complete IDL, and real Binding regressions, including sheet media. Modern conditions/ranges use the Media Queries grammar. | Device matching and additional feature interpretation belong to [Conditional Rules](../conditional/ROADMAP.md); serialization alone does not establish support. See disagreements below. |
-| [Selectors](https://drafts.csswg.org/cssom/#selectors) | Section 5 parsing and serialization use `selector/parser.ts`, with namespace, combinator, attribute, pseudo-element, functional pseudo-class, and An+B coverage. | Connect CSSStyleRule getters/setters with the correct namespace/nesting context and complete the [consumer review](../selector/ROADMAP.md#parser-to-consumer-coverage). |
-| [Style sheets](https://drafts.csswg.org/cssom/#css-style-sheets) | Metadata, one-pass initialization, typed construction/dictionary, access guards, replacement promises, simple insertion/deletion, legacy aliases, projected identity/realm coverage, and response-derived origin/base state. | Ordinary import/namespace grammars and mixed-rule hierarchy. Recognized missing grammars stop explicitly. |
+| [Selectors](https://drafts.csswg.org/cssom/#selectors) | Section 5 parsing/serialization and CSSStyleRule mutation use namespace/nesting context; edits refresh descendant selectors and specificity. | Complete the [matcher/consumer review](../selector/ROADMAP.md#parser-to-consumer-coverage), including future group-rule traversal. |
+| [Style sheets](https://drafts.csswg.org/cssom/#css-style-sheets) | Metadata, one-pass initialization, typed construction/dictionary, access guards, replacement promises, insertion/deletion and namespace/import ordering, legacy aliases, identity/realm coverage, and response-derived origin/base state. | Import loading, modern import clauses, and hierarchy exceptions for unfinished rule families such as layer statements. |
 | [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document/shadow sheets, real observable-array binding and adoption checks, retained identities, preferred/selected sets, and ordered Default-Style response processing. Header order survives reversed fetch completion. | Script blocking and resource completion; shadow-tree cascade selection is separate from collection ownership. See the [collection disagreements](../../browlet/style/ROADMAP.md#stylesheet-collection-disagreements). |
 | [Association and fetching](https://drafts.csswg.org/cssom/#style-sheet-association) | LinkStyle bindings for HTML/SVG inline style owners and ProcessingInstruction; Fetch-backed PI/header loading, cancellation on PI mutation/removal/adoption, policy, MIME/status/CORS, encoding, and URL metadata. | HTML `<link>`, imports, script/load/render blocking, and XML document parsing retain explicit owners. See [resource boundaries and browser choices](../../browlet/style/ROADMAP.md#external-stylesheet-loading). |
-| [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | A single projected implementation tree, parent links, live lists, separate style/nested declarations, and the no-op cssText setter. | Selector mutation, rule serialization, nested insertion/deletion, hierarchy checks, and supported at-rule grammars. See rule work below. |
+| [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | One implementation tree, parent links/live lists, selector edits, style/nested-declaration serialization, nested mutation, namespace grammar, and required CSSOM-owned interfaces. | Conditional/font/animation rule grammars and consumers; page/margin descriptors and import lifecycle. See the [rule interface accounting](rules/ROADMAP.md#rule-and-interface-coverage). |
 | [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | Retained declarations, queries/edits, attribute write-back, readonly checks, and CSSStyleDeclaration/CSSStyleProperties bindings with supported indices/property attributes. | Full declaration algorithm audit, shorthand/longhand and logical-group rules, URL provenance, descriptors, and the final mutation owner. |
 | [CSS values](https://drafts.csswg.org/cssom/#css-values) | Registry-driven value parsing/serialization and broader reusable value machinery. | Complete property grammar coverage, shorthand serialization, custom-property processing, and stage-correct representations through the value-lifecycle owner. |
 | [ElementCSSInlineStyle](https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin) | Permanent HTML/SVG/MathML mixins, explicit attribute input, stable lazy projected CSSStyleProperties, and CSP gating in Browlet. | Audit clone/import and parse-time URL behavior, alongside declaration ownership. |
@@ -53,45 +53,8 @@ or Platform behavior have been verified.
 
 ### Media-query disagreements
 
-Three-engine probes and the retained media-list browser regressions establish
-the following choices. Revisit the markers when the specifications or engines converge.
-
-- `SPEC_CLASH(media-query-only-serialization)`: CSSOM's
-  [serializer](https://drafts.csswg.org/cssom/#serialize-a-media-query) only emits
-  `not`. Preserve `only`, following Chromium, Firefox, and WebKit; for example,
-  `ONLY Screen AND (color)` becomes `only screen and (color)`.
-- `SPEC_CLASH(media-query-trailing-comma)`: Media Queries delegates list splitting
-  to Syntax's [comma-list algorithm](https://drafts.csswg.org/css-syntax-3/#parse-comma-separated-list-of-component-values),
-  which drops the final empty arm. Preserve it specifically for media queries,
-  as all three engines do: `screen,` becomes `screen, not all`. The general
-  Syntax entry point is unchanged. A comma inside a folded block is not a separator.
-- `SPEC_GAP(media-general-enclosed-serialization)`: Media Queries defines
-  [`<general-enclosed>`](https://drafts.csswg.org/mediaqueries-4/#typedef-general-enclosed),
-  but CSSOM's older serializer does not cover it. Retain token-based serialization,
-  as WebKit does: `future(a,` becomes `future(a,)`, and repeated whitespace
-  collapses. Chromium and Firefox preserve source text, including missing
-  closers and comments. Unknown grammar remains opaque; its function names
-  are not treated as interpreted CSS function keywords.
-- `SPEC_CLASH(media-list-mutation-comparison)`: Keep CSSOM's
-  [append](https://drafts.csswg.org/cssom/#dom-medialist-appendmedium) and
-  [delete](https://drafts.csswg.org/cssom/#dom-medialist-deletemedium) behavior,
-  matching Chromium: an equivalent append leaves order unchanged; deletion
-  removes all matching entries. Firefox moves an existing query to the end on
-  append; WebKit appends a duplicate and deletes only one match.
-- `SPEC_CLASH(media-list-mutation-input)`: Keep CSSOM's
-  [single-query parsing](https://drafts.csswg.org/cssom/#parse-a-media-query)
-  and Chromium's mutations: empty or multiple-query inputs are no-ops; invalid
-  single queries recover as `not all`. The table below records the other engines.
-  Each browser/input pair has a separate expected failure so convergence surfaces.
-
-Starting from `screen`, append and then delete the same input:
-
-| Input | Firefox | WebKit |
-| --- | --- | --- |
-| Empty string | Both operations throw NotFoundError; unchanged. | Append does nothing; delete throws NotFoundError. |
-| `,` | Append does nothing; delete throws NotFoundError. | Appends two `not all` entries; delete throws NotFoundError, retaining them. |
-| `screen, print` | Append does nothing; delete removes `screen`. | Appends both entries, including duplicate `screen`; delete throws NotFoundError. |
-| `&` | Append does nothing; delete throws NotFoundError. | Appends `not all`; delete throws NotFoundError, retaining it. |
+The [media roadmap](media/ROADMAP.md#media-query-disagreements) records the
+approved parsing, serialization, and list-mutation differences, with browser evidence.
 
 ### Constructed-sheet disagreements
 
@@ -119,81 +82,17 @@ support the following approved choices:
   The [binding regression](../../../test/browlet/style/cssom.test.ts) verifies
   the chosen exception's projected identity and name.
 
-### Rule and interface coverage
-
-`CSSStyleRuleImpl` derives from `CSSGroupingRuleImpl` and retains nested style
-and declaration-rule children. `selectorText`, style-rule `cssText` reads, and
-nested mutation are explicit throwing dependencies. `CSSRule.cssText` assignment
-has no effect, as specified. The interfaces are bound without claiming those
-remaining algorithms are implemented.
-
-Missing implementations include `CSSImportRule`,
-`CSSPageRule`, `CSSPageDescriptors`, `CSSMarginRule`, its descriptor interface,
-and `CSSNamespaceRule`. CSSMediaRule is defined by Conditional Rules; font,
-animation, supports, layer, nesting, and other rule interfaces have contributing
-specifications. The [rule roadmap](../css/ROADMAP.md) now records those
-contributions. CSSNestedDeclarationsImpl retains later declaration runs and
-projects its CSSStyleProperties result. CSSPropertyRuleImpl
-currently supports direct registration fixtures, not parsed `@property` input.
-CSSOM's legacy numeric
-constants are not a complete list of rule types.
-
-At present, unknown at-rules are discarded. Recognized unfinished at-rules stop
-at StylesheetContext's explicit statement/block dependencies rather than being
-silently discarded. Those methods receive preludes and preceding siblings;
-block preparation must supply the child grammar and final validity/construction
-step. Replacement discards imports as required by CSSOM. Constructed insertion
-rejects imports; ordinary insertion reaches the missing grammar. Complete
-mixed-rule hierarchy checks depend on these rule types. Parsing support, CSSOM identity, engine participation,
-and fetching must be accounted for separately as each rule is added.
+The [rules roadmap](rules/ROADMAP.md) owns §6.4 interface accounting, unfinished
+grammars, and the rule-specific disagreements and gaps.
 
 ## Projection and declaration lifecycle
 
-- [ ] Before closing the CSSOM audit, replace the provisional
-  `css/CSSDeclarationBlock` class with plain declaration state or ownership by
-  the appropriate implementation, unless review establishes a concrete need
-  for the separate class. Audit inline style, style rules, descriptor rules,
-  and computed results together. CSSOM defines an ordered collection and its
-  associated state; that does not require this extra class. Element `.style`
-  exposes `CSSStylePropertiesImpl`. Preserve observable identity and lifecycle
-  behavior; current private-storage tests and `instanceof` consumers do not
-  settle the representation.
-- [ ] Make attribute input, author mutation, and engine reads explicit paths.
-  Preserve one authorization/parsing path for first and later attribute inputs,
-  CSSOM write-back bypass, and accepted state after a blocked replacement.
-  Binding already replaces manual numeric properties and the mixin's
-  `synchronizeIndices()` dependency; no observer layer was required.
-- [ ] Audit supported-property lookup, custom-name case, empty/invalid values,
-  priority, null conversion, order, shorthand expansion/removal/serialization,
-  logical groups, and readonly/computed behavior. The current small registry
-  cannot exercise every one of these rules.
-- [ ] Preserve URL base/provenance per parsed declaration when enabling
-  URL-valued properties. A block can contain declarations from different edits
-  and bases; a later document base cannot replace that history.
+The [declarations roadmap](declarations/ROADMAP.md#declaration-state-and-lifecycle)
+owns the provisional block review, mutation semantics, attribute/CSP input,
+and declaration URL provenance. Preserve the existing explicit initialization
+and CSSOM write-back contract while settling representation.
 
-CSSOM's abstract declaration-block creation steps initialize from an existing
-owner attribute. They do not require our TypeScript constructor or the first
-Platform access to perform that read. Browlet already delivers attributes
-after element construction. An external host attaching to an existing node
-must supply the initial input explicitly. Preserve this reviewed lifecycle
-requirement while reconsidering the objects that carry it.
-
-### Rule mutation ownership
-
-- [ ] Extend parent-association coverage to nested insertion/deletion and
-  supported group rules. Existing parsing and top-level mutation propagate
-  sheet attachment/removal through the retained child tree.
-- [ ] Complete selector and rule serialization behavior using the underlying
-  algorithms, then nested mutation and rule-type hierarchy constraints.
-
-Declaration edits already update the state the engine reads. Regressions cover
-nested-rule survival, separate later declaration runs, and parent-sheet links
-after removal/replacement. There is no declaration copy-back callback or
-independent interpreted tree to keep synchronized.
-
-Discarded nested rules do not split declaration runs, following the reviewed
-browser behavior. The continuing Syntax disagreement and issue link are recorded
-in the [syntax roadmap](../syntax/ROADMAP.md#parser-disagreements).
+Rule-family mutation work is tracked in the [rules roadmap](rules/ROADMAP.md#rule-mutation-ownership).
 
 ## Computed results and external facts
 
@@ -234,15 +133,13 @@ not prerequisites for every CSSOM interface.
 
 ## Next review order
 
-1. Continue from §6.1 into collections/adoption and association. Keep missing
-   external-resource producers explicit rather than expanding their stubs silently.
-2. Audit CSS rule behavior, including selectors, nested mutation, serialization,
-   and hierarchy. The existing bindings supply observable test boundaries.
-3. Audit `CSSStyleDeclaration`/`CSSStyleProperties` and `ElementCSSInlineStyle`.
+1. Audit §6.5 declarations and §6.6 `CSSStyleDeclaration`/`CSSStyleProperties`.
    Settle declaration ownership while preserving the input/CSP/CSSOM behavior.
-4. Return to Window's computed-style partial with the completed interface.
+2. Review `ElementCSSInlineStyle`, then Window's computed-style partial.
    Separate what can work now from cascade, pseudo-element, and layout
    dependencies; record each unfinished branch at its owner.
+3. Revisit rule-family/resource dependencies with their owners; their explicit
+   entry points and the [rule coverage table](rules/ROADMAP.md#rule-and-interface-coverage) remain unfinished work.
 
 This is a bounded CSSOM review route, not a replacement for project priority.
 Small independent interfaces such as MediaList can be completed alongside the

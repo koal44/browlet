@@ -14,7 +14,8 @@ const options = [{
     'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
     stylelet: ['index', 'environment', 'context'],
     'stylelet/syntax': ['index'], 'stylelet/values': ['index'],
-    'stylelet/values/numeric-literal': ['index'], 'stylelet/cssom': ['index'],
+    'stylelet/values/numeric-literal': ['index'],
+    'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
   },
 }];
 const styleletFile = (path) => fileURLToPath(new URL(`../../src/stylelet/${path}.ts`, import.meta.url));
@@ -22,6 +23,9 @@ const tester = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
 tester.run('subsystem-imports', rule, {
   valid: [
+    { filename: styleletFile('engine/computed-style'), options, code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';" },
+    { filename: styleletFile('index'), options, code: "export { MediaListImpl } from './cssom/media/index';" },
+    { filename: styleletFile('index'), options, code: "export { StylePropertyMapImpl } from './cssom/typed/index';" },
     { filename: styleletFile('values/color'), options, code: "import { tokenize } from '../syntax/index';" },
     { filename: styleletFile('values/color'), options, code: "import { parseNumber } from './number';" },
     { filename: styleletFile('values/length'), options, code: "import { lengthLiteral } from './numeric-literal/index';" },
@@ -48,6 +52,12 @@ tester.run('subsystem-imports', rule, {
   ],
   invalid: [
     {
+      filename: styleletFile('engine/computed-style'), options,
+      code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/declaration';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+
+    {
       filename: styleletFile('values/color'), options, code: "import { tokenize } from '../syntax/tokens';",
       errors: [{ messageId: 'entryPoint' }],
     },
@@ -60,7 +70,7 @@ tester.run('subsystem-imports', rule, {
       errors: [{ messageId: 'entryPoint' }],
     },
     {
-      filename: styleletFile('cssom/declaration'), options, code: "type Color = import('../values/color').AbsoluteColor;",
+      filename: styleletFile('cssom/declarations/declaration'), options, code: "type Color = import('../../values/color').AbsoluteColor;",
       errors: [{ messageId: 'entryPoint' }],
     },
     {

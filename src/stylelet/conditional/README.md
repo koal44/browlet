@@ -13,10 +13,10 @@ and consumer connections.
 | [boolean-expr.ts](../values/boolean-expr.ts) | Parses generic tests and short-circuits boolean evaluation through caller-supplied test results. It propagates unknown internally and, unless requested otherwise, converts a final unknown result to false. | This helper does not choose the leaf semantics of supports, media, or container queries. Those contracts differ. |
 | [media-query.ts](../values/media-query.ts) | Parses types, modifiers, boolean/range features, lists and conditions; serializes query records. Invalid list entries become not all. | Feature names are strings, not a complete inventory of supported device features. |
 | `resolveMediaQuery()` | Resolves value components using ValueStage/MathContext and returns a MediaQuery. | Despite its name, it does not answer whether the query matches a device/document. |
-| [MediaListImpl](../cssom/media-list.ts) | Retains parsed media queries and exposes list mutation/serialization. | Retaining a media list does not evaluate stylesheet applicability. |
+| [MediaListImpl](../cssom/media/media-list.ts) | Retains parsed media queries and exposes list mutation/serialization. | Retaining a media list does not evaluate stylesheet applicability. |
 
 There is no container-query implementation. The
-[CSSOM parser](../cssom/parser.ts) reaches explicit missing-grammar methods for
+[CSSOM rule list](../cssom/rule-list.ts) reaches explicit missing-grammar methods for
 conditional at-rules, and
 `CascadeEngine.getActiveStyleSheets()` filters the disabled flag without media
 matching. CSSOM rule declarations/types therefore do not establish engine

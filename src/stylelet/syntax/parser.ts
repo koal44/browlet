@@ -1,7 +1,7 @@
 import { asciiLower } from '../../infra/ascii';
 
-import type { PropertyDeclaration } from '../css/index';
-import type { CSSRuleImpl, StylesheetContext } from '../cssom/index';
+import type { PropertyDeclaration } from '../props/index';
+import type { CSSRuleImpl, RuleListContext } from '../cssom/index';
 
 import {
   isBraceBlock, isComponentValue, isDelimToken, isIdentToken, isTokenKind,
@@ -88,7 +88,7 @@ export function parseListAsComponentGrammar<T, Context>(
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-stylesheet-contents
 export function parseStylesheetContents(
   input: ParserInput,
-  context: StylesheetContext,
+  context: RuleListContext,
 ): CSSRuleImpl[] {
   return consumeInput(input, context, consumeStylesheetContents);
 }
@@ -97,7 +97,7 @@ export function parseStylesheetContents(
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-block-contents
 export function parseBlockContents(
   input: ParserInput,
-  context: StylesheetContext,
+  context: RuleListContext,
 ): BlockContents {
   return consumeInput(input, context, consumeBlockContents);
 }
@@ -106,7 +106,7 @@ export function parseBlockContents(
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-rule
 export function parseRule(
   input: ParserInput,
-  context: StylesheetContext,
+  context: RuleListContext,
 ): CSSRuleImpl | null {
   return consumeInput(input, context, consumeSingleRule);
 }
@@ -163,7 +163,7 @@ export function discardRuleBlock<Value extends Token>(c: TokenCursor<Value>): vo
 /** Consume a brace-delimited block, including its closing brace when present. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block
 export function consumeBlock<Value extends Token>(
-  c: TokenCursor<Value, StylesheetContext>,
+  c: TokenCursor<Value, RuleListContext>,
 ): BlockContents {
   const opening = c.peek();
 
@@ -277,7 +277,7 @@ function consumeTrivia<Value extends Token>(c: TokenCursor<Value>): void {
 /** Consume whole-sheet rules, ignoring top-level CDO/CDC tokens and malformed rules. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-stylesheet-contents
 function consumeStylesheetContents(
-  c: TokenCursor<Token, StylesheetContext>,
+  c: TokenCursor<Token, RuleListContext>,
 ): CSSRuleImpl[] {
   const rules: CSSRuleImpl[] = [];
 
@@ -309,13 +309,13 @@ function consumeStylesheetContents(
 /** Apply the single-rule entry algorithm using the supplied grammar context. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#parse-rule
 function consumeSingleRule(
-  c: TokenCursor<Token, StylesheetContext>,
+  c: TokenCursor<Token, RuleListContext>,
 ): CSSRuleImpl | null {
   consumeTrivia(c);
   if (c.eof()) return null;
 
   const rule = c.peek().type === TokenKind.AtKeyword
-    ? consumeAtRule(c, false, [])
+    ? consumeAtRule(c, false, null)
     : consumeQualifiedRule(c);
 
   if (rule === null) return null;
@@ -327,9 +327,9 @@ function consumeSingleRule(
 /** Consume and validate an at-rule; nested input leaves the containing closing brace unread. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-at-rule
 function consumeAtRule<Value extends Token>(
-  c: TokenCursor<Value, StylesheetContext>,
+  c: TokenCursor<Value, RuleListContext>,
   nested: boolean,
-  preceding: BlockContents,
+  preceding: BlockContents | null,
 ): CSSRuleImpl | null {
   const token = c.next();
 
@@ -369,7 +369,7 @@ function consumeAtRule<Value extends Token>(
 // SPEC_CLASH(css-invalid-rule-declaration-runs): A rejected rule returns null,
 // just like an incomplete rule, so discarded rules do not split declaration runs.
 function consumeQualifiedRule<Value extends Token>(
-  c: TokenCursor<Value, StylesheetContext>,
+  c: TokenCursor<Value, RuleListContext>,
   stopToken?: TokenKind,
   nested = false,
 ): CSSRuleImpl | null {
@@ -423,7 +423,7 @@ function looksLikeCustomProperty(prelude: ComponentValue[]): boolean {
 /** Consume ordered declaration runs and rules, leaving a containing closing brace unread. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-block-contents
 function consumeBlockContents<Value extends Token>(
-  c: TokenCursor<Value, StylesheetContext>,
+  c: TokenCursor<Value, RuleListContext>,
 ): BlockContents {
   const contents: BlockContents = [];
   let declarations: PropertyDeclaration[] = [];

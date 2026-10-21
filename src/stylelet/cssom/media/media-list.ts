@@ -1,12 +1,12 @@
 import {
   annotated, arg, attr, defineInterface, DOMExceptionImpl, idlType, impl, indexedGetter,
   nullable, op, reference, roAttr, xattr,
-} from '../../web-idl/core/index';
+} from '../../../web-idl/core/index';
 
 import {
   parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
   type MathContext, type MediaQuery,
-} from '../values/index';
+} from '../../values/index';
 
 /** Retain and edit a media query list; device matching belongs to Conditional Rules. */
 // https://drafts.csswg.org/cssom/#the-medialist-interface
@@ -60,7 +60,7 @@ export class MediaListImpl {
   /** Remove every equivalent query, throwing NotFoundError if none matches. */
   // https://drafts.csswg.org/cssom/#dom-medialist-deletemedium
   // SPEC_CLASH(media-list-mutation-comparison): Remove all matches, following
-  // CSSOM/Chromium/Firefox; WebKit removes only one. See the CSSOM roadmap.
+  // CSSOM/Chromium/Firefox; WebKit removes only one. See this folder's roadmap.
   deleteMedium(medium: string): void {
     const query = parseSingleMediaQuery(medium, {});
     if (query === null) return;

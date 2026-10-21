@@ -9,10 +9,10 @@ import type {
   ColorContext, GradientContext, MathContext, PositionContext, ParsedSyntaxValue, SyntaxValue, UrlContext,
   WholeValue, WholeValueDefinition, SupportsContext,
 } from '../values/index';
-import {
-  backgroundColorProperty, colorProperty, opacityProperty,
-  marginBottomProperty, marginLeftProperty, marginRightProperty, marginTopProperty,
-} from '../props/index';
+
+import { backgroundColorProperty, colorProperty } from './color';
+import { opacityProperty } from './opacity';
+import { marginBottomProperty, marginLeftProperty, marginRightProperty, marginTopProperty } from './margin';
 
 /** Shared built-in property record; its registry key supplies the name. */
 export type PropertyRecord<Value, Context> = {

@@ -1,6 +1,6 @@
 import type { DOMDocument, DOMElement, DOMProcessingInstruction } from '../../src/infra/dom-operations';
 import type { CSSStyleSheetInit } from '../../src/stylelet/cssom/css-stylesheet';
-import type { MediaListImpl } from '../../src/stylelet/cssom/media-list';
+import type { MediaListImpl } from '../../src/stylelet/cssom/media/media-list';
 import type { StyleSheetImpl } from '../../src/stylelet/cssom/stylesheet';
 import type { StyleletURLConstructor } from '../../src/stylelet/environment';
 import { URLImpl } from '../../src/url/index';

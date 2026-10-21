@@ -8,7 +8,7 @@ import {
   type TokenCursor, type TokenList, type TryConsumer, type TryConsumerResult, type ParserInput, type DeclarationComponent,
 } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
-import type { PropertyContext } from '../css/index';
+import type { PropertyContext } from '../props/index';
 
 import { angleDef } from './angle';
 import { colorDef } from './color';

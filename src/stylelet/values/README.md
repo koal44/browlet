@@ -66,7 +66,7 @@ computed-time fallback. The [engine inventory](../engine/README.md#registration-
 explains the separate registration lookup and fixture-based tests.
 
 Unregistered declarations instead retain generic components and, when available,
-original text in [property.ts](../css/property.ts). They do not use a registered
+original text in [property.ts](../props/property.ts). They do not use a registered
 type's resolver merely because their tokens resemble a number, URL, or color.
 
 ## Reusable resolution
@@ -80,7 +80,7 @@ type's resolver merely because their tokens resemble a number, URL, or color.
 | [URLs](url.ts) | Retains notation/modifiers, captures local-fragment tree scope when supplied from Specified onward, and resolves other nonempty URLs from Computed onward using the host URL constructor/base. It does not fetch resources. |
 | Type-specific combination functions | Number, dimension, math, color, and other helpers offer operations such as interpolation. There is no generic ValueDefinition interpolation dispatcher or connected animation engine. |
 
-The broad [PropertyContext](../css/property.ts) combines value-helper inputs.
+The broad [PropertyContext](../props/property.ts) combines value-helper inputs.
 The current engine supplies only URL/base/tree information. Standalone tests
 can supply font or percentage facts that an actual style query does not yet
 provide. Neither those tests nor the Used/Actual enum entries imply a layout

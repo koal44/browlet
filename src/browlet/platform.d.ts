@@ -1646,6 +1646,12 @@ export interface Window extends EventTarget {
   CSSStyleDeclaration: CSSStyleDeclarationConstructor;
   CSSStyleSheet: CSSStyleSheetConstructor;
   CSSStyleProperties: CSSStylePropertiesConstructor;
+  CSSNamespaceRule: CSSNamespaceRuleConstructor;
+  CSSImportRule: CSSImportRuleConstructor;
+  CSSPageRule: CSSPageRuleConstructor;
+  CSSPageDescriptors: CSSPageDescriptorsConstructor;
+  CSSMarginRule: CSSMarginRuleConstructor;
+  CSSMarginDescriptors: CSSMarginDescriptorsConstructor;
   ByteLengthQueuingStrategy: ByteLengthQueuingStrategyConstructor;
   CountQueuingStrategy: CountQueuingStrategyConstructor;
   ReadableStream: ReadableStreamConstructor;
@@ -2543,6 +2549,86 @@ export interface CSSStyleProperties extends CSSStyleDeclaration {
 export interface CSSStylePropertiesConstructor extends Ctor<CSSStyleDeclarationConstructor> {
   readonly prototype: CSSStyleProperties;
   [Symbol.hasInstance](value: unknown): value is CSSStyleProperties;
+}
+
+export interface CSSNamespaceRule extends CSSRule {
+  readonly namespaceURI: string;
+  readonly prefix: string;
+}
+
+export interface CSSNamespaceRuleConstructor extends Ctor<CSSRuleConstructor> {
+  readonly prototype: CSSNamespaceRule;
+  [Symbol.hasInstance](value: unknown): value is CSSNamespaceRule;
+}
+
+export interface CSSImportRule extends CSSRule {
+  readonly href: string;
+  get media(): MediaList;
+  set media(value: string);
+  readonly styleSheet: CSSStyleSheet | null;
+  readonly layerName: string | null;
+  readonly supportsText: string | null;
+}
+
+export interface CSSImportRuleConstructor extends Ctor<CSSRuleConstructor> {
+  readonly prototype: CSSImportRule;
+  [Symbol.hasInstance](value: unknown): value is CSSImportRule;
+}
+
+export interface CSSPageRule extends CSSGroupingRule {
+  selectorText: string;
+  get style(): CSSPageDescriptors;
+  set style(value: string);
+}
+
+export interface CSSPageRuleConstructor extends Ctor<CSSGroupingRuleConstructor> {
+  readonly prototype: CSSPageRule;
+  [Symbol.hasInstance](value: unknown): value is CSSPageRule;
+}
+
+export interface CSSPageDescriptors extends CSSStyleDeclaration {
+  margin: string;
+  marginTop: string;
+  marginRight: string;
+  marginBottom: string;
+  marginLeft: string;
+  "margin-top": string;
+  "margin-right": string;
+  "margin-bottom": string;
+  "margin-left": string;
+  size: string;
+  pageOrientation: string;
+  "page-orientation": string;
+  marks: string;
+  bleed: string;
+  readonly [index: number]: string | undefined;
+  [Symbol.iterator](): IterableIterator<string>;
+}
+
+export interface CSSPageDescriptorsConstructor extends Ctor<CSSStyleDeclarationConstructor> {
+  readonly prototype: CSSPageDescriptors;
+  [Symbol.hasInstance](value: unknown): value is CSSPageDescriptors;
+}
+
+export interface CSSMarginRule extends CSSRule {
+  readonly name: string;
+  get style(): CSSMarginDescriptors;
+  set style(value: string);
+}
+
+export interface CSSMarginRuleConstructor extends Ctor<CSSRuleConstructor> {
+  readonly prototype: CSSMarginRule;
+  [Symbol.hasInstance](value: unknown): value is CSSMarginRule;
+}
+
+export interface CSSMarginDescriptors extends CSSStyleDeclaration {
+  readonly [index: number]: string | undefined;
+  [Symbol.iterator](): IterableIterator<string>;
+}
+
+export interface CSSMarginDescriptorsConstructor extends Ctor<CSSStyleDeclarationConstructor> {
+  readonly prototype: CSSMarginDescriptors;
+  [Symbol.hasInstance](value: unknown): value is CSSMarginDescriptors;
 }
 
 export interface ByteLengthQueuingStrategy {

@@ -11,13 +11,16 @@ observable behavior, rather than private storage choices, constrains its replace
 | --- | --- |
 | [StyleSheetImpl](stylesheet.ts) | Common metadata, owner/parent references, retained `MediaList`, disabled state; abstract base |
 | [CSSStyleSheetImpl](css-stylesheet.ts) | Owns the rule tree, location/base URL, metadata, and construction/access flags; retains list identity through insert/delete/replace operations |
-| [CSSRuleImpl](rule.ts), [CSSGroupingRuleImpl](rules.ts) | Rule identity/constants, parent associations, and retained child lists; nested insertion/deletion remain throwing stubs |
-| [CSSStyleRuleImpl](rules.ts), [CSSNestedDeclarationsImpl](rules.ts) | Parsed selectors, leading declarations, and separate later declaration runs; style-rule selector text and serialization remain unfinished |
-| [CSSPropertyRuleImpl](rules.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
-| [CSSStyleDeclarationImpl](declaration.ts), [CSSStylePropertiesImpl](style-properties.ts) | Shared declaration operations and the property-facing subtype; Binding supplies numeric and supported-property attributes |
-| [MediaListImpl](media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation, with a real MediaList declaration; does not evaluate media against a device |
+| [CSSRuleImpl](rules/rule.ts), [CSSGroupingRuleImpl](rules/grouping.ts) | Rule identity/constants, parent associations, live child lists, and nested insertion/deletion with declaration fallback |
+| [CSSStyleRuleImpl](rules/style.ts), [CSSNestedDeclarationsImpl](rules/nested-declarations.ts) | Parsed selectors, selector mutation and child rebinding, leading/later declaration runs, and rule serialization |
+| [CSSNamespaceRuleImpl](rules/namespace.ts) | Namespace grammar, literal URI/prefix, serialization, sheet scope, and mutation constraints |
+| [CSSImportRuleImpl](rules/import.ts) | URL/media prelude, serialization, and bindings; attachment explicitly requires the unfinished import loader; layer/supports clauses stop at their missing grammar |
+| [CSSPageRuleImpl](rules/page.ts), [CSSMarginRuleImpl](rules/margin.ts) | Bound rule and descriptor interfaces; construction/parsing stop explicitly until page-specific grammars exist; margin-descriptor subtype is provisional |
+| [CSSPropertyRuleImpl](rules/property.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
+| [CSSStyleDeclarationImpl](declarations/declaration.ts), [CSSStylePropertiesImpl](declarations/style-properties.ts) | Shared declaration operations and the property-facing subtype; Binding supplies numeric and supported-property attributes |
+| [MediaListImpl](media/media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation, with a real MediaList declaration; does not evaluate media against a device |
 | [CSSRuleListImpl](rule-list.ts), [StyleSheetListImpl](stylesheet-list.ts) | Retained ordered collections; Binding supplies live supported indices and projects entries |
-| [StylePropertyMapImpl](style-property-map.ts) | Explicit throwing placeholder for Typed OM; no working typed map API |
+| [StylePropertyMapImpl](typed/style-property-map.ts) | Explicit throwing placeholder for Typed OM; no working typed map API |
 
 [web-idl.ts](../web-idl.ts) exports the CSSOM string typedef, common sheet,
 rule, list, and declaration interfaces, and the host mixin/partial contributions.
@@ -47,41 +50,11 @@ List owners use `join(', ')` or `join(' ')` for CSSOM's separators.
 
 ## Declaration data and mutation
 
-[CSSDeclarationBlock](../css/declaration-block.ts) stores interpreted
-`PropertyDeclaration` values and their importance/order. It can parse text,
-set/remove declarations, and serialize the retained data. It has no DOM owner,
-environment, or CSSOM identity. Supported built-ins come from the small
-[property registry](../css/property.ts); custom-property token values are stored
-separately from built-in value representations.
-
-This separate class is provisional, including its role as the inline mixin's
-retained state. The [declaration audit](ROADMAP.md#projection-and-declaration-lifecycle)
-must resolve its representation and ownership before CSSOM review closes.
-
-`CSSStyleDeclarationImpl` holds a block and supplies CSSOM operations.
-`CSSStylePropertiesImpl` adds the projected subtype identity; supported property
-attributes declared beside the implementation forward to
-`getPropertyValue()`/`setProperty()` through Binding.
-Neither implementation installs numeric or property-name accessors.
-
-There are three current uses of declaration state:
-
-| Use | Data and change path |
-| --- | --- |
-| Inline style | Browlet's permanent element mixin retains a block and lazily creates the declaration object around it. Attribute input changes the block; CSSOM writes serialize back to the owner with an updating flag. |
-| Style-rule declarations | Each style or nested-declarations rule owns its declaration object. The engine reads that object's parsed declarations directly; edits do not replace child rules or synchronize a second tree. |
-| Computed result | The engine creates a separate block and readonly/computed declaration object for each query. The object contains a snapshot and has no owner node or update mechanism. |
-
-Construction itself does not read an owner's attribute. A standalone host
-attaching to an existing element explicitly delivers its attribute through
-`attributeChanged()`. Browlet delivers additions/changes through its mixin and
-checks CSP there. Its `.style` getter does not reread raw input. This preserves
-accepted declarations after a blocked replacement and avoids a second parsing
-path on first access.
-
-Binding reads supported indices from the current declarations. Attribute input
-therefore needs no `synchronizeIndices()` call or block observer to update the
-already-retained Platform object.
+[declarations/](declarations/README.md) owns the declaration implementations,
+their bindings, and provisional block storage. Its [roadmap](declarations/ROADMAP.md)
+tracks the ownership review and the input/CSP/CSSOM lifecycle to preserve.
+[media/](media/README.md) owns MediaList mutation and serialization. Both
+object families sit below rules and sheets and have export-only barrels.
 
 ## Sheets, collections, and execution
 
@@ -92,54 +65,19 @@ the author-facing `cssRules` getter retains its security check.
 `replace()` uses the owning environment's background execution, task delivery,
 and a `Promise<CSSStyleSheet>`-typed InternalPromise. Modification locking spans the asynchronous replacement.
 Parent-sheet associations propagate through children on attachment/removal.
+`CSSRuleListImpl` checks insertion bounds before parsing, tries declarations when
+nested rule parsing fails, and validates placement. It also owns removal and
+parent cleanup. Parsing uses a supplied `RuleListContext`; the sheet or grouping
+rule attaches the validated result before inserting it into the list.
+This ordering keeps a failed resource attachment from partially changing the list.
 Location and parse-time base URL belong to the sheet, independently of its rules.
 Constructed sheets expose null `href`, retain their Document and resolved base
 internally, and clone MediaList constructor input. Ordinary sheets initialize
 their own metadata directly rather than first constructing an author sheet.
 
-### Rule parsing
-
-[StylesheetContext](parser.ts) supplies the complete interpretation contract to
-Syntax consumption and constructs unattached implementations directly. It does not retain a second
-interpreted tree or whole sheet source string. Selector/value records remain internal parsed data;
-custom-property source text is retained where its representation needs it.
-
-CSSOM and loading callers create StylesheetContext with the enclosing selectors,
-constructed-sheet flag, and environment. The same class handles both sheet kinds:
-ordinary imports reach the explicit unfinished grammar; constructed-sheet
-insertion rejects imports and replacement discards them. Parsing helpers receive
-the context, extracting its environment when allocating retained CSSOM objects.
-Selector/property grammars receive the same context object directly.
-The class carries optional namespace prefixes and a default namespace.
-Nested contexts share the prefix map and retain the default namespace.
-Sheet parsing supplies no outer numeric bindings; value grammars introduce
-their own bindings, such as relative-color channels.
-Each child context selects its enclosing selectors and retains the environment
-and constructed-sheet flag. Populating namespace state from stylesheet text
-remains part of the unfinished `@namespace` integration, covered by an expected-failure
-test with actual stylesheet input. Declaration-only callers supply `PropertyContext`
-directly, passing `{}` when no settings are needed. They do
-not construct a rule context. Syntax reading does not replace the caller's
-context with a private identity interpreter.
-
-`StylesheetContext` methods apply selector/property grammars, consume each block
-under its child context, and return the completed rule. `createStyleRule()` assembles
-the interpreted declarations and children without repeating grammar work. These
-helpers implement CSS Syntax's [rule interpretation requirements](https://drafts.csswg.org/css-syntax-3/#css-stylesheets)
-and CSS Nesting's declaration placement; they are not separate named spec algorithms.
-
-| Construct | Current result / limit |
-| --- | --- |
-| Ordinary style rule | CSSStyleRuleImpl with parsed selectors and a declaration object |
-| Nested style rule | Child CSSStyleRuleImpl with parent-bound selectors and specificity; engine matching of nested style rules remains unfinished |
-| Declarations after a retained child rule | Separate CSSNestedDeclarationsImpl children, in order; the cascade reads them with the parent's matching result |
-| At-rules | Unknown rules are discarded; named unfinished grammars stop with InternalError at their context method. Namespace, grouping, descriptors, and import consumers remain unfinished |
-| `@charset` in parsed text | Intentionally discarded; encoding detection uses its initial byte pattern, not a live rule |
-
-Invalid selector lists discard the rule. Invalid/unsupported declarations do
-not discard its valid siblings. Constructed sheets reject inserted imports;
-ordinary imports reach the explicit unfinished grammar. Nested
-insertion/deletion remain explicit stubs.
+Rule implementations and the type-only context live in [rules/](rules/README.md).
+The coordinating [rule list](rule-list.ts) stays here, above those implementations.
+See [rule parsing](rules/README.md#parsing-and-ownership) for the ownership contract.
 
 [TreeScope](../engine/tree-scope.ts) orders header sheets before tree-associated
 sheets, then adds adopted sheets for cascade order. It tracks preferred/selected
@@ -161,6 +99,7 @@ neutral exception path; Stylelet no longer requires a host DOMException construc
 | Tests | What they exercise |
 | --- | --- |
 | [CSSOM unit suites](../../../test/stylelet/unit/cssom/) | Direct implementation construction, sheet/list identity, declaration edits, media lists, and asynchronous replacement |
+| [Rule browser scenarios](../../../test/stylelet/scenarios/rules.test.ts) | Browlet rule serialization, mutation, namespace scope, declaration order, and the isolated native-browser disagreements |
 | [Tree-scope tests](../../../test/stylelet/unit/engine/tree-scope.test.ts) | Ordering and stylesheet-set selection using explicit sheet inputs |
 | [Host tests](../../../test/stylelet/unit/host.test.ts), [environment tests](../../../test/stylelet/unit/environment.test.ts) | Host-neutral DOM access, explicit initialization, empty-provider semantics, URL/decoding/execution facilities, and neutral exceptions |
 | [Browlet style tests](../../../test/browlet/style/) | Inline/stylesheet association, cascade reads, and real CSSOM conversion, identity, supported indices, borrowed calls, and promises |
@@ -207,3 +146,13 @@ and Web IDL Binding/Core/assembly. The 12 stylesheet-set browser comparisons had
 engines. These comparisons remain enabled. The
 [collection disagreements](../../browlet/style/ROADMAP.md#stylesheet-collection-disagreements)
 record the precise browser results and remaining resource-lifecycle dependencies.
+
+The §6.4 rule audit passed **3,101 tests across 54 files**, with 7 existing
+expected failures and 14 existing skips, using the broad command above. All 21
+rule browser comparisons completed: 16 ordinary passes and 5 approved native
+expected failures; Browlet assertions pass before those annotations apply.
+Full lint/typecheck, the Stylelet build, and global-artifact smoke test passed. Rollup reports the
+parser/rule module cycle. The subsequent ownership cleanup has failing fresh-process
+rule-module regressions; the passing audit baseline above predates that work.
+Import loading, modern import clauses, and page/margin grammars
+remain explicit unfinished boundaries, not passing conformance claims.

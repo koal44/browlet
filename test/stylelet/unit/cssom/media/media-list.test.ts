@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { MediaListImpl } from '../../../../src/stylelet/cssom/media-list';
-import { DOMExceptionImpl } from '../../../../src/web-idl/core/index';
+import { MediaListImpl } from '../../../../../src/stylelet/cssom/media/media-list';
+import { DOMExceptionImpl } from '../../../../../src/web-idl/core/index';
 
 describe('MediaListImpl', () => {
   it('parses and serializes mediaText', () => {

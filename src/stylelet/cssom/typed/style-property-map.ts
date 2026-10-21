@@ -1,4 +1,4 @@
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../../infra/internal-error';
 
 /** Placeholder for the CSS Typed OM property map exposed by CSSStyleRule.styleMap. */
 // https://drafts.css-houdini.org/css-typed-om-1/#the-stylepropertymap

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type {
   CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext,
-} from '../../../../src/stylelet/css/property';
+} from '../../../../src/stylelet/props/property';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 import { CSS_WIDE_KEYWORDS } from '../../../../src/stylelet/values/css-wide';

@@ -10,8 +10,8 @@ import { createComponentParser, parseAsComponentGrammar, parseListAsComponentGra
 import { TokenCursor, type TryConsumer } from '../../../../src/stylelet/syntax/token-cursor';
 import { tokenize } from '../../../../src/stylelet/syntax/tokens';
 import { parseSelectorList } from '../../../../src/stylelet/selector/parser';
-import { parseDeclarationBlock } from '../../../../src/stylelet/css/declaration-block';
-import type { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
+import { parseDeclarationBlock } from '../../../../src/stylelet/cssom/declarations/declaration-block';
+import type { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 
 type NameContext = { name: string; };
 type CountContext = { count: number; };
@@ -71,7 +71,7 @@ describe('typed parsing contexts', () => {
 });
 
 /** Compile-time checks: every shared adapter must retain its consumer's requirements. */
-export function checkParserContextContracts(ruleContext: StylesheetContext): void {
+export function checkParserContextContracts(ruleContext: RuleListContext): void {
   const parseName = createComponentParser(consumeName);
   parseName('value', { name: 'valid' });
   // @ts-expect-error A parser must reject a context that cannot satisfy its consumer.

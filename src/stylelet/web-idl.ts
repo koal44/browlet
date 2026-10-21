@@ -10,6 +10,8 @@ import {
   cssRuleIDL, cssRuleListIDL, cssGroupingRuleIDL, cssStyleRuleIDL, cssNestedDeclarationsIDL, cssPropertyRuleIDL,
   cssAnimationsRuleIDL, cssCounterStylesRuleIDL, cssConditionalRuleIDL, cssFontsRuleIDL,
   cssStyleDeclarationIDL, cssStylePropertiesIDL, CSSStylePropertiesImpl, CSSStyleSheetImpl,
+  cssNamespaceRuleIDL, cssImportRuleIDL, cssPageRuleIDL, cssPageDescriptorsIDL,
+  cssMarginRuleIDL, cssMarginDescriptorsIDL,
 } from './cssom/index';
 import type { TreeScope } from './engine/index';
 
@@ -103,4 +105,6 @@ export const styleletIDLDefinitions: Definition<StyleletEnvironment>[] = [
   linkStyleIDL,
   cssomWindowIDL,
   cssStyleSheetIDL, cssStylePropertiesIDL,
+  cssNamespaceRuleIDL, cssImportRuleIDL, cssPageRuleIDL, cssPageDescriptorsIDL,
+  cssMarginRuleIDL, cssMarginDescriptorsIDL,
 ];

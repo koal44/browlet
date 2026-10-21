@@ -62,8 +62,8 @@ if (typeof stlt.createStyleSheet !== "function") {
 }
 
 const sheet = stlt.createStyleSheet({ baseURL: "https://example.test/assets/" });
-if (sheet.href !== "about:blank" || sheet.baseURL.href !== "https://example.test/assets/") {
-  throw new Error("Expected standalone stylesheet URL resolution through the native provider");
+if (sheet.href !== null || sheet.baseURL.href !== "https://example.test/assets/") {
+  throw new Error("Expected a constructed sheet with null href and the supplied base URL");
 }
 
 console.log("global artifact passed");

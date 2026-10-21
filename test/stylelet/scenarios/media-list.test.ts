@@ -1,6 +1,6 @@
 import { expect, type Page } from '@playwright/test';
 
-import { MediaListImpl } from '../../../src/stylelet/cssom/media-list';
+import { MediaListImpl } from '../../../src/stylelet/cssom/media/media-list';
 import { runScenarios } from '../../scenario/dispatch';
 import { BROWSER_NAMES } from '../../scenario/harness';
 

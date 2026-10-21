@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { styleletIDLDefinitions } from '../../../src/stylelet/web-idl';
-import { mediaListIDL } from '../../../src/stylelet/cssom/media-list';
+import { mediaListIDL } from '../../../src/stylelet/cssom/media/media-list';
 import { serializeDefinitions } from '../../../src/web-idl/core/index';
 
 describe('Stylelet Web IDL declarations', () => {

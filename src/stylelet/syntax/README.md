@@ -17,7 +17,7 @@ conformance.
 | Components | [parser.ts](parser.ts), [component-value.ts](component-value.ts) | Preserved tokens, nested blocks, and functions. These are syntax, not resolved CSS values. |
 | Stylesheet contents | `parseStylesheetContents()` | Rules interpreted by the required caller-supplied grammar context. |
 | Block syntax | `parseBlockContents()` | Interpreted declaration runs interleaved with rules, preserving the distinction needed by nesting. |
-| CSS rule construction | [CSSOM parser](../cssom/parser.ts) | Recognizes selectors/properties and constructs rule implementations directly; see the [rule inventory](../cssom/README.md#rule-parsing). |
+| CSS rule construction | [CSSOM rule list](../cssom/rule-list.ts) | Coordinates rule/property interpretation through the caller's RuleListContext; see the [rule inventory](../cssom/rules/README.md#parsing-and-ownership). |
 
 `ParserInput` accepts a string, `TokenList` record, or existing `TokenCursor`.
 Every parser entry point requires a context, including component and value
@@ -51,13 +51,13 @@ rules with `PropertyDeclaration` runs. There is no parallel raw rule tree.
 There is no separate syntax stylesheet container. The specification's
 [parse a stylesheet](https://drafts.csswg.org/css-syntax-3/#parse-stylesheet)
 operation spans contents parsing here and sheet creation in CSSOM. Callers supply
-StylesheetContext to `parseStylesheetContents()` and use `CSSStyleSheetImpl` to
+RuleListContext to `parseStylesheetContents()` and use `CSSStyleSheetImpl` to
 own the resulting rules and location.
 
 ## Choosing an entry point
 
 - `parseRule()` expects one complete rule; CSSOM `insertRule()` supplies a
-  StylesheetContext carrying the sheet's constructed flag. Whole-sheet parsing
+  RuleListContext carrying the sheet's constructed flag. Whole-sheet parsing
   has different recovery.
 - `parseDeclarationList()` is the declaration-only path used for style
   attributes and CSSOM declaration text. It consumes and discards at-rules.
@@ -77,7 +77,7 @@ own the resulting rules and location.
   enforce their respective component restrictions.
 
 `parseStylesheetContents()`, `parseRule()`, and `parseBlockContents()` require
-CSSOM's `StylesheetContext`, as do their internal rule consumers.
+CSSOM's `RuleListContext`, as do their internal rule consumers.
 Syntax imports the class's instance type without a runtime dependency on CSSOM
 or a separate interpretation interface. Declaration-only APIs preserve the caller's
 context without requiring interpretation methods. Property interpretation accepts
@@ -115,12 +115,12 @@ the caller. Functional-notation grammars can explicitly select a different
 argument context while their projector still receives the outer context.
 Token-only consumers accept `unknown` because they do not inspect context.
 
-CSSOM's `StylesheetContext` validates supported selectors/properties once and
-returns their parsed results. It passes itself to those grammar owners directly.
-Each nested rule block gets its own context with the enclosing selectors,
-constructed-sheet flag, and environment. Declaration rejection happens before
+CSSOM's `RuleListContext` forwards interpretation to its supplied rule list, which
+dispatches to the rule/property owners and returns their parsed results. Each
+nested rule block gets its own context with the supplied child list, enclosing
+selectors, constructed-sheet flag, and environment. Declaration rejection happens before
 the parser retries that input as a qualified rule. At-rule and descriptor grammars remain
-explicit throwing dependencies in that context. Syntax tests use the concrete
+explicit throwing dependencies reached through the list. Syntax tests use the concrete
 context and capture interpretation inputs where they need to inspect unfinished
 grammar boundaries. Declaration entry points also require the caller to
 supply its context, but read syntax without invoking interpretation methods.
@@ -194,7 +194,7 @@ conformance. Stylesheet creation remains in CSSOM.
 | Remaining section | Implementation / boundary |
 | --- | --- |
 | §6 An+B | Token grammar and coefficient interpretation in `values/an-plus-b.ts`; selector tests cover accepted/rejected forms and `of` clauses. |
-| §7 Rule and arbitrary-value grammars | `StylesheetContext` selects valid construct kinds while consuming and constructs CSSOM rules. Descriptor grammars remain unfinished. `any-value.ts` and `declaration-value.ts` enforce recursive malformed-token restrictions and the latter's additional top-level restrictions. |
+| §7 Rule and arbitrary-value grammars | `RuleListContext` forwards to its rule list for grammar selection and CSSOM construction while consuming. Descriptor grammars remain unfinished. `any-value.ts` and `declaration-value.ts` enforce recursive malformed-token restrictions and the latter's additional top-level restrictions. |
 | §8 Stylesheets, style rules, at-rules, @charset | CSSOM interprets selectors/properties and retains nested rules. Invalid selectors discard the rule; invalid declarations do not. Recognized unfinished at-rules reach explicit throwing dependencies; unknown at-rules and @charset are discarded. |
 | §9 Serialization | Component/token round trips and canonical An+B serialization; CSSOM and individual value specifications still own their further serialization requirements. |
 | §§10–11 Privacy/security | No additional runtime algorithm or API; consistent error recovery is supplied by the parser. |

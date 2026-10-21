@@ -10,11 +10,11 @@ export { InternalPromise } from '../infra/promises';
 export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from '../infra/index';
 export { TreeScope } from './engine/index';
 export {
-  CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, StylesheetContext,
+  CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, RuleListContext,
   MediaListImpl, StyleSheetListImpl, CSSStylePropertiesImpl,
   type CSSStyleSheetInit,
 } from './cssom/index';
-export { CSSDeclarationBlock } from './css/index';
+export { CSSDeclarationBlock } from './cssom/declarations/index';
 export { decodeStylesheetBytes, parseStylesheetContents } from './syntax/index';
 export { styleletIDLDefinitions } from './web-idl';
 export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor } from './values/index';

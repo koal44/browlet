@@ -4,7 +4,7 @@ import type {
 import { DOMExceptionImpl } from '../../web-idl/core/index';
 
 import { parseStylesheetContents } from '../syntax/index';
-import { CSSStyleSheetImpl, StyleSheetListImpl, StylesheetContext } from '../cssom/index';
+import { CSSStyleSheetImpl, StyleSheetListImpl, RuleListContext } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
 
@@ -102,8 +102,8 @@ export class TreeScope {
         alternate: false,
         originClean: true,
       },
-      parseStylesheetContents(source, new StylesheetContext(null, false, context.env)),
     );
+    styleSheet.replaceRules(parseStylesheetContents(source, new RuleListContext(styleSheet.ruleList, null, false, context.env)));
     this.addTreeStyleSheet(styleSheet);
     return styleSheet;
   }

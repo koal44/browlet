@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { defaultStyleletEnvironment as env } from '../../../../src/stylelet/environment';
-import type { PropertyDeclaration } from '../../../../src/stylelet/css/property';
-import { StylesheetContext } from '../../../../src/stylelet/cssom/parser';
-import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rule';
-import { CSSStyleRuleImpl, CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules';
+import type { PropertyDeclaration } from '../../../../src/stylelet/props/property';
+import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
+import { CSSRuleListImpl } from '../../../../src/stylelet/cssom/rule-list';
+import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
+import { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules/style';
+import { CSSNestedDeclarationsImpl } from '../../../../src/stylelet/cssom/rules/nested-declarations';
 import {
   isComponentBlock, type BlockKind, type ComponentValue, type PreservedToken,
 } from '../../../../src/stylelet/syntax/component-value';
@@ -15,7 +17,7 @@ import {
 import { tokenize, TokenKind, type TokenList } from '../../../../src/stylelet/syntax/tokens';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 
-const context = new StylesheetContext(null, false, env);
+const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
 afterEach(() => vi.restoreAllMocks());
 

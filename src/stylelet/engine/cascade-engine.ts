@@ -1,11 +1,10 @@
 import type { DOMElement as Element } from '../../infra/index';
 
 import type { StyleletURL } from '../environment';
-import type { StyleletContext } from '../context';
 import type {
-  CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext,
-  PropertyDeclaration,
-} from '../css/index';
+  CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext, PropertyDeclaration,
+} from '../props/index';
+import type { StyleletContext } from '../context';
 import { CSSStyleSheetImpl, type CSSStyleDeclarationImpl, type CSSStyleSheetInit } from '../cssom/index';
 
 import { computeStyle } from './computed-style';

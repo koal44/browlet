@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import type { MediaList } from '../../../src/browlet/platform';
-import { MediaListImpl } from '../../../src/stylelet/cssom/media-list';
+import { MediaListImpl } from '../../../src/stylelet/cssom/media/media-list';
 import { reference } from '../../../src/web-idl/index';
 import { getBindingContext, getRelevantRealm } from '../../support/browlet-binding';
 

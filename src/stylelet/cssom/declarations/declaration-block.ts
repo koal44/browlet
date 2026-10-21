@@ -1,15 +1,14 @@
-import { parseDeclarationList, type ParserInput } from '../syntax/index';
-
+import { parseDeclarationList, type ParserInput } from '../../syntax/index';
 import {
   interpretPropertyDeclarations, serializePropertyDeclaration, type PropertyDeclaration, type PropertyContext,
-} from './property';
+} from '../../props/index';
 
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
 // https://drafts.csswg.org/cssom/#css-declaration-blocks
 // PROVISIONAL(CSSOM): This separate storage/mutation class is an interim inline-style design.
 // Before closing the CSSOM audit, replace it with plain declaration state or direct
 // implementation ownership unless a separate class earns an explicit justification.
-// See ../cssom/ROADMAP.md#projection-and-declaration-lifecycle.
+// See ROADMAP.md#declaration-state-and-lifecycle.
 export class CSSDeclarationBlock {
   /** Winning declaration for each property, retaining the block's property order. */
   #declarations: PropertyDeclaration[] = [];
@@ -45,8 +44,8 @@ export class CSSDeclarationBlock {
     return this.#declarations.find((declaration) => declaration.name === name);
   }
 
-  /** Set a parsed declaration; source-list replacement also respects prior importance. */
-  set(declaration: PropertyDeclaration, respectImportance = false): boolean {
+  /** Set a declaration through CSSOM, retaining an existing property's position. */
+  set(declaration: PropertyDeclaration): boolean {
     const index = this.#declarations.findIndex(({ name }) => name === declaration.name);
     if (index < 0) {
       this.#declarations.push(declaration);
@@ -54,8 +53,6 @@ export class CSSDeclarationBlock {
     }
 
     const previous = this.#declarations[index]!;
-    if (respectImportance && previous.important && !declaration.important) return false;
-
     const previousValue = serializePropertyDeclaration(previous).value;
     const nextValue = serializePropertyDeclaration(declaration).value;
     if (previous.important === declaration.important && previousValue === nextValue) return false;
@@ -72,10 +69,19 @@ export class CSSDeclarationBlock {
     return true;
   }
 
-  /** Replace declarations in source order, preserving the winning importance. */
+  /** Keep each winning declaration at its specified position, rather than its first occurrence. */
+  // https://drafts.csswg.org/cssom/#concept-declarations-specified-order
+  // SPEC_CLASH(important-declaration-order): Follow CSSOM/Firefox's winning position;
+  // Chromium/WebKit move an earlier important winner to a later losing declaration's position.
   #replace(declarations: readonly PropertyDeclaration[]): void {
-    this.#declarations = [];
-    for (const declaration of declarations) this.set(declaration, true);
+    const winners = new Map<string, PropertyDeclaration>();
+    for (const declaration of declarations) {
+      const previous = winners.get(declaration.name);
+      if (previous?.important && !declaration.important) continue;
+      winners.delete(declaration.name);
+      winners.set(declaration.name, declaration);
+    }
+    this.#declarations = [...winners.values()];
   }
 }
 

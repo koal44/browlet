@@ -12,7 +12,7 @@ Read [Cascade 5 filtering](https://drafts.csswg.org/css-cascade-5/#filtering),
 together. Level 6 supplements the earlier level.
 
 - [ ] Connect nested/imported rules, conditional applicability, and final sheet
-  order through the [rule pipeline](../css/ROADMAP.md). A retained CSSOM child
+  order through the [rule pipeline](../cssom/rules/ROADMAP.md). A retained CSSOM child
   can exist while its condition excludes its declarations.
 - [ ] Carry origin, importance, encapsulation context, element attachment,
   layer, specificity, scope proximity, and appearance order as applicable.
