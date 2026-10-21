@@ -35,9 +35,9 @@ non-storage acquisition preserves opaque-origin identity and remains available
 when storage is disabled. Blob URL checks use the latter.
 
 The narrow `StorageEnvironment` interface in `environment.ts` is implemented by
-Browlet's `BrowletEnvironmentRecord` base class. Full `BrowletEnvironment` objects extend it;
+Browlet's `BrowletEnvironmentBase` base class. Full `BrowletEnvironment` objects extend it;
 no adapter object is constructed. Settings supply their security origin;
-earlier records supply their creation URL.
+reserved environments supply their creation URL.
 Its `StorageUserAgent` contract supplies `storageEnabled`, read at acquisition
 time, and `generateUUID()`, used by File's user-agent-owned Blob URL store.
 
@@ -50,7 +50,7 @@ to reproduce those additional browser privacy partitions.
 
 **Exit proof:** tuple and opaque origins, equal and unequal keys, settings
 versus creation-URL selection, and the two acquisition operations have focused
-tests, including real Window settings and pre-realm environment records.
+tests, including real Window settings and reserved environments before realm creation.
 The File-owned tests in B–C exercise those keys at the Blob URL boundary.
 The Blob preflight is complete; Fetch 8C now supplies response construction and
 dispatch, with the reviewed clientless-access precondition recorded in its roadmap.

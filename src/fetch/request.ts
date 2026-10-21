@@ -25,7 +25,7 @@ import {
   isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, serializeInteger,
 } from './headers';
 import type {
-  FetchEnvironment, FetchEnvironmentRecord, FetchUserAgent,
+  FetchEnvironment, FetchEnvironmentBase, FetchUserAgent,
   FetchPolicyContainer, FetchPromptTarget,
 } from './environment';
 import type { NetworkPartitionKey } from './transport';
@@ -54,7 +54,9 @@ export class FetchRequest {
   /** The shared networking owner, including for requests without a client. */
   userAgent: FetchUserAgent;
   /** Destination environment reserved for a navigation or worker, before it becomes active. */
-  reservedClient: FetchEnvironmentRecord | null = null;
+  // https://fetch.spec.whatwg.org/#concept-request-reserved-client
+  // Navigation uses the base environment; worker requests use a full environment.
+  reservedClient: FetchEnvironmentBase | null = null;
   /** Environment ID replaced by a navigation, or an empty string when none is designated. */
   replacesClientId = '';
   /** Prompt destination, undefined until selected from the client, or null to suppress prompts. */
@@ -288,7 +290,7 @@ export class FetchRequest {
 
   /** Select the reserved environment before the client; browser-owned requests can have neither. */
   // https://fetch.spec.whatwg.org/#request-determine-the-environment
-  determineEnvironment(): FetchEnvironmentRecord | null {
+  determineEnvironment(): FetchEnvironmentBase | null {
     return this.reservedClient ?? this.client;
   }
 

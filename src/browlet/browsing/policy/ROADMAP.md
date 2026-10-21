@@ -46,7 +46,7 @@ trustworthiness is implemented on UserAgent, including secure schemes,
 localhost/loopback, opaque/file/Blob origins, and configured trust exceptions.
 A potentially trustworthy origin is not by itself a secure environment.
 
-BrowletEnvironmentRecord owns the fixed decision before realm creation; BrowletRealm reads
+BrowletEnvironmentBase owns the fixed decision before realm creation; BrowletRealm reads
 it for exposure and full settings retain it. Window initialization uses an
 existing reserved decision or derives one from the selected origin and parent
 Window, including insecure intermediate ancestors. New Window creation computes

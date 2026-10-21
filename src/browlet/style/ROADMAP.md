@@ -22,29 +22,55 @@ declaration-state review.
   [§3.1.6 mechanism](../html/ROADMAP.md#section-316-render-blocking) and shared
   disconnection/attribute cleanup are implemented; the current inline sheet
   association does not supply the complete resource-loading lifecycle.
-- [ ] Complete §6.2's adopted-sheet binding. CSSStyleSheet, StyleSheetList,
-  the rule/declaration graph, and Window's getComputedStyle result now project
-  through real declarations. Their later behavioral audits remain open.
-- [ ] Restore `ObservableArray<CSSStyleSheet>` for `adoptedStyleSheets`.
-  Web IDL already supports observable arrays;
-  `TreeScope` should retain only the backing collection and CSSOM mutation
-  steps, with conversion and proxy ownership in the binding. Move the proxy
-  factory into Web IDL and remove `src/infra/observable-array.ts`.
-- [ ] Replace adopted-sheet host exceptions with the completed binding's
-  realization boundary. Sheet/declaration failures and replacement promises
-  already have projected and borrowed-call regressions.
-- [ ] Supply ShadowRoot's missing style scope and connect tree-scope selection
-  to matching. Shared DocumentOrShadowRoot declarations do not establish a
-  working shadow stylesheet implementation.
+- [ ] Connect shadow tree-scope selection and encapsulation precedence to matching.
+  ShadowRoot's retained sheet collections and adopted-sheet binding now work;
+  Window's current computed-style path still starts from the document scope.
 - [ ] Connect external sheets through their actual producers: HTML `<link>`,
-  XML `xml-stylesheet` processing instructions, HTTP Link/Default-Style headers,
+  XML `xml-stylesheet` processing instructions, HTTP Link headers,
   and CSS imports. Account for cancellation, response policy, MIME/encoding,
   origin-clean/base state, load completion, and script/render blocking with the
   loader and node owners; do not make Stylelet fetch by itself.
+- [ ] Supply CSSOM add-a-sheet step 2 from HTML's resource lifecycle. Document's
+  `addScriptBlockingStyleSheet()`/`removeScriptBlockingStyleSheet()` and parser
+  wait exist. The producer still needs parser-created state, media applicability,
+  and critical-resource completion. Current inline sheets finish synchronously;
+  ordinary `@import` reaches an explicit unfinished grammar. The missing
+  connection is recorded beside `LinkStyleMixin` association.
 
 The contracts come from CSSOM, CSSOM View, CSS Style Attributes, and HTML's
 style/link processing rather than one WHATWG HTML section. This file records
 the host boundary, not the CSS feature backlog.
+
+## Stylesheet collection disagreements
+
+CSSOM [§6.2](https://drafts.csswg.org/cssom/#css-style-sheet-collections) and
+DOM's [adoption steps](https://dom.spec.whatwg.org/#concept-node-adopt) were
+compared with Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5 on 2026-10-20.
+
+- `SPEC_GAP(shadow-adopted-sheets-adoption)`: neither algorithm clears a shadow
+  root's adopted sheets when its host changes documents. All three browsers
+  clear the backing list, preserve the array, and reject subsequent additions
+  from the old document. Follow that behavior; additions from the new document
+  succeed. Same-document adoption preserves the list. Chromium's source also
+  exempts moves to/from a document's template-contents owner; revisit that case
+  with HTMLTemplateElement's unfinished owner-document machinery.
+- `SPEC_CLASH(default-style-response-fields)`: follow CSSOM's individual header
+  fields in order, using each entire value as the set name. Chromium/WebKit
+  ignore HTTP `Default-Style`. Firefox honors a single field but combines
+  repeated `alpha` and `beta` fields into `alpha, beta`; CSSOM selects `beta`.
+  A literal comma in one field remains part of the name.
+- `SPEC_CLASH(stylesheet-set-disabled-flags)`: follow CSSOM/Firefox by changing
+  each sheet's `disabled` flag during preferred-set selection. Chromium/WebKit
+  keep those flags false and select set applicability separately. With untitled,
+  `alpha`, and `beta` sheets, all choose the first non-alternate titled set by
+  default, but the flags differ.
+
+[Browlet regressions](../../../test/browlet/style/adopted-stylesheets.test.ts)
+cover retained lists, conversion, current-document checks, and host adoption.
+[Response tests](../../../test/browlet/style/default-style.test.ts) cover ordered
+fields before association. The enabled
+[browser comparisons](../../../test/stylelet/scenarios/stylesheet-sets.test.ts)
+exercise Stylelet and retain CSSOM expectations with separate browser failures.
 
 ## Media matching
 

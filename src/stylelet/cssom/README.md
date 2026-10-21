@@ -36,7 +36,7 @@ Bindings own conversion, receiver checks, indexed properties, and exception
 realization. Implementations accept converted values and throw realm-neutral
 DOMExceptionImpl failures. Sheet, rule, and declaration results project through
 their declared references; DocumentOrShadowRoot's adopted-sheet collection
-retains a provisional `any` declaration until the §6.2 audit.
+uses `ObservableArray<CSSStyleSheet>` with declared indexed mutation steps.
 
 Common identifier, string, function, and LOCAL formatting lives in
 `syntax/component-value.ts`. Function formatting receives a name and contents
@@ -53,6 +53,10 @@ set/remove declarations, and serialize the retained data. It has no DOM owner,
 environment, or CSSOM identity. Supported built-ins come from the small
 [property registry](../css/property.ts); custom-property token values are stored
 separately from built-in value representations.
+
+This separate class is provisional, including its role as the inline mixin's
+retained state. The [declaration audit](ROADMAP.md#projection-and-declaration-lifecycle)
+must resolve its representation and ownership before CSSOM review closes.
 
 `CSSStyleDeclarationImpl` holds a block and supplies CSSOM operations.
 `CSSStylePropertiesImpl` adds the projected subtype identity; supported property
@@ -139,17 +143,18 @@ insertion/deletion remain explicit stubs.
 
 [TreeScope](../engine/tree-scope.ts) orders header sheets before tree-associated
 sheets, then adds adopted sheets for cascade order. It tracks preferred/selected
-stylesheet sets. Its adopted collection currently uses Infra's observable-array
-proxy and direct implementation checks. Actual sheet loading and header
-integration are separate host work; having collection operations does not mean
-those resources are fetched.
+stylesheet sets. The adopted collection is a retained implementation list;
+Binding owns its observable array and runs `checkAdoptedStyleSheet()` after
+conversion. Browlet supplies separate document/shadow scopes and ordered
+`Default-Style` response processing. Actual external-sheet loading remains
+separate host work; collection operations do not fetch those resources.
 
 All CSSOM objects that need execution retain the supplied
 [StyleletEnvironment](../environment.ts). Standalone defaults and Browlet's
 environment both work through this boundary. Sheet/declaration bindings realize
 synchronous failures at the method boundary; replacement promises retain their
-owning environment and typed result projection. The unbound adopted-sheet
-collection still uses the host's DOMException constructor pending §6.2.
+owning environment and typed result projection. Adoption failures use the same
+neutral exception path; Stylelet no longer requires a host DOMException constructor.
 
 ## Existing evidence and its limits
 
@@ -157,13 +162,13 @@ collection still uses the host's DOMException constructor pending §6.2.
 | --- | --- |
 | [CSSOM unit suites](../../../test/stylelet/unit/cssom/) | Direct implementation construction, sheet/list identity, declaration edits, media lists, and asynchronous replacement |
 | [Tree-scope tests](../../../test/stylelet/unit/engine/tree-scope.test.ts) | Ordering and stylesheet-set selection using explicit sheet inputs |
-| [Host tests](../../../test/stylelet/unit/host.test.ts), [environment tests](../../../test/stylelet/unit/environment.test.ts) | Host-neutral DOM access, explicit initialization, empty-provider semantics, URL/decoding/execution facilities, and interim exceptions |
+| [Host tests](../../../test/stylelet/unit/host.test.ts), [environment tests](../../../test/stylelet/unit/environment.test.ts) | Host-neutral DOM access, explicit initialization, empty-provider semantics, URL/decoding/execution facilities, and neutral exceptions |
 | [Browlet style tests](../../../test/browlet/style/) | Inline/stylesheet association, cascade reads, and real CSSOM conversion, identity, supported indices, borrowed calls, and promises |
 | [CSP style tests](../../../test/browlet/browsing/policy/csp/style-attribute.test.ts) | Raw-source authorization, reporting, accepted state, parser input, and adoption |
 | [Style-attribute browser scenarios](../../../test/stylelet/scenarios/style-attribute.test.ts) | Stylelet's declaration parsing compared with native behavior; not included in the baseline below |
 | [MediaList binding tests](../../../test/browlet/style/media-list.test.ts) | Real interface exposure, identity, conversions, live indices/iteration, author overrides, and borrowed-method exception realms |
 | [Media-list browser scenarios](../../../test/stylelet/scenarios/media-list.test.ts) | Stylelet parsing/mutation against Chromium, Firefox, and WebKit, with documented disagreements |
-| [IDL contribution test](../../../test/stylelet/unit/web-idl.test.ts) | Serialization of the typedef, MediaList, and provisional mixins |
+| [IDL contribution test](../../../test/stylelet/unit/web-idl.test.ts) | Serialization of the typedef, MediaList, and mixin contributions |
 
 Several tests pin representation details such as block identity and avoiding
 `.style` access during cascade reads. Review those assertions when changing
@@ -192,5 +197,13 @@ existing expected failure and seven existing skips. The final binding/IDL
 recheck passed all 11 tests. Full lint/typecheck and the Stylelet build passed.
 All 16 CSSOM, style-attribute, and constructed-sheet scenarios passed in
 Chromium, Firefox, and WebKit.
-Adoption, later rule/declaration algorithms, live computed values, complete
+Later rule/declaration algorithms, live computed values, complete
 property grammars, and layout-dependent results remain unfinished.
+
+The §6.2 collection audit passed **3,543 tests across 90 files**, with 8 existing
+expected failures and 14 existing skips, including Stylelet units, Browlet style/CSP,
+and Web IDL Binding/Core/assembly. The 12 stylesheet-set browser comparisons had
+3 ordinary passes and 9 approved expected failures; Stylelet passed in all three
+engines. These comparisons remain enabled. The
+[collection disagreements](../../browlet/style/ROADMAP.md#stylesheet-collection-disagreements)
+record the precise browser results and remaining resource-lifecycle dependencies.

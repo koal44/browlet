@@ -12,7 +12,7 @@ import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/rea
 import {
   obtainSimilarOriginWindowAgent, WindowAgent,
 } from '../../../../src/browlet/scripting/agents';
-import { BrowletEnvironmentRecord } from '../../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
 import { createSessionHistoryEntry } from '../../../../src/browlet/browsing/navigation/session-history';
@@ -133,19 +133,19 @@ describe('browsing context groups', () => {
     expect(realm.globalThis).toBe(proxy.platform);
   });
 
-  it('creates a Window realm from its early record before attaching settings or Window', () => {
+  it('creates a Window realm from its environment base before attaching settings or Window', () => {
     const creationURL = requireURL('about:blank');
     const origin = createOpaqueOrigin();
     const realm = new WindowRealm({
       agent: new WindowAgent(createManualEventLoop()),
-      envRecord: new BrowletEnvironmentRecord({
+      baseEnv: new BrowletEnvironmentBase({
         userAgent: new UserAgent(), creationURL,
         topLevelCreationURL: creationURL, topLevelOrigin: origin,
         targetBrowsingContext: null, isSecureContext: false,
       }),
     });
 
-    expect(realm.envRecord?.creationURL).toBe(creationURL);
+    expect(realm.baseEnv?.creationURL).toBe(creationURL);
     expect(realm.windowImplementation).toBeUndefined();
     expect(realm.hostDefined).toBeUndefined();
     expect(() => realm.env).toThrow('Realm has no environment');
@@ -407,7 +407,7 @@ describe('environment settings objects', () => {
     const origin = obtainURLOrigin(creationURL);
     const userAgent = new UserAgent();
     const reservedURL = requireURL('https://reserved.test/');
-    const reservedEnv = new BrowletEnvironmentRecord({
+    const reservedEnv = new BrowletEnvironmentBase({
       userAgent, creationURL: reservedURL, topLevelCreationURL: reservedURL, topLevelOrigin: obtainURLOrigin(reservedURL),
       targetBrowsingContext: new BrowsingContext(), activeServiceWorker: {}, isSecureContext: true,
     });
@@ -438,7 +438,7 @@ describe('environment settings objects', () => {
     expect(bindingEnv).toBe(env);
     expect(env.exec.global).toBe(env.global);
     expect(realm.hostDefined).toBe(env);
-    expect(realm.envRecord).toBe(env);
+    expect(realm.baseEnv).toBe(env);
     expect(realm.secureContext).toBe(true);
     expect(env.isSecureContext).toBe(true);
     expect(env.moduleMap).toBe(document.moduleMap);

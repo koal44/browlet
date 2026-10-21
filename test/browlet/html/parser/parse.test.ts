@@ -25,13 +25,13 @@ describe('DOM document construction', () => {
 
   it('lazily associates one CSS engine with its document', () => {
     const document = parseTestDocument('<main id="target"></main>');
-    const cssEngine = document.getCSSEngine();
+    const styleEngine = document.getStyleEngine();
 
-    expect(document.getCSSEngine()).toBe(cssEngine);
-    expect(cssEngine.context.document).toBe(document);
-    expect(cssEngine.context.root).toBe(document.documentElement);
-    expect(cssEngine.context.isQuirksMode).toBe(true);
-    expect(cssEngine.version).toBe('stylelet-__VERSION__');
+    expect(document.getStyleEngine()).toBe(styleEngine);
+    expect(styleEngine.context.document).toBe(document);
+    expect(styleEngine.context.root).toBe(document.documentElement);
+    expect(styleEngine.context.isQuirksMode).toBe(true);
+    expect(styleEngine.version).toBe('stylelet-__VERSION__');
     expect(document.documentElement?.localName).toBe('html');
     expect(document.getElementById('target')?.localName).toBe('main');
   });

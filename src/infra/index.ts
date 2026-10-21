@@ -26,7 +26,6 @@ export {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE, XLINK_NAMESPACE,
   XML_NAMESPACE, XMLNS_NAMESPACE, isHtmlSvgOrMathNamespace,
 } from './namespaces';
-export { createObservableArray, type ObservableArrayHandle, type ObservableArrayOptions } from './observable-array';
 export { ParallelQueue, type ScheduleParallelQueueDrain } from './parallel-queue';
 export {
   asciiWhitespacePattern, asciiWhitespaceRunPattern, surroundingASCIIWhitespacePattern,

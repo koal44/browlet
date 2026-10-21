@@ -1,6 +1,6 @@
 import {
   arg, attr, defineInterfaceMixin, definePartialInterface, definePartialInterfaceMixin, defineTypedef,
-  idlType, nullable, op, reference, roAttr, xattr,
+  idlType, nullable, observableArray, op, reference, roAttr, xattr,
   type Definition,
 } from '../web-idl/core/index';
 
@@ -11,6 +11,7 @@ import {
   cssAnimationsRuleIDL, cssCounterStylesRuleIDL, cssConditionalRuleIDL, cssFontsRuleIDL,
   cssStyleDeclarationIDL, cssStylePropertiesIDL, CSSStylePropertiesImpl, CSSStyleSheetImpl,
 } from './cssom/index';
+import type { TreeScope } from './engine/index';
 
 // CSSOM permits either DOMString or USVString. Keep DOMString conversion;
 // CSS input preprocessing separately replaces lone surrogates during parsing.
@@ -20,7 +21,6 @@ import {
  */
 const cssomStringIDL = defineTypedef({ name: 'CSSOMString', type: idlType.DOMString });
 
-// Adoption still awaits its §6.2 binding.
 // https://drafts.csswg.org/cssom/#extensions-to-the-document-or-shadow-root-interface
 /*
  * partial interface mixin DocumentOrShadowRoot {
@@ -32,9 +32,14 @@ const cssomDocumentOrShadowRootIDL = definePartialInterfaceMixin({
   name: 'DocumentOrShadowRoot',
   members: [
     roAttr('styleSheets', reference(StyleSheetListImpl), xattr('SameObject')),
-    // TODO(CSSOM interface projection): Restore ObservableArray<CSSStyleSheet>
-    // when adoption mutation steps are bound.
-    attr('adoptedStyleSheets', idlType.any),
+    attr('adoptedStyleSheets', observableArray(reference(CSSStyleSheetImpl)), {
+      observableArraySteps: {
+        // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-adoptedstylesheets
+        set(this: { getStyleScope(): TreeScope; }, value: CSSStyleSheetImpl) {
+          this.getStyleScope().checkAdoptedStyleSheet(value);
+        },
+      },
+    }),
   ],
 });
 

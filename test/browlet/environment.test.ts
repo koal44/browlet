@@ -10,7 +10,7 @@ import { Navigable, TopLevelTraversable } from '../../src/browlet/browsing/navig
 import { WindowAgent } from '../../src/browlet/scripting/agents';
 import { createWindowEnvironment } from '../../src/browlet/bindings';
 import { UserAgent } from '../../src/browlet/user-agent';
-import { BrowletEnvironmentRecord } from '../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../src/browlet/environment';
 import { StorageKey } from '../../src/storage/keys';
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { determineRequestReferrer } from '../../src/browlet/browsing/policy/referrer-policy';
@@ -246,11 +246,11 @@ describe('network partition keys from browser environments', () => {
     expect(networkPartitionKeysEqual(first, env.determineNetworkPartitionKey())).toBe(false);
   });
 
-  it('uses the same partition for a reserved record and the Window environment that consumes it', () => {
+  it('uses the same partition for a reserved environment and the Window environment that consumes it', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL('https://a.example.com/').url!;
     const origin = obtainURLOrigin(creationURL);
-    const reservedEnv = new BrowletEnvironmentRecord({
+    const reservedEnv = new BrowletEnvironmentBase({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: null,
       targetBrowsingContext: null, isSecureContext: true,
     });
@@ -286,16 +286,16 @@ describe('storage keys from browser environments', () => {
   it('uses the creation URL of a reserved environment before any realm exists', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL('https://reserved.test/').url!;
-    const record = new BrowletEnvironmentRecord({
+    const baseEnv = new BrowletEnvironmentBase({
       userAgent, creationURL, topLevelCreationURL: creationURL,
       topLevelOrigin: obtainURLOrigin(creationURL), targetBrowsingContext: null, isSecureContext: true,
     });
-    const key = StorageKey.obtain(record)!;
+    const key = StorageKey.obtain(baseEnv)!;
     expect(key.equals(new StorageKey(obtainURLOrigin(creationURL)))).toBe(true);
 
     userAgent.storageEnabled = false;
-    expect(StorageKey.obtain(record)).toBeNull();
-    expect(StorageKey.obtainForNonStoragePurposes(record).equals(key)).toBe(true);
+    expect(StorageKey.obtain(baseEnv)).toBeNull();
+    expect(StorageKey.obtainForNonStoragePurposes(baseEnv).equals(key)).toBe(true);
   });
 
   it('reads the UserAgent preference while preserving non-storage access checks', () => {
@@ -311,7 +311,7 @@ describe('storage keys from browser environments', () => {
 
 function createReservedEnvironment(url: string) {
   const creationURL = parseURL(url).url!;
-  return new BrowletEnvironmentRecord({
+  return new BrowletEnvironmentBase({
     userAgent: new UserAgent(), creationURL, topLevelCreationURL: creationURL,
     topLevelOrigin: null, targetBrowsingContext: null, isSecureContext: true,
   });

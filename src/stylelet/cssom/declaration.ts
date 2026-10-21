@@ -18,6 +18,7 @@ import type { CSSRuleImpl } from './rule';
 // https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
 export class CSSStyleDeclarationImpl {
   /** Parsed declarations shared with the owning rule, inline style, or computed result. */
+  // PROVISIONAL(CSSOM): Revisit this separate block's state and mutation ownership during the declaration audit.
   #block: CSSDeclarationBlock;
   /** Whether this object represents a computed result rather than authored declarations. */
   #computed: boolean;

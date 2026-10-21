@@ -31,8 +31,10 @@ Missing resource/layout consumers remain explicit at their owners.
 
 ## Decisions still open
 
-- Final declaration-state ownership: the separate `CSSDeclarationBlock` is a
-  working trial, not a constraint on `CSSStylePropertiesImpl`.
+- Final declaration-state ownership: replace or explicitly justify the provisional
+  `CSSDeclarationBlock` class before closing the CSSOM audit. Its current shape
+  does not constrain `CSSStylePropertiesImpl`; see the
+  [declaration lifecycle review](cssom/ROADMAP.md#projection-and-declaration-lifecycle).
 - The standalone author's CSSOM binding surface versus direct, post-conversion
   implementation APIs. Keep host-specific Platform objects out of Stylelet.
 - Live computed-style queries and any engine-owned cached value state. Neither

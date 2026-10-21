@@ -1,3 +1,3 @@
 export {
-  ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions, type TreeScopeResolver,
+  ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
 } from './integration';

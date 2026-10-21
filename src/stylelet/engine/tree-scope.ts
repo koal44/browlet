@@ -1,49 +1,34 @@
 import type {
-  DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node,
+  DOMOperations, DOMDocument as Document, DOMShadowRoot as ShadowRoot, DOMElement as Element, DOMNode as Node,
 } from '../../infra/index';
-import {
-  createObservableArray, type ObservableArrayHandle,
-} from '../../infra/observable-array';
-import { TypeError } from '../../infra/exceptions';
+import { DOMExceptionImpl } from '../../web-idl/core/index';
 
 import { parseStylesheetContents } from '../syntax/index';
 import { CSSStyleSheetImpl, StyleSheetListImpl, StylesheetContext } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
 
-/** A document's associated/adopted stylesheet collections and stylesheet-set selection state. */
+/** A document or shadow root's stylesheet collections and stylesheet-set selection state. */
 // https://drafts.csswg.org/cssom/#css-style-sheet-collections
 export class TreeScope {
+  /** Adopted implementations in cascade order; Binding owns author conversion and mutation hooks. */
+  readonly adoptedStyleSheets: CSSStyleSheetImpl[] = [];
   /** Header sheets followed by sheets associated with nodes in tree order. */
   #styleSheets = new StyleSheetListImpl<CSSStyleSheetImpl>();
   /** Number of leading entries supplied by response headers rather than tree nodes. */
   #headerStyleSheetCount = 0;
-  /** Adopted-sheet collection and its current mutation/conversion hooks. */
-  #adoptedStyleSheets: ObservableArrayHandle<CSSStyleSheetImpl>;
   /** Last explicitly selected set name, or null while the preferred set controls selection. */
   #lastStyleSheetSetName: string | null = null;
   /** Preferred stylesheet-set name; empty when none has been established. */
   #preferredStyleSheetSetName = '';
 
-  /** Establish sheet collections and restrict adoption to sheets constructed for this document. */
+  /** Establish the collections and their current document's style engine. */
   constructor(
-    /** Document whose stylesheet collections this scope represents. */
-    readonly root: Document,
+    /** Document or shadow root whose stylesheet collections this scope represents. */
+    readonly root: Document | ShadowRoot,
     /** Engine supplying the scope's document context and style queries. */
-    readonly cascade: CascadeEngine,
-  ) {
-    const document = this.cascade.context.dom.ownerDocument(root) ?? root;
-    this.#adoptedStyleSheets = createObservableArray({
-      convert: toCSSStyleSheet,
-      set(styleSheet) {
-        if (styleSheet.isConstructedFor(document)) return;
-        throw new cascade.context.env.exec.DOMException(
-          'The stylesheet was not constructed for this document.',
-          'NotAllowedError',
-        );
-      },
-    });
-  }
+    public cascade: CascadeEngine,
+  ) {}
 
   /** Live header/tree sheet list, excluding adopted sheets. */
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-stylesheets
@@ -51,22 +36,21 @@ export class TreeScope {
     return this.#styleSheets;
   }
 
-  /** Mutable adopted-sheet list with construction-document checks on changes. */
+  /** Reject a sheet unless it was constructed for the root's current node document. */
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-adoptedstylesheets
-  get adoptedStyleSheets(): CSSStyleSheetImpl[] {
-    return this.#adoptedStyleSheets.value;
-  }
-
-  /** Replace adopted sheets through the provisional observable-array conversion path. */
-  setAdoptedStyleSheets(styleSheets: unknown): void {
-    this.#adoptedStyleSheets.replace(styleSheets);
+  checkAdoptedStyleSheet(styleSheet: CSSStyleSheetImpl): void {
+    const dom = this.cascade.context.dom;
+    const document = dom.isDocument(this.root) ? this.root : dom.ownerDocument(this.root)!;
+    if (!styleSheet.isConstructedFor(document)) {
+      throw new DOMExceptionImpl('The stylesheet was not constructed for this document.', 'NotAllowedError');
+    }
   }
 
   /** Yield associated sheets first, followed by adopted sheets in their list order. */
   // https://drafts.csswg.org/cssom/#documentorshadowroot-final-css-style-sheets
   *finalStyleSheets(): IterableIterator<CSSStyleSheetImpl> {
     yield* this.#styleSheets;
-    yield* this.#adoptedStyleSheets.value;
+    yield* this.adoptedStyleSheets;
   }
 
   /** Append a header-supplied sheet before tree sheets and apply stylesheet-set selection. */
@@ -150,6 +134,7 @@ export class TreeScope {
 
   /** Establish a preferred set if needed and select participation for a newly associated sheet. */
   // https://drafts.csswg.org/cssom/#add-a-css-style-sheet
+  // SPEC_CLASH(stylesheet-set-disabled-flags): Follow CSSOM/Firefox; Chromium/WebKit select sets without changing each sheet's disabled flag.
   #configureAddedStyleSheet(styleSheet: CSSStyleSheetImpl): void {
     if (styleSheet.disabled) return;
 
@@ -185,12 +170,6 @@ export class TreeScope {
       if (title !== '') styleSheet.disabled = name !== title;
     }
   }
-}
-
-/** Require a stylesheet implementation at the provisional adopted-array boundary. */
-function toCSSStyleSheet(value: unknown): CSSStyleSheetImpl {
-  if (value instanceof CSSStyleSheetImpl) return value;
-  throw new TypeError('Expected a CSSStyleSheet');
 }
 
 /** Media conditions and stylesheet-set title supplied by a style element. */

@@ -27,7 +27,7 @@ entry points and implementation types.
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |
-| [web-idl.ts](web-idl.ts) | CSSOM declarations and host contributions; adoption's collection binding remains provisional |
+| [web-idl.ts](web-idl.ts) | CSSOM declarations and host contributions, including observable adopted-sheet mutation steps |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
 
 Each implemented component has an explicit `index.ts`; imports across its boundary use that
@@ -93,7 +93,7 @@ it as implemented.
 
 Stylelet reads nodes through Infra's `DOMOperations`, preserving host node
 identity. The existing `StyleletEnvironment` supplies URL construction, decoding,
-exceptions, promises, and background/task delivery. Standalone defaults do not
+promises and background/task delivery. Binding realizes implementation exceptions. Standalone defaults do not
 load Browlet's runtime. Browlet passes its existing owning environment through
 this contract; see [project architecture](../ARCHITECTURE.md).
 
@@ -113,8 +113,9 @@ a CSP-blocked raw attribute from becoming active during a style query. See the
 
 Sheet, rule, and declaration members now project through concrete interface
 references. Binding also supplies numeric indices and supported-property
-attributes. The adopted-sheet collection still uses a provisional `any` member
-and an implementation-side observable-array proxy pending the §6.2 audit.
+attributes. TreeScope retains the adopted implementation list; Binding exposes
+its `ObservableArray<CSSStyleSheet>` and converts author writes before running
+the declared current-document check. Stylelet retains no Platform proxy.
 
 ## Current reach
 

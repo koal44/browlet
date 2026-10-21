@@ -160,15 +160,14 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   [overload](../test/web-idl/binding/realm/overload.test.ts) and
   [union conversion](../test/web-idl/converters/union.test.ts) regressions cover this choice.
 - **CSSOM projection:** Sheets, rules, declaration results, and MediaList use
-  real bindings. DocumentOrShadowRoot's `adoptedStyleSheets` is `any`, bypassing adoption's
-  eventual interface conversion. That collection also retains host exception
-  construction. CSSStyleProperties exposes the small implemented property set;
+  real bindings. DocumentOrShadowRoot's adopted sheets now use the real observable
+  array binding, current-document checks, and realm exception realization.
+  CSSStyleProperties exposes the small implemented property set;
   its complete behavior and declaration-state ownership still need review.
   The [CSSOM roadmap](stylelet/cssom/ROADMAP.md#projection-and-declaration-lifecycle)
   owns the shared interface and declaration-state review.
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
-  owns Browlet's binding integration, restoring `ObservableArray<CSSStyleSheet>`,
-  and removing the temporary Infra observable-array factory.
+  owns external sheet loading, script/render blocking, and shadow-tree matching.
 - **Computed style:** `getComputedStyle()` currently creates a readonly snapshot
   of selected installed properties. CSSOM requires a new live object, complete
   supported-property/defaulting behavior, and resolved values that can depend
@@ -226,7 +225,7 @@ dependencies and the tests for the implemented storage and mutation behavior.
 
 Shadow attachment retains focus and serialization flags without implementing
 their later consumers; clonable shadow trees participate in clone/import.
-Declarative parsing, shadow style scopes,
+Declarative parsing, shadow-tree cascade selection,
 ElementInternals attachment, and custom-element definition checks remain absent. Browser/spec
 differences in assignment updates and adopted-host root allocation are recorded
 in the [4H scope](browlet/dom/nodes/ROADMAP.md#shadow-trees-4h).

@@ -1,12 +1,12 @@
 import { getRelevantRealm } from './browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import type { BrowletEnvironment } from '../../src/browlet/environment';
-import { DocumentImpl } from '../../src/browlet/dom/nodes/document';
+import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import { parseHTMLDocument } from '../../src/browlet/html/parser/parse';
 
-/** Create a detached document with real realm execution and direct node allocation. */
+/** Create a detached document through its environment's real binding and execution. */
 export function createTestDocument(env: BrowletEnvironment = createDocumentEnvironment()): DocumentImpl {
-  return new DocumentImpl(undefined, env);
+  return env.exec.createDocument();
 }
 
 /** Parse an implementation tree using real browser settings. */
@@ -14,7 +14,7 @@ export function parseTestDocument(
   source = '',
   env: BrowletEnvironment = createDocumentEnvironment(),
 ): DocumentImpl {
-  return parseHTMLDocument(source, {}, env);
+  return parseHTMLDocument(source, env);
 }
 
 function createDocumentEnvironment(): BrowletEnvironment {

@@ -21,7 +21,7 @@ import { PolicyContainer } from '../../../src/browlet/browsing/policy/container'
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
 import { Agent } from '../../../src/browlet/scripting/agents';
-import { BrowletEnvironmentRecord } from '../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../src/browlet/environment';
 import { BrowletEnvironment } from '../../../src/browlet/environment';
 import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/global-scope';
 import type { Task } from
@@ -38,7 +38,7 @@ describe('HTML callback and script-entry lifecycle', () => {
 
     expect(realm.hostDefined).toBe(env);
     expect(realm.env).toBe(env);
-    expect(realm.envRecord).toBe(env);
+    expect(realm.baseEnv).toBe(env);
     expect(env.realm).toBe(realm);
     expect(context.getEnvironment()).toBe(env);
   });
@@ -301,7 +301,7 @@ function createTestRealm(
   const realm = createBrowletRealm(agent, {
     createGlobalObject: () => ({}),
   }, { globalNames: ['Worker'] });
-  const record = new BrowletEnvironmentRecord({
+  const baseEnv = new BrowletEnvironmentBase({
     userAgent: new UserAgent(),
     isSecureContext: false,
     creationURL: requireURL(`https://${name}.test/`),
@@ -310,7 +310,7 @@ function createTestRealm(
     topLevelOrigin: null,
   });
   const context = browletBindingWorld.register(realm, (binding) =>
-    new TestEnvironment(realm, record, createBrowletExecution(binding)),
+    new TestEnvironment(realm, baseEnv, createBrowletExecution(binding)),
   );
   const env = realm.env;
   return { realm, env, context };

@@ -18,12 +18,12 @@ export {
 export { documentOrShadowRootIDL, htmlDocumentOrShadowRootIDL } from './document-or-shadow-root';
 export { DocumentTypeImpl, documentTypeIDL, documentTypeIncludesChildNodeIDL } from './document-type';
 export {
-  createDocument, type DocumentConstructionOptions, DocumentImpl, documentIDL, htmlDocumentIDL,
+  DocumentImpl, documentIDL, htmlDocumentIDL,
   documentReadyStateIDL, documentVisibilityStateIDL, htmlOrSVGScriptElementIDL,
   XMLDocumentImpl, xmlDocumentIDL, type ImportNodeOptions, importNodeOptionsIDL,
   type ElementCreationOptions, elementCreationOptionsIDL, documentIncludesParentNodeIDL,
   documentIncludesNonElementParentNodeIDL,
-  documentIncludesDocumentOrShadowRootIDL, type DOMNodeFactory, directDOMNodeFactory, type DocumentWriter,
+  documentIncludesDocumentOrShadowRootIDL, type DocumentWriter,
   type DocumentReadyState, type DocumentVisibilityState, type DocumentType, DocumentMode, type ModuleMap,
   type ModuleMapKey, type ModuleMapEntry, type DocumentLoadTimingInfo,
 } from './document';

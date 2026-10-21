@@ -19,6 +19,13 @@ There is no engine-owned computed-style tree or per-element value cache here.
 The selector caches belong to [StyleletContext](../context.ts); stylesheet
 collections and registration lookup are different state with different owners.
 
+TreeScope retains ordinary implementation lists, including adopted sheets.
+Binding supplies the observable array for author access. Its declared mutation
+step checks the sheet's constructor document against the root's current node
+document; internal list changes remain visible without reprojecting the array.
+Browlet supplies separate shadow-root scopes, but the computed-style caller
+does not yet choose them or implement shadow encapsulation precedence.
+
 ## Declaration selection
 
 [cascade.ts](cascade.ts) visits each sheet's authoritative rule list and reads

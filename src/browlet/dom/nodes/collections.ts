@@ -6,7 +6,7 @@ import {
 
 import type { DocumentImpl } from './document';
 import type { ElementImpl } from './element';
-import { NodeImpl } from './node';
+import type { NodeImpl } from './node';
 
 /** Shared storage for snapshots and lazily refreshed live collections. */
 abstract class NodeCollection<T extends NodeImpl> implements Iterable<T> {
@@ -67,12 +67,13 @@ export type LiveCollectionSource<T extends NodeImpl> = {
 /** Live children, an owner's filtered live view, or a static result whose array this list owns. */
 // https://dom.spec.whatwg.org/#interface-nodelist
 export class NodeListImpl extends NodeCollection<NodeImpl> {
-  constructor(source: NodeImpl | NodeImpl[] | LiveCollectionSource<NodeImpl>) {
-    super(!NodeImpl.is(source) ? source : {
-      root: source,
+  /** Create a live list of the root's immediate children, including non-element nodes. */
+  static forChildren(root: NodeImpl): NodeListImpl {
+    return new NodeListImpl({
+      root,
       collect() {
         const nodes: NodeImpl[] = [];
-        for (let child = source.firstChild; child; child = child.nextSibling) nodes.push(child);
+        for (let child = root.firstChild; child; child = child.nextSibling) nodes.push(child);
         return nodes;
       },
     });
@@ -107,19 +108,24 @@ export const nodeListIDL = defineInterface({
 /** Live element view, rooted in an ordinary tree and filtered in tree order. */
 // https://dom.spec.whatwg.org/#interface-htmlcollection
 export class HTMLCollectionImpl extends NodeCollection<ElementImpl> {
-  constructor(
-    source: NodeImpl | LiveCollectionSource<ElementImpl>,
+  constructor(source: LiveCollectionSource<ElementImpl>) {
+    super(source);
+  }
+
+  /** Create a filtered live view of the root's descendants, or only its immediate children. */
+  static fromRoot(
+    root: NodeImpl,
     matches: (element: ElementImpl) => boolean = () => true,
     childrenOnly = false,
-  ) {
-    super(!NodeImpl.is(source) ? source : {
-      root: source,
+  ): HTMLCollectionImpl {
+    return new HTMLCollectionImpl({
+      root,
       collect() {
         const elements: ElementImpl[] = [];
         for (
-          let node = source.firstChild;
+          let node = root.firstChild;
           node;
-          node = childrenOnly ? node.nextSibling : node.nextDescendant(source)
+          node = childrenOnly ? node.nextSibling : node.nextDescendant(root)
         ) {
           if (node.isElement() && matches(node)) elements.push(node);
         }

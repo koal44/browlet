@@ -1,29 +1,7 @@
-/*
- * TODO(CSSOM Web IDL integration): temporary proxy factory for Stylelet's
- * unbound CSSStyleSheet objects. Move the proxy machinery into Web IDL and
- * remove this module when adoptedStyleSheets uses the host binding.
- * See ../browlet/style/ROADMAP.md for the remaining integration work.
- */
-
-export type ObservableArrayOptions<IDLValue, JavaScriptValue = IDLValue> = {
-  convert: (value: unknown) => IDLValue;
-  toJavaScript?: (value: IDLValue) => JavaScriptValue;
-  array?: ArrayConstructor;
-  rangeError?: typeof RangeError;
-  typeError?: typeof TypeError;
-  toNumber?: (value: unknown) => number;
-  set?: (value: IDLValue, index: number) => void;
-  delete?: (value: IDLValue, index: number) => void;
-};
-
-export type ObservableArrayHandle<IDLValue, JavaScriptValue = IDLValue> = {
-  readonly backingList: IDLValue[];
-  readonly value: JavaScriptValue[];
-  replace: (value: unknown) => void;
-  replaceValues: (values: IDLValue[]) => void;
-};
-
+/** Expose a retained implementation list through Web IDL's observable-array exotic object. */
+// https://webidl.spec.whatwg.org/#es-observable-array
 export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
+  backingList,
   convert,
   toJavaScript = identity as (value: IDLValue) => JavaScriptValue,
   array: Array_ = Array,
@@ -38,7 +16,6 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
   IDLValue,
   JavaScriptValue
 > {
-  const backingList: IDLValue[] = [];
   const target = Reflect.construct(Array_, []) as JavaScriptValue[];
 
   const setLength = (value: unknown): boolean => {
@@ -198,36 +175,32 @@ export function createObservableArray<IDLValue, JavaScriptValue = IDLValue>({
     backingList,
     value: observable,
 
-    replace(value: unknown): void {
-      const converted = convertSequence(value, convert, TypeError_);
-      replaceValues(converted);
-    },
-
     replaceValues,
   };
 }
 
-function convertSequence<T>(
-  value: unknown,
-  convert: (value: unknown) => T,
-  TypeError_: typeof TypeError,
-): T[] {
-  if (value === null || value === undefined) {
-    throw new TypeError_('Value is not iterable');
-  }
+/** Platform array and replacement operation sharing the implementation's backing list. */
+export type ObservableArrayHandle<IDLValue, JavaScriptValue = IDLValue> = {
+  readonly backingList: IDLValue[];
+  readonly value: JavaScriptValue[];
+  replaceValues: (values: IDLValue[]) => void;
+};
 
-  const iterator = (value as { [Symbol.iterator]?: unknown; })[Symbol.iterator];
-  if (typeof iterator !== 'function') {
-    throw new TypeError_('Value is not iterable');
-  }
+/** Realm facilities and element operations for an observable-array platform value. */
+export type ObservableArrayOptions<IDLValue, JavaScriptValue = IDLValue> = {
+  /** The implementation's retained list; mutations never replace its identity. */
+  backingList: IDLValue[];
+  convert: (value: unknown) => IDLValue;
+  toJavaScript?: (value: IDLValue) => JavaScriptValue;
+  array?: ArrayConstructor;
+  rangeError?: typeof RangeError;
+  typeError?: typeof TypeError;
+  toNumber?: (value: unknown) => number;
+  set?: (value: IDLValue, index: number) => void;
+  delete?: (value: IDLValue, index: number) => void;
+};
 
-  return Array.from({
-    [Symbol.iterator]() {
-      return Reflect.apply(iterator, value, []) as Iterator<unknown>;
-    },
-  }, convert);
-}
-
+/** Recognize canonical array-index names, excluding the reserved maximum uint32. */
 function getArrayIndex(property: PropertyKey): number | null {
   if (typeof property !== 'string') return null;
 
@@ -237,10 +210,13 @@ function getArrayIndex(property: PropertyKey): number | null {
     : null;
 }
 
+/** Identify descriptors that install accessors rather than an indexed data value. */
 function isAccessorDescriptor(descriptor: PropertyDescriptor): boolean {
   return 'get' in descriptor || 'set' in descriptor;
 }
 
+/** Apply ToPropertyDescriptor, including inherited fields on the engine-supplied object. */
+// https://tc39.es/ecma262/#sec-topropertydescriptor
 function toPropertyDescriptor(
   object: PropertyDescriptor,
   TypeError_: typeof TypeError,
@@ -286,10 +262,12 @@ function toPropertyDescriptor(
   return descriptor;
 }
 
+/** Apply numeric coercion without accepting BigInt as Number() would. */
 function toNumber(value: unknown): number {
   return +(value as number);
 }
 
+/** Write internal list data without invoking author-installed Array prototype setters. */
 function setBackingValue<T>(values: T[], index: number, value: T): void {
   Object.defineProperty(values, index, {
     configurable: true,
@@ -299,8 +277,10 @@ function setBackingValue<T>(values: T[], index: number, value: T): void {
   });
 }
 
+/** Retain values whose implementation and JavaScript representations coincide. */
 function identity<T>(value: T): T {
   return value;
 }
 
+/** Default for an attribute with no corresponding indexed mutation steps. */
 function noop(): void {}

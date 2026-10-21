@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { runInNewContext } from 'node:vm';
 
-import { createObservableArray } from '../../src/infra/observable-array';
+import { createObservableArray } from '../../../../src/web-idl/binding/realm/observable-array-exotic';
 
 describe('Web IDL observable array', () => {
   it('behaves as an Array whose indexed values come from its backing list', () => {
@@ -24,6 +23,7 @@ describe('Web IDL observable array', () => {
   it('runs deletion before setting when an indexed value is replaced', () => {
     const operations: string[] = [];
     const observable = createObservableArray({
+      backingList: [],
       convert: Number,
       set: (value, index) => operations.push(`set ${index} ${value}`),
       delete: (value, index) => operations.push(`delete ${index} ${value}`),
@@ -43,6 +43,7 @@ describe('Web IDL observable array', () => {
   it('supports mutating Array methods through the indexed algorithms', () => {
     const deleted = vi.fn();
     const observable = createObservableArray({
+      backingList: [],
       convert: Number,
       delete: deleted,
     });
@@ -86,6 +87,7 @@ describe('Web IDL observable array', () => {
   it('shrinks through the delete algorithm and rejects invalid lengths', () => {
     const deleted: number[] = [];
     const array = createObservableArray({
+      backingList: [],
       convert: Number,
       delete: (value) => deleted.push(value),
     }).value;
@@ -103,31 +105,10 @@ describe('Web IDL observable array', () => {
     const array = observable.value;
     array.push(1);
 
-    observable.replace(new Set(['2', '3']));
+    observable.replaceValues([2, 3]);
 
     expect(observable.value).toBe(array);
     expect(array).toEqual([2, 3]);
-  });
-
-  it('converts a whole replacement before modifying the backing list', () => {
-    const observable = createObservableArray({
-      convert(value) {
-        if (typeof value !== 'number') throw new TypeError('Expected a number');
-        return value;
-      },
-    });
-    observable.value.push(1);
-
-    expect(() => observable.replace([2, 'invalid']))
-      .toThrow('Expected a number');
-    expect(observable.value).toEqual([1]);
-  });
-
-  it.each([null, {}])('uses the supplied TypeError for a non-iterable replacement: %s', (value) => {
-    const TypeError_ = runInNewContext('TypeError') as typeof TypeError;
-    const observable = createObservableArray({ convert: Number, typeError: TypeError_ });
-
-    expect(() => observable.replace(value)).toThrow(TypeError_);
   });
 
   it('enforces the indexed and length property descriptors', () => {
@@ -182,7 +163,7 @@ describe('Web IDL observable array', () => {
       },
     });
     try {
-      observable.replace([1, 2]);
+      observable.replaceValues([1, 2]);
     } finally {
       Reflect.deleteProperty(Array.prototype, '1');
     }
@@ -221,5 +202,5 @@ describe('Web IDL observable array', () => {
 });
 
 function createNumberArray() {
-  return createObservableArray({ convert: Number });
+  return createObservableArray({ backingList: [], convert: Number });
 }

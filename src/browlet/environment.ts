@@ -8,7 +8,7 @@ import {
   type Origin, type URLParseResult, type URLRecord,
 } from '../url/index';
 import {
-  FetchGroup, type FetchEnvironment, type FetchEnvironmentRecord, type FetchExecution,
+  FetchGroup, type FetchEnvironment, type FetchEnvironmentBase, type FetchExecution,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../fetch/index';
@@ -18,7 +18,7 @@ import type { EventLoop, BrowletRealm, WindowRealm, WindowAgent } from './script
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { AbortSignalImpl } from './dom/abort/index';
-import type { DocumentImpl, DOMNodeFactory, ModuleMap } from './dom/nodes/index';
+import type { DocumentImpl, ModuleMap } from './dom/nodes/index';
 import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
@@ -26,9 +26,9 @@ import type { WindowImpl } from './browsing/window/index';
 import type { BrowsingContext, Traversable } from './browsing/navigation/index';
 import type { UserAgent } from './user-agent';
 
-/** Browser state shared by reserved records and full environments. */
+/** Browser state shared by reserved clients and full environments. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#environment
-export class BrowletEnvironmentRecord implements FetchEnvironmentRecord {
+export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   /** Identity transferred to the full environment when a reservation is consumed. */
   id: string;
   /** Top-level creation URL, or null when the environment has none. */
@@ -47,7 +47,7 @@ export class BrowletEnvironmentRecord implements FetchEnvironmentRecord {
   #executionReady = false;
 
   /** Null leaves browser-specific state unavailable for an internal sandbox. */
-  constructor(initialization: BrowletEnvironmentRecordInit | null) {
+  constructor(initialization: BrowletEnvironmentBaseInit | null) {
     this.id = initialization?.id ?? randomUUID();
     this.#userAgent = initialization?.userAgent ?? null;
     this.#creationURL = initialization?.creationURL ?? null;
@@ -108,9 +108,14 @@ export class BrowletEnvironmentRecord implements FetchEnvironmentRecord {
 
 /** Engine, Fetch, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
 export interface BrowletExecution extends
-  RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, DOMNodeFactory, StyleletExecution {
-  /** Allocate a Document and its descendant-node factory in this environment's binding. */
+  RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, StyleletExecution {
+  /** Allocate a Document with this environment's binding ownership. */
   createDocument(): DocumentImpl;
+  /** Allocate a node implementation with this environment's binding ownership. */
+  constructNode<T extends object>(
+    implementation: abstract new (...argumentsList: never[]) => T,
+    argumentsList: unknown[],
+  ): T;
   /** Allocate an AbortSignal with this environment's binding ownership before first projection. */
   createAbortSignal(): AbortSignalImpl;
 }
@@ -118,7 +123,7 @@ export interface BrowletExecution extends
 /** Composed browser settings and execution for one realm and global. */
 // HTML's environment settings object. The engine owns execution-context stacks;
 // its realm component is retained directly here.
-export abstract class BrowletEnvironment extends BrowletEnvironmentRecord implements
+export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
   JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
@@ -131,13 +136,13 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentRecord implem
   /** Allocation, execution, and owner task delivery for this realm. */
   exec: BrowletExecution;
 
-  constructor(realm: BrowletRealm, record: BrowletEnvironmentRecord | null, exec: BrowletExecution) {
-    super(record);
+  constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, exec: BrowletExecution) {
+    super(baseEnv);
     this.exec = exec;
     this.timing = new EnvironmentTiming(this);
     this.realm = realm;
     // Internal sandboxes participate in Binding without becoming HTML settings objects.
-    if (record !== null) realm.setHostDefined(this);
+    if (baseEnv !== null) realm.setHostDefined(this);
   }
 
   /** The platform global installed in this environment's realm. */
@@ -335,8 +340,8 @@ export class SandboxEnvironment extends BrowletEnvironment {
 export class WindowEnvironment extends BrowletEnvironment {
   declare realm: WindowRealm;
 
-  constructor(realm: WindowRealm, record: BrowletEnvironmentRecord, exec: BrowletExecution) {
-    super(realm, record, exec);
+  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, exec: BrowletExecution) {
+    super(realm, baseEnv, exec);
   }
 
   /** Window implementation whose current Document supplies browser state. */
@@ -439,7 +444,7 @@ export class WindowEnvironment extends BrowletEnvironment {
 }
 
 /** State supplied when reserving an environment or transferring it into full settings. */
-export interface BrowletEnvironmentRecordInit {
+export interface BrowletEnvironmentBaseInit {
   /** Omitted for a fresh reservation; retained when constructing full settings. */
   id?: string;
   userAgent: UserAgent;
@@ -467,8 +472,8 @@ export type WindowEnvironmentInit = {
   topLevelCreationURL: URLRecord;
   /** Top-level origin captured for partitioning and security decisions. */
   topLevelOrigin: Origin;
-  /** Early environment record whose identity survives navigation setup. */
-  reservedEnv?: BrowletEnvironmentRecord | null;
+  /** Reserved environment whose identity survives navigation setup. */
+  reservedEnv?: BrowletEnvironmentBase | null;
   /** Previous realm whose WindowProxy identity is reused for navigation. */
   previousRealm?: WindowRealm;
 };

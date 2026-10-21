@@ -1,11 +1,10 @@
 import { standardDOM, type DOMDocument, type DOMOperations } from '../infra/index';
 import { createAsyncExecution, nativeTimerHost, type AsyncExecution } from '../infra/execution';
-import type { DOMExceptionConstructor, WebIDLExecution } from '../web-idl/core/index';
 import { decodeNative, type DecodeText } from '../encoding/core/index';
 
 /** Existing owner supplying Stylelet's execution, DOM access, URLs, and text decoding. */
 export interface StyleletEnvironment {
-  /** Promise allocation, background work, task delivery, and exception creation. */
+  /** Promise allocation, background work, and task delivery. */
   exec: StyleletExecution;
   /** Host facilities shared across this owner's documents and engines. */
   userAgent: StyleletUserAgent;
@@ -34,10 +33,8 @@ export interface StyleletURLConstructor {
   new (input: string, base?: string): StyleletURL;
 }
 
-/** Shared scheduling and host exception construction for stylesheet updates. */
-// PROVISIONAL: The unbound adopted-sheet collection still uses host exceptions;
-// its §6.2 binding must replace that path (browlet/style/ROADMAP.md).
-export interface StyleletExecution extends AsyncExecution, WebIDLExecution {}
+/** Shared scheduling for stylesheet updates; Binding projects implementation exceptions. */
+export type StyleletExecution = AsyncExecution;
 
 /** Host configuration for an existing environment or standalone execution. */
 export type StyleletOptions = {
@@ -49,7 +46,7 @@ export type StyleletOptions = {
   URL?: StyleletURLConstructor;
   /** Complete-input byte decoding; defaults to the native decoder adapter. */
   decodeText?: DecodeText;
-  /** Standalone execution facilities; defaults to native promises, timers, and exceptions. */
+  /** Standalone execution facilities; defaults to native promises and timers. */
   exec?: StyleletExecution;
 };
 
@@ -69,18 +66,10 @@ export function createStyleletEnvironment(options: StyleletOptions = {}): Stylel
 }
 
 // Capture standalone host facilities using only the surfaces Stylelet needs.
-const nativeHost = globalThis as typeof globalThis & NativeStyleletHost;
+const nativeHost = globalThis as typeof globalThis & { URL: StyleletURLConstructor; };
 const nativeURL = nativeHost.URL;
 
-/** Shared native scheduling and host exceptions for standalone Stylelet. */
-export const defaultStyleletExecution: StyleletExecution = {
-  ...createAsyncExecution(nativeTimerHost),
-  DOMException: nativeHost.DOMException,
-};
+/** Shared native scheduling for standalone Stylelet. */
+export const defaultStyleletExecution: StyleletExecution = createAsyncExecution(nativeTimerHost);
 
 export const defaultStyleletEnvironment = createStyleletEnvironment();
-
-type NativeStyleletHost = {
-  URL: StyleletURLConstructor;
-  DOMException: DOMExceptionConstructor;
-};

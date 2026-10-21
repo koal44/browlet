@@ -312,6 +312,16 @@ their respective members. They and the iterable bindings share direct-platform
 receiver validation through `RealmBinding`, without global fallback or proxy aliases.
 JS Engine owns iterator identity, reentrancy, and completion.
 
+Observable-array attributes expose a retained list from the implementation
+getter. `ObservableArrayBinding` reads that list once and creates the array in
+the receiver's owning realm, including when first accessed through a borrowed
+getter. Declarations supply optional `observableArraySteps.set`/`delete` methods;
+Binding invokes them with the implementation receiver and realizes exceptions.
+Attribute assignment performs complete sequence conversion before clearing the
+list; indexed writes convert individually. Internal list mutations are visible
+without invoking author-mutation steps. The proxy machinery lives in
+`binding/realm/observable-array-exotic.ts`, not Infra or the consuming subsystem.
+
 `IDLPromise` owns resolution, rejection, and reactions. Its `react()` handles
 JS values; callers supply conversions in their reaction steps. Convert an IDL
 result with `converter.idlToJS()` before `resolve()`, which accepts a JS value
@@ -962,8 +972,6 @@ resolves the assignment type through its target attribute; an opaque `object`
 is an error. WPT and projected runtime tests still establish behavior;
 declaration generation does not certify that unfinished bindings are implemented.
 
-Restoring `ObservableArray<CSSStyleSheet>` remains with
-[style integration](../browlet/style/ROADMAP.md#next-boundary-change).
 `[CEReactions]` belongs to [HTML custom elements](../browlet/dom/nodes/html/custom-elements/ROADMAP.md),
 security policy to [Window](../browlet/browsing/window/ROADMAP.md), and new platform
 transfer types to [structured data](../browlet/scripting/structured-data/ROADMAP.md).

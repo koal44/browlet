@@ -28,7 +28,7 @@ export function findElement(root: NodeImpl, matches: (element: ElementImpl) => b
 export function findElementsByClassName(root: NodeImpl, classNames: string): HTMLCollectionImpl {
   const names = parseOrderedSet(classNames);
   const lowercaseNames = Array.from(names, asciiLower);
-  return new HTMLCollectionImpl(root, (element) => {
+  return HTMLCollectionImpl.fromRoot(root, (element) => {
     if (names.size === 0) return false;
     const value = element.getAttributeNS(null, 'class');
     if (value === null) return false;
@@ -47,7 +47,7 @@ export function findElementsByTagName(root: NodeImpl, qualifiedName: string): HT
   const anyName = qualifiedName === '*';
   const html = root.nodeDocument.type === 'html';
   const lowercaseName = asciiLower(qualifiedName);
-  return new HTMLCollectionImpl(root, (element) => anyName ||
+  return HTMLCollectionImpl.fromRoot(root, (element) => anyName ||
     element.qualifiedName === (html && element.namespaceURI === HTML_NAMESPACE ? lowercaseName : qualifiedName));
 }
 
@@ -60,7 +60,7 @@ export function findElementsByTagNameNS(
   const namespace = namespaceURI ?? '';
   const anyNamespace = namespace === '*';
   const anyName = localName === '*';
-  return new HTMLCollectionImpl(root, (element) =>
+  return HTMLCollectionImpl.fromRoot(root, (element) =>
     (anyNamespace || element.namespaceURI === namespace) &&
     (anyName || element.localName === localName));
 }

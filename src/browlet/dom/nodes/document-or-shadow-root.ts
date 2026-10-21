@@ -40,10 +40,6 @@ export class DocumentOrShadowRootMixin {
   get adoptedStyleSheets(): CSSStyleSheetImpl[] {
     return this.#root.getStyleScope().adoptedStyleSheets;
   }
-
-  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
-    this.#root.getStyleScope().setAdoptedStyleSheets(styleSheets);
-  }
 }
 
 /*

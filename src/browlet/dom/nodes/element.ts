@@ -10,7 +10,7 @@ import type { CSSStyleSheetImpl, CSSDeclarationBlock } from '../../../stylelet/i
 
 import { isValidAttributeLocalName, validateAndExtract } from '../infra/index';
 import { ElementTag, type ContentCategory, type ContentModel } from './element-definitions/index';
-import type { LinkStyleMixin, TreeScopeResolver } from '../../style/index';
+import type { LinkStyleMixin } from '../../style/index';
 import type { EventImpl } from '../events/index';
 import { getTrustedTypeDataForAttribute, type TrustedTypeValue } from '../../browsing/policy/trusted-types/index';
 import { DOMTokenListImpl, type TokenListAttribute } from '../token-list';
@@ -1000,8 +1000,6 @@ export type ElementCreationContext = {
   namespaceURI: string;
   /** Prefix retained by namespace-aware document factories. */
   prefix?: string | null;
-  /** Resolve style ownership after insertion or removal. */
-  treeScopeResolver: TreeScopeResolver;
 };
 
 /** DOM's construction and upgrade states for an element. */

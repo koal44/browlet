@@ -5,7 +5,7 @@ import type { WindowImpl } from '../../../../src/browlet/browsing/window/window'
 import { createWindowEnvironment } from '../../../../src/browlet/bindings';
 import { getRelevantRealm } from '../../../support/browlet-binding';
 import { WindowAgent } from '../../../../src/browlet/scripting/agents';
-import { BrowletEnvironmentRecord } from '../../../../src/browlet/environment';
+import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
 import { WindowRealm } from '../../../../src/browlet/scripting/realm';
 import { UserAgent } from '../../../../src/browlet/user-agent';
 import { createOpaqueOrigin, type Origin, type TupleOrigin } from '../../../../src/url/origin';
@@ -129,7 +129,7 @@ describe('Secure Contexts: Window classification', () => {
     const realm = getRelevantRealm(browlet.window);
 
     expect(realm.env.origin.kind).toBe('opaque');
-    expect(realm.envRecord).toBe(realm.env);
+    expect(realm.baseEnv).toBe(realm.env);
     expect(realm.secureContext).toBe(false);
     expect(realm.env.isSecureContext).toBe(false);
     expect(await browlet.evaluate(() => isSecureContext)).toBe(false);
@@ -147,7 +147,7 @@ describe('Secure Contexts: Window classification', () => {
     const realm = getRelevantRealm(browlet.window);
 
     expect(realm.secureContext).toBe(expected);
-    expect(realm.envRecord).toBe(realm.env);
+    expect(realm.baseEnv).toBe(realm.env);
     expect(realm.env.isSecureContext).toBe(expected);
     expect(browlet.window.isSecureContext).toBe(expected);
     expect(Reflect.get(browlet.document, 'title')).toBe(String(expected));
@@ -185,7 +185,7 @@ describe('Secure Contexts: Window classification', () => {
     const creationURL = parseURL('http://example.test/').url!;
     const origin = obtainURLOrigin(creationURL);
     userAgent.trustworthyOrigins.push(tupleOriginFor('http://example.test/'));
-    const reservedEnv = new BrowletEnvironmentRecord({
+    const reservedEnv = new BrowletEnvironmentBase({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
@@ -238,13 +238,13 @@ describe('Secure Contexts: Web IDL exposure', () => {
     const userAgent = new UserAgent();
     const creationURL = parseURL(url).url!;
     const origin = obtainURLOrigin(creationURL);
-    const record = new BrowletEnvironmentRecord({
+    const baseEnv = new BrowletEnvironmentBase({
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: origin,
       targetBrowsingContext: null,
       isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin),
     });
     const realm = new WindowRealm({
-      agent: new WindowAgent(createManualEventLoop()), envRecord: record,
+      agent: new WindowAgent(createManualEventLoop()), baseEnv,
     });
     const world = new BindingWorld([
       defineInterface({
@@ -260,19 +260,19 @@ describe('Secure Contexts: Web IDL exposure', () => {
 
     expect(realm.hostDefined).toBeUndefined();
     expect(() => realm.env).toThrow('Realm has no environment');
-    expect(realm.envRecord).toBe(record);
+    expect(realm.baseEnv).toBe(baseEnv);
     expect(realm.secureContext).toBe(expected);
     expect(Reflect.has(target, 'SecureProbe')).toBe(expected);
     const constructor = Reflect.get(target, 'OrdinaryProbe') as { prototype: object; };
     expect(Reflect.has(constructor.prototype, 'secureMember')).toBe(expected);
 
     const env = createWindowEnvironment({
-      agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin, parent: null, reservedEnv: record,
+      agent: new WindowAgent(createManualEventLoop()), userAgent, creationURL, origin, parent: null, reservedEnv: baseEnv,
       topLevelCreationURL: creationURL, topLevelOrigin: origin,
     });
     const installedTarget = env.realm.createOrdinaryObject(null);
     world.register(env.realm, (ctx) => ({ realm: ctx.realm })).install(installedTarget);
-    expect(env.realm.envRecord).toBe(env);
+    expect(env.realm.baseEnv).toBe(env);
     expect(env.realm.hostDefined).toBe(env);
     expect(env.realm.env).toBe(env);
     expect(env.realm.secureContext).toBe(expected);

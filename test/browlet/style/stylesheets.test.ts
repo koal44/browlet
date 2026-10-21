@@ -12,7 +12,7 @@ describe('stylesheet integration', () => {
     const document = createTestDocument();
     const element = document.createElement('div');
     if (!HTMLElementImpl.is(element)) throw new Error('Expected an HTML element');
-    const getCSSEngine = vi.spyOn(document, 'getCSSEngine');
+    const getStyleEngine = vi.spyOn(document, 'getStyleEngine');
     const { userAgent } = document.env;
     const setAttributeNS = vi.fn(userAgent.dom.setAttributeNS.bind(userAgent.dom));
     userAgent.dom = { ...userAgent.dom, setAttributeNS };
@@ -23,7 +23,7 @@ describe('stylesheet integration', () => {
     expect(element.parentNode).toBeNull();
     expect(element.getAttributeNS(null, 'style')).toBe('opacity: 0.25;');
     expect(setAttributeNS).toHaveBeenCalledWith(element, null, 'style', 'opacity: 0.25;');
-    expect(getCSSEngine).not.toHaveBeenCalled();
+    expect(getStyleEngine).not.toHaveBeenCalled();
   });
 
   it('replaces sheets through the existing environment and its owner task queue', async () => {
@@ -31,7 +31,7 @@ describe('stylesheet integration', () => {
     const { env } = document;
     const background = vi.spyOn(env.exec, 'runInParallel');
     const delivery = vi.spyOn(env.exec, 'queueTask');
-    const styles = document.getCSSEngine();
+    const styles = document.getStyleEngine();
     const sheet = styles.createStyleSheet();
 
     expect(styles.context.env).toBe(env);
@@ -215,7 +215,7 @@ describe('stylesheet integration', () => {
     });
     const style = getStyleElement(document, 'style');
     const target = document.getElementById('target')!;
-    const engine = document.getCSSEngine();
+    const engine = document.getStyleEngine();
     const computed = engine.getComputedStyle(target);
 
     expect(computed.getPropertyValue('opacity')).toBe('1');
@@ -249,7 +249,7 @@ describe('stylesheet integration', () => {
     void target.style;
     const getAttribute = vi.spyOn(target, 'getAttribute');
 
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.5');
     expect(getAttribute).not.toHaveBeenCalledWith('style');
   });
@@ -265,7 +265,7 @@ describe('stylesheet integration', () => {
     const first = getStyleElement(document, 'first');
     const second = getStyleElement(document, 'second');
     const target = document.getElementById('target')!;
-    const engine = document.getCSSEngine();
+    const engine = document.getStyleEngine();
 
     expect(engine.getComputedStyle(target).getPropertyValue('opacity')).toBe('0.2');
 
@@ -288,46 +288,46 @@ describe('stylesheet integration', () => {
 
     expect(alpha.disabled).toBe(false);
     expect(beta.disabled).toBe(true);
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.25');
   });
 
-  it('exposes observable adopted stylesheets without replacing the array', () => {
+  it('reads internal adopted stylesheet mutations directly in the cascade', () => {
     const document = createTestDocument({
       source: '<main id="target" class="target"></main>',
     });
     const target = document.getElementById('target')!;
     const styleSheets = document.adoptedStyleSheets;
-    const first = document.getCSSEngine().createStyleSheet();
-    const second = document.getCSSEngine().createStyleSheet();
+    const first = document.getStyleEngine().createStyleSheet();
+    const second = document.getStyleEngine().createStyleSheet();
     first.replaceSync('.target { opacity: 0.25 }');
     second.replaceSync('.target { opacity: 0.5 }');
 
-    document.adoptedStyleSheets = [first];
+    document.adoptedStyleSheets.push(first);
 
     expect(document.adoptedStyleSheets).toBe(styleSheets);
     expect(styleSheets).toEqual([first]);
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.25');
 
     styleSheets.push(second);
 
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.5');
 
     styleSheets.reverse();
 
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.25');
 
     styleSheets.splice(1, 1);
 
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.5');
 
     styleSheets.splice(0, 1, first);
 
-    expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity'))
+    expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity'))
       .toBe('0.25');
   });
 
@@ -337,15 +337,12 @@ describe('stylesheet integration', () => {
     });
     const embedded = getStyleElement(document, 'style').sheet!;
     const otherDocument = createTestDocument();
-    const foreign = otherDocument.getCSSEngine().createStyleSheet();
+    const foreign = otherDocument.getStyleEngine().createStyleSheet();
 
-    expect(() => document.adoptedStyleSheets.push(embedded))
+    expect(() => document.getStyleScope().checkAdoptedStyleSheet(embedded))
       .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
-    expect(() => document.adoptedStyleSheets.push(foreign))
+    expect(() => document.getStyleScope().checkAdoptedStyleSheet(foreign))
       .toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
-    expect(() => document.adoptedStyleSheets.push(
-      'not a stylesheet' as never,
-    )).toThrow(TypeError);
     expect(document.adoptedStyleSheets).toHaveLength(0);
   });
 });

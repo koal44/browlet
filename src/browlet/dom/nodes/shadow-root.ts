@@ -1,8 +1,7 @@
-import { InternalError } from '../../../infra/internal-error';
 import {
   defineEnumeration, defineIncludes, defineInterface, idlType, impl, reference, roAttr,
 } from '../../../web-idl/core/index';
-import type { TreeScope, CSSStyleSheetImpl, StyleSheetListImpl } from '../../../stylelet/index';
+import { TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl } from '../../../stylelet/index';
 
 import { EventHandlerMap, eventHandlerAttr, type EventHandlerCallback } from '../../scripting/index';
 import type { EventImpl, EventTargetImpl } from '../events/index';
@@ -10,6 +9,7 @@ import type { EventImpl, EventTargetImpl } from '../events/index';
 import { DocumentFragmentImpl } from './document-fragment';
 import type { ElementImpl } from './element';
 import { NodeImpl } from './node';
+import type { DocumentImpl } from './document';
 import {
   DocumentOrShadowRootMixin, documentOrShadowRootIDL,
 } from './document-or-shadow-root';
@@ -41,6 +41,8 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   /** Focus and style-sheet behavior shared with documents. */
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
+  /** Retained collection identities, created only when this root participates in styling. */
+  #styleScope: TreeScope | undefined;
   /** IDL handler registration shares the ordinary event listener ordering. */
   #eventHandlers = new EventHandlerMap(this, [{ name: 'onslotchange', type: 'slotchange' }]);
 
@@ -68,22 +70,19 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
     return this.#documentOrShadowRootMixin.activeElement;
   }
 
+  /** Live associated sheets, excluding the separately retained adopted list. */
   get styleSheets(): StyleSheetListImpl {
     return this.#documentOrShadowRootMixin.styleSheets;
   }
 
+  /** Implementation list exposed through Binding's observable array. */
   get adoptedStyleSheets(): CSSStyleSheetImpl[] {
     return this.#documentOrShadowRootMixin.adoptedStyleSheets;
   }
 
-  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
-    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
-  }
-
   /** Initialize or retrieve the style scope for this shadow tree. */
   getStyleScope(): TreeScope {
-    // TODO: create and retain the shadow tree's style scope.
-    throw new InternalError('Shadow-root style scopes are not implemented');
+    return this.#styleScope ??= new TreeScope(this, this.nodeDocument.getStyleScope().cascade);
   }
 
   override getShadowRootHost(): ElementImpl {
@@ -108,6 +107,15 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
     }
 
     return this.host;
+  }
+
+  /** Clear foreign adopted sheets without replacing either live collection. */
+  protected override adoptingSteps(_oldDocument: DocumentImpl): void {
+    if (this.#styleScope) {
+      // SPEC_GAP(shadow-adopted-sheets-adoption): CSSOM and DOM omit cleanup; follow all three browsers by clearing the retained list.
+      this.#styleScope.adoptedStyleSheets.length = 0;
+      this.#styleScope.cascade = this.nodeDocument.getStyleScope().cascade;
+    }
   }
 }
 

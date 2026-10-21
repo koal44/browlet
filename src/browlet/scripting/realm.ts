@@ -11,7 +11,7 @@ import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { DOMRealm, WindowDOMRealm } from '../dom/index';
-import type { BrowletEnvironment, BrowletEnvironmentRecord, WindowEnvironment } from '../environment';
+import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from '../environment';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
 
 import type { Agent, WindowAgent } from './agents';
@@ -48,7 +48,8 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   globalNames: ReadonlySet<string>;
   /** Whether this host permits changes to the global prototype chain. */
   isGlobalPrototypeChainMutable: boolean;
-  #envRecord: BrowletEnvironmentRecord | undefined;
+  /** Security state retained during realm creation and replaced by the attached full environment. */
+  #baseEnv: BrowletEnvironmentBase | undefined;
   #hostDefined: BrowletEnvironment | undefined;
 
   constructor(options: BrowletRealmOptions) {
@@ -62,7 +63,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     this.globalNames = new Set(options.globalNames ?? []);
     this.isGlobalPrototypeChainMutable =
       options.isGlobalPrototypeChainMutable ?? false;
-    this.#envRecord = options.envRecord;
+    this.#baseEnv = options.baseEnv;
     this.callbacks = {
       // Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3.
       captureContext: () => {
@@ -117,13 +118,13 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     return this.#hostDefined;
   }
 
-  /** Early security owner, replaced by the full environment when attached. */
-  get envRecord(): BrowletEnvironmentRecord | undefined {
-    return this.#envRecord;
+  /** Shared security state, available before and after full environment attachment. */
+  get baseEnv(): BrowletEnvironmentBase | undefined {
+    return this.#baseEnv;
   }
 
   get secureContext(): boolean {
-    return this.#envRecord?.isSecureContext ?? false;
+    return this.#baseEnv?.isSecureContext ?? false;
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {
@@ -201,7 +202,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 
   /** Attach this realm's HTML environment. */
   setHostDefined(env: BrowletEnvironment): void {
-    this.#envRecord = env;
+    this.#baseEnv = env;
     this.#hostDefined = env;
   }
 
@@ -308,10 +309,10 @@ export type BrowletRealmOptions = {
   crossOriginIsolated?: boolean;
   globalNames?: string[];
   isGlobalPrototypeChainMutable?: boolean;
-  envRecord?: BrowletEnvironmentRecord;
+  baseEnv?: BrowletEnvironmentBase;
 };
 
 export type WindowRealmOptions = Omit<BrowletRealmOptions, 'globalNames' | 'isGlobalPrototypeChainMutable'> & {
   agent: WindowAgent;
-  envRecord: BrowletEnvironmentRecord;
+  baseEnv: BrowletEnvironmentBase;
 };

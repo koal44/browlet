@@ -16,7 +16,7 @@ export class HTMLAllCollectionImpl {
 
   constructor(document: DocumentImpl) {
     this.#document = document;
-    this.#elements = new HTMLCollectionImpl(document, () => true);
+    this.#elements = HTMLCollectionImpl.fromRoot(document, () => true);
   }
 
   get length(): number { return this.#elements.length; }
@@ -50,7 +50,7 @@ export class HTMLAllCollectionImpl {
   // https://html.spec.whatwg.org/#concept-get-all-named
   namedItem(name: string): HTMLCollectionImpl | ElementImpl | null {
     if (name === '') return null;
-    const matches = new HTMLCollectionImpl(this.#document, (element) =>
+    const matches = HTMLCollectionImpl.fromRoot(this.#document, (element) =>
       element.getAttributeNS(null, 'id') === name ||
       (element instanceof HTMLElementImpl && element.isAllNamedElement && element.getAttributeNS(null, 'name') === name));
     const length = matches.length;

@@ -6,6 +6,10 @@ import {
 
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
 // https://drafts.csswg.org/cssom/#css-declaration-blocks
+// PROVISIONAL(CSSOM): This separate storage/mutation class is an interim inline-style design.
+// Before closing the CSSOM audit, replace it with plain declaration state or direct
+// implementation ownership unless a separate class earns an explicit justification.
+// See ../cssom/ROADMAP.md#projection-and-declaration-lifecycle.
 export class CSSDeclarationBlock {
   /** Winning declaration for each property, retaining the block's property order. */
   #declarations: PropertyDeclaration[] = [];

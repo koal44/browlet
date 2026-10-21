@@ -37,11 +37,12 @@ Nested style rules and later declaration runs retain their own implementations;
 the engine reads their current declaration data without copying it back to a
 second tree. See the [CSSOM inventory](../cssom/README.md#rule-parsing).
 
-The separate declaration block is still under review alongside
-`CSSStyleDeclaration` and the missing `CSSStyleProperties` implementation.
-It currently stores one declaration list, not a synchronized duplicate.
-Its shared inline ownership and the mixin's manual index synchronization are
-the next ownership questions; see the [CSSOM roadmap](../cssom/ROADMAP.md).
+The separate `CSSDeclarationBlock` class is provisional. Both
+`CSSStyleDeclarationImpl` and `CSSStylePropertiesImpl` now exist and use real
+bindings; no manual index synchronization remains. The separate class stores
+one declaration list, but its representation and mutation ownership must be
+settled before the CSSOM audit closes. See the
+[declaration lifecycle review](../cssom/ROADMAP.md#projection-and-declaration-lifecycle).
 
 The [rule roadmap](ROADMAP.md) maps unfinished grammars and their consumers.
 [Rule construction tests](../../../test/stylelet/unit/cssom/parser.test.ts)

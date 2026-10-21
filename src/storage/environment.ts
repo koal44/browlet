@@ -1,6 +1,6 @@
 import type { Origin, URLRecord } from '../url/index';
 
-/** The Storage-owned view of an HTML settings object or an earlier environment record. */
+/** The Storage-owned view of a full or reserved HTML environment. */
 export interface StorageEnvironment {
   /** Browser owner supplying storage policy and identifier generation. */
   userAgent: StorageUserAgent;

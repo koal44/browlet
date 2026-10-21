@@ -14,7 +14,7 @@ style attribute. The reference roots are listed in the
 The [selector](../selector/ROADMAP.md), [rule](../css/ROADMAP.md),
 [value-lifecycle](../value-processing/ROADMAP.md), [property](../props/ROADMAP.md)
 and [Typed OM](typed/ROADMAP.md) guides own the related contracts.
-Sections 1–5 and the §6 preface/§6.1 sheet contracts have been audited.
+Sections 1–5 and the §6 preface/§6.1–6.2 sheet and collection contracts have been audited.
 Required rule/declaration bindings are present; their behavioral audit remains open. Related browser evidence lives in
 the [Browlet style roadmap](../../browlet/style/ROADMAP.md) and
 [CSP roadmap](../../browlet/browsing/policy/csp/ROADMAP.md#style-attribute-consumer).
@@ -40,7 +40,7 @@ or Platform behavior have been verified.
 | [Media queries and MediaList](https://drafts.csswg.org/cssom/#media-queries) | List parsing/recovery, serialization/comparison, mutation, complete IDL, and real Binding regressions, including sheet media. Modern conditions/ranges use the Media Queries grammar. | Device matching and additional feature interpretation belong to [Conditional Rules](../conditional/ROADMAP.md); serialization alone does not establish support. See disagreements below. |
 | [Selectors](https://drafts.csswg.org/cssom/#selectors) | Section 5 parsing and serialization use `selector/parser.ts`, with namespace, combinator, attribute, pseudo-element, functional pseudo-class, and An+B coverage. | Connect CSSStyleRule getters/setters with the correct namespace/nesting context and complete the [consumer review](../selector/ROADMAP.md#parser-to-consumer-coverage). |
 | [Style sheets](https://drafts.csswg.org/cssom/#css-style-sheets) | Metadata, one-pass initialization, typed construction/dictionary, access guards, replacement promises, simple insertion/deletion, legacy aliases, and projected identity/realm coverage. | Ordinary import/namespace grammars and mixed-rule hierarchy; actual response-derived origin/base state. Recognized missing grammars stop explicitly. |
-| [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document sheets, adopted-sheet checks, preferred/selected sets, and retained lists. | Complete ShadowRoot scopes, binding-owned `ObservableArray<CSSStyleSheet>`, Default-Style/Link response processing, script blocking, and resource completion. |
+| [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document/shadow sheets, real observable-array binding and adoption checks, retained identities, preferred/selected sets, and ordered Default-Style response processing. | HTTP Link/external sheet producers, script blocking, and resource completion; shadow-tree cascade selection is separate from collection ownership. See the [collection disagreements](../../browlet/style/ROADMAP.md#stylesheet-collection-disagreements). |
 | [Association and fetching](https://drafts.csswg.org/cssom/#style-sheet-association) | HTML/SVG inline style elements associate sheets through Browlet's LinkStyle mixin. | `<link>`, `xml-stylesheet`, HTTP Link, imports, cancellation, MIME/CORS/encoding, policy, and load events belong at their host/loader boundary. Collection helpers alone do not satisfy these algorithms. |
 | [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | A single projected implementation tree, parent links, live lists, separate style/nested declarations, and the no-op cssText setter. | Selector mutation, rule serialization, nested insertion/deletion, hierarchy checks, and supported at-rule grammars. See rule work below. |
 | [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | Retained declarations, queries/edits, attribute write-back, readonly checks, and CSSStyleDeclaration/CSSStyleProperties bindings with supported indices/property attributes. | Full declaration algorithm audit, shorthand/longhand and logical-group rules, URL provenance, descriptors, and the final mutation owner. |
@@ -149,13 +149,15 @@ and fetching must be accounted for separately as each rule is added.
 
 ## Projection and declaration lifecycle
 
-- [ ] Finish §6.2's adoption binding and mutation steps. Sheet/list,
-  rule, declaration, inline-style, LinkStyle, and Window results already use
-  concrete references. Keep conversion, identity, and supported indices in Binding.
-- [ ] Review who owns declaration state across inline style, style rules,
-  descriptor rules, and computed results. Compare direct ownership by the
-  appropriate implementation with the current separate block. Neither a
-  missing interface nor a passing private-storage test settles this choice.
+- [ ] Before closing the CSSOM audit, replace the provisional
+  `css/CSSDeclarationBlock` class with plain declaration state or ownership by
+  the appropriate implementation, unless review establishes a concrete need
+  for the separate class. Audit inline style, style rules, descriptor rules,
+  and computed results together. CSSOM defines an ordered collection and its
+  associated state; that does not require this extra class. Element `.style`
+  exposes `CSSStylePropertiesImpl`. Preserve observable identity and lifecycle
+  behavior; current private-storage tests and `instanceof` consumers do not
+  settle the representation.
 - [ ] Make attribute input, author mutation, and engine reads explicit paths.
   Preserve one authorization/parsing path for first and later attribute inputs,
   CSSOM write-back bypass, and accepted state after a blocked replacement.

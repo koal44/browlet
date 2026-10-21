@@ -86,7 +86,7 @@ export class WindowImpl extends EventTargetImpl {
       throw new InternalError('Pseudo-element computed style is not implemented');
     }
 
-    return this.getAssociatedDocument().getCSSEngine().getComputedStyle(element);
+    return this.getAssociatedDocument().getStyleEngine().getComputedStyle(element);
   }
 
   /** Schedule a one-shot timer; Web IDL has already converted and defaulted the delay. */
@@ -207,10 +207,6 @@ export class WindowImpl extends EventTargetImpl {
 
   /** Attach the current document and update document-dependent global facilities. */
   setAssociatedDocument(document: DocumentImpl): void {
-    // The initial about:blank Document and its replacement can share this
-    // Window. Each Document retains its relevant global when the Window's
-    // associated Document advances.
-    document.setRelevantGlobalObject(this);
     this.#document = document;
     if (this.#globalScopeMixin !== null) {
       this.#globalScopeMixin.setAssociatedDocument(document);

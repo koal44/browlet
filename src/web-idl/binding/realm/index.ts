@@ -12,4 +12,5 @@ export {
   MemberBinding, invalidReceiver, type MemberOwner, type AttributeSteps, type ConstructorSteps,
   type ImplementationConstructorSteps, type ConstructorBehavior, type StringificationBehavior, type OperationSteps,
 } from './member';
-export { ObservableArrayBinding, type ObservableArraySteps } from './observable-array';
+export { ObservableArrayBinding } from './observable-array';
+export type { ObservableArrayHandle } from './observable-array-exotic';

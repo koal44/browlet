@@ -436,7 +436,7 @@ after pending notifications drain, through both implementation and platform iden
 Stopping points: custom-element definitions and the definition's
 disable-shadow check remain provisional with custom-element construction and
 `[HTMLConstructor]`. Registry definition/initialization, ElementInternals attachment, focus
-delegation, shadow style scopes, declarative parsing, and markup serialization
+delegation, shadow-tree cascade selection, declarative parsing, and markup serialization
 belong to their later consumers. 4I retains element `is` values and clones shadow
 trees using their attachment flags; this does not implement custom-element construction.
 

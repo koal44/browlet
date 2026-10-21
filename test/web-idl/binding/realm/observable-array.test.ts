@@ -2,14 +2,12 @@ import { describe, expect, it } from 'vitest';
 
 import {
   defineInterface, idlType, impl, observableArray, reference, roAttr,
-  type AttributeMember,
+  type AttributeMember, type ObservableArraySteps,
 } from '../../../../src/web-idl/core/index';
-import { DefinitionAssembly } from '../../../../src/web-idl/assembly/index';
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
-import { RealmBinding } from '../../../../src/web-idl/binding/realm';
+import type { RealmBinding } from '../../../../src/web-idl/binding/realm';
 import { getPlatformRecord } from '../../../../src/web-idl/binding/platform';
 
-import { getMemberBinding } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
 
 describe('Web IDL observable arrays', () => {
@@ -27,10 +25,7 @@ describe('Web IDL observable arrays', () => {
     first.push('1', 2);
 
     expect(first).toEqual([1, 2]);
-    expect(fixture.binding.getObservableArrayBackingList(
-      fixture.object,
-      fixture.binding.resolveInterface('NumberArrays').findMemberByKind('attribute')!.member,
-    )).toEqual([1, 2]);
+    expect(fixture.implementation.values).toEqual([1, 2]);
 
     const other = fixture.binding.allocatePlatformRecord(fixture.binding.resolveInterface('NumberArrays')).platformObject!;
     expect(getValues(other)).not.toBe(first);
@@ -39,7 +34,7 @@ describe('Web IDL observable arrays', () => {
   it('preserves the receiver owner when a borrowed getter first exposes the array', () => {
     class ValueImpl {}
     class ValuesImpl {
-      get values(): never { throw new Error('Observable arrays use the binding-owned backing list'); }
+      values: ValueImpl[] = [];
     }
     const attribute = roAttr('values', observableArray(reference('Value')));
     const world = new BindingWorld([
@@ -48,14 +43,15 @@ describe('Web IDL observable arrays', () => {
     ]);
     const owner = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
     const other = world.register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const object = owner.project(ValuesImpl, new ValuesImpl());
+    const implementation = new ValuesImpl();
+    const object = owner.project(ValuesImpl, implementation);
     const foreign = other.project(ValuesImpl, new ValuesImpl());
     // eslint-disable-next-line @typescript-eslint/unbound-method -- explicitly apply the borrowed getter to the owner
     const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreign), 'values')!.get!;
     const values = Reflect.apply(getter, object, []) as object[];
+    expect(Object.getPrototypeOf(values)).toBe(owner.realm.intrinsics.array.prototype);
     const value = new ValueImpl();
-    const binding = world.getRealmBinding(owner.realm)!;
-    binding.getObservableArrayBackingList(object, binding.resolveInterface('Values').findMemberByKind('attribute')!.member).push(value);
+    implementation.values.push(value);
 
     expect(world.getRealm(values[0]!)).toBe(owner.realm);
     expect(values[0]).toBe(owner.project(ValueImpl, value));
@@ -64,8 +60,7 @@ describe('Web IDL observable arrays', () => {
   it('runs indexed implementation steps around backing-list mutations', () => {
     const operations: string[] = [];
     const receivers: object[] = [];
-    const fixture = createNumberArrayBinding();
-    getMemberBinding(fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)), fixture.attribute).observableArraySteps = {
+    const fixture = createNumberArrayBinding({
       delete(value, index) {
         receivers.push(this);
         operations.push(`delete ${index} ${String(value)}`);
@@ -74,7 +69,7 @@ describe('Web IDL observable arrays', () => {
         receivers.push(this);
         operations.push(`set ${index} ${String(value)}`);
       },
-    };
+    });
     const values = getValues(fixture.object);
 
     values.push(1);
@@ -95,13 +90,12 @@ describe('Web IDL observable arrays', () => {
   it('preserves deletions completed before a later delete step throws', () => {
     const deleted: number[] = [];
     const exception = new Error('stop deleting');
-    const fixture = createNumberArrayBinding();
-    getMemberBinding(fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)), fixture.attribute).observableArraySteps = {
+    const fixture = createNumberArrayBinding({
       delete(_value, index) {
         deleted.push(index);
         if (index === 1) throw exception;
       },
-    };
+    });
     const values = getValues(fixture.object);
     values.push(1, 2, 3);
 
@@ -112,15 +106,14 @@ describe('Web IDL observable arrays', () => {
 
   it('converts an assignment before replacing the existing contents', () => {
     const operations: string[] = [];
-    const fixture = createNumberArrayBinding();
-    getMemberBinding(fixture.binding.getImplementationBinding(fixture.binding.resolveInterface(fixture.definition.name)), fixture.attribute).observableArraySteps = {
+    const fixture = createNumberArrayBinding({
       delete(value, index) {
         operations.push(`delete ${index} ${String(value)}`);
       },
       set(value, index) {
         operations.push(`set ${index} ${String(value)}`);
       },
-    };
+    });
     const values = getValues(fixture.object);
     values.push(1);
     operations.length = 0;
@@ -171,6 +164,14 @@ describe('Web IDL observable arrays', () => {
     values.label = 'numbers';
     expect(values.label).toBe('numbers');
     expect(Reflect.ownKeys(values)).toEqual(['length', 'label']);
+  });
+
+  it.each([null, {}])('rejects a non-iterable assignment in the binding realm: %s', (value) => {
+    const fixture = createNumberArrayBinding();
+    const values = getValues(fixture.object);
+    values.push(1);
+    expect(() => Reflect.set(fixture.object, 'values', value)).toThrow(fixture.realm.intrinsics.typeError);
+    expect(values).toEqual([1]);
   });
 
   it('coerces an assigned length through ToUint32 and then ToNumber', () => {
@@ -226,10 +227,11 @@ describe('Web IDL observable arrays', () => {
 
   it('converts interface elements and reflects specification list changes', () => {
     class EmployeeImpl {}
-    class BuildingImpl {}
+    class BuildingImpl { workers: EmployeeImpl[] = []; }
     const employee = defineInterface({
       name: 'Employee',
       exposed: '*',
+      implementation: impl(EmployeeImpl),
       members: [],
     });
     const workers = {
@@ -240,23 +242,19 @@ describe('Web IDL observable arrays', () => {
     const building = defineInterface({
       name: 'Building',
       exposed: '*',
+      implementation: impl(BuildingImpl),
       members: [workers],
     });
     const realm = new Realm();
 
-    const binding = new RealmBinding(
-      new DefinitionAssembly([employee, building]),
-      realm,
-      new BindingWorld([]),
-      (ctx) => ({ realm: ctx.realm }),
-    );
-    binding.getImplementationBinding(binding.resolveInterface(employee.name)).createImplementation = () => new EmployeeImpl();
-    binding.getImplementationBinding(binding.resolveInterface(building.name)).createImplementation = () => new BuildingImpl();
-    const object = binding.allocatePlatformRecord(binding.resolveInterface('Building')).platformObject!;
-    const employeeObject = binding.allocatePlatformRecord(binding.resolveInterface('Employee')).platformObject!;
-    const employeeImpl = getPlatformRecord(employeeObject)!.implInst;
+    const world = new BindingWorld([employee, building]);
+    const binding = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+    const implementation = new BuildingImpl();
+    const employeeImpl = new EmployeeImpl();
+    const object = binding.project(BuildingImpl, implementation);
+    const employeeObject = binding.project(EmployeeImpl, employeeImpl);
     const values = getArray(object, 'workers');
-    const backingList = binding.getObservableArrayBackingList(object, binding.resolveInterface('Building').findMemberByKind('attribute')!.member);
+    const backingList = implementation.workers;
 
     values.push(employeeObject);
     expect(backingList).toHaveLength(1);
@@ -269,31 +267,32 @@ describe('Web IDL observable arrays', () => {
   });
 });
 
-function createNumberArrayBinding(): NumberArrayFixture {
-  class NumberArraysImpl {}
+function createNumberArrayBinding(observableArraySteps?: ObservableArraySteps): NumberArrayFixture {
+  class NumberArraysImpl { values: number[] = []; }
   const attribute = {
     kind: 'attribute',
     name: 'values',
     type: observableArray(idlType.long),
+    observableArraySteps,
   } satisfies AttributeMember;
   const definition = defineInterface({
     name: 'NumberArrays',
     exposed: '*',
+    implementation: impl(NumberArraysImpl),
     members: [attribute],
   });
   const realm = new Realm();
-  const binding = new RealmBinding(
-    new DefinitionAssembly([definition]),
-    realm,
-    new BindingWorld([]),
-    (ctx) => ({ realm: ctx.realm }),
-  );
-  binding.getImplementationBinding(binding.resolveInterface(definition.name)).createImplementation = () => new NumberArraysImpl();
+  const world = new BindingWorld([definition]);
+  const context = world.register(realm, (ctx) => ({ realm: ctx.realm }));
+  const binding = world.getRealmBinding(realm)!;
+  const implementation = new NumberArraysImpl();
+  const object = context.project(NumberArraysImpl, implementation);
   return {
     attribute,
     binding,
     definition,
-    object: binding.allocatePlatformRecord(binding.resolveInterface('NumberArrays')).platformObject!,
+    object,
+    implementation,
     realm,
   };
 }
@@ -309,6 +308,7 @@ function getArray(object: object, name: string): unknown[] {
 }
 
 type NumberArrayFixture = {
+  implementation: { values: number[]; };
   definition: ReturnType<typeof defineInterface>;
   attribute: AttributeMember;
   binding: RealmBinding;

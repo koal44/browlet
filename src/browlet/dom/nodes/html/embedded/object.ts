@@ -4,7 +4,7 @@ import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/
 import { ElementTag, ContentCategory, transparentContent } from '../../element-definitions/index';
 
 import { HTMLElementImpl, type DocumentNamedItemType } from '../html-element';
-import { HTMLEmbedElementImpl } from './embed';
+import type { HTMLEmbedElementImpl } from './embed';
 
 /** Object identity and exposure state used by Document's named properties. */
 // https://html.spec.whatwg.org/multipage/iframe-embed-object.html#the-object-element
@@ -44,7 +44,7 @@ export class HTMLObjectElementImpl extends HTMLElementImpl {
     if (hasExposedObjectAncestor(this)) return false;
     if (!this.showsFallbackContent) return true;
     for (let node = this.firstChild; node; node = node.nextDescendant(this)) {
-      if (node instanceof HTMLObjectElementImpl || node instanceof HTMLEmbedElementImpl) return false;
+      if (node.isElement() && (node.tag === ElementTag.HTMLObject || node.tag === ElementTag.HTMLEmbed)) return false;
     }
     return true;
   }

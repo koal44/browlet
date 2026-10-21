@@ -41,7 +41,7 @@ export function isOffline(env: FetchEnvironment): boolean {
 }
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
-export interface FetchEnvironment extends FetchEnvironmentRecord, FileEnvironment {
+export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment {
   /** Execution, body handling, aborts, and task delivery for this environment. */
   exec: FetchExecution;
   /** Whether this environment's global is a Window. */
@@ -159,7 +159,7 @@ export interface FetchCSPList {
 export type FetchEmbedderPolicyValue = 'unsafe-none' | 'require-corp' | 'credentialless';
 
 /** The HTML environment, including reserved clients that do not yet have a realm. */
-export interface FetchEnvironmentRecord extends StorageEnvironment {
+export interface FetchEnvironmentBase extends StorageEnvironment {
   /** Shared user agent owning this environment's networking state. */
   userAgent: FetchUserAgent;
   /** Top-level origin used for network partitioning, or null when it must be derived. */

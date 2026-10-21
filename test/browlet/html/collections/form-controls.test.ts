@@ -84,7 +84,7 @@ describe('HTMLFormControlsCollection', () => {
     first.setAttribute('type', 'RADIO');
     second.setAttribute('type', 'radio');
     second.setAttribute('value', '');
-    const list = new RadioNodeListImpl(root);
+    const list = new RadioNodeListImpl({ root, collect: () => [...root.childNodes] });
     expect(list.value).toBe('');
     list.value = 'on';
     expect(list.value).toBe('on');
@@ -129,7 +129,7 @@ describe('HTMLFormControlsCollection', () => {
     first.setAttribute('value', 'first');
     second.setAttribute('value', 'second');
     first.setAttribute('checked', '');
-    const list = new RadioNodeListImpl(root);
+    const list = new RadioNodeListImpl({ root, collect: () => [...root.childNodes] });
     list.value = 'second';
     expect(list.value).toBe('second');
   });

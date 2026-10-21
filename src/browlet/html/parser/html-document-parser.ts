@@ -170,7 +170,7 @@ export class HTMLDocumentParser extends DocumentParser {
       // HTML's blocking wait resumes on the original (networking) task source.
       // Recheck here: another stylesheet can block before that task runs.
       if (this.document.hasScriptBlockingStyleSheets()) {
-        this.document.waitForScriptBlockingStyleSheets(this.document.env).observe(
+        this.document.waitForScriptBlockingStyleSheets().observe(
           () => { this.#queueTask(() => { this.#runScript(element, write, resume); }); },
           (error) => { this.#parse5Stream.destroy(toError(error)); },
         );

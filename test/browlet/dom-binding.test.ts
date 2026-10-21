@@ -12,6 +12,7 @@ import { AttrImpl } from '../../src/browlet/dom/nodes/attribute';
 import { TextImpl } from '../../src/browlet/dom/nodes/text';
 import type { DocumentImpl } from '../../src/browlet/dom/nodes/document';
 import type { ElementImpl } from '../../src/browlet/dom/nodes/element';
+import { parseHTMLDocument } from '../../src/browlet/html/parser/parse';
 import { SandboxEnvironment } from '../../src/browlet/environment';
 import { itPassesWith } from '../test-runtime';
 
@@ -662,6 +663,19 @@ describe('Browlet DOM binding', () => {
     expect(textPlatform).not.toBeInstanceOf(second.window.Text);
     expect(signalPlatform).toBeInstanceOf(first.window.AbortSignal);
     expect(signalPlatform).not.toBeInstanceOf(second.window.AbortSignal);
+  });
+
+  it('retains parsed document and node ownership before first projection in another realm', () => {
+    const first = createBrowlet();
+    const second = createBrowlet();
+    const sourceRealm = getRelevantRealm(first.window);
+    const document = parseHTMLDocument('<p id="target">owned</p>', sourceRealm.env);
+    const text = document.getElementById('target')!.firstChild!;
+    const foreignBinding = getBindingContext(getRelevantRealm(second.window));
+
+    expect(foreignBinding.project(TextImpl, text) instanceof first.window.Text).toBe(true);
+    expect(getRelevantRealm(document)).toBe(sourceRealm);
+    expect(getRelevantRealm(text)).toBe(sourceRealm);
   });
 
   it('filters DOM constructors for the host exposure set', () => {

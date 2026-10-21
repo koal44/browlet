@@ -1,7 +1,7 @@
 import { Browlet } from '../../../../src/browlet/browlet';
-import { browletDefinitions } from '../../../../src/browlet/bindings';
-import type { BrowletEnvironment } from '../../../../src/browlet/environment';
-import { DocumentImpl, ElementImpl } from '../../../../src/browlet/dom/nodes/index';
+import { browletDefinitions, createBrowletExecution } from '../../../../src/browlet/bindings';
+import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
+import { ElementImpl } from '../../../../src/browlet/dom/nodes/index';
 import { HTMLElementImpl } from '../../../../src/browlet/dom/nodes/html/html-element';
 import { htmlQuoteElementImplementations } from '../../../../src/browlet/dom/nodes/html/grouping/quote';
 import type { TokenListAttribute } from '../../../../src/browlet/dom/token-list';
@@ -103,9 +103,12 @@ export function createReflectionWorld(additionalDefinitions: Definition[] = []) 
   return () => {
     const browser = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browser.window);
-    const env = realm.env;
-    const context = world.register(realm, () => env);
-    const document = new DocumentImpl(undefined, env);
+    // The private world owns allocations; the real Window realm supplies DOM notification state.
+    const context = world.register(realm, (binding) =>
+      new SandboxEnvironment(realm, createBrowletExecution(binding), realm.env.userAgent),
+    );
+    const env = context.getEnvironment();
+    const document = env.exec.createDocument();
     const element = context.construct(ReflectionElementImpl, [{ document, localName: 'div', namespaceURI: HTML_NAMESPACE }, env]);
     const platform = context.project(ReflectionElementImpl, element) as unknown as ReflectionElement;
     function child(reflected = false) {

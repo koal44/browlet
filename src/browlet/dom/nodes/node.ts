@@ -126,7 +126,7 @@ export abstract class NodeImpl extends EventTargetImpl {
 
   // https://dom.spec.whatwg.org/#dom-node-childnodes
   get childNodes(): NodeListImpl {
-    return this.#childNodes ??= new NodeListImpl(this);
+    return this.#childNodes ??= NodeListImpl.forChildren(this);
   }
 
   get firstChild(): NodeImpl | null {

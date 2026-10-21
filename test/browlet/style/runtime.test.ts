@@ -12,7 +12,7 @@ describe('Stylelet execution integration', () => {
   it('uses Encoding to decode stylesheet bytes through the owning UserAgent', () => {
     const browlet = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browlet.document);
-    const styles = document.getCSSEngine();
+    const styles = document.getStyleEngine();
 
     expect(styles.context.env.userAgent).toHaveProperty('decodeText', decode);
     expect(decodeStylesheetBytes(Uint8Array.of(0xE9), {
@@ -23,7 +23,7 @@ describe('Stylelet execution integration', () => {
   it('uses Browlet URL implementations for stylesheet state', () => {
     const browlet = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browlet.document);
-    const styles = document.getCSSEngine();
+    const styles = document.getStyleEngine();
     const sheet = styles.createStyleSheet({ baseURL: 'https://example.test/assets/' });
 
     expect(styles.context.env.userAgent.URL).toBe(URLImpl);
@@ -59,7 +59,7 @@ describe('Stylelet execution integration', () => {
         ? new DocumentConstructor()
         : browlet.document;
       const implementation = unwrap<DocumentImpl>(document);
-      const styles = implementation.getCSSEngine();
+      const styles = implementation.getStyleEngine();
       const sheet = styles.createStyleSheet();
       const result = sheet.replace('main { color: red }');
       const completed = new Promise((resolve, reject) => { result.observe(resolve, reject); });
@@ -72,7 +72,7 @@ describe('Stylelet execution integration', () => {
   it('delivers stylesheet replacement completion without an unrelated task or manual checkpoint', async () => {
     const browlet = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browlet.document);
-    const sheet = document.getCSSEngine().createStyleSheet();
+    const sheet = document.getStyleEngine().createStyleSheet();
     const realm = getRelevantRealm(browlet.window);
     const started = Promise.withResolvers<void>();
     let completed = false;

@@ -43,7 +43,7 @@ import { svgIDLDefinitions } from './dom/nodes/svg/index';
 import { domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
 import {
-  type WindowEnvironmentInit, BrowletEnvironmentRecord, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
+  type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
   type BrowletExecution,
 } from './environment';
 import {
@@ -84,7 +84,7 @@ export function createWindowEnvironment(
   // parent's full chain. A reserved environment already carries that decision.
   // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
   // https://w3c.github.io/webappsec-secure-contexts/#ancestors
-  const envRecord = reservedEnv ?? new BrowletEnvironmentRecord({
+  const baseEnv = reservedEnv ?? new BrowletEnvironmentBase({
     userAgent, creationURL, topLevelCreationURL, topLevelOrigin,
     targetBrowsingContext: null,
     isSecureContext: userAgent.isOriginPotentiallyTrustworthy(origin) &&
@@ -97,7 +97,7 @@ export function createWindowEnvironment(
   if (useAddonGlobals) previousRealm?.detachGlobal();
   const realm = new WindowRealm({
     agent,
-    envRecord,
+    baseEnv,
     reuseGlobalProxyFrom: useAddonGlobals ? previousRealm : undefined,
     // Window.prototype -> named properties -> EventTarget.prototype.
     globalPrototypeChain: useAddonGlobals ? ['immutable', 'delegated', 'immutable'] : undefined,
@@ -107,7 +107,7 @@ export function createWindowEnvironment(
   const context = browletBindingWorld.register(realm, (binding) => {
     // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
     // Execution reads the installed global lazily; all consumers retain this environment.
-    env = new WindowEnvironment(realm, envRecord, createBrowletExecution(binding));
+    env = new WindowEnvironment(realm, baseEnv, createBrowletExecution(binding));
     env.creationURL = creationURL;
     env.topLevelCreationURL = topLevelCreationURL;
     env.topLevelOrigin = topLevelOrigin;

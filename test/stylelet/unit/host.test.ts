@@ -218,7 +218,7 @@ describe('Stylelet DOM hosts', () => {
       <main></main><x-example></x-example><unknown></unknown>
       <svg><circle></circle></svg><math><mi>x</mi></math>
     `);
-    const context = document.getCSSEngine().context;
+    const context = document.getStyleEngine().context;
     const getNamespaceURI = vi.spyOn(context.dom, 'getNamespaceURI');
     const main = document.getElementsByTagName('main').item(0)!;
 
@@ -240,7 +240,7 @@ describe('Stylelet DOM hosts', () => {
   it('uses Browlet document language defaults through the host query', () => {
     const document = createBrowletDocument('<main></main>');
     const main = document.querySelector('main')!;
-    const styles = document.getCSSEngine();
+    const styles = document.getStyleEngine();
     document.contentLanguage = 'fr';
     expect(matchSelectorList(parseSelectorList(':lang(fr)', {})!, main, styles.context)).not.toBeNull();
     document.pragmaLanguage = 'de';
@@ -333,7 +333,7 @@ describe('Stylelet execution', () => {
     expect(sheet.cssRules.length).toBe(0);
     expect(() => sheet.replaceSync('')).toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
     await expect(replacement).resolves.toBe(sheet);
-    styles.documentScope.setAdoptedStyleSheets([sheet]);
+    styles.documentScope.adoptedStyleSheets.push(sheet);
     expect(styles.getComputedStyle(document.querySelector('main')!).getPropertyValue('opacity')).toBe('0.25');
     expect(() => sheet.replaceSync('')).not.toThrow();
   });
@@ -370,21 +370,16 @@ describe('Stylelet execution', () => {
     expect(sheet.insertRule('.third {}')).toBe(0);
   });
 
-  it('keeps sheet/declaration failures neutral while adoption awaits its binding audit', async () => {
-    class HostDOMException extends DOMException {}
-    const exec: StyleletExecution = {
-      ...defaultStyleletExecution,
-      DOMException: HostDOMException,
-    };
+  it('keeps sheet, declaration, and adoption failures neutral before projection', async () => {
     const { document } = new JSDOM('<main></main>').window;
-    const styles = new Stylelet(document, { exec });
+    const styles = new Stylelet(document);
     const sheet = styles.createStyleSheet();
 
     expect(() => sheet.deleteRule(0)).toThrow(DOMExceptionImpl);
     const declaration = styles.getComputedStyle(document.querySelector('main')!);
     expect(() => declaration.setProperty('color', 'red')).toThrow(DOMExceptionImpl);
     const foreign = new Stylelet(new JSDOM().window.document).createStyleSheet();
-    expect(() => styles.documentScope.setAdoptedStyleSheets([foreign])).toThrow(HostDOMException);
+    expect(() => styles.documentScope.checkAdoptedStyleSheet(foreign)).toThrow(DOMExceptionImpl);
 
     const embedded = styles.documentScope.createStyleElementStyleSheet(
       document.createElement('style'), '',

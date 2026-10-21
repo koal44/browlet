@@ -1,37 +1,32 @@
-import { createObservableArray, type ObservableArrayHandle } from '../../../infra/index';
+import { InternalError } from '../../../infra/index';
 
 import type { IDLType, IDLAttribute } from '../../assembly/index';
 import type { PlatformRecord } from '../platform';
 
 import type { RealmBinding } from '../realm';
+import { createObservableArray, type ObservableArrayHandle } from './observable-array-exotic';
 
+/** Retains the platform arrays exposing each implementation's observable-array lists. */
 export class ObservableArrayBinding {
+  /** Realm whose attribute or array operation supplies conversion and exceptions. */
   #binding: RealmBinding;
 
-  // Project helper: retain the owning realm binding.
+  /** Retain the realm's conversion, allocation, and invocation machinery. */
   constructor(binding: RealmBinding) {
     this.#binding = binding;
   }
 
-  // Project helper: retrieve the platform value for an observable-array attribute.
+  /** Retrieve the receiver's retained array, independent of the getter's realm. */
   get(
     record: PlatformRecord,
     attribute: IDLAttribute,
     elementType: IDLType,
   ): unknown[] {
-    return this.#getHandle(record, attribute, elementType).value;
+    return record.binding.observableArrays.#getHandle(record, attribute, elementType).value;
   }
 
-  // Project helper: retrieve the observable-array attribute's retained backing list.
-  getBackingList(
-    record: PlatformRecord,
-    attribute: IDLAttribute,
-    elementType: IDLType,
-  ): unknown[] {
-    return this.#getHandle(record, attribute, elementType).backingList;
-  }
-
-  // Extracted from Web IDL §3.7.6 Attributes — replace an observable array's contents in an attribute setter.
+  /** Convert the entire assignment before running mutation steps on the retained list. */
+  // https://webidl.spec.whatwg.org/#dfn-attribute-setter
   replace(
     record: PlatformRecord,
     attribute: IDLAttribute,
@@ -39,11 +34,11 @@ export class ObservableArrayBinding {
     value: unknown,
   ): void {
     const values = this.#binding.getConverter(this.#binding.assembly.getSequenceType(elementType)).jsToIDL(value);
-    this.#getHandle(record, attribute, elementType).replaceValues(values);
+    record.binding.observableArrays.#getHandle(record, attribute, elementType).replaceValues(values);
   }
 
-  // Project adapter for Web IDL §3.10 Observable array exotic objects — compose conversion and mutation hooks
-  // with Infra's backing list.
+  /** Read the implementation list once and retain its projected array and declared mutation steps. */
+  // https://webidl.spec.whatwg.org/#es-observable-array
   #getHandle(
     record: PlatformRecord,
     attribute: IDLAttribute,
@@ -60,16 +55,22 @@ export class ObservableArrayBinding {
 
     const inputConverter = this.#binding.getConverter(elementType);
     const outputConverter = record.binding.getConverter(elementType, this.#binding.realm);
-    const steps = this.#binding.getMemberBinding(record.assembled, attribute)?.observableArraySteps;
+    const member = this.#binding.getMemberBinding(record.assembled, attribute);
+    if (!member?.attributeSteps) {
+      throw new InternalError(`Observable array ${attribute.name} has no implementation getter`);
+    }
+    const backingList = member.attributeSteps.get(record) as unknown[];
+    const steps = attribute.observableArraySteps;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const deleteSteps = steps?.delete;
     // eslint-disable-next-line @typescript-eslint/unbound-method -- steps are explicitly applied with the implementation object as their this value
     const setSteps = steps?.set;
     const handle = createObservableArray({
+      backingList,
       array: this.#binding.realm.intrinsics.array,
       convert: inputConverter.getJSToIDLSteps(),
       delete: deleteSteps
-        ? (value, index) => Reflect.apply(
+        ? (value, index) => this.#binding.callImplementation(
           deleteSteps,
           record.implInst,
           [value, index],
@@ -78,7 +79,7 @@ export class ObservableArrayBinding {
       rangeError: this.#binding.realm.intrinsics.rangeError,
       typeError: this.#binding.realm.intrinsics.typeError,
       set: setSteps
-        ? (value, index) => Reflect.apply(
+        ? (value, index) => this.#binding.callImplementation(
           setSteps,
           record.implInst,
           [value, index],
@@ -91,9 +92,3 @@ export class ObservableArrayBinding {
     return handle;
   }
 }
-
-/** Implementation hooks run when an observable array element is set or removed. */
-export type ObservableArraySteps = {
-  delete?(this: object, value: unknown, index: number): void;
-  set?(this: object, value: unknown, index: number): void;
-};

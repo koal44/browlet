@@ -94,7 +94,7 @@ Generation returns a serialized key, using `blob:null/UUID` for opaque origins.
 Lookup ignores fragments; exact removal does not. Author revocation parses and
 checks access before removal. Storage's non-storage key preserves opaque-origin
 identity and remains available when storage is disabled. Acquisition accepts
-early environment records; registration requires the creator's security origin.
+reserved environments; registration requires the creator's security origin.
 Top-level navigation/self-fetch exemptions are selected explicitly by the caller.
 
 `UserAgent.parseURL()` supplies the store to URL parsing. Request/redirect records

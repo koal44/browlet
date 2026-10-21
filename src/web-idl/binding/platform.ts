@@ -1,4 +1,4 @@
-import { InternalError, Stamper, type ObservableArrayHandle } from '../../infra/index';
+import { InternalError, Stamper } from '../../infra/index';
 import { isObject, readErrorStack, writeErrorStack } from '../../js-engine/index';
 import {
   DOMExceptionImpl, DOMExceptionStamper, type ImplementationClass, type StructuredData,
@@ -8,6 +8,7 @@ import {
 import type { WebIDLRealm } from '../environment';
 import type { IDLAttribute, AssembledInterface } from '../assembly/index';
 import type { RealmBinding } from './realm';
+import type { ObservableArrayHandle } from './realm/index';
 
 /** An implementation instance stamped with its private platform record. */
 export type StampedImplInstance<T extends object = object> = T & ImplementationStamper;

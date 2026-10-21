@@ -17,7 +17,6 @@ import type { AsyncIteratorSteps } from './async-iterable';
 import type { ImplementationBinding, BoundConstruct } from './implementation';
 import type { ValuePairsSteps } from './iterable';
 import type { IndexedPropertySteps, NamedPropertySteps } from './legacy';
-import type { ObservableArraySteps } from './observable-array';
 import { createOverloadResolver } from './overload';
 
 /** Registered implementation steps and platform functions for one member in one realm. */
@@ -32,7 +31,6 @@ export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   declare stringificationBehavior?: StringificationBehavior;
   declare indexedPropertySteps?: IndexedPropertySteps;
   declare namedPropertySteps?: NamedPropertySteps;
-  declare observableArraySteps?: ObservableArraySteps;
   declare asyncIteratorSteps?: AsyncIteratorSteps;
   declare valuePairsSteps?: ValuePairsSteps;
 

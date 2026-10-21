@@ -11,8 +11,9 @@ the implementation objects currently being exposed.
 
 - Document lazily creates its Stylelet engine and exposes the document
   `TreeScope`. `DocumentOrShadowRootMixin` forwards stylesheet access through
-  its root. ShadowRoot's `getStyleScope()` is still an explicit unimplemented
-  dependency, despite the shared IDL contribution.
+  its root. Each ShadowRoot lazily retains its own collections, using the current
+  node document's engine. Collection ownership does not yet select shadow sheets
+  for computed-style matching.
 - [integration.ts](integration.ts) implements the permanent
   `ElementCSSInlineStyleMixin` owned by HTML, SVG, and MathML elements, and the
   `LinkStyleMixin` for current inline-sheet associations. Includers explicitly
@@ -23,9 +24,9 @@ the implementation objects currently being exposed.
 - [Stylelet's declarations](../../stylelet/web-idl.ts) supply common CSSOM
   interfaces and mixin/partial contributions, including sheet construction and
   CSSStyleProperties accessors. Browlet's environment supplies
-  `getAssociatedDocument()` for the constructor. The pending Core hook boundary
-  is recorded in the [CSSOM roadmap](../../stylelet/cssom/ROADMAP.md#declaration-hook-boundary).
-  Adoption still awaits its §6.2 binding.
+  `getAssociatedDocument()` for the constructor. `adoptedStyleSheets` declares
+  `ObservableArray<CSSStyleSheet>` and its indexed mutation check; Binding owns
+  conversion, the retained array, and realm exception realization.
 - Window's CSSOM partial projects `getComputedStyle()` results and converts its
   arguments. The algorithm still returns a limited snapshot; complete computed
   values and liveness remain unfinished.
@@ -60,19 +61,26 @@ produce a separate snapshot object.
 ## Sheet association and execution
 
 `LinkStyleMixin` currently associates HTML and SVG inline style elements with
-the document tree scope. Parser-created elements defer association until their
+their document or shadow-root scope, obtained directly from the owner's current root.
+Parser-created elements defer association until their
 text is complete. Text/tree/type changes update association; media/title changes
 can update an existing sheet. TreeScope maintains document order, sheet-set
-selection, and adopted sheets. External links, XML processing instructions, HTTP
+selection, and adopted sheets. Document creation applies each `Default-Style`
+response field in order before parsing. External links, XML processing instructions, HTTP
 Link input, and complete resource blocking/loading are not supplied by these
 helpers.
 
 Documents and CSSOM implementations use their existing environment through
 `StyleletEnvironment`. UserAgent provides DOM operations, URL construction, and
 decoding. `env.exec` supplies promises, background work, and owner task delivery.
-There is no separate document execution adapter. Sheet and declaration failures
-use DOMException implementations and Binding realization. The adopted-sheet
-collection still constructs host exceptions until its §6.2 binding is completed.
+There is no separate document execution adapter. Sheet, declaration, and adoption
+failures use DOMException implementations and Binding realization.
+
+TreeScope's adopted list is ordinary implementation state. Internal list changes
+are visible through the retained Platform array; author writes first convert
+and run the declared adoption check. Moving a shadow host to another document
+clears that list in place and switches its engine. The
+[adoption gap](ROADMAP.md#stylesheet-collection-disagreements) records the browser evidence.
 
 The distinction between inline declaration data, inline CSSOM, and computed
 results is real. Their present class/container arrangement is a working trial.
@@ -88,6 +96,6 @@ cover raw-source policy, reporting, blocked replacements, parsing, and adoption.
 These suites passed in the 2026-10-19
 [CSSOM baseline](../../stylelet/cssom/README.md#validation-baseline).
 
-Full CSSOM Platform conformance, live computed results, shadow-root styles,
+Full CSSOM Platform conformance, live computed results, shadow-tree cascade selection,
 external sheets, and rendering remain outside that passing baseline. Keep those
 dependencies visible in the roadmap as implementation proceeds.

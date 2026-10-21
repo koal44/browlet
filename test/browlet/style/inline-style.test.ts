@@ -22,7 +22,7 @@ describe('ElementCSSInlineStyle', () => {
         target.setAttribute('style', 'opacity: .2; opacity: .4 !important; opacity: .8');
         const block = target.getInlineStyleBlock();
         assert.isNotNull(block);
-        expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.4');
+        expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.4');
         expect(getStyle).not.toHaveBeenCalled();
 
         const style = target.style;
@@ -35,7 +35,7 @@ describe('ElementCSSInlineStyle', () => {
         expect(getStyle).toHaveBeenCalledOnce();
         expect(style.item(0)).toBe('color');
         expect(style.item(1)).toBe('opacity');
-        expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.6');
+        expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.6');
 
         target.removeAttribute('style');
         expect(style.length).toBe(0);
@@ -45,7 +45,7 @@ describe('ElementCSSInlineStyle', () => {
         style.setProperty('opacity', '.7');
         expect(block.cssText).toBe('opacity: 0.7;');
         expect(target.getAttribute('style')).toBe('opacity: 0.7;');
-        expect(document.getCSSEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.7');
+        expect(document.getStyleEngine().getComputedStyle(target).getPropertyValue('opacity')).toBe('0.7');
         expect(target.style).toBe(style);
       } finally { getStyle.mockRestore(); }
     },
@@ -125,7 +125,7 @@ describe('ElementCSSInlineStyle', () => {
     for (const element of [html, svg, math]) {
       expect(element.getInlineStyleBlock()).toBeNull();
       expect(dom.inlineStyleBlock?.(element)).toBeNull();
-      document.getCSSEngine().getComputedStyle(element);
+      document.getStyleEngine().getComputedStyle(element);
       expect(element.getInlineStyleBlock()).toBeNull();
     }
 

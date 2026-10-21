@@ -88,28 +88,31 @@ views of existing owners, not a new environment object for each subsystem.
 | Contract or class | What it supplies |
 | --- | --- |
 | [`StorageEnvironment`](storage/environment.ts) | UserAgent, creation URL, and an origin when available; usable before realm creation |
-| [`FetchEnvironmentRecord`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
-| HTML [`BrowletEnvironmentRecord`](browlet/environment.ts) | Concrete early browser state: identity, owner, creation/security state, readiness, and partition derivation |
+| [`FetchEnvironmentBase`](fetch/environment.ts) | Extends the Storage view with top-level partition inputs and `determineNetworkPartitionKey()` |
+| HTML [`BrowletEnvironmentBase`](browlet/environment.ts) | Shared browser state before and after realm creation: identity, owner, creation/security state, readiness, and partition derivation |
 | [`JSEnvironment`](js-engine/environment.ts) | `realm: JSRealm` and `exec: RealmExecution` for a JavaScript execution owner |
 | [`StreamsEnvironment`](streams/environment.ts) | Extends JSEnvironment with DOM abort and HTML structured-data execution contracts on `exec` |
 | [`FileEnvironment`](file/environment.ts) | Extends the Streams view with native line endings for Blob text processing |
 | [`DOMEnvironment`](browlet/dom/environment.ts) | `realm: DOMRealm` for event behavior and the associated-document query; its Window specialization exposes the Agent's DOM notification state; `exec: DOMExecution` for event allocation |
-| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentRecord and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
-| [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends BrowletEnvironmentRecord and satisfies JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
+| [`FetchEnvironment`](fetch/environment.ts) | Extends FetchEnvironmentBase and FileEnvironment with Fetch task delivery, exception allocation, and client settings |
+| [`BrowletEnvironment`](browlet/environment.ts) | Full browser environment; extends BrowletEnvironmentBase and satisfies JS Engine, DOM, Fetch, Stylelet, and Selectlet contracts |
 | `WindowEnvironment` | Specializes BrowletEnvironment with its Window and live queries of the associated Document |
 | `SandboxEnvironment` | Implements the same binding contract for internal execution; unavailable browser client settings throw explicitly |
 
 [`BrowletRealm`](browlet/scripting/realm.ts) extends `JSRealm` with HTML ownership,
 callback lifecycle, and task routing; `WindowRealm` specializes it for a Window global.
 
-The early HTML record intentionally has no realm or `exec`. It is not an
-ECMAScript lexical Environment Record. A reserved navigation client can use it
+The HTML base requires neither a realm nor `exec`. A reserved navigation client can use it
 for partitioning and security before full settings exist. BrowletEnvironment
 inherits the class and preserves the reservation's identity and security
 classification; it is not a wrapper around a second settings object.
 
+`Base` names the shared contract; `reservedEnv` and `reservedClient` name a
+destination's role during loading. Keep those role names: Fetch's reserved
+client can be a base environment for navigation or a full environment for a worker.
+
 Interfaces do not provide method implementations. Shared browser behavior such
-as `determineNetworkPartitionKey()` lives directly on HTML's BrowletEnvironmentRecord.
+as `determineNetworkPartitionKey()` lives directly on HTML's BrowletEnvironmentBase.
 Portable contracts describe that behavior without making Fetch depend on HTML.
 Use the same approach for other owners; introduce inheritance or a mixin only
 for an actual shared implementation, not to simulate multiple class inheritance.
@@ -132,9 +135,11 @@ JavaScript facilities, such as releasing an existing reader, keep `JSEnvironment
 browser execution object, including the bound Promise, DOM allocations, Fetch
 task delivery, and structured data. Standalone `AsyncExecution` does not require
 abort or structured-data facilities.
-`BrowletExecution` implements the existing `DOMNodeFactory` contract, shared by
-its Documents, and supplies `createAbortSignal()`. Both establish binding
-ownership during allocation, before a different realm can first project the result.
+`BrowletExecution` supplies `createDocument()`, `constructNode()`, and
+`createAbortSignal()`. These establish binding ownership during allocation,
+before a different realm can first project the result. Documents retain only
+their environment and use its execution for descendant allocation; synchronous
+HTML parsing uses the same document creation path.
 
 Subsystems declare independent execution contracts. Web IDL Core's
 [`WebIDLExecution`](web-idl/core/execution.ts) supplies `DOMException` through
@@ -332,11 +337,11 @@ creates its engine microtask queue, reads the shared clock, and schedules work a
 it arrives, without a separate start phase or per-turn options. Realm construction
 requires its owning Agent. Browsing algorithms call their UserAgent's Window
 factory; existing objects use their retained `env`, realm, and WindowProxy handle. Document allocation
-uses `env.exec.createDocument()`, preserving the binding-owned node factory without
+uses `env.exec.createDocument()`, preserving binding-owned allocation without
 passing Binding Context into the lifecycle algorithms. Main-world inspection for
 tests lives in `test/support/browlet-binding.ts`.
 
-[`createWindowEnvironment()`](browlet/bindings.ts) assembles the early record,
+[`createWindowEnvironment()`](browlet/bindings.ts) assembles the environment base,
 WindowRealm, binding, execution, and full settings before constructing Window
 with that environment. Binding registration
 accepts an environment factory because execution composition needs the new
@@ -355,9 +360,12 @@ tests need browser settings for its HTML operations. Every target retains one
 `env` field. Derived implementations can narrow its declared type to the stronger
 contract their constructor requires, without adding another field or owner lookup.
 Global projection and global-scope mixin setup finish before consumers receive the Window environment.
-Document creation retains its own HTML initialization steps.
+Document creation retains its own HTML initialization steps. Its relevant Window comes
+from the retained environment's realm; changing the Window's associated document
+does not require updating a second Window reference on Document. DOMImplementation
+likewise takes its environment from its associated document.
 
-The early browser record and complete environment live together in
+The browser environment base and complete environment live together in
 [`browlet/environment.ts`](browlet/environment.ts), above Scripting's realms and
 event loops. The complete environment constructs its
 own `InsecureRequestsPolicy` and calls Reporting's
@@ -377,17 +385,17 @@ eagerly, with a real BrowletRealm, Agent, event loop, and SandboxEnvironment, bu
 Window, Document, or attached HTML settings object. It supplies execution for
 retained browser work such as Reporting uploads and retains that UserAgent explicitly.
 SandboxEnvironment extends BrowletEnvironment so binding declarations retain
-their full contract. Passing no browser record leaves its creation URL and
+their full contract. Passing no environment base leaves its creation URL and
 standalone UserAgent unavailable; guarded accessors throw rather than return
 incorrectly typed nulls. Origins, API base URLs, policies, module maps, ancestry,
 time origins, and Window/Worker global-scope state also fail explicitly.
 Top-level associations and reporting/referrer sources are null. Window
-construction still requires a complete BrowletEnvironmentRecord.
+construction still requires a complete BrowletEnvironmentBase.
 
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination
 selects a global or parallel queue. A null client does not imply missing
-execution. Early records, full settings, and sandbox environments must not be
+execution. Reserved clients, full settings, and sandbox environments must not be
 substituted for one another just because an algorithm can reach a UserAgent.
 
 The [global-scope mixin](browlet/global-scope.ts) composes each global's timers,
@@ -592,7 +600,7 @@ class to one public interface; all automatic instance members use property looku
 on the concrete receiver. Explicit member bindings can select a base algorithm.
 There is no separately maintained
 tag-to-constructor table.
-Document selects a constructor and uses its existing node factory for allocation;
+Document selects a constructor and uses `env.exec.constructNode()` for allocation;
 Binding's internal construction uses the registered implementation or its nearest
 declared base. Namespace and unknown-name fallbacks remain element-selection
 rules. Declaration tests check that each specialized constructor is registered
@@ -726,8 +734,9 @@ Dictionary implementation types use their specified names, such as
 `CSSStyleSheetInit` and `GetRootNodeOptions`. Their fields describe converted
 values; a convenience API may accept `Partial<CSSStyleSheetInit>` and supply
 defaults before entering the implementation. A mechanical `Record` suffix adds
-no distinction here. Keep meaningful names such as `URLRecord`, `PropertyRecord`,
-and `BrowletEnvironmentRecord`.
+no distinction here. Keep meaningful record names such as `URLRecord` and
+`PropertyRecord`. Shared environment foundations use `Base`, as in
+`BrowletEnvironmentBase` and `FetchEnvironmentBase`.
 
 Keep `index.ts` barrels export-only. A subsystem's `web-idl.ts` collects its
 declarations for assembly and can own declarations without an implementation

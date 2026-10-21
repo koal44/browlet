@@ -17,13 +17,14 @@ and structured data. Fetch delivery resolves the supplied destination global's
 BrowletRealm, which can differ from the execution owner's, and queues on HTML's networking
 task source. The live global and DOMException accessors remain at that composition
 boundary because global installation and interface registration finish later.
-The BrowletRealm initially reads security from a `BrowletEnvironmentRecord` instance.
+The BrowletRealm initially reads security from a `BrowletEnvironmentBase` instance.
 Registration constructs the complete `WindowEnvironment` before global projection;
-it inherits the record state and adds `realm` and `exec`. The composition root
+it inherits the base state and adds `realm` and `exec`. The composition root
 then constructs Window with that environment, links it to the realm, and installs
 the shared global-scope mixin. The Document lifecycle
-algorithms retain their own initialization. `env.exec.createDocument()` obtains the node factory and
-environment through Document's construction declaration. Stylelet uses that
+algorithms retain their own initialization. `env.exec.createDocument()` supplies
+the environment through Document's construction declaration; descendant allocation
+uses that same environment's `exec.constructNode()`. Stylelet uses that
 same environment, including `userAgent.dom` and `exec`. Event creation is
 available before projection.
 `Browlet` constructs UserAgent, which creates its sandbox through bindings and

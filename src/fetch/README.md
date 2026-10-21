@@ -70,7 +70,7 @@ Abort fallback exceptions retain their destination realm.
 
 UserAgent owns transport, connections, HTTP/CORS caches, authentication, cookies,
 and HSTS. Its sandbox supplies execution for work that outlives a Window, such
-as retired Reporting deliveries. Reserved HTML environment records supply early
+as retired Reporting deliveries. Reserved HTML environments supply early
 origin/partition state without pretending to be complete settings objects.
 
 Native transport callbacks return work through the owner's

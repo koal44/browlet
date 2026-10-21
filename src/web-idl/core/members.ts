@@ -84,6 +84,16 @@ export type AttributeMember<Env = unknown> = {
   attributeFunction?: (this: undefined, env: Env) => AttributeFunctionSteps;
   /** Report or rethrow exceptions from an author callback assigned to this attribute. */
   callbackExceptionBehavior?: CallbackExceptionBehavior;
+  /** Algorithms invoked before changing the implementation's observable-array backing list. */
+  observableArraySteps?: ObservableArraySteps;
+};
+
+/** Specification hooks for setting or deleting an observable array's converted indexed value. */
+export type ObservableArraySteps = {
+  /** Run after conversion, and after deletion steps when replacing an existing index. */
+  set?(this: object, value: unknown, index: number): void;
+  /** Run before removing an indexed value or replacing it. */
+  delete?(this: object, value: unknown, index: number): void;
 };
 
 /** Steps for an attribute's returned function, receiving author-side `this` and arguments. */

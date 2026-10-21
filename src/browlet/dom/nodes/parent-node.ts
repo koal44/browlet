@@ -21,7 +21,7 @@ export class ParentNodeMixin {
   /** Live collection of immediate element children in tree order. */
   // https://dom.spec.whatwg.org/#dom-parentnode-children
   get children(): HTMLCollectionImpl {
-    return this.#children ??= new HTMLCollectionImpl(this.#node, () => true, true);
+    return this.#children ??= HTMLCollectionImpl.fromRoot(this.#node, () => true, true);
   }
 
   // https://dom.spec.whatwg.org/#dom-parentnode-firstelementchild

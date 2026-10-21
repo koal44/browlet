@@ -10,7 +10,7 @@ import {
 
 import type { WebIDLEnvironment, WebIDLRealm } from '../environment';
 import {
-  AssembledInterface, type IDLType, type IDLDictionaryType, type IDLAttribute,
+  AssembledInterface, type IDLType, type IDLDictionaryType,
   type AssembledDictionary, type DefinitionAssembly, type IDLFrozenArrayType,
 } from '../assembly/index';
 import {
@@ -657,27 +657,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     const record = getPlatformRecord(object) ?? getImplementationRecord(object);
     return this.setlikes.getEntries(
       record?.binding.world === this.world ? record : undefined,
-    );
-  }
-
-  // Locate an observable-array member and retrieve its backing list.
-  getObservableArrayBackingList(
-    object: object,
-    attribute: IDLAttribute,
-  ): unknown[] {
-    const record = getPlatformRecord(object);
-    const elementType = this.assembly.getObservableArrayElementType(attribute.type);
-    if (
-      record?.binding.world !== this.world ||
-      !elementType ||
-      !record.assembled.includesMember(attribute)
-    ) {
-      throw new InternalError('Observable array attribute does not belong to object');
-    }
-    return this.observableArrays.getBackingList(
-      record,
-      attribute,
-      elementType,
     );
   }
 

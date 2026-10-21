@@ -312,6 +312,7 @@ describe('Web IDL platform-object identity and state', () => {
   });
 
   it('changes a platform object realm without replacing its state', () => {
+    class RealmMutableImpl { numbers: number[] = []; }
     const numbers = {
       kind: 'attribute',
       name: 'numbers',
@@ -325,6 +326,7 @@ describe('Web IDL platform-object identity and state', () => {
     const interfaceIDL = defineInterface({
       name: 'RealmMutable',
       exposed: '*',
+      implementation: impl(RealmMutableImpl),
       members: [numbers, entries],
     });
     const { first, second } = createRealmBindings(interfaceIDL);
@@ -385,7 +387,9 @@ function createRealmBindings(
   const first = world.getRealmBinding(firstContext.realm)!;
   const second = world.getRealmBinding(secondContext.realm)!;
   for (const binding of [first, second]) {
-    binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new RealmTestImpl();
+    if (!interfaceIDL.implementation) {
+      binding.getImplementationBinding(binding.resolveInterface(interfaceIDL.name)).createImplementation = () => new RealmTestImpl();
+    }
   }
   return { first, second };
 }

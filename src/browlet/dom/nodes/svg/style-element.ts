@@ -24,9 +24,7 @@ export class SVGStyleElementImpl extends SVGElementImpl {
 
   constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(context, env);
-    this.linkStyleMixin = new LinkStyleMixin(
-      this, SVGStyleElementImpl.#linkStyleOptions, context.treeScopeResolver,
-    );
+    this.linkStyleMixin = new LinkStyleMixin(this, SVGStyleElementImpl.#linkStyleOptions);
   }
 
   static is(value: unknown): value is SVGStyleElementImpl {

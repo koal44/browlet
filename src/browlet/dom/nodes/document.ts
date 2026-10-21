@@ -3,7 +3,7 @@ import { asciiLower } from '../../../infra/ascii';
 import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../infra/index';
 import { stripAndCollapseASCIIWhitespace } from '../../../infra/strings';
 import { InternalError } from '../../../infra/internal-error';
-import { addon, isomorphicDecode, isomorphicEncode, type JSEnvironment } from '../../../js-engine/index';
+import { addon, isomorphicDecode, isomorphicEncode } from '../../../js-engine/index';
 import {
   arg, atArg, attr, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, definePartialInterface,
   defineTypedef, dictMember, emptyDictionary, idlType, impl, integer, nullable, onError, op, roAttr, reference, union,
@@ -23,7 +23,6 @@ import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
-import type { TreeScopeResolver } from '../../style/index';
 import { DOMStringListImpl } from '../string-list';
 import { EventHandlerMap, type EventHandlerCallback, type SpeculationRulesParseResult } from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
@@ -82,20 +81,6 @@ import { HTMLFormElementImpl } from './html/forms/index';
 import { SVGSVGElementImpl, SVGTitleElementImpl, type SVGScriptElementImpl } from './svg/index';
 import type { CustomElementRegistryImpl } from './html/custom-elements/index';
 import type { HTMLDialogElementImpl } from './html/interactive/index';
-
-/** Create a document in env with optional binding-owned node allocation. */
-export function createDocument(
-  options: DocumentConstructionOptions = {},
-  env: BrowletEnvironment,
-): DocumentImpl {
-  const nodeFactory = options.nodeFactory ?? directDOMNodeFactory;
-  return nodeFactory.constructNode(DocumentImpl, [nodeFactory, env]);
-}
-
-export type DocumentConstructionOptions = {
-  /** Allocate this document and its descendants through the selected binding. */
-  nodeFactory?: DOMNodeFactory;
-};
 
 /** Owns a document tree, node creation, and document loading state. */
 // https://dom.spec.whatwg.org/#interface-document
@@ -217,8 +202,6 @@ export class DocumentImpl extends NodeImpl {
 
   /** Associated browsing context, or null for a detached document. */
   #browsingContext: BrowsingContext | null = null;
-  /** Relevant Window of the construction realm, retained independently of document activity. */
-  #relevantGlobalObject: WindowImpl | null = null;
   /** First base element with an href attribute, whose frozen URL supplies the base. */
   #firstBaseElement: HTMLBaseElementImpl | null = null;
   /** First element child, maintained before tree mutation participants run. */
@@ -240,16 +223,11 @@ export class DocumentImpl extends NodeImpl {
   #documentOrShadowRootMixin: DocumentOrShadowRootMixin;
   /** Live child collection and element-child navigation. */
   #parentNodeMixin: ParentNodeMixin;
-  /** Maps a node's tree root to its owning style scope. */
-  #treeScopeResolver: TreeScopeResolver;
-
   /** Ordered set of sheet owners currently blocking script execution. */
   // https://html.spec.whatwg.org/#script-blocking-style-sheet-set
   #scriptBlockingStyleSheets = new Set<ElementImpl>();
   /** Shared wait resolved when the blocking style-sheet set becomes empty. */
   #scriptBlockingStyleSheetsReady: InternalPromiseWithResolvers<void> | null = null;
-  /** Node allocator selected when the document is created. */
-  #nodeFactory: DOMNodeFactory;
   /** Stable factory object associated with this document. */
   #implementation?: DOMImplementationImpl;
   /** Cached live collection returned by document.all. */
@@ -267,15 +245,9 @@ export class DocumentImpl extends NodeImpl {
   /** Document event-handler attributes and their registered listeners. */
   #eventHandlers = new EventHandlerMap(this, [{ name: 'onreadystatechange', type: 'readystatechange' }]);
 
-  constructor(
-    nodeFactory: DOMNodeFactory = directDOMNodeFactory,
-    env: BrowletEnvironment,
-  ) {
+  constructor(env: BrowletEnvironment) {
     super(NodeType.Document, null, env);
     this.nodeDocument = this;
-    if (env.realm.isWindow()) this.#relevantGlobalObject = env.realm.windowImplementation;
-    this.#nodeFactory = nodeFactory;
-    this.#treeScopeResolver = new DocumentTreeScopeResolver(this);
     this.#documentOrShadowRootMixin = new DocumentOrShadowRootMixin(this);
     this.#parentNodeMixin = new ParentNodeMixin(this);
   }
@@ -550,14 +522,14 @@ export class DocumentImpl extends NodeImpl {
   /** Live HTML img descendants in tree order. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-images
   get images(): HTMLCollectionImpl {
-    return this.#images ??= new HTMLCollectionImpl(this,
+    return this.#images ??= HTMLCollectionImpl.fromRoot(this,
       (element) => element instanceof HTMLImageElementImpl);
   }
 
   /** Live HTML embed descendants, regardless of named-property exposure. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-embeds
   get embeds(): HTMLCollectionImpl {
-    return this.#embeds ??= new HTMLCollectionImpl(this,
+    return this.#embeds ??= HTMLCollectionImpl.fromRoot(this,
       (element) => element instanceof HTMLEmbedElementImpl);
   }
 
@@ -570,7 +542,7 @@ export class DocumentImpl extends NodeImpl {
   /** Live HTML a/area descendants with an href content attribute, including an empty one. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-links
   get links(): HTMLCollectionImpl {
-    return this.#links ??= new HTMLCollectionImpl(this, (element) =>
+    return this.#links ??= HTMLCollectionImpl.fromRoot(this, (element) =>
       (element instanceof HTMLAnchorElementImpl || element instanceof HTMLAreaElementImpl) &&
       element.hasAttributeNS(null, 'href'));
   }
@@ -578,14 +550,14 @@ export class DocumentImpl extends NodeImpl {
   /** Live HTML form descendants in tree order. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-forms
   get forms(): HTMLCollectionImpl {
-    return this.#forms ??= new HTMLCollectionImpl(this,
+    return this.#forms ??= HTMLCollectionImpl.fromRoot(this,
       (element) => element instanceof HTMLFormElementImpl);
   }
 
   /** Live HTML script descendants; SVG scripts do not belong to this collection. */
   // https://html.spec.whatwg.org/multipage/dom.html#dom-document-scripts
   get scripts(): HTMLCollectionImpl {
-    return this.#scripts ??= new HTMLCollectionImpl(this,
+    return this.#scripts ??= HTMLCollectionImpl.fromRoot(this,
       (element) => element instanceof HTMLScriptElementImpl);
   }
 
@@ -607,10 +579,6 @@ export class DocumentImpl extends NodeImpl {
 
   get adoptedStyleSheets(): CSSStyleSheetImpl[] {
     return this.#documentOrShadowRootMixin.adoptedStyleSheets;
-  }
-
-  set adoptedStyleSheets(styleSheets: CSSStyleSheetImpl[]) {
-    this.#documentOrShadowRootMixin.adoptedStyleSheets = styleSheets;
   }
 
   get children(): HTMLCollectionImpl {
@@ -638,7 +606,7 @@ export class DocumentImpl extends NodeImpl {
   /** Stable DOM factory object; the associated document selects origin and allocation realm. */
   // https://dom.spec.whatwg.org/#dom-document-implementation
   get implementation(): DOMImplementationImpl {
-    return this.#implementation ??= new DOMImplementationImpl(this, this.env);
+    return this.#implementation ??= new DOMImplementationImpl(this);
   }
 
   /** Document containing this active document's navigable container, or null without one. */
@@ -721,7 +689,7 @@ export class DocumentImpl extends NodeImpl {
   getNamedProperty(name: string): ElementImpl | WindowProxyHandle | HTMLCollectionImpl {
     let elements = this.#namedCollections.get(name);
     if (elements === undefined) {
-      elements = new HTMLCollectionImpl(this, (element) =>
+      elements = HTMLCollectionImpl.fromRoot(this, (element) =>
         element instanceof HTMLElementImpl && element.matchesDocumentName(name));
       this.#namedCollections.set(name, elements);
     }
@@ -783,9 +751,9 @@ export class DocumentImpl extends NodeImpl {
     return this.createElementNode(localName, namespace ?? '', prefix, isValue, registry);
   }
 
-  /** Create a detached Document or XMLDocument through this document's allocator. */
+  /** Create a detached Document or XMLDocument in this document's environment. */
   createDocumentNode(xml = false): DocumentImpl {
-    return this.#nodeFactory.constructNode(xml ? XMLDocumentImpl : DocumentImpl, [this.#nodeFactory, this.env]);
+    return this.env.exec.constructNode(xml ? XMLDocumentImpl : DocumentImpl, []);
   }
 
   /** Copy document metadata without copying its browsing context or runtime services. */
@@ -813,13 +781,13 @@ export class DocumentImpl extends NodeImpl {
 
   /** Allocate existing CDATA data, including data that became non-XML after mutation. */
   createCDATASectionNode(data: string): CDATASectionImpl {
-    return this.#nodeFactory.constructNode(CDATASectionImpl, [data, this]);
+    return this.env.exec.constructNode(CDATASectionImpl, [data, this]);
   }
 
   /** Create and initialize a processing instruction in this document. */
   // https://dom.spec.whatwg.org/#dom-document-createprocessinginstruction
   createProcessingInstruction(target: string, data: string): ProcessingInstructionImpl {
-    return this.#nodeFactory.constructNode(ProcessingInstructionImpl, [target, data, this]);
+    return this.env.exec.constructNode(ProcessingInstructionImpl, [target, data, this]);
   }
 
   /** Copy retained instruction data without repeating public creation validation. */
@@ -850,12 +818,12 @@ export class DocumentImpl extends NodeImpl {
 
   // https://dom.spec.whatwg.org/#dom-document-createtextnode
   createTextNode(data: string): TextImpl {
-    return this.#nodeFactory.constructNode(TextImpl, [data, this]);
+    return this.env.exec.constructNode(TextImpl, [data, this]);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createcomment
   createComment(data: string): CommentImpl {
-    return this.#nodeFactory.constructNode(CommentImpl, [data, this]);
+    return this.env.exec.constructNode(CommentImpl, [data, this]);
   }
 
   /** Create a live range collapsed at this document's start. */
@@ -1236,6 +1204,11 @@ export class DocumentImpl extends NodeImpl {
     const languages = response.headerList.getDecodeAndSplit('Content-Language');
     // SPEC_CLASH(language-protocol-fallback): Use the first language like Chromium/WebKit; HTML says unknown and Firefox matches all.
     this.contentLanguage = languages?.find((language) => language !== '') ?? '';
+    // https://drafts.csswg.org/cssom/#the-http-default-style-header
+    // SPEC_CLASH(default-style-response-fields): Follow CSSOM's ordered fields; Chromium/WebKit ignore them and Firefox combines duplicates.
+    for (const [name, value] of response.headerList) {
+      if (asciiLower(name) === 'default-style') this.getStyleScope().changePreferredStyleSheetSetName(value);
+    }
     this.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
     if (response.headerList.get('Refresh') !== null) {
       throw new InternalError('Refresh response processing is not implemented');
@@ -1438,38 +1411,29 @@ export class DocumentImpl extends NodeImpl {
       return null;
     }
 
-    if (this.#relevantGlobalObject === null) {
+    const window = this.getRelevantGlobalObject();
+    if (window === null) {
       throw new InternalError(
         'A Document with a browsing context needs a relevant global object',
       );
     }
-    return this.#relevantGlobalObject;
+    return window;
   }
 
-  /** Associate the document with its relevant Window without permitting replacement. */
-  setRelevantGlobalObject(window: WindowImpl): void {
-    if (
-      this.#relevantGlobalObject !== null &&
-      this.#relevantGlobalObject !== window
-    ) {
-      throw new InternalError('A Document cannot change its relevant global object');
-    }
-    this.#relevantGlobalObject = window;
-  }
-
-  /** Relevant Window, retained even when this document is no longer active. */
+  /** Window of the construction realm, independent of which document is currently active. */
   getRelevantGlobalObject(): WindowImpl | null {
-    return this.#relevantGlobalObject;
+    const { realm } = this.env;
+    return realm.isWindow() ? realm.windowImplementation : null;
   }
 
   /** Initialize or retrieve the style engine owned by this document. */
-  getCSSEngine(): Stylelet {
+  getStyleEngine(): Stylelet {
     return this.#stylelet ??= new Stylelet(this, { env: this.env });
   }
 
   /** Initialize or retrieve the style scope for this document's tree. */
   getStyleScope(): TreeScope {
-    return this.getCSSEngine().documentScope;
+    return this.getStyleEngine().documentScope;
   }
 
   /** Temporarily route document.write() to a parser while the callback runs. */
@@ -1490,14 +1454,13 @@ export class DocumentImpl extends NodeImpl {
     isValue: string | null = null, registry: CustomElementRegistryImpl | null = this.customElementRegistry,
   ): ElementImpl {
     const implementation = getElementConstructor(namespaceURI, localName);
-    const element = this.#nodeFactory.constructNode<ElementImpl>(
+    const element = this.env.exec.constructNode<ElementImpl>(
       implementation,
       [{
         document: this,
         localName,
         namespaceURI,
         prefix,
-        treeScopeResolver: this.#treeScopeResolver,
       }, this.env],
     );
     element.isValue = isValue;
@@ -1508,14 +1471,14 @@ export class DocumentImpl extends NodeImpl {
 
   // https://dom.spec.whatwg.org/#dom-document-createdocumentfragment
   createDocumentFragment(): DocumentFragmentImpl {
-    return this.#nodeFactory.constructNode(DocumentFragmentImpl, [this]);
+    return this.env.exec.constructNode(DocumentFragmentImpl, [this]);
   }
 
   /** Allocate a shadow root in this document's realm, including for an adopted host. */
   // https://dom.spec.whatwg.org/#concept-node-create
   // SPEC_CLASH(adopted-shadow-root-realm): follow DOM and Firefox; Chromium/WebKit use the host's original realm.
   createShadowRoot(host: ElementImpl, mode: ShadowRootMode): ShadowRootImpl {
-    return this.#nodeFactory.constructNode(ShadowRootImpl, [host, mode]);
+    return this.env.exec.constructNode(ShadowRootImpl, [host, mode]);
   }
 
   /** Allocate an attribute from an already selected name, namespace, and value. */
@@ -1525,7 +1488,7 @@ export class DocumentImpl extends NodeImpl {
     namespaceURI: string | null,
     prefix: string | null,
   ): AttrImpl {
-    return this.#nodeFactory.constructNode(AttrImpl, [
+    return this.env.exec.constructNode(AttrImpl, [
       localName,
       value,
       namespaceURI,
@@ -1541,7 +1504,7 @@ export class DocumentImpl extends NodeImpl {
     publicId: string,
     systemId: string,
   ): DocumentTypeImpl {
-    return this.#nodeFactory.constructNode(
+    return this.env.exec.constructNode(
       DocumentTypeImpl,
       [name, publicId, systemId, this, this.env],
     );
@@ -1567,13 +1530,14 @@ export class DocumentImpl extends NodeImpl {
   }
 
   /** Wait for the blocking set to empty, rechecking for sheets added before resumption. */
-  waitForScriptBlockingStyleSheets(env: JSEnvironment): InternalPromise<void> {
+  waitForScriptBlockingStyleSheets(): InternalPromise<void> {
+    const { env } = this;
     return env.exec.Promise.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
       const ready = this.#scriptBlockingStyleSheetsReady ??=
         env.exec.Promise.withResolvers(idlType.undefined);
       return ready.promise.then(() =>
-        this.waitForScriptBlockingStyleSheets(env),
+        this.waitForScriptBlockingStyleSheets(),
       );
     }, idlType.undefined);
   }
@@ -1709,10 +1673,7 @@ export const documentIDL = defineInterface<BrowletEnvironment>({
   inherits: 'Node',
   exposed: 'Window',
   implementation: impl(DocumentImpl, {
-    constructWith: [
-      atArg(0, (env) => env.exec),
-      atArg(1, (env) => env),
-    ],
+    constructWith: [atArg(0, (env) => env)],
   }),
   members: [
     ctor(),
@@ -1984,9 +1945,12 @@ export class XMLDocumentImpl extends DocumentImpl {}
  * [Exposed=Window]
  * interface XMLDocument : Document {};
  */
-export const xmlDocumentIDL = defineInterface({
+export const xmlDocumentIDL = defineInterface<BrowletEnvironment>({
   name: 'XMLDocument', inherits: 'Document', exposed: 'Window',
-  implementation: impl(XMLDocumentImpl), members: [],
+  implementation: impl(XMLDocumentImpl, {
+    constructWith: [atArg(0, (env) => env)],
+  }),
+  members: [],
 });
 
 /*
@@ -2009,41 +1973,6 @@ export const documentIncludesNonElementParentNodeIDL = defineIncludes({
 export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
   interface: 'Document', mixin: documentOrShadowRootIDL.name,
 });
-
-/** Resolves the document's style scope for nodes in its tree. */
-class DocumentTreeScopeResolver implements TreeScopeResolver {
-  /** Document whose style engine owns the scope. */
-  #document: DocumentImpl;
-
-  constructor(document: DocumentImpl) {
-    this.#document = document;
-  }
-
-  resolve(root: NodeImpl): TreeScope | null {
-    return root === this.#document
-      ? this.#document.getStyleScope()
-      : null;
-  }
-}
-
-/** Node allocation supplied by the document's composition or binding boundary. */
-export type DOMNodeFactory = {
-  /** Construct an implementation, establishing binding ownership when needed. */
-  constructNode<T extends object>(
-    implementation: abstract new (...argumentsList: never[]) => T,
-    argumentsList: unknown[],
-  ): T;
-};
-
-/** Allocate standalone implementations without establishing platform-object ownership. */
-export const directDOMNodeFactory: DOMNodeFactory = {
-  constructNode<T extends object>(
-    implementation: abstract new (...argumentsList: never[]) => T,
-    argumentsList: unknown[],
-  ): T {
-    return Reflect.construct(implementation, argumentsList) as T;
-  },
-};
 
 /** Active parser input used by document.write(). */
 export type DocumentWriter = (markup: string) => void;

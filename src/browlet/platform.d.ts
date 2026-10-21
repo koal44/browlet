@@ -2185,7 +2185,7 @@ export interface ShadowRoot extends DocumentFragment {
   readonly customElementRegistry: CustomElementRegistry | null;
   readonly activeElement: Element | null;
   readonly styleSheets: StyleSheetList;
-  adoptedStyleSheets: any;
+  adoptedStyleSheets: Array<CSSStyleSheet>;
 }
 
 export interface ShadowRootConstructor extends Ctor<DocumentFragmentConstructor> {
@@ -2256,7 +2256,7 @@ export interface Document extends Node {
   readonly customElementRegistry: CustomElementRegistry | null;
   readonly activeElement: Element | null;
   readonly styleSheets: StyleSheetList;
-  adoptedStyleSheets: any;
+  adoptedStyleSheets: Array<CSSStyleSheet>;
 }
 
 export interface DocumentConstructor extends Ctor<NodeConstructor> {

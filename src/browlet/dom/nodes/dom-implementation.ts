@@ -18,9 +18,9 @@ export class DOMImplementationImpl {
   /** Document supplying the allocator and origin for newly created documents. */
   #document: DocumentImpl;
 
-  constructor(document: DocumentImpl, env: DOMEnvironment) {
+  constructor(document: DocumentImpl) {
     this.#document = document;
-    this.env = env;
+    this.env = document.env;
   }
 
   /** Create a detached doctype associated with the factory's document. */

@@ -35,9 +35,7 @@ export class HTMLStyleElementImpl extends HTMLElementImpl {
 
   constructor(context: ElementCreationContext, env: BrowletEnvironment) {
     super(context, env);
-    this.linkStyleMixin = new LinkStyleMixin(
-      this, HTMLStyleElementImpl.#linkStyleOptions, context.treeScopeResolver,
-    );
+    this.linkStyleMixin = new LinkStyleMixin(this, HTMLStyleElementImpl.#linkStyleOptions);
   }
 
   static is(value: unknown): value is HTMLStyleElementImpl {

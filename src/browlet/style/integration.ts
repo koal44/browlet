@@ -3,14 +3,17 @@ import {
   type CSSStyleSheetImpl, type TreeScope, type StyleletEnvironment,
 } from '../../stylelet/index';
 
-import type { ElementImpl, NodeImpl } from '../dom/nodes/index';
+import type { ElementImpl } from '../dom/nodes/index';
 
 /** Owns accepted inline declarations and lazily exposes their CSSOM object. */
 // https://drafts.csswg.org/cssom/#elementcssinlinestyle
 export class ElementCSSInlineStyleMixin {
   #element: ElementImpl;
   #env: StyleletEnvironment;
+  /** Accepted inline declarations, retained independently of the raw attribute. */
+  // PROVISIONAL(CSSOM): The separate block and lazy CSSOM ownership split await the declaration audit.
   #block?: CSSDeclarationBlock;
+  /** Stable CSSStyleProperties implementation returned by the element's style getter. */
   #style?: CSSStylePropertiesImpl;
 
   /** Retain the owner without allocating a declaration or reading its attributes. */
@@ -57,20 +60,18 @@ export class ElementCSSInlineStyleMixin {
 export class LinkStyleMixin {
   /** Associated sheet, or null while detached or unsupported. */
   sheet: CSSStyleSheetImpl | null = null;
-  #owner;
-  #options;
-  #treeScopeResolver;
+  /** Element whose attributes and text determine the associated stylesheet. */
+  #owner: ElementImpl;
+  /** Inputs that trigger this element's stylesheet association updates. */
+  #options: LinkStyleOptions;
+  /** Scope retaining the current sheet, needed to remove it after a tree move. */
   #scope: TreeScope | null = null;
+  /** Whether the parser is still supplying this element's stylesheet text. */
   #deferred = false;
 
-  constructor(
-    owner: ElementImpl,
-    options: LinkStyleOptions,
-    treeScopeResolver: TreeScopeResolver,
-  ) {
+  constructor(owner: ElementImpl, options: LinkStyleOptions) {
     this.#owner = owner;
     this.#options = options;
-    this.#treeScopeResolver = treeScopeResolver;
   }
 
   /** Delay sheet creation until the parser has supplied the full style text. */
@@ -136,8 +137,9 @@ export class LinkStyleMixin {
       return;
     }
 
-    const scope = this.#treeScopeResolver.resolve(this.#owner.getRootNode());
-    if (!scope) return;
+    const root = this.#owner.getRoot();
+    if (!root.isDocument() && !root.isShadowRoot()) return;
+    const scope = root.getStyleScope();
 
     let source = '';
     for (
@@ -148,6 +150,14 @@ export class LinkStyleMixin {
       if (child.isText()) source += child.data;
     }
 
+    // TODO(HTML stylesheet resources): CSSOM's add-a-sheet step 2 must register
+    // contributing owners with Document.addScriptBlockingStyleSheet(), then load
+    // completion must call removeScriptBlockingStyleSheet(). The predicate needs
+    // parser creation, media applicability, and pending critical resources.
+    // Current inline sheets finish synchronously; ordinary @import stops at its
+    // explicit unfinished grammar. Connect this with the external-sheet lifecycle.
+    // https://drafts.csswg.org/cssom/#add-a-css-style-sheet
+    // https://html.spec.whatwg.org/#contributes-a-script-blocking-style-sheet
     const sheet = scope.createStyleElementStyleSheet(
       this.#owner,
       source,
@@ -166,9 +176,4 @@ export type LinkStyleOptions = {
   attributes: ReadonlySet<string>;
   /** Whether the element's child text supplies the stylesheet source. */
   children?: boolean;
-};
-
-export type TreeScopeResolver = {
-  /** Style owner for a document or shadow root, if that scope supports stylesheets. */
-  resolve(root: NodeImpl): TreeScope | null;
 };

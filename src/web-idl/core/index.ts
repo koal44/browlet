@@ -33,7 +33,7 @@ export type {
   InterfaceMember, MixinMember, NamespaceMember, ConstructorMember,
   ConstantMember, AttributeMember, AttributeFunctionSteps, OperationMember, NamedGetterMember, StringifierMember,
   IterableMember, AsyncIterableMember, MaplikeMember, SetlikeMember,
-  DictionaryMember, ArgumentDefinition, IndexedGetterDeclaration,
+  DictionaryMember, ArgumentDefinition, IndexedGetterDeclaration, ObservableArraySteps,
 } from './members';
 
 export {

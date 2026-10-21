@@ -187,7 +187,7 @@ describe('CSP style attributes', () => {
 
   it('checks parser-created attributes against the document global policy', () => {
     const { env, runTask } = createCSPWindow("style-src-attr 'none'");
-    const parsed = parseHTMLDocument('<div id="target" style="opacity: .5"></div>', {}, env);
+    const parsed = parseHTMLDocument('<div id="target" style="opacity: .5"></div>', env);
     expect(runTask()).toBe(true);
     const element = parsed.getElementById('target')!;
     expect(element.getAttribute('style')).toBe('opacity: .5');

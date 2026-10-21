@@ -6,7 +6,7 @@ import type { DOMHighResTimeStamp } from '../../timing/index';
 import { PolicyContainer, OpenerPolicy, type SandboxingFlagSet } from '../policy/index';
 import type { DocumentImpl } from '../../dom/nodes/index';
 import type { NavigationTimingType } from '../../performance/index';
-import type { BrowletEnvironmentRecord } from '../../environment';
+import type { BrowletEnvironmentBase } from '../../environment';
 
 import type { UserNavigationInvolvement } from './navigable';
 
@@ -28,8 +28,8 @@ export class NavigationParams {
   commitEarlyHints: ((document: DocumentImpl) => void) | null = null;
   /** Whether COOP requires changing the destination's browsing context group. */
   coopEnforcementResult: OpenerPolicyEnforcementResult = { needsBrowsingContextGroupSwitch: false };
-  /** Environment reserved by Fetch before constructing the document's realm. */
-  reservedEnv: BrowletEnvironmentRecord | null = null;
+  /** Environment prepared for the destination document before constructing its realm. */
+  reservedEnv: BrowletEnvironmentBase | null = null;
   /** Origin selected for the new document. */
   origin: Origin;
   /** Response policies transferred to the new document. */
