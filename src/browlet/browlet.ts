@@ -1,6 +1,7 @@
 import { internalType, type InternalPromise } from '../infra/promises';
 import { InternalError } from '../infra/internal-error';
 import type { StampedPlatformObject } from '../web-idl/index';
+import type { SystemColorPalette } from '../stylelet/index';
 import { isHeaderValue } from '../fetch/index';
 
 import type { Document, WindowProxy } from './platform';
@@ -25,6 +26,7 @@ export class Browlet {
     installHostHooks();
     this.#route = config.route;
     this.#userAgent = new UserAgent();
+    if (config.systemColors !== undefined) this.#userAgent.systemColors = config.systemColors;
     if (config.userAgent !== undefined) {
       if (!isHeaderValue(config.userAgent)) {
         // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
@@ -192,6 +194,8 @@ export type BrowletRoute = (url: string) => string;
 
 export type BrowletConfig = {
   route: BrowletRoute;
+  /** Complete CSS system-color palette; defaults to Stylelet's fixed light palette. */
+  systemColors?: SystemColorPalette;
   /** Default User-Agent header value; defaults to Mozilla/5.0 (compatible; Browlet). */
   userAgent?: string;
   /** Allow outbound reports; false retains local ReportingObservers. Defaults to true. */

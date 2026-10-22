@@ -23,43 +23,54 @@ the general value suite.
 
 ## How a property participates
 
-`WholeValue.createParser()` adapts an ordinary value parser to the whole-value forms
-described in the [value inventory](../values/README.md). It does not install the
-property or provide defaulting, inheritance, shorthand expansion, applicability,
-or a layout effect.
+`PropertyRecord.parse()` applies the record's ordinary grammar through
+`WholeValue.parse()`, including the whole-value forms described in the
+[value inventory](../values/README.md). Parsing does not install the property or
+provide defaulting, inheritance, shorthand expansion, applicability, or a layout effect.
 
-Different property records can share one parser, such as `parseColorProperty`.
+Different property records can share one ordinary grammar, such as `ColorValue.parse`.
 The parsed values own resolution and serialization; no definition dispatch is
 needed to call either operation.
 
-Each `PropertyRecord` pairs `parse` with `inherits` and a
-typed `initialValue`; its registry key supplies the name. The family modules
-create these records once. Initial values are shared Declared representations,
+Each `PropertyRecord` owns its ordinary parser, complete-value construction,
+`inherits`, and typed `initialValue`; its registry key supplies the name. The family
+modules create these records once, supplying an ordinary initial value. The record
+retains that value in a `WholeValue` with its grammar, as it does for already-parsed
+shorthand components. It also constructs pending shorthand longhands.
+Initial values are shared Declared representations,
 not CSS strings to parse or per-element computed values. Resolution leaves them
 unchanged and receives the current context, including the system palette.
 An optional `logicalGroup` records the family name and physical/logical mapping
 used by CSSOM's declaration ordering rules.
 
-[Shorthand records](shorthand.ts) separately identify canonical longhands and
-family-owned expansion/serialization. Margin expands one through four values or
-a CSS-wide keyword into top/right/bottom/left values. CSSOM creates declaration
+[Shorthand](shorthand.ts) owns declaration validation, CSS-wide expansion,
+pending substitution, and shared serialization checks. Families supply ordinary
+parsing and shortening, plus each longhand's name and property record in canonical order.
+[MarginShorthand](built-in/margin.ts) expands one through four values into
+top/right/bottom/left values and shortens compatible sides.
+The separate [registry](shorthand-registry.ts) derives the reverse longhand
+lookup once, in CSSOM's preferred shorthand order. The property and shorthand
+classes sit below the built-in families; `Shorthand` imports the supplied record's
+type, and neither class loads the registry. Families never load their collector.
+CSSOM creates declaration
 occurrences with those names and the original importance; the property layer
 does not construct declarations. Compatible longhands serialize to the shortest
 one-to-four-value form without resolving them. Unitless margin zero becomes a
-`0px` length during parsing. Deferred margin syntax, including arbitrary
-substitution and `first-valid()`, still throws at an explicit unfinished boundary;
-see the [substitution handoff](ROADMAP.md#shorthand-substitution-handoff).
+`0px` length during parsing. Variable-containing margins retain a shared shorthand
+occurrence until computed-time substitution and expansion; overwritten sides
+participate independently in the cascade. `first-valid()` shorthand selection
+remains unfinished; see the [shorthand account](ROADMAP.md#shorthand-substitution-handoff).
 
 Property interpretation looks up built-in names in the registry and rejects
 unknown built-ins, then uses the record's parser. Later processing calls the
 value's resolution and serialization methods. Custom properties use a separate token-preserving path.
-The [computed-style routine](../engine/computed-style.ts) also iterates the
+The [computed-style query](../engine/cascade-engine.ts) also iterates the
 registry; adding a generic value parser alone does not extend this inventory.
-Engine defaulting and inheritance do not yet consume the new metadata; see
+Engine defaulting and inheritance consume this metadata for the installed names; see
 the [remaining lifecycle work](../engine/ROADMAP.md#defaulting-and-per-element-values).
 
-The engine currently supplies URL/base/tree context. It does not populate the
-font, viewport, container, color, or geometry fields accepted by the shared
+The engine currently supplies URL/base/tree context and the host system-color palette.
+It does not populate the font, viewport, container, currentColor, or geometry fields accepted by the shared
 value helpers. Direct tests can supply those facts independently; see
 [value inputs](../values/ROADMAP.md#context-inputs-and-freshness).
 

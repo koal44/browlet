@@ -3,7 +3,7 @@ import { InternalError } from '../../infra/internal-error';
 import {
   consumeParensBlock, adaptConsumer, withTrivia, isTokenKind, parseDeclaration, createComponentParser,
   parseAsComponentGrammar, TokenKind,
-  type TokenCursor, type TryConsumerResult, type ParserInput, type Declaration,
+  type TokenCursor, type TryConsumerResult, type ParserInput, type SyntaxDeclaration,
 } from '../syntax/index';
 
 import { BooleanExprValue } from './boolean-expr';
@@ -40,12 +40,12 @@ export class SupportsConditionValue {
 }
 
 export type SupportsContext = {
-  supports?: (declaration: Declaration) => boolean;
+  supports?: (declaration: SyntaxDeclaration) => boolean;
 };
 
 export type SupportsDeclaration = {
   type: 'supports-declaration';
-  declaration: Declaration;
+  declaration: SyntaxDeclaration;
 };
 
 /** Consume the declaration tested by a supports feature. */

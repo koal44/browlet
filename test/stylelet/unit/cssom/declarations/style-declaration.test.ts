@@ -6,6 +6,49 @@ import { CSSStyleDeclarationImpl } from '../../../../../src/stylelet/cssom/decla
 import { defaultStyleletEnvironment } from '../../../../../src/stylelet/environment';
 
 describe('declaration collection', () => {
+  it.each<[string, string, string]>([
+    ['--x:/**/red/**/;', '/**/red/**/', ''],
+    ['--x:/*only*/', '/*only*/', ''],
+    ['--x: \t/*only*/ \n;', '/*only*/', ''],
+    ['--x: /*before*/ red /*after*/ !/**/important /*priority*/;', '/*before*/ red /*after*/', 'important'],
+    ['--x:/*only*/!important;', '/*only*/', 'important'],
+    ['--x: \\  /*after*/;', '\\  /*after*/', ''],
+  ])('retains custom-value comments while parsing %s', (input, expected, priority) => {
+    const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
+    style.cssText = input;
+    expect(style.getPropertyValue('--x')).toBe(expected);
+    expect(style.getPropertyPriority('--x')).toBe(priority);
+  });
+
+  it.each(['/**/red/**/', '/*only*/', '/*before*/ red /*after*/'])(
+    'retains custom-value boundary comments through setters and cssText: %s', (value) => {
+      const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
+      style.setProperty('--x', value, 'important');
+      expect(style.getPropertyValue('--x')).toBe(value);
+      const text = style.cssText;
+      style.cssText = text;
+      expect(style.getPropertyValue('--x')).toBe(value);
+      expect(style.getPropertyPriority('--x')).toBe('important');
+      expect(style.cssText).toBe(text);
+    },
+  );
+
+  it.each(['margin', 'margin-left', 'opacity'])('preserves deferred %s spelling through reads and edits', (name) => {
+    const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
+    const first = 'var( --gap ,  01.00px )';
+    style.setProperty(name, first, 'important');
+    expect(style.getPropertyValue(name)).toBe(first);
+    expect(style.cssText).toBe(`${name}: ${first} !important;`);
+
+    const second = 'var( --gap ,  001.0px )';
+    style.setProperty(name, second, 'important');
+    expect(style.getPropertyValue(name)).toBe(second);
+    expect(style.cssText).toBe(`${name}: ${second} !important;`);
+    const text = style.cssText;
+    style.cssText = text;
+    expect(style.getPropertyValue(name)).toBe(second);
+  });
+
   it('keeps the winning important declaration and the order of unrelated edits', () => {
     const block = new CSSDeclarationBlock(InterpretedDeclaration.parseBlock(
       'color: red !important; opacity: .5; color: blue; margin-left: 1px; margin-top: 2px', {},
@@ -20,7 +63,7 @@ describe('declaration collection', () => {
     const block = new CSSDeclarationBlock();
     const style = new CSSStyleDeclarationImpl({ block }, defaultStyleletEnvironment);
     block.setText('--Name: /**/ A/**/B /**/; color: red', {});
-    expect(style.getPropertyValue('--Name')).toBe('A/**/B');
+    expect(style.getPropertyValue('--Name')).toBe('/**/ A/**/B /**/');
     style.cssText = 'opacity: .5';
     expect(block.cssText).toBe('opacity: 0.5;');
     block.clear();
@@ -107,14 +150,21 @@ describe('margin shorthand', () => {
     expect(style.cssText).toBe('margin-top: var(--space); margin-right: var(--space); margin-bottom: var(--space); margin-left: var(--space);');
   });
 
-  // Deferred expansion remains an explicit dependency, approved for the substitution slice.
   it.each([
-    'var(--space)', 'calc(var(--space) + 1px)', 'first-valid(1px, 2px)',
-  ])('identifies the deferred shorthand dependency without changing existing declarations: %s', (value) => {
+    'var(--space)', 'calc(var(--space) + 1px)',
+  ])('retains a pending shorthand for computed-time expansion: %s', (value) => {
+    const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
+    style.setProperty('margin', value);
+    expect(style.getPropertyValue('margin')).toBe(value);
+    expect(style.getPropertyValue('margin-left')).toBe('');
+    expect(InterpretedDeclaration.parseBlock(`margin: ${value}`, {})).toHaveLength(4);
+  });
+
+  it('identifies the remaining first-valid shorthand dependency without changing declarations', () => {
     const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
     style.setProperty('margin', '1px');
-    expect(() => style.setProperty('margin', value)).toThrow('Deferred margin shorthand expansion is not implemented');
-    expect(() => InterpretedDeclaration.parseBlock(`margin: ${value}`, {})).toThrow('Deferred margin shorthand expansion is not implemented');
+    expect(() => style.setProperty('margin', 'first-valid(1px, 2px)')).toThrow('First-valid margin shorthand selection is not implemented');
+    expect(() => InterpretedDeclaration.parseBlock('margin: first-valid(1px, 2px)', {})).toThrow('First-valid margin shorthand selection is not implemented');
     expect(style.cssText).toBe('margin: 1px;');
   });
 

@@ -1,16 +1,16 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import type { CustomPropertyName, CustomPropertyRegistration, PropertyContext } from '../../../../src/stylelet/props/property';
+import type { CustomPropertyRegistration, PropertyContext } from '../../../../src/stylelet/props/property';
+import type { CustomPropertyName } from '../../../../src/stylelet/syntax/names';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
 import { CSSPropertyRuleImpl } from '../../../../src/stylelet/cssom/rules/property';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
-import type { CascadedProperty } from '../../../../src/stylelet/engine/cascade';
 import {
-  CascadeEngine, type CascadeEngineOptions,
+  CascadeEngine, type CascadeEngineOptions, type CascadedProperty,
 } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
@@ -221,14 +221,14 @@ function registration(
   syntaxText = '<color>',
 ): CustomPropertyRegistration {
   const syntax = SyntaxValue.parse(syntaxText, {})!;
-  const parseValue = WholeValue.createParser(syntax.createParser(), true);
+  const parseOrdinary = syntax.createParser();
 
   return {
     name,
     syntax,
-    parse: parseValue,
+    parse: (input, context) => WholeValue.parse(input, context, parseOrdinary, true),
     inherits,
-    initialValue: parseValue(initial, {})!,
+    initialValue: WholeValue.parse(initial, {}, parseOrdinary, true)!,
   };
 }
 

@@ -385,16 +385,15 @@ describe('style tokenizer consumers', () => {
     expect(list.sourceText(1, 3)).toBe(' /**/ ');
   });
 
-  it('records UTF-16 offsets in preprocessed source and omits trailing comments', () => {
+  it('records UTF-16 token offsets while retaining surrounding comments in the full source', () => {
     const list = TokenList.tokenize('/**/💩\r\n\\41 /**/');
-    expect(list.text).toBe('/**/💩\n\\41 /**/');
     expect(list.tokens).toMatchObject([
       { type: TokenKind.Ident, value: '💩' },
       { type: TokenKind.Whitespace },
       { type: TokenKind.Ident, value: 'A' },
     ]);
     expect(list.tokens.map((_, i) => list.sourceText(i, i + 1))).toEqual(['💩', '\n', '\\41 ']);
-    expect(list.sourceText()).toBe('💩\n\\41 ');
+    expect(list.sourceText()).toBe('/**/💩\n\\41 /**/');
   });
 
   it('consume token handles hash tokens and at-keywords', () => {

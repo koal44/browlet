@@ -23,7 +23,7 @@ const tester = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
 tester.run('subsystem-imports', rule, {
   valid: [
-    { filename: styleletFile('engine/computed-style'), options, code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';" },
+    { filename: styleletFile('engine/cascade-engine'), options, code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';" },
     { filename: styleletFile('index'), options, code: "export { MediaListImpl } from './cssom/media/index';" },
     { filename: styleletFile('index'), options, code: "export { StylePropertyMapImpl } from './cssom/typed/index';" },
     { filename: styleletFile('values/color'), options, code: "import { tokenize } from '../syntax/index';" },
@@ -54,7 +54,7 @@ tester.run('subsystem-imports', rule, {
   ],
   invalid: [
     {
-      filename: styleletFile('engine/computed-style'), options,
+      filename: styleletFile('engine/cascade-engine'), options,
       code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/style-declaration';",
       errors: [{ messageId: 'entryPoint' }],
     },

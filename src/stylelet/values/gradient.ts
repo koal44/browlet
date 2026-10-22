@@ -207,8 +207,8 @@ abstract class GradientBase<
     if (stage < ValueStage.Used) return null;
     const computed = this.resolve(ValueStage.Computed, context);
     // Keep comparable percentages when possible; geometry is only the fallback.
-    computed.stops[0].offsets ??= [computed.defaultStopOffset(0)];
-    let stops = computed.fixupStops(computed.stops, ValueStage.Used, {});
+    computed.stops[0].offsets ??= [computed.#defaultStopOffset(0)];
+    let stops = computed.#fixupStops(computed.stops, ValueStage.Used, {});
     if (!computed.hasExplicitStops(stops)) {
       stops = this.resolve(stage, context).stops;
       if (!computed.hasExplicitStops(stops)) return null;
@@ -226,7 +226,7 @@ abstract class GradientBase<
       this.method.space !== GradientBase.defaultColorSpace(this.stops)) {
       prelude.push(serializeColorInterpolationMethod(this.method));
     }
-    const stops = this.serializeStops();
+    const stops = this.#serializeStops();
     const body = prelude.length === 0 ? stops : `${prelude.join(' ')}, ${stops}`;
     return `${name}(${body})`;
   }
@@ -288,12 +288,12 @@ abstract class GradientBase<
       };
     }) as GradientStops<Offset>;
 
-    return this.fixupStops(resolved, stage, context);
+    return this.#fixupStops(resolved, stage, context);
   }
 
   /** Whether every stop has an absolute color and one comparable canonical offset. */
   protected hasExplicitStops(stops: GradientStops<GradientStopOffset> = this.stops): boolean {
-    return this.hasComparableStopOffsets(stops) &&
+    return this.#hasComparableStopOffsets(stops) &&
       stops.every((stop) => stop.type === 'color-hint' ||
         stop.color.value.kind === ColorKind.Absolute && stop.offsets?.length === 1);
   }
@@ -305,7 +305,7 @@ abstract class GradientBase<
   protected abstract serializePrelude(): string[];
 
   /** Construct an endpoint percentage in this gradient's angular or length grammar. */
-  private defaultStopOffset(value: 0 | 100): Offset {
+  #defaultStopOffset(value: 0 | 100): Offset {
     const percentage = new PercentageLiteral(value);
     return (this.gradientType === 'conic'
       ? new AnglePercentageValue(percentage)
@@ -313,7 +313,7 @@ abstract class GradientBase<
   }
 
   /** Whether all present offsets can be ordered without another conversion. */
-  private hasComparableStopOffsets(stops: GradientStops<GradientStopOffset>): boolean {
+  #hasComparableStopOffsets(stops: GradientStops<GradientStopOffset>): boolean {
     let kind: ExplicitGradientStopOffset['value']['type'] | undefined;
     const conic = this.gradientType === 'conic';
 
@@ -339,7 +339,7 @@ abstract class GradientBase<
   }
 
   /** Fill missing offsets, clamp decreasing offsets, and distribute unpositioned stops. */
-  private fixupStops(
+  #fixupStops(
     stops: GradientStops<Offset>, stage: ValueStage, context: GradientValueContext,
   ): GradientStops<Offset> {
     if (stage < ValueStage.Used) {
@@ -357,7 +357,7 @@ abstract class GradientBase<
     if (last.type === 'color-stop' && last.offsets === undefined) {
       const percentageReference = context.percentageReferenceValue;
       const offset = percentageReference === undefined
-        ? this.defaultStopOffset(100)
+        ? this.#defaultStopOffset(100)
         : this.gradientType === 'conic'
           ? new AnglePercentageValue(new AngleLiteral(percentageReference.value, 'deg'))
           : new LengthPercentageValue(new LengthLiteral(percentageReference.value, 'px'));
@@ -365,7 +365,7 @@ abstract class GradientBase<
       last.offsets = [offset as Offset];
     }
 
-    if (!this.hasComparableStopOffsets(stops)) {
+    if (!this.#hasComparableStopOffsets(stops)) {
       return stops;
     }
 
@@ -454,7 +454,7 @@ abstract class GradientBase<
   }
 
   /** Serialize stop colors, offsets, and hints in their retained order. */
-  private serializeStops(): string {
+  #serializeStops(): string {
     return this.stops.map((stop, index) => {
       if (stop.type === 'color-hint') {
         return stop.offset.serialize();
@@ -510,7 +510,7 @@ export class LinearGradient<Stops extends ColorStops = ColorStops>
   }
 
   /** Resolve an angle or side/corner direction against the gradient box. */
-  private static angleForDirection(
+  static #angleForDirection(
     direction: LinearGradientDirection, boxSize: GradientBoxSize,
   ): number | undefined {
     let angle: number;
@@ -543,7 +543,7 @@ export class LinearGradient<Stops extends ColorStops = ColorStops>
   }
 
   /** Measure the gradient line for a resolved angle in the concrete box. */
-  private static lineLengthForAngle(
+  static #lineLengthForAngle(
     angle: number | undefined, boxSize: GradientBoxSize,
   ): number | undefined {
     if (angle === undefined) {
@@ -570,7 +570,7 @@ export class LinearGradient<Stops extends ColorStops = ColorStops>
       ? this.direction.resolve(stage, context) : this.direction;
     const boxSize = context.gradientBoxSize;
     const lineLength = stage >= ValueStage.Used && boxSize !== undefined
-      ? LinearGradient.lineLengthForAngle(LinearGradient.angleForDirection(direction, boxSize), boxSize)
+      ? LinearGradient.#lineLengthForAngle(LinearGradient.#angleForDirection(direction, boxSize), boxSize)
       : undefined;
     const percentageReferenceValue = lineLength === undefined ? undefined : new LengthLiteral(lineLength, 'px');
     const stops = this.resolveStops(stage, { ...context, percentageReferenceValue });
@@ -610,8 +610,8 @@ export class LinearGradient<Stops extends ColorStops = ColorStops>
     if (boxSize === undefined) return null;
     const direction = this.direction instanceof AngleValue
       ? this.direction.resolve(stage, context) : this.direction;
-    const angle = LinearGradient.angleForDirection(direction, boxSize);
-    const lineLength = LinearGradient.lineLengthForAngle(angle, boxSize);
+    const angle = LinearGradient.#angleForDirection(direction, boxSize);
+    const lineLength = LinearGradient.#lineLengthForAngle(angle, boxSize);
     return angle === undefined || lineLength === undefined ? null : new LinearGradient(
       new AngleValue(new AngleLiteral(angle, 'deg')), this.method,
       stops as ExplicitGradientStops<ExplicitLengthPercentage>, this.repeating, new LengthLiteral(lineLength, 'px'),
@@ -621,7 +621,7 @@ export class LinearGradient<Stops extends ColorStops = ColorStops>
   protected serializePrelude(): string[] {
     const prelude: string[] = [];
 
-    if (!this.hasDefaultDirection()) {
+    if (!this.#hasDefaultDirection()) {
       const direction = this.direction;
       prelude.push(direction instanceof AngleValue || direction instanceof ZeroLiteral
         ? direction.serialize()
@@ -631,7 +631,7 @@ export class LinearGradient<Stops extends ColorStops = ColorStops>
   }
 
   /** Whether the direction can be omitted without changing the gradient line. */
-  private hasDefaultDirection(): boolean {
+  #hasDefaultDirection(): boolean {
     const { direction } = this;
     if (direction instanceof AngleValue) return direction.value instanceof AngleLiteral && direction.value.canonicalize().value === 180;
     return !(direction instanceof ZeroLiteral) && direction.horizontal === undefined && direction.vertical === 'bottom';
@@ -694,7 +694,7 @@ export class RadialGradient<Stops extends ColorStops = ColorStops>
       this.shape, size,
       this.position.resolve(stage, geometryContext), this.method, this.stops, this.repeating,
     );
-    const lineLength = resolved.geometry(stage, geometryContext)?.radii[0];
+    const lineLength = resolved.#geometry(stage, geometryContext)?.radii[0];
     const percentageReferenceValue = stage >= ValueStage.Used && lineLength !== undefined
       ? new LengthLiteral(lineLength, 'px') : undefined;
     resolved.stops = resolved.resolveStops(stage, { ...context, percentageReferenceValue });
@@ -727,7 +727,7 @@ export class RadialGradient<Stops extends ColorStops = ColorStops>
       this.size.radii.length === 2 && this.size.radii.every(isExplicitLengthPercentage)
       ? this.size as ExplicitRadialSize : null;
     const position = isExplicitGradientPosition(this.position) ? this.position : null;
-    const geometry = size === null || position === null ? this.geometry(stage, context) : undefined;
+    const geometry = size === null || position === null ? this.#geometry(stage, context) : undefined;
     if ((size === null || position === null) && geometry === undefined) return null;
     return new RadialGradient(
       'ellipse', size ?? {
@@ -758,7 +758,7 @@ export class RadialGradient<Stops extends ColorStops = ColorStops>
     return prelude;
   }
 
-  private geometry(
+  #geometry(
     stage: ValueStage, context: GradientValueContext,
   ): { center: RadialCenter; radii: RadialRadii; } | undefined {
     const boxSize = context.gradientBoxSize;
@@ -829,7 +829,7 @@ export class ConicGradient<Stops extends GradientStops<AngularColorStopOffset> =
   resolve(stage: ValueStage, context: GradientValueContext): ConicGradient {
     const percentageReferenceValue = stage >= ValueStage.Used ? new AngleLiteral(360, 'deg') : undefined;
     return new ConicGradient(
-      this.resolveAngle(stage, context), this.position.resolve(stage, context), this.method,
+      this.#resolveAngle(stage, context), this.position.resolve(stage, context), this.method,
       this.resolveStops(stage, { ...context, percentageReferenceValue }), this.repeating,
     );
   }
@@ -858,7 +858,7 @@ export class ConicGradient<Stops extends GradientStops<AngularColorStopOffset> =
       : radialGradientCenter(this.position, context.gradientBoxSize, stage, context);
     const position = isExplicitGradientPosition(this.position) ? this.position
       : center === undefined ? null : explicitGradientPosition(center);
-    const resolvedAngle = this.resolveAngle(stage, context);
+    const resolvedAngle = this.#resolveAngle(stage, context);
     const angle = resolvedAngle instanceof ZeroLiteral ? new AngleValue(new AngleLiteral(0, 'deg'))
       : resolvedAngle.value instanceof AngleLiteral ? new AngleValue(resolvedAngle.value.canonicalize()) : null;
     return position === null || angle === null ? null : new ConicGradient(
@@ -880,7 +880,7 @@ export class ConicGradient<Stops extends GradientStops<AngularColorStopOffset> =
   }
 
   /** Resolve an authored angle while retaining the unitless zero alternative. */
-  private resolveAngle(stage: ValueStage, context: GradientValueContext): AngleValue | ZeroLiteral {
+  #resolveAngle(stage: ValueStage, context: GradientValueContext): AngleValue | ZeroLiteral {
     return this.angle instanceof ZeroLiteral ? this.angle : this.angle.resolve(stage, context);
   }
 }

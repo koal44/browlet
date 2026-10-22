@@ -14,7 +14,8 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 tester.run('dependency-direction', direction, {
   valid: [
     { filename: sourceFile('stylelet/props/registry'), code: "import { colorProperty } from './built-in/index';" },
-    { filename: sourceFile('stylelet/props/built-in/color'), code: "import type { PropertyRecord } from '../property';" },
+    { filename: sourceFile('stylelet/props/built-in/color'), code: "import { PropertyRecord } from '../property';" },
+    { filename: sourceFile('stylelet/props/built-in/margin'), code: "import { Shorthand } from '../shorthand';" },
     { filename: sourceFile('stylelet/syntax/parser'), code: "import type { InterpretedDeclaration } from '../cssom/declarations/index';" },
     { filename: sourceFile('stylelet/cssom/rules/style'), code: "import { CSSStylePropertiesImpl } from '../declarations/index';" },
     { filename: sourceFile('stylelet/cssom/rules/import'), code: "import { MediaListImpl } from '../media/index';" },
@@ -27,7 +28,7 @@ tester.run('dependency-direction', direction, {
     { filename: sourceFile('stylelet/cssom/rule-list'), code: "import { CSSStyleRuleImpl } from './rules/index';" },
     { filename: sourceFile('stylelet/cssom/rules/style'), code: "import type { CSSRuleListImpl } from '../rule-list';" },
     { filename: sourceFile('stylelet/cssom/rules/context'), code: "import type { CSSStyleRuleImpl } from './style';" },
-    { filename: sourceFile('stylelet/engine/cascade'), code: "import { CSSStyleSheetImpl } from '../cssom/index';" },
+    { filename: sourceFile('stylelet/engine/cascade-engine'), code: "import { CSSStyleSheetImpl } from '../cssom/index';" },
     { filename: sourceFile('stylelet/environment'), code: "import type { StreamsEnvironment } from '../streams/index';" },
     { filename, code: "import { WindowImpl } from '../window/index';" },
     { filename, code: "import { Navigable } from './navigable';" },
@@ -56,6 +57,10 @@ tester.run('dependency-direction', direction, {
   ],
   invalid: [
     {
+      filename: sourceFile('stylelet/props/shorthand'), code: "import { marginShorthand } from './built-in/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/shorthand', target: 'stylelet/props/built-in' } }],
+    },
+    {
       filename: sourceFile('stylelet/props/built-in/color'), code: "import { propertyRegistry } from '../registry';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/built-in', target: 'stylelet/props' } }],
     },
@@ -73,7 +78,7 @@ tester.run('dependency-direction', direction, {
     },
     {
       filename: sourceFile('stylelet/props/property'), code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';",
-      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props', target: 'stylelet/cssom/declarations' } }],
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/property', target: 'stylelet/cssom/declarations' } }],
     },
 
     {
@@ -89,7 +94,7 @@ tester.run('dependency-direction', direction, {
       errors: [{ messageId: 'upward' }],
     },
     {
-      filename: sourceFile('stylelet/cssom/declarations/style-declaration'), code: "import { computeStyle } from '../../engine/index';",
+      filename: sourceFile('stylelet/cssom/declarations/style-declaration'), code: "import { CascadeEngine } from '../../engine/index';",
       errors: [{ messageId: 'upward' }],
     },
     {

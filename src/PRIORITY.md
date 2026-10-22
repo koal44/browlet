@@ -69,6 +69,8 @@ property or referenced specification first.
    Follow [engine](stylelet/engine/ROADMAP.md), [lifecycle](stylelet/value-processing/ROADMAP.md),
    and [value](stylelet/values/ROADMAP.md) ownership. Serialization exposes the
    resulting stage; it does not repair missing computation.
+   Follow the bounded Variables/substitution slices with the full
+   [Cascade review](stylelet/engine/ROADMAP.md#defaulting-and-per-element-values).
 4. **Live queries and typed views.** Complete getComputedStyle's identity,
    eligibility, enumeration, freshness and property-specific resolved values.
    Keep Typed OM computed values distinct. Declared typed maps can follow step 1;

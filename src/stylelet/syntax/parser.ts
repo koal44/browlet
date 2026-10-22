@@ -4,8 +4,7 @@ import type { InterpretedDeclaration } from '../cssom/declarations/index';
 import type { CSSRuleImpl, RuleListContext } from '../cssom/index';
 
 import {
-  isBraceBlock, isComponentValue, isDelimToken, isIdentToken, isTokenKind,
-  isWhitespaceToken,
+  isBraceBlock, isDelimToken, isIdentToken, isTokenKind, isWhitespaceToken,
   type ComponentValue, type FunctionBlock, type SimpleBlock,
 } from './component-value';
 import { TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
@@ -22,12 +21,10 @@ export type StatementAtRule = {
 
 /** A property or descriptor's syntax, before its grammar is interpreted. */
 // https://drafts.csswg.org/css-syntax-3/#declaration
-export type Declaration = {
+export type SyntaxDeclaration = {
   name: string;
   value: TokenList<ComponentValue>;
   important: boolean;
-  /** Original value spelling, retained for custom properties. */
-  originalText?: string;
 };
 
 /** Interpreted declaration runs and CSSOM rules in source order. */
@@ -114,7 +111,7 @@ export function parseRule(
 
 /** Read declaration syntax in the caller's context, without interpreting its property or descriptor. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-declaration
-export function parseDeclaration<Context>(input: ParserInput, context: Context): Declaration | null {
+export function parseDeclaration<Context>(input: ParserInput, context: Context): SyntaxDeclaration | null {
   return consumeInput(input, context, consumeSingleDeclaration);
 }
 
@@ -127,7 +124,7 @@ export function parseComponentValue<Context>(input: ParserInput, context: Contex
 /** Consume all remaining components, reusing blocks that have already been parsed. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#parse-list-of-component-values
 export function parseListOfComponentValues<Context>(input: ParserInput, context: Context): TokenList<ComponentValue> {
-  if (typeof input !== 'string' && !(input instanceof TokenCursor) && isComponentList(input)) {
+  if (typeof input !== 'string' && !(input instanceof TokenCursor) && input.isComponentList()) {
     return input;
   }
 
@@ -152,7 +149,7 @@ export function parseCommaSeparatedListOfComponentValues<Context>(
 // SPEC_CLASH(css-style-attribute-parsing): Follow CSS Style Attributes and all
 // three engines. CSSOM's newer block-contents reference also admits nested rules
 // and treats an unmatched closing brace as the end of the whole input.
-export function parseDeclarationList<Context>(input: ParserInput, context: Context): Declaration[] {
+export function parseDeclarationList<Context>(input: ParserInput, context: Context): SyntaxDeclaration[] {
   return consumeInput(input, context, consumeDeclarationList);
 }
 
@@ -185,8 +182,8 @@ export function consumeBlock<Value extends Token>(
 
 /** Consume the declaration-only attribute grammar, ignoring complete at-rules. */
 // https://drafts.csswg.org/css-style-attr/#syntax
-function consumeDeclarationList(c: TokenCursor<Token>): Declaration[] {
-  const declarations: Declaration[] = [];
+function consumeDeclarationList(c: TokenCursor<Token>): SyntaxDeclaration[] {
+  const declarations: SyntaxDeclaration[] = [];
   while (!c.eof()) {
     const type = c.peek().type;
     if (type === TokenKind.Whitespace || type === TokenKind.Semicolon) {
@@ -264,11 +261,6 @@ function normalize<Context>(input: string | TokenList, context: Context): TokenC
   return new TokenCursor(TokenList.tokenize(input), context);
 }
 
-/** Recognize a list whose nested blocks/functions have already been folded. */
-function isComponentList(list: TokenList): list is TokenList<ComponentValue> {
-  return list.tokens.every(isComponentValue);
-}
-
 /** Discard whitespace tokens; comments were already consumed by tokenization. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#token-stream-discard-whitespace
 function consumeTrivia<Value extends Token>(c: TokenCursor<Value>): void {
@@ -339,7 +331,7 @@ function consumeAtRule<Value extends Token>(
   }
 
   const name = token.value;
-  const prelude = new TokenList<ComponentValue>(c.source.text);
+  const prelude = new TokenList<ComponentValue>(c.source, true, c.pos());
 
   while (true) {
     switch (c.peek().type) {
@@ -374,7 +366,7 @@ function consumeQualifiedRule<Value extends Token>(
   stopToken?: TokenKind,
   nested = false,
 ): CSSRuleImpl | null {
-  const prelude = new TokenList<ComponentValue>(c.source.text);
+  const prelude = new TokenList<ComponentValue>(c.source, true, c.pos());
 
   while (true) {
     const token = c.peek();
@@ -482,17 +474,19 @@ function consumeBlockContents<Value extends Token>(
 
 /** Consume a standalone declaration after leading whitespace, leaving its semicolon unread. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#parse-declaration
-function consumeSingleDeclaration(c: TokenCursor<Token>): Declaration | null {
+function consumeSingleDeclaration(c: TokenCursor<Token>): SyntaxDeclaration | null {
   consumeTrivia(c);
   return consumeDeclaration(c);
 }
 
 /** Consume declaration syntax and priority; the owning grammar interprets the result. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-declaration
+// SPEC_MISMATCH: consume a declaration(input, nested) -> declaration
+// The value list retains the original text; the declaration does not store a second string.
 function consumeDeclaration<Value extends Token>(
   c: TokenCursor<Value>,
   nested = false,
-): Declaration | null {
+): SyntaxDeclaration | null {
   const token = c.peek();
 
   if (!isIdentToken(token)) {
@@ -510,9 +504,8 @@ function consumeDeclaration<Value extends Token>(
   }
 
   c.next();
-  consumeTrivia(c);
   const valueStart = c.pos();
-  const declaration: Declaration = {
+  const declaration: SyntaxDeclaration = {
     name: token.value,
     value: consumeListOfComponentValues(c, TokenKind.Semicolon, nested),
     important: false,
@@ -522,15 +515,13 @@ function consumeDeclaration<Value extends Token>(
   consumeImportantFlag(declaration);
   declaration.value.trimWhitespace();
 
-  if (declaration.name.startsWith('--')) {
-    // SPEC_CLASH(css-custom-property-boundary-comments): Keep token-span text,
-    // matching Syntax and Chromium/WebKit; Firefox also retains trailing comments.
-    declaration.originalText = declaration.value.sourceText();
-  } else if (hasDisallowedTopLevelBraceBlock(declaration.value.tokens)) {
-    return null;
-  } else if (asciiLower(declaration.name) === 'unicode-range') {
-    const originalText = c.sourceText(valueStart, valueEnd);
-    declaration.value = consumeUnicodeRangeDescriptorValue(originalText, c.context);
+  if (!declaration.name.startsWith('--')) {
+    if (hasDisallowedTopLevelBraceBlock(declaration.value.tokens)) return null;
+    if (asciiLower(declaration.name) === 'unicode-range') {
+      const originalText = c.source.sourceText(valueStart, valueEnd);
+      declaration.value = consumeUnicodeRangeDescriptorValue(originalText, c.context);
+      declaration.value.trimWhitespace();
+    }
   }
 
   return declaration;
@@ -562,7 +553,7 @@ function consumeBadDeclarationRemnants<Value extends Token>(
 
 /** Remove a final important flag and following whitespace. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
-function consumeImportantFlag(declaration: Declaration): void {
+function consumeImportantFlag(declaration: SyntaxDeclaration): void {
   const components = declaration.value.tokens;
   const importantIndex = lastNonWhitespaceIndex(components, components.length - 1);
   if (importantIndex < 0) return;
@@ -611,7 +602,13 @@ function consumeListOfComponentValues<Value extends Token>(
   stopToken?: TokenKind,
   nested = false,
 ): TokenList<ComponentValue> {
-  const list = new TokenList<ComponentValue>(c.source.text);
+  const source: TokenList = c.source;
+  if (source.isComponentList()) {
+    const start = c.pos();
+    while (!c.eof() && c.peek().type !== stopToken && (!nested || c.peek().type !== TokenKind.RightBrace)) c.next();
+    return source.slice(start, c.pos());
+  }
+  const list = new TokenList<ComponentValue>(c.source, true, c.pos());
 
   while (true) {
     const token = c.peek();

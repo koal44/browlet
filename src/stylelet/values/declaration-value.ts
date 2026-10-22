@@ -1,7 +1,7 @@
 import {
-  isDelimToken, isTokenKind, isAnyValueContents, serializeComponentValues, parseListOfComponentValues, TokenList, TokenKind,
+  isDelimToken, isTokenKind, isAnyValueContents, serializeComponentValues, parseListOfComponentValues, TokenKind,
   type TokenCursor, type TryConsumerResult, type ComponentValue, type ParserInput,
-  type NonEmptyTokenList, type StaticToken, type AnyValueComponent,
+  type TokenList, type NonEmptyTokenList, type StaticToken, type AnyValueComponent,
 } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
 
@@ -60,7 +60,7 @@ export class OptionalDeclarationValue implements Value {
   /** Accept an omitted value at EOF; invalid components still fail without advancing. */
   static consume(this: void, c: TokenCursor): TryConsumerResult<OptionalDeclarationValue> {
     const list = c.eof()
-      ? new TokenList<DeclarationComponent>(c.source.text)
+      ? c.source.slice(c.pos()) as TokenList<DeclarationComponent>
       : consumeDeclarationValueContents(c);
     return list === null ? null : new OptionalDeclarationValue(list);
   }

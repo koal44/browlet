@@ -1,13 +1,46 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { propertyRegistry, type PropertyValue } from '../../../../../src/stylelet/props/registry';
-import type { OptionalDeclarationValue } from '../../../../../src/stylelet/values/declaration-value';
+import { OptionalDeclarationValue } from '../../../../../src/stylelet/values/declaration-value';
 import { NumberLiteral } from '../../../../../src/stylelet/values/numeric-literal/number';
 import { WholeValue } from '../../../../../src/stylelet/values/whole-value';
 import { ValueStage } from '../../../../../src/stylelet/value-processing/stage';
 
 describe('interpreted declarations', () => {
+  it('resolves ordinary and pending shorthand values through the shared context', () => {
+    const context = {
+      length: { em: 16 },
+      getCustomProperty: () => OptionalDeclarationValue.parse('2em', {})!,
+    };
+    const declarations = InterpretedDeclaration.parseBlock('margin-left: var(--gap); margin: var(--gap)', {});
+
+    expect(declarations.map((declaration) => declaration.resolve(ValueStage.Computed, context).serializeValue()))
+      .toEqual(['32px', '32px', '32px', '32px', '32px']);
+    expect(declarations[0]!.serializeValue()).toBe('var(--gap)');
+  });
+
+  it('serializes a retained value lazily once, with a separate cache after resolution', () => {
+    const [declared] = InterpretedDeclaration.parseBlock('margin-left: 2em', {});
+    const serialize = vi.spyOn(declared!.value, 'serialize');
+    expect(serialize).not.toHaveBeenCalled();
+    expect(declared!.serializeValue()).toBe('2em');
+    expect(declared!.serialize()).toBe('margin-left: 2em;');
+    expect(serialize).toHaveBeenCalledOnce();
+    expect(declared!.resolve(ValueStage.Computed, { length: { em: 16 } }).serializeValue()).toBe('32px');
+    expect(declared!.serializeValue()).toBe('2em');
+  });
+
+  it('caches custom-property spelling without reconstructing its tokens', () => {
+    const value = OptionalDeclarationValue.parse('A/**/B foo\\62 ar', {})!;
+    const declaration = new InterpretedDeclaration('--accent', value);
+    const sourceText = vi.spyOn(value.value, 'sourceText');
+    expect(sourceText).not.toHaveBeenCalled();
+    expect(declaration.serializeValue()).toBe('A/**/B foo\\62 ar');
+    expect(declaration.serialize()).toBe('--accent: A/**/B foo\\62 ar;');
+    expect(sourceText).toHaveBeenCalledOnce();
+  });
+
   it('carries property context from declaration parsing into the declared value', () => {
     const context = {
       numericVariables: new Map([['progress', {

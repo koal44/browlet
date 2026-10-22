@@ -4,7 +4,7 @@ import { arg, defineInterface, DOMExceptionImpl, idlType, impl, indexedGetter, n
 
 import {
   discardRuleBlock, parseRule,
-  type BlockContents, type ComponentValue, type Declaration, type ParserInput,
+  type BlockContents, type ComponentValue, type SyntaxDeclaration, type ParserInput,
   type StatementAtRule, type Token, type TokenCursor, type TokenList,
 } from '../syntax/index';
 import type { SelectorList, SelectorNamespaces } from '../selector/index';
@@ -103,7 +103,7 @@ export class CSSRuleListImpl {
   }
 
   /** Interpret one property before Syntax decides whether to retry it as a rule. */
-  interpretDeclaration(declaration: Declaration, context: RuleListContext): InterpretedDeclaration[] | null {
+  interpretDeclaration(declaration: SyntaxDeclaration, context: RuleListContext): InterpretedDeclaration[] | null {
     return InterpretedDeclaration.interpret(declaration, context);
   }
 

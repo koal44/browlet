@@ -68,7 +68,7 @@ export class LengthValue<Representation extends Length = Length> implements Valu
       return new LengthValue(this.value.add(other.value));
     }
     return new LengthValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -78,7 +78,7 @@ export class LengthValue<Representation extends Length = Length> implements Valu
       return new LengthValue(this.value.interpolate(other.value, progress));
     }
     return new LengthValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -87,7 +87,7 @@ export class LengthValue<Representation extends Length = Length> implements Valu
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'length'> {
+  #asMathValue(context: MathContext): MathValue<'length'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'length', context);
   }

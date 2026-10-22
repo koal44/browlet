@@ -76,6 +76,7 @@ export function isComponentBlock(token: Token): token is ComponentBlock {
   }
 }
 
+// UNUSED: retained for individual-token checks; whole lists use their construction flag.
 export function isComponentValue(token: Token): token is ComponentValue {
   switch (token.type) {
     case TokenKind.Function:
@@ -157,6 +158,11 @@ export function serializeComponentValues(components: ComponentValue[]): string {
   }
 
   return result;
+}
+
+/** Whether adjacent components require a comment to preserve their token boundaries in source text. */
+export function needsComponentSeparator(left: ComponentValue, right: ComponentValue): boolean {
+  return needsSeparator(lastTokenSerializationType(left), firstTokenSerializationType(right));
 }
 
 function serializeComponentValue(component: ComponentValue): string {

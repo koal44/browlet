@@ -69,6 +69,28 @@ export function exerciseMargin(kind: keyof typeof marginExpectations): unknown {
       for (const side of ['top', 'right', 'bottom', 'left']) style.setProperty(`margin-${side}`, 'var(--space)');
       return [style.margin, style.marginTop, style.cssText];
     }
+    case 'pending-shorthand': {
+      style.setProperty('margin', 'var(--first)', 'important');
+      const first = [style.margin, style.marginTop, style.cssText];
+      style.setProperty('margin', 'var(--second)', 'important');
+      const second = [style.margin, style.marginLeft, style.getPropertyPriority('margin'), element.getAttribute('style')];
+      style.setProperty('margin-left', '4px', 'important');
+      const partial = [style.margin, style.marginLeft, style.cssText];
+      style.removeProperty('margin-top');
+      return { first, second, partial, removed: style.cssText };
+    }
+    case 'pending-priority': {
+      style.cssText = 'margin: var(--first) !important; margin-left: 4px; margin: var(--second)';
+      const priority = [style.margin, style.cssText];
+      style.margin = 'var(--third)';
+      const replaced = style.cssText;
+      return { priority, replaced };
+    }
+    case 'pending-invalid-name': {
+      style.margin = 'var(--fourth)';
+      style.margin = 'var(ordinary-name)';
+      return style.cssText;
+    }
   }
 }
 
@@ -119,4 +141,16 @@ export const marginExpectations = {
   },
   'removal-return': '4px',
   'deferred-longhands': ['', 'var(--space)', 'margin-top: var(--space); margin-right: var(--space); margin-bottom: var(--space); margin-left: var(--space);'],
+  'pending-shorthand': {
+    first: ['var(--first)', '', 'margin: var(--first) !important;'],
+    second: ['var(--second)', '', 'important', 'margin: var(--second) !important;'],
+    partial: ['', '4px', 'margin-top:  !important; margin-right:  !important; margin-bottom:  !important; margin-left: 4px !important;'],
+    removed: 'margin-right:  !important; margin-bottom:  !important; margin-left: 4px !important;',
+  },
+  'pending-priority': {
+    priority: ['var(--first)', 'margin: var(--first) !important;'],
+    replaced: 'margin: var(--third);',
+  },
+  // Current Values 5 defers name validation until computation, including in shorthands.
+  'pending-invalid-name': 'margin: var(ordinary-name);',
 };

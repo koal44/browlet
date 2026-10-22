@@ -64,7 +64,7 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
       return new NumberValue(this.value.add(other.value));
     }
     return new NumberValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -74,7 +74,7 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
       return new NumberValue(this.value.interpolate(other.value, progress));
     }
     return new NumberValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -83,7 +83,7 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'number'> {
+  #asMathValue(context: MathContext): MathValue<'number'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'number', context);
   }

@@ -52,21 +52,61 @@ and [environment variables](https://drafts.csswg.org/css-env-1/#environment).
 The local Variables text now delegates shared substitution mechanics to Values 5;
 audit those sources together rather than implementing two replacement engines.
 
-- [ ] Replace the explicit arbitrary-substitution stub with the relevant
-  function algorithms. Preserve component values and function-specific argument
-  evaluation; fallbacks and unselected if branches are not eagerly evaluated.
-- [ ] Supply per-element custom-property computed values, missing/invalid
-  distinctions, empty fallbacks, cycle detection, and bounded expansion.
-  Registered font-relative dependencies can form cycles with ordinary properties.
-  Handle animation and attribute taint where their defining algorithms require it.
-- [ ] Reparse substituted results against the consuming grammar and implement
+### Variables 1 and Values 5 Appendix A audit
+
+Reviewed both local `Overview.bs` sources and the published editor's drafts on
+2026-10-22. The connected profile is unregistered custom properties, `var()`,
+the installed ordinary properties, and margin. The following accounts for each
+normative section; a working substitution path does not complete its dependencies.
+
+| Section | Implemented and tested | Remaining work or recorded choice |
+| --- | --- | --- |
+| Variables 1 §2: names, cascade, inheritance | Decoded names retain exact case/code points; `--` is reserved. Inline and matched rules use importance/specificity/order; children inherit computed values. | Full [Cascade](../engine/ROADMAP.md), conditions, pseudo-elements and cross-scope inheritance. The future `all` shorthand must exclude custom properties. |
+| Variables 1 §2: animation | No connected animation producer. | Discrete custom-property animation, keyframe taint, transitive taint, and rejection of tainted substitutions in non-animatable properties belong with [animation](../../animation/ROADMAP.md). |
+| Variables 1 §2.1: value syntax | Opaque declaration validation, empty values, priority removal, retained casing, and `var()` argument validation. | Unregistered URL tokens stay unresolved; URL-valued consumers must supply the consuming declaration's base. Other substitution functions still need argument validation. |
+| Variables 1 §2.2: guaranteed-invalid | Distinct from a valid empty value; initial/missing values, cycles, and failed substitution use the sentinel. | Registered universal-syntax values need the same invalid-result rule when registration is connected. |
+| Variables 1 §3: `var()` | Dynamic name substitution, exact-name lookup, empty/comma/brace fallbacks, and lazy fallback selection. | Animation taint and registered computed values. The approved draft/browser argument and fallback differences remain recorded in the [engine account](../engine/README.md#substitution-draft-differences). |
+| Variables 1 §4–4.1: APIs and serialization | CSSOM name/value access, retained declared/computed spelling, boundary and comment-only values through substitution and fallback/spread selection, empty-value serialization, and fresh reads after edits. | Live computed-style objects remain unfinished. Browser comment differences are recorded in [Syntax](../syntax/ROADMAP.md#parser-disagreements). The [declaration roadmap](../cssom/declarations/ROADMAP.md#continuing-browser-differences) and engine account retain the other approved differences. |
+| Appendix A.1: traversal and guards | Outermost arbitrary functions control their arguments; ordinary blocks recurse. Property guards mark all cycle participants, including references visited after an earlier failure. | The engine's guards cover custom properties on an element. Attribute, custom-function, and registered/ordinary value dependencies need their own identities and producers. |
+| Appendix A.2: argument grammars and spread | Early `...` expansion precedes argument parsing; spacing rules and lazy non-spread arguments are covered. | Apply the shared traversal to each remaining function's own grammar and replacement algorithm. |
+| Appendix A.3–A.4: property replacement and invalidity | Defer the consuming grammar, substitute tokens, reparse, then apply CSS-wide/defaulting rules. Invalid winners do not revive earlier declarations. | Cascade rollback, registration, and missing property inputs. Keep substitution confined to property values unless another specification explicitly enables a context; descriptors, media queries, selectors, and property names do not inherit this permission. Declaration-support queries still need the [conditional owner](../conditional/ROADMAP.md#feature-support). |
+| Appendix A.5: shorthands | Pending margin occurrences cascade independently, expand once per element/query, and serialize according to pending-longhand rules. | Additional shorthand families, including reset-only/logical relationships, remain property work. `first-valid()` shorthand selection is a separate whole-value dependency. |
+| Appendix A.6 / Variables security | A 65,536-token expansion limit, counting nested delimiters and each occurrence of shared replacements, prevents exponential token materialization. | This is the chosen UA limit, not a specification-mandated number or a general resource-budget policy. |
+
+The traversal, property guard, and retained-source model need no new abstraction
+for this profile. In particular, continuing after a failed replacement is needed
+to discover later cycle edges; token counting and lazy source assembly serve
+different consumers and must not be replaced by a text round trip.
+
+### Implementation checklist
+
+- [x] Connect `var()` for unregistered custom properties: recursive token
+  replacement, early `...` expansion, dynamic names, and lazy fallback evaluation.
+  The engine supplies guarded per-element lookup and marks all cycle participants.
+  Missing/invalid values remain distinct from valid empty values. Expanded
+  sequences are bounded to 65,536 underlying tokens before composition.
+- [x] Validate `var()` argument grammar in custom and ordinary declaration
+  acceptance. Lists whose structure depends on early spread are validated after
+  expansion; the final custom-property name is checked at computation. Preserve
+  the [approved draft/browser differences](../engine/README.md#substitution-draft-differences).
+- [ ] Extend validation and replacement to the other arbitrary substitution
+  functions. Their evaluation currently throws explicitly; their argument
+  validation is still a TODO. Preserve function-specific evaluation rather than
+  eagerly substituting every fallback or unselected conditional branch.
+- [ ] Generalize dependency guards to registered font-relative values, ordinary
+  properties, attributes, and custom functions when those owners are connected.
+  Carry animation and attribute taint where their defining algorithms require it.
+  Animation taint originates in keyframes, propagates through custom-property
+  references, and makes `var()` use its fallback in a non-animatable property.
+  The current lookup returns a value without this metadata.
+- [x] Reparse substituted results against the consuming grammar and implement
   invalid-at-computed-value-time fallback. A failed winning value does not
   revive an earlier declaration; coordinate with [engine defaulting](../engine/ROADMAP.md).
-- [ ] Preserve shorthand pending-substitution values and their original source
+- [x] Preserve shorthand pending-substitution values and their original source
   relationship until longhands can be assigned. CSSOM serialization must retain
   the distinction between an unexpanded shorthand and independent longhands.
-  Ordinary margin is now connected; the [next-slice handoff](../props/ROADMAP.md#shorthand-substitution-handoff)
-  records the shared grammar, overwrite/equality, and computed-failure requirements.
+  Margin is connected; the [shorthand account](../props/ROADMAP.md#shorthand-substitution-handoff)
+  records shared grammar, overwrite/equality, and computed-failure handling.
 - [ ] Give `env()` a named/indexed variable lookup and fallback behavior supplied
   by the relevant UA/viewport owner. Do not confuse this with the JS owning
   environment or turn missing facts into zero. The draft's unresolved
@@ -93,10 +133,51 @@ roadmaps; these tasks concern the resulting values.
 - [ ] Preserve URL timing: typed registered URLs resolve at their declaration's
   source before substitution; unregistered URL tokens resolve when consumed by
   a typed property. Include differing sheet bases and local-fragment tree scope.
-- [ ] Preserve custom-property source spelling through substitution. Audit
-  valid empty values versus guaranteed-invalid serialization against
-  [Variables' serialization rules](https://drafts.csswg.org/css-variables-1/#serializing-custom-props);
-  the current original-text field alone does not prove that whole lifecycle.
+- [x] Preserve unregistered custom-property source spelling through substitution,
+  including comments, escapes, empty replacements, and implicit EOF delimiters.
+  Compose token/source lists directly and separate adjacent tokens when needed;
+  do not serialize and retokenize substituted values. Keep empty values distinct
+  from guaranteed-invalid under
+  [Variables' serialization rules](https://drafts.csswg.org/css-variables-1/#serializing-custom-props).
+  Registered equivalent-token serialization remains part of the computation task above.
+
+  `SPEC_CLASH(custom-property-substitution-comments)` follows Variables' source
+  preservation rule for retained comments. The 2026-10-22 native probe used
+  Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5, with `--empty: ;`:
+
+  | Computed input | Browlet | Chromium | Firefox | WebKit |
+  | --- | --- | --- | --- | --- |
+  | `one/**/var(--empty)var(--empty)/**/two` | `one/**//**/two` | `one/**//**/two` | `one/**//**/two` | `one/**/two` |
+  | `var(--empty)var(--empty)/**/one` | `/**/one` | `/**/one` | `/**/one` | `one` |
+  | `one/**/var(--empty)var(--empty)` | `one/**/` | `one` | `one/**/` | `one` |
+  | `fn(var(--empty)var(--empty)/**/)` | `fn(/**/)` | `fn(/**/)` | `fn(/**/)` | `fn()` |
+
+  TokenList retains boundary comments alongside its token spans. Replacement
+  references retain these lists, and slicing preserves the selected source,
+  including comment-only tails of spread arguments. Computed text is assembled
+  lazily and cached, so shared empty replacements do not require repeated
+  traversal during serialization.
+
+### Fallback source spelling
+
+`SPEC_GAP(fallback-comment-whitespace)`: fallback whitespace trimming and exact
+comment preservation do not yet form a complete source-serialization rule;
+[CSSWG issue 6871](https://github.com/w3c/csswg-drafts/issues/6871) discusses
+trimming fallback whitespace. Replacement text retains the selected token
+spellings and intervening comments, but does not restore whitespace tokens
+discarded by grammar selection. Whitespace inside comments is preserved.
+Declared source remains unchanged. Rendering and caching happen only when text
+is requested; substitution and argument parsing still work directly with tokens.
+
+For example, `calc(1px/**/var(--missing, /*before*/ + 2px))` emits
+`calc(1px/**//*before*/+ 2px)`. Both the retained tokens and reparsed text fail
+the length grammar because the fallback's leading whitespace was discarded.
+A local browser probe on 2026-10-22 confirmed that Chromium, Firefox, and WebKit
+also reject this calculation, although their emitted comments differ.
+Computed `--absent, /*only*/ var(--empty)` supplies `/*only*/` when selected
+as a spread fallback. The [substitution regressions](../../../test/stylelet/unit/values/substitution.test.ts)
+cover literal, braced, and spread fallbacks, declared custom replacements, and
+whitespace that must remain meaningful in the surrounding calculation.
 
 ## Resolution, combination, and API boundaries
 
@@ -105,8 +186,10 @@ roadmaps; these tasks concern the resulting values.
   integer rounding, non-finite values, and incomplete context explicit.
   Follow the [lifecycle roadmap](../value-processing/ROADMAP.md) for stage ownership;
   serialization must not supply missing calculation or conversion.
-- [ ] Connect first-valid and if behavior to real substitution and property
-  validity. Preserve the existing seven expected-failure cases as visible debt;
+- [ ] Extend whole-value selection to shorthands and implement if replacement.
+  Ordinary WholeValue selects a supported first-valid argument and only then
+  computes it, including substitution. Margin first-valid remains an explicit
+  unfinished boundary. Preserve the existing seven expected-failure cases as visible debt;
   recheck current draft algorithms before implementing them.
 - [ ] Provide typed registered-property interpolation when an actual consumer
   needs it: computed-value dispatch, equal-length lists, and transform-specific
@@ -147,8 +230,9 @@ roadmaps; these tasks concern the resulting values.
 
 ## Context inputs and freshness
 
-The engine currently supplies URL/base/tree facts. Direct resolvers accept the
-additional fields below, but providers are not connected. Missing facts can
+The engine currently supplies URL/base/tree facts, guarded custom-property lookup,
+and host system colors (with fixed light defaults). Direct resolvers accept the
+other fields below, but their providers are not connected. Missing facts can
 leave a relative value unresolved or make a helper return null; neither outcome
 proves a complete observable computed value. Preserve intentionally unresolved
 values when the property's stage requires them.
@@ -181,8 +265,9 @@ exploratory local drafts. The work above follows the concrete Variables 1 /
 Values 5 contracts; newer proposals need their own review before adoption.
 
 Use direct representation tests and connected stylesheet/inline/CSSOM tests
-together. Existing helper tests do not prove registration, variable inheritance,
-or computed-style integration. The [baseline](../README.md#cascade-and-values)
-records exactly what ran. The [property and condition baseline](../README.md#properties-and-conditions)
-adds existing family-helper and condition tests. Browser/WPT comparison and
-complete property/feature audits remain future work.
+together. [Custom-property contracts](../../../test/stylelet/custom-properties.contracts.ts)
+and [ordinary-property contracts](../../../test/stylelet/ordinary-properties.contracts.ts)
+now exercise the unregistered path through Browlet and native browsers; helper
+tests alone still do not prove registration or the other integrations above.
+The [baselines](../README.md#test-baselines) record earlier runs. Full WPT coverage,
+remaining function grammars, and complete property/feature audits remain future work.

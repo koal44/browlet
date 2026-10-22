@@ -63,7 +63,7 @@ export class AngleValue<Representation extends Angle = Angle> implements Value<M
       return new AngleValue(this.value.add(other.value));
     }
     return new AngleValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -73,7 +73,7 @@ export class AngleValue<Representation extends Angle = Angle> implements Value<M
       return new AngleValue(this.value.interpolate(other.value, progress));
     }
     return new AngleValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -82,7 +82,7 @@ export class AngleValue<Representation extends Angle = Angle> implements Value<M
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'angle'> {
+  #asMathValue(context: MathContext): MathValue<'angle'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'angle', context);
   }

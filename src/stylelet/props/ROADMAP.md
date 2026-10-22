@@ -21,15 +21,20 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 
 ## Shorthand and logical-property dependencies
 
+- [x] Move common declaration, CSS-wide, and pending-substitution handling into
+  `Shorthand`, below the built-in families. Each family supplies its longhand
+  names and records and ordinary expansion/compression; property records construct
+  their complete and pending values, and the registry collects shorthand instances
+  separately. `MarginShorthand` now contains only margin-specific behavior.
 - [x] Implement ordinary `marginShorthand.expand()` and `.serialize()` in `built-in/margin.ts`:
   validate the 1–4-value grammar, expand in top/right/bottom/left order, preserve
   importance and CSS-wide values, and shorten compatible longhands without
-  resolving them. The record returns values; CSSOM constructs their occurrences.
-- [ ] Add a retained pending-substitution representation shared by a shorthand's
+  resolving them. The shorthand returns values; CSSOM constructs their occurrences.
+- [x] Add a retained pending-substitution representation shared by a shorthand's
   expanded longhands, including partial overwrites and computed-time failure.
   See [Values 5](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands).
-  The existing `SubstitutionValue` does not by itself identify a
-  shorthand's pending longhand values.
+  PendingSubstitutionValue retains each longhand's index into the shared
+  original shorthand and delegates substitution before applying its full grammar.
 - [x] Cover ordinary shorthand queries, cssText shortening, mixed importance, removal,
   source-order replacement, and invalid values through projected CSSOM.
 - [ ] When adding legacy shorthands, exclude unprefixed legacy names from
@@ -41,30 +46,26 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 
 ### Shorthand substitution handoff
 
-Deferred margin expansion is intentionally left for the substitution slice.
-`marginShorthand.expand()` throws for recognized arbitrary-substitution syntax
-and `first-valid()` rather than discarding it as an invalid ordinary value.
-The general function detector does not validate each function's arguments.
+Deferred `var()` margins are now connected. Each longhand retains an index and
+the shared original shorthand/grammar. The engine expands that occurrence once
+per element/query, then computes only the winning sides. A failed shorthand
+defaults those sides; it does not revive earlier declarations or overwrite a
+separately winning longhand.
 
-1. Finish the [value substitution prerequisites](../values/ROADMAP.md#substitution-and-custom-values):
-   per-element custom-property computation/lookup, cycles, fallback and invalidity,
-   and component-preserving substitution. `SubstitutionValue.substitute()` is
-   currently the explicit throwing endpoint; recognition is not substitution.
-2. Retain the original shorthand grammar/source once, with a pending value for
-   each longhand. Cascade these occurrences normally; after substitution, parse
-   the original shorthand and select each surviving longhand. Failed computation
-   uses the winning declaration's invalid-at-computed-value-time behavior, not an
-   earlier declaration. Review `first-valid()` whole-value selection alongside
-   this, without treating it as an arbitrary-substitution function.
-3. Preserve CSSOM's distinction: pending longhands query as empty text; a complete
-   compatible set from the same shorthand returns its original value; mixed or
-   independently deferred longhands cannot serialize as a shorthand. Ordinary
-   serialization already refuses the latter case.
-4. Test replacement of one pending side, removal, importance, and repeated
-   `margin: var(--a)` / `margin: var(--b)` assignments. Both pending longhands
-   serialize as empty text, so `CSSDeclarationBlock.set()`'s current serialized
-   equality alone will not distinguish those edits. Include source/base provenance
-   and computed-time failure without adding context caches to values.
+CSSOM returns empty text for pending longhands. A complete equally important set
+from one occurrence returns the original shorthand; mixed or independently
+deferred longhands cannot serialize as a shorthand. Pending assignment bypasses
+serialized-value equality so replacing `var(--a)` with `var(--b)` is observable.
+Connected tests cover partial overwrites/removal, importance, repeated assignment,
+CSS-wide results, invalid expansion, and freshness without persistent value caches.
+
+`first-valid()` shorthand selection remains unfinished and throws explicitly.
+It must select using the complete shorthand grammar; it is a whole-value notation,
+not an arbitrary substitution function. Ordinary WholeValue selection now handles
+lazy alternatives and computed-time failure. Registered custom values, other
+substitution functions, taint, and future URL-valued shorthand provenance remain
+separate dependencies. The [value roadmap](../values/ROADMAP.md#substitution-and-custom-values)
+owns those lower-level connections.
 
 ## Family homes and stopping points
 
@@ -77,7 +78,7 @@ need their own interpretation and CSSOM path. The
 
 | Family / representative source | Existing foundation | Missing work and external boundary |
 | --- | --- | --- |
-| [Color](https://drafts.csswg.org/css-color-4/#resolving-color-values) and [adjustment](https://drafts.csswg.org/css-color-adjust-1/#color-scheme-resolution) | Two installed color properties; color conversion, mixing, and contextual value helpers | Property-specific color computation, color-scheme/forced-color policy, palette/profile inputs. Stylelet computes values; display realization remains external. |
+| [Color](https://drafts.csswg.org/css-color-4/#resolving-color-values) and [adjustment](https://drafts.csswg.org/css-color-adjust-1/#color-scheme-resolution) | Two installed color properties; color conversion, mixing, contextual value helpers, and host palettes | Property-specific color computation, color-scheme/forced-color policy, and profile inputs. Stylelet computes values; display realization remains external. |
 | [Images](https://drafts.csswg.org/css-images-4/#image-values), backgrounds, borders | URLs, gradients, positions, and lengths; background-color is the only installed background property | Layered properties/shorthands and additional image forms. Fetch/decode state, natural dimensions and concrete object size are separate inputs; painting and image-frame delivery remain external. |
 | [Fonts](https://drafts.csswg.org/css-fonts-4/#font-matching-algorithm), text, decoration, ruby | Font-relative unit inputs and shared strings/numbers; no registered font/text properties | Font/text properties and font-face descriptor parsing here; [fonts](../../fonts/ROADMAP.md) owns face/loading/matching state and metrics/shaping. [Layout](../../layout/ROADMAP.md) owns lines; readiness needs host coordination. |
 | [Writing modes](https://drafts.csswg.org/css-writing-modes-4/#abstract-box) and [logical properties](https://drafts.csswg.org/css-logical-1/#margin-properties) | Position resolver accepts writing mode/direction; four physical margins are installed | Compute CSS axes and logical/physical cascade relationships. HTML directionality is a separate input/UA-rule concern, not a replacement for computed CSS direction. |

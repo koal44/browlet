@@ -46,7 +46,7 @@ export class SyntaxValue<Representation extends Syntax = Syntax> implements Valu
     return syntaxConsumer(c);
   }
 
-  private static createComponentConsumer(component: SyntaxComponent): TryConsumer<ParsedSyntaxValue, PropertyContext> {
+  static #createComponentConsumer(component: SyntaxComponent): TryConsumer<ParsedSyntaxValue, PropertyContext> {
     let consume: TryConsumer<ParsedSyntaxComponent, PropertyContext>;
     if (component.type === 'syntax-keyword') {
       consume = adaptConsumer(consumeIdentToken, (token) => token.value === component.name ? new IdentValue(token.value) : null);
@@ -78,7 +78,7 @@ export class SyntaxValue<Representation extends Syntax = Syntax> implements Valu
     if (this.value.type === 'universal-syntax') return OptionalDeclarationValue.consume;
     const clauses = this.value.components.map((component) =>
       one(adaptConsumer(
-        withTrivia(SyntaxValue.createComponentConsumer(component)),
+        withTrivia(SyntaxValue.#createComponentConsumer(component)),
         (value) => value,
         { complete: true },
       ))

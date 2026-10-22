@@ -43,8 +43,8 @@ or Platform behavior have been verified.
 | [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document/shadow sheets, real observable-array binding and adoption checks, retained identities, preferred/selected sets, and ordered Default-Style response processing. Header order survives reversed fetch completion. | Script blocking and resource completion; shadow-tree cascade selection is separate from collection ownership. See the [collection disagreements](../../browlet/style/ROADMAP.md#stylesheet-collection-disagreements). |
 | [Association and fetching](https://drafts.csswg.org/cssom/#style-sheet-association) | LinkStyle bindings for HTML/SVG inline style owners and ProcessingInstruction; Fetch-backed PI/header loading, cancellation on PI mutation/removal/adoption, policy, MIME/status/CORS, encoding, and URL metadata. | HTML `<link>`, imports, script/load/render blocking, and XML document parsing retain explicit owners. See [resource boundaries and browser choices](../../browlet/style/ROADMAP.md#external-stylesheet-loading). |
 | [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | One implementation tree, parent links/live lists, selector edits, style/nested-declaration serialization, nested mutation, namespace grammar, and required CSSOM-owned interfaces. | Conditional/font/animation rule grammars and consumers; page/margin descriptors and import lifecycle. See the [rule interface accounting](rules/ROADMAP.md#rule-and-interface-coverage). |
-| [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | §6.5–6.6 longhand/custom mutation, independent name/value parsing, indices/property bindings, shared collection ownership, and ordinary margin expansion/serialization. | Deferred shorthand expansion, logical property families, URL provenance, and descriptors remain unfinished. |
-| [CSS values](https://drafts.csswg.org/cssom/#css-values) | §6.7 registry-driven parsing/serialization, ordinary margin shortening and CSS-wide expansion, and reusable value machinery; see the [component accounting](declarations/ROADMAP.md#section-67-value-accounting). | Complete property grammars, reset-only longhands, pending shorthand substitution, and the missing component/property consumers recorded there. Resolution owns stage-correct representations. |
+| [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | §6.5–6.6 longhand/custom mutation, independent name/value parsing, indices/property bindings, shared collection ownership, and ordinary/pending margin expansion/serialization. | First-valid shorthand selection, logical property families, URL provenance, and descriptors remain unfinished. |
+| [CSS values](https://drafts.csswg.org/cssom/#css-values) | §6.7 registry-driven parsing/serialization, margin shortening and CSS-wide expansion, pending-substitution serialization, and reusable value machinery; see the [component accounting](declarations/ROADMAP.md#section-67-value-accounting). | Complete property grammars, reset-only longhands, and the missing component/property consumers recorded there. Resolution owns stage-correct representations. |
 | [ElementCSSInlineStyle](https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin) | Permanent HTML/SVG/MathML mixins, explicit attribute input, stable lazy projected CSSStyleProperties, and CSP gating in Browlet. | Audit clone/import and parse-time URL behavior, alongside declaration ownership. |
 | [Window.getComputedStyle](https://drafts.csswg.org/cssom/#extensions-to-the-window-interface) | Typed Window partial and projected readonly snapshot for selected installed properties. | Target-document selection, pseudo-elements, eligibility, complete enumeration, live results, and resolved-value dependencies. |
 | [CSS.escape](https://drafts.csswg.org/cssom/#the-css.escape()-method) | `serializeCssIdentifier()` supplies the underlying primitive, with the [non-ASCII browser disagreement](../syntax/ROADMAP.md#identifier-serialization-disagreement) recorded. | Add the CSS namespace declaration/binding and author conversion tests; review that conflict for the projected API. Other specs' CSS namespace members retain their own owners. |
@@ -102,8 +102,8 @@ engine creates independent declaration data once; the live query/invalidation
 contract remains missing. Inline style does not own computed state.
 
 The [engine inventory](../engine/README.md#current-computed-style-path) traces
-that sparse query; the [lifecycle roadmap](../value-processing/ROADMAP.md)
-separates its missing defaulting/substitution from the reusable value resolvers.
+that limited query; the [lifecycle roadmap](../value-processing/ROADMAP.md)
+separates its connected defaulting/substitution from missing contextual inputs.
 
 - [ ] Use the element's node document when selecting style rules. The current
   Window implementation selects its own associated document. Cover calls with
@@ -112,8 +112,8 @@ separates its missing defaulting/substitution from the reusable value resolvers.
   membership, browsing-context/container rendering, and the empty result cases.
   Current pseudo-element arguments are rejected rather than implemented.
 - [ ] Enumerate supported longhands in the required order and include eligible
-  custom properties. Finish defaulting, inheritance, and substitution before
-  equating a sparse declaration selection with a computed-style object.
+  custom properties. The installed built-ins now default and substitute; extend
+  property coverage and contextual computation before claiming a complete result.
 - [ ] Establish live reads and mutation invalidation before choosing a cache
   location. Cover retained query objects after attribute, rule, sheet, tree,
   and relevant host-state changes.

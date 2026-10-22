@@ -59,12 +59,12 @@ export class OpacityValue<Representation extends Opacity = Opacity> implements V
 
   /** Add opacities in their number scale; resolution applies the stage's limits. */
   add(other: OpacityValue, context: MathContext = {}): OpacityValue {
-    return new OpacityValue(this.asNumber().add(other.asNumber(), context));
+    return new OpacityValue(this.#asNumber().add(other.#asNumber(), context));
   }
 
   /** Interpolate opacities in their number scale. */
   interpolate(other: OpacityValue, progress: number, context: MathContext = {}): OpacityValue {
-    return new OpacityValue(this.asNumber().interpolate(other.asNumber(), progress, context));
+    return new OpacityValue(this.#asNumber().interpolate(other.#asNumber(), progress, context));
   }
 
   /** Accumulation is addition. */
@@ -72,7 +72,7 @@ export class OpacityValue<Representation extends Opacity = Opacity> implements V
     return this.add(other, context);
   }
 
-  private asNumber(): NumberValue {
+  #asNumber(): NumberValue {
     if (this.value instanceof NumberValue) return this.value;
     const percentage = this.value.value;
     return new NumberValue(percentage instanceof MathValue

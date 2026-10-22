@@ -26,6 +26,7 @@ export const standardDOM: DOMOperations<
   root: (node) => node.getRootNode(),
   parentNode: (node) => node.parentNode as StandardDocument | StandardElement | StandardDocumentFragment | null,
   parentElement: (node) => node.parentElement,
+  flatTreeParent,
   firstChild: (node) => node.firstChild,
   nextSibling: (node) => node.nextSibling,
   firstElementChild: (node) => node.firstElementChild,
@@ -112,6 +113,7 @@ export interface StandardNode {
   ownerDocument: StandardDocument | null;
   parentNode: (StandardNode & StandardParentNode) | null;
   parentElement: StandardElement | null;
+  assignedSlot?: StandardSlotElement | null;
   firstChild: StandardNode | null;
   nextSibling: StandardNode | null;
   baseURI: string;
@@ -123,6 +125,7 @@ export interface StandardNode {
 
 /** Browser-shaped element view; form and media state have separate views below. */
 export interface StandardElement extends StandardNode, StandardParentNode {
+  shadowRoot: StandardShadowRoot | null;
   id: string;
   className: string | object;
   localName: string;
@@ -229,6 +232,20 @@ interface StandardMediaElement extends StandardElement {
   readyState: number;
   seeking: boolean;
   muted: boolean;
+}
+
+/** Follow exposed slot assignment and shadow hosts; closed roots require host-supplied DOM operations. */
+// https://drafts.csswg.org/css-scoping/#flat-tree
+function flatTreeParent(node: StandardNode): StandardNode | null {
+  if (node.assignedSlot) return node.assignedSlot;
+  const parent = node.parentNode;
+  if (parent === null) return null;
+  if (standardDOM.isShadowRoot(parent)) return parent.host;
+  if (standardDOM.isElement(parent)) {
+    if (parent.shadowRoot) return null;
+    if (standardDOM.isSlot(parent) && (parent as StandardSlotElement).assignedNodes().length > 0) return null;
+  }
+  return parent;
 }
 
 /** Read language attributes and DOM ancestry, crossing shadow roots to their hosts. */

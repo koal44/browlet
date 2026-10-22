@@ -86,7 +86,7 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
       return new AnglePercentageValue(this.value.add(other.value));
     }
     const mathContext = anglePercentageMathContext(context);
-    return new AnglePercentageValue(this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext));
+    return new AnglePercentageValue(this.#asMathValue(mathContext).add(other.#asMathValue(mathContext), mathContext));
   }
 
   /** Interpolate directly compatible literals, retaining other combinations as math. */
@@ -99,7 +99,7 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
     }
     const mathContext = anglePercentageMathContext(context);
     return new AnglePercentageValue(
-      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+      this.#asMathValue(mathContext).interpolate(other.#asMathValue(mathContext), progress, mathContext),
     );
   }
 
@@ -108,7 +108,7 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'angle-percentage'> {
+  #asMathValue(context: MathContext): MathValue<'angle-percentage'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'angle-percentage', context);
   }

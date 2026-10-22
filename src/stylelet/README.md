@@ -37,6 +37,23 @@ barrel, while collaborating modules inside it import each other directly.
 The public [index](index.ts) also exports Infra's `InternalPromise` for standalone
 hosts supplying `exec.Promise`. Implementation modules import it directly from Infra.
 
+Hosts can supply `systemColors` through Stylelet options or the existing
+`env.userAgent`; Browlet accepts the same map in `BrowletConfig`. It is a complete
+palette keyed by lowercase CSS system-color names. The factory supplies fixed
+light defaults and accepts overrides as absolute colors:
+
+```ts
+const systemColors = createSystemColorPalette({
+  canvastext: absoluteColorFromRgba(0x123456ff),
+});
+const styles = new Stylelet(document, { systemColors });
+```
+
+Palette entries can be replaced between queries; earlier computed snapshots
+retain their values. Omitted palettes use independent defaults. Stylelet does
+not inspect OS colors. Automatic color-scheme selection and forced-color policy
+remain unfinished; supplying a palette does not implement those features.
+
 The provisional [component order](../../scripts/eslint/import-hierarchy.mjs) puts
 syntax, the Value contract, and lifecycle stages below numeric literals, collections, values, conditions,
 property definitions/selectors, declaration data, CSSOM, and the engine. Streams
@@ -68,7 +85,7 @@ Use these responsibilities when adding or reviewing parsing code:
    the list owns dispatch, and Syntax retains structural parsing and recovery.
 
 Use plain specification names for syntax records (`Rule`, `QualifiedRule`,
-`Declaration`), `interpret…` for applying the relevant grammars, and `…Impl` for
+`SyntaxDeclaration`), `interpret…` for applying the relevant grammars, and `…Impl` for
 implementations of Platform interfaces. Keep named parsing entry points aligned
 with their source algorithms, such as `parseStylesheetContents()`.
 
@@ -104,7 +121,7 @@ this contract; see [project architecture](../ARCHITECTURE.md).
 `TreeScope` retains ordered stylesheet collections and adopted stylesheets. It
 does not retain a computed-style tree. `StyleletContext` caches selectors,
 regular expressions, and selector runtime information. The current
-[computed-style routine](engine/computed-style.ts) creates a fresh result and
+[CascadeEngine.getComputedStyle()](engine/cascade-engine.ts) creates a fresh result and
 declaration block on each call; it has no live-result invalidation mechanism.
 
 Inline style has a separate lifecycle. Browlet owns attribute notifications and
@@ -139,9 +156,16 @@ their interface declarations do not imply working consumers.
 The engine selects supported declarations from inline state and matched sheets.
 It does not yet provide the complete cascade/defaulting/inheritance pipeline,
 media-dependent sheet participation, or CSSOM's live resolved-value result.
-Registered-value helpers and registration lookup exist, but author registration
-and per-element custom-property computation are not connected. Arbitrary
-substitution reaches an explicit stub; CSS-wide keyword handling is incomplete.
+Unregistered custom properties support initial values, inheritance, and `var()`
+substitution with lazy fallbacks, dynamic names, spread arguments, cycle guards,
+and bounded token/source composition. Registered-value
+helpers and registration lookup exist, but author registration and registered-value
+computation are not connected. Ordinary-property substitution/reparsing, initial/
+inherited defaulting, and pending margin expansion are connected. Other arbitrary
+substitution functions and first-valid shorthand selection stop explicitly;
+CSS-wide keyword handling is incomplete. The
+[engine guide](engine/README.md#substitution-draft-differences) records approved
+differences between the current draft and browsers.
 Layout and painting have separate owners. Their facts must be
 explicit inputs when required; missing geometry must not become a guessed value
 or work performed during serialization.
@@ -167,6 +191,24 @@ resolver fields from missing providers. [Typed OM](cssom/typed/ROADMAP.md) and t
 CSSOM/inline-style boundary.
 
 ## Test baselines
+
+### Custom-property substitution — 2026-10-22
+
+Custom Node 27.0.0-pre with the compatibility addon:
+
+```text
+node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit test/browlet/style/custom-properties.test.ts
+node scripts/with-node.mjs playwright test --project=stylelet test/stylelet/scenarios/custom-properties.test.ts
+```
+
+The unit run passed **59 files, 3,272 tests**, with the existing **7 expected
+failures and 14 skips**. The browser run completed **60 scenarios**: every
+Browlet assertion passed; native comparisons had **38 agreements and 22 approved
+expected failures**. Those differences cover invalid enumeration, lazy fallback
+cycles, the draft argument grammar, and EOF serialization. They do not mask
+Browlet assertions or establish general Variables/Cascade conformance.
+
+### Earlier focused baselines
 
 These focused runs passed on 2026-10-19 using custom Node 27.0.0-pre with the
 compatibility addon. They record tested behavior, not complete conformance.
@@ -195,7 +237,7 @@ node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/engine t
 ```
 
 The expected failures are seven if-replacement cases. Skips are seven engine
-custom-property defaulting/substitution cases, two registered-transform cases
+registered-custom-property defaulting/substitution cases, two registered-transform cases
 and five animation-name parser cases. Registration fixtures manually populate
 records; they do not prove document/API registration or end-to-end substitution.
 

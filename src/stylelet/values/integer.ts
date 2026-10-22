@@ -64,7 +64,7 @@ export class IntegerValue<Representation extends Integer = Integer> implements V
       return new IntegerValue(this.value.add(other.value));
     }
     return new IntegerValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -74,7 +74,7 @@ export class IntegerValue<Representation extends Integer = Integer> implements V
       return new IntegerValue(this.value.interpolate(other.value, progress));
     }
     return new IntegerValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -83,7 +83,7 @@ export class IntegerValue<Representation extends Integer = Integer> implements V
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'integer'> {
+  #asMathValue(context: MathContext): MathValue<'integer'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'integer', context);
   }

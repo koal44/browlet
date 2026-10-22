@@ -24,6 +24,15 @@ const { implForWrapper } = createRequire(__filename)('jsdom/lib/generated/idl/ut
 };
 
 describe('Stylelet DOM hosts', () => {
+  it('selects the last equally important inline declaration in the raw-attribute fallback', () => {
+    const host = createOpaqueDOM('<main style="opacity: .25; opacity: .5 !important; opacity: .75 !important; opacity: 1"></main>');
+    try {
+      const styles = new Stylelet(host.document, { dom: host.dom });
+      const element = host.opaque(host.window.document.querySelector('main')!);
+      expect(styles.getComputedStyle(element).getPropertyValue('opacity')).toBe('0.75');
+    } finally { host.close(); }
+  });
+
   it.each([false, true])('uses raw attribute fallback only without an inline-state provider (provider present: %s)', (hasProvider) => {
     const host = createOpaqueDOM('<main style="opacity: .25"></main>');
     try {
@@ -33,7 +42,7 @@ describe('Stylelet DOM hosts', () => {
         dom: hasProvider ? { ...dom, inlineStyleBlock: () => null } : dom,
       });
 
-      expect(styles.getComputedStyle(element).getPropertyValue('opacity')).toBe(hasProvider ? '' : '0.25');
+      expect(styles.getComputedStyle(element).getPropertyValue('opacity')).toBe(hasProvider ? '1' : '0.25');
       expect(dom.getAttributeNS(element, null, 'style')).toBe('opacity: .25');
     } finally { host.close(); }
   });
@@ -146,7 +155,7 @@ describe('Stylelet DOM hosts', () => {
         expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('0.25');
         expect(styles.getComputedStyle(child).getPropertyValue('opacity')).toBe('0.5');
         dom.setAttribute(main, 'class', 'other');
-        expect(styles.getComputedStyle(child).getPropertyValue('opacity')).toBe('');
+        expect(styles.getComputedStyle(child).getPropertyValue('opacity')).toBe('1');
       } finally {
         close();
       }
@@ -199,14 +208,14 @@ describe('Stylelet DOM hosts', () => {
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
         const styles = new Stylelet(document, { dom });
-        dom.setAttributeNS(main, 'urn:other', 'style', 'color: purple');
+        dom.setAttributeNS(main, 'urn:other', 'style', 'opacity: .25');
         const declaration = new CSSStyleDeclarationImpl({ ownerNode: main }, styles.context.env);
 
-        expect(declaration.getPropertyValue('color')).toBe('');
-        expect(styles.getComputedStyle(main).getPropertyValue('color')).toBe('');
-        declaration.setProperty('color', 'red');
-        expect(dom.getAttributeNS(main, 'urn:other', 'style')).toBe('color: purple');
-        expect(dom.getAttributeNS(main, null, 'style')).toBe('color: red;');
+        expect(declaration.getPropertyValue('opacity')).toBe('');
+        expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('1');
+        declaration.setProperty('opacity', '.5');
+        expect(dom.getAttributeNS(main, 'urn:other', 'style')).toBe('opacity: .25');
+        expect(dom.getAttributeNS(main, null, 'style')).toBe('opacity: 0.5;');
       } finally {
         close();
       }

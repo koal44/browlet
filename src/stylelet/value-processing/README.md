@@ -38,8 +38,8 @@ resolution or serialization. Initial values and inheritance remain property meta
 | --- | --- |
 | Declared | Property parsing validates ordinary values and prepares their Declared representation through the grammar's consumer. Deferred values retain their later dependencies; no element state is available. |
 | Cascaded | The engine chooses a declaration; the enum value alone does not represent cascade origin, layer, or rollback candidates. |
-| Specified | Value helpers accept this stage, for example to capture a local URL's tree scope. There is no engine defaulting pass. |
-| Computed | The engine invokes selected built-in resolvers here. Individual helpers also support typed registered values, math, units, and URLs when their context is supplied. |
+| Specified | The engine applies initial/inherited metadata and `initial`/`inherit`/`unset` during its query. Rollback and complete Cascade ordering remain unfinished. Value helpers also accept this stage, for example to capture a local URL's tree scope. |
+| Computed | The engine substitutes unregistered custom values, reparses installed built-ins, expands pending margins, and defaults invalid winners. Individual helpers also support typed registered values, math, units, and URLs when their context is supplied; registered per-element computation remains unfinished. |
 | Used / Actual | Resolvers can receive these stages in direct calls. There is no connected layout/device processing path establishing these values for elements. |
 
 These names follow [Cascade's value stages](https://drafts.csswg.org/css-cascade-5/#value-stages).
@@ -52,7 +52,7 @@ used-value facts. It is not another enum entry or a synonym for Computed.
 
 The current call chain runs from [declaration interpretation](../cssom/declarations/interpreted-declaration.ts)
 through [WholeValue](../values/whole-value.ts) to a concrete value class.
-[computeStyle()](../engine/computed-style.ts) selects declarations and requests
+[CascadeEngine.getComputedStyle()](../engine/cascade-engine.ts) selects declarations and requests
 Computed resolution. Syntax records, WholeValue, and numeric/color values are
 internal representations, not CSSStyleValue Platform objects.
 
@@ -61,8 +61,8 @@ while each resolution call supplies the stage and context. Raw components, defer
 alternatives, CSS-wide keywords, and guaranteed-invalid values remain distinct.
 Raw whole values now mean registered syntax awaiting Computed-time validation,
 not ordinary built-in values whose initial interpretation is unfinished.
-Migrating ownership of these methods does not implement the missing defaulting,
-substitution, dependency tracking, or Used/Actual orchestration.
+The connected unregistered-variable path does not establish registered computation,
+all dependency tracking, or Used/Actual orchestration.
 
 RawWholeValue, FirstValidValue, and SubstitutionValue are notation payloads whose
 property-dependent resolution belongs to WholeValue. IfValue and IfArguments

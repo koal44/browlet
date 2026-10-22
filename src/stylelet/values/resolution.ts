@@ -59,7 +59,7 @@ export class ResolutionValue<Representation extends Resolution = Resolution> imp
       return new ResolutionValue(this.value.add(other.value));
     }
     return new ResolutionValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -69,7 +69,7 @@ export class ResolutionValue<Representation extends Resolution = Resolution> imp
       return new ResolutionValue(this.value.interpolate(other.value, progress));
     }
     return new ResolutionValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -78,7 +78,7 @@ export class ResolutionValue<Representation extends Resolution = Resolution> imp
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'resolution'> {
+  #asMathValue(context: MathContext): MathValue<'resolution'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'resolution', context);
   }

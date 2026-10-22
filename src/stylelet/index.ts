@@ -8,16 +8,16 @@ export type { DOMException, DOMExceptionConstructor, DOMExceptionName } from '..
 export type { Encoding, DecodeText } from '../encoding/core/index';
 export { InternalPromise } from '../infra/promises';
 export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from '../infra/index';
-export { TreeScope } from './engine/index';
+export { TreeScope, createSystemColorPalette, type SystemColorPalette } from './engine/index';
 export {
   CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, RuleListContext,
   MediaListImpl, StyleSheetListImpl, CSSStylePropertiesImpl,
   type CSSStyleSheetInit,
 } from './cssom/index';
 export { CSSDeclarationBlock } from './cssom/declarations/index';
-export { decodeStylesheetBytes, parseStylesheetContents } from './syntax/index';
+export { decodeStylesheetBytes, parseStylesheetContents, isCustomPropertyName, type CustomPropertyName } from './syntax/index';
 export { styleletIDLDefinitions } from './web-idl';
-export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor } from './values/index';
+export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor, type SystemColorName } from './values/index';
 export {
   LengthLiteral, PercentageLiteral,
   type CanonicalLengthPercentageLiteral,

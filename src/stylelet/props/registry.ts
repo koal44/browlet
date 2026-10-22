@@ -1,3 +1,4 @@
+import type { CustomPropertyName } from '../syntax/index';
 import { backgroundColorProperty, colorProperty, marginSideProperty, opacityProperty } from './built-in/index';
 
 /** Shared grammars and metadata for supported built-in properties. */
@@ -11,11 +12,14 @@ export const propertyRegistry = {
   opacity: opacityProperty,
 } as const;
 
-export type PropertyName = keyof typeof propertyRegistry;
+/** Names accepted by interpreted declarations: supported longhands or custom properties. */
+export type PropertyName = BuiltInPropertyName | CustomPropertyName;
 
-/** Parsed value type associated with a registered property name. */
-export type PropertyValue<Name extends PropertyName> = PropertyValues[Name];
+/** Built-in longhand names installed in the registry. */
+export type BuiltInPropertyName = keyof PropertyRegistry;
 
-type PropertyValues = {
-  [Name in PropertyName]: NonNullable<ReturnType<(typeof propertyRegistry)[Name]['parse']>>;
-};
+/** Parsed value type associated with a supported built-in property name. */
+export type PropertyValue<Name extends BuiltInPropertyName> = NonNullable<ReturnType<PropertyRegistry[Name]['parse']>>;
+
+/** Registry entries retain each property's parser and metadata. */
+type PropertyRegistry = typeof propertyRegistry;

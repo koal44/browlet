@@ -33,8 +33,14 @@ rule-specific grammars, loading, and the consuming value/API specifications.
   source; do not substitute serialized tokens for the original spelling.
   Bounds, reversed ranges, and priority acceptance belong
   to the unfinished font descriptor consumer.
-- [ ] Audit custom-property serialization against CSS Variables, including
-  boundary comments; preserve the recorded browser evidence below.
+- [x] Audit custom-property serialization against CSS Variables together with
+  Values 5 Appendix A; see the [accounting](../values/ROADMAP.md#variables-1-and-values-5-appendix-a-audit).
+- [x] Retain declaration-value character boundaries through priority removal,
+  including boundary and comment-only comments. TokenList owns the outer bounds;
+  parsing supplies the initial cursor position, including for empty block contents.
+- [x] Preserve those value boundaries through replacements and fallback selection,
+  including spread arguments that select part of a computed replacement. Slicing
+  retains comment-only values at EOF without exposing ranges to fallback consumers.
 - [ ] Complete CSSOM's author-string conversion and CSS.escape binding review.
   The Syntax serializer now covers token-boundary/numeric round trips; revisit
   the identifier conflict below when defining the projected CSS.escape contract.
@@ -71,13 +77,22 @@ which would lose even a declaration-only block. The surrounding declaration
 placement rules and all three browsers retain it. Syntax recovery and CSSOM
 consumer tests cover both EOF and brace termination.
 
-`SPEC_CLASH(css-custom-property-boundary-comments)` records unchanged token-span
-capture. For `--x:/**/red/**/;`, Chromium/WebKit return `red`, while Firefox
-returns `red/**/`. Syntax captures the span corresponding to the retained value
-tokens, whereas [CSS Variables serialization](https://drafts.csswg.org/css-variables-1/#serializing-custom-props)
-also requires preserving comments. Retain the existing Chromium/WebKit behavior
-for this parser pass; review the boundary with that specification's serialization
-rules, including comment-only values and priority removal.
+`SPEC_CLASH(css-custom-property-boundary-comments)` records the approved choice to follow
+[CSS Variables serialization](https://drafts.csswg.org/css-variables-1/#serializing-custom-props)
+by retaining comments outside the first/last token and values containing only
+comments. Declared and computed values preserve these boundaries through priority
+removal, copying, substitution, and fallback selection. Replacement lists own their
+source bounds; spread selection also keeps a replacement's comment-only tail.
+
+The 2026-10-22 browser probe found that, for `--x:/**/red/**/;`, Chromium 149.0.7827.55
+and WebKit 26.5 return `red`, while Firefox 151.0 returns `red/**/`. All three return
+an empty string for `--x:/*only*/;`. Declared values, computed values, and references
+through `var()` show the same difference. The target results are `/**/red/**/` and
+`/*only*/`; the browser comparisons have separately approved expected failures.
+
+Substitution also retains comments exposed by empty replacements; see
+`SPEC_CLASH(custom-property-substitution-comments)` in the
+[Values roadmap](../values/ROADMAP.md).
 
 ## Identifier serialization disagreement
 

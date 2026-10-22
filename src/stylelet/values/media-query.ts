@@ -37,12 +37,12 @@ export class MediaQuery<Representation extends MediaQuerySyntax = MediaQuerySynt
   static parseList(input: ParserInput, context: MathContext): MediaQuery[] {
     const list = parseListOfComponentValues(input, context);
     const queries = parseListAsComponentGrammar(list, mediaQueryGrammar, context)
-      .map((query) => query ?? MediaQuery.invalid());
+      .map((query) => query ?? MediaQuery.#invalid());
 
     // SPEC_CLASH(media-query-trailing-comma): Follow browsers by retaining the
     // final empty query; Syntax's comma-list algorithm drops it. Inspect folded
     // components so a comma inside an unclosed function/block is not a separator.
-    if (list.tokens.at(-1)?.type === TokenKind.Comma) queries.push(MediaQuery.invalid());
+    if (list.tokens.at(-1)?.type === TokenKind.Comma) queries.push(MediaQuery.#invalid());
     return queries;
   }
 
@@ -57,7 +57,7 @@ export class MediaQuery<Representation extends MediaQuerySyntax = MediaQuerySynt
     return queries.map((query) => query.serialize()).join(', ');
   }
 
-  private static invalid(): MediaQuery {
+  static #invalid(): MediaQuery {
     return new MediaQuery({ type: 'media-type-query', modifier: 'not', mediaType: 'all' });
   }
 

@@ -68,7 +68,7 @@ export class CSSImportRuleImpl extends CSSRuleImpl {
       (isFunctionBlock(next) && ['layer', 'supports'].includes(asciiLower(next.name)))) {
       throw new InternalError('Import layer/supports grammar and applicability are not implemented');
     }
-    const media = new MediaListImpl(c.sourceText(c.pos(), prelude.tokens.length));
+    const media = new MediaListImpl(prelude.sourceText(c.pos(), prelude.tokens.length));
     return new CSSImportRuleImpl(href, media, context.env);
   }
 

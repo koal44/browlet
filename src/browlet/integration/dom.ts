@@ -28,6 +28,7 @@ export const browletDOM: DOMOperations<
   root: (node) => node.getRootNode(),
   parentNode: (node) => node.parentNode as ParentImpl | null,
   parentElement: (node) => node.parentElement,
+  flatTreeParent: (node) => node.getFlatTreeParent(),
   firstChild: (node) => node.firstChild,
   nextSibling: (node) => node.nextSibling,
   firstElementChild: (node) => node.firstElementChild,

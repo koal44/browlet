@@ -1,3 +1,4 @@
+export { isCustomPropertyName, type CustomPropertyName } from './names';
 export {
   consumeParensBlock, consumeDimensionToken, consumeIdentToken, consumeIntegerToken, consumeMinusDelim,
   consumePlusDelim, createFunctionalNotationConsumer, consumeComma, consumeHashToken, consumeSlashDelim,
@@ -16,7 +17,7 @@ export { TokenList, type NonEmptyTokenList } from './token-list';
 export {
   isTokenKind, serializeComponentValues, serializeCssIdentifier, isDelimToken, serializeCssDimensionUnit,
   serializeCssString, serializeCssFunction, serializeCssLocal,
-  isComponentBlock, isFunctionBlock, isBraceBlock, isWhitespaceToken,
+  isComponentBlock, isFunctionBlock, isBraceBlock, isWhitespaceToken, needsComponentSeparator,
   isAnyValueContents, isAnyValueComponent,
   type AnyValueComponent, type AnyValueContents, type AnyValueFunctionBlock,
 } from './component-value';
@@ -24,7 +25,7 @@ export {
   createComponentParser, parseAsComponentGrammar, parseDeclarationList, consumeBlock, discardRuleBlock,
   parseStylesheetContents, parseRule, parseDeclaration, parseListAsComponentGrammar, parseListOfComponentValues,
   parseCommaSeparatedListOfComponentValues,
-  type ParserInput, type Declaration, type BlockContents, type StatementAtRule,
+  type ParserInput, type SyntaxDeclaration, type BlockContents, type StatementAtRule,
 } from './parser';
 export {
   TokenKind, NumericSign, NumberTokenFlag, decodeStylesheetBytes,

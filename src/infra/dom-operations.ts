@@ -47,6 +47,8 @@ export interface DOMOperations<
   root(node: N): N;
   parentNode(node: N): D | E | F | null;
   parentElement(node: N): E | null;
+  /** Parent in the flattened tree used by CSS inheritance, including slot assignment. */
+  flatTreeParent(node: N): N | null;
   firstChild(node: N): N | null;
   nextSibling(node: N): N | null;
   firstElementChild(node: D | E | F): E | null;

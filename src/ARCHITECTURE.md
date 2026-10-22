@@ -176,6 +176,13 @@ another owner's complete API into a facade. Stylelet consumes the existing
 `getAssociatedDocument()` supplies the owning global's Document as Infra's
 `DOMDocument`, or null for unbound and non-Window environments. Browlet forwards
 the query to its realm; standalone engines already retain their explicit Document.
+The host may supply `userAgent.systemColors`, a complete palette of absolute colors.
+Browlet's configuration accepts this palette; standalone Stylelet options forward
+it to their existing UserAgent. `createSystemColorPalette()` creates independent
+fixed light defaults with optional entry overrides. An engine without a supplied
+palette lazily retains its own defaults. No operating-system query is involved.
+Palette entries are replaced, not mutated, so earlier computed snapshots retain
+their colors. Per-element scheme selection and forced-color policy remain separate work.
 Browlet supplies `URLImpl`; standalone composition captures the native constructor
 or accepts a supplied provider. Stylelet retains only the `StyleletURL` contract
 (`href`) and passes the selected constructor through CSS value contexts. Resource
@@ -261,27 +268,54 @@ WholeValue retains its consuming parser for deferred reparsing and delegates
 ordinary resolution and serialization to the contained value. AnyValue and the
 declaration-value classes retain component lists; their raw component types and
 validation belong to Syntax.
-Built-in property records pair a shared parser with inheritance and typed
-initial-value metadata; their registry keys supply the property names. The
-records live in the property-family modules. Custom-property registrations retain
-their syntax, compiled whole-value parser, and metadata.
+Built-in property records own ordinary parsers, complete-value construction,
+inheritance, and typed initial values; their registry keys supply the property
+names. Families supply ordinary initial values, and shorthand expansion supplies
+already-parsed components or pending occurrences. The record constructs each
+complete value with its consuming grammar. Instances live in the property-family
+modules. Custom-property registrations retain their syntax, compiled whole-value
+parser, and metadata.
 Initial values remain shared Declared representations; resolution must not
-mutate them. Engine defaulting and inheritance remain unfinished.
+mutate them. CascadeEngine owns declaration selection, registration lookup, and
+value computation. Each style query uses local maps for selected declarations,
+computed built-in/custom values, and pending shorthand expansions. Defaulting
+uses property metadata and inheritance via DOMOperations' flat-tree parent. Property
+dependency guards are query-local too; SubstitutionValue receives a guarded
+lookup and composes component/source lists for `var()` replacement without
+retokenizing serialized text. WholeValue and pending longhands receive that lookup
+through `context.getCustomProperty`, preserving `resolve(stage, context)`.
+Complete property values default to `PropertyContext`; ordinary grammars keep
+their narrower context types. WholeValue reparses the resulting components with
+its retained grammar. PendingSubstitutionValue retains a longhand's index and
+the original shorthand occurrence/grammar, expanded once per element/query.
+Invalid winners default without reviving earlier declarations. Cascade rollback,
+shadow-scope selection, registered values, and other arbitrary substitution
+functions remain unfinished; full Cascade review follows the bounded
+Variables work. This query state is separate from registration metadata and
+the CSSOM result, which remains a snapshot.
 Property parsing returns values ready to retain in a declaration: ordinary
 grammars prepare the Declared representation, while deferred forms retain
 their syntax. Registered-property grammar validation waits until Computed.
 Resolution receives stage and context at invocation. Serialization describes
 the retained representation without resolving it or selecting a later stage.
+Interpreted declarations lazily cache their serialized value. Retained values and
+their nested payloads must stay unchanged; CSSOM edits replace occurrences and
+resolution creates a separate declaration with a fresh cache.
 
 Stylelet's RuleListContext forwards Syntax's interpretation requests to a supplied
 CSSRuleListImpl. The context module imports only types; the list dispatches to
 concrete rule and property grammars. Rule implementations and `context.ts` live
 under `cssom/rules/`; the coordinating `rule-list.ts` remains one level above.
 Shared property contracts and registries live in `props/`; `props/built-in/`
-supplies the concrete property grammars and metadata. Declaration interpretation,
+supplies the concrete property grammars and metadata. `props/property.ts` and
+`props/shorthand.ts` sit below those families and own value construction and common
+expansion/serialization handling, respectively. Shorthands retain supplied property
+records through type-only imports; the separate shorthand registry collects family
+instances without a reverse runtime import.
+Declaration interpretation,
 the resulting `InterpretedDeclaration` instances, the ordered collection, and its
 CSSOM implementations live together in `cssom/declarations/`. Syntax keeps the
-uninterpreted `Declaration` and imports interpretation result types only.
+uninterpreted `SyntaxDeclaration` and imports interpretation result types only.
 MediaList lives in `cssom/media/`. Both CSSOM families sit below
 rules and sheets, alongside the type-only rule context. Their barrels provide
 narrow entry points without loading the rule dispatcher. ESLint checks these

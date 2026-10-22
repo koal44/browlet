@@ -2,6 +2,8 @@ import { standardDOM, type DOMDocument, type DOMOperations } from '../infra/inde
 import { createAsyncExecution, nativeTimerHost, type AsyncExecution } from '../infra/execution';
 import { decodeNative, type DecodeText } from '../encoding/core/index';
 
+import type { SystemColorPalette } from './engine/index';
+
 /** Existing owner supplying Stylelet's execution, DOM access, URLs, and text decoding. */
 export interface StyleletEnvironment {
   /** Promise allocation, background work, and task delivery. */
@@ -20,6 +22,8 @@ export interface StyleletUserAgent {
   URL: StyleletURLConstructor;
   /** Decode complete input through the host's selected Encoding implementation. */
   decodeText: DecodeText;
+  /** Complete host-selected palette; omitted uses the engine's independent light palette. */
+  systemColors?: SystemColorPalette;
 }
 
 /** Serialized view of a parsed URL retained by Stylelet. */
@@ -46,6 +50,8 @@ export type StyleletOptions = {
   URL?: StyleletURLConstructor;
   /** Complete-input byte decoding; defaults to the native decoder adapter. */
   decodeText?: DecodeText;
+  /** System colors shared with this host; use createSystemColorPalette() for editable defaults. */
+  systemColors?: SystemColorPalette;
   /** Standalone execution facilities; defaults to native promises and timers. */
   exec?: StyleletExecution;
 };
@@ -59,6 +65,7 @@ export function createStyleletEnvironment(options: StyleletOptions = {}): Stylel
       dom: options.dom ?? standardDOM,
       URL: options.URL ?? nativeURL,
       decodeText: options.decodeText ?? decodeNative,
+      systemColors: options.systemColors,
     },
     exec: options.exec ?? defaultStyleletExecution,
     getAssociatedDocument: () => null,

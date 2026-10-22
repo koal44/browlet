@@ -23,12 +23,12 @@ Individual algorithms in these sections still need implementation review.
 
 ## Property metadata and failure states
 
-- [ ] Connect engine defaulting to the initial values and inherited flags in
+- [x] Connect engine defaulting to the initial values and inherited flags in
   the seven installed [property records](../props/README.md).
   Add further facts when their consumers are implemented: computed-value rules,
   applicability, percentage behavior, shorthand relationships, and logical
-  groups. Each record retains its shared `parse` function; parsed value instances
-  own resolution and serialization.
+  groups. Each record owns WholeValue construction through its `parse` method;
+  parsed value instances own resolution and serialization.
 - [ ] Preserve different outcomes: invalid syntax is discarded before cascade;
   an invalid substituted winner follows computed-time fallback, not an earlier
   declaration; a rollback keyword deliberately revisits cascade candidates.
@@ -56,9 +56,12 @@ Individual algorithms in these sections still need implementation review.
   stage, and clamp computed math results before serializing. The specification
   sometimes describes these outcomes in its serialization section; this does
   not move resolution responsibility into our serializers.
-- [ ] Preserve original custom-property token spelling where required and use
-  equivalent tokens for computed registered values. Do not round-trip every
-  internal value through text merely to cross an ownership boundary.
+- [x] Preserve unregistered custom-property spelling through computation, and
+  retain declared substitution text for ordinary and pending shorthand queries.
+  Computation uses component tokens without a serialization/reparse step.
+- [ ] Use equivalent tokens for computed registered values when registration
+  participates. Do not round-trip every internal value through text merely to
+  cross an ownership boundary.
 
 Use small resolver tests for representation/stage behavior and connected engine
 tests for inherited/defaulted values and dependency updates. Existing direct

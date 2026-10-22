@@ -61,7 +61,7 @@ export class TimeValue<Representation extends Time = Time> implements Value<Math
       return new TimeValue(this.value.add(other.value));
     }
     return new TimeValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -71,7 +71,7 @@ export class TimeValue<Representation extends Time = Time> implements Value<Math
       return new TimeValue(this.value.interpolate(other.value, progress));
     }
     return new TimeValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -80,7 +80,7 @@ export class TimeValue<Representation extends Time = Time> implements Value<Math
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'time'> {
+  #asMathValue(context: MathContext): MathValue<'time'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'time', context);
   }

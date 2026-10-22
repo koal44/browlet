@@ -3,7 +3,7 @@ import { internalType, type InternalPromise } from '../infra/promises';
 import type { TimerHost } from '../infra/execution';
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
-import { PercentageLiteral, type StyleletUserAgent } from '../stylelet/index';
+import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } from '../stylelet/index';
 import { decode } from '../encoding/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
@@ -46,6 +46,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   URL = URLImpl;
   /** Encoding's complete-input decoder used by stylesheet byte processing. */
   decodeText = decode;
+  /** Configurable CSS system colors, independent of the machine running Browlet. */
+  systemColors = createSystemColorPalette();
   /** Related-context groups currently retained by this browser. */
   browsingContextGroupSet = new Set<BrowsingContextGroup>();
   /** Top-level windows or tabs owned by this browser. */

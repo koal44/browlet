@@ -97,7 +97,7 @@ export class MathValue<
   /** Resolve with current inputs, retaining the value object when its representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): MathValue<Type> {
     const previous = this.value;
-    const calculation = simplifyCalculationTree(this.calculation(context), stage, context, this.valueType);
+    const calculation = simplifyCalculationTree(this.#calculation(context), stage, context, this.valueType);
     const unwrapMathAt = context.unwrapMathAt ?? ValueStage.Computed;
 
     if (isNumericLeaf(calculation) && (stage >= unwrapMathAt || !(previous instanceof MathExpression))) {
@@ -121,15 +121,15 @@ export class MathValue<
   /** Add calculations of the same numeric grammar. */
   // https://drafts.csswg.org/css-values-4/#combine-math
   add(other: MathValue<Type>, context: MathContext = {}): MathValue<Type> {
-    return this.combine(other, this.calculation(context), other.calculation(context), context);
+    return this.#combine(other, this.#calculation(context), other.#calculation(context), context);
   }
 
   /** Interpolate calculations while retaining terms that require later context. */
   interpolate(other: MathValue<Type>, progress: number, context: MathContext = {}): MathValue<Type> {
-    return this.combine(
+    return this.#combine(
       other,
-      scaleCalculationTree(this.calculation(context), 1 - progress),
-      scaleCalculationTree(other.calculation(context), progress),
+      scaleCalculationTree(this.#calculation(context), 1 - progress),
+      scaleCalculationTree(other.#calculation(context), progress),
       context,
     );
   }
@@ -141,7 +141,7 @@ export class MathValue<
 
   /** Convert percentage math to a number in the caller's component scales. */
   toNumber(this: MathValue<'percentage'>, percentageScale: number, numberScale: number): MathValue<'number'> {
-    const calculation = this.calculation({ percentHint: 'percent' });
+    const calculation = this.#calculation({ percentHint: 'percent' });
     const percentageBasis = createNumericLeaf(
       { type: 'percentage', value: 100 },
       percentageMathHints({ percentHint: 'percent' }),
@@ -163,12 +163,12 @@ export class MathValue<
     return new MathValue(new MathExpression(simplified), 'number');
   }
 
-  private calculation(context: MathContext): CalculationTree {
+  #calculation(context: MathContext): CalculationTree {
     return this.value instanceof MathExpression
       ? this.value.calculation : createNumericLeafFromLiteral(this.value, context);
   }
 
-  private combine(
+  #combine(
     other: MathValue<Type>,
     a: CalculationTree,
     b: CalculationTree,

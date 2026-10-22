@@ -1,6 +1,6 @@
 import type { StyleletEnvironment } from '../../environment';
 import type {
-  Declaration, StatementAtRule, ComponentValue, BlockContents, ParserInput, TokenList, TokenCursor, Token,
+  SyntaxDeclaration, StatementAtRule, ComponentValue, BlockContents, ParserInput, TokenList, TokenCursor, Token,
 } from '../../syntax/index';
 import type { PropertyContext } from '../../props/index';
 import type { SelectorList, SelectorNamespaces } from '../../selector/index';
@@ -57,7 +57,7 @@ export class RuleListContext implements SelectorNamespaces, PropertyContext {
   }
 
   /** Validate and interpret a property once, before declaration-versus-rule recovery. */
-  interpretDeclaration(declaration: Declaration): InterpretedDeclaration[] | null {
+  interpretDeclaration(declaration: SyntaxDeclaration): InterpretedDeclaration[] | null {
     return this.ruleList.interpretDeclaration(declaration, this);
   }
 

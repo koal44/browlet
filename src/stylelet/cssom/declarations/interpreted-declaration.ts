@@ -2,27 +2,32 @@ import { asciiLower } from '../../../infra/ascii';
 import { nonASCIIWhitespacePattern } from '../../../infra/patterns';
 
 import {
-  parseDeclarationList, parseListOfComponentValues, serializeCssIdentifier, type Declaration, type ParserInput,
+  isCustomPropertyName, parseDeclarationList, parseListOfComponentValues, serializeCssIdentifier,
+  type SyntaxDeclaration, type ParserInput,
 } from '../../syntax/index';
 import type { ValueStage } from '../../value-processing/index';
-import { OptionalDeclarationValue } from '../../values/index';
+import { OptionalDeclarationValue, SubstitutionValue } from '../../values/index';
 import {
-  getShorthand, propertyRegistry, type CustomPropertyName, type PropertyContext, type PropertyName, type PropertyValue,
+  getShorthand, propertyRegistry, type BuiltInPropertyName, type CustomPropertyName,
+  type PropertyContext, type PropertyName, type PropertyValue,
 } from '../../props/index';
 
 /** An occurrence whose property grammar has been applied; later value resolution may remain deferred. */
 // https://drafts.csswg.org/cssom/#css-declarations
 // Currently covers built-in and custom properties; descriptor interpretation remains unfinished.
 // The instance union below preserves narrowing by property name without wrapping these fields.
-export const InterpretedDeclaration = class <Name extends DeclarationName> {
+class Declaration<Name extends PropertyName> {
   /** Normalized built-in name or case-sensitive custom property name. */
   name: Name;
-  /** Value parsed using this property's grammar. */
+  /** Retained value; replace the declaration rather than mutate its value or nested payload. */
   value: DeclarationValues[Name];
   /** Whether the occurrence has an !important annotation. */
   important: boolean;
   /** Whether the property retains opaque custom-property components. */
   custom: Name extends CustomPropertyName ? true : false;
+
+  /** Computed only on a text request; resolution creates a declaration with its own cache. */
+  #serializedValue?: string;
 
   constructor(name: Name, value: NoInfer<DeclarationValues[Name]>, important = false) {
     this.name = name;
@@ -33,11 +38,12 @@ export const InterpretedDeclaration = class <Name extends DeclarationName> {
 
   /** Interpret one syntax declaration into longhands or one custom property; null rejects its grammar. */
   // https://drafts.csswg.org/css-cascade-5/#shorthand
-  static interpret(declaration: Declaration, context: PropertyContext): InterpretedDeclaration[] | null {
+  static interpret(declaration: SyntaxDeclaration, context: PropertyContext): InterpretedDeclaration[] | null {
     const { name, important } = declaration;
     if (isCustomPropertyName(name)) {
       const value = OptionalDeclarationValue.parse(declaration.value, context);
-      return value === null ? null : [new InterpretedDeclaration(name, value, important)];
+      return value === null || !SubstitutionValue.hasValidVarArguments(value.value)
+        ? null : [new InterpretedDeclaration(name, value, important)];
     }
 
     const property = asciiLower(name);
@@ -45,10 +51,10 @@ export const InterpretedDeclaration = class <Name extends DeclarationName> {
     if (shorthand !== undefined) {
       const values = shorthand.expand(declaration.value, context);
       return values === null ? null : values.map((value, index) =>
-        new InterpretedDeclaration(shorthand.longhands[index]!, value, important) as BuiltInDeclaration,
+        new InterpretedDeclaration(shorthand.longhands[index]![0], value, important) as BuiltInDeclaration,
       );
     }
-    if (!isPropertyName(property)) return null;
+    if (!isBuiltInPropertyName(property)) return null;
 
     const value = propertyRegistry[property].parse(declaration.value, context);
     // Both fields came from the same registry entry; preserve that correlation in the instance union.
@@ -92,11 +98,15 @@ export const InterpretedDeclaration = class <Name extends DeclarationName> {
   // https://drafts.csswg.org/css-variables-1/#serializing-custom-props
   serializeValue(): string {
     const value = this.value;
+    // SPEC_CLASH(css-custom-property-boundary-comments): Preserve surrounding comments
+    // as required by Variables; browsers discard leading/comment-only comments.
     // SPEC_CLASH(custom-property-value-escapes): Preserve source spelling as required
     // by CSS Variables and Chromium/Firefox; WebKit serializes decoded tokens.
     // SPEC_CLASH(empty-custom-property-serialization): Follow CSS Variables' single
     // space for an empty value; all three browsers return the empty string instead.
-    return value instanceof OptionalDeclarationValue ? value.value.sourceText() || ' ' : value.serialize();
+    // SPEC_CLASH(custom-property-eof-serialization): Preserve source spelling, including
+    // missing EOF delimiters, as in Chromium. Firefox completes them; WebKit's behavior varies.
+    return this.#serializedValue ??= value instanceof OptionalDeclarationValue ? value.value.sourceText() || ' ' : value.serialize();
   }
 
   /** Serialize this complete declaration at its current value stage. */
@@ -115,33 +125,29 @@ export const InterpretedDeclaration = class <Name extends DeclarationName> {
   /** Whether the other property maps the same logical group differently. */
   // https://drafts.csswg.org/css-logical-1/#logical-property-group
   hasDifferentMapping(other: InterpretedDeclaration): boolean {
-    if (!isPropertyName(this.name) || other.custom) return false;
+    if (!isBuiltInPropertyName(this.name) || other.custom) return false;
     const left = propertyRegistry[this.name].logicalGroup;
     const right = propertyRegistry[other.name].logicalGroup;
     return left !== undefined && right !== undefined && left.name === right.name && left.mapping !== right.mapping;
   }
-};
+}
+
+// A named class lets TypeScript emit its private cache while the exported type retains the union.
+export const InterpretedDeclaration = Declaration;
 
 /** Keep each name paired with its value, including when an array contains different properties. */
 // TODO: Reassess this coupling and its TypeScript cost; see ROADMAP.md#declaration-typing.
-export type InterpretedDeclaration<Name extends DeclarationName = DeclarationName> = {
+export type InterpretedDeclaration<Name extends PropertyName = PropertyName> = {
   [Key in Name]: InstanceType<typeof InterpretedDeclaration<Key>>;
 }[Name];
 
-export type BuiltInDeclaration<Name extends PropertyName = PropertyName> = InterpretedDeclaration<Name>;
+export type BuiltInDeclaration<Name extends BuiltInPropertyName = BuiltInPropertyName> = InterpretedDeclaration<Name>;
 export type CustomDeclaration = InterpretedDeclaration<CustomPropertyName>;
 
-type DeclarationName = PropertyName | CustomPropertyName;
-type DeclarationValues = { [Name in PropertyName]: PropertyValue<Name>; } & {
+type DeclarationValues = { [Name in BuiltInPropertyName]: PropertyValue<Name>; } & {
   [Name in CustomPropertyName]: OptionalDeclarationValue;
 };
 
-function isPropertyName(name: string): name is PropertyName {
+function isBuiltInPropertyName(name: string): name is BuiltInPropertyName {
   return Object.hasOwn(propertyRegistry, name);
-}
-
-function isCustomPropertyName(name: string): name is CustomPropertyName {
-  // https://drafts.csswg.org/css-variables-1/#defining-variables
-  // The bare -- name is reserved and is not a custom property.
-  return name.length > 2 && name.startsWith('--');
 }

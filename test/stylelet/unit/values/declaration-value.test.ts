@@ -118,6 +118,13 @@ describe('DeclarationValue nonempty grammar', () => {
 });
 
 describe('OptionalDeclarationValue optional grammar', () => {
+  it('retains boundary comments when given a parsed component list', () => {
+    const list = parseListOfComponentValues('/**/red/**/', {});
+    const declaration = OptionalDeclarationValue.parse(list, {})!;
+
+    expect(declaration.value.sourceText()).toBe('/**/red/**/');
+  });
+
   it('retains its own class for both empty and nonempty input', () => {
     for (const input of ['', 'red']) {
       const list = parseListOfComponentValues(input, {});

@@ -107,10 +107,14 @@ functions remain opaque syntax and are discarded when assembling a URL;
 [WholeValue](whole-value.ts) owns the lifecycle of a complete property value.
 Its `value` holds either a concrete value class or whole-value notation. It
 retains the ordinary parser needed for deferred reparsing, without retaining
-context. `WholeValue.createParser()` binds that grammar once per property or
-registration; each parsed instance shares the same ordinary parser.
+context. `PropertyRecord.parse()` supplies its retained grammar to `WholeValue.parse()`.
+Standalone callers pass their ordinary parser directly to the same method;
+each parsed instance shares that parser.
+Whole values and property records default to `PropertyContext`, which includes
+substitution lookup. An ordinary parser's narrower context does not narrow the
+whole property's contract; a caller can explicitly select another context type.
 
-The resulting parser returns a value ready to retain in a
+Parsing returns a value ready to retain in a
 declaration, or null for invalid ordinary property syntax. It reads generic
 declaration syntax through `OptionalDeclarationValue.parse()`, then applies the
 property's grammar. The grammar's consumer prepares its Declared representation;
@@ -118,6 +122,8 @@ callers do not need a second Declared-stage resolution to finish parsing.
 Existing component lists enter the same path without being tokenized again.
 
 Later callers use `value.resolve(stage, context)` and `value.serialize()`.
+Deferred substitution requires the engine's guarded `context.getCustomProperty` lookup;
+ordinary values do not need it.
 Resolution returns a WholeValue containing the resulting representation,
 including GuaranteedInvalidValue where appropriate; null belongs to initial
 parse rejection. Property records retain their parser, inheritance flag, and
@@ -132,8 +138,9 @@ The main representations are:
 | RawWholeValue | Retains registered custom-property components without trying the registered grammar before Computed. |
 | Concrete ordinary value | Owns its resolution and serialization; WholeValue delegates directly to it. |
 | CssWideValue | Recognizes `initial`, `inherit`, `unset`, `revert`, and `revert-layer`; resolution currently returns the keyword unchanged. |
-| SubstitutionValue | Retains a value containing a recognized arbitrary-substitution function. Before Computed it remains unresolved; at Computed replacement throws as unimplemented. |
-| FirstValidValue | Retains alternatives before Computed; WholeValue then tries its consuming grammar and resolves each candidate until one succeeds. It is not independent of the substitution/defaulting gaps. |
+| SubstitutionValue | Retains arbitrary-substitution components; replaces `var()` with a guarded custom-property lookup while preserving token/source data. Other functions stop explicitly. |
+| FirstValidValue | Retains alternatives before Computed; WholeValue selects the first argument accepted by its consuming grammar, then resolves it. Unused alternatives are not substituted; a computed-time failure does not select another argument. |
+| PendingSubstitutionValue | A WholeValue subtype for one deferred longhand, retaining its position and the original shorthand occurrence/grammar. Longhand serialization is empty; a complete compatible set can serialize the original shorthand. |
 | GuaranteedInvalidValue | Represents invalidity distinctly from an ordinary value; serializes as an empty string. It does not perform registration or property fallback. |
 
 Resolution receives the requested stage and current context on every call.
@@ -141,9 +148,17 @@ Parsing recognizes CSS-wide keywords, first-valid alternatives, and substitution
 values while leaving their deferred dependencies intact. Later resolution
 interprets deferred syntax when due; serialization never advances a value's stage.
 
-[substitution-value.ts](substitution-value.ts) recognizes `var`, `attr`, `env`,
-`if`, `inherit`, `random-item`, and dashed custom-function names, including in
-nested blocks. This is detection, not validation/replacement of those functions.
+[substitution-value.ts](substitution-value.ts) validates `var()` arguments and
+implements dynamic names, early spread, lazy fallbacks, and bounded token expansion.
+Computed function blocks retain replacement lists. TokenList owns their character
+bounds, including boundary comments, and preserves them through fallback selection.
+Source spelling is assembled and cached only when requested. The engine supplies
+computed custom values and property-cycle guards.
+`WholeValue` reparses substituted components with its retained grammar. The engine
+defaults invalid winners and CSS-wide results, and caches pending shorthand
+expansions only for the current element/query. No serialized text is needed by
+ordinary computation. Recognition of `attr`, `env`, `if`, `inherit`, `ident`, `random-item`,
+and dashed custom functions does not establish their validation/replacement.
 [if()](substitution/if.ts) has argument grammar support, with media/style-query
 conditions still TODO; its replacement tests are existing expected failures.
 
@@ -158,7 +173,8 @@ syntax directly uses OptionalDeclarationValue for its possibly empty component
 list. Both own their resolution and serialization. Transform type names are accepted
 in syntax definitions, but creating their value consumer explicitly throws as unfinished.
 
-`WholeValue.createParser(syntax.createParser(), true)` supplies the parser for a known registration.
+For a known registration, compile its ordinary parser once with `syntax.createParser()`
+and call `WholeValue.parse(input, context, parseOrdinary, true)`.
 It retains ordinary raw input without consulting that grammar's dependencies
 before Computed, then checks registered syntax
 and resolves supported values; syntax failure becomes GuaranteedInvalidValue.
@@ -196,7 +212,7 @@ resolution/serialization boundary.
 
 | Helper | Existing representation/operation | Current limit |
 | --- | --- | --- |
-| [Colors](color.ts) | Named/absolute/contextual colors, relative colors, color mixing and conversion/interpolation helpers; caller-supplied palettes, scheme and profiles | Contextual colors can remain unresolved without inputs. Generic currentColor handling does not supply each property's own rule. No engine-delivered palette/profile or output pipeline is established. |
+| [Colors](color.ts) | Named/absolute/contextual colors, relative colors, color mixing and conversion/interpolation helpers; caller-supplied palettes, scheme and profiles | The engine delivers a host palette or fixed light defaults. Per-element scheme selection, profiles, and output integration remain unfinished; generic currentColor handling does not supply each property's own rule. |
 | [Images](image.ts) | ImageValue is a URL or gradient, with resolution delegated to those helpers. | No image(), image-set(), cross-fade(), element() or paint() value implementation, fetching, decoding or natural-size delivery. |
 | [Gradients](gradient.ts) | Linear/radial/conic and repeating forms, stops and interpolation; explicit used-value preparation accepts gradient-box geometry. | Explicit preparation can return null when stage/facts are insufficient. Interpolation still throws for cases including cross-fade fallback, repeating-stop alignment and missing required percentage bases. No rasterization. |
 | [Positions](position.ts) | Position grammar and stage-aware resolution, including CSS writing-mode/direction inputs for logical positions | Does not choose a property's reference rectangle or image size. |

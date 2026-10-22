@@ -44,7 +44,7 @@ underflow. `consumeUnicodeRangeDescriptorValue()` opts into unicode-range
 tokens when a declaration is named `unicode-range`.
 It retokenizes the complete value segment; descriptor validation remains missing.
 
-`Declaration` and `StatementAtRule` hold syntax passed to interpretation.
+`SyntaxDeclaration` and `StatementAtRule` hold syntax passed to interpretation.
 Rule consumers return `CSSRuleImpl` objects; `BlockContents` interleaves those
 rules with `InterpretedDeclaration` runs. There is no parallel raw rule tree.
 
@@ -164,18 +164,32 @@ context-specific range choice permitted by CSS Values, not a general numeric
 range policy for all properties. Selector matching owns positive-index and
 nonnegative-iteration behavior.
 
-`TokenList` in [token-list.ts](token-list.ts) owns its token array and private
-source ranges. Callers read `tokens` directly and use the list's methods for
+`TokenList` in [token-list.ts](token-list.ts) owns its source components and private
+source ranges. Callers read `tokens` for grammar input and use the list's methods for
 structural edits. Source is required. `TokenList.tokenize()` creates a list from
 text; folding tokens into components retains their complete consumed spans.
 Block/function children, comma-list arms, and collected grammar values share
-the full preprocessed text, each with ranges for its own sequence.
+the full preprocessed text, each with ranges for its own sequence. Component builders
+use `new TokenList<ComponentValue>(c.source, true)` to share the source without
+accessing its text and record that the contents are already folded. Slices preserve
+this flag; parsing recognizes component lists without scanning their tokens. The
+flag is a construction guarantee, not a per-append check.
 
-`append()` retains a consumed interval from another list sharing the source text.
-`slice()`, `truncate()`, and `trimWhitespace()` keep tokens and ranges aligned;
+`append()` retains an interval of `sourceTokens` from another list sharing the source text.
+`slice()` selects grammar tokens while retaining their source components; a selection
+inside a computed function selects the corresponding portion of its replacement.
+`truncate()` and `trimWhitespace()` operate on retained source components during
+syntax construction. They are not operations on a computed value's expanded tokens.
 `sourceText()` reads the retained source span. Declaration parsing and CSSOM share
-these operations rather than editing parallel arrays themselves. Range records
-are private and can be reused for unchanged tokens and sliced sequences.
+these operations rather than editing parallel arrays themselves. Syntax declarations
+retain original spelling through their value list instead of eagerly copying an
+`originalText` string. Each list owns its outer character bounds, including comments
+outside its first and last tokens. TokenCursor only traverses tokens; source reads
+and range bookkeeping stay inside TokenList.
+Replacement rendering preserves token spellings and comments, without restoring
+whitespace discarded by grammar selection; see the
+[fallback whitespace note](../values/ROADMAP.md#fallback-source-spelling).
+Declared source remains unchanged. Grammar consumers use tokens, not source text.
 
 Values' [`AnyValue`](../values/any-value.ts) owns a validated, nonempty
 `<any-value>` sequence in its `value` field.
@@ -204,6 +218,26 @@ output construction. Reopening a block or entering a component grammar therefore
 preserves custom-property spelling and unicode-range reparsing. A bare array is
 not parser input; serialization can still read a component array without source
 information.
+
+Substitution copies changed function blocks with a `replacement` reference to the
+computed value's list. That list owns the replacement's character bounds as well.
+Ordinary enclosing blocks point to their changed contents.
+The original declaration remains untouched, and the computed tree retains original
+character offsets. An early spread's three dots and function form one consumed span.
+
+`sourceTokens` retains that tree. `tokens` exposes the expanded grammar input on
+demand and caches it; unchanged lists use the same array for both. TokenCursor still
+traverses a plain array. Substitution and argument parsing never read source text.
+
+Only `sourceText()` assembles the spelling: unchanged lists use a single source
+slice; changed lists copy unchanged spans and follow replacement references, caching
+the resulting text, including empty strings. Shared replacements render once.
+Retained comments survive even when empty replacements expose them at an edge.
+Nested blocks retain their original openings and closers. Separator comments are
+inserted at replacement boundaries when needed to preserve tokens.
+Computed values retain their completed replacement lists by reference, just as
+AnyValue retains validated contents; consumers must not subsequently mutate those
+shared inputs.
 
 Use `component` for one component value and `components` for an array of them;
 use `token` for a lexical or unspecialized token. Name the complete `TokenList`

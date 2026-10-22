@@ -209,6 +209,8 @@ export type FunctionBlock<Contents = TokenList<ComponentValue>> = {
   type: TokenKind.FunctionBlock;
   name: string;
   value: Contents;
+  /** Computed replacement; absent on the original declaration's function block. */
+  replacement?: TokenList<ComponentValue>;
 };
 
 type LexicalToken =

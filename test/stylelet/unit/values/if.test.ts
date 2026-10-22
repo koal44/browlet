@@ -122,10 +122,10 @@ describe('<if-args>', () => {
 });
 
 describe('if() replacement', () => {
-  const property = WholeValue.createParser(SyntaxValue.parse('<color>', {})!.createParser(), true);
+  const parseOrdinary = SyntaxValue.parse('<color>', {})!.createParser();
 
   function resolve(input: string, context: PropertyContext = {}) {
-    const raw = property(input, context);
+    const raw = WholeValue.parse(input, context, parseOrdinary, true);
     return raw === null ? null : raw.resolve(ValueStage.Computed, context);
   }
 

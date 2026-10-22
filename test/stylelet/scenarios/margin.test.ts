@@ -26,7 +26,10 @@ runScenarios('CSSOM margin shorthand', 'normal', BROWSER_NAMES.flatMap((browser)
     }
     // SPEC_CLASH(shorthand-removal-return): Chromium/WebKit return empty text;
     // CSSOM and Firefox return the former shorthand value. Browlet is asserted above.
-    test.fail(browser !== 'firefox' && kind === 'removal-return', 'Approved native shorthand-removal return disagreement');
+    // SPEC_CLASH(var-argument-grammar): Previously approved draft argument rules
+    // also apply to shorthands. Browsers reject literal non-custom names early.
+    test.fail((browser !== 'firefox' && kind === 'removal-return') || kind === 'pending-invalid-name',
+      'Approved native shorthand-removal or var-argument disagreement');
     expect(native).toEqual(marginExpectations[kind]);
   },
 }))));

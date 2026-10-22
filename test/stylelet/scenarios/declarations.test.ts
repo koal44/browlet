@@ -22,6 +22,8 @@ runScenarios('CSSOM declaration operations', 'normal', BROWSER_NAMES.flatMap((br
     test.fail(browser === 'webkit' && kind === 'name-serialization', 'Approved native name-escaping disagreement');
     // SPEC_CLASH(custom-property-value-escapes): WebKit serializes decoded tokens instead of preserving escapes.
     test.fail(browser === 'webkit' && kind === 'custom-spelling', 'Approved native custom-value escape disagreement');
+    // SPEC_CLASH(css-custom-property-boundary-comments): Browsers discard leading/comment-only comments; Firefox retains trailing ones.
+    test.fail(kind === 'boundary-comments', 'Approved native custom-value boundary-comment disagreement');
     // SPEC_CLASH(empty-custom-property-serialization): All three browsers return an empty string instead of one space.
     test.fail(kind === 'empty-custom-value', 'Approved native empty-custom-value disagreement');
     // SPEC_CLASH(empty-value-priority-order): Chromium/WebKit check priority before removal.

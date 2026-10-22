@@ -6,6 +6,7 @@ import {
 } from '../../../web-idl/core/index';
 
 import type { StyleletEnvironment } from '../../environment';
+import { isCustomPropertyName } from '../../syntax/index';
 import { getShorthand, propertyRegistry } from '../../props/index';
 import type { CSSRuleImpl } from '../rules/index';
 
@@ -166,8 +167,12 @@ export class CSSStyleDeclarationImpl {
     const value = this.getPropertyValue(name);
     const shorthand = getShorthand(name);
     let removed = false;
-    for (const longhand of shorthand?.longhands ?? [name]) {
-      if (this.#block.remove(longhand)) removed = true;
+    if (shorthand === undefined) {
+      removed = this.#block.remove(name);
+    } else {
+      for (const [longhand] of shorthand.longhands) {
+        if (this.#block.remove(longhand)) removed = true;
+      }
     }
     if (removed) this.#updateStyleAttribute();
     return value;
@@ -243,11 +248,6 @@ function isSupportedPropertyName(
   name: string,
 ): name is keyof typeof propertyRegistry {
   return Object.hasOwn(propertyRegistry, name);
-}
-
-/** Whether a name has the custom-property prefix rather than a built-in property's spelling. */
-function isCustomPropertyName(name: string): name is `--${string}` {
-  return name.length > 2 && name.startsWith('--');
 }
 
 /*

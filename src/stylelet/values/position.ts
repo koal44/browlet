@@ -38,7 +38,7 @@ export class PositionValue<Representation extends Position = Position> implement
     return new PositionValue({ components } as PositionSyntax);
   }
 
-  private static resolveOffsets(
+  static #resolveOffsets(
     components: PositionSyntax['components'], context: PositionValueContext,
   ): PositionOffsets | null {
     if (components.length === 1) {
@@ -60,17 +60,17 @@ export class PositionValue<Representation extends Position = Position> implement
     const firstAxis = logicalOrder ? 'block' : 'x';
     const secondAxis = logicalOrder ? 'inline' : 'y';
     const first = components.length === 2
-      ? PositionValue.componentOffset(components[0], firstAxis, context)
-      : PositionValue.edgeOffset(components[0], components[1], firstAxis, context);
+      ? PositionValue.#componentOffset(components[0], firstAxis, context)
+      : PositionValue.#edgeOffset(components[0], components[1], firstAxis, context);
     const second = components.length === 2
-      ? PositionValue.componentOffset(components[1], secondAxis, context)
-      : PositionValue.edgeOffset(components[2], components[3], secondAxis, context);
+      ? PositionValue.#componentOffset(components[1], secondAxis, context)
+      : PositionValue.#edgeOffset(components[2], components[3], secondAxis, context);
 
     if (first === null || second === null || first.axis === second.axis) return null;
     return { offsets: first.axis === 'horizontal' ? [first.offset, second.offset] : [second.offset, first.offset] };
   }
 
-  private static componentOffset(
+  static #componentOffset(
     component: PositionComponent, axis: PositionAxis, context: PositionContext,
   ): PositionedOffset | null {
     const resolvedAxis = resolvePositionAxis(axis, context);
@@ -84,7 +84,7 @@ export class PositionValue<Representation extends Position = Position> implement
       : { axis: resolvedAxis, offset: isEndEdge(edge) ? FULL : ZERO };
   }
 
-  private static edgeOffset(
+  static #edgeOffset(
     keyword: PositionEdgeKeyword, offset: LengthPercentageValue, axis: PositionAxis, context: PositionValueContext,
   ): PositionedOffset | null {
     const edge = physicalEdge(keyword, axis, context);
@@ -110,7 +110,7 @@ export class PositionValue<Representation extends Position = Position> implement
       typeof component === 'string' ? component : component.resolve(stage, context));
     const unchanged = components.every((component, i) => component === previous.components[i]);
     const syntax = unchanged ? previous : { components } as PositionSyntax;
-    const resolved = stage < ValueStage.Computed ? syntax : PositionValue.resolveOffsets(syntax.components, context) ?? syntax;
+    const resolved = stage < ValueStage.Computed ? syntax : PositionValue.#resolveOffsets(syntax.components, context) ?? syntax;
     return resolved === previous ? this : new PositionValue(resolved);
   }
 

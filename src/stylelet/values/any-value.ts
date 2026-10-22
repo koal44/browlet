@@ -1,5 +1,5 @@
 import {
-  isAnyValueComponent, isAnyValueContents, serializeComponentValues, parseListOfComponentValues, TokenList,
+  isAnyValueComponent, isAnyValueContents, serializeComponentValues, parseListOfComponentValues,
   type TokenCursor, type TryConsumerResult, type ParserInput, type NonEmptyTokenList,
   type AnyValueComponent, type AnyValueContents,
 } from '../syntax/index';
@@ -33,15 +33,10 @@ export class AnyValue implements Value {
       return new AnyValue(c.source);
     }
 
-    const list = new TokenList<AnyValueComponent>(c.source.text);
-    while (true) {
-      const component = c.peek();
-      if (!isAnyValueComponent(component)) break;
-      const start = c.pos();
-      c.next();
-      list.append(component, c.source, start, c.pos());
-    }
-    return isNonEmpty(list) ? new AnyValue(list) : null;
+    const start = c.pos();
+    c.consumeWhile(isAnyValueComponent);
+    const list = c.source.slice(start, c.pos());
+    return isAnyValueContents(list) && isNonEmpty(list) ? new AnyValue(list) : null;
   }
 
   /** Opaque components have no contextual interpretation to resolve. */

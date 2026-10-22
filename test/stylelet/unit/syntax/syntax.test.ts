@@ -12,7 +12,7 @@ import {
 import {
   consumeBlock, discardRuleBlock, parseBlockContents, parseCommaSeparatedListOfComponentValues, parseComponentValue,
   parseDeclaration, parseListOfComponentValues, parseRule, parseStylesheetContents,
-  type BlockContents, type Declaration,
+  type BlockContents, type SyntaxDeclaration,
 } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
@@ -42,7 +42,7 @@ function expectDeclarations(
   return value;
 }
 
-function expectDeclaration(value: Declaration | null | undefined): Declaration {
+function expectDeclaration(value: SyntaxDeclaration | null | undefined): SyntaxDeclaration {
   expect(value).toBeTruthy();
   return value!;
 }
@@ -99,9 +99,9 @@ describe('5.4 parser entry points', () => {
     const list = TokenList.tokenize('--x: fn(a) /**/ foo\\62 ar !important; unicode-range: U+4??');
     const input = new TokenCursor(list, {});
 
-    expect(parseDeclaration(input, context)).toMatchObject({
-      name: '--x', originalText: 'fn(a) /**/ foo\\62 ar', important: true,
-    });
+    const declaration = parseDeclaration(input, context);
+    expect(declaration).toMatchObject({ name: '--x', important: true });
+    expect(declaration?.value.sourceText()).toBe('fn(a) /**/ foo\\62 ar');
     input.next();
     expect(parseDeclaration(input, context)?.value.tokens).toEqual([
       { type: TokenKind.UnicodeRange, start: 0x400, end: 0x4FF },
@@ -355,7 +355,7 @@ describe('5.5 declaration recovery', () => {
   test('captures the original source text of a custom property value', () => {
     const declaration = expectDeclaration(parseDeclaration('--foo:foo\\62 ar', context));
 
-    expect(declaration.originalText).toBe('foo\\62 ar');
+    expect(declaration.value.sourceText()).toBe('foo\\62 ar');
   });
 
   test('re-tokenizes a unicode-range descriptor from its original source', () => {

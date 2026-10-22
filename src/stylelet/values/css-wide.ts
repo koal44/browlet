@@ -24,7 +24,7 @@ export class CssWideValue implements Value {
   }
 
   resolve(_stage: ValueStage, _context: unknown): CssWideValue {
-    // TODO: The engine must apply property defaulting and inheritance.
+    // The engine applies property defaulting and inheritance to this retained keyword.
     return this;
   }
 

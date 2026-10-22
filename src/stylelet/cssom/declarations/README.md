@@ -31,15 +31,15 @@ Built-in value instances retain their grammar/lifecycle representation rather
 than turning back into a generic component list.
 
 `InterpretedDeclaration.interpret()` applies the registered property grammar to one Syntax
-`Declaration`. It returns one custom/built-in declaration or multiple longhands
+`SyntaxDeclaration`. It returns one custom/built-in declaration or multiple longhands
 for a shorthand, and returns null for an unsupported name or invalid value.
 `InterpretedDeclaration.parseBlock()` collects these results in source order. Rule-list
 interpretation calls the same operation while Syntax consumes a rule block.
 `PropertyContext` carries value inputs without rule-interpretation hooks.
 Built-in names are ASCII-lowercased; custom names retain case, exclude the
 reserved `--`, and retain components and original text for later substitution.
-Custom spelling comes from the value's retained token-list source spans; the
-interpreted declaration does not store a separate copy of that text.
+Custom spelling comes from the value's retained token-list source spans. The
+interpreted declaration reads and caches that spelling only on a serialization request.
 An empty custom value serializes as one space in a property query, while a
 missing property returns the empty string. The complete empty declaration still
 serializes as `--name: ;`.
@@ -48,7 +48,10 @@ interpretation remains unfinished with its owning rule families.
 
 Each occurrence owns `resolve()`, `serializeValue()`, `serialize()`, and
 `hasDifferentMapping()`. Resolution creates a separate occurrence with the
-resolved value; serialization only describes the current representation.
+resolved value and its own empty serialization cache. Retained values and nested
+payloads must not be mutated: CSSOM replaces declaration occurrences instead.
+Serialization only describes the current representation; `serializeValue()` lazily
+caches its result for subsequent equality checks and property queries.
 `serializeValue()` supplies CSSOM property queries; `serialize()` produces the
 complete declaration, including its name, priority, and semicolon. Shorthand
 output uses the same static `serializeText()` formatter without creating a
@@ -102,10 +105,23 @@ The property record returns values in canonical longhand order; interpreted
 declarations supply their names and importance. Complete compatible sets shorten
 to one through four components. Incomplete, mixed-priority, mixed CSS-wide, or
 independently deferred longhands return an empty shorthand query and remain
-separate in block text. Deferred shorthand expansion still throws explicitly;
-the [substitution handoff](../../props/ROADMAP.md#shorthand-substitution-handoff)
-records its prerequisites. The [roadmap](ROADMAP.md) accounts for §6.7's other
+separate in block text. Pending margin longhands retain their original shorthand
+occurrence; a complete compatible set serializes that original value, while each
+pending longhand serializes empty text. Replacing a pending occurrence always
+updates its sides rather than comparing those empty serializations. The
+[shorthand account](../../props/ROADMAP.md#shorthand-substitution-handoff)
+records computation and remaining dependencies. The [roadmap](ROADMAP.md) accounts for §6.7's other
 value-family dependencies and browser choices.
+
+Declared substitutions use their retained source spelling, including number
+spelling and interior whitespace, in both longhand and shorthand queries.
+Computing a value does not rewrite its declaration. Replacing a declaration with
+different spelling also replaces its lazy serialization cache, even when the
+tokens represent the same numbers. A complete pending longhand set reconstructs
+its original shorthand; a partially overwritten set cannot reconstruct that
+shorthand and exposes the required empty pending longhands instead. Source
+preservation also retains missing EOF delimiters, so it does not promise that
+appending further declarations to the serialized text will preserve their parsing.
 
 The export-only [barrel](index.ts) is the entry point for declaration consumers.
 Shared property contracts, concrete grammars, and registries live in
@@ -115,7 +131,7 @@ declarations do not construct rules or sheets.
 [Projected regressions](../../../../test/browlet/style/declarations.test.ts) cover
 name/value separation, escaping, priority, readonly behavior, and Binding.
 [Collection tests](../../../../test/stylelet/unit/cssom/declarations/style-declaration.test.ts)
-cover shared state, ordinary margins, and the explicit deferred boundary.
+cover shared state, ordinary/pending margins, and the unfinished first-valid boundary.
 [Margin contracts](../../../../test/stylelet/margin.contracts.ts) cover inline
 styles, rules, mutation, and shortening through projected CSSOM. The matching browser
 scenarios assert Browlet before applying any native expected-failure annotation.

@@ -30,22 +30,51 @@ together. Level 6 supplements the earlier level.
 and [defaulting](https://drafts.csswg.org/css-cascade-5/#defaulting) require more
 than calling a selected value's resolver.
 
-- [ ] Consume initial values and inherited flags from the installed property
-  records, and connect property-specific computed-value rules. Defaults and
-  explicit CSS-wide keywords must work even when no declaration won. The
+Unregistered custom properties compute in ordinary trees: retained tokens, valid
+empty values, guaranteed-invalid initial values, `initial`/`inherit`/`unset`, and
+Values 5 Appendix A's `var()` replacement. Each query owns its declaration/value
+maps and property guards; there is no persistent value cache. Ordinary properties
+now reparse substituted components with their consuming grammar and default
+invalid winners without reviving earlier declarations. Pending margin longhands
+share one expansion per element and query.
+
+- [ ] Follow this bounded Variables/substitution work with a full CSS Cascade
+  review. The small defaulting implementation is not a completed Cascade audit;
+  review filtering, origin/layer ordering, all CSS-wide keywords, inheritance,
+  property metadata, and computed-time failure together.
+
+- [x] Consume initial values and inherited flags from the installed property
+  records. Missing declarations and `initial`/`inherit`/`unset` now default,
+  including CSS-wide keywords produced by substitution. Property-specific
+  computed/used-value inputs remain unfinished; the
   [lifecycle roadmap](../value-processing/ROADMAP.md) records remaining metadata
   and stage contracts.
-- [ ] Resolve inherited computed values using the flat-tree parent, with root
-  defaults and pseudo-element-specific inheritance. Identify the existing DOM
-  owner supplying that relation; layout boxes are not the inheritance tree.
-- [ ] Connect custom-property computation and substitution before resolving
+- [ ] Complete inheritance across scopes and for pseudo-elements. Ordinary-tree
+  inheritance is connected for built-ins and unregistered custom properties. DOMOperations
+  now supplies `flatTreeParent`; Browlet forwards to NodeImpl's existing method.
+  Connect shadow-root scope selection and cross-scope inheritance, then
+  pseudo-element-specific inheritance. Queries that need an unavailable shadow
+  scope currently throw explicitly. The standard DOM adapter can see open slot
+  assignment; closed roots require host-supplied operations.
+- [x] Connect custom-property computation and substitution before resolving
   consuming built-ins. Preserve the distinction between parse-time rejection,
   computed-time invalidity, and cascade rollback.
+  Unregistered custom `var()` substitution is connected, including lazy fallbacks,
+  dynamic names, early spread, cycles, and bounded token/source composition.
+  `revert`/`revert-layer` and registered custom computation still stop explicitly.
+  The local draft's `revert-rule` is not yet a
+  recognized keyword. Generalize guards to attribute/custom-function dependencies
+  when those owners are connected; do not silently treat their missing inputs as
+  absent custom properties.
 - [ ] Supply only the facts a resolver needs: parent/root style, percentages,
   font metrics, viewport/container references, color inputs, and URL provenance.
   The [value-input contracts](../values/ROADMAP.md#context-inputs-and-freshness) distinguish existing
   fields from absent providers. Do not silently report a value as fully
   computed when a required fact is unavailable.
+  Host palettes are now supplied through `userAgent.systemColors`, with fixed
+  light defaults when omitted; initial `CanvasText` becomes an absolute color.
+  Per-element color-scheme selection, forced-color policy, currentColor's used-value
+  dependency, and CSSOM's remaining resolved-color rules are still unfinished.
 
 ## Custom-property registration
 
@@ -70,15 +99,31 @@ defines document registration state and precedence over stylesheet registration.
 
 ## Queries, mutation, and tests
 
+- [x] Audit Variables 1's API serialization and Values 5's pending shorthand
+  queries. Cover declared/computed spelling, copying computed custom values,
+  and repeated rule edits through CSSOM. Fresh queries reflect each edit;
+  this does not implement live updates to an already returned computed object.
 - [ ] Establish freshness for tree/attribute changes, CSSOM mutation, sheet
   replacement/adoption, registrations, and external facts before choosing a
   cache. Keep live CSSOM/Typed OM views distinct from cached internal values.
 - [ ] Preserve parse-time URL bases across inline/CSSOM edits and shared sheets;
   keep the authoritative-empty inline provider contract through this work.
-- [ ] Add connected tests for an absent declaration, explicit inheritance,
-  flat-tree inheritance, rollback, invalid substituted winners, registered and
-  unregistered variables, and retained live query objects. Registration tests
+- [x] Cover absent declarations, explicit inheritance, invalid substituted
+  winners, unregistered variables, and pending margin expansion through connected
+  queries. Failed expansions are shared within one query; distinct shorthand
+  occurrences and separate elements/queries retain independent results.
+- [ ] Add connected tests for cross-scope flat-tree inheritance, rollback,
+  registered variables, and retained live query objects. Registration tests
   must use real input/API paths as well as direct value fixtures.
+
+The custom-property slices have connected tests for acceptance, case-sensitive
+names, source preservation, importance/specificity/order, root defaulting,
+inheritance, empty versus invalid values, substitution, cycle/defaulting order,
+bounded expansion, and fresh queries after CSSOM edits. The
+[approved draft differences](README.md#substitution-draft-differences) cover lazy
+fallbacks, argument grammar/spread, and EOF source spelling.
+The inline raw-text fallback regression also covers duplicate declarations and
+importance; an authoritative empty inline provider remains authoritative.
 
 The [existing baseline](../README.md#cascade-and-values) is scoped evidence.
 It does not close these tasks. Layout, painting, timelines, and platform-object

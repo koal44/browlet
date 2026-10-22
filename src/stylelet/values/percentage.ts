@@ -66,7 +66,7 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
     }
     const mathContext = percentageMathContext(context);
     return new PercentageValue(
-      this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext),
+      this.#asMathValue(mathContext).add(other.#asMathValue(mathContext), mathContext),
     );
   }
 
@@ -77,7 +77,7 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
     }
     const mathContext = percentageMathContext(context);
     return new PercentageValue(
-      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+      this.#asMathValue(mathContext).interpolate(other.#asMathValue(mathContext), progress, mathContext),
     );
   }
 
@@ -86,7 +86,7 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'percentage'> {
+  #asMathValue(context: MathContext): MathValue<'percentage'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'percentage', context);
   }

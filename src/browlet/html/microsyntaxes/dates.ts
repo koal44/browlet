@@ -261,13 +261,16 @@ export type ParsedDateOrTime =
  * Complete parse operations reject trailing input.
  */
 class DateTimeParser {
+  #input: string;
   /** Next unread UTF-16 code unit. */
   #position = 0;
 
-  constructor(private input: string) {}
+  constructor(input: string) {
+    this.#input = input;
+  }
 
   /** Whether the selected grammar consumed the complete input. */
-  eof(): boolean { return this.#position >= this.input.length; }
+  eof(): boolean { return this.#position >= this.#input.length; }
 
   /** Consume YYYY-MM without creating a separate position object. */
   consumeYearMonth(): YearMonth | null {
@@ -315,7 +318,7 @@ class DateTimeParser {
         const start = this.#position;
         if (this.#consumeDigits() === 0) return null;
         // SPEC_CLASH(html-time-parser-fraction): Preserve HTML's long fractions; browser form parsers cap them at three digits.
-        fractionDigits = this.input.slice(start, this.#position);
+        fractionDigits = this.#input.slice(start, this.#position);
       }
     }
     return year === undefined ? { hour, minute, second, fractionDigits } :
@@ -381,7 +384,7 @@ class DateTimeParser {
     if (!this.#consumeDateTimeSeparator()) return false;
     const time = this.consumeClockTime();
     if (time === null || time.fractionDigits.length > 3) return false;
-    const negative = this.input.charCodeAt(this.#position) === 45;
+    const negative = this.#input.charCodeAt(this.#position) === 45;
     const offset = this.consumeUtcOffsetMinutes();
     return offset !== null && this.eof() && !(negative && offset === 0);
   }
@@ -394,9 +397,9 @@ class DateTimeParser {
     // Four year digits fit exactly in a number, avoiding a temporary substring.
     // SPEC_CLASH(html-date-year-range): HTML has no maximum year; browser form parsers impose differing limits.
     const year = length === 4 ? BigInt(
-      (this.input.charCodeAt(start) - 48) * 1000 + (this.input.charCodeAt(start + 1) - 48) * 100 +
-      (this.input.charCodeAt(start + 2) - 48) * 10 + this.input.charCodeAt(start + 3) - 48,
-    ) : BigInt(this.input.slice(start, this.#position));
+      (this.#input.charCodeAt(start) - 48) * 1000 + (this.#input.charCodeAt(start + 1) - 48) * 100 +
+      (this.#input.charCodeAt(start + 2) - 48) * 10 + this.#input.charCodeAt(start + 3) - 48,
+    ) : BigInt(this.#input.slice(start, this.#position));
     return year > 0n ? year : null;
   }
 
@@ -409,8 +412,8 @@ class DateTimeParser {
   /** Consume two digits; surrounding grammar or the end-of-input check excludes any extra digits. */
   #consumeTwoDigits(): number | null {
     const start = this.#position;
-    const first = this.input.charCodeAt(start) - 48;
-    const second = this.input.charCodeAt(start + 1) - 48;
+    const first = this.#input.charCodeAt(start) - 48;
+    const second = this.#input.charCodeAt(start + 1) - 48;
     if (!(first >= 0 && first <= 9 && second >= 0 && second <= 9)) return null;
     this.#position += 2;
     return first * 10 + second;
@@ -418,7 +421,7 @@ class DateTimeParser {
 
   /** Consume one literal separator when it is present. */
   #match(character: string): boolean {
-    if (this.input[this.#position] !== character) return false;
+    if (this.#input[this.#position] !== character) return false;
     this.#position++;
     return true;
   }
@@ -430,7 +433,7 @@ class DateTimeParser {
   /** Advance over ASCII digits with one direct scan; return the number consumed. */
   #consumeDigits(): number {
     const start = this.#position;
-    this.#position = skipDigits(this.input, start);
+    this.#position = skipDigits(this.#input, start);
     return this.#position - start;
   }
 }

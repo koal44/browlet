@@ -63,7 +63,7 @@ export class FrequencyValue<Representation extends Frequency = Frequency> implem
       return new FrequencyValue(this.value.add(other.value));
     }
     return new FrequencyValue(
-      this.asMathValue(context).add(other.asMathValue(context), context),
+      this.#asMathValue(context).add(other.#asMathValue(context), context),
     );
   }
 
@@ -73,7 +73,7 @@ export class FrequencyValue<Representation extends Frequency = Frequency> implem
       return new FrequencyValue(this.value.interpolate(other.value, progress));
     }
     return new FrequencyValue(
-      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+      this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
     );
   }
 
@@ -82,7 +82,7 @@ export class FrequencyValue<Representation extends Frequency = Frequency> implem
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'frequency'> {
+  #asMathValue(context: MathContext): MathValue<'frequency'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'frequency', context);
   }

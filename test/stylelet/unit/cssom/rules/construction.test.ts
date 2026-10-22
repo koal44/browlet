@@ -71,6 +71,19 @@ describe('CSS rule construction', () => {
     expect(rule.style.getPropertyValue('--Accent')).toBe('red');
   });
 
+  it.each([
+    ['text', 'a { --x:/**/red/**/ } b { color: blue }'],
+    ['components', 'a { --x:/**/red/**/ } b { color: blue }'],
+    ['text', 'a { --x:/**/red/**/'],
+    ['components', 'a { --x:/**/red/**/'],
+  ])('ends a custom declaration at its block boundary in %s: %s', (inputKind, text) => {
+    const input = inputKind === 'text' ? text : parseListOfComponentValues(text, {});
+    const [rule] = parseStylesheetContents(input, context);
+    if (!(rule instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
+
+    expect(rule.style.getPropertyValue('--x')).toBe('/**/red/**/');
+  });
+
   it('carries supplied namespaces through nested rule contexts', () => {
     const namespaceContext = new RuleListContext(new CSSRuleListImpl(), null, false, env);
     namespaceContext.namespacePrefixes = new Map([['svg', 'http://www.w3.org/2000/svg']]);

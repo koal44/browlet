@@ -129,11 +129,6 @@ export class TokenCursor<Value extends Token = ComponentValue, Context = unknown
     }
   }
 
-  /** Read the original text for the token interval [start, end). */
-  sourceText(start: number, end: number): string {
-    return this.source.sourceText(start, end);
-  }
-
   /** Throw a parsing diagnostic at the current token index. */
   error(message: string): never {
     throw new TokenCursorError(message, this.#i);

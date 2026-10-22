@@ -1,7 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createFreeFormConsumer } from '../../../../src/stylelet/syntax/component-consumers';
 import { isComponentBlock } from '../../../../src/stylelet/syntax/component-value';
+import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import {
   parseAsComponentGrammar, parseComponentValue, parseDeclaration, parseListAsComponentGrammar,
   parseListOfComponentValues,
@@ -16,15 +17,17 @@ describe('token-list whitespace boundaries', () => {
     const list = parseListOfComponentValues(' \t/**/ --x: fn( a ) /**/ foo\\62 ar \n/**/', {});
     list.trimWhitespace();
 
-    expect(list.sourceText()).toBe('--x: fn( a ) /**/ foo\\62 ar');
-    expect(parseDeclaration(list, {})?.originalText).toBe('fn( a ) /**/ foo\\62 ar');
+    expect(list.sourceText()).toBe('/**/ --x: fn( a ) /**/ foo\\62 ar \n/**/');
+    expect(parseDeclaration(list, {})?.value.sourceText()).toBe('fn( a ) /**/ foo\\62 ar \n/**/');
   });
 
-  it.each(['', ' \t\n', '/**/ \n/**/'])('trims empty or whitespace-only input: %j', (input) => {
+  it.each([
+    ['', ''], [' \t\n', ''], ['/**/ \n/**/', '/**/ \n/**/'],
+  ])('trims whitespace while retaining comments: %j', (input, expected) => {
     const list = TokenList.tokenize(input);
     list.trimWhitespace();
 
-    expect(list.sourceText()).toBe('');
+    expect(list.sourceText()).toBe(expected);
     expect(new TokenCursor(list, {}).eof()).toBe(true);
   });
 
@@ -38,25 +41,55 @@ describe('token-list whitespace boundaries', () => {
 });
 
 describe('source spelling through component parsing', () => {
+  it('reuses parsed component lists and slices without reading their tokens', () => {
+    const list = parseListOfComponentValues('fn(a) [b]', {});
+    for (const input of [list, list.slice(2)]) {
+      const read = vi.spyOn(input, 'tokens', 'get');
+      try {
+        expect(parseListOfComponentValues(input, {})).toBe(input);
+        expect(read).not.toHaveBeenCalled();
+      } finally {
+        read.mockRestore();
+      }
+    }
+  });
+
+  it('retains declaration source without reading it before serialization', () => {
+    const source = TokenList.tokenize('skip --x: fn(a) /**/ foo\\62 ar !important');
+    const cursor = new TokenCursor(source, {}, { position: 2 });
+    const read = vi.spyOn(TokenList.prototype, 'sourceText');
+    try {
+      const declaration = parseDeclaration(cursor, {});
+      if (declaration === null) throw new Error('Expected a declaration');
+      const interpreted = InterpretedDeclaration.interpret(declaration, {})![0]!;
+
+      expect(read).not.toHaveBeenCalled();
+      expect(interpreted.serializeValue()).toBe('fn(a) /**/ foo\\62 ar');
+      expect(read).toHaveBeenCalledOnce();
+    } finally {
+      read.mockRestore();
+    }
+  });
+
   it('slices and truncates independently while preserving original source spans', () => {
     const source = parseListOfComponentValues('skip --x: fn( a ) /**/ foo\\62 ar', {});
     const list = source.slice(2);
     list.truncate(5);
 
-    expect(parseDeclaration(list, {})?.originalText).toBe('fn( a )');
-    expect(list.sourceText()).toBe('--x: fn( a ) ');
+    expect(parseDeclaration(list, {})?.value.sourceText()).toBe('fn( a ) /**/');
+    expect(list.sourceText()).toBe('--x: fn( a ) /**/');
     expect(source.sourceText()).toBe('skip --x: fn( a ) /**/ foo\\62 ar');
 
     list.truncate(0);
     expect(list.sourceText()).toBe('');
     expect(new TokenCursor(list, {}).eof()).toBe(true);
-    expect(parseDeclaration(source.slice(2), {})?.originalText).toBe('fn( a ) /**/ foo\\62 ar');
+    expect(parseDeclaration(source.slice(2), {})?.value.sourceText()).toBe('fn( a ) /**/ foo\\62 ar');
   });
 
   it('retains token-list source when creating another cursor', () => {
     const list = TokenList.tokenize('--x: foo\\62 ar');
 
-    expect(parseDeclaration(list, {})?.originalText).toBe('foo\\62 ar');
+    expect(parseDeclaration(list, {})?.value.sourceText()).toBe('foo\\62 ar');
   });
 
   it('aligns folded component ranges after consuming an existing cursor prefix', () => {
@@ -66,9 +99,8 @@ describe('source spelling through component parsing', () => {
     const list = parseListOfComponentValues(input, input.context);
     const declaration = parseDeclaration(list, {});
 
-    expect(declaration).toMatchObject({
-      name: '--x', originalText: 'fn(a) /**/ [b] foo\\62 ar', important: true,
-    });
+    expect(declaration).toMatchObject({ name: '--x', important: true });
+    expect(declaration?.value.sourceText()).toBe('fn(a) /**/ [b] foo\\62 ar');
     expect(input.eof()).toBe(true);
   });
 
@@ -77,7 +109,7 @@ describe('source spelling through component parsing', () => {
       const block = parseComponentValue(source, {});
       if (block === null || !isComponentBlock(block)) throw new Error('Expected a block');
 
-      expect(parseDeclaration(block.value, {})?.originalText)
+      expect(parseDeclaration(block.value, {})?.value.sourceText())
         .toBe('fn(a) /**/ foo\\62 ar');
     },
   );
@@ -94,10 +126,10 @@ describe('source spelling through component parsing', () => {
   it('carries source into component grammars and separate comma-list arms', () => {
     const consume = (c: TokenCursor) => parseDeclaration(c, c.context);
 
-    expect(parseAsComponentGrammar('--x: fn(a) /**/ foo\\62 ar', consume, {})?.originalText)
+    expect(parseAsComponentGrammar('--x: fn(a) /**/ foo\\62 ar', consume, {})?.value.sourceText())
       .toBe('fn(a) /**/ foo\\62 ar');
     expect(parseListAsComponentGrammar('--x: fn(a) foo\\62 ar, --y: [b] b\\61 z', consume, {})
-      .map((declaration) => declaration?.originalText))
+      .map((declaration) => declaration?.value.sourceText()))
       .toEqual(['fn(a) foo\\62 ar', '[b] b\\61 z']);
   });
 
@@ -105,7 +137,7 @@ describe('source spelling through component parsing', () => {
     'preserves source through the free-form consumer: %s', (input) => {
       const consume = createFreeFormConsumer((c) => parseDeclaration(c, c.context));
 
-      expect(parseAsComponentGrammar(input, consume, {})?.originalText).toBe('foo\\62 ar');
+      expect(parseAsComponentGrammar(input, consume, {})?.value.sourceText()).toBe('foo\\62 ar');
     },
   );
 
@@ -114,7 +146,7 @@ describe('source spelling through component parsing', () => {
 
     expect(value).not.toBeNull();
     const [argument] = value!.value;
-    expect(parseDeclaration(argument.value, {})?.originalText)
+    expect(parseDeclaration(argument.value, {})?.value.sourceText())
       .toBe('fn(a) /**/ foo\\62 ar');
   });
 });

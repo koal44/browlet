@@ -1,4 +1,5 @@
-import { getShorthands, type PropertyContext, type ShorthandRecord } from '../../props/index';
+import { PendingSubstitutionValue } from '../../values/index';
+import { getShorthands, type PropertyContext, type Shorthand } from '../../props/index';
 
 import { InterpretedDeclaration, type BuiltInDeclaration } from './interpreted-declaration';
 
@@ -54,9 +55,9 @@ export class CSSDeclarationBlock {
   }
 
   /** Return complete, equally important shorthand longhands in canonical order, or null. */
-  getLonghands(shorthand: ShorthandRecord): BuiltInDeclaration[] | null {
+  getLonghands(shorthand: Shorthand): BuiltInDeclaration[] | null {
     const longhands: BuiltInDeclaration[] = [];
-    for (const name of shorthand.longhands) {
+    for (const [name] of shorthand.longhands) {
       const declaration = this.find(name);
       if (declaration === undefined || declaration.custom) return null;
       if (longhands.length > 0 && declaration.important !== longhands[0]!.important) return null;
@@ -83,9 +84,10 @@ export class CSSDeclarationBlock {
     }
 
     const previous = this.#declarations[index]!;
-    const previousValue = previous.serializeValue();
-    const nextValue = declaration.serializeValue();
-    if (previous.important === declaration.important && previousValue === nextValue) return false;
+    // Empty pending-longhand serialization is not an equality test: a new shorthand
+    // occurrence must replace all its sides together, even when their text is equal.
+    if (!(previous.value instanceof PendingSubstitutionValue) && !(declaration.value instanceof PendingSubstitutionValue) &&
+      previous.important === declaration.important && previous.serializeValue() === declaration.serializeValue()) return false;
 
     this.#declarations[index] = declaration;
     return true;
@@ -103,14 +105,14 @@ export class CSSDeclarationBlock {
   // https://drafts.csswg.org/cssom/#serialize-into-a-shorthand-form
   #serializeShorthand(declaration: InterpretedDeclaration, alreadySerialized: Set<string>): string | null {
     if (declaration.custom) return null;
-    for (const [name, shorthand] of getShorthands(declaration.name)) {
+    for (const shorthand of getShorthands(declaration.name)) {
       const longhands = this.getLonghands(shorthand);
       if (longhands === null || longhands.some(({ name }) => alreadySerialized.has(name))) continue;
       if (this.#hasInterleavedLogicalGroup(longhands)) continue;
       const value = shorthand.serialize(longhands.map(({ value }) => value));
       if (value === '') continue;
       for (const longhand of longhands) alreadySerialized.add(longhand.name);
-      return InterpretedDeclaration.serializeText(name, value, declaration.important);
+      return InterpretedDeclaration.serializeText(shorthand.name, value, declaration.important);
     }
     return null;
   }

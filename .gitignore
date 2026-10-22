@@ -2,6 +2,7 @@ node_modules/
 /.env
 test-results/
 .last-run.json
+/debug.log
 dist/
 /wpt/tests/
 /wpt/.cache/

@@ -3,7 +3,7 @@ export { AnyValue } from './any-value';
 export { DeclarationValue, OptionalDeclarationValue, type DeclarationComponent } from './declaration-value';
 export {
   ColorValue, ColorKind, ColorRgba, absoluteColorFromRgba,
-  type ColorContext, type ColorValueContext, type AbsoluteColor,
+  type ColorContext, type ColorValueContext, type AbsoluteColor, type SystemColorName,
 } from './color';
 export { GradientValue, type GradientContext } from './gradient';
 export { MathValue, MathExpression, type MathContext, type MathValueType } from './math-value';
@@ -25,8 +25,10 @@ export { SyntaxValue, type ParsedSyntaxValue } from './syntax-value';
 export { UrlValue, type UrlContext } from './url';
 export { SupportsConditionValue, type SupportsContext } from './supports-condition';
 export { WholeValue } from './whole-value';
+export { PendingSubstitutionValue, type PendingShorthand } from './pending-substitution';
 export { CssWideValue } from './css-wide';
-export { SubstitutionValue } from './substitution-value';
+export { GuaranteedInvalidValue, guaranteedInvalidValue } from './guaranteed-invalid';
+export { SubstitutionValue, type SubstitutionContext } from './substitution-value';
 export { FirstValidValue } from './substitution/first-valid';
 export { MediaQuery } from './media-query';
 export type { BoxSides } from './box-sides';

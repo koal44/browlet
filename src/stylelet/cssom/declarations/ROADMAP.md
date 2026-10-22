@@ -21,11 +21,13 @@ The APIs and Web IDL are present; incomplete property families still limit them.
   returns ordered values; CSSOM supplies declaration names and importance.
   One-to-four sides, CSS-wide values, incompatible combinations, and canonical
   shortening now work through inline-style and rule bindings.
-- [ ] Retain pending substitution across a shorthand's longhands. A `var()`
+- [x] Retain pending substitution across a shorthand's longhands. A `var()`
   shorthand cannot be split into independently parsed longhands before
   substitution; partial overwrites must remain distinguishable. See
   [Values 5](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands)
-  and the [next-slice handoff](../../props/ROADMAP.md#shorthand-substitution-handoff).
+  and the [shorthand account](../../props/ROADMAP.md#shorthand-substitution-handoff).
+  Margin now retains the shared occurrence, and assignment does not mistake
+  two pending values' empty serializations for equality.
 - [ ] Add reset-only longhands with the first property family that has them.
   Margin has none; its passing tests do not establish reset-only support.
 - [ ] Add actual logical-property families. Physical margin metadata and
@@ -77,10 +79,25 @@ computed/resolved values, or deferred shorthand syntax are implemented.
 
 ## Continuing browser differences
 
-Observed with installed Chromium, Firefox, and WebKit on 2026-10-21; approved
+Observed with installed Chromium, Firefox, and WebKit on 2026-10-21–22; approved
 choices are covered by separate native-browser expected failures. Browlet
 assertions run before those annotations.
 
+- `SPEC_CLASH(deferred-value-source-serialization)`: Preserve a declared
+  substitution's original spelling in ordinary and shorthand queries, following
+  [Values 5's pending shorthand rule](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands)
+  and Chromium/Firefox. WebKit decodes an escaped function name (`v\61 r`) and
+  drops interior comments. The 2026-10-22 cases cover margin, margin-left, and
+  opacity; only WebKit's escape/comment comparison is an expected failure.
+  All three engines preserve the numeric spelling and whitespace in
+  `var( --gap ,  01.00px )`.
+- `SPEC_CLASH(deferred-value-eof-serialization)`: Extend the approved
+  [custom-value source choice](../../engine/README.md#substitution-draft-differences)
+  to deferred ordinary and shorthand values. Browlet and Chromium retain
+  missing closing delimiters. Firefox adds missing function, string, and URL
+  closers; WebKit adds string/URL closers but leaves the outer function unclosed.
+  Each delimiter case has its own native comparison. Computation uses the
+  already-closed component structure and does not change the declared spelling.
 - `SPEC_CLASH(shorthand-removal-return)`: Follow
   [CSSOM removeProperty](https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-removeproperty)
   and Firefox by returning the previous serialized shorthand value. Chromium

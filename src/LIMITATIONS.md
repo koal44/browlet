@@ -163,22 +163,35 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   real bindings. DocumentOrShadowRoot's adopted sheets now use the real observable
   array binding, current-document checks, and realm exception realization.
   CSSStyleProperties exposes the small implemented longhand set and ordinary
-  margin shorthand expansion/serialization, including CSS-wide keywords.
-  Deferred margin syntax such as `var()` and `first-valid()` still throws at the
-  explicit [substitution boundary](stylelet/props/ROADMAP.md#shorthand-substitution-handoff).
+  margin shorthand expansion/serialization, including CSS-wide keywords and
+  pending `var()` values. `first-valid()` shorthand selection remains an explicit
+  [unfinished boundary](stylelet/props/ROADMAP.md#shorthand-substitution-handoff).
   The [CSSOM roadmap](stylelet/cssom/ROADMAP.md#projection-and-declaration-lifecycle)
   owns the remaining property and declaration dependencies.
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)
   owns external sheet loading, script/render blocking, and shadow-tree matching.
 - **Computed style:** `getComputedStyle()` currently creates a readonly snapshot
-  of selected installed properties. CSSOM requires a new live object, complete
+  of the installed properties. CSSOM requires a new live object, complete
   supported-property/defaulting behavior, and resolved values that can depend
   on layout. Pseudo-elements and full eligibility checks also remain unfinished.
   See [computed-result dependencies](stylelet/cssom/ROADMAP.md#computed-results-and-external-facts).
-- **Value lifecycle:** selected values do not yet receive engine defaulting or
-  inheritance; CSS-wide keywords currently remain keywords. Arbitrary
-  substitution throws as unfinished, and custom-property registration/value
-  helpers are not connected to author registration or per-element computation.
+- **Value lifecycle:** unregistered custom properties now compute retained tokens,
+  valid empty values, guaranteed-invalid initial values, and `initial`/`inherit`/
+  `unset` in ordinary trees, together with `var()` replacement, dynamic names,
+  early spread, lazy fallbacks, cycle detection, and bounded token/source composition.
+  Installed built-ins now reparse substituted components, expand pending margins,
+  and apply initial/inherited defaults without reviving earlier declarations.
+  Host-supplied system palettes now resolve system colors, including initial
+  CanvasText; omitted palettes use fixed light defaults. Per-element color-scheme
+  selection, forced-color policy, property-specific currentColor resolution,
+  font/viewport inputs, and layout-dependent resolved values remain
+  unconnected; symbolic values can still escape the limited computed-style query.
+  Other arbitrary substitution functions, registered custom computation, custom
+  and built-in cascade rollback, and unavailable shadow scopes throw explicitly. Argument
+  validation beyond `var()`, animation/attribute taint, and registration APIs remain
+  unconnected. Approved draft/browser differences are recorded in the engine guide.
+  The standard DOM adapter cannot see closed-root slot assignments; such hosts
+  must supply their own DOM operations, as Browlet does.
   The [engine inventory](stylelet/engine/README.md) distinguishes these limits
   from passing direct resolver tests.
 - **Stylesheet rules:** namespace declarations, selector edits, style-rule text,

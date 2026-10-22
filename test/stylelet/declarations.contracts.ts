@@ -27,8 +27,16 @@ export function exerciseDeclarations(kind: keyof typeof declarationExpectations)
         style.setProperty('--value', value);
         return style.length;
       });
-      style.cssText = '--: reserved; --Empty: ; --Comment: /**/; --Text: A/**/B !important;';
+      style.cssText = '--: reserved; --Empty: ; --Text: A/**/B !important;';
       return { results, names: [...style], text: style.cssText, value: style.getPropertyValue('--Text'), priority: style.getPropertyPriority('--Text') };
+    }
+    case 'boundary-comments': {
+      style.cssText = '--Boundary:/**/red/**/; --Comment:/*only*/; --Priority:/**/blue/**/ !important;';
+      return {
+        values: ['--Boundary', '--Comment', '--Priority'].map((name) => style.getPropertyValue(name)),
+        priority: style.getPropertyPriority('--Priority'),
+        text: style.cssText,
+      };
     }
     case 'custom-spelling': {
       style.setProperty('--Text', 'A/**/B foo\\62 ar', 'important');
@@ -116,8 +124,12 @@ export const declarationExpectations = {
     names: ['--x:other', '--x y', '--x\\y'], values: ['red', 'blue', 'green'],
   },
   values: {
-    results: [0, 0, 0, 0], names: ['--Empty', '--Comment', '--Text'],
-    text: '--Empty: ; --Comment: ; --Text: A/**/B !important;', value: 'A/**/B', priority: 'important',
+    results: [0, 0, 0, 0], names: ['--Empty', '--Text'],
+    text: '--Empty: ; --Text: A/**/B !important;', value: 'A/**/B', priority: 'important',
+  },
+  'boundary-comments': {
+    values: ['/**/red/**/', '/*only*/', '/**/blue/**/'], priority: 'important',
+    text: '--Boundary: /**/red/**/; --Comment: /*only*/; --Priority: /**/blue/**/ !important;',
   },
   'custom-spelling': { text: '--Text: A/**/B foo\\62 ar !important;', value: 'A/**/B foo\\62 ar', priority: 'important' },
   'empty-custom-value': { value: ' ', missing: '', text: '--Empty: ;', names: ['--Empty', '--Copy'] },

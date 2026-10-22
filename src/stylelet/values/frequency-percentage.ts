@@ -82,7 +82,7 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
     }
     const mathContext = frequencyPercentageMathContext(context);
     return new FrequencyPercentageValue(
-      this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext),
+      this.#asMathValue(mathContext).add(other.#asMathValue(mathContext), mathContext),
     );
   }
 
@@ -96,7 +96,7 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
     }
     const mathContext = frequencyPercentageMathContext(context);
     return new FrequencyPercentageValue(
-      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+      this.#asMathValue(mathContext).interpolate(other.#asMathValue(mathContext), progress, mathContext),
     );
   }
 
@@ -105,7 +105,7 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'frequency-percentage'> {
+  #asMathValue(context: MathContext): MathValue<'frequency-percentage'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'frequency-percentage', context);
   }

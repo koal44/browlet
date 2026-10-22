@@ -1,9 +1,8 @@
-export type {
-  PropertyRecord, CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext,
-} from './property';
-export { propertyRegistry, type PropertyName, type PropertyValue } from './registry';
-export { getShorthand, getShorthands, shorthandRegistry, type ShorthandRecord } from './shorthand';
 export {
-  backgroundColorProperty, colorProperty, parseColorProperty,
-  parseMarginSideProperty, marginSideProperty, opacityProperty, parseOpacityProperty,
-} from './built-in/index';
+  PropertyRecord, type CustomPropertyRegistration, type CustomPropertyRegistry, type PropertyContext,
+} from './property';
+export type { CustomPropertyName } from '../syntax/index';
+export { propertyRegistry, type PropertyName, type BuiltInPropertyName, type PropertyValue } from './registry';
+export { Shorthand } from './shorthand';
+export { getShorthand, getShorthands, shorthandRegistry } from './shorthand-registry';
+export { backgroundColorProperty, colorProperty, marginSideProperty, opacityProperty } from './built-in/index';

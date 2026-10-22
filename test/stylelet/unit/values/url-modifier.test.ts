@@ -13,15 +13,12 @@ describe('url-modifier', () => {
   it('parses unknown functional notation as a function block', () => {
     const modifier = UrlModifierValue.parse('future-modifier(value)', {})!.value;
 
-    expect(modifier).toEqual({
+    expect(modifier).toMatchObject({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
-      value: {
-        tokens: [identToken('value')],
-        text: 'future-modifier(value)',
-      },
     });
     if (!(modifier instanceof IdentValue) && modifier.type === TokenKind.FunctionBlock) {
+      expect(modifier.value.tokens).toEqual([identToken('value')]);
       expect(modifier.value.sourceText()).toBe('value');
     }
   });
@@ -93,12 +90,12 @@ describe('url-modifier', () => {
     const c = new TokenCursor(parseListOfComponentValues('future-modifier()', {}), {});
     const modifier = UrlModifierValue.consume(c)!.value;
 
-    expect(modifier).toEqual({
+    expect(modifier).toMatchObject({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
-      value: { tokens: [], text: 'future-modifier()' },
     });
     if (!(modifier instanceof IdentValue) && modifier.type === TokenKind.FunctionBlock) {
+      expect(modifier.value.tokens).toEqual([]);
       expect(modifier.value.sourceText()).toBe('');
     }
     expect(c.pos()).toBe(1);

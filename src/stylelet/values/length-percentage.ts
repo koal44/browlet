@@ -82,7 +82,7 @@ export class LengthPercentageValue<Representation extends LengthPercentage = Len
     }
     const mathContext = lengthPercentageMathContext(context);
     return new LengthPercentageValue(
-      this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext),
+      this.#asMathValue(mathContext).add(other.#asMathValue(mathContext), mathContext),
     );
   }
 
@@ -96,7 +96,7 @@ export class LengthPercentageValue<Representation extends LengthPercentage = Len
     }
     const mathContext = lengthPercentageMathContext(context);
     return new LengthPercentageValue(
-      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+      this.#asMathValue(mathContext).interpolate(other.#asMathValue(mathContext), progress, mathContext),
     );
   }
 
@@ -105,7 +105,7 @@ export class LengthPercentageValue<Representation extends LengthPercentage = Len
     return this.add(other, context);
   }
 
-  private asMathValue(context: MathContext): MathValue<'length-percentage'> {
+  #asMathValue(context: MathContext): MathValue<'length-percentage'> {
     return this.value instanceof MathValue
       ? this.value : MathValue.fromLiteral(this.value, 'length-percentage', context);
   }
