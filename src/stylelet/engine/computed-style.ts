@@ -1,10 +1,10 @@
 import type { DOMElement as Element } from '../../infra/index';
 
 import { ValueStage } from '../value-processing/index';
+import { propertyRegistry, type PropertyContext, type PropertyName } from '../props/index';
 import {
-  propertyRegistry, resolveBuiltInPropertyDeclaration, type PropertyContext, type PropertyDeclaration, type PropertyName,
-} from '../props/index';
-import { CSSDeclarationBlock, parseDeclarationBlock } from '../cssom/declarations/index';
+  CSSDeclarationBlock, InterpretedDeclaration,
+} from '../cssom/declarations/index';
 import { CSSStylePropertiesImpl } from '../cssom/index';
 
 import type { CascadeEngine } from './cascade-engine';
@@ -19,12 +19,12 @@ export function computeStyle(
   const block = dom.inlineStyleBlock?.(element);
   // An absent provider permits text fallback; a provider's empty result is authoritative.
   const declarations = block === undefined
-    ? parseDeclarationBlock(
+    ? InterpretedDeclaration.parseBlock(
       dom.getAttributeNS(element, null, 'style') ?? '',
       {},
     )
     : block instanceof CSSDeclarationBlock ? block.declarations : [];
-  const computed: PropertyDeclaration[] = [];
+  const computed: InterpretedDeclaration[] = [];
 
   for (const name of Object.keys(propertyRegistry) as PropertyName[]) {
     const inline = declarations.find(
@@ -32,7 +32,7 @@ export function computeStyle(
     );
     const cascaded = engine.getCascadedPropertyForElement(name, element, scope);
 
-    let selected: PropertyDeclaration | undefined;
+    let selected: InterpretedDeclaration | undefined;
     let context: PropertyContext = {
       URL: engine.context.env.userAgent.URL,
       treeScope: scope,
@@ -54,11 +54,7 @@ export function computeStyle(
     // TODO: Apply the property's initial/inherited metadata and CSS-wide defaulting.
     if (selected === undefined || selected.custom) continue;
 
-    const resolved = resolveBuiltInPropertyDeclaration(
-      selected,
-      ValueStage.Computed,
-      context,
-    );
+    const resolved = selected.resolve(ValueStage.Computed, context);
     computed.push(resolved);
   }
 

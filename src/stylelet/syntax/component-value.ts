@@ -285,8 +285,8 @@ function serializeNumericToken(
 
 /** Escapes a decoded identifier for use in CSS syntax. */
 // https://drafts.csswg.org/cssom/#serialize-an-identifier
-// SPEC_CLASH(css-non-ascii-ident-serialization): Follow Syntax's restricted ranges;
-// CSSOM and browsers emit all non-ASCII characters literally. Escape excluded
+// SPEC_CLASH(css-non-ascii-ident-serialization): Follow CSSOM/Syntax's restricted ranges;
+// browsers emit all non-ASCII characters literally. Escape excluded
 // characters so our tokenizer can recover the identifier. See syntax/ROADMAP.md.
 export function serializeCssIdentifier(value: string): string {
   const characters = [...value];

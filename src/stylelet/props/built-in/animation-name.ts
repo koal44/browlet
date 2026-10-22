@@ -1,9 +1,9 @@
 import {
   createKeywordConsumer, commaRepeat, one, oneOf, withTrivia, createComponentParser,
   type ParserInput, type TokenCursor, type TryConsumer, type TryConsumerResult,
-} from '../syntax/index';
-import type { ValueStage } from '../value-processing/index';
-import { CustomIdentValue, StringValue, type Value } from '../values/index';
+} from '../../syntax/index';
+import type { ValueStage } from '../../value-processing/index';
+import { CustomIdentValue, StringValue, type Value } from '../../values/index';
 
 /*
  * <'animation-name'> = [ none | <keyframes-name> ]#

@@ -5,7 +5,7 @@ import {
 } from 'vitest';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 
-import { AnimationNameValue } from '../../../../src/stylelet/props/animation-name';
+import { AnimationNameValue } from '../../../../src/stylelet/props/built-in/animation-name';
 
 import { CssWideValue } from '../../../../src/stylelet/values/css-wide';
 import { CustomIdentValue } from '../../../../src/stylelet/values/custom-ident';

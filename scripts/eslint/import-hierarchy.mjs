@@ -22,6 +22,7 @@ export const layers = [
   ['stylelet/values/numeric-literal', 'stylelet/values/collections'],
   ['stylelet/values'],
   ['stylelet/conditional'],
+  ['stylelet/props/built-in'],
   ['stylelet/props', 'stylelet/selector'],
   ['stylelet/context'],
   ['stylelet/cssom/declarations', 'stylelet/cssom/media'],

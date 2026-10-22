@@ -1,10 +1,9 @@
-export {
-  interpretPropertyDeclaration, interpretPropertyDeclarations, propertyRegistry,
-  serializePropertyDeclaration, resolveBuiltInPropertyDeclaration,
-  type PropertyRecord, type PropertyDeclaration, type BuiltInPropertyDeclaration, type CustomPropertyName, type CustomPropertyRegistration,
-  type CustomPropertyRegistry, type PropertyContext, type PropertyName,
+export type {
+  PropertyRecord, CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext,
 } from './property';
+export { propertyRegistry, type PropertyName, type PropertyValue } from './registry';
 export { getShorthand, getShorthands, shorthandRegistry, type ShorthandRecord } from './shorthand';
-export { backgroundColorProperty, colorProperty, parseColorProperty } from './color';
-export { parseMarginSideProperty, marginSideProperty } from './margin';
-export { opacityProperty, parseOpacityProperty } from './opacity';
+export {
+  backgroundColorProperty, colorProperty, parseColorProperty,
+  parseMarginSideProperty, marginSideProperty, opacityProperty, parseOpacityProperty,
+} from './built-in/index';

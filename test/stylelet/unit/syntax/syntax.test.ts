@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { defaultStyleletEnvironment as env } from '../../../../src/stylelet/environment';
-import type { PropertyDeclaration } from '../../../../src/stylelet/props/property';
+import type { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { CSSRuleListImpl } from '../../../../src/stylelet/cssom/rule-list';
 import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
@@ -29,15 +29,15 @@ function preservedKinds(list: TokenList<ComponentValue>): TokenKind[] {
 }
 
 function expectStyleRule(
-  value: CSSRuleImpl | PropertyDeclaration[] | null | undefined,
+  value: CSSRuleImpl | InterpretedDeclaration[] | null | undefined,
 ): CSSStyleRuleImpl {
   if (!(value instanceof CSSStyleRuleImpl)) throw new Error('Expected a style rule');
   return value;
 }
 
 function expectDeclarations(
-  value: CSSRuleImpl | PropertyDeclaration[] | null | undefined,
-): PropertyDeclaration[] {
+  value: CSSRuleImpl | InterpretedDeclaration[] | null | undefined,
+): InterpretedDeclaration[] {
   if (!Array.isArray(value)) throw new Error('Expected a declaration run');
   return value;
 }

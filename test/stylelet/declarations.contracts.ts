@@ -30,6 +30,19 @@ export function exerciseDeclarations(kind: keyof typeof declarationExpectations)
       style.cssText = '--: reserved; --Empty: ; --Comment: /**/; --Text: A/**/B !important;';
       return { results, names: [...style], text: style.cssText, value: style.getPropertyValue('--Text'), priority: style.getPropertyPriority('--Text') };
     }
+    case 'custom-spelling': {
+      style.setProperty('--Text', 'A/**/B foo\\62 ar', 'important');
+      const text = style.cssText;
+      style.cssText = text;
+      return { text, value: style.getPropertyValue('--Text'), priority: style.getPropertyPriority('--Text') };
+    }
+    case 'empty-custom-value': {
+      style.cssText = '--Empty: ;';
+      const value = style.getPropertyValue('--Empty');
+      const text = style.cssText;
+      style.setProperty('--Copy', value);
+      return { value, missing: style.getPropertyValue('--Missing'), text, names: [...style] };
+    }
     case 'mutations': {
       element.setAttribute('style', 'COLOR: red; opacity: .5;');
       style.setProperty('Color', 'red');
@@ -106,6 +119,8 @@ export const declarationExpectations = {
     results: [0, 0, 0, 0], names: ['--Empty', '--Comment', '--Text'],
     text: '--Empty: ; --Comment: ; --Text: A/**/B !important;', value: 'A/**/B', priority: 'important',
   },
+  'custom-spelling': { text: '--Text: A/**/B foo\\62 ar !important;', value: 'A/**/B foo\\62 ar', priority: 'important' },
+  'empty-custom-value': { value: ' ', missing: '', text: '--Empty: ;', names: ['--Empty', '--Copy'] },
   mutations: {
     unchanged: 'COLOR: red; opacity: .5;', before: ['color: red; opacity: 0.7 !important;', 'important', 'opacity', ''],
     removed: '0.7', text: '', attribute: '', names: [],

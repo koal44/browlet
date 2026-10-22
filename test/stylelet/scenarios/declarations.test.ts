@@ -20,6 +20,10 @@ runScenarios('CSSOM declaration operations', 'normal', BROWSER_NAMES.flatMap((br
     const native = await page.evaluate(exerciseDeclarations, kind);
     // SPEC_CLASH(custom-property-name-serialization): WebKit does not escape names.
     test.fail(browser === 'webkit' && kind === 'name-serialization', 'Approved native name-escaping disagreement');
+    // SPEC_CLASH(custom-property-value-escapes): WebKit serializes decoded tokens instead of preserving escapes.
+    test.fail(browser === 'webkit' && kind === 'custom-spelling', 'Approved native custom-value escape disagreement');
+    // SPEC_CLASH(empty-custom-property-serialization): All three browsers return an empty string instead of one space.
+    test.fail(kind === 'empty-custom-value', 'Approved native empty-custom-value disagreement');
     // SPEC_CLASH(empty-value-priority-order): Chromium/WebKit check priority before removal.
     test.fail(browser !== 'firefox' && kind === 'empty-priority', 'Approved native empty-value priority ordering');
     // SPEC_CLASH(css-declaration-indexed-write): Chromium reports success without an indexed setter.

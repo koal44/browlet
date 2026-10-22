@@ -17,7 +17,7 @@ observable behavior, rather than private storage choices, constrains its replace
 | [CSSImportRuleImpl](rules/import.ts) | URL/media prelude, serialization, and bindings; attachment explicitly requires the unfinished import loader; layer/supports clauses stop at their missing grammar |
 | [CSSPageRuleImpl](rules/page.ts), [CSSMarginRuleImpl](rules/margin.ts) | Bound rule and descriptor interfaces; construction/parsing stop explicitly until page-specific grammars exist; margin-descriptor subtype is provisional |
 | [CSSPropertyRuleImpl](rules/property.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
-| [CSSStyleDeclarationImpl](declarations/declaration.ts), [CSSStylePropertiesImpl](declarations/style-properties.ts) | Shared declaration operations and the property-facing subtype; Binding supplies numeric and supported-property attributes |
+| [CSSStyleDeclarationImpl](declarations/style-declaration.ts), [CSSStylePropertiesImpl](declarations/style-properties.ts) | Shared declaration operations and the property-facing subtype; Binding supplies numeric and supported-property attributes |
 | [MediaListImpl](media/media-list.ts) | Query-list parsing/serialization, comparison, and collection mutation, with a real MediaList declaration; does not evaluate media against a device |
 | [CSSRuleListImpl](rule-list.ts), [StyleSheetListImpl](stylesheet-list.ts) | Retained ordered collections; Binding supplies live supported indices and projects entries |
 | [StylePropertyMapImpl](typed/style-property-map.ts) | Explicit throwing placeholder for Typed OM; no working typed map API |
@@ -100,6 +100,7 @@ neutral exception path; Stylelet no longer requires a host DOMException construc
 | --- | --- |
 | [CSSOM unit suites](../../../test/stylelet/unit/cssom/) | Direct implementation construction, sheet/list identity, declaration edits, media lists, and asynchronous replacement |
 | [Rule browser scenarios](../../../test/stylelet/scenarios/rules.test.ts) | Browlet rule serialization, mutation, namespace scope, declaration order, and the isolated native-browser disagreements |
+| [Declaration browser scenarios](../../../test/stylelet/scenarios/declarations.test.ts) | Browlet declaration mutation, custom-value spelling and empty-value copies, property attributes, and isolated native-browser disagreements |
 | [Tree-scope tests](../../../test/stylelet/unit/engine/tree-scope.test.ts) | Ordering and stylesheet-set selection using explicit sheet inputs |
 | [Host tests](../../../test/stylelet/unit/host.test.ts), [environment tests](../../../test/stylelet/unit/environment.test.ts) | Host-neutral DOM access, explicit initialization, empty-provider semantics, URL/decoding/execution facilities, and neutral exceptions |
 | [Browlet style tests](../../../test/browlet/style/) | Inline/stylesheet association, cascade reads, and real CSSOM conversion, identity, supported indices, borrowed calls, and promises |
@@ -151,8 +152,19 @@ The §6.4 rule audit passed **3,101 tests across 54 files**, with 7 existing
 expected failures and 14 existing skips, using the broad command above. All 21
 rule browser comparisons completed: 16 ordinary passes and 5 approved native
 expected failures; Browlet assertions pass before those annotations apply.
-Full lint/typecheck, the Stylelet build, and global-artifact smoke test passed. Rollup reports the
-parser/rule module cycle. The subsequent ownership cleanup has failing fresh-process
-rule-module regressions; the passing audit baseline above predates that work.
+Full lint/typecheck, the Stylelet build, and global-artifact smoke test passed.
+The subsequent ownership cleanup removed the parser/rule module cycle;
+fresh-process rule-module regressions now pass.
 Import loading, modern import clauses, and page/margin grammars
 remain explicit unfinished boundaries, not passing conformance claims.
+
+The 2026-10-21 §6.5–6.6 re-audit passed **3,347 tests across 62 files**, with
+7 existing expected failures and 14 existing skips. This covers Stylelet units,
+Browlet declaration/inline-style/CSSOM and CSP integration, and import-rule tests.
+All 23 fresh-process CSSOM module checks passed. Stylelet/test typechecking,
+scoped ESLint, and repository import checks also passed. Shorthand expansion and
+serialization, pending substitution, logical families, and declaration URL
+provenance remain explicit dependencies in the [declaration roadmap](declarations/ROADMAP.md).
+All 36 declaration browser comparisons completed: 27 ordinary passes and
+9 approved native expected failures. Browlet passed before each annotation;
+the final 16-test declaration recheck also passed.

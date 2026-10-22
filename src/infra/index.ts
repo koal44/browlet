@@ -28,7 +28,7 @@ export {
 } from './namespaces';
 export { ParallelQueue, type ScheduleParallelQueueDrain } from './parallel-queue';
 export {
-  asciiWhitespacePattern, asciiWhitespaceRunPattern, surroundingASCIIWhitespacePattern,
+  asciiWhitespacePattern, nonASCIIWhitespacePattern, asciiWhitespaceRunPattern, surroundingASCIIWhitespacePattern,
   surroundingTabOrSpacePattern, nonASCIIDigitPattern, nonASCIIPattern, lineEndingPattern,
 } from './patterns';
 export {

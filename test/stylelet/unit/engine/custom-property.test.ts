@@ -1,9 +1,7 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import type {
-  CustomPropertyName, CustomPropertyRegistration, PropertyContext,
-} from '../../../../src/stylelet/props/property';
+import type { CustomPropertyName, CustomPropertyRegistration, PropertyContext } from '../../../../src/stylelet/props/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
@@ -65,11 +63,10 @@ describe('custom property registration', () => {
     expect(accent.styleSheet).toBe(cssStyleSheet);
     expect(accent.scope).toBe(scope);
     expect(accent.declaration).toMatchObject({
-      type: 'property-declaration',
       custom: true,
       name: '--accent',
-      originalText: '10px',
     });
+    expect(accent.declaration.serializeValue()).toBe('10px');
   });
 
   // CSS Properties and Values API 1, 2.3. Specified Value-Time Behavior

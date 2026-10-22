@@ -10,7 +10,7 @@ import { createComponentParser, parseAsComponentGrammar, parseListAsComponentGra
 import { TokenCursor, type TryConsumer } from '../../../../src/stylelet/syntax/token-cursor';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 import { parseSelectorList } from '../../../../src/stylelet/selector/parser';
-import { parseDeclarationBlock } from '../../../../src/stylelet/cssom/declarations/declaration-block';
+import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import type { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 
 type NameContext = { name: string; };
@@ -108,7 +108,7 @@ export function checkParserContextContracts(ruleContext: RuleListContext): void 
 
   // The same rule context can supply each grammar's optional settings.
   parseSelectorList('*', ruleContext);
-  parseDeclarationBlock('color: red', ruleContext);
+  InterpretedDeclaration.parseBlock('color: red', ruleContext);
 
   const needsCount: TryConsumer<number, CountContext> = consumeCount;
   // @ts-expect-error The selected child context must satisfy the argument consumer.

@@ -3,10 +3,21 @@
 The [README](README.md) records the §6.5–6.6 implementation and ownership.
 The APIs and Web IDL are present; incomplete property families still limit them.
 
+## Declaration typing
+
+- [ ] Revisit the name/value coupling in [InterpretedDeclaration](interpreted-declaration.ts).
+  It rejects mismatched construction and preserves per-property narrowing, but
+  current production callers mainly need the built-in/custom distinction and
+  common value operations. Reassess whether those benefits justify the class
+  expression, mapped instance union, and correlation assertions as consumers
+  develop. As the property registry grows, measure TypeScript checking and
+  editor responsiveness before extending this machinery. The typing adds no
+  runtime work; no compiler or editor slowdown has been established.
+
 ## Declaration state and lifecycle
 
 - [ ] Finish shorthand expansion and serialization in the property layer,
-  starting with [margin](../../props/margin.ts). The mapping, CSSOM query/removal,
+  starting with [margin](../../props/built-in/margin.ts). The mapping, CSSOM query/removal,
   block selection, and expanded-declaration return contract exist. The family
   operations throw explicitly; do not count those stubs as supported CSS.
 - [ ] Retain pending substitution across a shorthand's longhands. A `var()`
@@ -49,6 +60,19 @@ assertions run before those annotations.
   Follow Chromium/Firefox by escaping names such as `--x:other` and `--x y`,
   preserving their identity across a cssText round trip. Ordinary property
   lookup and `item()` still return the decoded name.
+- `SPEC_CLASH(custom-property-value-escapes)`: Follow
+  [CSS Variables serialization](https://drafts.csswg.org/css-variables-1/#serializing-custom-props)
+  and Chromium/Firefox by preserving custom-value source spelling. WebKit
+  decodes escapes such as `foo\62 ar` to `foobar` in both property queries and
+  `cssText`. The isolated escape round-trip case asserts Browlet first and marks
+  only WebKit's native comparison as an expected failure.
+- `SPEC_CLASH(empty-custom-property-serialization)`: Follow
+  [CSS Variables' empty-value exception](https://drafts.csswg.org/css-variables-1/#serializing-custom-props)
+  by returning one space for an empty custom value. Chromium, Firefox, and
+  WebKit return the empty string instead. One space keeps copying the result
+  through `setProperty()` from removing the destination property. Full declaration
+  text remains `--name: ;`. Each browser has its own expected-failure case;
+  Browlet's property query and copy round trip must pass before the annotation.
 - `SPEC_CLASH(empty-value-priority-order)`: Follow
   [CSSOM setProperty](https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-setproperty)
   and Firefox: an empty value removes the property even with an invalid priority.

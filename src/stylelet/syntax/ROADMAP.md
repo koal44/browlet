@@ -85,9 +85,10 @@ rules, including comment-only values and priority removal.
 [non-ASCII identifier ranges](https://drafts.csswg.org/css-syntax-3/#non-ascii-ident-code-point)
 and [round-trip requirement](https://drafts.csswg.org/css-syntax-3/#serialization).
 [CSSOM's identifier serializer](https://drafts.csswg.org/cssom/#serialize-an-identifier)
-instead emits every code point from U+0080 upward literally. For example, U+0080,
-U+00A0, U+00D7 and U+200E need escapes under Syntax's grammar. Our tokenizer keeps
-that grammar; identifier/name serialization escapes excluded characters using
+now uses those same ranges; the 2026-10-21 reference refresh removed the earlier
+specification disagreement. For example, U+0080, U+00A0, U+00D7 and U+200E need
+escapes under Syntax's grammar. Our tokenizer keeps that grammar;
+identifier/name serialization escapes excluded characters using
 the same range predicate. Strings are unaffected.
 
 Chromium 149.0.7827.55, Firefox 151.0 and WebKit 26.5 were checked on 2026-10-19:
@@ -103,7 +104,7 @@ expectations as expected failures and return to their idle skipped state.
 
 Selector grammar, namespace/nesting context, and parser-to-matcher coverage are
 tracked in the [selector roadmap](../selector/ROADMAP.md). The supported-rule
-inventory and contextual rule validation belong to [css/](../cssom/rules/ROADMAP.md).
+inventory and contextual rule validation belong to [CSSOM rules](../cssom/rules/ROADMAP.md).
 The [value](../values/ROADMAP.md) and [lifecycle](../value-processing/ROADMAP.md)
 owners handle property grammars and declared/computed values.
 

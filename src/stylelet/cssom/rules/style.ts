@@ -6,11 +6,11 @@ import {
   consumeBlock,
   type BlockContents, type ParserInput, type Token, type TokenCursor,
 } from '../../syntax/index';
-import type { PropertyDeclaration } from '../../props/index';
 import {
   parseNestedSelectorList, parseSelectorList, serializeSelectorList,
   type SelectorList, type SelectorNamespaces,
 } from '../../selector/index';
+import type { InterpretedDeclaration } from '../declarations/index';
 import { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../declarations/index';
 import type { StylePropertyMapImpl } from '../typed/index';
 import { RuleListContext } from './context';
@@ -33,7 +33,7 @@ export class CSSStyleRuleImpl extends CSSGroupingRuleImpl {
   /** Retain parsed selectors and the supplied child list, and establish this rule's declaration object. */
   constructor(
     selectors: SelectorList,
-    declarations: PropertyDeclaration[],
+    declarations: InterpretedDeclaration[],
     namespaces: SelectorNamespaces,
     cssRules: CSSRuleListImpl,
     env: StyleletEnvironment,
@@ -76,7 +76,7 @@ export class CSSStyleRuleImpl extends CSSGroupingRuleImpl {
   // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#style-rules
   // CSS Nesting: https://drafts.csswg.org/css-nesting-1/#nested-declarations
   static fromContents(selectors: SelectorList, contents: BlockContents, context: RuleListContext): CSSStyleRuleImpl {
-    const declarations: PropertyDeclaration[] = [];
+    const declarations: InterpretedDeclaration[] = [];
     const children: CSSRuleImpl[] = [];
     let pendingDeclarations = declarations;
     // SPEC_CLASH(css-invalid-rule-declaration-runs): Follow browsers by merging

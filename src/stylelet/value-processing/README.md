@@ -50,7 +50,7 @@ used-value facts. It is not another enum entry or a synonym for Computed.
 
 ## Ownership and serialization
 
-The current call chain runs from [property interpretation](../props/property.ts)
+The current call chain runs from [declaration interpretation](../cssom/declarations/interpreted-declaration.ts)
 through [WholeValue](../values/whole-value.ts) to a concrete value class.
 [computeStyle()](../engine/computed-style.ts) selects declarations and requests
 Computed resolution. Syntax records, WholeValue, and numeric/color values are

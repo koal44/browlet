@@ -277,9 +277,12 @@ Stylelet's RuleListContext forwards Syntax's interpretation requests to a suppli
 CSSRuleListImpl. The context module imports only types; the list dispatches to
 concrete rule and property grammars. Rule implementations and `context.ts` live
 under `cssom/rules/`; the coordinating `rule-list.ts` remains one level above.
-Property records, their registry, and declaration interpretation live in `props/`.
-The declaration implementations and ordered declaration collection live together in
-`cssom/declarations/`; MediaList lives in `cssom/media/`. Both families sit below
+Shared property contracts and registries live in `props/`; `props/built-in/`
+supplies the concrete property grammars and metadata. Declaration interpretation,
+the resulting `InterpretedDeclaration` instances, the ordered collection, and its
+CSSOM implementations live together in `cssom/declarations/`. Syntax keeps the
+uninterpreted `Declaration` and imports interpretation result types only.
+MediaList lives in `cssom/media/`. Both CSSOM families sit below
 rules and sheets, alongside the type-only rule context. Their barrels provide
 narrow entry points without loading the rule dispatcher. ESLint checks these
 dependency directions; parent-rule and parent-sheet references remain type-only.

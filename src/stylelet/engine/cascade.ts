@@ -1,7 +1,7 @@
 import type { DOMElement as Element } from '../../infra/index';
 
-import type { PropertyDeclaration } from '../props/index';
 import { matchSelectorList, type Specificity } from '../selector/index';
+import type { InterpretedDeclaration } from '../cssom/declarations/index';
 import {
   CSSStyleRuleImpl, CSSNestedDeclarationsImpl, type CSSStyleSheetImpl,
 } from '../cssom/index';
@@ -10,7 +10,7 @@ import type { CascadeEngine } from './cascade-engine';
 import type { TreeScope } from './tree-scope';
 
 export type CascadedProperty = {
-  declaration: PropertyDeclaration;
+  declaration: InterpretedDeclaration;
   styleSheet: CSSStyleSheetImpl;
   scope: TreeScope;
 };
@@ -22,7 +22,7 @@ export type CascadedProperty = {
 // their representations are added to the engine.
 export function getCascadedProperty(
   engine: CascadeEngine,
-  name: PropertyDeclaration['name'],
+  name: InterpretedDeclaration['name'],
   scope: TreeScope,
   element?: Element,
 ): CascadedProperty | null {
@@ -64,8 +64,8 @@ export function getCascadedProperty(
 // CSS Nesting: https://drafts.csswg.org/css-nesting-1/#nested-declarations (parent matching/specificity).
 function findRuleDeclaration(
   rule: CSSStyleRuleImpl,
-  name: PropertyDeclaration['name'],
-): PropertyDeclaration | undefined {
+  name: InterpretedDeclaration['name'],
+): InterpretedDeclaration | undefined {
   let result = rule.style.getDeclaration(name);
   for (const child of rule.cssRules) {
     // TODO: cascade nested style/group rules using their own matching conditions.
@@ -82,9 +82,9 @@ function findRuleDeclaration(
 /** Compare importance and specificity; the caller resolves ties by appearance order. */
 // CSS Cascade: https://drafts.csswg.org/css-cascade-5/#cascade-sort
 function comparePrecedence(
-  left: PropertyDeclaration,
+  left: InterpretedDeclaration,
   leftSpecificity: Specificity,
-  right: PropertyDeclaration,
+  right: InterpretedDeclaration,
   rightSpecificity: Specificity,
 ): number {
   return Number(left.important) - Number(right.important) ||

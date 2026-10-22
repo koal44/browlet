@@ -2,8 +2,9 @@ import type { StyleletEnvironment } from '../../environment';
 import type {
   Declaration, StatementAtRule, ComponentValue, BlockContents, ParserInput, TokenList, TokenCursor, Token,
 } from '../../syntax/index';
-import type { PropertyDeclaration, PropertyContext } from '../../props/index';
+import type { PropertyContext } from '../../props/index';
 import type { SelectorList, SelectorNamespaces } from '../../selector/index';
+import type { InterpretedDeclaration } from '../declarations/index';
 import type { CSSStyleRuleImpl } from './style';
 import type { CSSRuleImpl } from './rule';
 import type { CSSRuleListImpl } from '../rule-list';
@@ -56,7 +57,7 @@ export class RuleListContext implements SelectorNamespaces, PropertyContext {
   }
 
   /** Validate and interpret a property once, before declaration-versus-rule recovery. */
-  interpretDeclaration(declaration: Declaration): PropertyDeclaration[] | null {
+  interpretDeclaration(declaration: Declaration): InterpretedDeclaration[] | null {
     return this.ruleList.interpretDeclaration(declaration, this);
   }
 

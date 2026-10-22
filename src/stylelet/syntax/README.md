@@ -46,7 +46,7 @@ It retokenizes the complete value segment; descriptor validation remains missing
 
 `Declaration` and `StatementAtRule` hold syntax passed to interpretation.
 Rule consumers return `CSSRuleImpl` objects; `BlockContents` interleaves those
-rules with `PropertyDeclaration` runs. There is no parallel raw rule tree.
+rules with `InterpretedDeclaration` runs. There is no parallel raw rule tree.
 
 There is no separate syntax stylesheet container. The specification's
 [parse a stylesheet](https://drafts.csswg.org/css-syntax-3/#parse-stylesheet)

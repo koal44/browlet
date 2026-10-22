@@ -7,9 +7,8 @@ import {
   type BlockContents, type ComponentValue, type Declaration, type ParserInput,
   type StatementAtRule, type Token, type TokenCursor, type TokenList,
 } from '../syntax/index';
-import { interpretPropertyDeclaration, type PropertyDeclaration } from '../props/index';
 import type { SelectorList, SelectorNamespaces } from '../selector/index';
-import { parseDeclarationBlock } from './declarations/index';
+import { InterpretedDeclaration } from './declarations/index';
 import {
   CSSImportRuleImpl, CSSNamespaceRuleImpl, CSSNestedDeclarationsImpl, CSSStyleRuleImpl, CSSPageRuleImpl,
   type CSSRuleImpl, type RuleListContext,
@@ -64,7 +63,7 @@ export class CSSRuleListImpl {
     if (index > this.#rules.length) throw new DOMExceptionImpl('The rule index exceeds the list length.', 'IndexSizeError');
     let parsed = parseRule(rule, context);
     if (parsed === null && nested) {
-      const declarations = parseDeclarationBlock(rule, context);
+      const declarations = InterpretedDeclaration.parseBlock(rule, context);
       if (declarations.length > 0) parsed = new CSSNestedDeclarationsImpl(declarations, context.env);
     }
     if (parsed === null) throw new DOMExceptionImpl('The input is not a CSS rule.', 'SyntaxError');
@@ -104,8 +103,8 @@ export class CSSRuleListImpl {
   }
 
   /** Interpret one property before Syntax decides whether to retry it as a rule. */
-  interpretDeclaration(declaration: Declaration, context: RuleListContext): PropertyDeclaration[] | null {
-    return interpretPropertyDeclaration(declaration, context);
+  interpretDeclaration(declaration: Declaration, context: RuleListContext): InterpretedDeclaration[] | null {
+    return InterpretedDeclaration.interpret(declaration, context);
   }
 
   /** Select a statement's owner; null siblings mean standalone parsing before insertion checks. */

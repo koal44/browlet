@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
 
-import { CSSDeclarationBlock, parseDeclarationBlock } from '../../../../../src/stylelet/cssom/declarations/declaration-block';
-import { CSSStyleDeclarationImpl } from '../../../../../src/stylelet/cssom/declarations/declaration';
+import { CSSDeclarationBlock } from '../../../../../src/stylelet/cssom/declarations/declaration-block';
+import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
+import { CSSStyleDeclarationImpl } from '../../../../../src/stylelet/cssom/declarations/style-declaration';
 import { defaultStyleletEnvironment } from '../../../../../src/stylelet/environment';
 
 describe('declaration collection', () => {
   it('keeps the winning important declaration and the order of unrelated edits', () => {
-    const block = new CSSDeclarationBlock(parseDeclarationBlock(
+    const block = new CSSDeclarationBlock(InterpretedDeclaration.parseBlock(
       'color: red !important; opacity: .5; color: blue; margin-left: 1px; margin-top: 2px', {},
     ));
     expect(block.declarations.map(({ name }) => name)).toEqual(['color', 'opacity', 'margin-left', 'margin-top']);
-    expect(block.set(parseDeclarationBlock('color: green', {})[0]!)).toBe(true);
-    expect(block.set(parseDeclarationBlock('color: green', {})[0]!)).toBe(false);
+    expect(block.set(InterpretedDeclaration.parseBlock('color: green', {})[0]!)).toBe(true);
+    expect(block.set(InterpretedDeclaration.parseBlock('color: green', {})[0]!)).toBe(false);
     expect(block.cssText).toBe('color: green; opacity: 0.5; margin-left: 1px; margin-top: 2px;');
   });
 
@@ -53,7 +54,7 @@ describe('shorthand dependency boundary', () => {
     const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
     expect(() => style.setProperty('margin', '1px')).toThrow('Margin shorthand expansion and pending substitution are not implemented');
     expect(() => style.setProperty('margin', 'var(--space)')).toThrow('Margin shorthand expansion and pending substitution are not implemented');
-    expect(() => parseDeclarationBlock('margin: 1px', {})).toThrow('Margin shorthand expansion and pending substitution are not implemented');
+    expect(() => InterpretedDeclaration.parseBlock('margin: 1px', {})).toThrow('Margin shorthand expansion and pending substitution are not implemented');
   });
 
   it('can query complete priorities while value and block serialization reach the missing serializer', () => {

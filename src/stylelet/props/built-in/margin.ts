@@ -1,12 +1,11 @@
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../../infra/internal-error';
 
-import { one, oneOf, withTrivia, createComponentParser, type TryConsumer } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
-import { LengthLiteral } from '../values/numeric-literal/index';
-import { WholeValue, AutoValue, LengthPercentageValue, type MathContext } from '../values/index';
-
-import type { PropertyRecord } from './property';
-import type { ShorthandRecord } from './shorthand';
+import { one, oneOf, withTrivia, createComponentParser, type TryConsumer } from '../../syntax/index';
+import { ValueStage } from '../../value-processing/index';
+import { LengthLiteral } from '../../values/numeric-literal/index';
+import { WholeValue, AutoValue, LengthPercentageValue, type MathContext } from '../../values/index';
+import type { PropertyRecord } from '../property';
+import type { ShorthandRecord } from '../shorthand';
 
 /*
  * <margin-top>, <margin-right>, <margin-bottom>, <margin-left> =

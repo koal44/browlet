@@ -7,8 +7,8 @@ it.each([
   'rules/rule', 'rules/nested-declarations', 'rule-list', 'rules/property',
   'rules/grouping', 'rules/style', 'rules/import', 'rules/namespace',
   'rules/page', 'rules/margin', 'rules/context', 'css-stylesheet',
-  'rules/index', 'declarations/declaration-block', 'declarations/declaration',
-  'declarations/style-properties', 'declarations/index', 'media/media-list', 'media/index',
+  'rules/index', 'declarations/declaration-block', 'declarations/style-declaration',
+  'declarations/interpreted-declaration', 'declarations/style-properties', 'declarations/index', 'media/media-list', 'media/index',
   'typed/style-property-map', 'typed/index', 'index',
 ])('loads %s without requiring an earlier stylesheet import', (module) => {
   // A fresh process exposes class-initialization cycles that an already loaded

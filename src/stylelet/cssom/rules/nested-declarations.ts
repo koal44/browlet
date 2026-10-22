@@ -1,7 +1,7 @@
 import { defineInterface, impl, reference, roAttr, xattr } from '../../../web-idl/core/index';
 
 import type { StyleletEnvironment } from '../../environment';
-import type { PropertyDeclaration } from '../../props/index';
+import type { InterpretedDeclaration } from '../declarations/index';
 import { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../declarations/index';
 
 import { CSSRuleImpl } from './rule';
@@ -13,7 +13,7 @@ export class CSSNestedDeclarationsImpl extends CSSRuleImpl {
   #style: CSSStylePropertiesImpl;
 
   /** Establish a declaration object owned by this nested-declarations rule. */
-  constructor(declarations: PropertyDeclaration[], env: StyleletEnvironment) {
+  constructor(declarations: InterpretedDeclaration[], env: StyleletEnvironment) {
     super(env);
     this.#style = new CSSStylePropertiesImpl({
       block: new CSSDeclarationBlock(declarations),

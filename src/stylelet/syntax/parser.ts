@@ -1,6 +1,6 @@
 import { asciiLower } from '../../infra/ascii';
 
-import type { PropertyDeclaration } from '../props/index';
+import type { InterpretedDeclaration } from '../cssom/declarations/index';
 import type { CSSRuleImpl, RuleListContext } from '../cssom/index';
 
 import {
@@ -32,7 +32,7 @@ export type Declaration = {
 
 /** Interpreted declaration runs and CSSOM rules in source order. */
 // https://drafts.csswg.org/css-syntax-3/#block-contents
-export type BlockContents = Array<PropertyDeclaration[] | CSSRuleImpl>;
+export type BlockContents = Array<InterpretedDeclaration[] | CSSRuleImpl>;
 
 /** CSS text, tokens/components, or a stream at its current position; decode bytes first. */
 export type ParserInput = string | TokenList | TokenCursor<Token>;
@@ -427,7 +427,7 @@ function consumeBlockContents<Value extends Token>(
   c: TokenCursor<Value, RuleListContext>,
 ): BlockContents {
   const contents: BlockContents = [];
-  let declarations: PropertyDeclaration[] = [];
+  let declarations: InterpretedDeclaration[] = [];
 
   const flushDeclarations = (): void => {
     if (declarations.length === 0) return;

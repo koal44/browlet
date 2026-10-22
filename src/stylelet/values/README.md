@@ -167,7 +167,7 @@ computed-time fallback. The [engine inventory](../engine/README.md#registration-
 explains the separate registration lookup and fixture-based tests.
 
 Unregistered declarations instead retain generic components and, when available,
-original text in [property.ts](../props/property.ts). They do not use a registered
+original text in [interpreted-declaration.ts](../cssom/declarations/interpreted-declaration.ts). They do not use a registered
 type's resolver merely because their tokens resemble a number, URL, or color.
 
 ## Reusable resolution

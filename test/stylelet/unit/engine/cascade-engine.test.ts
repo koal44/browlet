@@ -2,7 +2,6 @@ import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declar
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import { serializePropertyDeclaration } from '../../../../src/stylelet/props/property';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
@@ -50,7 +49,6 @@ describe('cascade engine', () => {
     expect(color.styleSheet).toBe(styleSheet);
     expect(color.scope).toBe(scope);
     expect(color.declaration).toMatchObject({
-      type: 'property-declaration',
       custom: false,
       name: 'color',
     });
@@ -59,7 +57,6 @@ describe('cascade engine', () => {
     expect(accent.styleSheet).toBe(styleSheet);
     expect(accent.scope).toBe(scope);
     expect(accent.declaration).toMatchObject({
-      type: 'property-declaration',
       custom: true,
       name: '--accent',
     });
@@ -163,9 +160,7 @@ describe('cascade engine', () => {
 
     const rule = styleSheet.cssRules.item(0) as CSSStyleRuleImpl;
     rule.style.setProperty('color', 'blue');
-    expect(serializePropertyDeclaration(
-      engine.getCascadedProperty('color', scope)!.declaration,
-    ).value).toBe('blue');
+    expect(engine.getCascadedProperty('color', scope)!.declaration.serializeValue()).toBe('blue');
 
     styleSheet.insertRule('* { opacity: 0.5 }');
     expect(engine.getCascadedProperty('opacity', scope)?.declaration)
@@ -198,7 +193,7 @@ describe('cascade engine', () => {
     );
 
     expect(result).not.toBeNull();
-    expect(serializePropertyDeclaration(result!.declaration).value)
+    expect(result!.declaration.serializeValue())
       .toBe('blue');
   });
 
@@ -207,9 +202,7 @@ describe('cascade engine', () => {
     const sheet = addStyleSheet(scope, '* { color: red }', { originClean: false });
 
     expect(() => sheet.cssRules).toThrow('The stylesheet is not origin-clean.');
-    expect(serializePropertyDeclaration(
-      engine.getCascadedProperty('color', scope)!.declaration,
-    ).value).toBe('red');
+    expect(engine.getCascadedProperty('color', scope)!.declaration.serializeValue()).toBe('red');
   });
 
   it('reads declarations after nested rules in order without copying parent edits over them', () => {

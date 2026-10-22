@@ -55,7 +55,7 @@ tester.run('subsystem-imports', rule, {
   invalid: [
     {
       filename: styleletFile('engine/computed-style'), options,
-      code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/declaration';",
+      code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/style-declaration';",
       errors: [{ messageId: 'entryPoint' }],
     },
 
@@ -76,7 +76,7 @@ tester.run('subsystem-imports', rule, {
       errors: [{ messageId: 'entryPoint' }],
     },
     {
-      filename: styleletFile('cssom/declarations/declaration'), options, code: "type Color = import('../../values/color').AbsoluteColor;",
+      filename: styleletFile('cssom/declarations/style-declaration'), options, code: "type Color = import('../../values/color').AbsoluteColor;",
       errors: [{ messageId: 'entryPoint' }],
     },
     {

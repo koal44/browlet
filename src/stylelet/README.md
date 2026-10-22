@@ -22,11 +22,11 @@ entry points and implementation types.
 | [selector/](selector/README.md) | Selector parsing, serialization, specificity, stylesheet matching, and its caches; separate from Selectlet's selector engine |
 | [values/](values/README.md) | The shared Value contract, reusable value grammars, representations, resolution, and serialization, with supporting numeric literals and collections |
 | [value-processing/](value-processing/README.md) | Value stages; complete element-level orchestration remains missing |
-| [props/](props/README.md) | Property records, the installed registry, and declaration interpretation; seven installed names. Animation-name has a separate unregistered parser. |
+| [props/](props/README.md) | Shared property contracts and registries; built-in grammars and metadata live in `props/built-in/`. Seven installed names; animation-name has a separate unregistered parser. |
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |
-| [cssom/declarations/](cssom/declarations/README.md) | CSSStyleDeclaration, CSSStyleProperties, and their shared ordered declaration collection |
+| [cssom/declarations/](cssom/declarations/README.md) | Declaration interpretation and records, their ordered collection, CSSStyleDeclaration, and CSSStyleProperties |
 | [cssom/media/](cssom/media/README.md) | MediaList mutation and serialization, below rules and sheets |
 | [web-idl.ts](web-idl.ts) | CSSOM declarations and host contributions, including observable adopted-sheet mutation steps |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
@@ -55,11 +55,11 @@ Use these responsibilities when adding or reviewing parsing code:
    required rule context that makes grammar decisions during consumption.
    Declaration-only and component parsers remain available for narrower grammars,
    including support queries that must retain unsupported declaration syntax.
-2. **Property interpretation** in [props/property.ts](props/property.ts) applies
-   the installed property grammars and produces `PropertyDeclaration` values.
-   `interpretPropertyDeclaration()` supplies the shared grammar step. Stylesheet
+2. **Declaration interpretation** in [cssom/declarations/interpreted-declaration.ts](cssom/declarations/interpreted-declaration.ts) applies
+   the installed property grammars and produces `InterpretedDeclaration` values.
+   `InterpretedDeclaration.interpret()` supplies the shared grammar step. Stylesheet
    consumption calls it before deciding whether to retry input as a rule;
-   `interpretPropertyDeclarations()` applies it to declaration-only syntax lists.
+   `InterpretedDeclaration.parseBlock()` applies it to declaration-only syntax lists.
 3. **CSSOM rule interpretation** uses [RuleListContext](cssom/rules/context.ts)
    to forward grammar decisions through a supplied rule list to the rule/property owners, producing implementations
    with parsed selectors and interpreted declarations. The owners select child
@@ -79,7 +79,7 @@ There is no retained intermediate stylesheet tree. Core declarations describe
 the sheet/rule/declaration interfaces; the host's Binding machinery supplies
 their realm-owned Platform objects.
 
-The same distinction applies to declarations. `PropertyDeclaration` is internal
+The same distinction applies to declarations. `InterpretedDeclaration` is internal
 data; `CSSDeclarationBlock` is the current retained data container;
 `CSSStyleDeclarationImpl` provides mutation/query behavior, and
 `CSSStylePropertiesImpl` supplies the property-facing subtype. Both interfaces

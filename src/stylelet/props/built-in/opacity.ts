@@ -1,9 +1,8 @@
-import { NumberLiteral } from '../values/numeric-literal/index';
+import { NumberLiteral } from '../../values/numeric-literal/index';
 import {
   WholeValue, OpacityValue, NumberValue, type MathContext,
-} from '../values/index';
-
-import type { PropertyRecord } from './property';
+} from '../../values/index';
+import type { PropertyRecord } from '../property';
 
 export const parseOpacityProperty = WholeValue.createParser(OpacityValue.parse);
 

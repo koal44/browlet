@@ -144,7 +144,7 @@ describe('stylesheet parsing context', () => {
     expectTypeOf(parseRule('', context)).toEqualTypeOf<CSSRuleImpl | null>();
     expectTypeOf(parseStylesheetContents('', context)).toEqualTypeOf<CSSRuleImpl[]>();
 
-    expect(contents[0]).toMatchObject([{ type: 'property-declaration', name: 'color' }]);
+    expect(contents[0]).toMatchObject([{ name: 'color' }]);
     expect(contents[1]).toBeInstanceOf(CSSStyleRuleImpl);
   });
 });

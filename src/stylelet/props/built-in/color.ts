@@ -1,8 +1,7 @@
 import {
   ColorKind, WholeValue, ColorValue, type ColorValueContext,
-} from '../values/index';
-
-import type { PropertyRecord } from './property';
+} from '../../values/index';
+import type { PropertyRecord } from '../property';
 
 export const parseColorProperty = WholeValue.createParser(ColorValue.parse);
 

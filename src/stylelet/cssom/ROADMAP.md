@@ -14,8 +14,8 @@ style attribute. The reference roots are listed in the
 The [selector](../selector/ROADMAP.md), [rule](rules/ROADMAP.md),
 [value-lifecycle](../value-processing/ROADMAP.md), [property](../props/ROADMAP.md)
 and [Typed OM](typed/ROADMAP.md) guides own the related contracts.
-Sections 1–5 and §6.1–6.4 have been reviewed, including explicit rule-family dependencies below.
-Declaration behavior remains under audit. Related browser evidence lives in
+Sections 1–5 and §6.1–6.6 have been reviewed, including explicit rule-family
+and declaration dependencies below. Related browser evidence lives in
 the [Browlet style roadmap](../../browlet/style/ROADMAP.md) and
 [CSP roadmap](../../browlet/browsing/policy/csp/ROADMAP.md#style-attribute-consumer).
 
@@ -47,7 +47,7 @@ or Platform behavior have been verified.
 | [CSS values](https://drafts.csswg.org/cssom/#css-values) | Registry-driven value parsing/serialization and broader reusable value machinery. | Complete property grammar coverage, shorthand serialization, custom-property processing, and stage-correct representations through the value-lifecycle owner. |
 | [ElementCSSInlineStyle](https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin) | Permanent HTML/SVG/MathML mixins, explicit attribute input, stable lazy projected CSSStyleProperties, and CSP gating in Browlet. | Audit clone/import and parse-time URL behavior, alongside declaration ownership. |
 | [Window.getComputedStyle](https://drafts.csswg.org/cssom/#extensions-to-the-window-interface) | Typed Window partial and projected readonly snapshot for selected installed properties. | Target-document selection, pseudo-elements, eligibility, complete enumeration, live results, and resolved-value dependencies. |
-| [CSS.escape](https://drafts.csswg.org/cssom/#the-css.escape()-method) | `serializeCssIdentifier()` supplies the underlying primitive, with the [Syntax/CSSOM non-ASCII conflict](../syntax/ROADMAP.md#identifier-serialization-disagreement) recorded. | Add the CSS namespace declaration/binding and author conversion tests; review that conflict for the projected API. Other specs' CSS namespace members retain their own owners. |
+| [CSS.escape](https://drafts.csswg.org/cssom/#the-css.escape()-method) | `serializeCssIdentifier()` supplies the underlying primitive, with the [non-ASCII browser disagreement](../syntax/ROADMAP.md#identifier-serialization-disagreement) recorded. | Add the CSS namespace declaration/binding and author conversion tests; review that conflict for the projected API. Other specs' CSS namespace members retain their own owners. |
 | [Resolved values](https://drafts.csswg.org/cssom/#resolved-values) | Current engine requests `ValueStage.Computed`. | Apply each property's resolved-value rule; some require used values and layout facts. Keep Typed OM computed values distinct. |
 | IANA, change history, security/privacy notes | Reviewed for additional obligations. | Default-Style handling is already accounted for under sheet collections; registry metadata and editorial history need no separate runtime module. Origin-clean/privacy constraints remain part of observable API review. |
 

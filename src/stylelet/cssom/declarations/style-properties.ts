@@ -6,7 +6,7 @@ import {
 
 import { propertyRegistry, shorthandRegistry } from '../../props/index';
 
-import { CSSStyleDeclarationImpl } from './declaration';
+import { CSSStyleDeclarationImpl } from './style-declaration';
 
 /** A declaration object whose supported CSS properties are exposed as attributes by Binding. */
 // https://drafts.csswg.org/cssom/#cssstyleproperties

@@ -2,14 +2,11 @@ import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declar
 import { GuaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
 import { CssWideValue } from '../../../../src/stylelet/values/css-wide';
 import { SubstitutionValue } from '../../../../src/stylelet/values/substitution-value';
-import { NumberLiteral } from '../../../../src/stylelet/values/numeric-literal/number';
 import { FirstValidValue } from '../../../../src/stylelet/values/substitution/first-valid';
 import { describe, expect, it, vi } from 'vitest';
-import { parseColorProperty } from '../../../../src/stylelet/props/color';
-import {
-  propertyRegistry, resolveBuiltInPropertyDeclaration, serializePropertyDeclaration,
-} from '../../../../src/stylelet/props/property';
-import { parseDeclarationBlock } from '../../../../src/stylelet/cssom/declarations/declaration-block';
+import { parseColorProperty } from '../../../../src/stylelet/props/built-in/color';
+import { propertyRegistry } from '../../../../src/stylelet/props/registry';
+import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
   absoluteColorFromRgba, ColorValue, ColorKind, ColorRgba,
@@ -28,8 +25,7 @@ describe('property records', () => {
   ] as const)('stores the parsed initial value and inheritance for %s', (name, inherits, text) => {
     const property = propertyRegistry[name];
     expect(property.inherits).toBe(inherits);
-    expect(parseDeclarationBlock(`${name}: ${text}`, {})).toEqual([{
-      type: 'property-declaration',
+    expect(InterpretedDeclaration.parseBlock(`${name}: ${text}`, {})).toEqual([{
       custom: false,
       name,
       value: property.initialValue,
@@ -60,20 +56,6 @@ describe('property records', () => {
 });
 
 describe('property value', () => {
-  it('carries property context from declaration parsing into the declared value', () => {
-    const context = {
-      numericVariables: new Map([['progress', {
-        valueType: 'number' as const,
-        value: new NumberLiteral(0.5),
-      }]]),
-    };
-    const declarations = parseDeclarationBlock('opacity: calc(progress)', context);
-
-    expect(declarations).toMatchObject([{ name: 'opacity', custom: false }]);
-    expect(declarations[0]?.value).toBeInstanceOf(WholeValue);
-    expect(parseDeclarationBlock('opacity: calc(progress)', {})).toEqual([]);
-  });
-
   it('preserves an exact value type through the property registry', () => {
     const parseValue: typeof parseColorProperty = propertyRegistry.color.parse;
     const declared = parseValue('red', {})!;
@@ -85,23 +67,6 @@ describe('property value', () => {
     if (computed.value instanceof ColorValue) {
       expect(computed.value.value.kind).toBe(ColorKind.Absolute);
     }
-  });
-
-  it('lets each declaration value resolve and serialize itself', () => {
-    const declarations = parseDeclarationBlock(
-      'color: red; opacity: 150%; margin-left: 2em; --Accent: 10px', {},
-    );
-    const computed = declarations.map((declaration) => declaration.custom
-      ? declaration
-      : resolveBuiltInPropertyDeclaration(declaration, ValueStage.Computed, { length: { em: 16 } })
-    );
-
-    expect(computed.map(serializePropertyDeclaration)).toEqual([
-      { name: 'color', value: 'rgb(255, 0, 0)', important: false },
-      { name: 'opacity', value: '1', important: false },
-      { name: 'margin-left', value: '32px', important: false },
-      { name: '--Accent', value: '10px', important: false },
-    ]);
   });
 
   describe('ordinary value', () => {
@@ -146,7 +111,7 @@ describe('property value', () => {
 
       expect(opacity.serialize()).toBe('1.5');
       expect(margin.serialize()).toBe('3px');
-      expect(parseDeclarationBlock('opacity: calc(150%); margin-left: calc(1px + 2px)', context))
+      expect(InterpretedDeclaration.parseBlock('opacity: calc(150%); margin-left: calc(1px + 2px)', context))
         .toMatchObject([
           { name: 'opacity', value: opacity },
           { name: 'margin-left', value: margin },

@@ -1,10 +1,9 @@
 import type { DOMElement as Element } from '../../infra/index';
 
 import type { StyleletURL } from '../environment';
-import type {
-  CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext, PropertyDeclaration,
-} from '../props/index';
+import type { CustomPropertyName, CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext } from '../props/index';
 import type { StyleletContext } from '../context';
+import type { InterpretedDeclaration } from '../cssom/declarations/index';
 import { CSSStyleSheetImpl, type CSSStyleDeclarationImpl, type CSSStyleSheetInit } from '../cssom/index';
 
 import { computeStyle } from './computed-style';
@@ -62,7 +61,7 @@ export class CascadeEngine {
 
   /** Select a property without an element, treating selector specificity as zero. */
   getCascadedProperty(
-    name: PropertyDeclaration['name'],
+    name: InterpretedDeclaration['name'],
     scope: TreeScope,
   ): CascadedProperty | null {
     return findCascadedProperty(this, name, scope);
@@ -70,7 +69,7 @@ export class CascadeEngine {
 
   /** Select a property from rules matching this element in the supplied scope. */
   getCascadedPropertyForElement(
-    name: PropertyDeclaration['name'],
+    name: InterpretedDeclaration['name'],
     element: Element,
     scope: TreeScope,
   ): CascadedProperty | null {

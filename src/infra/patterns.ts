@@ -1,6 +1,9 @@
 /** One Infra ASCII whitespace character: tab, LF, FF, CR, or space. */
 export const asciiWhitespacePattern = /[\t\n\f\r ]/;
 
+/** Any code unit other than Infra ASCII whitespace. */
+export const nonASCIIWhitespacePattern = /[^\t\n\f\r ]/;
+
 /** A nonempty run of Infra ASCII whitespace, for splitting tokens. */
 export const asciiWhitespaceRunPattern = /[\t\n\f\r ]+/;
 

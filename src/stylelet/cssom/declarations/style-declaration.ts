@@ -6,14 +6,11 @@ import {
 } from '../../../web-idl/core/index';
 
 import type { StyleletEnvironment } from '../../environment';
-import { parseListOfComponentValues } from '../../syntax/index';
-import {
-  getShorthand, interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration,
-  type PropertyDeclaration, type PropertyContext,
-} from '../../props/index';
+import { getShorthand, propertyRegistry } from '../../props/index';
 import type { CSSRuleImpl } from '../rules/index';
 
 import { CSSDeclarationBlock } from './declaration-block';
+import { InterpretedDeclaration } from './interpreted-declaration';
 
 /** CSSOM access to a declaration block, with optional rule ownership or element write-back. */
 // https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
@@ -75,7 +72,7 @@ export class CSSStyleDeclarationImpl {
   }
 
   /** Read the current parsed declarations without serializing or projecting them. */
-  get declarations(): readonly PropertyDeclaration[] {
+  get declarations(): readonly InterpretedDeclaration[] {
     return this.#block.declarations;
   }
 
@@ -91,7 +88,7 @@ export class CSSStyleDeclarationImpl {
   }
 
   /** Find a declaration by its already-normalized property name. */
-  getDeclaration(name: string): PropertyDeclaration | undefined {
+  getDeclaration(name: string): InterpretedDeclaration | undefined {
     return this.#block.find(name);
   }
 
@@ -107,7 +104,7 @@ export class CSSStyleDeclarationImpl {
     const declaration = this.#block.find(name);
     return declaration === undefined
       ? ''
-      : serializePropertyDeclaration(declaration).value;
+      : declaration.serializeValue();
   }
 
   /** Return `important` for an important declaration, otherwise an empty string. */
@@ -144,7 +141,7 @@ export class CSSStyleDeclarationImpl {
 
     if (priority !== '' && asciiLower(priority) !== 'important') return;
 
-    const declarations = parsePropertyDeclaration(
+    const declarations = InterpretedDeclaration.parse(
       name,
       value,
       priority !== '',
@@ -233,24 +230,6 @@ type CSSStyleDeclarationOptions = {
   /** Attribute write-back target; attaching an owner does not read its current attribute. */
   ownerNode?: Element | null;
 };
-
-/** Parse one property value with a separately supplied priority; reject an embedded !important. */
-// Part of https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-setproperty
-function parsePropertyDeclaration(
-  property: string,
-  value: string,
-  important: boolean,
-  context: PropertyContext,
-): PropertyDeclaration[] | null {
-  // The property is an already-decoded name, not declaration syntax. Parsing
-  // only the value also makes trailing semicolons and extra declarations fail
-  // the property's grammar rather than ending a successful declaration parse.
-  // https://drafts.csswg.org/cssom/#parse-a-css-value
-  const list = parseListOfComponentValues(value, context);
-  list.trimWhitespace();
-  const originalText = isCustomPropertyName(property) ? list.sourceText() : undefined;
-  return interpretPropertyDeclaration({ name: property, value: list, important, originalText }, context);
-}
 
 /** Canonicalize a built-in property name while preserving custom-property case. */
 function normalizePropertyName(name: string): string {

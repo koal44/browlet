@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { defaultStyleletEnvironment as env } from '../../../../../src/stylelet/environment';
-import {
-  propertyRegistry,
-  type BuiltInPropertyDeclaration, type CustomPropertyDeclaration,
-} from '../../../../../src/stylelet/props/property';
+import { propertyRegistry } from '../../../../../src/stylelet/props/registry';
+import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { RuleListContext } from '../../../../../src/stylelet/cssom/rules/context';
 import { CSSRuleListImpl } from '../../../../../src/stylelet/cssom/rule-list';
 import { parseListOfComponentValues, parseStylesheetContents } from '../../../../../src/stylelet/syntax/parser';
@@ -21,13 +19,7 @@ const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
 describe('CSS rule construction', () => {
   it('preserves the registry association in a built-in declaration', () => {
-    const declaration: BuiltInPropertyDeclaration = {
-      type: 'property-declaration',
-      custom: false,
-      name: 'color',
-      value: propertyRegistry.color.parse('red', {})!,
-      important: false,
-    };
+    const declaration = new InterpretedDeclaration('color', propertyRegistry.color.parse('red', {})!);
     const resolved = declaration.value.resolve(ValueStage.Computed, {});
 
     expect(resolved.value).toBeInstanceOf(ColorValue);
@@ -37,20 +29,9 @@ describe('CSS rule construction', () => {
   });
 
   it('holds built-in and custom declarations in source order', () => {
-    const custom: CustomPropertyDeclaration = {
-      type: 'property-declaration',
-      custom: true,
-      name: '--accent',
-      value: OptionalDeclarationValue.parse('red', {})!,
-      important: false,
-    };
-    const rule = new CSSStyleRuleImpl(parseSelectorList('*', {})!, [{
-      type: 'property-declaration',
-      custom: false,
-      name: 'color',
-      value: propertyRegistry.color.parse('var(--accent)', {})!,
-      important: false,
-    }, custom], {}, new CSSRuleListImpl(), env);
+    const custom = new InterpretedDeclaration('--accent', OptionalDeclarationValue.parse('red', {})!);
+    const color = new InterpretedDeclaration('color', propertyRegistry.color.parse('var(--accent)', {})!);
+    const rule = new CSSStyleRuleImpl(parseSelectorList('*', {})!, [color, custom], {}, new CSSRuleListImpl(), env);
 
     expect(rule.style.declarations.map((declaration) => declaration.name))
       .toEqual(['color', '--accent']);
@@ -86,8 +67,8 @@ describe('CSS rule construction', () => {
       custom: true,
       name: '--Accent',
       important: true,
-      originalText: 'red',
     }]);
+    expect(rule.style.getPropertyValue('--Accent')).toBe('red');
   });
 
   it('carries supplied namespaces through nested rule contexts', () => {
@@ -178,8 +159,9 @@ describe('CSS rule construction', () => {
     expect(serializeSelectorList(rule.selectors)).toBe('div span');
     expect(rule.style.declarations).toMatchObject([
       { name: 'color', custom: false },
-      { name: '--text', custom: true, originalText: 'a /**/ b' },
+      { name: '--text', custom: true },
     ]);
+    expect(rule.style.getPropertyValue('--text')).toBe('a /**/ b');
   });
 
   it('preserves custom-property spelling in prebuilt nested rule blocks', () => {

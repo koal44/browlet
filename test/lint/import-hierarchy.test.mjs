@@ -13,6 +13,9 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 
 tester.run('dependency-direction', direction, {
   valid: [
+    { filename: sourceFile('stylelet/props/registry'), code: "import { colorProperty } from './built-in/index';" },
+    { filename: sourceFile('stylelet/props/built-in/color'), code: "import type { PropertyRecord } from '../property';" },
+    { filename: sourceFile('stylelet/syntax/parser'), code: "import type { InterpretedDeclaration } from '../cssom/declarations/index';" },
     { filename: sourceFile('stylelet/cssom/rules/style'), code: "import { CSSStylePropertiesImpl } from '../declarations/index';" },
     { filename: sourceFile('stylelet/cssom/rules/import'), code: "import { MediaListImpl } from '../media/index';" },
     { filename: sourceFile('stylelet/cssom/typed/style-property-map'), code: "import { CSSDeclarationBlock } from '../declarations/index';" },
@@ -20,7 +23,7 @@ tester.run('dependency-direction', direction, {
     { filename: sourceFile('stylelet/values/length'), code: "import { lengthLiteral } from './numeric-literal/index';" },
     { filename: sourceFile('stylelet/values/color'), code: "import { MixPercentages } from './collections/index';" },
     { filename: sourceFile('stylelet/conditional/example'), code: "import { parseMediaQueryList } from '../values/index';" },
-    { filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import type { StyleletContext } from '../../context';" },
+    { filename: sourceFile('stylelet/cssom/declarations/style-declaration'), code: "import type { StyleletContext } from '../../context';" },
     { filename: sourceFile('stylelet/cssom/rule-list'), code: "import { CSSStyleRuleImpl } from './rules/index';" },
     { filename: sourceFile('stylelet/cssom/rules/style'), code: "import type { CSSRuleListImpl } from '../rule-list';" },
     { filename: sourceFile('stylelet/cssom/rules/context'), code: "import type { CSSStyleRuleImpl } from './style';" },
@@ -53,11 +56,15 @@ tester.run('dependency-direction', direction, {
   ],
   invalid: [
     {
+      filename: sourceFile('stylelet/props/built-in/color'), code: "import { propertyRegistry } from '../registry';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/built-in', target: 'stylelet/props' } }],
+    },
+    {
       filename: sourceFile('stylelet/cssom/typed/style-property-map'), code: "import { CSSStyleRuleImpl } from '../rules/index';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/typed', target: 'stylelet/cssom/rules' } }],
     },
     {
-      filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import { CSSStyleRuleImpl } from '../rules/index';",
+      filename: sourceFile('stylelet/cssom/declarations/style-declaration'), code: "import { CSSStyleRuleImpl } from '../rules/index';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/declarations', target: 'stylelet/cssom/rules' } }],
     },
     {
@@ -82,7 +89,7 @@ tester.run('dependency-direction', direction, {
       errors: [{ messageId: 'upward' }],
     },
     {
-      filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import { computeStyle } from '../../engine/index';",
+      filename: sourceFile('stylelet/cssom/declarations/style-declaration'), code: "import { computeStyle } from '../../engine/index';",
       errors: [{ messageId: 'upward' }],
     },
     {

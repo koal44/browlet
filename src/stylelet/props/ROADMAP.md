@@ -21,7 +21,7 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 
 ## Shorthand and logical-property dependencies
 
-- [ ] Implement `marginShorthand.expand()` and `.serialize()` in `margin.ts`.
+- [ ] Implement `marginShorthand.expand()` and `.serialize()` in `built-in/margin.ts`.
   Their call paths are connected and currently throw: validate the 1–4-value
   grammar, expand in top/right/bottom/left order, preserve importance and
   CSS-wide values, and serialize compatible longhands without resolving them.
@@ -32,14 +32,19 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
   shorthand's pending longhand values.
 - [ ] Cover shorthand queries, cssText shortening, mixed importance, removal,
   source-order replacement, and invalid values through projected CSSOM.
+- [ ] When adding legacy shorthands, exclude unprefixed legacy names from
+  CSSOM's [preferred shorthand order](https://drafts.csswg.org/cssom/#concept-shorthands-preferred-order).
+  The current registry contains only the non-legacy `margin` shorthand.
 - [ ] Add logical margin records with their actual grammars and mapping metadata;
   test opposing mapping order and shorthand barriers. Existing physical margin
   metadata and CSSOM branches do not establish logical-property support.
 
 ## Family homes and stopping points
 
-`props/` remains the home for property definitions, with family subfolders only
-as they become useful. Reusable values stay in `values/`; at-rules/descriptors
+`props/built-in/` holds concrete property definitions, with family subfolders only
+as they become useful. Shared contracts and registries remain in `props/`;
+interpreted declaration occurrences live in `cssom/declarations/`.
+Reusable values stay in `values/`; at-rules/descriptors
 need their own interpretation and CSSOM path. The
 [organization plan](../ROADMAP.md#source-organization) records prospective homes.
 
