@@ -17,8 +17,8 @@ import {
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { defineCustomWholeValue } from '../../../../src/stylelet/values/whole-value';
-import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
+import { WholeValue } from '../../../../src/stylelet/values/whole-value';
+import { SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('custom property registration', () => {
@@ -159,7 +159,6 @@ describe('custom property registration', () => {
       engine,
     )).toMatchObject({
       value: {
-        name: 'url',
         value: { local: true, treeScope: documentScope },
       },
     });
@@ -169,7 +168,6 @@ describe('custom property registration', () => {
       engine,
     )).toMatchObject({
       value: {
-        name: 'url',
         value: { local: true, treeScope: shadowScope },
       },
     });
@@ -225,15 +223,15 @@ function registration(
   inherits = false,
   syntaxText = '<color>',
 ): CustomPropertyRegistration {
-  const syntax = parseSyntax(syntaxText, {})!;
-  const definition = defineCustomWholeValue({ syntax });
+  const syntax = SyntaxValue.parse(syntaxText, {})!;
+  const parseValue = WholeValue.createParser(syntax.createParser(), true);
 
   return {
     name,
     syntax,
-    definition,
+    parse: parseValue,
     inherits,
-    initialValue: definition.parse(initial, {})!,
+    initialValue: parseValue(initial, {})!,
   };
 }
 
@@ -259,9 +257,10 @@ function resolveRegisteredCustomProperty(
 ) {
   if (!cascaded.declaration.custom) return null;
 
-  const { definition } = registration;
-  const raw = definition.parse(cascaded.declaration.value.components, {});
-  return raw === null ? null : definition.resolve(raw, ValueStage.Computed, engine.getPropertyContext(cascaded));
+  const { parse: parseValue } = registration;
+  const declaration = cascaded.declaration.value;
+  const raw = parseValue(declaration.value, {});
+  return raw === null ? null : raw.resolve(ValueStage.Computed, engine.getPropertyContext(cascaded));
 }
 
 function resolveCustomProperty(
@@ -283,11 +282,9 @@ function resolveCustomProperty(
   }
 
   const declaration = cascaded.declaration;
-  const { definition } = registration;
-  const inheritedRaw = definition.parse(inherited, {});
-  const inheritedValue = inheritedRaw === null ? null : definition.resolve(
-    inheritedRaw, ValueStage.Computed, { URL: engine.context.env.userAgent.URL },
-  );
+  const { parse: parseValue } = registration;
+  const inheritedRaw = parseValue(inherited, {});
+  const inheritedValue = inheritedRaw === null ? null : inheritedRaw.resolve(ValueStage.Computed, { URL: engine.context.env.userAgent.URL });
   const context: PropertyContext & {
     customProperty: {
       engine: CascadeEngine;
@@ -299,9 +296,10 @@ function resolveCustomProperty(
     customProperty: { engine, registration, inheritedValue },
   };
 
-  const raw = definition.parse(declaration.value.components, {});
-  const value = raw === null ? null : definition.resolve(raw, stage, context);
-  return value === null ? null : definition.serialize(value);
+  const declarationValue = declaration.value;
+  const raw = parseValue(declarationValue.value, {});
+  const value = raw === null ? null : raw.resolve(stage, context);
+  return value === null ? null : value.serialize();
 }
 
 function propertyRules(

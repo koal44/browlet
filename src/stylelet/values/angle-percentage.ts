@@ -1,189 +1,124 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
-  createAnglePercentageConsumer as createAnglePercentageLiteralConsumer,
-  serializeAnglePercentage as serializeAnglePercentageLiteral,
-  tryAccumulateAnglePercentages as tryAccumulateAnglePercentageLiterals,
-  tryAddAnglePercentages as tryAddAnglePercentageLiterals,
-  tryInterpolateAnglePercentages as tryInterpolateAnglePercentageLiterals,
-  tryResolveAnglePercentage as tryResolveAnglePercentageLiteral,
+  AngleLiteral, PercentageLiteral, createAnglePercentageConsumer,
   type AnglePercentageLiteral, type DimensionPercentageConsumerOptions,
 } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, MathExpression, type MathContext } from './math-value';
 
-/*
- * <angle-percentage> = <angle> | <percentage> | <math-function>
- */
+/** An <angle-percentage>, including calculations that still need a percentage reference. */
+// https://drafts.csswg.org/css-values-4/#typedef-angle-percentage
+export class AnglePercentageValue<Representation extends AnglePercentage = AnglePercentage> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type AnglePercentageValue =
-  AnglePercentageLiteral | MathValue<'angle-percentage'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export function parseAnglePercentage(
-  input: ParserInput,
-  context: MathContext,
-): AnglePercentageValue | null {
-  return anglePercentageParser(input, context);
-}
+  /** Parse a complete <angle-percentage>. */
+  static parse(input: ParserInput, context: MathContext): AnglePercentageValue | null {
+    return parseAsComponentGrammar(input, anglePercentageGrammar, context);
+  }
 
-export function consumeAnglePercentage(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<AnglePercentageValue> {
-  return anglePercentageConsumer(c);
-}
+  /** Consume one <angle-percentage> using the default literal range. */
+  static consume(
+    this: void,
+    c: TokenCursor<ComponentValue, MathContext>,
+  ): TryConsumerResult<AnglePercentageValue> {
+    return anglePercentageConsumer(c);
+  }
 
-export function createAnglePercentageConsumer(
-  options: DimensionPercentageConsumerOptions = {},
-): TryConsumer<AnglePercentageValue, MathContext> {
-  const literalConsumer = createAnglePercentageLiteralConsumer(options);
-  const range = anglePercentageRange(options);
+  /** Bind optional literal limits to the corresponding literal and math grammars. */
+  static createConsumer(
+    options: DimensionPercentageConsumerOptions = {},
+  ): TryConsumer<AnglePercentageValue, MathContext> {
+    // <angle-percentage> = <angle> | <percentage>
+    // Percentages resolve to angles, including within math functions.
+    const literalConsumer = createAnglePercentageConsumer(options);
 
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'angle-percentage',
         percentHint: 'angle',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveAnglePercentage(
-  value: AnglePercentageValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): AnglePercentageValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, anglePercentageMathContext(context));
+    ], ([value]) => new AnglePercentageValue(value));
   }
 
-  if (stage < ValueStage.Computed) {
-    return value;
-  }
-
-  const reference = context.percentageReferenceValue;
-  return tryResolveAnglePercentageLiteral(value, {
-    percentageReferenceValue: reference?.type === 'angle' ? reference : undefined,
-  }) ?? value;
-}
-
-export function serializeAnglePercentage(
-  value: AnglePercentageValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeAnglePercentageLiteral(value);
-}
-
-export function addAnglePercentages(
-  a: AnglePercentageValue,
-  b: AnglePercentageValue,
-  context: MathContext = {},
-): AnglePercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryAddAnglePercentageLiterals(a, b);
-
-    if (result !== null) {
-      return result;
+  /** Resolve angles and, when supplied, their percentage reference at the requested stage. */
+  resolve(stage: ValueStage, context: MathContext = {}): AnglePercentageValue {
+    const previous = this.value;
+    if (previous instanceof MathValue) {
+      const resolved = previous.resolve(stage, anglePercentageMathContext(context));
+      const value = resolved.value instanceof MathExpression ? resolved : resolved.value;
+      return value === previous ? this : new AnglePercentageValue(value);
     }
+
+    if (stage < ValueStage.Computed || (previous.type === 'angle' && previous.unit === 'deg')) return this;
+
+    const reference = context.percentageReferenceValue;
+    const resolved = previous instanceof AngleLiteral
+      ? previous.canonicalize()
+      : reference?.type === 'angle' ? new AngleLiteral(reference.value * previous.value / 100, 'deg') : null;
+    return resolved === null ? this : new AnglePercentageValue(resolved);
   }
 
-  const mathContext = anglePercentageMathContext(context);
+  /** Serialize the current literal or calculation without changing its stage. */
+  serialize(): string {
+    return this.value.serialize();
+  }
 
-  return addMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
-}
-
-export function interpolateAnglePercentages(
-  a: AnglePercentageValue,
-  b: AnglePercentageValue,
-  p: number,
-  context: MathContext = {},
-): AnglePercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryInterpolateAnglePercentageLiterals(a, b, p);
-
-    if (result !== null) {
-      return result;
+  /** Add directly compatible literals, retaining other combinations as math. */
+  add(other: AnglePercentageValue, context: MathContext = {}): AnglePercentageValue {
+    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
+      return new AnglePercentageValue(this.value.add(other.value));
     }
-  }
-
-  const mathContext = anglePercentageMathContext(context);
-
-  return interpolateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    p,
-    mathContext,
-  );
-}
-
-export function accumulateAnglePercentages(
-  a: AnglePercentageValue,
-  b: AnglePercentageValue,
-  context: MathContext = {},
-): AnglePercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryAccumulateAnglePercentageLiterals(a, b);
-
-    if (result !== null) {
-      return result;
+    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
+      return new AnglePercentageValue(this.value.add(other.value));
     }
+    const mathContext = anglePercentageMathContext(context);
+    return new AnglePercentageValue(this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext));
   }
 
-  const mathContext = anglePercentageMathContext(context);
-
-  return accumulateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
-}
-
-function asMathValue(
-  value: AnglePercentageValue,
-  context: MathContext,
-): MathValue<'angle-percentage'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'angle-percentage', context);
-}
-
-function anglePercentageMathContext(
-  context: MathContext,
-): MathContext {
-  return {
-    ...context,
-    percentHint: 'angle',
-  };
-}
-
-function anglePercentageRange(
-  options: DimensionPercentageConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate directly compatible literals, retaining other combinations as math. */
+  interpolate(other: AnglePercentageValue, progress: number, context: MathContext = {}): AnglePercentageValue {
+    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
+      return new AnglePercentageValue(this.value.interpolate(other.value, progress));
+    }
+    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
+      return new AnglePercentageValue(this.value.interpolate(other.value, progress));
+    }
+    const mathContext = anglePercentageMathContext(context);
+    return new AnglePercentageValue(
+      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation of angle-percentages is addition. */
+  accumulate(other: AnglePercentageValue, context: MathContext = {}): AnglePercentageValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'angle-percentage'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'angle-percentage', context);
+  }
 }
 
-// <angle-percentage> = <angle> | <percentage> | <math-function>
-const anglePercentageConsumer = createAnglePercentageConsumer();
-const anglePercentageParser = createComponentParser(withTrivia(anglePercentageConsumer));
+type AnglePercentage = AnglePercentageLiteral | MathValue<'angle-percentage'>;
+
+function anglePercentageMathContext(context: MathContext): MathContext {
+  return { ...context, percentHint: 'angle' };
+}
+
+const anglePercentageConsumer = AnglePercentageValue.createConsumer();
+const anglePercentageGrammar = withTrivia(anglePercentageConsumer);

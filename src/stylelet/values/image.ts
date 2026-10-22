@@ -2,30 +2,16 @@ import {
   one, oneOf, withTrivia, createComponentParser,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueStage, ValueDefinition } from '../value-processing/index';
 
-import {
-  resolveGradient, serializeGradient, consumeGradient,
-  type GradientValueContext, type GradientValue,
-} from './gradient';
-import {
-  resolveUrl, serializeUrl, consumeUrl, type UrlContext, type UrlValue,
-} from './url';
+import { GradientValue, type GradientValueContext } from './gradient';
+import { UrlValue, type UrlContext } from './url';
 
-/*
- * <image> = <url> | <gradient>
- */
-
+/** Each image alternative already owns its lifecycle; the union adds no container. */
 export type ImageValue = UrlValue | GradientValue;
 
 export type ImageValueContext = GradientValueContext & UrlContext;
 
-export const imageDef: ValueDefinition<ImageValue, ImageValueContext> = {
-  consume: consumeImage,
-  resolve: resolveImage,
-  serialize: serializeImage,
-};
-
+/** Parse a complete supported image notation. */
 export function parseImage(
   input: ParserInput,
   context: ImageValueContext,
@@ -33,31 +19,21 @@ export function parseImage(
   return imageParser(input, context);
 }
 
+/** Consume a URL or gradient, retaining its concrete value. */
 export function consumeImage(
   c: TokenCursor<ComponentValue, ImageValueContext>,
 ): TryConsumerResult<ImageValue> {
   return imageConsumer(c);
 }
 
-export function resolveImage(
-  value: ImageValue,
-  stage: ValueStage,
-  context: ImageValueContext = {},
-): ImageValue {
-  return value.type === 'url'
-    ? resolveUrl(value, stage, context)
-    : resolveGradient(value, stage, context);
-}
-
-export function serializeImage(value: ImageValue): string {
-  return value.type === 'url' ? serializeUrl(value) : serializeGradient(value);
-}
-
-// <image> = <url> | <gradient>
+/*
+ * Supported <image> alternatives (see ROADMAP.md for the remaining notations):
+ * <image> = <url> | <gradient>
+ */
 const imageConsumer: TryConsumer<ImageValue, ImageValueContext> = oneOf(
   [
-    one(consumeUrl),
-    one(consumeGradient),
+    one(UrlValue.consume),
+    one(GradientValue.consume),
   ],
   ([image]) => image,
 );

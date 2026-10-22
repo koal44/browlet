@@ -1,61 +1,186 @@
 import { mapTuple } from '../../infra/util';
 
 import {
-  adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia, createComponentParser,
+  createKeywordConsumer, adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia, createComponentParser,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
+import { LengthLiteral, PercentageLiteral } from './numeric-literal/index';
 
-import { createKeywordConsumer } from './keyword';
-import {
-  addLengthPercentages, interpolateLengthPercentages, resolveLengthPercentage,
-  serializeLengthPercentage, consumeLengthPercentage,
-  type LengthPercentageValue,
-} from './length-percentage';
-import type { MathContext } from './math-value';
+import type { Value } from './value';
+import { LengthPercentageValue } from './length-percentage';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <position> = <position-one> | <position-two> | <position-four>
- *
- * <position-one> = [
- *   left | center | right | top | bottom |
- *   x-start | x-end | y-start | y-end |
- *   block-start | block-end | inline-start | inline-end |
- *   <length-percentage>
- * ]
- *
- * <position-two> = [
- *   [ left | center | right | x-start | x-end ] &&
- *   [ top | center | bottom | y-start | y-end ]
- * |
- *   [ left | center | right | x-start | x-end | <length-percentage> ]
- *   [ top | center | bottom | y-start | y-end | <length-percentage> ]
- * |
- *   [ block-start | center | block-end ] &&
- *   [ inline-start | center | inline-end ]
- * |
- *   [ start | center | end ]{2}
- * ]
- *
- * <position-four> = [
- *   [ [ left | right | x-start | x-end ] <length-percentage> ] &&
- *   [ [ top | bottom | y-start | y-end ] <length-percentage> ]
- * |
- *   [ [ block-start | block-end ] <length-percentage> ] &&
- *   [ [ inline-start | inline-end ] <length-percentage> ]
- * |
- *   [ [ start | end ] <length-percentage> ]{2}
- * ]
- */
+/** A position retaining keywords until its writing-mode inputs can produce offsets. */
+// https://drafts.csswg.org/css-values-4/#position
+export class PositionValue<Representation extends Position = Position> implements Value<PositionValueContext> {
+  /** The specified components or resolved physical offsets. */
+  value: Representation;
 
-export type PositionValue =
+  constructor(value: Representation) {
+    this.value = value;
+  }
+
+  /** Parse one complete <position>. */
+  static parse(input: ParserInput, context: PositionValueContext): PositionValue | null {
+    return positionParser(input, context);
+  }
+
+  /** Consume one position in its existing one-, two-, or four-component grammar. */
+  static consume(this: void, c: TokenCursor<ComponentValue, PositionValueContext>): TryConsumerResult<PositionValue> {
+    return positionConsumer(c);
+  }
+
+  /** Construct a position from already interpreted components. */
+  static fromComponents(
+    ...components: PositionOneComponents | PositionTwoComponents | PositionFourComponents
+  ): PositionValue {
+    return new PositionValue({ components } as PositionSyntax);
+  }
+
+  private static resolveOffsets(
+    components: PositionSyntax['components'], context: PositionValueContext,
+  ): PositionOffsets | null {
+    if (components.length === 1) {
+      const component = components[0];
+      if (typeof component !== 'string') return { offsets: [component, CENTER] };
+      if (component === 'center') return { offsets: [CENTER, CENTER] };
+
+      const edge = physicalEdge(component, undefined, context);
+      if (edge === null) return null;
+      const offset = isEndEdge(edge) ? FULL : ZERO;
+      return { offsets: physicalAxis(edge) === 'horizontal' ? [offset, CENTER] : [CENTER, offset] };
+    }
+
+    const logicalOrder = components.some((component) => {
+      if (typeof component !== 'string') return false;
+      const axis = PositionKeywordAxes[component];
+      return component === 'start' || component === 'end' || axis === 'block' || axis === 'inline';
+    });
+    const firstAxis = logicalOrder ? 'block' : 'x';
+    const secondAxis = logicalOrder ? 'inline' : 'y';
+    const first = components.length === 2
+      ? PositionValue.componentOffset(components[0], firstAxis, context)
+      : PositionValue.edgeOffset(components[0], components[1], firstAxis, context);
+    const second = components.length === 2
+      ? PositionValue.componentOffset(components[1], secondAxis, context)
+      : PositionValue.edgeOffset(components[2], components[3], secondAxis, context);
+
+    if (first === null || second === null || first.axis === second.axis) return null;
+    return { offsets: first.axis === 'horizontal' ? [first.offset, second.offset] : [second.offset, first.offset] };
+  }
+
+  private static componentOffset(
+    component: PositionComponent, axis: PositionAxis, context: PositionContext,
+  ): PositionedOffset | null {
+    const resolvedAxis = resolvePositionAxis(axis, context);
+    if (resolvedAxis === null) return null;
+    if (typeof component !== 'string') return { axis: resolvedAxis, offset: component };
+    if (component === 'center') return { axis: resolvedAxis, offset: CENTER };
+
+    const edge = physicalEdge(component, axis, context);
+    return edge === null || physicalAxis(edge) !== resolvedAxis
+      ? null
+      : { axis: resolvedAxis, offset: isEndEdge(edge) ? FULL : ZERO };
+  }
+
+  private static edgeOffset(
+    keyword: PositionEdgeKeyword, offset: LengthPercentageValue, axis: PositionAxis, context: PositionValueContext,
+  ): PositionedOffset | null {
+    const edge = physicalEdge(keyword, axis, context);
+    if (edge === null) return null;
+
+    return {
+      axis: physicalAxis(edge),
+      offset: isEndEdge(edge) ? FULL.add(negateLengthPercentage(offset, context), context) : offset,
+    };
+  }
+
+  /** Resolve components, then map logical edges when the required context is present. */
+  resolve(stage: ValueStage, context: PositionValueContext = {}): PositionValue {
+    const previous: Position = this.value;
+    if (previous.offsets !== undefined) {
+      const [x, y] = previous.offsets;
+      const horizontal = x.resolve(stage, context);
+      const vertical = y.resolve(stage, context);
+      return horizontal === x && vertical === y
+        ? this : new PositionValue({ offsets: [horizontal, vertical] });
+    }
+    const components = mapTuple(previous.components, (component) =>
+      typeof component === 'string' ? component : component.resolve(stage, context));
+    const unchanged = components.every((component, i) => component === previous.components[i]);
+    const syntax = unchanged ? previous : { components } as PositionSyntax;
+    const resolved = stage < ValueStage.Computed ? syntax : PositionValue.resolveOffsets(syntax.components, context) ?? syntax;
+    return resolved === previous ? this : new PositionValue(resolved);
+  }
+
+  /** Return resolved offsets, or null while logical-axis context is unavailable. */
+  tryResolveOffsets(stage: ValueStage, context: PositionValueContext = {}): PositionValue<PositionOffsets> | null {
+    const resolved = this.resolve(stage, context);
+    return resolved.value.offsets === undefined ? null : resolved as PositionValue<PositionOffsets>;
+  }
+
+  /** Serialize the current components or offsets without resolving them. */
+  serialize(): string {
+    const value = this.value;
+    const components: PositionComponent[] = value.offsets !== undefined
+      ? value.offsets
+      : value.components;
+
+    if (components.length === 1) {
+      const component = components[0]!;
+      const axis = typeof component === 'string' ? PositionKeywordAxes[component] : 'x';
+      const text = typeof component === 'string' ? component : component.serialize();
+
+      return axis === 'y' || axis === 'inline' ? `center ${text}` : `${text} center`;
+    }
+
+    return components
+      .map((component) => typeof component === 'string'
+        ? component
+        : component.serialize())
+      .join(' ');
+  }
+
+  /** Add physical offsets after logical edges have been resolved. */
+  add(
+    this: PositionValue<PositionOffsets>, other: PositionValue<PositionOffsets>, context: MathContext = {},
+  ): PositionValue<PositionOffsets> {
+    const a = this.value.offsets;
+    const b = other.value.offsets;
+    return new PositionValue({ offsets: [a[0].add(b[0], context), a[1].add(b[1], context)] });
+  }
+
+  /** Interpolate resolved physical offsets. */
+  interpolate(
+    this: PositionValue<PositionOffsets>, other: PositionValue<PositionOffsets>, progress: number,
+    context: MathContext = {},
+  ): PositionValue<PositionOffsets> {
+    const a = this.value.offsets;
+    const b = other.value.offsets;
+    return new PositionValue({
+      offsets: [
+        a[0].interpolate(b[0], progress, context),
+        a[1].interpolate(b[1], progress, context),
+      ],
+    });
+  }
+
+  /** Accumulation is addition. */
+  accumulate(
+    this: PositionValue<PositionOffsets>, other: PositionValue<PositionOffsets>, context: MathContext = {},
+  ): PositionValue<PositionOffsets> {
+    return this.add(other, context);
+  }
+}
+
+type Position =
   | PositionOffsets
   | PositionOne
   | PositionTwo
   | PositionFour;
 
 export type PositionOffsets = {
-  type: 'position';
   offsets: PositionOffsetTuple;
 };
 
@@ -65,19 +190,16 @@ export type PositionOffsetTuple = [
 ];
 
 export type PositionOne = {
-  type: 'position';
   offsets?: never;
   components: PositionOneComponents;
 };
 
 export type PositionTwo = {
-  type: 'position';
   offsets?: never;
   components: PositionTwoComponents;
 };
 
 export type PositionFour = {
-  type: 'position';
   offsets?: never;
   components: PositionFourComponents;
 };
@@ -113,19 +235,6 @@ type PositionFourComponents = [
 
 type PositionComponent = PositionKeyword | LengthPercentageValue;
 
-export function positionLiteral<
-  const Components extends
-    | PositionOneComponents
-    | PositionTwoComponents
-    | PositionFourComponents,
->(...components: Components): {
-  type: 'position';
-  offsets?: never;
-  components: Components;
-} {
-  return { type: 'position', components };
-}
-
 type PositionKeyword =
   | PositionEdgeKeyword
   | 'center';
@@ -137,402 +246,17 @@ type PositionEdgeKeyword =
   | 'inline-start' | 'inline-end'
   | 'start' | 'end';
 
-function isPositionKeyword(
-  component: PositionComponent,
-): component is PositionKeyword {
-  return typeof component === 'string';
-}
-
-export function parsePosition(
-  input: ParserInput,
-  context: PositionValueContext,
-): PositionValue | null {
-  return positionParser(input, context);
-}
-
-export function consumePosition(
-  c: TokenCursor<ComponentValue, PositionValueContext>,
-): TryConsumerResult<PositionValue> {
-  return positionConsumer(c);
-}
-
-// =============================================================================
-// Syntax
-// =============================================================================
-
-// <position-one> = left | center | right | top | bottom | x-start | x-end | y-start | y-end | block-start | block-end | inline-start | inline-end | <length-percentage>
-const positionOneConsumer: TryConsumer<PositionOne, PositionValueContext> = oneOf(
-  [
-    one(createKeywordConsumer(
-      'left', 'center', 'right', 'top', 'bottom',
-      'x-start', 'x-end', 'y-start', 'y-end',
-      'block-start', 'block-end',
-      'inline-start', 'inline-end',
-    )),
-    one(consumeLengthPercentage),
-  ],
-  ([component]) => ({
-    type: 'position',
-    components: [component],
-  }),
-);
-
-// <position-two> = [ [ left | center | right | x-start | x-end ] && [ top | center | bottom | y-start | y-end ] | [ left | center | right | x-start | x-end | <length-percentage> ] [ top | center | bottom | y-start | y-end | <length-percentage> ] | [ block-start | center | block-end ] && [ inline-start | center | inline-end ] | [ start | center | end ]{2} ]
-const positionTwoConsumer: TryConsumer<PositionTwo, PositionValueContext> = oneOf(
-  // Expand the unordered conjunctions because both operands can consume
-  // `center`: H && V = H V | V H, and B && I = B I | I B.
-  [
-    one(sequenceOf(
-      [
-        one(createKeywordConsumer('left', 'center', 'right', 'x-start', 'x-end')),
-        one(withTrivia(createKeywordConsumer(
-          'top', 'center', 'bottom', 'y-start', 'y-end',
-        ))),
-      ],
-      ([[horizontal], [vertical]]) => [horizontal, vertical],
-    )),
-    one(sequenceOf(
-      [
-        one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
-        one(withTrivia(createKeywordConsumer(
-          'left', 'center', 'right', 'x-start', 'x-end',
-        ))),
-      ],
-      ([[vertical], [horizontal]]) => [horizontal, vertical],
-    )),
-    one(sequenceOf(
-      [
-        one(oneOf(
-          [
-            one(createKeywordConsumer('left', 'center', 'right', 'x-start', 'x-end')),
-            one(consumeLengthPercentage),
-          ],
-          ([horizontal]) => horizontal,
-        )),
-        one(withTrivia(oneOf(
-          [
-            one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
-            one(consumeLengthPercentage),
-          ],
-          ([vertical]) => vertical,
-        ))),
-      ],
-      ([[horizontal], [vertical]]) => [horizontal, vertical],
-    )),
-    one(sequenceOf(
-      [
-        one(createKeywordConsumer('block-start', 'center', 'block-end')),
-        one(withTrivia(createKeywordConsumer(
-          'inline-start', 'center', 'inline-end',
-        ))),
-      ],
-      ([[block], [inline]]) => [block, inline],
-    )),
-    one(sequenceOf(
-      [
-        one(createKeywordConsumer('inline-start', 'center', 'inline-end')),
-        one(withTrivia(createKeywordConsumer(
-          'block-start', 'center', 'block-end',
-        ))),
-      ],
-      ([[inline], [block]]) => [block, inline],
-    )),
-    one(repeat(
-      withTrivia(createKeywordConsumer('start', 'center', 'end')),
-      2,
-      2,
-    )),
-  ],
-  ([components]): PositionTwo => ({
-    type: 'position',
-    components: components as PositionTwoComponents,
-  }),
-);
-
-// <position-four> = [ [ [ left | right | x-start | x-end ] <length-percentage> ] && [ [ top | bottom | y-start | y-end ] <length-percentage> ] | [ [ block-start | block-end ] <length-percentage> ] && [ [ inline-start | inline-end ] <length-percentage> ] | [ [ start | end ] <length-percentage> ]{2} ]
-const positionFourConsumer: TryConsumer<PositionFour, PositionValueContext> = oneOf(
-  [
-    one(allOf(
-      [
-        one(sequenceOf(
-          [
-            one(withTrivia(createKeywordConsumer(
-              'left', 'right', 'x-start', 'x-end',
-            ))),
-            one(withTrivia(consumeLengthPercentage)),
-          ],
-          ([[edge], [offset]]) => [edge, offset] as const,
-        )),
-        one(sequenceOf(
-          [
-            one(withTrivia(createKeywordConsumer(
-              'top', 'bottom', 'y-start', 'y-end',
-            ))),
-            one(withTrivia(consumeLengthPercentage)),
-          ],
-          ([[edge], [offset]]) => [edge, offset] as const,
-        )),
-      ],
-      ([[horizontal], [vertical]]) => [
-        ...horizontal,
-        ...vertical,
-      ] as PositionFourComponents,
-    )),
-    one(allOf(
-      [
-        one(sequenceOf(
-          [
-            one(withTrivia(createKeywordConsumer('block-start', 'block-end'))),
-            one(withTrivia(consumeLengthPercentage)),
-          ],
-          ([[edge], [offset]]) => [edge, offset] as const,
-        )),
-        one(sequenceOf(
-          [
-            one(withTrivia(createKeywordConsumer('inline-start', 'inline-end'))),
-            one(withTrivia(consumeLengthPercentage)),
-          ],
-          ([[edge], [offset]]) => [edge, offset] as const,
-        )),
-      ],
-      ([[block], [inline]]) => [
-        ...block,
-        ...inline,
-      ] as PositionFourComponents,
-    )),
-    one(adaptConsumer(
-      repeat(
-        sequenceOf(
-          [
-            one(withTrivia(createKeywordConsumer('start', 'end'))),
-            one(withTrivia(consumeLengthPercentage)),
-          ],
-          ([[edge], [offset]]) => [edge, offset] as const,
-        ),
-        2,
-        2,
-      ),
-      ([first, second]) => [
-        ...first,
-        ...second,
-      ],
-    )),
-  ],
-  ([components]): PositionFour => ({
-    type: 'position',
-    components: components as PositionFourComponents,
-  }),
-);
-
-// <position> = <position-one> | <position-two> | <position-four>
-const positionConsumer: TryConsumer<PositionValue, PositionValueContext> = oneOf(
-  [
-    one(positionFourConsumer),
-    one(positionTwoConsumer),
-    one(positionOneConsumer),
-  ],
-  ([value]) => value,
-);
-
-const positionParser = createComponentParser(withTrivia(positionConsumer));
-
-// ████████  ████████  ██████   ███████  ██       ██     ██ ████████
-// ██     ██ ██       ██    ██ ██     ██ ██       ██     ██ ██
-// ██     ██ ██       ██       ██     ██ ██       ██     ██ ██
-// ████████  ██████    ██████  ██     ██ ██       ██     ██ ██████
-// ██   ██   ██             ██ ██     ██ ██        ██   ██  ██
-// ██    ██  ██       ██    ██ ██     ██ ██         ██ ██   ██
-// ██     ██ ████████  ██████   ███████  ████████    ███    ████████
-
-export function resolvePosition(
-  value: PositionValue,
-  stage: ValueStage,
-  context: PositionValueContext = {},
-): PositionValue {
-  if (value.offsets !== undefined) {
-    return {
-      type: 'position',
-      offsets: mapTuple(value.offsets, (offset) =>
-        resolveLengthPercentage(offset, stage, context)),
-    };
-  }
-
-  const resolved = {
-    type: 'position',
-    components: mapTuple(value.components, (component) =>
-      isPositionKeyword(component)
-        ? component
-        : resolveLengthPercentage(component, stage, context)),
-  } as PositionSyntax;
-
-  return stage < ValueStage.Computed
-    ? resolved
-    : positionOffsets(resolved, context) ?? resolved;
-}
-
-export function tryResolvePositionOffsets(
-  value: PositionValue,
-  stage: ValueStage,
-  context: PositionValueContext = {},
-): PositionOffsets | null {
-  const resolved = resolvePosition(value, stage, context);
-
-  return resolved.offsets !== undefined ? resolved : null;
-}
-
-function positionOffsets(
-  value: PositionSyntax,
-  context: PositionValueContext,
-): PositionOffsets | null {
-  const { components } = value;
-
-  switch (components.length) {
-    case 1:
-      return positionOneOffsets(components[0], context);
-    case 2:
-      return positionTwoOffsets(components, context);
-    case 4:
-      return positionFourOffsets(components, context);
-  }
-}
-
-function positionOneOffsets(
-  component: PositionComponent,
-  context: PositionContext,
-): PositionOffsets | null {
-  if (!isPositionKeyword(component)) {
-    return createPositionOffsets(component, CENTER);
-  }
-
-  if (component === 'center') {
-    return createPositionOffsets(CENTER, CENTER);
-  }
-
-  const edge = physicalEdge(component, undefined, context);
-
-  if (edge === null) {
-    return null;
-  }
-
-  const offset = isEndEdge(edge) ? FULL : ZERO;
-
-  return physicalAxis(edge) === 'horizontal'
-    ? createPositionOffsets(offset, CENTER)
-    : createPositionOffsets(CENTER, offset);
-}
-
-function positionTwoOffsets(
-  components: PositionTwoComponents,
-  context: PositionContext,
-): PositionOffsets | null {
-  const axes: [PositionAxis, PositionAxis] = usesLogicalAxisOrder(components)
-    ? ['block', 'inline']
-    : ['x', 'y'];
-  const first = positionComponentOffset(components[0], axes[0], context);
-  const second = positionComponentOffset(components[1], axes[1], context);
-
-  return orderPositionOffsets(first, second);
-}
-
-function positionFourOffsets(
-  [firstEdge, firstOffset, secondEdge, secondOffset]: PositionFourComponents,
-  context: PositionValueContext,
-): PositionOffsets | null {
-  const axes: [PositionAxis, PositionAxis] = usesLogicalAxisOrder([
-    firstEdge,
-    secondEdge,
-  ])
-    ? ['block', 'inline']
-    : ['x', 'y'];
-  const first = positionEdgeOffset(firstEdge, firstOffset, axes[0], context);
-  const second = positionEdgeOffset(secondEdge, secondOffset, axes[1], context);
-
-  return orderPositionOffsets(first, second);
-}
-
-function orderPositionOffsets(
-  first: PositionedOffset | null,
-  second: PositionedOffset | null,
-): PositionOffsets | null {
-  if (first === null || second === null || first.axis === second.axis) {
-    return null;
-  }
-
-  return first.axis === 'horizontal'
-    ? createPositionOffsets(first.offset, second.offset)
-    : createPositionOffsets(second.offset, first.offset);
-}
-
-type PositionedOffset = {
-  axis: PhysicalAxis;
-  offset: LengthPercentageValue;
-};
-
-function positionComponentOffset(
-  component: PositionComponent,
-  axis: PositionAxis,
-  context: PositionContext,
-): PositionedOffset | null {
-  const resolvedAxis = resolvePositionAxis(axis, context);
-
-  if (resolvedAxis === null) {
-    return null;
-  }
-
-  if (!isPositionKeyword(component)) {
-    return { axis: resolvedAxis, offset: component };
-  }
-
-  if (component === 'center') {
-    return { axis: resolvedAxis, offset: CENTER };
-  }
-
-  const edge = physicalEdge(component, axis, context);
-
-  return edge === null || physicalAxis(edge) !== resolvedAxis
-    ? null
-    : { axis: resolvedAxis, offset: isEndEdge(edge) ? FULL : ZERO };
-}
-
-function positionEdgeOffset(
-  keyword: PositionEdgeKeyword,
-  offset: LengthPercentageValue,
-  axis: PositionAxis,
-  context: PositionValueContext,
-): PositionedOffset | null {
-  const edge = physicalEdge(keyword, axis, context);
-
-  if (edge === null) {
-    return null;
-  }
-
-  return {
-    axis: physicalAxis(edge),
-    offset: isEndEdge(edge)
-      ? addLengthPercentages(
-        FULL,
-        negateLengthPercentage(offset, context),
-        context,
-      )
-      : offset,
-  };
-}
-
 function negateLengthPercentage(
   value: LengthPercentageValue,
   context: PositionValueContext,
 ): LengthPercentageValue {
-  if (value.type !== 'math') {
-    if (value.type === 'percentage') {
-      return { type: 'percentage', value: 0 - value.value };
-    }
-
-    return value.unit === ''
-      ? value
-      : { type: 'length', value: 0 - value.value, unit: value.unit };
+  const literal = value.value;
+  if (!(literal instanceof MathValue)) {
+    return new LengthPercentageValue(literal instanceof PercentageLiteral
+      ? new PercentageLiteral(0 - literal.value)
+      : literal.unit === '' ? literal : new LengthLiteral(0 - literal.value, literal.unit));
   }
-
-  return interpolateLengthPercentages(ZERO, value, -1, context);
+  return ZERO.interpolate(value, -1, context);
 }
 
 function physicalEdge(
@@ -563,32 +287,31 @@ function physicalEdge(
     case 'inline-end':
       return oppositeEdge(logicalAxisStartEdge('inline', context));
     case 'start':
-      return isLogicalAxis(axis)
-        ? logicalAxisStartEdge(axis, context)
-        : null;
-    case 'end':
-      return isLogicalAxis(axis)
-        ? oppositeEdge(logicalAxisStartEdge(axis, context))
-        : null;
+    case 'end': {
+      if (axis !== 'block' && axis !== 'inline') return null;
+      const edge = logicalAxisStartEdge(axis, context);
+      return keyword === 'start' ? edge : oppositeEdge(edge);
+    }
   }
 }
 
-const PositionAxisSet = new Set(['x', 'y', 'block', 'inline'] as const);
-const LogicalAxisSet = new Set(['block', 'inline'] as const);
-
-type SetElement<Set> = Set extends ReadonlySet<infer Element> ? Element : never;
-type PositionAxis = SetElement<typeof PositionAxisSet>;
-type LogicalAxis = SetElement<typeof LogicalAxisSet>;
+type PositionAxis = 'x' | 'y' | 'block' | 'inline';
+type LogicalAxis = 'block' | 'inline';
 type PhysicalAxis = 'horizontal' | 'vertical';
 type PhysicalEdge = 'left' | 'right' | 'top' | 'bottom';
 
-function isPositionAxis(value: unknown): value is PositionAxis {
-  return typeof value === 'string' && PositionAxisSet.has(value as PositionAxis);
-}
+type PositionedOffset = {
+  axis: PhysicalAxis;
+  offset: LengthPercentageValue;
+};
 
-function isLogicalAxis(value: unknown): value is LogicalAxis {
-  return typeof value === 'string' && LogicalAxisSet.has(value as LogicalAxis);
-}
+const PositionKeywordAxes = {
+  left: 'x', right: 'x', 'x-start': 'x', 'x-end': 'x',
+  top: 'y', bottom: 'y', 'y-start': 'y', 'y-end': 'y',
+  'block-start': 'block', 'block-end': 'block',
+  'inline-start': 'inline', 'inline-end': 'inline',
+  center: null, start: null, end: null,
+} as const satisfies Record<PositionKeyword, PositionAxis | null>;
 
 const PositionStartEdges = {
   'horizontal-tb': { block: 'top',   inline: { ltr: 'left',   rtl: 'right' } },
@@ -678,114 +401,213 @@ function isEndEdge(edge: PhysicalEdge): boolean {
   return edge === 'right' || edge === 'bottom';
 }
 
-function createPositionOffsets(
-  horizontal: LengthPercentageValue,
-  vertical: LengthPercentageValue,
-): PositionOffsets {
-  return {
-    type: 'position',
-    offsets: [horizontal, vertical],
-  };
-}
+const ZERO = new LengthPercentageValue(new PercentageLiteral(0));
+const CENTER = new LengthPercentageValue(new PercentageLiteral(50));
+const FULL = new LengthPercentageValue(new PercentageLiteral(100));
 
-function usesLogicalAxisOrder(
-  components: PositionComponent[],
-): boolean {
-  return components.some((component) => {
-    if (!isPositionKeyword(component)) {
-      return false;
-    }
+/*
+ * <position> = <position-one> | <position-two> | <position-four>
+ *
+ * <position-one> = [
+ *   left | center | right | top | bottom |
+ *   x-start | x-end | y-start | y-end |
+ *   block-start | block-end | inline-start | inline-end |
+ *   <length-percentage>
+ * ]
+ *
+ * <position-two> = [
+ *   [ left | center | right | x-start | x-end ] &&
+ *   [ top | center | bottom | y-start | y-end ]
+ * |
+ *   [ left | center | right | x-start | x-end | <length-percentage> ]
+ *   [ top | center | bottom | y-start | y-end | <length-percentage> ]
+ * |
+ *   [ block-start | center | block-end ] &&
+ *   [ inline-start | center | inline-end ]
+ * |
+ *   [ start | center | end ]{2}
+ * ]
+ *
+ * <position-four> = [
+ *   [ [ left | right | x-start | x-end ] <length-percentage> ] &&
+ *   [ [ top | bottom | y-start | y-end ] <length-percentage> ]
+ * |
+ *   [ [ block-start | block-end ] <length-percentage> ] &&
+ *   [ [ inline-start | inline-end ] <length-percentage> ]
+ * |
+ *   [ [ start | end ] <length-percentage> ]{2}
+ * ]
+ */
 
-    return component === 'start' ||
-      component === 'end' ||
-      isLogicalAxis(positionKeywordAxis(component));
-  });
-}
+// <position-one> = left | center | right | top | bottom | x-start | x-end | y-start | y-end | block-start | block-end | inline-start | inline-end | <length-percentage>
+const positionOneConsumer: TryConsumer<PositionOne, PositionValueContext> = oneOf(
+  [
+    one(createKeywordConsumer(
+      'left', 'center', 'right', 'top', 'bottom',
+      'x-start', 'x-end', 'y-start', 'y-end',
+      'block-start', 'block-end',
+      'inline-start', 'inline-end',
+    )),
+    one(LengthPercentageValue.consume),
+  ],
+  ([component]) => ({
+    components: [component],
+  }),
+);
 
-function positionKeywordAxis(keyword: PositionKeyword): PositionAxis | null {
-  if (keyword === 'left' || keyword === 'right') {
-    return 'x';
-  }
+// <position-two> = [ [ left | center | right | x-start | x-end ] && [ top | center | bottom | y-start | y-end ] | [ left | center | right | x-start | x-end | <length-percentage> ] [ top | center | bottom | y-start | y-end | <length-percentage> ] | [ block-start | center | block-end ] && [ inline-start | center | inline-end ] | [ start | center | end ]{2} ]
+const positionTwoConsumer: TryConsumer<PositionTwo, PositionValueContext> = oneOf(
+  // Expand the unordered conjunctions because both operands can consume
+  // `center`: H && V = H V | V H, and B && I = B I | I B.
+  [
+    one(sequenceOf(
+      [
+        one(createKeywordConsumer('left', 'center', 'right', 'x-start', 'x-end')),
+        one(withTrivia(createKeywordConsumer(
+          'top', 'center', 'bottom', 'y-start', 'y-end',
+        ))),
+      ],
+      ([[horizontal], [vertical]]) => [horizontal, vertical],
+    )),
+    one(sequenceOf(
+      [
+        one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
+        one(withTrivia(createKeywordConsumer(
+          'left', 'center', 'right', 'x-start', 'x-end',
+        ))),
+      ],
+      ([[vertical], [horizontal]]) => [horizontal, vertical],
+    )),
+    one(sequenceOf(
+      [
+        one(oneOf(
+          [
+            one(createKeywordConsumer('left', 'center', 'right', 'x-start', 'x-end')),
+            one(LengthPercentageValue.consume),
+          ],
+          ([horizontal]) => horizontal,
+        )),
+        one(withTrivia(oneOf(
+          [
+            one(createKeywordConsumer('top', 'center', 'bottom', 'y-start', 'y-end')),
+            one(LengthPercentageValue.consume),
+          ],
+          ([vertical]) => vertical,
+        ))),
+      ],
+      ([[horizontal], [vertical]]) => [horizontal, vertical],
+    )),
+    one(sequenceOf(
+      [
+        one(createKeywordConsumer('block-start', 'center', 'block-end')),
+        one(withTrivia(createKeywordConsumer(
+          'inline-start', 'center', 'inline-end',
+        ))),
+      ],
+      ([[block], [inline]]) => [block, inline],
+    )),
+    one(sequenceOf(
+      [
+        one(createKeywordConsumer('inline-start', 'center', 'inline-end')),
+        one(withTrivia(createKeywordConsumer(
+          'block-start', 'center', 'block-end',
+        ))),
+      ],
+      ([[inline], [block]]) => [block, inline],
+    )),
+    one(repeat(
+      withTrivia(createKeywordConsumer('start', 'center', 'end')),
+      2,
+      2,
+    )),
+  ],
+  ([components]): PositionTwo => ({
+    components: components as PositionTwoComponents,
+  }),
+);
 
-  if (keyword === 'top' || keyword === 'bottom') {
-    return 'y';
-  }
+// <position-four> = [ [ [ left | right | x-start | x-end ] <length-percentage> ] && [ [ top | bottom | y-start | y-end ] <length-percentage> ] | [ [ block-start | block-end ] <length-percentage> ] && [ [ inline-start | inline-end ] <length-percentage> ] | [ [ start | end ] <length-percentage> ]{2} ]
+const positionFourConsumer: TryConsumer<PositionFour, PositionValueContext> = oneOf(
+  [
+    one(allOf(
+      [
+        one(sequenceOf(
+          [
+            one(withTrivia(createKeywordConsumer(
+              'left', 'right', 'x-start', 'x-end',
+            ))),
+            one(withTrivia(LengthPercentageValue.consume)),
+          ],
+          ([[edge], [offset]]) => [edge, offset] as const,
+        )),
+        one(sequenceOf(
+          [
+            one(withTrivia(createKeywordConsumer(
+              'top', 'bottom', 'y-start', 'y-end',
+            ))),
+            one(withTrivia(LengthPercentageValue.consume)),
+          ],
+          ([[edge], [offset]]) => [edge, offset] as const,
+        )),
+      ],
+      ([[horizontal], [vertical]]) => [
+        ...horizontal,
+        ...vertical,
+      ] as PositionFourComponents,
+    )),
+    one(allOf(
+      [
+        one(sequenceOf(
+          [
+            one(withTrivia(createKeywordConsumer('block-start', 'block-end'))),
+            one(withTrivia(LengthPercentageValue.consume)),
+          ],
+          ([[edge], [offset]]) => [edge, offset] as const,
+        )),
+        one(sequenceOf(
+          [
+            one(withTrivia(createKeywordConsumer('inline-start', 'inline-end'))),
+            one(withTrivia(LengthPercentageValue.consume)),
+          ],
+          ([[edge], [offset]]) => [edge, offset] as const,
+        )),
+      ],
+      ([[block], [inline]]) => [
+        ...block,
+        ...inline,
+      ] as PositionFourComponents,
+    )),
+    one(adaptConsumer(
+      repeat(
+        sequenceOf(
+          [
+            one(withTrivia(createKeywordConsumer('start', 'end'))),
+            one(withTrivia(LengthPercentageValue.consume)),
+          ],
+          ([[edge], [offset]]) => [edge, offset] as const,
+        ),
+        2,
+        2,
+      ),
+      ([first, second]) => [
+        ...first,
+        ...second,
+      ],
+    )),
+  ],
+  ([components]): PositionFour => ({
+    components: components as PositionFourComponents,
+  }),
+);
 
-  const axis = keyword.split('-', 1)[0];
+// <position> = <position-one> | <position-two> | <position-four>
+const positionConsumer: TryConsumer<PositionValue, PositionValueContext> = oneOf(
+  [
+    one(positionFourConsumer),
+    one(positionTwoConsumer),
+    one(positionOneConsumer),
+  ],
+  ([value]) => new PositionValue(value),
+);
 
-  return isPositionAxis(axis) ? axis : null;
-}
-
-const ZERO = { type: 'percentage', value: 0 } as const;
-const CENTER = { type: 'percentage', value: 50 } as const;
-const FULL = { type: 'percentage', value: 100 } as const;
-
-//  ██████  ████████ ████████  ████    ███    ██
-// ██    ██ ██       ██     ██  ██    ██ ██   ██
-// ██       ██       ██     ██  ██   ██   ██  ██
-//  ██████  ██████   ████████   ██  ██     ██ ██
-//       ██ ██       ██   ██    ██  █████████ ██
-// ██    ██ ██       ██    ██   ██  ██     ██ ██
-//  ██████  ████████ ██     ██ ████ ██     ██ ████████
-
-export function serializePosition(value: PositionValue): string {
-  let components: PositionComponent[] = value.offsets !== undefined
-    ? value.offsets
-    : value.components;
-
-  if (components.length === 1) {
-    const component = components[0]!;
-    const axis = isPositionKeyword(component)
-      ? positionKeywordAxis(component)
-      : 'x';
-
-    components = axis === 'y' || axis === 'inline'
-      ? ['center', component]
-      : [component, 'center'];
-  }
-
-  return components
-    .map((component) => isPositionKeyword(component)
-      ? component
-      : serializeLengthPercentage(component))
-    .join(' ');
-}
-
-//  ██████   ███████  ███    ███ ████████  ████ ██    ██ ████████
-// ██       ██     ██ ████  ████ ██     ██  ██  ███   ██ ██
-// ██       ██     ██ ██ ████ ██ ██     ██  ██  ████  ██ ██
-// ██       ██     ██ ██  ██  ██ ████████   ██  ██ ██ ██ ██████
-// ██       ██     ██ ██      ██ ██     ██  ██  ██  ████ ██
-// ██       ██     ██ ██      ██ ██     ██  ██  ██   ███ ██
-//  ██████   ███████  ██      ██ ████████  ████ ██    ██ ████████
-
-export function addPositions(
-  a: PositionOffsets,
-  b: PositionOffsets,
-  context: MathContext = {},
-): PositionOffsets {
-  return createPositionOffsets(
-    addLengthPercentages(a.offsets[0], b.offsets[0], context),
-    addLengthPercentages(a.offsets[1], b.offsets[1], context),
-  );
-}
-
-export function interpolatePositions(
-  a: PositionOffsets,
-  b: PositionOffsets,
-  progress: number,
-  context: MathContext = {},
-): PositionOffsets {
-  return createPositionOffsets(
-    interpolateLengthPercentages(a.offsets[0], b.offsets[0], progress, context),
-    interpolateLengthPercentages(a.offsets[1], b.offsets[1], progress, context),
-  );
-}
-
-export function accumulatePositions(
-  a: PositionOffsets,
-  b: PositionOffsets,
-  context: MathContext = {},
-): PositionOffsets {
-  return addPositions(a, b, context);
-}
+const positionParser = createComponentParser(withTrivia(positionConsumer));

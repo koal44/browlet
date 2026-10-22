@@ -18,6 +18,7 @@ tester.run('dependency-direction', direction, {
     { filename: sourceFile('stylelet/cssom/typed/style-property-map'), code: "import { CSSDeclarationBlock } from '../declarations/index';" },
     { filename: sourceFile('stylelet/values/color'), code: "import { tokenize } from '../syntax/index';" },
     { filename: sourceFile('stylelet/values/length'), code: "import { lengthLiteral } from './numeric-literal/index';" },
+    { filename: sourceFile('stylelet/values/color'), code: "import { MixPercentages } from './collections/index';" },
     { filename: sourceFile('stylelet/conditional/example'), code: "import { parseMediaQueryList } from '../values/index';" },
     { filename: sourceFile('stylelet/cssom/declarations/declaration'), code: "import type { StyleletContext } from '../../context';" },
     { filename: sourceFile('stylelet/cssom/rule-list'), code: "import { CSSStyleRuleImpl } from './rules/index';" },
@@ -71,6 +72,10 @@ tester.run('dependency-direction', direction, {
     {
       filename: sourceFile('stylelet/syntax/parser'), code: "import { parseColor } from '../values/index';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/syntax', target: 'stylelet/values' } }],
+    },
+    {
+      filename: sourceFile('stylelet/values/collections/mix'), code: "import { ColorValue } from '../color';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/values/collections', target: 'stylelet/values' } }],
     },
     {
       filename: sourceFile('stylelet/values/example'), code: "import { matchCondition } from '../conditional/index';",

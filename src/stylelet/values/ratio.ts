@@ -4,120 +4,94 @@ import {
   consumeSlashDelim, adaptConsumer, one, oneOf, opt, sequenceOf, withTrivia, createComponentParser,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueDefinition, ValueStage } from '../value-processing/index';
-import { createNumberConsumer, numberLiteral, serializeCssNumber } from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { NumberLiteral, serializeCssNumber } from './numeric-literal/index';
 
-import {
-  consumeNumber, resolveNumber, serializeNumber, type NumberValue,
-} from './number';
-import { type MathContext } from './math-value';
+import type { Value } from './value';
+import { NumberValue } from './number';
+import type { MathContext } from './math-value';
 
-/*
- * <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
- */
+/** A ratio retaining both components, including degenerate ratios. */
+// https://drafts.csswg.org/css-values-4/#ratios
+export class RatioValue implements Value {
+  /** The numerator and denominator as specified. */
+  value: Ratio;
 
-export type RatioValue = {
-  type: 'ratio';
+  constructor(value: Ratio) {
+    this.value = value;
+  }
+
+  /** Parse a complete <ratio>. */
+  static parse(input: ParserInput, context: unknown): RatioValue | null {
+    return ratioParser(input, context);
+  }
+
+  /** Consume a nonnegative numerator and optional nonnegative denominator. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<RatioValue> {
+    return ratioConsumer(c);
+  }
+
+  /** A ratio needs no contextual conversion. */
+  resolve(_stage: ValueStage, _context: unknown): RatioValue {
+    return this;
+  }
+
+  /** Serialize both retained components without reducing the ratio. */
+  serialize(): string {
+    const { numerator, denominator } = this.value;
+    return `${serializeCssNumber(numerator)} / ${serializeCssNumber(denominator)}`;
+  }
+
+  /** Whether either component is zero or infinite. */
+  isDegenerate(): boolean {
+    const { numerator, denominator } = this.value;
+    return isDegenerateRatioComponent(numerator) || isDegenerateRatioComponent(denominator);
+  }
+
+  /** Interpolate nondegenerate ratios in logarithmic space. */
+  // https://drafts.csswg.org/css-values-4/#combine-ratio
+  interpolate(other: RatioValue, progress: number): RatioValue {
+    if (this.isDegenerate() || other.isDegenerate()) {
+      throw new InternalError('Degenerate ratios cannot be interpolated');
+    }
+    const a = this.value;
+    const b = other.value;
+    const aLog = Math.log(a.numerator / a.denominator);
+    const bLog = Math.log(b.numerator / b.denominator);
+    return new RatioValue({ numerator: Math.exp((1 - progress) * aLog + progress * bLog), denominator: 1 });
+  }
+}
+
+type Ratio = {
   numerator: number;
   denominator: number;
 };
 
 export type NumberOrRatioValue = NumberValue | RatioValue;
 
-export const ratioDef: ValueDefinition<RatioValue> = {
-  consume: consumeRatio,
-  resolve: resolveRatio,
-  serialize: serializeRatio,
-};
-
-export function parseRatio(
-  input: ParserInput,
-  context: unknown,
-): RatioValue | null {
-  return ratioParser(input, context);
-}
-
-export function consumeRatio(
-  c: TokenCursor,
-): TryConsumerResult<RatioValue> {
-  return ratioConsumer(c);
-}
-
-/*
- * Factorization of the overlapping `<number> | <ratio>` grammar.
- */
-export function parseNumberOrRatio(
-  input: ParserInput,
-  context: MathContext,
-): NumberOrRatioValue | null {
+/** Parse the overlapping <number> | <ratio> grammar without another value container. */
+export function parseNumberOrRatio(input: ParserInput, context: MathContext): NumberOrRatioValue | null {
   return numberOrRatioParser(input, context);
 }
 
-export function consumeNumberOrRatio(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<NumberOrRatioValue> {
+/** A slash selects the ratio alternative; otherwise retain a number. */
+export function consumeNumberOrRatio(c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<NumberOrRatioValue> {
   return numberOrRatioConsumer(c);
-}
-
-export function resolveRatio(value: RatioValue): RatioValue {
-  return value;
-}
-
-export function resolveNumberOrRatio(
-  value: NumberOrRatioValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): NumberOrRatioValue {
-  return value.type === 'ratio'
-    ? resolveRatio(value)
-    : resolveNumber(value, stage, context);
-}
-
-export function serializeRatio(value: RatioValue): string {
-  return `${serializeCssNumber(value.numerator)} / ${serializeCssNumber(value.denominator)}`;
-}
-
-export function serializeNumberOrRatio(value: NumberOrRatioValue): string {
-  return value.type === 'ratio'
-    ? serializeRatio(value)
-    : serializeNumber(value);
-}
-
-export function isDegenerateRatio(value: RatioValue): boolean {
-  return isDegenerateRatioComponent(value.numerator) ||
-    isDegenerateRatioComponent(value.denominator);
 }
 
 function isDegenerateRatioComponent(value: number): boolean {
   return value === 0 || Math.abs(value) === Infinity;
 }
 
-// CSS Values, "Combination of <ratio>".
-export function interpolateRatios(
-  a: RatioValue,
-  b: RatioValue,
-  p: number,
-): RatioValue {
-  if (isDegenerateRatio(a) || isDegenerateRatio(b)) {
-    throw new InternalError('Degenerate ratios cannot be interpolated');
-  }
+type RatioSyntax = {
+  numerator: NumberLiteral;
+  denominator: number | undefined;
+};
 
-  const aLog = Math.log(a.numerator / a.denominator);
-  const bLog = Math.log(b.numerator / b.denominator);
-
-  return {
-    type: 'ratio',
-    numerator: Math.exp((1 - p) * aLog + p * bLog),
-    denominator: 1,
-  };
-}
-
-// =============================================================================
-// Syntax
-// =============================================================================
+// <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
 
 // <number [0,∞]>
-const nonnegativeNumberConsumer = createNumberConsumer({ min: 0 });
+const nonnegativeNumberConsumer = NumberLiteral.createConsumer({ min: 0 });
 
 /*
  * Implementation factorization of <ratio>:
@@ -131,11 +105,6 @@ const ratioDenominatorConsumer: TryConsumer<number> = sequenceOf(
   ([, [denominator]]) => denominator.value,
 );
 
-type RatioSyntax = {
-  numerator: number;
-  denominator?: number;
-};
-
 // Shared syntax for <ratio> and the overlapping <number> | <ratio> union.
 const ratioSyntaxConsumer: TryConsumer<RatioSyntax> = sequenceOf(
   [
@@ -143,17 +112,15 @@ const ratioSyntaxConsumer: TryConsumer<RatioSyntax> = sequenceOf(
     opt(ratioDenominatorConsumer),
   ],
   ([[numerator], denominator]) => ({
-    numerator: numerator.value,
-    ...(denominator.length === 0 ? {} : { denominator: denominator[0] }),
+    numerator,
+    denominator: denominator[0],
   }),
 );
 
-// <ratio> = <number [0,∞]> [ / <number [0,∞]> ]?
 const ratioConsumer: TryConsumer<RatioValue> = adaptConsumer(
   ratioSyntaxConsumer,
-  ({ numerator, denominator }) => ({
-    type: 'ratio',
-    numerator,
+  ({ numerator, denominator }) => new RatioValue({
+    numerator: numerator.value,
     denominator: denominator ?? 1,
   }),
 );
@@ -162,8 +129,8 @@ const ratioConsumer: TryConsumer<RatioValue> = adaptConsumer(
 const nonnegativeNumberOrRatioConsumer: TryConsumer<NumberOrRatioValue, MathContext> = adaptConsumer(
   ratioSyntaxConsumer,
   ({ numerator, denominator }) => denominator === undefined
-    ? numberLiteral(numerator)
-    : { type: 'ratio', numerator, denominator },
+    ? new NumberValue(numerator)
+    : new RatioValue({ numerator: numerator.value, denominator }),
 );
 
 // The <number> alternative additionally accepts negative values, which cannot
@@ -171,7 +138,7 @@ const nonnegativeNumberOrRatioConsumer: TryConsumer<NumberOrRatioValue, MathCont
 const numberOrRatioConsumer: TryConsumer<NumberOrRatioValue, MathContext> = oneOf(
   [
     one(nonnegativeNumberOrRatioConsumer),
-    one(consumeNumber),
+    one(NumberValue.consume),
   ],
   ([value]) => value,
 );

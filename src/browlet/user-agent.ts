@@ -3,7 +3,7 @@ import { internalType, type InternalPromise } from '../infra/promises';
 import type { TimerHost } from '../infra/execution';
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
-import { percentageLiteral, type StyleletUserAgent } from '../stylelet/index';
+import { PercentageLiteral, type StyleletUserAgent } from '../stylelet/index';
 import { decode } from '../encoding/index';
 import {
   areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
@@ -99,7 +99,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-root-margin
   // Implementation-defined: use WebKit's image-observer "100%" fallback until measurements justify tuning.
   lazyLoadScrollMargin: IntersectionObserverMargin = [
-    percentageLiteral(100), percentageLiteral(100), percentageLiteral(100), percentageLiteral(100),
+    new PercentageLiteral(100), new PercentageLiteral(100), new PercentageLiteral(100), new PercentageLiteral(100),
   ];
   /** Render-blocking cutoff in milliseconds from the relevant global's time origin. */
   // https://html.spec.whatwg.org/multipage/dom.html#render-blocked

@@ -1,86 +1,66 @@
+import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
+import { BooleanExprValue } from '../../../../src/stylelet/values/boolean-expr';
+import { SupportsConditionValue } from '../../../../src/stylelet/values/supports-condition';
+import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
 import { describe, expect, it, vi } from 'vitest';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
-import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import type { PropertyContext } from '../../../../src/stylelet/props/property';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
-  consumeIf, parseIf, parseIfArguments,
+  IfValue, IfArguments,
 } from '../../../../src/stylelet/values/substitution/if';
 import {
-  defineCustomWholeValue, guaranteedInvalidValue,
+  WholeValue,
 } from '../../../../src/stylelet/values/whole-value';
-import { parseSyntax } from '../../../../src/stylelet/values/syntax-value';
+import { SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 
 describe('<if()>', () => {
   it('parses a nonempty semicolon-separated branch list', () => {
-    const value = parseIf('if(future(): red; else: blue;)', {});
+    const value = IfValue.parse('if(future(): red; else: blue;)', {});
 
-    expect(value).toMatchObject({
-      type: 'if',
-      branches: [
-        {
-          condition: { type: 'general-enclosed' },
-          value: { type: 'declaration-value' },
-        },
-        {
-          condition: { type: 'else' },
-          value: { type: 'declaration-value' },
-        },
-      ],
-    });
-    expect(value?.branches.map(({ value: branchValue }) =>
-      serializeComponentValues(branchValue.components.tokens).trim()
+    expect(value?.value[0].condition).toBeInstanceOf(BooleanExprValue);
+    expect(value?.value[1]?.condition).toEqual({ type: 'else' });
+    for (const branch of value!.value) {
+      expect(branch.value).toBeInstanceOf(OptionalDeclarationValue);
+    }
+    expect(value?.value.map(({ value: branchValue }) =>
+      branchValue.serialize().trim()
     )).toEqual(['red', 'blue']);
   });
 
   it('parses Boolean expressions around supports tests', () => {
-    expect(parseIf('if(not supports(display: grid): red; else: blue)', {}))
-      .toMatchObject({
-        branches: [
-          {
-            condition: {
-              type: 'boolean-not',
-              value: {
-                type: 'boolean-test',
-                value: {
-                  type: 'supports',
-                  condition: { type: 'supports-declaration' },
-                },
-              },
-            },
-          },
-          { condition: { type: 'else' } },
-        ],
-      });
+    const parsed = IfValue.parse('if(not supports(display: grid): red; else: blue)', {})!;
+    const condition = parsed.value[0].condition;
+    if (!(condition instanceof BooleanExprValue)) throw new Error('Expected a boolean condition');
+    expect(condition.evaluate({ evaluateTest: () => true })).toBe(false);
+    expect(parsed.value[1]!.condition).toEqual({ type: 'else' });
   });
 
   it('parses a supports condition as a supports test', () => {
-    expect(parseIf(
-      'if(supports((display: grid) and (color: red)): yes; else: no)', {},
-    )?.branches[0]).toMatchObject({
-      condition: {
-        type: 'boolean-test',
-        value: {
-          type: 'supports',
-          condition: { type: 'boolean-and' },
-        },
+    const parsed = IfValue.parse('if(supports((display: grid) and (color: red)): yes; else: no)', {})!;
+    const condition = parsed.value[0].condition;
+    if (!(condition instanceof BooleanExprValue)) throw new Error('Expected a boolean condition');
+    const supports = vi.fn(() => true);
+    expect(condition.evaluate({
+      evaluateTest: (test) => {
+        expect(test.condition).toBeInstanceOf(SupportsConditionValue);
+        return test.condition instanceof SupportsConditionValue && test.condition.evaluate({ supports });
       },
-    });
+    })).toBe(true);
+    expect(supports.mock.calls).toHaveLength(2);
   });
 
-  it('retains unsupported media and style tests as general-enclosed', () => {
-    expect(
-      parseIf('if(media(width > 10px): wide; else: narrow)', {})?.branches[0],
-    ).toMatchObject({
-      condition: { type: 'general-enclosed' },
-    });
-    expect(
-      parseIf('if(style(--scheme: dark): dark; else: light)', {})?.branches[0],
-    ).toMatchObject({
-      condition: { type: 'general-enclosed' },
-    });
-  });
+  it.each(['media(width > 10px)', 'style(--scheme: dark)'])(
+    'retains unsupported %s as general-enclosed',
+    (test) => {
+      const condition = IfValue.parse(`if(${test}: yes; else: no)`, {})!.value[0].condition;
+      if (!(condition instanceof BooleanExprValue)) throw new Error('Expected a boolean condition');
+      const evaluateTest = vi.fn(() => true);
+      expect(condition.evaluate({ evaluateTest, preserveUnknown: true })).toBe('unknown');
+      expect(evaluateTest).not.toHaveBeenCalled();
+    },
+  );
 
   it.each([
     ['if(else:)', false],
@@ -88,16 +68,17 @@ describe('<if()>', () => {
     ['if(else:{})', false],
     ['if(else: red)', true],
   ])('parses an optional branch value in %j', (input, hasComponents) => {
-    const value = parseIf(input, {});
+    const value = IfValue.parse(input, {});
 
     expect(value).not.toBeNull();
-    expect(value!.branches[0].value.components.tokens.length > 0).toBe(hasComponents);
+    const { value: declaration } = value!.value[0];
+    expect(declaration.value.tokens.length > 0).toBe(hasComponents);
   });
 
   it('uses braces to bound a value containing a top-level comma', () => {
-    const value = parseIf('if(else: {Times, serif})', {});
+    const value = IfValue.parse('if(else: {Times, serif})', {});
 
-    expect(serializeComponentValues(value!.branches[0].value.components.tokens))
+    expect(value!.value[0].value.serialize())
       .toBe('Times, serif');
   });
 
@@ -109,7 +90,7 @@ describe('<if()>', () => {
     'if(else: red;; else: blue)',
     'if(else: red ! blue)',
   ])('rejects %j', (input) => {
-    expect(parseIf(input, {})).toBeNull();
+    expect(IfValue.parse(input, {})).toBeNull();
   });
 
   it('consumes one notation without consuming following input', () => {
@@ -117,20 +98,18 @@ describe('<if()>', () => {
       parseListOfComponentValues('if(else: red) trailing', {}), {},
     );
 
-    expect(consumeIf(c)?.type).toBe('if');
+    expect(IfValue.consume(c)).toBeInstanceOf(IfValue);
     expect(c.pos()).toBe(1);
   });
 });
 
 describe('<if-args>', () => {
   it('divides branches without parsing their conditions', () => {
-    const value = parseIfArguments(
-      'if(var(--condition): var(--when-true); else: var(--fallback))', {},
-    );
+    const value = IfArguments.parse('if(var(--condition): var(--when-true); else: var(--fallback))', {});
 
-    expect(value?.branches.map(({ condition, value: branchValue }) => [
-      serializeComponentValues(condition.components.tokens).trim(),
-      serializeComponentValues(branchValue.components.tokens).trim(),
+    expect(value?.value.map(({ condition, value: branchValue }) => [
+      condition.serialize().trim(),
+      branchValue.serialize().trim(),
     ])).toEqual([
       ['var(--condition)', 'var(--when-true)'],
       ['else', 'var(--fallback)'],
@@ -138,16 +117,16 @@ describe('<if-args>', () => {
   });
 
   it('requires the literal colon and semicolon branch boundaries', () => {
-    expect(parseIfArguments('if(var(--branch); else: green;)', {})).toBeNull();
+    expect(IfArguments.parse('if(var(--branch); else: green;)', {})).toBeNull();
   });
 });
 
 describe('if() replacement', () => {
-  const property = defineCustomWholeValue({ syntax: parseSyntax('<color>', {})! });
+  const property = WholeValue.createParser(SyntaxValue.parse('<color>', {})!.createParser(), true);
 
   function resolve(input: string, context: PropertyContext = {}) {
-    const raw = property.parse(input, context);
-    return raw === null ? null : property.resolve(raw, ValueStage.Computed, context);
+    const raw = property(input, context);
+    return raw === null ? null : raw.resolve(ValueStage.Computed, context);
   }
 
   it.fails('selects the first branch whose supports test is true', () => {
@@ -157,7 +136,7 @@ describe('if() replacement', () => {
       { supports },
     );
 
-    expect(property.serialize(value!)).toBe('rgb(255, 0, 0)');
+    expect(value!.serialize()).toBe('rgb(255, 0, 0)');
     expect(supports).toHaveBeenCalledTimes(1);
   });
 
@@ -168,7 +147,7 @@ describe('if() replacement', () => {
       { supports },
     );
 
-    expect(property.serialize(value!)).toBe('rgb(255, 0, 0)');
+    expect(value!.serialize()).toBe('rgb(255, 0, 0)');
     expect(supports).toHaveBeenCalledTimes(1);
   });
 
@@ -179,26 +158,26 @@ describe('if() replacement', () => {
       { supports },
     );
 
-    expect(property.serialize(value!)).toBe('rgb(255, 0, 0)');
+    expect(value!.serialize()).toBe('rgb(255, 0, 0)');
     expect(supports).not.toHaveBeenCalled();
   });
 
   it.fails('skips a condition that does not parse after substitution', () => {
     const value = resolve('if(not-a-condition: blue; else: red)')!;
-    expect(property.serialize(value)).toBe('rgb(255, 0, 0)');
+    expect(value.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('does not substitute the value of a false branch', () => {
     const value = resolve('if(future(): var(--missing); else: red)')!;
-    expect(property.serialize(value)).toBe('rgb(255, 0, 0)');
+    expect(value.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('substitutes arbitrary functions in the selected value', () => {
     const value = resolve('if(else: if(else: red))')!;
-    expect(property.serialize(value)).toBe('rgb(255, 0, 0)');
+    expect(value.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('returns an empty sequence when no branch matches', () => {
-    expect(resolve('if(future(): red)')).toBe(guaranteedInvalidValue);
+    expect(resolve('if(future(): red)')?.value).toBe(guaranteedInvalidValue);
   });
 });

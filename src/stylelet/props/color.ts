@@ -1,21 +1,25 @@
 import {
-  colorDef, ColorKind, defineWholeValue, type ColorValue, type ColorValueContext,
+  ColorKind, WholeValue, ColorValue, type ColorValueContext,
 } from '../values/index';
 
 import type { PropertyRecord } from './property';
 
-export const colorWholeValueDef = defineWholeValue(colorDef);
+export const parseColorProperty = WholeValue.createParser(ColorValue.parse);
 
 // https://drafts.csswg.org/css-color-4/#the-color-property
 export const colorProperty: PropertyRecord<ColorValue, ColorValueContext> = {
-  definition: colorWholeValueDef,
+  parse: parseColorProperty,
   inherits: true,
-  initialValue: { type: 'ordinary', value: { kind: ColorKind.System, name: 'canvastext' } },
+  initialValue: new WholeValue<ColorValue, ColorValueContext>(
+    new ColorValue({ kind: ColorKind.System, name: 'canvastext' }), ColorValue.parse,
+  ),
 };
 
 // https://drafts.csswg.org/css-backgrounds-3/#background-color
 export const backgroundColorProperty: PropertyRecord<ColorValue, ColorValueContext> = {
-  definition: colorWholeValueDef,
+  parse: parseColorProperty,
   inherits: false,
-  initialValue: { type: 'ordinary', value: { kind: ColorKind.Named, name: 'transparent' } },
+  initialValue: new WholeValue<ColorValue, ColorValueContext>(
+    new ColorValue({ kind: ColorKind.Named, name: 'transparent' }), ColorValue.parse,
+  ),
 };

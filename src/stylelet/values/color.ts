@@ -3,31 +3,133 @@ import { assertNever, clamp, mapTuple, type SameArityTuple } from '../../infra/u
 import { InternalError } from '../../infra/internal-error';
 
 import {
-  createFunctionalNotationConsumer, consumeComma, consumeDimensionToken, consumeHashToken,
+  createKeywordConsumer, createFunctionalNotationConsumer, consumeComma, consumeDimensionToken, consumeHashToken,
   consumeIdentToken, consumeIntegerToken, consumeSlashDelim, allOf, commaRepeat, one, oneOf, opt,
   plus, adaptConsumer, repeat, sequenceOf, withTrivia, createComponentParser, NumberTokenFlag,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
+import { ValueStage } from '../value-processing/index';
 import {
-  canonicalizeAngle, serializeCssNumber,
-  type NumberLiteral, type PercentageLiteral,
+  NumberLiteral, PercentageLiteral, AngleLiteral, serializeCssNumber,
 } from './numeric-literal/index';
+import { MixPercentages } from './collections/index';
 
-import { resolveAngle, serializeAngle, consumeAngle, type AngleValue } from './angle';
+import type { Value } from './value';
+import { AngleValue } from './angle';
 import {
-  coercePercentageMathToNumber, promoteNumericVariable, tryGetMathVariableName, type MathContext,
-  type NumericVariable,
+  MathValue, MathExpression, type MathContext, type NumericVariable,
 } from './math-value';
-import { completeMixPercentages, normalizeMixPercentages } from './mix';
-import { consumeDashedIdent, type DashedIdentValue } from './dashed-ident';
-import { consumeIdent } from './ident';
-import { createKeywordConsumer } from './keyword';
-import { resolveNumber, serializeNumber, consumeNumber, type NumberValue } from './number';
-import {
-  createPercentageConsumer, resolvePercentage, serializePercentage, consumePercentage,
-  type PercentageValue,
-} from './percentage';
+import { DashedIdentValue } from './dashed-ident';
+import { IdentValue } from './ident';
+import { NumberValue } from './number';
+import { PercentageValue } from './percentage';
+
+/** A CSS color with parsing, resolution, and serialization at its current stage. */
+// https://drafts.csswg.org/css-color-4/#color-type
+export class ColorValue<Representation extends Color = Color> implements Value<ColorValueContext> {
+  /** Color syntax or absolute coordinates retained at the current lifecycle stage. */
+  value: Representation;
+
+  constructor(value: Representation) {
+    this.value = value;
+  }
+
+  /** Parse a complete color, optionally accepting the legacy quirks grammar. */
+  static parse(this: void, input: ParserInput, context: ColorValueContext, allowQuirkyColor = false): ColorValue | null {
+    return (allowQuirkyColor ? colorInQuirksModeParser : colorParser)(input, context);
+  }
+
+  /** Consume one color with its declared-stage component rules. */
+  static consume(
+    this: void,
+    c: TokenCursor<ComponentValue, ColorValueContext>,
+    allowQuirkyColor = false,
+  ): TryConsumerResult<ColorValue> {
+    return (allowQuirkyColor ? colorValueInQuirksModeConsumer : colorValueConsumer)(c);
+  }
+
+  /** Resolve with current color and numeric context, retaining an unchanged value. */
+  resolve(stage: ValueStage, context: ColorValueContext = {}): ColorValue {
+    const resolved = resolveColor(this.value, stage, context);
+    return resolved === this.value ? this : new ColorValue(resolved);
+  }
+
+  /** Resolve only when the available context produces absolute coordinates. */
+  tryResolveAbsolute(stage: ValueStage, context: ColorValueContext = {}): ColorValue<AbsoluteColor> | null {
+    const resolved = this.resolve(stage, context);
+    return resolved.value.kind === ColorKind.Absolute ? resolved as ColorValue<AbsoluteColor> : null;
+  }
+
+  /** Serialize retained syntax or coordinates without resolving the color. */
+  serialize(htmlCompatible = false): string {
+    return serializeColor(this.value, htmlCompatible);
+  }
+
+  /** Whether this color belongs to the legacy sRGB interpolation category. */
+  isLegacySrgb(): boolean {
+    const color: Color = this.value;
+    switch (color.kind) {
+      case ColorKind.Named:
+      case ColorKind.Hex:
+        return true;
+      case ColorKind.RgbFn:
+      case ColorKind.HslFn:
+      case ColorKind.HwbFn:
+        return color.origin === undefined;
+      case ColorKind.Absolute:
+        return color.isLegacySrgb;
+      default:
+        return false;
+    }
+  }
+
+  /** Convert absolute coordinates to a predefined color space. */
+  convert(
+    this: ColorValue<AbsoluteColor>,
+    target: ColorSpaceName,
+    context: ColorContext = {},
+  ): ColorValue<PredefinedAbsoluteColor> {
+    const converted = convertAbsoluteColor(this.value, target, context);
+    return new ColorValue(converted);
+  }
+
+  /** Map an absolute color into the destination gamut. */
+  gamutMap(
+    this: ColorValue<AbsoluteColor>,
+    destination: ColorSpaceName,
+    method: GamutMappingMethod = 'binary-search',
+    context: ColorContext = {},
+  ): ColorValue<PredefinedAbsoluteColor> {
+    return new ColorValue(gamutMapColor(this.value, destination, method, context));
+  }
+
+  /** Interpolate resolved colors in the requested coordinate space and hue direction. */
+  interpolate(
+    this: ColorValue<AbsoluteColor>,
+    other: ColorValue<AbsoluteColor>,
+    progress: number,
+    space?: ColorInterpolationSpaceName,
+    hue: HueInterpolationMethod = 'shorter',
+    context: ColorContext = {},
+  ): ColorValue<AbsoluteColor> {
+    return new ColorValue(interpolateColors(this.value, other.value, progress, space, hue, context));
+  }
+
+  /** Compare resolved colors after accounting for their spaces and powerless components. */
+  isEquivalent(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): boolean {
+    return areColorsEquivalent(this.value, other.value, context);
+  }
+
+  /** Measure the CIEDE2000 difference between resolved colors. */
+  deltaE2000(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): number {
+    return deltaE2000(this.value, other.value, context);
+  }
+
+  /** Measure the Euclidean difference between resolved colors in Oklab. */
+  deltaEOK(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): number {
+    return deltaEOK(this.value, other.value, context);
+  }
+}
 
 // Resolved representation of a color in an identified coordinate space. It
 // has an intrinsic colorimetric interpretation when its space is predefined;
@@ -303,7 +405,7 @@ function builtinColorProfile<
  * <hue> = <number> | <angle>
  */
 
-export type ColorValue =
+type Color =
   | AbsoluteColor
   | ColorBase
   | CurrentColor
@@ -331,56 +433,17 @@ export type ColorFunction =
   | ColorFn;
 
 export type RelativeColorFunction =
-  ColorFunction & { origin: ColorValue; };
+  ColorFunction & { origin: Color; };
 
-export const colorDef: ValueDefinition<ColorValue, ColorValueContext> = {
-  consume: consumeColor,
-  resolve: resolveColorValue,
-  serialize: serializeColorValue,
-};
 
-/** Whether a color belongs to the legacy sRGB interpolation category. */
-export function isLegacySrgbColor(color: ColorValue): boolean {
-  switch (color.kind) {
-    case ColorKind.Named:
-    case ColorKind.Hex:
-      return true;
-    case ColorKind.RgbFn:
-    case ColorKind.HslFn:
-    case ColorKind.HwbFn:
-      return color.origin === undefined;
-    case ColorKind.Absolute:
-      return color.isLegacySrgb;
-    default:
-      return false;
-  }
-}
-
-export function parseColorValue(
-  input: ParserInput,
-  context: ColorValueContext,
-  allowQuirkyColor = false,
-): ColorValue | null {
-  return (
-    allowQuirkyColor
-      ? colorInQuirksModeParser
-      : colorParser
-  )(input, context);
-}
-
-export function consumeColor(
+function consumeColor(
   c: TokenCursor<ComponentValue, RelativeColorContext>,
-  allowQuirkyColor = false,
-): TryConsumerResult<ColorValue> {
-  return (
-    allowQuirkyColor
-      ? declaredColorInQuirksModeConsumer
-      : declaredColorConsumer
-  )(c);
+): TryConsumerResult<Color> {
+  return declaredColorConsumer(c);
 }
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color>
-const colorConsumer: TryConsumer<ColorValue, RelativeColorContext> = oneOf(
+const colorConsumer: TryConsumer<Color, RelativeColorContext> = oneOf(
   [
     one(consumeColorBase),
     one(consumeCurrentColor),
@@ -394,7 +457,7 @@ const colorConsumer: TryConsumer<ColorValue, RelativeColorContext> = oneOf(
 );
 
 // <color> = <color-base> | currentColor | <system-color> | <contrast-color()> | <device-cmyk()> | <light-dark-color> | <quirky-color>
-const colorInQuirksModeConsumer: TryConsumer<ColorValue, RelativeColorContext> = oneOf(
+const colorInQuirksModeConsumer: TryConsumer<Color, RelativeColorContext> = oneOf(
   [
     one(colorConsumer),
     one(consumeQuirkyColor),
@@ -405,18 +468,21 @@ const colorInQuirksModeConsumer: TryConsumer<ColorValue, RelativeColorContext> =
 const declaredColorConsumer = adaptConsumer(
   colorConsumer,
   (value, context: RelativeColorContext) =>
-    resolveColorValue(value, ValueStage.Declared, context),
+    resolveColor(value, ValueStage.Declared, context),
 );
 
 const declaredColorInQuirksModeConsumer = adaptConsumer(
   colorInQuirksModeConsumer,
   (value, context: RelativeColorContext) =>
-    resolveColorValue(value, ValueStage.Declared, context),
+    resolveColor(value, ValueStage.Declared, context),
 );
 
-const colorParser = createComponentParser(withTrivia(declaredColorConsumer));
+const colorValueConsumer = adaptConsumer(declaredColorConsumer, (color) => new ColorValue(color));
+const colorValueInQuirksModeConsumer = adaptConsumer(declaredColorInQuirksModeConsumer, (color) => new ColorValue(color));
+
+const colorParser = createComponentParser(withTrivia(colorValueConsumer));
 const colorInQuirksModeParser = createComponentParser(
-  withTrivia(declaredColorInQuirksModeConsumer),
+  withTrivia(colorValueInQuirksModeConsumer),
 );
 
 function consumeColorBase(
@@ -492,8 +558,8 @@ function consumeAlphaValue(
 const alphaValueConsumer: TryConsumer<AlphaValue, RelativeColorContext> =
   oneOf(
     [
-      one(consumeNumber),
-      one(consumePercentage),
+      one(NumberValue.consume),
+      one(PercentageValue.consume),
     ],
     ([alpha]) => alpha,
   );
@@ -562,7 +628,7 @@ function consumeNamedColor(
 
 // <named-color>
 const namedColorConsumer: TryConsumer<NamedColor, RelativeColorContext> = adaptConsumer(
-  consumeIdent,
+  IdentValue.consume,
   (ident) => {
     const name = asciiLower(ident.value);
     const rgba = Object.hasOwn(ColorRgba, name)
@@ -744,7 +810,7 @@ export type ColorMixFn = {
 };
 
 export type ColorMixItem = {
-  color: ColorValue;
+  color: Color;
   percentage?: PercentageValue;
 };
 
@@ -755,7 +821,7 @@ function consumeColorMixFn(
 }
 
 const colorMixPercentageConsumer =
-  createPercentageConsumer({ min: 0, max: 100 });
+  PercentageValue.createConsumer({ min: 0, max: 100 });
 
 // <color-mix()> = color-mix(<color-interpolation-method>? , [ <color> && <percentage [0,100]>? ]#)
 const colorMixFnConsumer: TryConsumer<ColorMixFn, RelativeColorContext> =
@@ -812,7 +878,7 @@ function consumeSystemColor(
 
 // <system-color>
 const systemColorConsumer: TryConsumer<SystemColor, RelativeColorContext> = adaptConsumer(
-  consumeIdent,
+  IdentValue.consume,
   (ident) => {
     const name = asciiLower(ident.value);
 
@@ -858,7 +924,7 @@ function consumeDeprecatedColor(
 
 // <deprecated-color>
 const deprecatedColorConsumer: TryConsumer<DeprecatedColor, RelativeColorContext> = adaptConsumer(
-  consumeIdent,
+  IdentValue.consume,
   (ident) => {
     const name = asciiLower(ident.value);
 
@@ -935,7 +1001,7 @@ const currentColorConsumer: TryConsumer<CurrentColor, RelativeColorContext> = ad
 export type RgbFn = {
   kind: ColorKind.RgbFn;
   useLegacySyntax: boolean;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<SrgbSpace, [
     red: SyntaxNonHueComponent,
     green: SyntaxNonHueComponent,
@@ -1007,7 +1073,7 @@ function createLegacyRgbSyntaxConsumer(
     [
       one(sequenceOf(
         [
-          commaRepeat(consumePercentage, 3, 3),
+          commaRepeat(PercentageValue.consume, 3, 3),
           opt(sequenceOf(
             [
               one(withTrivia(consumeComma)),
@@ -1024,7 +1090,7 @@ function createLegacyRgbSyntaxConsumer(
       )),
       one(sequenceOf(
         [
-          commaRepeat(consumeNumber, 3, 3),
+          commaRepeat(NumberValue.consume, 3, 3),
           opt(sequenceOf(
             [
               one(withTrivia(consumeComma)),
@@ -1075,8 +1141,8 @@ function createModernRgbSyntaxConsumer(
       }),
       repeat(withTrivia(oneOf(
         [
-          one(consumeNumber),
-          one(consumePercentage),
+          one(NumberValue.consume),
+          one(PercentageValue.consume),
           one(consumeNone),
           one(consumeRelativeColorKeyword),
         ],
@@ -1119,7 +1185,7 @@ function createModernRgbSyntaxConsumer(
 export type HslFn = {
   kind: ColorKind.HslFn;
   useLegacySyntax: boolean;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<HslSpace, [
     hue: SyntaxHueComponent,
     saturation: SyntaxNonHueComponent,
@@ -1192,14 +1258,14 @@ function createLegacyHslSyntaxConsumer(): TryConsumer<HslFn, RelativeColorContex
       one(sequenceOf(
         [
           one(withTrivia(consumeComma)),
-          one(withTrivia(consumePercentage)),
+          one(withTrivia(PercentageValue.consume)),
         ],
         ([, [percentage]]) => percentage,
       )),
       one(sequenceOf(
         [
           one(withTrivia(consumeComma)),
-          one(withTrivia(consumePercentage)),
+          one(withTrivia(PercentageValue.consume)),
         ],
         ([, [percentage]]) => percentage,
       )),
@@ -1257,8 +1323,8 @@ function createModernHslSyntaxConsumer(): TryConsumer<HslFn, RelativeColorContex
       ))),
       repeat(withTrivia(oneOf(
         [
-          one(consumePercentage),
-          one(consumeNumber),
+          one(PercentageValue.consume),
+          one(NumberValue.consume),
           one(consumeNone),
           one(consumeRelativeColorKeyword),
         ],
@@ -1284,8 +1350,8 @@ function consumeHue(
 // <hue> = <number> | <angle>
 const hueConsumer: TryConsumer<HueValue, RelativeColorContext> = oneOf(
   [
-    one(consumeNumber),
-    one(consumeAngle),
+    one(NumberValue.consume),
+    one(AngleValue.consume),
   ],
   ([hue]) => hue,
 );
@@ -1302,7 +1368,7 @@ const hueConsumer: TryConsumer<HueValue, RelativeColorContext> = oneOf(
 export type HwbFn = {
   kind: ColorKind.HwbFn;
   useLegacySyntax: false;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<HwbSpace, [
     hue: SyntaxHueComponent,
     whiteness: SyntaxNonHueComponent,
@@ -1339,8 +1405,8 @@ const hwbFunctionConsumer: TryConsumer<HwbFn, RelativeColorContext> =
         ))),
         repeat(withTrivia(oneOf(
           [
-            one(consumePercentage),
-            one(consumeNumber),
+            one(PercentageValue.consume),
+            one(NumberValue.consume),
             one(consumeNone),
             one(consumeRelativeColorKeyword),
           ],
@@ -1377,7 +1443,7 @@ const hwbFunctionConsumer: TryConsumer<HwbFn, RelativeColorContext> =
 export type LabFn = {
   kind: ColorKind.LabFn;
   useLegacySyntax: false;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<LabSpace, [
     lightness: SyntaxNonHueComponent,
     a: SyntaxNonHueComponent,
@@ -1388,7 +1454,7 @@ export type LabFn = {
 export type OklabFn = {
   kind: ColorKind.OklabFn;
   useLegacySyntax: false;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<OklabSpace, [
     lightness: SyntaxNonHueComponent,
     a: SyntaxNonHueComponent,
@@ -1397,7 +1463,7 @@ export type OklabFn = {
 };
 
 type LabArguments = {
-  origin?: ColorValue;
+  origin?: Color;
   components: LabFn['components'];
 };
 
@@ -1455,8 +1521,8 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
         }),
         repeat(withTrivia(oneOf(
           [
-            one(consumePercentage),
-            one(consumeNumber),
+            one(PercentageValue.consume),
+            one(NumberValue.consume),
             one(consumeNone),
             one(consumeRelativeColorKeyword),
           ],
@@ -1492,7 +1558,7 @@ function createLabFunctionConsumer<Color extends LabFn | OklabFn>(
 export type LchFn = {
   kind: ColorKind.LchFn;
   useLegacySyntax: false;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<LchSpace, [
     lightness: SyntaxNonHueComponent,
     chroma: SyntaxNonHueComponent,
@@ -1503,7 +1569,7 @@ export type LchFn = {
 export type OklchFn = {
   kind: ColorKind.OklchFn;
   useLegacySyntax: false;
-  origin?: ColorValue;
+  origin?: Color;
   components: ColorFunctionComponentTuple<OklchSpace, [
     lightness: SyntaxNonHueComponent,
     chroma: SyntaxNonHueComponent,
@@ -1512,7 +1578,7 @@ export type OklchFn = {
 };
 
 type LchArguments = {
-  origin?: ColorValue;
+  origin?: Color;
   components: LchFn['components'];
 };
 
@@ -1570,8 +1636,8 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
         }),
         repeat(withTrivia(oneOf(
           [
-            one(consumePercentage),
-            one(consumeNumber),
+            one(PercentageValue.consume),
+            one(NumberValue.consume),
             one(consumeNone),
             one(consumeRelativeColorKeyword),
           ],
@@ -1605,7 +1671,7 @@ function createLchFunctionConsumer<Color extends LchFn | OklchFn>(
 export type AlphaFn = {
   kind: ColorKind.AlphaFn;
   useLegacySyntax: false;
-  origin: ColorValue;
+  origin: Color;
   components: [alpha: SyntaxAlphaComponent | undefined];
 };
 
@@ -1670,7 +1736,7 @@ export type PredefinedColorFn = {
   useLegacySyntax: false;
   space: ColorFnSpace;
   components: VariadicColorFunctionComponents;
-  origin?: ColorValue;
+  origin?: Color;
 };
 
 export type CustomColorFn = {
@@ -1678,7 +1744,7 @@ export type CustomColorFn = {
   useLegacySyntax: false;
   space: CustomColorSpace['name'];
   components: VariadicColorFunctionComponents;
-  origin?: ColorValue;
+  origin?: Color;
 };
 
 function colorProfileFor(
@@ -1768,14 +1834,14 @@ function consumeCustomParams(
 // <custom-params> = <dashed-ident> [ <number> | <percentage> | none ]+
 const customParamsConsumer: TryConsumer<ColorFnSpaceParams, RelativeColorContext> = sequenceOf(
   [
-    one<DashedIdentValue, RelativeColorContext>(withTrivia(consumeDashedIdent), {
+    one<DashedIdentValue, RelativeColorContext>(withTrivia(DashedIdentValue.consume), {
       contextAfter: (space, context) =>
         contextWithColorFnRelativeVariables(space.value, context),
     }),
     plus(withTrivia(oneOf(
       [
-        one(consumeNumber),
-        one(consumePercentage),
+        one(NumberValue.consume),
+        one(PercentageValue.consume),
         one(consumeNone),
         one(consumeRelativeColorKeyword),
       ],
@@ -1805,8 +1871,8 @@ const predefinedRgbParamsConsumer: TryConsumer<ColorFnSpaceParams, RelativeColor
       }),
       repeat(withTrivia(oneOf(
         [
-          one(consumeNumber),
-          one(consumePercentage),
+          one(NumberValue.consume),
+          one(PercentageValue.consume),
           one(consumeNone),
           one(consumeRelativeColorKeyword),
         ],
@@ -1852,8 +1918,8 @@ const xyzParamsConsumer: TryConsumer<ColorFnSpaceParams, RelativeColorContext> =
     }),
     repeat(withTrivia(oneOf(
       [
-        one(consumeNumber),
-        one(consumePercentage),
+        one(NumberValue.consume),
+        one(PercentageValue.consume),
         one(consumeNone),
         one(consumeRelativeColorKeyword),
       ],
@@ -1932,7 +1998,7 @@ function consumeLegacyDeviceCmykSyntax(
 // <legacy-device-cmyk-syntax> = device-cmyk(<number>#{4})
 const legacyDeviceCmykSyntaxConsumer: TryConsumer<DeviceCmykFn, RelativeColorContext> =
   adaptConsumer(
-    commaRepeat(consumeNumber, 4, 4),
+    commaRepeat(NumberValue.consume, 4, 4),
     (components) => ({
       kind: ColorKind.DeviceCmykFn as const,
       useLegacySyntax: true,
@@ -1969,8 +2035,8 @@ function consumeCmykComponent(
 // <cmyk-component> = <number> | <percentage> | none
 const cmykComponentConsumer: TryConsumer<SyntaxNonHueComponent, RelativeColorContext> = oneOf(
   [
-    one(consumeNumber),
-    one(consumePercentage),
+    one(NumberValue.consume),
+    one(PercentageValue.consume),
     one(consumeNone),
   ],
   ([component]) => component,
@@ -1987,8 +2053,8 @@ const cmykComponentConsumer: TryConsumer<SyntaxNonHueComponent, RelativeColorCon
 
 export type LightDarkColor = {
   kind: ColorKind.LightDarkColor;
-  light: ColorValue;
-  dark: ColorValue;
+  light: Color;
+  dark: Color;
 };
 
 function consumeLightDarkColor(
@@ -2022,7 +2088,7 @@ const lightDarkColorConsumer: TryConsumer<LightDarkColor, RelativeColorContext> 
 
 export type ContrastColorFn = {
   kind: ColorKind.ContrastColorFn;
-  color: ColorValue;
+  color: Color;
 };
 
 function consumeContrastColorFn(
@@ -2173,7 +2239,7 @@ function consumeCustomColorSpace(
 }
 
 const customColorSpaceConsumer = adaptConsumer(
-  consumeDashedIdent,
+  DashedIdentValue.consume,
   ({ value }, context: RelativeColorContext) => context.colorProfiles?.has(value)
     ? value
     : null,
@@ -2247,7 +2313,7 @@ type RelativeColorContext = {
 
 function consumeRelativeColorOrigin(
   c: TokenCursor<ComponentValue, RelativeColorContext>,
-): TryConsumerResult<ColorValue> {
+): TryConsumerResult<Color> {
   return relativeColorOriginConsumer(c);
 }
 
@@ -2266,12 +2332,12 @@ function consumeRelativeColorKeyword(
 }
 
 const relativeColorKeywordConsumer = adaptConsumer(
-  consumeIdent,
+  IdentValue.consume,
   (ident, context: RelativeColorContext) => {
     const name = asciiLower(ident.value);
 
     return context.relativeColorVariables?.has(name) === true
-      ? promoteNumericVariable(name, 'number', context)
+      ? new NumberValue(MathValue.fromVariable(name, 'number', context))
       : null;
   },
 );
@@ -2705,13 +2771,6 @@ function colorMetadataAsRelative(
 // ██    ██  ██       ██    ██ ██     ██ ██         ██ ██   ██
 // ██     ██ ████████  ██████   ███████  ████████    ███    ████████
 
-export function resolveColorValue(
-  value: ColorValue,
-  stage: ValueStage,
-  context: ColorValueContext = {},
-): ColorValue {
-  return resolveColorValueInternal(value, stage, context);
-}
 
 export type ColorContext = {
   currentColor?: AbsoluteColor;
@@ -2724,22 +2783,13 @@ export type ColorValueContext = ColorContext & MathContext;
 
 export type ColorScheme = 'light' | 'dark';
 
-export function tryResolveAbsoluteColor(
-  value: ColorValue,
-  stage: ValueStage,
-  context: ColorValueContext = {},
-): AbsoluteColor | null {
-  const resolved = resolveColorValue(value, stage, context);
 
-  return resolved.kind === ColorKind.Absolute ? resolved : null;
-}
-
-function resolveColorValueInternal(
-  value: ColorValue,
+function resolveColor(
+  value: Color,
   stage: ValueStage,
   context: ColorValueContext,
   asOrigin = false,
-): ColorValue {
+): Color {
   switch (value.kind) {
     case ColorKind.Absolute:
       return value;
@@ -2815,7 +2865,7 @@ function resolveColorMixFn(
   value: ColorMixFn,
   stage: ValueStage,
   context: ColorContext,
-): ColorValue {
+): Color {
   const method = canonicalizeColorMixMethod(value.method);
   const items = canonicalizeColorMixPercentages(mapTuple(
     value.items,
@@ -2853,17 +2903,17 @@ function canonicalizeColorMixMethod(
 function canonicalizeColorMixPercentages(
   items: ColorMixFn['items'],
 ): ColorMixFn['items'] {
-  if (items.some(({ percentage }) => percentage?.type === 'math')) {
+  if (items.some(({ percentage }) => percentage !== undefined && colorComponentValue(percentage) instanceof MathExpression)) {
     return items;
   }
 
-  const percentages = completeMixPercentages(
+  const percentages = new MixPercentages(
     items.map(({ percentage }) =>
-      percentage === undefined || percentage.type === 'math'
+      percentage === undefined || colorComponentValue(percentage) instanceof MathExpression
         ? undefined
-        : percentage.value
+        : (colorComponentValue(percentage) as PercentageLiteral).value
     ),
-  );
+  ).complete();
   const equalPercentage = 100 / items.length;
   const allEqual = percentages.every(
     (percentage) => percentage === equalPercentage,
@@ -2871,10 +2921,7 @@ function canonicalizeColorMixPercentages(
   const canonical = mapTuple(items, (item, index) => {
     const percentage = allEqual
       ? undefined
-      : item.percentage ?? {
-        type: 'percentage' as const,
-        value: percentages[index]!,
-      };
+      : item.percentage ?? new PercentageValue(new PercentageLiteral(percentages[index]!));
 
     return percentage === item.percentage
       ? item
@@ -2891,10 +2938,10 @@ function resolveColorMixItem(
   stage: ValueStage,
   context: ColorValueContext,
 ): ColorMixItem {
-  const color = resolveColorValueInternal(item.color, stage, context);
+  const color = resolveColor(item.color, stage, context);
   const percentage = item.percentage === undefined
     ? undefined
-    : resolvePercentage(item.percentage, stage, {
+    : item.percentage.resolve(stage, {
       ...colorMathContext(context, ValueStage.Computed),
       range: [0, 100],
     });
@@ -2911,7 +2958,7 @@ function isResolvedColorMixItem(
     item.color.kind === ColorKind.Absolute &&
     (
       item.percentage === undefined ||
-      item.percentage.type === 'percentage'
+      colorComponentValue(item.percentage) instanceof PercentageLiteral
     )
   );
 }
@@ -2919,9 +2966,9 @@ function isResolvedColorMixItem(
 function resolveColorFunction(
   value: ColorFunction,
   stage: ValueStage,
-  context: ColorContext,
+  context: ColorValueContext,
   asOrigin: boolean,
-): ColorValue {
+): Color {
   const isRelative = isRelativeColorFunction(value);
   const metadata = isRelative
     ? RELATIVE_COLOR_METADATA[value.kind]
@@ -2930,15 +2977,15 @@ function resolveColorFunction(
       : COLOR_METADATA[value.kind];
   // Undefined means non-relative; null means the relative origin is unavailable.
   let reference: AbsoluteColor | null | undefined;
+  let origin = value.origin;
 
   if (isRelative) {
-    const origin = resolveColorValueInternal(
+    origin = resolveColor(
       value.origin,
       stage,
       context,
       true,
     );
-    value.origin = origin;
     reference = origin.kind === ColorKind.Absolute
       ? normalizeAbsoluteColorEncoding(origin)
       : null;
@@ -2960,6 +3007,7 @@ function resolveColorFunction(
     components,
     useLegacySyntax: false,
   } as ColorFunction;
+  if (origin !== undefined) resolvedValue.origin = origin;
 
   if (reference === null || !componentResolution.channelsAvailable) {
     return resolvedValue;
@@ -3009,7 +3057,7 @@ function shouldPreserveLegacySyntax(value: DeviceCmykFn): boolean {
   // Missing components and deferred math values require modern syntax.
   return value.useLegacySyntax && value.components.every(
     (component) => component === undefined ||
-      (component !== 'none' && component.type !== 'math'),
+      (component !== 'none' && !(colorComponentValue(component) instanceof MathExpression)),
   );
 }
 
@@ -3095,7 +3143,7 @@ function relativeChannelValue(
 ): NumberLiteral | 'none' {
   return component === undefined
     ? 'none'
-    : { type: 'number', value: component / scale };
+    : new NumberLiteral(component / scale);
 }
 
 function relativeColorMathContext(
@@ -3216,7 +3264,7 @@ function tryLowerTo8BitAbsoluteColor(
   if (
     specifiedAlpha !== undefined &&
     specifiedAlpha !== 'none' &&
-    specifiedAlpha.type === 'math'
+    colorComponentValue(specifiedAlpha) instanceof MathExpression
   ) {
     return null;
   }
@@ -3230,7 +3278,7 @@ function tryLowerTo8BitAbsoluteColor(
       return null;
     }
 
-    coordinates.push(component.value);
+    coordinates.push(component.value.value);
   }
 
   if (alpha !== undefined && !is8BitColorComponent(alpha)) {
@@ -3241,23 +3289,16 @@ function tryLowerTo8BitAbsoluteColor(
     kind: ColorKind.Absolute,
     space: metadata.space!,
     components: coordinates,
-    alpha: (alpha?.value ?? 1) * 0xff,
+    alpha: (alpha?.value.value ?? 1) * 0xff,
     isLegacySrgb: metadata.space?.name === 'srgb',
     is8Bit: true,
   };
 }
 
-function is8BitColorComponent(
-  value: SyntaxComponent,
-): value is NumberLiteral {
-  return (
-    value !== undefined &&
-    value !== 'none' &&
-    value.type === 'number' &&
-    Number.isInteger(value.value) &&
-    value.value >= 0 &&
-    value.value <= 0xff
-  );
+function is8BitColorComponent(component: SyntaxComponent): component is NumberValue<NumberLiteral> {
+  if (!(component instanceof NumberValue) || !(component.value instanceof NumberLiteral)) return false;
+  const number = component.value.value;
+  return Number.isInteger(number) && number >= 0 && number <= 0xff;
 }
 
 function resolveComponents<
@@ -3275,6 +3316,7 @@ function resolveComponents<
   const components = value.components;
   let mathContext = context;
   let channelValues: RelativeColorChannelValues | undefined;
+  let inheritedAlpha: SyntaxAlphaComponent;
 
   if (reference !== undefined) {
     const relative = value as RelativeColorFunction;
@@ -3296,9 +3338,9 @@ function resolveComponents<
       reference !== null &&
       stage >= metadata.lowerToAbsoluteAt
     ) {
-      components[alphaIndex] = reference.alpha === undefined
+      inheritedAlpha = reference.alpha === undefined
         ? 'none'
-        : { type: 'number', value: reference.alpha };
+        : new NumberValue(new NumberLiteral(reference.alpha));
     }
   }
 
@@ -3306,7 +3348,7 @@ function resolveComponents<
     components: mapTuple(
       components,
       (component, index) => resolveComponent(
-        component,
+        index === components.length - 1 ? component ?? inheritedAlpha : component,
         stage,
         mathContext,
         componentMetadataAt(metadata, index, components.length),
@@ -3382,7 +3424,7 @@ function tryResolveFromOriginChannel<Component extends SyntaxComponent>(
     throw new InternalError(`Unknown relative color variable: ${channelName}`);
   }
 
-  return value as Component;
+  return (value === 'none' ? value : new NumberValue(value)) as Component;
 }
 
 function resolveNonHueComponent(
@@ -3412,9 +3454,7 @@ function resolveHueComponent(
     context,
     metadata.resolveMathAt,
   );
-  return isNumberValue(value)
-    ? resolveNumber(value, stage, mathContext)
-    : resolveAngle(value, stage, mathContext);
+  return value.resolve(stage, mathContext);
 }
 
 function canonicalizeComponents<
@@ -3447,16 +3487,10 @@ function canonicalizeComponent<Component extends SyntaxComponent>(
 
   if (stage < metadata.canonicalizeAt || metadata.isHue) {
     canonicalized = component;
-  } else if (component !== 'none' && component.type === 'math') {
-    if (
-      metadata.canonicalSyntax === 'number' &&
-      component.valueType === 'percentage'
-    ) {
-      canonicalized = coercePercentageMathToNumber(
-        component,
-        metadata.percentageScale,
-        metadata.numberScale,
-      ) as Component;
+  } else if (component instanceof PercentageValue && component.value instanceof MathValue &&
+    component.value.value instanceof MathExpression) {
+    if (metadata.canonicalSyntax === 'number') {
+      canonicalized = new NumberValue(component.value.toNumber(metadata.percentageScale, metadata.numberScale)) as Component;
     }
   } else {
     canonicalized = (metadata.canonicalSyntax === 'number'
@@ -3475,59 +3509,33 @@ function canonicalizeComponent<Component extends SyntaxComponent>(
     : canonicalized;
 }
 
-function canonicalizeHueComponent(
-  value: SyntaxHueComponent,
-): SyntaxHueComponent {
-  return value !== 'none' && value.type === 'angle' && value.unit !== 'deg'
-    ? canonicalizeAngle(value)
-    : value;
+function canonicalizeHueComponent(value: SyntaxHueComponent): SyntaxHueComponent {
+  if (value === 'none') return value;
+  const literal = colorComponentValue(value);
+  return literal instanceof AngleLiteral && literal.unit !== 'deg'
+    ? new AngleValue(literal.canonicalize()) : value;
 }
 
-function canonicalizeAsNumber(
-  value: SyntaxNonHueComponent,
-  metadata: ColorComponentMetadata,
-): SyntaxNonHueComponent {
-  if (value === 'none') {
-    return value;
-  }
-
-  if (value.type === 'math') {
-    return value;
-  }
-
-  return {
-    type: 'number',
-    value: value.type === 'percentage'
-      ? value.value / (
-        metadata.numberScale /
-        metadata.percentageScale
-      )
-      : value.value,
-  };
+function canonicalizeAsNumber(value: SyntaxNonHueComponent, metadata: ColorComponentMetadata): SyntaxNonHueComponent {
+  if (value === 'none') return value;
+  const literal = colorComponentValue(value);
+  if (literal instanceof MathExpression) return value;
+  return literal instanceof NumberLiteral ? value : new NumberValue(new NumberLiteral(
+    literal.value / (metadata.numberScale / metadata.percentageScale),
+  ));
 }
 
 function canonicalizeAsPercentage(
   value: SyntaxNonHueComponent,
   metadata: ColorComponentMetadata,
 ): SyntaxNonHueComponent {
-  if (value === 'none' || value.type === 'math') {
-    return value;
-  }
-
-  if (value.value === 0) {
-    return value.type === 'number'
-      ? value
-      : { type: 'number', value: 0 };
-  }
-
-  return value.type === 'percentage'
-    ? value
-    : {
-      type: 'percentage',
-      value: value.value *
-        metadata.numberScale /
-        metadata.percentageScale,
-    };
+  if (value === 'none') return value;
+  const literal = colorComponentValue(value);
+  if (literal instanceof MathExpression) return value;
+  if (literal.value === 0) return literal instanceof NumberLiteral ? value : new NumberValue(new NumberLiteral(0));
+  return literal instanceof PercentageLiteral ? value : new PercentageValue(new PercentageLiteral(
+    literal.value * metadata.numberScale / metadata.percentageScale,
+  ));
 }
 
 function scaleComponents(
@@ -3557,39 +3565,18 @@ function scaleComponents(
   });
 }
 
-function scaleNonHueComponent(
-  value: SyntaxNonHueComponent,
-  metadata: ColorComponentMetadata,
-): AbsoluteComponent {
-  if (value === 'none') {
-    return undefined;
-  }
-
-  if (value.type === 'math') {
-    throw new InternalError('Deferred color components cannot be scaled');
-  }
-
-  return value.value * (
-    value.type === 'percentage'
-      ? metadata.percentageScale
-      : metadata.numberScale
-  );
+function scaleNonHueComponent(value: SyntaxNonHueComponent, metadata: ColorComponentMetadata): AbsoluteComponent {
+  if (value === 'none') return undefined;
+  const literal = colorComponentValue(value);
+  if (literal instanceof MathExpression) throw new InternalError('Deferred color components cannot be scaled');
+  return literal.value * (literal instanceof PercentageLiteral ? metadata.percentageScale : metadata.numberScale);
 }
 
-function scaleHueComponent(
-  value: SyntaxHueComponent,
-): AbsoluteComponent {
-  if (value === 'none') {
-    return undefined;
-  }
-
-  if (value.type === 'math') {
-    throw new InternalError('A deferred hue cannot be scaled');
-  }
-
-  return value.type === 'angle'
-    ? canonicalizeAngle(value).value
-    : value.value;
+function scaleHueComponent(value: SyntaxHueComponent): AbsoluteComponent {
+  if (value === 'none') return undefined;
+  const literal = colorComponentValue(value);
+  if (literal instanceof MathExpression) throw new InternalError('A deferred hue cannot be scaled');
+  return literal instanceof AngleLiteral ? literal.canonicalize().value : literal.value;
 }
 
 function normalizeComponents<
@@ -3623,21 +3610,14 @@ function normalizeComponent<Component extends SyntaxComponent>(
     : normalizeHueComponent(component as SyntaxHueComponent)) as Component;
 }
 
-function normalizeHueComponent(
-  value: SyntaxHueComponent,
-): SyntaxHueComponent {
-  if (value === 'none' || value.type === 'math') {
-    return value;
-  }
-
-  const number = value.type === 'angle'
-    ? canonicalizeAngle(value).value
-    : value.value;
+function normalizeHueComponent(value: SyntaxHueComponent): SyntaxHueComponent {
+  if (value === 'none') return value;
+  const literal = colorComponentValue(value);
+  if (literal instanceof MathExpression) return value;
+  const number = literal instanceof AngleLiteral ? literal.canonicalize().value : literal.value;
   const normalized = normalizeHue(number);
-
-  return value.type === 'number' && Object.is(normalized, value.value)
-    ? value
-    : { type: 'number', value: normalized };
+  return literal instanceof NumberLiteral && Object.is(normalized, literal.value)
+    ? value : new NumberValue(new NumberLiteral(normalized));
 }
 
 function normalizeHue(value: number): number {
@@ -3720,29 +3700,20 @@ function hasDeferredComponents(
     (value) =>
       value !== undefined &&
       value !== 'none' &&
-      value.type === 'math',
+      colorComponentValue(value) instanceof MathExpression,
   );
 }
 
-function shouldOmitUnitaryComponent(
-  component: SyntaxComponent,
-  omitUnitary: boolean,
-): boolean {
-  return (
-    omitUnitary &&
-    component !== undefined &&
-    component !== 'none' &&
-    component.type === 'number' &&
-    component.value === 1
-  );
+function shouldOmitUnitaryComponent(component: SyntaxComponent, omitUnitary: boolean): boolean {
+  if (!omitUnitary || component === undefined || component === 'none') return false;
+  const literal = colorComponentValue(component);
+  return literal instanceof NumberLiteral && literal.value === 1;
 }
 
-function tryGetRelativeChannelName(
-  value: SyntaxComponent,
-): string | null {
-  return value !== undefined && value !== 'none' && value.type === 'math'
-    ? tryGetMathVariableName(value)
-    : null;
+function tryGetRelativeChannelName(value: SyntaxComponent): string | null {
+  if (value === undefined || value === 'none') return null;
+  const expression = colorComponentValue(value);
+  return expression instanceof MathExpression ? expression.variableName() : null;
 }
 
 function resolveNonHueValue(
@@ -3756,9 +3727,7 @@ function resolveNonHueValue(
     metadata.resolveMathAt,
   );
 
-  return isNumberValue(value)
-    ? resolveNumber(value, stage, mathContext)
-    : resolvePercentage(value, stage, mathContext);
+  return value.resolve(stage, mathContext);
 }
 
 function colorMathContext(
@@ -3771,12 +3740,6 @@ function colorMathContext(
   };
 }
 
-function isNumberValue(
-  value: NumberValue | PercentageValue | AngleValue,
-): value is NumberValue {
-  return value.type === 'number' ||
-    (value.type === 'math' && value.valueType === 'number');
-}
 
 function clampComponents<
   const Values extends SyntaxComponent[],
@@ -3800,39 +3763,24 @@ function clampComponent<Component extends SyntaxComponent>(
   metadata: ColorComponentMetadata,
   stage: ValueStage,
 ): Component {
-  if (
-    component === undefined ||
-    component === 'none' ||
-    component.type === 'math'
-  ) {
-    return component;
-  }
-
-  if (
-    stage < metadata.resolveMathAt &&
-    !Number.isFinite(component.value)
-  ) {
-    return component;
-  }
-
-  const literal = component as {
-    type: string;
-    value: number;
-  };
+  if (component === undefined || component === 'none') return component;
+  const literal = colorComponentValue(component);
+  if (literal instanceof MathExpression || stage < metadata.resolveMathAt && !Number.isFinite(literal.value)) return component;
   const clampable = normalizeForClamping(literal.value);
   const range = stage >= metadata.clampAt
-    ? literal.type === 'percentage'
-      ? metadata.percentageRange
-      : metadata.numberRange
+    ? literal instanceof PercentageLiteral ? metadata.percentageRange : metadata.numberRange
     : null;
+  const number = range === null ? clampable : clamp(clampable, ...range);
+  if (Object.is(number, literal.value)) return component;
+  return (literal instanceof PercentageLiteral
+    ? new PercentageValue(new PercentageLiteral(number))
+    : literal instanceof AngleLiteral
+      ? new AngleValue(new AngleLiteral(number, literal.unit))
+      : new NumberValue(new NumberLiteral(number))) as Component;
+}
 
-  const value = range === null
-    ? clampable
-    : clamp(clampable, ...range);
-
-  return Object.is(value, literal.value)
-    ? component
-    : { ...literal, value } as Component;
+function colorComponentValue(component: NumberValue | PercentageValue | AngleValue) {
+  return component.value instanceof MathValue ? component.value.value : component.value;
 }
 
 function componentMetadataAt(
@@ -3928,7 +3876,7 @@ function resolveLightDarkColor(
   value: LightDarkColor,
   stage: ValueStage,
   context: ColorContext,
-): ColorValue {
+): Color {
   if (
     stage < ValueStage.Computed ||
     context.colorScheme === undefined
@@ -3936,7 +3884,7 @@ function resolveLightDarkColor(
     return value;
   }
 
-  return resolveColorValueInternal(
+  return resolveColor(
     context.colorScheme === 'light' ? value.light : value.dark,
     stage,
     context,
@@ -3947,12 +3895,12 @@ function resolveContrastColorFn(
   value: ContrastColorFn,
   stage: ValueStage,
   context: ColorContext,
-): ColorValue {
+): Color {
   if (stage < ValueStage.Computed) {
     return value;
   }
 
-  const color = resolveColorValueInternal(value.color, stage, context);
+  const color = resolveColor(value.color, stage, context);
   const resolved = color === value.color ? value : { ...value, color };
 
   if (color.kind !== ColorKind.Absolute) {
@@ -4003,7 +3951,6 @@ function relativeLuminance(value: PredefinedAbsoluteColor): number {
 }
 
 
-
 //  ██████  ████████ ████████  ████    ███    ██
 // ██    ██ ██       ██     ██  ██    ██ ██   ██
 // ██       ██       ██     ██  ██   ██   ██  ██
@@ -4012,8 +3959,8 @@ function relativeLuminance(value: PredefinedAbsoluteColor): number {
 // ██    ██ ██       ██    ██   ██  ██     ██ ██
 //  ██████  ████████ ██     ██ ████ ██     ██ ████████
 
-export function serializeColorValue(
-  value: ColorValue,
+function serializeColor(
+  value: Color,
   htmlCompatible = false,
 ): string {
   switch (value.kind) {
@@ -4028,7 +3975,7 @@ export function serializeColorValue(
     case ColorKind.LightDarkColor:
       return serializeLightDarkColor(value);
     case ColorKind.ContrastColorFn:
-      return `contrast-color(${serializeColorValue(value.color)})`;
+      return `contrast-color(${serializeColor(value.color)})`;
     case ColorKind.RgbFn:
     case ColorKind.HslFn:
     case ColorKind.HwbFn:
@@ -4057,10 +4004,10 @@ function serializeColorMixFn(value: ColorMixFn): string {
     ? null
     : serializeColorInterpolationMethod(value.method);
   const items = value.items.map((item) => {
-    const color = serializeColorValue(item.color);
+    const color = serializeColor(item.color);
     const percentage = item.percentage === undefined
       ? null
-      : serializePercentage(item.percentage);
+      : item.percentage.serialize();
 
     return percentage === null ? color : `${color} ${percentage}`;
   });
@@ -4088,7 +4035,7 @@ function serializeColorFunction(value: ColorFunction): string {
   if (value.origin !== undefined) {
     args.push(
       'from',
-      serializeColorValue(value.origin),
+      serializeColor(value.origin),
     );
   }
 
@@ -4153,9 +4100,7 @@ function serializeHueComponent(
     return value;
   }
 
-  return isNumberValue(value)
-    ? serializeNumber(value)
-    : serializeAngle(value);
+  return value.serialize();
 }
 
 function serializeNonHueComponent(
@@ -4165,9 +4110,7 @@ function serializeNonHueComponent(
     return value;
   }
 
-  return isNumberValue(value)
-    ? serializeNumber(value)
-    : serializePercentage(value);
+  return value.serialize();
 }
 
 function serializeAbsoluteColor(
@@ -4270,9 +4213,9 @@ function serializeDeviceCmykFn(value: DeviceCmykFn): string {
 
 function serializeLightDarkColor(value: LightDarkColor): string {
   return `light-dark(${
-    serializeColorValue(value.light)
+    serializeColor(value.light)
   }, ${
-    serializeColorValue(value.dark)
+    serializeColor(value.dark)
   })`;
 }
 
@@ -4312,7 +4255,6 @@ function serializeAbsoluteColorAlpha(value: number | undefined): string | null {
 }
 
 
-
 //  ██████   ███████  ██    ██ ██     ██ ████████ ████████  ████████
 // ██    ██ ██     ██ ███   ██ ██     ██ ██       ██     ██    ██
 // ██       ██     ██ ████  ██ ██     ██ ██       ██     ██    ██
@@ -4329,7 +4271,7 @@ type ColorMatrix = [
   [number, number, number],
 ];
 
-export function convertAbsoluteColor(
+function convertAbsoluteColor(
   value: AbsoluteColor,
   target: ColorSpaceName,
   context: ColorContext = {},
@@ -5362,7 +5304,6 @@ function naiveCmykToSrgb(
 }
 
 
-
 //  ██████      ███    ██     ██ ██     ██    ███
 // ██    ██    ██ ██   ███   ███ ███   ███   ██ ██
 // ██         ██   ██  ████ ████ ████ ████  ██   ██
@@ -5376,7 +5317,7 @@ const GAMUT_MAPPING_EPSILON = 0.0001;
 
 export type GamutMappingMethod = 'binary-search' | 'clip';
 
-export function gamutMapColor(
+function gamutMapColor(
   origin: AbsoluteColor,
   destination: ColorSpaceName,
   method: GamutMappingMethod = 'binary-search',
@@ -5541,7 +5482,7 @@ function clipColorToGamut(
   }
 }
 
-export function deltaE2000(
+function deltaE2000(
   reference: AbsoluteColor,
   sample: AbsoluteColor,
   context: ColorContext = {},
@@ -5641,7 +5582,7 @@ export function deltaE2000(
   );
 }
 
-export function deltaEOK(
+function deltaEOK(
   one: AbsoluteColor,
   two: AbsoluteColor,
   context: ColorContext = {},
@@ -5672,7 +5613,7 @@ function labHueInDegrees(a: number, b: number): number {
   return hue < 0 ? hue + 360 : hue;
 }
 
-export function areColorsEquivalent(
+function areColorsEquivalent(
   a: AbsoluteColor,
   b: AbsoluteColor,
   context: ColorContext = {},
@@ -5731,7 +5672,6 @@ function areColorComponentValuesEquivalent(
 }
 
 
-
 // ████ ██    ██ ████████ ████████ ████████  ████████   ███████  ██          ███    ████████ ████████
 //  ██  ███   ██    ██    ██       ██     ██ ██     ██ ██     ██ ██         ██ ██      ██    ██
 //  ██  ████  ██    ██    ██       ██     ██ ██     ██ ██     ██ ██        ██   ██     ██    ██
@@ -5740,7 +5680,7 @@ function areColorComponentValuesEquivalent(
 //  ██  ██   ███    ██    ██       ██    ██  ██        ██     ██ ██       ██     ██    ██    ██
 // ████ ██    ██    ██    ████████ ██     ██ ██         ███████  ████████ ██     ██    ██    ████████
 
-export function interpolateColors(
+function interpolateColors(
   a: AbsoluteColor,
   b: AbsoluteColor,
   progress: number,
@@ -6186,12 +6126,12 @@ function colorHueIndex(space: string): 0 | 2 | undefined {
 // ██     ██  ██   ██   ██
 // ██     ██ ████ ██     ██
 
-export type ResolvedColorMixItem = {
+type ResolvedColorMixItem = {
   color: AbsoluteColor;
-  percentage?: PercentageLiteral;
+  percentage?: PercentageValue;
 };
 
-export function calculateColorMix(
+function calculateColorMix(
   items: ResolvedColorMixItem[],
   method: ColorInterpolationMethod = { space: 'oklab' },
   context: ColorContext = {},
@@ -6200,10 +6140,9 @@ export function calculateColorMix(
     throw new InternalError('A color mix requires at least one item');
   }
 
-  const { percentages, leftover } = normalizeMixPercentages(
-    items.map((item) => item.percentage?.value),
-    true,
-  );
+  const { percentages, leftover } = new MixPercentages(
+    items.map((item) => item.percentage === undefined ? undefined : (colorComponentValue(item.percentage) as PercentageLiteral).value),
+  ).normalize(true);
   let color: AbsoluteColor = items[0]!.color;
   let combinedPercentage = percentages[0]!;
 

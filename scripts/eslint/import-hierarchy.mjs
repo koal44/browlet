@@ -19,7 +19,7 @@ export const layers = [
   ['streams', 'selectlet'],
   ['stylelet/environment', 'stylelet/syntax'],
   ['stylelet/value-processing'],
-  ['stylelet/values/numeric-literal'],
+  ['stylelet/values/numeric-literal', 'stylelet/values/collections'],
   ['stylelet/values'],
   ['stylelet/conditional'],
   ['stylelet/props', 'stylelet/selector'],

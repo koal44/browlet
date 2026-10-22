@@ -1,148 +1,99 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueStage, ValueDefinition } from '../value-processing/index';
-import {
-  accumulatePercentages as accumulatePercentageLiterals, addPercentages as addPercentageLiterals,
-  createPercentageConsumer as createPercentageLiteralConsumer,
-  interpolatePercentages as interpolatePercentageLiterals,
-  serializePercentage as serializePercentageLiteral,
-  type PercentageConsumerOptions, type PercentageLiteral,
-} from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { PercentageLiteral, type PercentageConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <percentage> = <percentage-token> | <math-function>
- */
+/** A <percentage> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#percentages
+export class PercentageValue<Representation extends Percentage = Percentage> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type PercentageValue = PercentageLiteral | MathValue<'percentage'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export const percentageDef: ValueDefinition<PercentageValue, MathContext> = {
-  consume: consumePercentage,
-  resolve: resolvePercentage,
-  serialize: serializePercentage,
-};
+  /** Parse one complete <percentage>. */
+  static parse(input: ParserInput, context: MathContext): PercentageValue | null {
+    return parseAsComponentGrammar(input, percentageGrammar, context);
+  }
 
-export function parsePercentage(
-  input: ParserInput,
-  context: MathContext,
-): PercentageValue | null {
-  return percentageParser(input, context);
-}
+  /** Consume one <percentage> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<PercentageValue> {
+    return percentageConsumer(c);
+  }
 
-export function consumePercentage(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<PercentageValue> {
-  return percentageConsumer(c);
-}
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: PercentageConsumerOptions = {}): TryConsumer<PercentageValue, MathContext> {
+    const literalConsumer = PercentageLiteral.createConsumer(options);
 
-export function createPercentageConsumer(
-  options: PercentageConsumerOptions = {},
-): TryConsumer<PercentageValue, MathContext> {
-  const literalConsumer = createPercentageLiteralConsumer(options);
-  const range = percentageRange(options);
-
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'percentage',
         percentHint: 'percent',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolvePercentage(
-  value: PercentageValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): PercentageValue {
-  return value.type === 'math'
-    ? resolveMathValue(value, stage, percentageMathContext(context))
-    : value;
-}
-
-export function serializePercentage(
-  value: PercentageValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializePercentageLiteral(value);
-}
-
-export function addPercentages(
-  a: PercentageValue,
-  b: PercentageValue,
-  context: MathContext = {},
-): PercentageValue {
-  if (a.type === 'percentage' && b.type === 'percentage') {
-    return addPercentageLiterals(a, b);
+    ], ([parsed]) => new PercentageValue(parsed));
   }
 
-  const mathContext = percentageMathContext(context);
-
-  return addMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
-}
-
-export function interpolatePercentages(
-  a: PercentageValue,
-  b: PercentageValue,
-  p: number,
-  context: MathContext = {},
-): PercentageValue {
-  if (a.type === 'percentage' && b.type === 'percentage') {
-    return interpolatePercentageLiterals(a, b, p);
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): PercentageValue {
+    const previous = this.value;
+    if (previous instanceof MathValue) {
+      const resolved = previous.resolve(stage, percentageMathContext(context));
+      return resolved === previous ? this : new PercentageValue(resolved);
+    }
+    return this;
   }
 
-  const mathContext = percentageMathContext(context);
-
-  return interpolateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    p,
-    mathContext,
-  );
-}
-
-export function accumulatePercentages(
-  a: PercentageValue,
-  b: PercentageValue,
-  context: MathContext = {},
-): PercentageValue {
-  if (a.type === 'percentage' && b.type === 'percentage') {
-    return accumulatePercentageLiterals(a, b);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  const mathContext = percentageMathContext(context);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: PercentageValue, context: MathContext = {}): PercentageValue {
+    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
+      return new PercentageValue(this.value.add(other.value));
+    }
+    const mathContext = percentageMathContext(context);
+    return new PercentageValue(
+      this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext),
+    );
+  }
 
-  return accumulateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: PercentageValue, progress: number, context: MathContext = {}): PercentageValue {
+    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
+      return new PercentageValue(this.value.interpolate(other.value, progress));
+    }
+    const mathContext = percentageMathContext(context);
+    return new PercentageValue(
+      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+    );
+  }
+
+  /** Accumulation is addition. */
+  accumulate(other: PercentageValue, context: MathContext = {}): PercentageValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'percentage'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'percentage', context);
+  }
 }
 
-function asMathValue(
-  value: PercentageValue,
-  context: MathContext,
-): MathValue<'percentage'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'percentage', context);
-}
+/** Literal or calculation accepted by this numeric grammar. */
+type Percentage = PercentageLiteral | MathValue<'percentage'>;
 
 function percentageMathContext(
   context: MathContext,
@@ -154,19 +105,5 @@ function percentageMathContext(
   };
 }
 
-function percentageRange(
-  options: PercentageConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
-  }
-
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
-}
-
-// <percentage> = <percentage-token> | <math-function>
-const percentageConsumer = createPercentageConsumer();
-const percentageParser = createComponentParser(withTrivia(percentageConsumer));
+const percentageConsumer = PercentageValue.createConsumer();
+const percentageGrammar = withTrivia(percentageConsumer);

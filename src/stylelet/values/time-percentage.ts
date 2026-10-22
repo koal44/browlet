@@ -1,167 +1,117 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
-  createTimePercentageConsumer as createTimePercentageLiteralConsumer,
-  serializeTimePercentage as serializeTimePercentageLiteral,
-  tryAccumulateTimePercentages as tryAccumulateTimePercentageLiterals,
-  tryAddTimePercentages as tryAddTimePercentageLiterals,
-  tryInterpolateTimePercentages as tryInterpolateTimePercentageLiterals,
-  tryResolveTimePercentage as tryResolveTimePercentageLiteral,
-  type TimePercentageConsumerOptions, type TimePercentageLiteral,
+  TimeLiteral, PercentageLiteral, createTimePercentageConsumer,
+  type TimePercentageLiteral, type TimePercentageConsumerOptions,
 } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <time-percentage> = <time> | <percentage> | <math-function>
- */
+/** A <time-percentage> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#typedef-time-percentage
+export class TimePercentageValue<Representation extends TimePercentage = TimePercentage> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type TimePercentageValue =
-  TimePercentageLiteral | MathValue<'time-percentage'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export function parseTimePercentage(
-  input: ParserInput,
-  context: MathContext,
-): TimePercentageValue | null {
-  return timePercentageParser(input, context);
-}
+  /** Parse one complete <time-percentage>. */
+  static parse(input: ParserInput, context: MathContext): TimePercentageValue | null {
+    return parseAsComponentGrammar(input, timePercentageGrammar, context);
+  }
 
-export function consumeTimePercentage(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<TimePercentageValue> {
-  return timePercentageConsumer(c);
-}
+  /** Consume one <time-percentage> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<TimePercentageValue> {
+    return timePercentageConsumer(c);
+  }
 
-export function createTimePercentageConsumer(
-  options: TimePercentageConsumerOptions = {},
-): TryConsumer<TimePercentageValue, MathContext> {
-  const literalConsumer = createTimePercentageLiteralConsumer(options);
-  const range = timePercentageRange(options);
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: TimePercentageConsumerOptions = {}): TryConsumer<TimePercentageValue, MathContext> {
+    const literalConsumer = createTimePercentageConsumer(options);
 
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'time-percentage',
         percentHint: 'time',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveTimePercentage(
-  value: TimePercentageValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): TimePercentageValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, timePercentageMathContext(context));
+    ], ([parsed]) => new TimePercentageValue(parsed));
   }
 
-  if (stage < ValueStage.Computed) {
-    return value;
-  }
-
-  const reference = context.percentageReferenceValue;
-  return tryResolveTimePercentageLiteral(value, {
-    percentageReferenceValue: reference?.type === 'time' ? reference : undefined,
-  }) ?? value;
-}
-
-export function serializeTimePercentage(
-  value: TimePercentageValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeTimePercentageLiteral(value);
-}
-
-export function addTimePercentages(
-  a: TimePercentageValue,
-  b: TimePercentageValue,
-  context: MathContext = {},
-): TimePercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryAddTimePercentageLiterals(a, b);
-
-    if (result !== null) {
-      return result;
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): TimePercentageValue {
+    const previous = this.value;
+    if (previous instanceof MathValue) {
+      const resolved = previous.resolve(stage, timePercentageMathContext(context));
+      return resolved === previous ? this : new TimePercentageValue(resolved);
     }
+
+    if (stage < ValueStage.Computed || (previous.type === 'time' && previous.unit === 's')) return this;
+
+    const reference = context.percentageReferenceValue;
+    const resolved = previous instanceof TimeLiteral
+      ? previous.canonicalize()
+      : reference?.type === 'time' ? new TimeLiteral(reference.value * previous.value / 100, 's') : null;
+    return resolved === null ? this : new TimePercentageValue(resolved);
   }
 
-  const mathContext = timePercentageMathContext(context);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
+  }
 
-  return addMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
-}
-
-export function interpolateTimePercentages(
-  a: TimePercentageValue,
-  b: TimePercentageValue,
-  p: number,
-  context: MathContext = {},
-): TimePercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryInterpolateTimePercentageLiterals(a, b, p);
-
-    if (result !== null) {
-      return result;
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: TimePercentageValue, context: MathContext = {}): TimePercentageValue {
+    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
+      return new TimePercentageValue(this.value.add(other.value));
     }
-  }
-
-  const mathContext = timePercentageMathContext(context);
-
-  return interpolateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    p,
-    mathContext,
-  );
-}
-
-export function accumulateTimePercentages(
-  a: TimePercentageValue,
-  b: TimePercentageValue,
-  context: MathContext = {},
-): TimePercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryAccumulateTimePercentageLiterals(a, b);
-
-    if (result !== null) {
-      return result;
+    if (this.value instanceof TimeLiteral && other.value instanceof TimeLiteral && this.value.unit === other.value.unit) {
+      return new TimePercentageValue(this.value.add(other.value));
     }
+    const mathContext = timePercentageMathContext(context);
+    return new TimePercentageValue(
+      this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext),
+    );
   }
 
-  const mathContext = timePercentageMathContext(context);
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: TimePercentageValue, progress: number, context: MathContext = {}): TimePercentageValue {
+    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
+      return new TimePercentageValue(this.value.interpolate(other.value, progress));
+    }
+    if (this.value instanceof TimeLiteral && other.value instanceof TimeLiteral && this.value.unit === other.value.unit) {
+      return new TimePercentageValue(this.value.interpolate(other.value, progress));
+    }
+    const mathContext = timePercentageMathContext(context);
+    return new TimePercentageValue(
+      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+    );
+  }
 
-  return accumulateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
+  /** Accumulation is addition. */
+  accumulate(other: TimePercentageValue, context: MathContext = {}): TimePercentageValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'time-percentage'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'time-percentage', context);
+  }
 }
 
-function asMathValue(
-  value: TimePercentageValue,
-  context: MathContext,
-): MathValue<'time-percentage'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'time-percentage', context);
-}
+/** Literal or calculation accepted by this numeric grammar. */
+type TimePercentage = TimePercentageLiteral | MathValue<'time-percentage'>;
 
+// In this grammar, percentages participate in calculations as times.
 function timePercentageMathContext(
   context: MathContext,
 ): MathContext {
@@ -171,19 +121,5 @@ function timePercentageMathContext(
   };
 }
 
-function timePercentageRange(
-  options: TimePercentageConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
-  }
-
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
-}
-
-// <time-percentage> = <time> | <percentage> | <math-function>
-const timePercentageConsumer = createTimePercentageConsumer();
-const timePercentageParser = createComponentParser(withTrivia(timePercentageConsumer));
+const timePercentageConsumer = TimePercentageValue.createConsumer();
+const timePercentageGrammar = withTrivia(timePercentageConsumer);

@@ -1,124 +1,63 @@
 import { describe, expect, it } from 'vitest';
+import { LengthLiteral, DimensionLiteral, FrequencyLiteral, TimeLiteral } from '../../../../src/stylelet/values/numeric-literal/index';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
-import {
-  accumulateNumbers, addNumbers, createNumberConsumer, interpolateNumbers, parseNumber,
-  resolveNumber, serializeNumber, consumeNumber,
-} from '../../../../src/stylelet/values/number';
-import {
-  accumulateAngles, addAngles, interpolateAngles, parseAngle, resolveAngle, serializeAngle,
-  consumeAngle,
-} from '../../../../src/stylelet/values/angle';
-import {
-  accumulateFrequencies, addFrequencies, interpolateFrequencies, parseFrequency, resolveFrequency,
-  serializeFrequency, consumeFrequency,
-} from '../../../../src/stylelet/values/frequency';
-import {
-  accumulateLengths, addLengths, createLengthConsumer, interpolateLengths, parseLength,
-  resolveLength, serializeLength, consumeLength,
-} from '../../../../src/stylelet/values/length';
-import {
-  accumulateResolutions, addResolutions, interpolateResolutions, parseResolution, resolveResolution,
-  serializeResolution, consumeResolution,
-} from '../../../../src/stylelet/values/resolution';
-import {
-  accumulateTimes, addTimes, interpolateTimes, parseTime, resolveTime, serializeTime,
-  consumeTime,
-} from '../../../../src/stylelet/values/time';
-import {
-  parseDimension, resolveDimension, serializeDimension,
-} from '../../../../src/stylelet/values/dimension';
-import {
-  accumulateIntegers, addIntegers, createIntegerConsumer, interpolateIntegers, parseInteger,
-  resolveInteger, serializeInteger, consumeInteger,
-} from '../../../../src/stylelet/values/integer';
-import {
-  accumulatePercentages, addPercentages, createPercentageConsumer, interpolatePercentages,
-  parsePercentage, resolvePercentage, serializePercentage, consumePercentage,
-} from '../../../../src/stylelet/values/percentage';
-import {
-  accumulateAnglePercentages, addAnglePercentages, createAnglePercentageConsumer,
-  interpolateAnglePercentages, parseAnglePercentage, resolveAnglePercentage,
-  serializeAnglePercentage, consumeAnglePercentage,
-} from '../../../../src/stylelet/values/angle-percentage';
-import {
-  accumulateLengthPercentages, addLengthPercentages, createLengthPercentageConsumer,
-  interpolateLengthPercentages, parseLengthPercentage, resolveLengthPercentage,
-  serializeLengthPercentage, consumeLengthPercentage,
-} from '../../../../src/stylelet/values/length-percentage';
-import {
-  accumulateFrequencyPercentages, addFrequencyPercentages, createFrequencyPercentageConsumer,
-  interpolateFrequencyPercentages, parseFrequencyPercentage, resolveFrequencyPercentage,
-  serializeFrequencyPercentage, consumeFrequencyPercentage,
-} from '../../../../src/stylelet/values/frequency-percentage';
-import {
-  accumulateTimePercentages, addTimePercentages, createTimePercentageConsumer,
-  interpolateTimePercentages, parseTimePercentage, resolveTimePercentage, serializeTimePercentage,
-  consumeTimePercentage,
-} from '../../../../src/stylelet/values/time-percentage';
-import type { MathContext } from '../../../../src/stylelet/values/math-value';
+import { MathValue, type MathContext } from '../../../../src/stylelet/values/math-value';
+import { NumberValue } from '../../../../src/stylelet/values/number';
+import { AngleValue } from '../../../../src/stylelet/values/angle';
+import { FrequencyValue } from '../../../../src/stylelet/values/frequency';
+import { LengthValue } from '../../../../src/stylelet/values/length';
+import { ResolutionValue } from '../../../../src/stylelet/values/resolution';
+import { TimeValue } from '../../../../src/stylelet/values/time';
+import { IntegerValue } from '../../../../src/stylelet/values/integer';
+import { PercentageValue } from '../../../../src/stylelet/values/percentage';
+import { LengthPercentageValue } from '../../../../src/stylelet/values/length-percentage';
+import { FrequencyPercentageValue } from '../../../../src/stylelet/values/frequency-percentage';
+import { TimePercentageValue } from '../../../../src/stylelet/values/time-percentage';
+import { parseDimension } from '../../../../src/stylelet/values/dimension';
 
-function expectLiteralResolution<Value>(
-  parse: (input: string, context: MathContext) => Value | null,
-  resolve: (value: Value, stage: ValueStage, context: MathContext) => Value,
+type NumericValue = NumberValue | AngleValue | FrequencyValue | LengthValue | ResolutionValue | TimeValue
+  | IntegerValue | PercentageValue | LengthPercentageValue | FrequencyPercentageValue | TimePercentageValue;
+
+function representation(numeric: NumericValue | null) {
+  if (numeric === null) return null;
+  const payload = numeric.value;
+  return payload instanceof MathValue ? payload.value : payload;
+}
+
+function expectLiteralResolution(
+  factory: { parse(input: string, context: MathContext): NumericValue | null; },
   input: string,
   computed: unknown,
   context: MathContext = {},
 ): void {
-  const value = parse(input, context);
-
-  expect(value).not.toBeNull();
-  expect(resolve(value!, ValueStage.Specified, context)).toBe(value);
-  expect(resolve(value!, ValueStage.Computed, context)).toEqual(computed);
+  const parsed = factory.parse(input, context);
+  expect(parsed).not.toBeNull();
+  expect(parsed!.resolve(ValueStage.Specified, context)).toBe(parsed);
+  expect(representation(parsed!.resolve(ValueStage.Computed, context))).toEqual(computed);
 }
 
 describe('dimensional value literals', () => {
   it.each([
-    ['angle', () => expectLiteralResolution(
-      parseAngle,
-      resolveAngle,
-      '0.5turn',
-      { type: 'angle', value: 180, unit: 'deg' },
-    )],
-    ['frequency', () => expectLiteralResolution(
-      parseFrequency,
-      resolveFrequency,
-      '1khz',
-      { type: 'frequency', value: 1_000, unit: 'hz' },
-    )],
-    ['length', () => expectLiteralResolution(
-      parseLength,
-      resolveLength,
-      '1in',
-      { type: 'length', value: 96, unit: 'px' },
-    )],
-    ['resolution', () => expectLiteralResolution(
-      parseResolution,
-      resolveResolution,
-      '96dpi',
-      { type: 'resolution', value: 1, unit: 'dppx' },
-    )],
-    ['time', () => expectLiteralResolution(
-      parseTime,
-      resolveTime,
-      '250ms',
-      { type: 'time', value: 0.25, unit: 's' },
-    )],
+    ['angle', () => expectLiteralResolution(AngleValue, '0.5turn', { type: 'angle', value: 180, unit: 'deg' })],
+    ['frequency', () => expectLiteralResolution(FrequencyValue, '1khz', { type: 'frequency', value: 1000, unit: 'hz' })],
+    ['length', () => expectLiteralResolution(LengthValue, '1in', { type: 'length', value: 96, unit: 'px' })],
+    ['resolution', () => expectLiteralResolution(ResolutionValue, '96dpi', { type: 'resolution', value: 1, unit: 'dppx' })],
+    ['time', () => expectLiteralResolution(TimeValue, '250ms', { type: 'time', value: 0.25, unit: 's' })],
   ])('canonicalizes a literal %s at computed-value time', (_name, test) => {
     test();
   });
 
   it('preserves a relative length until its context is available', () => {
-    const value = parseLength('2em', {})!;
-
-    expect(resolveLength(value, ValueStage.Specified, {
+    const value = LengthValue.parse('2em', {})!;
+    expect(value.resolve(ValueStage.Specified, {
       length: { em: 16 },
     })).toBe(value);
-    expect(resolveLength(value, ValueStage.Computed)).toBe(value);
-    expect(resolveLength(value, ValueStage.Computed, {
+    expect(value.resolve(ValueStage.Computed, {})).toBe(value);
+    expect(representation(value.resolve(ValueStage.Computed, {
       length: { em: 16 },
-    })).toEqual({ type: 'length', value: 32, unit: 'px' });
+    }))).toEqual({ type: 'length', value: 32, unit: 'px' });
   });
 });
 
@@ -127,74 +66,67 @@ describe('dimension values', () => {
     const length = parseDimension('1in', {})!;
     const resolution = parseDimension('96dpi', {})!;
     const math = parseDimension('calc(1in + 96px)', {})!;
-
-    expect(serializeDimension(length)).toBe('1in');
-    expect(serializeDimension(resolveDimension(length, ValueStage.Computed)))
+    expect(length.serialize()).toBe('1in');
+    expect(length.resolve(ValueStage.Computed, {}).serialize())
       .toBe('96px');
-    expect(serializeDimension(resolveDimension(resolution, ValueStage.Computed)))
+    expect(resolution.resolve(ValueStage.Computed, {}).serialize())
       .toBe('1dppx');
-    expect(serializeDimension(math)).toBe('calc(192px)');
-    expect(serializeDimension(resolveDimension(math, ValueStage.Computed)))
+    expect(math.serialize()).toBe('calc(192px)');
+    expect(math.resolve(ValueStage.Computed, {}).serialize())
       .toBe('192px');
   });
 
   it('preserves an unrecognized dimension as the generic fallback', () => {
     const value = parseDimension('1unknown', {})!;
-
-    expect(value).toEqual({ type: 'dimension', value: 1, unit: 'unknown' });
-    expect(resolveDimension(value, ValueStage.Computed)).toBe(value);
-    expect(serializeDimension(value)).toBe('1unknown');
+    expect(value).toBeInstanceOf(DimensionLiteral);
+    expect(value).toMatchObject({ type: 'dimension', value: 1, unit: 'unknown' });
+    expect(value.resolve(ValueStage.Computed, {})).toBe(value);
+    expect(value.serialize()).toBe('1unknown');
   });
 });
 
 describe('number values', () => {
   it('retains finite values from long CSS number tokens', () => {
-    expect(parseNumber(`0.${'1'.repeat(400)}`, {})).toEqual({
+    expect(representation(NumberValue.parse(`0.${'1'.repeat(400)}`, {}))).toEqual({
       type: 'number',
       value: 0.1111111111111111,
     });
   });
 
   it('parses a number literal', () => {
-    expect(parseNumber('1.25', {})).toEqual({
+    expect(representation(NumberValue.parse('1.25', {}))).toEqual({
       type: 'number',
       value: 1.25,
     });
   });
 
   it('parses and serializes a number-valued math function', () => {
-    const value = parseNumber('calc(1 + 2)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = NumberValue.parse('calc(1 + 2)', {});
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'number',
         value: 3,
       },
     });
-    expect(serializeNumber(value!)).toBe('calc(3)');
-    expect(serializeNumber(
-      resolveNumber(value!, ValueStage.Computed),
-    )).toBe('3');
+    expect(value!.serialize()).toBe('calc(3)');
+    expect(value!.resolve(ValueStage.Computed, {}).serialize()).toBe('3');
   });
 
   it('resolves a math value to a number at computed-value time', () => {
-    const value = parseNumber('calc(1 + 2)', {})!;
-
-    expect(resolveNumber(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveNumber(value, ValueStage.Declared, { unwrapMathAt: ValueStage.Declared })).toEqual({
+    const value = NumberValue.parse('calc(1 + 2)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Declared, { unwrapMathAt: ValueStage.Declared }))).toEqual({
       type: 'number',
       value: 3,
     });
-    expect(resolveNumber(value, ValueStage.Computed)).toEqual({
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'number',
       value: 3,
     });
   });
 
   it('accepts math functions other than calc()', () => {
-    expect(parseNumber('min(1, 2)', {})).toMatchObject({
-      type: 'math',
+    expect(representation(NumberValue.parse('min(1, 2)', {}))).toMatchObject({
       calculation: {
         type: 'number',
         value: 1,
@@ -203,100 +135,87 @@ describe('number values', () => {
   });
 
   it('rejects a math function with a non-number result', () => {
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(1px)', {}), {},
-    );
-
-    expect(consumeNumber(c)).toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(1px)', {}), {});
+    expect(NumberValue.consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
   it('applies consumer ranges to literals and math functions at their stages', () => {
-    const consume = createNumberConsumer({ min: 0, max: 1 });
+    const consume = NumberValue.createConsumer({ min: 0, max: 1 });
     const literal = new TokenCursor(parseListOfComponentValues('2', {}), {});
-    const specifiedMath = new TokenCursor(
-      parseListOfComponentValues('calc(2)', {}), {},
-    );
-    const math = parseNumber('calc(2)', {})!;
-
+    const specifiedMath = new TokenCursor(parseListOfComponentValues('calc(2)', {}), {});
+    const math = NumberValue.parse('calc(2)', {})!;
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).not.toBeNull();
-    expect(resolveNumber(math, ValueStage.Specified, {
+    expect(math.resolve(ValueStage.Specified, {
       range: [0, 1],
     })).toBe(math);
-    expect(resolveNumber(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, 1],
-    })).toEqual({
+    }))).toEqual({
       type: 'number',
       value: 1,
     });
   });
 
   it('does not mutate the surrounding calculation context', () => {
-    const context = { range: [0, 5] as [number, number], marker: true };
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(1 + 2)', {}),
-      context,
-    );
-
-    expect(consumeNumber(c)).not.toBeNull();
+    const context = {
+      range: [0, 5] as [
+        number,
+        number
+      ], marker: true,
+    };
+    const c = new TokenCursor(parseListOfComponentValues('calc(1 + 2)', {}), context);
+    expect(NumberValue.consume(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
   it('combines two literals without creating a math value', () => {
-    const a = parseNumber('2', {})!;
-    const b = parseNumber('4', {})!;
-
-    expect(addNumbers(a, b)).toEqual({ type: 'number', value: 6 });
-    expect(interpolateNumbers(a, b, 0.25))
+    const a = NumberValue.parse('2', {})!;
+    const b = NumberValue.parse('4', {})!;
+    expect(representation(a.add(b))).toEqual({ type: 'number', value: 6 });
+    expect(representation(a.interpolate(b, 0.25)))
       .toEqual({ type: 'number', value: 2.5 });
-    expect(accumulateNumbers(a, b))
+    expect(representation(a.accumulate(b)))
       .toEqual({ type: 'number', value: 6 });
   });
 
   it('promotes a literal when adding it to a math value', () => {
-    const literal = parseNumber('2', {})!;
-    const math = parseNumber('calc(4)', {})!;
-
-    const forward = addNumbers(literal, math);
-    const reverse = addNumbers(math, literal);
-
-    expect(forward.type).toBe('math');
-    expect(reverse.type).toBe('math');
-    expect(serializeNumber(forward)).toBe('calc(6)');
-    expect(serializeNumber(reverse)).toBe('calc(6)');
+    const literal = NumberValue.parse('2', {})!;
+    const math = NumberValue.parse('calc(4)', {})!;
+    const forward = literal.add(math);
+    const reverse = math.add(literal);
+    expect(forward.value).toBeInstanceOf(MathValue);
+    expect(reverse.value).toBeInstanceOf(MathValue);
+    expect(forward.serialize()).toBe('calc(6)');
+    expect(reverse.serialize()).toBe('calc(6)');
   });
 
   it('promotes literals for interpolation and accumulation with math values', () => {
-    const literal = parseNumber('2', {})!;
-    const math = parseNumber('calc(4)', {})!;
-    const interpolated = interpolateNumbers(literal, math, 0.25);
-    const accumulated = accumulateNumbers(literal, math);
-
-    expect(interpolated.type).toBe('math');
-    expect(accumulated.type).toBe('math');
-    expect(serializeNumber(interpolated)).toBe('calc(2.5)');
-    expect(serializeNumber(accumulated)).toBe('calc(6)');
+    const literal = NumberValue.parse('2', {})!;
+    const math = NumberValue.parse('calc(4)', {})!;
+    const interpolated = literal.interpolate(math, 0.25);
+    const accumulated = literal.accumulate(math);
+    expect(interpolated.value).toBeInstanceOf(MathValue);
+    expect(accumulated.value).toBeInstanceOf(MathValue);
+    expect(interpolated.serialize()).toBe('calc(2.5)');
+    expect(accumulated.serialize()).toBe('calc(6)');
   });
 });
 
 describe('angle values', () => {
   it('accepts angle-valued math and rejects other categories', () => {
-    const value = parseAngle('min(1deg, 2deg)', {});
-    const other = new TokenCursor(
-      parseListOfComponentValues('calc(1s)', {}), {},
-    );
-
-    expect(serializeAngle(value!)).toBe('calc(1deg)');
-    expect(consumeAngle(other)).toBeNull();
+    const value = AngleValue.parse('min(1deg, 2deg)', {});
+    const other = new TokenCursor(parseListOfComponentValues('calc(1s)', {}), {});
+    expect(value!.serialize()).toBe('calc(1deg)');
+    expect(AngleValue.consume(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
   it('resolves math values as canonical angles at the computed-value stage', () => {
-    const value = parseAngle('calc(.5turn + 180deg)', {})!;
-
-    expect(resolveAngle(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveAngle(value, ValueStage.Computed)).toEqual({
+    const value = AngleValue.parse('calc(.5turn + 180deg)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'angle',
       value: 360,
       unit: 'deg',
@@ -304,36 +223,47 @@ describe('angle values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseAngle('1deg', {})!;
-    const b = parseAngle('2deg', {})!;
-    const math = parseAngle('calc(2deg)', {})!;
-
-    expect(addAngles(a, b))
+    const a = AngleValue.parse('1deg', {})!;
+    const b = AngleValue.parse('2deg', {})!;
+    const math = AngleValue.parse('calc(2deg)', {})!;
+    expect(representation(a.add(b)))
       .toEqual({ type: 'angle', value: 3, unit: 'deg' });
-    expect(serializeAngle(addAngles(a, math))).toBe('calc(3deg)');
-    expect(serializeAngle(interpolateAngles(a, math, 0.5)))
+    expect(a.add(math).serialize()).toBe('calc(3deg)');
+    expect(a.interpolate(math, 0.5).serialize())
       .toBe('calc(1.5deg)');
-    expect(serializeAngle(accumulateAngles(a, math))).toBe('calc(3deg)');
+    expect(a.accumulate(math).serialize()).toBe('calc(3deg)');
+  });
+
+  it.each([
+    ['add', '270deg'],
+    ['interpolate', '135deg'],
+    ['accumulate', '270deg'],
+  ] as const)('%s combines angles in different units', (operation, expected) => {
+    const a = AngleValue.parse('0.25turn', {})!;
+    const b = AngleValue.parse('180deg', {})!;
+    const combined = operation === 'interpolate'
+      ? a.interpolate(b, 0.5)
+      : a[operation](b);
+
+    expect(combined.resolve(ValueStage.Computed).serialize()).toBe(expected);
+    expect(a.serialize()).toBe('0.25turn');
+    expect(b.serialize()).toBe('180deg');
   });
 });
 
 describe('frequency values', () => {
   it('accepts frequency-valued math and rejects other categories', () => {
-    const value = parseFrequency('min(1hz, 2hz)', {});
-    const other = new TokenCursor(
-      parseListOfComponentValues('calc(1s)', {}), {},
-    );
-
-    expect(serializeFrequency(value!)).toBe('calc(1hz)');
-    expect(consumeFrequency(other)).toBeNull();
+    const value = FrequencyValue.parse('min(1hz, 2hz)', {});
+    const other = new TokenCursor(parseListOfComponentValues('calc(1s)', {}), {});
+    expect(value!.serialize()).toBe('calc(1hz)');
+    expect(FrequencyValue.consume(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
   it('resolves math values as canonical frequencies at the computed-value stage', () => {
-    const value = parseFrequency('calc(1khz + 500hz)', {})!;
-
-    expect(resolveFrequency(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveFrequency(value, ValueStage.Computed)).toEqual({
+    const value = FrequencyValue.parse('calc(1khz + 500hz)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'frequency',
       value: 1500,
       unit: 'hz',
@@ -341,37 +271,73 @@ describe('frequency values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseFrequency('1hz', {})!;
-    const b = parseFrequency('2hz', {})!;
-    const math = parseFrequency('calc(2hz)', {})!;
-
-    expect(addFrequencies(a, b))
+    const a = FrequencyValue.parse('1hz', {})!;
+    const b = FrequencyValue.parse('2hz', {})!;
+    const math = FrequencyValue.parse('calc(2hz)', {})!;
+    expect(representation(a.add(b)))
       .toEqual({ type: 'frequency', value: 3, unit: 'hz' });
-    expect(serializeFrequency(addFrequencies(a, math))).toBe('calc(3hz)');
-    expect(serializeFrequency(interpolateFrequencies(a, math, 0.5)))
+    expect(a.add(math).serialize()).toBe('calc(3hz)');
+    expect(a.interpolate(math, 0.5).serialize())
       .toBe('calc(1.5hz)');
-    expect(serializeFrequency(accumulateFrequencies(a, math)))
+    expect(a.accumulate(math).serialize())
       .toBe('calc(3hz)');
+  });
+
+  it.each([
+    ['add', '1500hz'],
+    ['interpolate', '750hz'],
+    ['accumulate', '1500hz'],
+  ] as const)('%s combines frequencies in different units', (operation, expected) => {
+    const a = FrequencyValue.parse('1khz', {})!;
+    const b = FrequencyValue.parse('500hz', {})!;
+    const combined = operation === 'interpolate'
+      ? a.interpolate(b, 0.5)
+      : a[operation](b);
+
+    expect(combined.resolve(ValueStage.Computed).serialize()).toBe(expected);
+    expect(a.serialize()).toBe('1khz');
+    expect(b.serialize()).toBe('500hz');
   });
 });
 
 describe('length values', () => {
-  it('accepts length-valued math and rejects other categories', () => {
-    const value = parseLength('min(1px, 2px)', {});
-    const other = new TokenCursor(
-      parseListOfComponentValues('calc(1deg)', {}), {},
-    );
+  it('promotes unitless zero as a length when combining with other units or math', () => {
+    const zero = LengthValue.parse('0', {})!;
+    const pixels = LengthValue.parse('2px', {})!;
+    const math = LengthValue.parse('calc(2px)', {})!;
 
-    expect(serializeLength(value!)).toBe('calc(1px)');
-    expect(consumeLength(other)).toBeNull();
+    expect(zero.add(pixels).resolve(ValueStage.Computed, {}).serialize()).toBe('2px');
+    expect(zero.interpolate(pixels, 0.5).resolve(ValueStage.Computed, {}).serialize()).toBe('1px');
+    expect(zero.accumulate(math).resolve(ValueStage.Computed, {}).serialize()).toBe('2px');
+    expect(zero.serialize()).toBe('0');
+  });
+
+  it.each([
+    ['add', 192],
+    ['interpolate', 96],
+    ['accumulate', 192],
+  ] as const)('combines different length units with %s', (operation, expected) => {
+    const a = LengthValue.parse('1in', {})!;
+    const b = LengthValue.parse('96px', {})!;
+    const combined = operation === 'interpolate' ? a.interpolate(b, 0.5) : a[operation](b);
+
+    expect(combined.resolve(ValueStage.Computed, {}).serialize()).toBe(`${expected}px`);
+    expect(a.serialize()).toBe('1in');
+    expect(b.serialize()).toBe('96px');
+  });
+
+  it('accepts length-valued math and rejects other categories', () => {
+    const value = LengthValue.parse('min(1px, 2px)', {});
+    const other = new TokenCursor(parseListOfComponentValues('calc(1deg)', {}), {});
+    expect(value!.serialize()).toBe('calc(1px)');
+    expect(LengthValue.consume(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
   it('resolves math values as canonical lengths at the computed-value stage', () => {
-    const value = parseLength('calc(1in + 96px)', {})!;
-
-    expect(resolveLength(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveLength(value, ValueStage.Computed)).toEqual({
+    const value = LengthValue.parse('calc(1in + 96px)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'length',
       value: 192,
       unit: 'px',
@@ -379,29 +345,25 @@ describe('length values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseLength('1px', {})!;
-    const b = parseLength('2px', {})!;
-    const math = parseLength('calc(2px)', {})!;
-
-    expect(addLengths(a, b))
+    const a = LengthValue.parse('1px', {})!;
+    const b = LengthValue.parse('2px', {})!;
+    const math = LengthValue.parse('calc(2px)', {})!;
+    expect(representation(a.add(b)))
       .toEqual({ type: 'length', value: 3, unit: 'px' });
-    expect(serializeLength(addLengths(a, math))).toBe('calc(3px)');
-    expect(serializeLength(interpolateLengths(a, math, 0.5)))
+    expect(a.add(math).serialize()).toBe('calc(3px)');
+    expect(a.interpolate(math, 0.5).serialize())
       .toBe('calc(1.5px)');
-    expect(serializeLength(accumulateLengths(a, math))).toBe('calc(3px)');
+    expect(a.accumulate(math).serialize()).toBe('calc(3px)');
   });
 
   it('applies ranges to math at the computed-value stage', () => {
-    const consume = createLengthConsumer({ min: 0 });
-    const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-1px)', {}), {},
-    );
-    const math = parseLength('calc(-1px)', {})!;
-
+    const consume = LengthValue.createConsumer({ min: 0 });
+    const specified = new TokenCursor(parseListOfComponentValues('calc(-1px)', {}), {});
+    const math = LengthValue.parse('calc(-1px)', {})!;
     expect(consume(specified)).not.toBeNull();
-    expect(resolveLength(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, Infinity],
-    })).toEqual({
+    }))).toEqual({
       type: 'length',
       value: 0,
       unit: 'px',
@@ -410,22 +372,32 @@ describe('length values', () => {
 });
 
 describe('resolution values', () => {
-  it('accepts resolution-valued math and rejects other categories', () => {
-    const value = parseResolution('min(1dppx, 2dppx)', {});
-    const other = new TokenCursor(
-      parseListOfComponentValues('calc(1hz)', {}), {},
-    );
+  it.each([
+    ['add', '3dppx'],
+    ['interpolate', '1.5dppx'],
+    ['accumulate', '3dppx'],
+  ] as const)('%s combines resolutions in different units', (operation, expected) => {
+    const a = ResolutionValue.parse('96dpi', {})!;
+    const b = ResolutionValue.parse('2dppx', {})!;
+    const combined = operation === 'interpolate' ? a.interpolate(b, 0.5) : a[operation](b);
 
-    expect(serializeResolution(value!)).toBe('calc(1dppx)');
-    expect(consumeResolution(other)).toBeNull();
+    expect(combined.resolve(ValueStage.Computed).serialize()).toBe(expected);
+    expect(a.serialize()).toBe('96dpi');
+    expect(b.serialize()).toBe('2dppx');
+  });
+
+  it('accepts resolution-valued math and rejects other categories', () => {
+    const value = ResolutionValue.parse('min(1dppx, 2dppx)', {});
+    const other = new TokenCursor(parseListOfComponentValues('calc(1hz)', {}), {});
+    expect(value!.serialize()).toBe('calc(1dppx)');
+    expect(ResolutionValue.consume(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
   it('resolves math values as canonical resolutions at the computed-value stage', () => {
-    const value = parseResolution('calc(96dpi + 1dppx)', {})!;
-
-    expect(resolveResolution(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveResolution(value, ValueStage.Computed)).toEqual({
+    const value = ResolutionValue.parse('calc(96dpi + 1dppx)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'resolution',
       value: 2,
       unit: 'dppx',
@@ -433,32 +405,25 @@ describe('resolution values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseResolution('1dppx', {})!;
-    const b = parseResolution('2dppx', {})!;
-    const math = parseResolution('calc(2dppx)', {})!;
-
-    expect(addResolutions(a, b))
+    const a = ResolutionValue.parse('1dppx', {})!;
+    const b = ResolutionValue.parse('2dppx', {})!;
+    const math = ResolutionValue.parse('calc(2dppx)', {})!;
+    expect(representation(a.add(b)))
       .toEqual({ type: 'resolution', value: 3, unit: 'dppx' });
-    expect(serializeResolution(addResolutions(a, math)))
+    expect(a.add(math).serialize())
       .toBe('calc(3dppx)');
-    expect(serializeResolution(interpolateResolutions(a, math, 0.5)))
+    expect(a.interpolate(math, 0.5).serialize())
       .toBe('calc(1.5dppx)');
-    expect(serializeResolution(accumulateResolutions(a, math)))
+    expect(a.accumulate(math).serialize())
       .toBe('calc(3dppx)');
   });
 
   it('clamps math results to the nonnegative resolution range', () => {
-    const value = resolveResolution(
-      parseResolution('calc(-1dppx)', {})!,
-      ValueStage.Computed,
-      {
-        range: [0, Infinity],
-        unwrapMathAt: ValueStage.Actual,
-      },
-    );
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = ResolutionValue.parse('calc(-1dppx)', {})!.resolve(ValueStage.Computed, {
+      range: [0, Infinity],
+      unwrapMathAt: ValueStage.Actual,
+    });
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'dimension',
         value: 0,
@@ -469,22 +434,32 @@ describe('resolution values', () => {
 });
 
 describe('time values', () => {
-  it('accepts time-valued math and rejects other categories', () => {
-    const value = parseTime('min(1s, 2s)', {});
-    const other = new TokenCursor(
-      parseListOfComponentValues('calc(1hz)', {}), {},
-    );
+  it.each([
+    ['add', '1.5s'],
+    ['interpolate', '0.75s'],
+    ['accumulate', '1.5s'],
+  ] as const)('%s combines times in different units', (operation, expected) => {
+    const a = TimeValue.parse('500ms', {})!;
+    const b = TimeValue.parse('1s', {})!;
+    const combined = operation === 'interpolate' ? a.interpolate(b, 0.5) : a[operation](b);
 
-    expect(serializeTime(value!)).toBe('calc(1s)');
-    expect(consumeTime(other)).toBeNull();
+    expect(combined.resolve(ValueStage.Computed).serialize()).toBe(expected);
+    expect(a.serialize()).toBe('500ms');
+    expect(b.serialize()).toBe('1s');
+  });
+
+  it('accepts time-valued math and rejects other categories', () => {
+    const value = TimeValue.parse('min(1s, 2s)', {});
+    const other = new TokenCursor(parseListOfComponentValues('calc(1hz)', {}), {});
+    expect(value!.serialize()).toBe('calc(1s)');
+    expect(TimeValue.consume(other)).toBeNull();
     expect(other.pos()).toBe(0);
   });
 
   it('resolves math values as canonical times at the computed-value stage', () => {
-    const value = parseTime('calc(1000ms + 1s)', {})!;
-
-    expect(resolveTime(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveTime(value, ValueStage.Computed)).toEqual({
+    const value = TimeValue.parse('calc(1000ms + 1s)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'time',
       value: 2,
       unit: 's',
@@ -492,62 +467,49 @@ describe('time values', () => {
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseTime('1s', {})!;
-    const b = parseTime('2s', {})!;
-    const math = parseTime('calc(2s)', {})!;
-
-    expect(addTimes(a, b))
+    const a = TimeValue.parse('1s', {})!;
+    const b = TimeValue.parse('2s', {})!;
+    const math = TimeValue.parse('calc(2s)', {})!;
+    expect(representation(a.add(b)))
       .toEqual({ type: 'time', value: 3, unit: 's' });
-    expect(serializeTime(addTimes(a, math))).toBe('calc(3s)');
-    expect(serializeTime(interpolateTimes(a, math, 0.5)))
+    expect(a.add(math).serialize()).toBe('calc(3s)');
+    expect(a.interpolate(math, 0.5).serialize())
       .toBe('calc(1.5s)');
-    expect(serializeTime(accumulateTimes(a, math))).toBe('calc(3s)');
+    expect(a.accumulate(math).serialize()).toBe('calc(3s)');
   });
 });
 
 describe('integer values', () => {
   it('parses integer literals and number-valued math functions', () => {
-    expect(parseInteger('2', {})).toEqual({
+    expect(representation(IntegerValue.parse('2', {}))).toEqual({
       type: 'integer',
       value: 2,
     });
-
-    const value = parseInteger('calc(1.5)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = IntegerValue.parse('calc(1.5)', {});
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'number',
         value: 1.5,
       },
     });
-    expect(serializeInteger(value!)).toBe('calc(1.5)');
+    expect(value!.serialize()).toBe('calc(1.5)');
   });
 
   it('rounds math results at the computed-value stage', () => {
-    const value = resolveInteger(
-      parseInteger('calc(1.5)', {})!,
-      ValueStage.Computed,
-      { unwrapMathAt: ValueStage.Actual },
-    );
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = IntegerValue.parse('calc(1.5)', {})!.resolve(ValueStage.Computed, { unwrapMathAt: ValueStage.Actual });
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'number',
         value: 2,
       },
     });
-    expect(serializeInteger(
-      resolveInteger(value, ValueStage.Computed),
-    )).toBe('2');
+    expect(value.resolve(ValueStage.Computed, {}).serialize()).toBe('2');
   });
 
   it('resolves math values as integers at the computed-value stage', () => {
-    const value = parseInteger('calc(1.5)', {})!;
-
-    expect(resolveInteger(value, ValueStage.Declared)).toEqual(value);
-    expect(resolveInteger(value, ValueStage.Computed)).toEqual({
+    const value = IntegerValue.parse('calc(1.5)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {}))).toEqual({
       type: 'integer',
       value: 2,
     });
@@ -556,84 +518,65 @@ describe('integer values', () => {
   it('rejects non-number math results', () => {
     for (const input of ['calc(1px)', 'calc(1%)']) {
       const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
-
-      expect(consumeInteger(c)).toBeNull();
+      expect(IntegerValue.consume(c)).toBeNull();
       expect(c.pos()).toBe(0);
     }
   });
 
   it('applies ranges to literals and math functions at their stages', () => {
-    const consume = createIntegerConsumer({ min: 0, max: 2 });
+    const consume = IntegerValue.createConsumer({ min: 0, max: 2 });
     const literal = new TokenCursor(parseListOfComponentValues('3', {}), {});
-    const specifiedMath = new TokenCursor(
-      parseListOfComponentValues('calc(3)', {}), {},
-    );
-    const math = parseInteger('calc(3)', {})!;
-
+    const specifiedMath = new TokenCursor(parseListOfComponentValues('calc(3)', {}), {});
+    const math = IntegerValue.parse('calc(3)', {})!;
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).not.toBeNull();
-    expect(resolveInteger(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, 2],
-    })).toEqual({
+    }))).toEqual({
       type: 'integer',
       value: 2,
     });
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parseInteger('1', {})!;
-    const b = parseInteger('2', {})!;
-    const math = parseInteger('calc(2)', {})!;
-
-    expect(addIntegers(a, b)).toEqual({ type: 'integer', value: 3 });
-    expect(interpolateIntegers(a, b, 0.5))
+    const a = IntegerValue.parse('1', {})!;
+    const b = IntegerValue.parse('2', {})!;
+    const math = IntegerValue.parse('calc(2)', {})!;
+    expect(representation(a.add(b))).toEqual({ type: 'integer', value: 3 });
+    expect(representation(a.interpolate(b, 0.5)))
       .toEqual({ type: 'integer', value: 2 });
-    expect(accumulateIntegers(a, b))
+    expect(representation(a.accumulate(b)))
       .toEqual({ type: 'integer', value: 3 });
-
-    expect(serializeInteger(addIntegers(a, math))).toBe('calc(3)');
-    const interpolated = interpolateIntegers(
-      a,
-      math,
-      0.5,
-    );
-
-    expect(serializeInteger(
-      resolveInteger(interpolated, ValueStage.Computed),
-    )).toBe('2');
-    expect(serializeInteger(accumulateIntegers(a, math))).toBe('calc(3)');
+    expect(a.add(math).serialize()).toBe('calc(3)');
+    const interpolated = a.interpolate(math, 0.5);
+    expect(interpolated.resolve(ValueStage.Computed, {}).serialize()).toBe('2');
+    expect(a.accumulate(math).serialize()).toBe('calc(3)');
   });
 });
 
 describe('percentage values', () => {
   it('parses and serializes percentage literals and math functions', () => {
-    expect(parsePercentage('25%', {})).toEqual({
+    expect(representation(PercentageValue.parse('25%', {}))).toEqual({
       type: 'percentage',
       value: 25,
     });
-
-    const value = parsePercentage('calc(10% + 20%)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = PercentageValue.parse('calc(10% + 20%)', {});
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'percentage',
         value: 30,
       },
     });
-    expect(serializePercentage(value!)).toBe('calc(30%)');
-    expect(serializePercentage(
-      resolvePercentage(value!, ValueStage.Computed),
-    )).toBe('30%');
+    expect(value!.serialize()).toBe('calc(30%)');
+    expect(value!.resolve(ValueStage.Computed, {}).serialize()).toBe('30%');
   });
 
   it('resolves math values as percentages at the computed-value stage', () => {
-    const value = parsePercentage('calc(10% + 20%)', {})!;
-
-    expect(resolvePercentage(value, ValueStage.Declared)).toEqual(value);
-    expect(resolvePercentage(value, ValueStage.Computed, {
+    const value = PercentageValue.parse('calc(10% + 20%)', {})!;
+    expect(value.resolve(ValueStage.Declared)).toEqual(value);
+    expect(representation(value.resolve(ValueStage.Computed, {
       percentHint: 'length',
-    })).toEqual({
+    }))).toEqual({
       type: 'percentage',
       value: 30,
     });
@@ -642,8 +585,7 @@ describe('percentage values', () => {
   it('rejects non-percentage math results', () => {
     for (const input of ['calc(1)', 'calc(1px)']) {
       const c = new TokenCursor(parseListOfComponentValues(input, {}), {});
-
-      expect(consumePercentage(c)).toBeNull();
+      expect(PercentageValue.consume(c)).toBeNull();
       expect(c.pos()).toBe(0);
     }
   });
@@ -652,12 +594,8 @@ describe('percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(25%)', {}),
-      context,
-    );
-
-    expect(consumePercentage(c)).toMatchObject({
+    const c = new TokenCursor(parseListOfComponentValues('calc(25%)', {}), context);
+    expect(representation(PercentageValue.consume(c))).toMatchObject({
       calculation: {
         type: 'percentage',
         value: 25,
@@ -667,244 +605,98 @@ describe('percentage values', () => {
   });
 
   it('applies ranges to literals and math functions at their stages', () => {
-    const consume = createPercentageConsumer({ min: 0, max: 100 });
+    const consume = PercentageValue.createConsumer({ min: 0, max: 100 });
     const literal = new TokenCursor(parseListOfComponentValues('125%', {}), {});
-    const specifiedMath = new TokenCursor(
-      parseListOfComponentValues('calc(125%)', {}), {},
-    );
-    const math = parsePercentage('calc(125%)', {})!;
-
+    const specifiedMath = new TokenCursor(parseListOfComponentValues('calc(125%)', {}), {});
+    const math = PercentageValue.parse('calc(125%)', {})!;
     expect(consume(literal)).toBeNull();
     expect(consume(specifiedMath)).not.toBeNull();
-    expect(resolvePercentage(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, 100],
-    })).toEqual({
+    }))).toEqual({
       type: 'percentage',
       value: 100,
     });
   });
 
   it('combines literals directly and promotes mixed representations', () => {
-    const a = parsePercentage('10%', {})!;
-    const b = parsePercentage('20%', {})!;
-    const math = parsePercentage('calc(20%)', {})!;
-
-    expect(addPercentages(a, b))
+    const a = PercentageValue.parse('10%', {})!;
+    const b = PercentageValue.parse('20%', {})!;
+    const math = PercentageValue.parse('calc(20%)', {})!;
+    expect(representation(a.add(b)))
       .toEqual({ type: 'percentage', value: 30 });
-    expect(interpolatePercentages(a, b, 0.5))
+    expect(representation(a.interpolate(b, 0.5)))
       .toEqual({ type: 'percentage', value: 15 });
-    expect(accumulatePercentages(a, b))
+    expect(representation(a.accumulate(b)))
       .toEqual({ type: 'percentage', value: 30 });
-
-    expect(serializePercentage(addPercentages(a, math))).toBe('calc(30%)');
-    expect(serializePercentage(interpolatePercentages(a, math, 0.5)))
+    expect(a.add(math).serialize()).toBe('calc(30%)');
+    expect(a.interpolate(math, 0.5).serialize())
       .toBe('calc(15%)');
-    expect(serializePercentage(accumulatePercentages(a, math)))
+    expect(a.accumulate(math).serialize())
       .toBe('calc(30%)');
-  });
-});
-
-describe('angle-percentage values', () => {
-  it('parses literal alternatives without promoting them', () => {
-    expect(parseAnglePercentage('10deg', {})).toEqual({
-      type: 'angle',
-      value: 10,
-      unit: 'deg',
-    });
-    expect(parseAnglePercentage('25%', {})).toEqual({
-      type: 'percentage',
-      value: 25,
-    });
-  });
-
-  it('parses and serializes mixed math functions', () => {
-    const value = parseAnglePercentage('calc(10deg + 25%)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
-      calculation: {
-        type: 'sum',
-      },
-    });
-    expect(serializeAnglePercentage(value!)).toBe('calc(25% + 10deg)');
-  });
-
-  it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseAnglePercentage('calc(10deg + 25%)', {})!;
-    const percentage = parseAnglePercentage('calc(25%)', {})!;
-
-    expect(resolveAnglePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
-    expect(resolveAnglePercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'angle', value: 200, unit: 'deg' },
-    })).toEqual({ type: 'angle', value: 60, unit: 'deg' });
-    expect(resolveAnglePercentage(percentage, ValueStage.Computed))
-      .toEqual({ type: 'percentage', value: 25 });
-  });
-
-  it('canonicalizes literal angles at the computed-value stage', () => {
-    const angle = parseAnglePercentage('0.5turn', {})!;
-
-    expect(resolveAnglePercentage(angle, ValueStage.Specified)).toBe(angle);
-    expect(resolveAnglePercentage(angle, ValueStage.Computed))
-      .toEqual({ type: 'angle', value: 180, unit: 'deg' });
-  });
-
-  it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseAnglePercentage('25%', {})!;
-    const context = {
-      percentageReferenceValue: { type: 'angle', value: 200, unit: 'deg' },
-    } as const;
-
-    expect(resolveAnglePercentage(percentage, ValueStage.Specified, context))
-      .toBe(percentage);
-    expect(resolveAnglePercentage(percentage, ValueStage.Computed))
-      .toBe(percentage);
-    expect(resolveAnglePercentage(percentage, ValueStage.Computed, context))
-      .toEqual({ type: 'angle', value: 50, unit: 'deg' });
-  });
-
-  it('rejects calculations from another dimensional category', () => {
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10px + 25%)', {}), {},
-    );
-
-    expect(consumeAnglePercentage(c)).toBeNull();
-    expect(c.pos()).toBe(0);
-  });
-
-  it('uses the angle percentage type and restores outer context', () => {
-    const context = {
-      percentHint: 'length',
-    } as const;
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10deg + 25%)', {}),
-      context,
-    );
-
-    expect(consumeAnglePercentage(c)).not.toBeNull();
-    expect(c.context).toBe(context);
-  });
-
-  it('keeps directly compatible literal combinations literal', () => {
-    const angleA = parseAnglePercentage('10deg', {})!;
-    const angleB = parseAnglePercentage('20deg', {})!;
-    const percentageA = parseAnglePercentage('10%', {})!;
-    const percentageB = parseAnglePercentage('20%', {})!;
-
-    expect(addAnglePercentages(angleA, angleB))
-      .toEqual({ type: 'angle', value: 30, unit: 'deg' });
-    expect(interpolateAnglePercentages(
-      percentageA,
-      percentageB,
-      0.5,
-    )).toEqual({ type: 'percentage', value: 15 });
-    expect(accumulateAnglePercentages(percentageA, percentageB))
-      .toEqual({ type: 'percentage', value: 30 });
-  });
-
-  it('promotes incompatible literal alternatives into math', () => {
-    const angle = parseAnglePercentage('10deg', {})!;
-    const percentage = parseAnglePercentage('20%', {})!;
-
-    expect(serializeAnglePercentage(addAnglePercentages(angle, percentage)))
-      .toBe('calc(20% + 10deg)');
-    expect(serializeAnglePercentage(interpolateAnglePercentages(
-      angle,
-      percentage,
-      0.5,
-    ))).toBe('calc(10% + 5deg)');
-    expect(serializeAnglePercentage(accumulateAnglePercentages(
-      angle,
-      percentage,
-    ))).toBe('calc(20% + 10deg)');
-  });
-
-  it('applies ranges to math at the computed-value stage', () => {
-    const consume = createAnglePercentageConsumer({ min: 0 });
-    const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10deg)', {}), {},
-    );
-    const math = parseAnglePercentage('calc(-10deg)', {})!;
-
-    expect(consume(specified)).not.toBeNull();
-    expect(resolveAnglePercentage(math, ValueStage.Computed, {
-      range: [0, Infinity],
-    })).toEqual({
-      type: 'angle',
-      value: 0,
-      unit: 'deg',
-    });
   });
 });
 
 describe('length-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseLengthPercentage('10px', {})).toEqual({
+    expect(representation(LengthPercentageValue.parse('10px', {}))).toEqual({
       type: 'length',
       value: 10,
       unit: 'px',
     });
-    expect(parseLengthPercentage('25%', {})).toEqual({
+    expect(representation(LengthPercentageValue.parse('25%', {}))).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseLengthPercentage('calc(10px + 25%)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = LengthPercentageValue.parse('calc(10px + 25%)', {});
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'sum',
       },
     });
-    expect(serializeLengthPercentage(value!)).toBe('calc(25% + 10px)');
+    expect(value!.serialize()).toBe('calc(25% + 10px)');
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseLengthPercentage('calc(10px + 25%)', {})!;
-    const percentage = parseLengthPercentage('calc(25%)', {})!;
-
-    expect(resolveLengthPercentage(mixed, ValueStage.Computed)).toEqual(mixed);
-    expect(resolveLengthPercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'length', value: 200, unit: 'px' },
-    })).toEqual({ type: 'length', value: 60, unit: 'px' });
-    expect(resolveLengthPercentage(percentage, ValueStage.Computed))
+    const mixed = LengthPercentageValue.parse('calc(10px + 25%)', {})!;
+    const percentage = LengthPercentageValue.parse('calc(25%)', {})!;
+    expect(mixed.resolve(ValueStage.Computed, {})).toEqual(mixed);
+    expect(representation(mixed.resolve(ValueStage.Computed, {
+      percentageReferenceValue: new LengthLiteral(200, 'px'),
+    }))).toEqual({ type: 'length', value: 60, unit: 'px' });
+    expect(representation(percentage.resolve(ValueStage.Computed, {})))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
   it('resolves literal lengths to computed absolute lengths', () => {
-    const absolute = parseLengthPercentage('1in', {})!;
-    const relative = parseLengthPercentage('2em', {})!;
-
-    expect(resolveLengthPercentage(absolute, ValueStage.Specified))
+    const absolute = LengthPercentageValue.parse('1in', {})!;
+    const relative = LengthPercentageValue.parse('2em', {})!;
+    expect(absolute.resolve(ValueStage.Specified))
       .toEqual(absolute);
-    expect(resolveLengthPercentage(absolute, ValueStage.Computed))
+    expect(representation(absolute.resolve(ValueStage.Computed, {})))
       .toEqual({ type: 'length', value: 96, unit: 'px' });
-    expect(resolveLengthPercentage(relative, ValueStage.Computed))
+    expect(relative.resolve(ValueStage.Computed, {}))
       .toEqual(relative);
-    expect(resolveLengthPercentage(relative, ValueStage.Computed, {
+    expect(representation(relative.resolve(ValueStage.Computed, {
       length: { em: 16 },
-    })).toEqual({ type: 'length', value: 32, unit: 'px' });
+    }))).toEqual({ type: 'length', value: 32, unit: 'px' });
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseLengthPercentage('25%', {})!;
-
-    expect(resolveLengthPercentage(percentage, ValueStage.Computed))
+    const percentage = LengthPercentageValue.parse('25%', {})!;
+    expect(percentage.resolve(ValueStage.Computed, {}))
       .toEqual(percentage);
-    expect(resolveLengthPercentage(percentage, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'length', value: 200, unit: 'px' },
-    })).toEqual({ type: 'length', value: 50, unit: 'px' });
+    expect(representation(percentage.resolve(ValueStage.Computed, {
+      percentageReferenceValue: new LengthLiteral(200, 'px'),
+    }))).toEqual({ type: 'length', value: 50, unit: 'px' });
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10deg + 25%)', {}), {},
-    );
-
-    expect(consumeLengthPercentage(c)).toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(10deg + 25%)', {}), {});
+    expect(LengthPercentageValue.consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -912,62 +704,39 @@ describe('length-percentage values', () => {
     const context = {
       percentHint: 'angle',
     } as const;
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10px + 25%)', {}),
-      context,
-    );
-
-    expect(consumeLengthPercentage(c)).not.toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(10px + 25%)', {}), context);
+    expect(LengthPercentageValue.consume(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const lengthA = parseLengthPercentage('10px', {})!;
-    const lengthB = parseLengthPercentage('20px', {})!;
-    const percentageA = parseLengthPercentage('10%', {})!;
-    const percentageB = parseLengthPercentage('20%', {})!;
-
-    expect(addLengthPercentages(lengthA, lengthB))
+    const lengthA = LengthPercentageValue.parse('10px', {})!;
+    const lengthB = LengthPercentageValue.parse('20px', {})!;
+    const percentageA = LengthPercentageValue.parse('10%', {})!;
+    const percentageB = LengthPercentageValue.parse('20%', {})!;
+    expect(representation(lengthA.add(lengthB)))
       .toEqual({ type: 'length', value: 30, unit: 'px' });
-    expect(interpolateLengthPercentages(
-      percentageA,
-      percentageB,
-      0.5,
-    )).toEqual({ type: 'percentage', value: 15 });
-    expect(accumulateLengthPercentages(percentageA, percentageB))
+    expect(representation(percentageA.interpolate(percentageB, 0.5))).toEqual({ type: 'percentage', value: 15 });
+    expect(representation(percentageA.accumulate(percentageB)))
       .toEqual({ type: 'percentage', value: 30 });
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const length = parseLengthPercentage('10px', {})!;
-    const percentage = parseLengthPercentage('20%', {})!;
-
-    expect(serializeLengthPercentage(addLengthPercentages(
-      length,
-      percentage,
-    ))).toBe('calc(20% + 10px)');
-    expect(serializeLengthPercentage(interpolateLengthPercentages(
-      length,
-      percentage,
-      0.5,
-    ))).toBe('calc(10% + 5px)');
-    expect(serializeLengthPercentage(accumulateLengthPercentages(
-      length,
-      percentage,
-    ))).toBe('calc(20% + 10px)');
+    const length = LengthPercentageValue.parse('10px', {})!;
+    const percentage = LengthPercentageValue.parse('20%', {})!;
+    expect(length.add(percentage).serialize()).toBe('calc(20% + 10px)');
+    expect(length.interpolate(percentage, 0.5).serialize()).toBe('calc(10% + 5px)');
+    expect(length.accumulate(percentage).serialize()).toBe('calc(20% + 10px)');
   });
 
   it('applies ranges to math at the computed-value stage', () => {
-    const consume = createLengthPercentageConsumer({ min: 0 });
-    const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10px)', {}), {},
-    );
-    const math = parseLengthPercentage('calc(-10px)', {})!;
-
+    const consume = LengthPercentageValue.createConsumer({ min: 0 });
+    const specified = new TokenCursor(parseListOfComponentValues('calc(-10px)', {}), {});
+    const math = LengthPercentageValue.parse('calc(-10px)', {})!;
     expect(consume(specified)).not.toBeNull();
-    expect(resolveLengthPercentage(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, Infinity],
-    })).toEqual({
+    }))).toEqual({
       type: 'length',
       value: 0,
       unit: 'px',
@@ -977,71 +746,63 @@ describe('length-percentage values', () => {
 
 describe('frequency-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseFrequencyPercentage('10hz', {})).toEqual({
+    expect(representation(FrequencyPercentageValue.parse('10hz', {}))).toEqual({
       type: 'frequency',
       value: 10,
       unit: 'hz',
     });
-    expect(parseFrequencyPercentage('25%', {})).toEqual({
+    expect(representation(FrequencyPercentageValue.parse('25%', {}))).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseFrequencyPercentage('calc(10hz + 25%)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = FrequencyPercentageValue.parse('calc(10hz + 25%)', {});
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'sum',
       },
     });
-    expect(serializeFrequencyPercentage(value!)).toBe('calc(25% + 10hz)');
+    expect(value!.serialize()).toBe('calc(25% + 10hz)');
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseFrequencyPercentage('calc(10hz + 25%)', {})!;
-    const percentage = parseFrequencyPercentage('calc(25%)', {})!;
-
-    expect(resolveFrequencyPercentage(mixed, ValueStage.Computed))
+    const mixed = FrequencyPercentageValue.parse('calc(10hz + 25%)', {})!;
+    const percentage = FrequencyPercentageValue.parse('calc(25%)', {})!;
+    expect(mixed.resolve(ValueStage.Computed, {}))
       .toEqual(mixed);
-    expect(resolveFrequencyPercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'frequency', value: 200, unit: 'hz' },
-    })).toEqual({ type: 'frequency', value: 60, unit: 'hz' });
-    expect(resolveFrequencyPercentage(percentage, ValueStage.Computed))
+    expect(representation(mixed.resolve(ValueStage.Computed, {
+      percentageReferenceValue: new FrequencyLiteral(200, 'hz'),
+    }))).toEqual({ type: 'frequency', value: 60, unit: 'hz' });
+    expect(representation(percentage.resolve(ValueStage.Computed, {})))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
   it('canonicalizes literal frequencies at the computed-value stage', () => {
-    const frequency = parseFrequencyPercentage('1khz', {})!;
-
-    expect(resolveFrequencyPercentage(frequency, ValueStage.Specified))
+    const frequency = FrequencyPercentageValue.parse('1khz', {})!;
+    expect(frequency.resolve(ValueStage.Specified))
       .toBe(frequency);
-    expect(resolveFrequencyPercentage(frequency, ValueStage.Computed))
-      .toEqual({ type: 'frequency', value: 1_000, unit: 'hz' });
+    expect(representation(frequency.resolve(ValueStage.Computed, {})))
+      .toEqual({ type: 'frequency', value: 1000, unit: 'hz' });
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseFrequencyPercentage('25%', {})!;
+    const percentage = FrequencyPercentageValue.parse('25%', {})!;
     const context = {
-      percentageReferenceValue: { type: 'frequency', value: 200, unit: 'hz' },
+      percentageReferenceValue: new FrequencyLiteral(200, 'hz'),
     } as const;
-
-    expect(resolveFrequencyPercentage(percentage, ValueStage.Specified, context))
+    expect(percentage.resolve(ValueStage.Specified, context))
       .toBe(percentage);
-    expect(resolveFrequencyPercentage(percentage, ValueStage.Computed))
+    expect(percentage.resolve(ValueStage.Computed, {}))
       .toBe(percentage);
-    expect(resolveFrequencyPercentage(percentage, ValueStage.Computed, context))
+    expect(representation(percentage.resolve(ValueStage.Computed, context)))
       .toEqual({ type: 'frequency', value: 50, unit: 'hz' });
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10s + 25%)', {}), {},
-    );
-
-    expect(consumeFrequencyPercentage(c)).toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(10s + 25%)', {}), {});
+    expect(FrequencyPercentageValue.consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1049,62 +810,39 @@ describe('frequency-percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10hz + 25%)', {}),
-      context,
-    );
-
-    expect(consumeFrequencyPercentage(c)).not.toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(10hz + 25%)', {}), context);
+    expect(FrequencyPercentageValue.consume(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const frequencyA = parseFrequencyPercentage('10hz', {})!;
-    const frequencyB = parseFrequencyPercentage('20hz', {})!;
-    const percentageA = parseFrequencyPercentage('10%', {})!;
-    const percentageB = parseFrequencyPercentage('20%', {})!;
-
-    expect(addFrequencyPercentages(frequencyA, frequencyB))
+    const frequencyA = FrequencyPercentageValue.parse('10hz', {})!;
+    const frequencyB = FrequencyPercentageValue.parse('20hz', {})!;
+    const percentageA = FrequencyPercentageValue.parse('10%', {})!;
+    const percentageB = FrequencyPercentageValue.parse('20%', {})!;
+    expect(representation(frequencyA.add(frequencyB)))
       .toEqual({ type: 'frequency', value: 30, unit: 'hz' });
-    expect(interpolateFrequencyPercentages(
-      percentageA,
-      percentageB,
-      0.5,
-    )).toEqual({ type: 'percentage', value: 15 });
-    expect(accumulateFrequencyPercentages(percentageA, percentageB))
+    expect(representation(percentageA.interpolate(percentageB, 0.5))).toEqual({ type: 'percentage', value: 15 });
+    expect(representation(percentageA.accumulate(percentageB)))
       .toEqual({ type: 'percentage', value: 30 });
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const frequency = parseFrequencyPercentage('10hz', {})!;
-    const percentage = parseFrequencyPercentage('20%', {})!;
-
-    expect(serializeFrequencyPercentage(addFrequencyPercentages(
-      frequency,
-      percentage,
-    ))).toBe('calc(20% + 10hz)');
-    expect(serializeFrequencyPercentage(interpolateFrequencyPercentages(
-      frequency,
-      percentage,
-      0.5,
-    ))).toBe('calc(10% + 5hz)');
-    expect(serializeFrequencyPercentage(accumulateFrequencyPercentages(
-      frequency,
-      percentage,
-    ))).toBe('calc(20% + 10hz)');
+    const frequency = FrequencyPercentageValue.parse('10hz', {})!;
+    const percentage = FrequencyPercentageValue.parse('20%', {})!;
+    expect(frequency.add(percentage).serialize()).toBe('calc(20% + 10hz)');
+    expect(frequency.interpolate(percentage, 0.5).serialize()).toBe('calc(10% + 5hz)');
+    expect(frequency.accumulate(percentage).serialize()).toBe('calc(20% + 10hz)');
   });
 
   it('applies ranges to math at the computed-value stage', () => {
-    const consume = createFrequencyPercentageConsumer({ min: 0 });
-    const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10hz)', {}), {},
-    );
-    const math = parseFrequencyPercentage('calc(-10hz)', {})!;
-
+    const consume = FrequencyPercentageValue.createConsumer({ min: 0 });
+    const specified = new TokenCursor(parseListOfComponentValues('calc(-10hz)', {}), {});
+    const math = FrequencyPercentageValue.parse('calc(-10hz)', {})!;
     expect(consume(specified)).not.toBeNull();
-    expect(resolveFrequencyPercentage(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, Infinity],
-    })).toEqual({
+    }))).toEqual({
       type: 'frequency',
       value: 0,
       unit: 'hz',
@@ -1114,69 +852,61 @@ describe('frequency-percentage values', () => {
 
 describe('time-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
-    expect(parseTimePercentage('10s', {})).toEqual({
+    expect(representation(TimePercentageValue.parse('10s', {}))).toEqual({
       type: 'time',
       value: 10,
       unit: 's',
     });
-    expect(parseTimePercentage('25%', {})).toEqual({
+    expect(representation(TimePercentageValue.parse('25%', {}))).toEqual({
       type: 'percentage',
       value: 25,
     });
   });
 
   it('parses and serializes mixed math functions', () => {
-    const value = parseTimePercentage('calc(10s + 25%)', {});
-
-    expect(value).toMatchObject({
-      type: 'math',
+    const value = TimePercentageValue.parse('calc(10s + 25%)', {});
+    expect(representation(value)).toMatchObject({
       calculation: {
         type: 'sum',
       },
     });
-    expect(serializeTimePercentage(value!)).toBe('calc(25% + 10s)');
+    expect(value!.serialize()).toBe('calc(25% + 10s)');
   });
 
   it('resolves mixed math when its percentage reference is available', () => {
-    const mixed = parseTimePercentage('calc(10s + 25%)', {})!;
-    const percentage = parseTimePercentage('calc(25%)', {})!;
-
-    expect(resolveTimePercentage(mixed, ValueStage.Computed)).toEqual(mixed);
-    expect(resolveTimePercentage(mixed, ValueStage.Computed, {
-      percentageReferenceValue: { type: 'time', value: 200, unit: 's' },
-    })).toEqual({ type: 'time', value: 60, unit: 's' });
-    expect(resolveTimePercentage(percentage, ValueStage.Computed))
+    const mixed = TimePercentageValue.parse('calc(10s + 25%)', {})!;
+    const percentage = TimePercentageValue.parse('calc(25%)', {})!;
+    expect(mixed.resolve(ValueStage.Computed, {})).toEqual(mixed);
+    expect(representation(mixed.resolve(ValueStage.Computed, {
+      percentageReferenceValue: new TimeLiteral(200, 's'),
+    }))).toEqual({ type: 'time', value: 60, unit: 's' });
+    expect(representation(percentage.resolve(ValueStage.Computed, {})))
       .toEqual({ type: 'percentage', value: 25 });
   });
 
   it('canonicalizes literal times at the computed-value stage', () => {
-    const time = parseTimePercentage('250ms', {})!;
-
-    expect(resolveTimePercentage(time, ValueStage.Specified)).toBe(time);
-    expect(resolveTimePercentage(time, ValueStage.Computed))
+    const time = TimePercentageValue.parse('250ms', {})!;
+    expect(time.resolve(ValueStage.Specified)).toBe(time);
+    expect(representation(time.resolve(ValueStage.Computed, {})))
       .toEqual({ type: 'time', value: 0.25, unit: 's' });
   });
 
   it('resolves literal percentages only when their basis is available', () => {
-    const percentage = parseTimePercentage('25%', {})!;
+    const percentage = TimePercentageValue.parse('25%', {})!;
     const context = {
-      percentageReferenceValue: { type: 'time', value: 200, unit: 's' },
+      percentageReferenceValue: new TimeLiteral(200, 's'),
     } as const;
-
-    expect(resolveTimePercentage(percentage, ValueStage.Specified, context))
+    expect(percentage.resolve(ValueStage.Specified, context))
       .toBe(percentage);
-    expect(resolveTimePercentage(percentage, ValueStage.Computed))
+    expect(percentage.resolve(ValueStage.Computed, {}))
       .toBe(percentage);
-    expect(resolveTimePercentage(percentage, ValueStage.Computed, context))
+    expect(representation(percentage.resolve(ValueStage.Computed, context)))
       .toEqual({ type: 'time', value: 50, unit: 's' });
   });
 
   it('rejects calculations from another dimensional category', () => {
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10hz + 25%)', {}), {},
-    );
-
-    expect(consumeTimePercentage(c)).toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(10hz + 25%)', {}), {});
+    expect(TimePercentageValue.consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 
@@ -1184,62 +914,39 @@ describe('time-percentage values', () => {
     const context = {
       percentHint: 'length',
     } as const;
-    const c = new TokenCursor(
-      parseListOfComponentValues('calc(10s + 25%)', {}),
-      context,
-    );
-
-    expect(consumeTimePercentage(c)).not.toBeNull();
+    const c = new TokenCursor(parseListOfComponentValues('calc(10s + 25%)', {}), context);
+    expect(TimePercentageValue.consume(c)).not.toBeNull();
     expect(c.context).toBe(context);
   });
 
   it('keeps directly compatible literal combinations literal', () => {
-    const timeA = parseTimePercentage('10s', {})!;
-    const timeB = parseTimePercentage('20s', {})!;
-    const percentageA = parseTimePercentage('10%', {})!;
-    const percentageB = parseTimePercentage('20%', {})!;
-
-    expect(addTimePercentages(timeA, timeB))
+    const timeA = TimePercentageValue.parse('10s', {})!;
+    const timeB = TimePercentageValue.parse('20s', {})!;
+    const percentageA = TimePercentageValue.parse('10%', {})!;
+    const percentageB = TimePercentageValue.parse('20%', {})!;
+    expect(representation(timeA.add(timeB)))
       .toEqual({ type: 'time', value: 30, unit: 's' });
-    expect(interpolateTimePercentages(
-      percentageA,
-      percentageB,
-      0.5,
-    )).toEqual({ type: 'percentage', value: 15 });
-    expect(accumulateTimePercentages(percentageA, percentageB))
+    expect(representation(percentageA.interpolate(percentageB, 0.5))).toEqual({ type: 'percentage', value: 15 });
+    expect(representation(percentageA.accumulate(percentageB)))
       .toEqual({ type: 'percentage', value: 30 });
   });
 
   it('promotes incompatible literal alternatives into math', () => {
-    const time = parseTimePercentage('10s', {})!;
-    const percentage = parseTimePercentage('20%', {})!;
-
-    expect(serializeTimePercentage(addTimePercentages(
-      time,
-      percentage,
-    ))).toBe('calc(20% + 10s)');
-    expect(serializeTimePercentage(interpolateTimePercentages(
-      time,
-      percentage,
-      0.5,
-    ))).toBe('calc(10% + 5s)');
-    expect(serializeTimePercentage(accumulateTimePercentages(
-      time,
-      percentage,
-    ))).toBe('calc(20% + 10s)');
+    const time = TimePercentageValue.parse('10s', {})!;
+    const percentage = TimePercentageValue.parse('20%', {})!;
+    expect(time.add(percentage).serialize()).toBe('calc(20% + 10s)');
+    expect(time.interpolate(percentage, 0.5).serialize()).toBe('calc(10% + 5s)');
+    expect(time.accumulate(percentage).serialize()).toBe('calc(20% + 10s)');
   });
 
   it('applies ranges to math at the computed-value stage', () => {
-    const consume = createTimePercentageConsumer({ min: 0 });
-    const specified = new TokenCursor(
-      parseListOfComponentValues('calc(-10s)', {}), {},
-    );
-    const math = parseTimePercentage('calc(-10s)', {})!;
-
+    const consume = TimePercentageValue.createConsumer({ min: 0 });
+    const specified = new TokenCursor(parseListOfComponentValues('calc(-10s)', {}), {});
+    const math = TimePercentageValue.parse('calc(-10s)', {})!;
     expect(consume(specified)).not.toBeNull();
-    expect(resolveTimePercentage(math, ValueStage.Computed, {
+    expect(representation(math.resolve(ValueStage.Computed, {
       range: [0, Infinity],
-    })).toEqual({
+    }))).toEqual({
       type: 'time',
       value: 0,
       unit: 's',

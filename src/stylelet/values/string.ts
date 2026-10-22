@@ -1,45 +1,41 @@
 import {
-  consumeStringToken, serializeCssString, adaptConsumer, withTrivia, createComponentParser,
+  consumeStringToken, serializeCssString, adaptConsumer, withTrivia, parseAsComponentGrammar,
   type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueDefinition } from '../value-processing/index';
+import type { ValueStage } from '../value-processing/index';
 
-/*
- * <string> = <string-token>
- */
+import type { Value } from './value';
 
-export type StringValue = {
-  type: 'string';
+/** A parsed CSS <string>. */
+// https://drafts.csswg.org/css-values-4/#strings
+export class StringValue implements Value {
+  /** The decoded string, retaining its case. */
   value: string;
-};
 
-export const stringDef: ValueDefinition<StringValue> = {
-  consume: consumeString,
-  resolve: (value) => value,
-  serialize: serializeString,
-};
+  constructor(value: string) {
+    this.value = value;
+  }
 
-export function parseString(
-  input: ParserInput,
-  context: unknown,
-): StringValue | null {
-  return stringParser(input, context);
+  /** Parse a complete <string>. */
+  static parse(input: ParserInput, context: unknown): StringValue | null {
+    return parseAsComponentGrammar(input, stringGrammar, context);
+  }
+
+  /** Consume one <string>. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<StringValue> {
+    return stringConsumer(c);
+  }
+
+  /** This grammar has no contextual resolution. */
+  resolve(_stage: ValueStage, _context: unknown): StringValue {
+    return this;
+  }
+
+  /** Escape the retained text using CSS string syntax. */
+  serialize(): string {
+    return serializeCssString(this.value);
+  }
 }
 
-export function consumeString(
-  c: TokenCursor,
-): TryConsumerResult<StringValue> {
-  return stringConsumer(c);
-}
-
-export function serializeString(value: StringValue): string {
-  return serializeCssString(value.value);
-}
-
-// <string> = <string-token>
-const stringConsumer = adaptConsumer(
-  consumeStringToken,
-  (token): StringValue => ({ type: 'string', value: token.value }),
-);
-
-const stringParser = createComponentParser(withTrivia(stringConsumer));
+const stringConsumer = adaptConsumer(consumeStringToken, (token) => new StringValue(token.value));
+const stringGrammar = withTrivia(stringConsumer);

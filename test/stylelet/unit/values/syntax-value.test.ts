@@ -2,23 +2,22 @@ import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
-  consumeSyntax, parseSyntax,
-  type SyntaxValue,
+  SyntaxValue,
 } from '../../../../src/stylelet/values/syntax-value';
 import { describe, expect, it } from 'vitest';
 
-const lengthSyntax: SyntaxValue = {
+const lengthSyntax = new SyntaxValue({
   type: 'syntax-definition',
   components: [{ type: 'syntax-type', name: 'length' }],
-};
+});
 
 describe('<syntax>', () => {
   it('parses the universal syntax definition', () => {
-    expect(parseSyntax('*', {})).toEqual({ type: 'universal-syntax' });
+    expect(SyntaxValue.parse('*', {})?.value).toEqual({ type: 'universal-syntax' });
   });
 
   it('distinguishes syntax types from keyword components', () => {
-    expect(parseSyntax('<length> | length', {})).toEqual({
+    expect(SyntaxValue.parse('<length> | length', {})?.value).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length' },
@@ -28,7 +27,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves the specified order of alternatives', () => {
-    expect(parseSyntax('<percentage> | <number> | auto', {})).toEqual({
+    expect(SyntaxValue.parse('<percentage> | <number> | auto', {})?.value).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'percentage' },
@@ -39,7 +38,7 @@ describe('<syntax>', () => {
   });
 
   it('parses syntax multipliers without intervening whitespace', () => {
-    expect(parseSyntax('<length>+ | auto#', {})).toEqual({
+    expect(SyntaxValue.parse('<length>+ | auto#', {})?.value).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length', multiplier: '+' },
@@ -49,7 +48,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves the pre-multiplied transform-list type', () => {
-    expect(parseSyntax('<transform-list>', {})).toEqual({
+    expect(SyntaxValue.parse('<transform-list>', {})?.value).toEqual({
       type: 'syntax-definition',
       components: [{
         type: 'syntax-type',
@@ -59,7 +58,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves syntax keyword case and accepts dashed custom identifiers', () => {
-    expect(parseSyntax('Foo | --bar', {})).toEqual({
+    expect(SyntaxValue.parse('Foo | --bar', {})?.value).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-keyword', name: 'Foo' },
@@ -69,13 +68,13 @@ describe('<syntax>', () => {
   });
 
   it('normalizes the historical string form to the same value', () => {
-    expect(parseSyntax('"<length> | auto"', {})).toEqual(
-      parseSyntax('<length> | auto', {}),
+    expect(SyntaxValue.parse('"<length> | auto"', {})).toEqual(
+      SyntaxValue.parse('<length> | auto', {}),
     );
   });
 
   it('accepts insignificant outer and combinator whitespace', () => {
-    expect(parseSyntax('  <length>|auto  ', {})).toEqual({
+    expect(SyntaxValue.parse('  <length>|auto  ', {})?.value).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length' },
@@ -85,7 +84,7 @@ describe('<syntax>', () => {
   });
 
   it('matches type names as CSS identifiers', () => {
-    expect(parseSyntax('<\\6c ength>', {})).toEqual(lengthSyntax);
+    expect(SyntaxValue.parse('<\\6c ength>', {})).toEqual(lengthSyntax);
   });
 
   it.each([
@@ -109,7 +108,7 @@ describe('<syntax>', () => {
     'initial',
     'default',
   ])('rejects %j as a complete syntax definition', (input) => {
-    expect(parseSyntax(input, {})).toBeNull();
+    expect(SyntaxValue.parse(input, {})).toBeNull();
   });
 
   it('consumes one syntax value without consuming following input', () => {
@@ -117,7 +116,7 @@ describe('<syntax>', () => {
       parseListOfComponentValues('<length> trailing', {}), {},
     );
 
-    expect(consumeSyntax(c)).toEqual(lengthSyntax);
+    expect(SyntaxValue.consume(c)).toEqual(lengthSyntax);
     expect(c.peek()).toMatchObject({
       type: TokenKind.Whitespace,
     });
@@ -128,7 +127,7 @@ describe('<syntax>', () => {
       parseListOfComponentValues('<length >', {}), {},
     );
 
-    expect(consumeSyntax(c)).toBeNull();
+    expect(SyntaxValue.consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 });

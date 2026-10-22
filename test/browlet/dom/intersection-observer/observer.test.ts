@@ -5,7 +5,7 @@ import {
   IntersectionObserverImpl, type IntersectionObserverCallback, type IntersectionObserverOptions,
 } from '../../../../src/browlet/dom/intersection-observer/index';
 import type { DocumentImpl } from '../../../../src/browlet/dom/nodes/document';
-import { lengthLiteral, percentageLiteral } from '../../../../src/stylelet/index';
+import { LengthLiteral, PercentageLiteral } from '../../../../src/stylelet/index';
 import { unwrap } from '../../../support/browlet-binding';
 
 describe('Intersection Observer scaffold', () => {
@@ -17,14 +17,15 @@ describe('Intersection Observer scaffold', () => {
     expect(observer.options.threshold).not.toBe(options.threshold);
     options.rootMargin[2].value = 20;
     options.scrollMargin[0].value = 200;
-    options.scrollMargin[1] = percentageLiteral(10);
+    options.scrollMargin[1] = new PercentageLiteral(10);
     options.threshold.push(1);
     expect(observer.options.rootMargin).toEqual([
-      lengthLiteral(0), lengthLiteral(0), lengthLiteral(0), lengthLiteral(0),
+      new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'),
     ]);
     expect(observer.options.scrollMargin).toEqual([
-      lengthLiteral(50), percentageLiteral(100), lengthLiteral(75), percentageLiteral(50),
+      new LengthLiteral(50, 'px'), new PercentageLiteral(100), new LengthLiteral(75, 'px'), new PercentageLiteral(50),
     ]);
+    expect(observer.options.scrollMargin.map((side) => side.serialize())).toEqual(['50px', '100%', '75px', '50%']);
     expect(observer.options.threshold).toEqual([0, 0.5]);
   });
 
@@ -140,8 +141,8 @@ function createObserver() {
   const callback = vi.fn<IntersectionObserverCallback>();
   const options = {
     root: null,
-    rootMargin: [lengthLiteral(0), lengthLiteral(0), lengthLiteral(0), lengthLiteral(0)],
-    scrollMargin: [lengthLiteral(50), percentageLiteral(100), lengthLiteral(75), percentageLiteral(50)],
+    rootMargin: [new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px')],
+    scrollMargin: [new LengthLiteral(50, 'px'), new PercentageLiteral(100), new LengthLiteral(75, 'px'), new PercentageLiteral(50)],
     threshold: [0, 0.5],
     delay: 0,
     trackVisibility: false,

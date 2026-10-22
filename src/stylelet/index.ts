@@ -19,6 +19,6 @@ export { decodeStylesheetBytes, parseStylesheetContents } from './syntax/index';
 export { styleletIDLDefinitions } from './web-idl';
 export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor } from './values/index';
 export {
-  lengthLiteral, percentageLiteral,
+  LengthLiteral, PercentageLiteral,
   type CanonicalLengthPercentageLiteral,
 } from './values/numeric-literal/index';

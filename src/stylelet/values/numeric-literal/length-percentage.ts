@@ -1,103 +1,19 @@
-import {
-  withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
-} from '../../syntax/index';
+import type { TryConsumer } from '../../syntax/index';
 
-import {
-  serializeLength, consumeLength, tryResolveLength, type CanonicalLengthLiteral,
-  type LengthResolutionContext, type LengthLiteral,
-} from './length';
-import {
-  createDimensionPercentageConsumer, serializeDimensionPercentage,
-  tryAccumulateDimensionPercentages, tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
-} from './dimension-percentage';
+import { LengthLiteral, type CanonicalLengthLiteral } from './length';
+import type { PercentageLiteral } from './percentage';
+import { createDimensionPercentageConsumer, type DimensionPercentageConsumerOptions } from './dimension-percentage';
 
-/*
- * <length-percentage> = [ <length> | <percentage> ]
- */
+/** The literal alternatives in <length-percentage>; there is no additional value container. */
+export type LengthPercentageLiteral = LengthLiteral | PercentageLiteral;
+export type CanonicalLengthPercentageLiteral = CanonicalLengthLiteral | PercentageLiteral;
 
-export type LengthPercentageLiteral = DimensionPercentageLiteral<LengthLiteral>;
+export type LengthPercentageConsumerOptions = DimensionPercentageConsumerOptions;
 
-/** A pixel length or a percentage whose reference size has not yet been supplied. */
-export type CanonicalLengthPercentageLiteral = DimensionPercentageLiteral<CanonicalLengthLiteral>;
-
-export type LengthPercentageResolutionContext = LengthResolutionContext & {
-  percentageReferenceValue?: CanonicalLengthLiteral;
-};
-
-export function parseLengthPercentage(
-  input: ParserInput,
-  context: unknown,
-): LengthPercentageLiteral | null {
-  return lengthPercentageParser(input, context);
-}
-
-export function consumeLengthPercentage(
-  c: TokenCursor,
-): TryConsumerResult<LengthPercentageLiteral> {
-  return lengthPercentageConsumer(c);
-}
-
-export type LengthPercentageConsumerOptions =
-  DimensionPercentageConsumerOptions;
-
+/** Configure the literal alternatives before contextual percentage resolution. */
+// https://drafts.csswg.org/css-values-4/#typedef-length-percentage
 export function createLengthPercentageConsumer(
-  options: LengthPercentageConsumerOptions = {},
+  options: DimensionPercentageConsumerOptions = {},
 ): TryConsumer<LengthPercentageLiteral> {
-  return createDimensionPercentageConsumer(
-    consumeLength,
-    'Length-percentage',
-    options,
-  );
+  return createDimensionPercentageConsumer(LengthLiteral.consume, 'Length-percentage', options);
 }
-
-export function serializeLengthPercentage(value: LengthPercentageLiteral): string {
-  return serializeDimensionPercentage(value, serializeLength);
-}
-
-export function tryResolveLengthPercentage(
-  value: LengthPercentageLiteral,
-  context: LengthPercentageResolutionContext = {},
-): CanonicalLengthLiteral | null {
-  if (value.type === 'length') {
-    return tryResolveLength(value, context);
-  }
-
-  const reference = context.percentageReferenceValue;
-
-  if (reference === undefined) {
-    return null;
-  }
-
-  return {
-    ...reference,
-    value: reference.value * value.value / 100,
-  };
-}
-
-export function tryAddLengthPercentages(
-  a: LengthPercentageLiteral,
-  b: LengthPercentageLiteral,
-): LengthPercentageLiteral | null {
-  return tryAddDimensionPercentages(a, b);
-}
-
-export function tryInterpolateLengthPercentages(
-  a: LengthPercentageLiteral,
-  b: LengthPercentageLiteral,
-  p: number,
-): LengthPercentageLiteral | null {
-  return tryInterpolateDimensionPercentages(a, b, p);
-}
-
-export function tryAccumulateLengthPercentages(
-  a: LengthPercentageLiteral,
-  b: LengthPercentageLiteral,
-): LengthPercentageLiteral | null {
-  return tryAccumulateDimensionPercentages(a, b);
-}
-
-// <length-percentage> = [ <length> | <percentage> ]
-const lengthPercentageConsumer = createLengthPercentageConsumer();
-const lengthPercentageParser = createComponentParser(withTrivia(lengthPercentageConsumer));

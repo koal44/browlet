@@ -1,32 +1,109 @@
 import { asciiLower } from '../../infra/ascii';
+import { mapTuple } from '../../infra/util';
 
 import {
-  consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeLessDelim,
+  createKeywordConsumer, consumeColon, consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeLessDelim,
   consumeParensBlock, adaptConsumer, any, one, oneOf, opt, plus, sequenceOf, withTrivia,
   serializeCssIdentifier, createComponentParser, parseAsComponentGrammar, parseListAsComponentGrammar,
   parseListOfComponentValues, TokenKind,
-  type ComponentValue, type TokenCursor, type ParensBlock, type ParserInput, type TryConsumer, type TryConsumerResult,
+  type ComponentValue, type TokenCursor, type ParserInput, type TryConsumer, type TryConsumerResult,
 } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
 
-import {
-  consumeDimension, resolveDimension, serializeDimension, type DimensionValue,
-} from './dimension';
-import {
-  consumeGeneralEnclosed, resolveGeneralEnclosed, serializeGeneralEnclosed,
-  type GeneralEnclosedValue,
-} from './general-enclosed';
-import {
-  consumeIdent, resolveIdent, serializeIdent, type IdentValue,
-} from './ident';
-import { createKeywordConsumer } from './keyword';
-import { type MathContext } from './math-value';
-import {
-  consumeNumberOrRatio, resolveNumberOrRatio, serializeNumberOrRatio,
-  type NumberOrRatioValue,
-} from './ratio';
+import type { Value } from './value';
+import { consumeDimension, type DimensionValue } from './dimension';
+import { GeneralEnclosedValue } from './general-enclosed';
+import { IdentValue } from './ident';
+import type { MathContext } from './math-value';
+import { consumeNumberOrRatio, type NumberOrRatioValue } from './ratio';
 
-export type MediaQuery =
+/** A media query retaining its condition syntax and interpreted feature values. */
+// https://drafts.csswg.org/mediaqueries-4/#mq-syntax
+export class MediaQuery<Representation extends MediaQuerySyntax = MediaQuerySyntax> implements Value<MathContext> {
+  /** The media type, modifier, and condition at the current value stage. */
+  value: Representation;
+
+  constructor(value: Representation) {
+    this.value = value;
+  }
+
+  /** Parse one complete media query without list error recovery. */
+  static parse(input: ParserInput, context: MathContext): MediaQuery | null {
+    return mediaQueryParser(input, context);
+  }
+
+  /** Parse independent queries, replacing invalid entries with not all. */
+  // https://drafts.csswg.org/cssom/#parse-a-media-query-list
+  static parseList(input: ParserInput, context: MathContext): MediaQuery[] {
+    const list = parseListOfComponentValues(input, context);
+    const queries = parseListAsComponentGrammar(list, mediaQueryGrammar, context)
+      .map((query) => query ?? MediaQuery.invalid());
+
+    // SPEC_CLASH(media-query-trailing-comma): Follow browsers by retaining the
+    // final empty query; Syntax's comma-list algorithm drops it. Inspect folded
+    // components so a comma inside an unclosed function/block is not a separator.
+    if (list.tokens.at(-1)?.type === TokenKind.Comma) queries.push(MediaQuery.invalid());
+    return queries;
+  }
+
+  /** Consume one query in the caller's numeric context. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<MediaQuery> {
+    return mediaQueryConsumer(c);
+  }
+
+  /** Serialize a query list in its current order. */
+  // https://drafts.csswg.org/cssom/#serialize-a-media-query-list
+  static serializeList(queries: MediaQuery[]): string {
+    return queries.map((query) => query.serialize()).join(', ');
+  }
+
+  private static invalid(): MediaQuery {
+    return new MediaQuery({ type: 'media-type-query', modifier: 'not', mediaType: 'all' });
+  }
+
+  /** Resolve feature values without deciding whether this query matches a device. */
+  resolve(stage: ValueStage, context: MathContext = {}): MediaQuery {
+    const query = this.value;
+    if (query.type === 'media-condition-query') {
+      return new MediaQuery({
+        ...query,
+        condition: query.condition.resolve(stage, context),
+      });
+    }
+
+    return new MediaQuery({
+      ...query,
+      ...(query.condition === undefined
+        ? {}
+        : { condition: query.condition.resolve(stage, context) }),
+    });
+  }
+
+  /** Serialize the current query without resolving its values. */
+  // https://drafts.csswg.org/cssom/#serialize-a-media-query
+  serialize(): string {
+    const query = this.value;
+    if (query.type === 'media-condition-query') {
+      return query.condition.serialize();
+    }
+
+    const mediaType = serializeCssIdentifier(query.mediaType);
+    // SPEC_CLASH(media-query-only-serialization): Preserve `only`, as all three
+    // browsers do; CSSOM's written serializer only accounts for `not`.
+    const head = query.modifier === undefined
+      ? mediaType
+      : `${query.modifier} ${mediaType}`;
+
+    if (query.condition === undefined) return head;
+
+    const condition = query.condition.serialize();
+    return query.modifier === undefined && query.mediaType === 'all'
+      ? condition
+      : `${head} and ${condition}`;
+  }
+}
+
+type MediaQuerySyntax =
   | MediaConditionQuery
   | MediaTypeQuery;
 
@@ -52,419 +129,164 @@ type MediaConditionWithoutOr =
   | MediaAnd;
 
 type MediaInParens =
-  | MediaConditionBlock
-  | MediaFeatureBlock
+  | MediaBlock
   | GeneralEnclosedValue;
 
-interface MediaConditionBlock extends ParensBlock<MediaCondition> {
-  value: MediaCondition;
+/** Parentheses preserve grouping around a condition or feature. */
+class MediaBlock implements Value<MathContext> {
+  /** The interpreted contents of the parentheses. */
+  value: MediaCondition | MediaFeature;
+
+  constructor(value: MediaCondition | MediaFeature) {
+    this.value = value;
+  }
+
+  resolve(stage: ValueStage, context: MathContext): MediaBlock {
+    return new MediaBlock(this.value.resolve(stage, context));
+  }
+
+  serialize(): string {
+    return `(${this.value.serialize()})`;
+  }
 }
 
-interface MediaFeatureBlock extends ParensBlock<MediaFeature> {
-  value: MediaFeature;
-}
-
-type MediaNot = {
-  type: 'media-not';
+/** A negated parenthesized condition or unknown condition grammar. */
+class MediaNot implements Value<MathContext> {
+  /** The condition following not. */
   value: MediaInParens;
-};
 
-type MediaAnd = {
-  type: 'media-and';
+  constructor(value: MediaInParens) {
+    this.value = value;
+  }
+
+  resolve(stage: ValueStage, context: MathContext): MediaNot {
+    return new MediaNot(this.value.resolve(stage, context));
+  }
+
+  serialize(): string {
+    return `not ${this.value.serialize()}`;
+  }
+}
+
+/** Conditions joined by one operator, retaining their grammar order. */
+class MediaJunction<Operator extends 'and' | 'or'> implements Value<MathContext> {
+  /** The operator also distinguishes conditions allowed after a media type. */
+  operator: Operator;
+  /** Two or more parenthesized operands. */
   values: MediaConditionOperands;
-};
 
-type MediaOr = {
-  type: 'media-or';
-  values: MediaConditionOperands;
-};
+  constructor(operator: Operator, values: MediaConditionOperands) {
+    this.operator = operator;
+    this.values = values;
+  }
 
-type MediaConditionOperands = [
-  MediaInParens,
-  MediaInParens,
-  ...MediaInParens[],
-];
+  resolve(stage: ValueStage, context: MathContext): MediaJunction<Operator> {
+    return new MediaJunction(this.operator, mapTuple(this.values, (value) => value.resolve(stage, context)));
+  }
 
-type MediaFeature =
-  | MediaFeaturePlain
-  | MediaFeatureBoolean
-  | MediaFeatureRange;
+  serialize(): string {
+    return this.values.map((value) => value.serialize()).join(` ${this.operator} `);
+  }
+}
 
-type MediaFeaturePlain = {
-  type: 'media-feature-plain';
+type MediaAnd = MediaJunction<'and'>;
+type MediaOr = MediaJunction<'or'>;
+type MediaConditionOperands = [MediaInParens, MediaInParens, ...MediaInParens[]];
+type MediaFeature = MediaFeaturePlain | MediaFeatureBoolean | MediaFeatureRange;
+
+/** A named feature with a single value after a colon. */
+class MediaFeaturePlain implements Value<MathContext> {
+  /** The ASCII-lowercase feature name. */
   name: string;
+  /** The value interpreted by the generic media-feature grammar. */
+  value: MediaFeatureValue;
+
+  constructor(name: string, value: MediaFeatureValue) {
+    this.name = name;
+    this.value = value;
+  }
+
+  resolve(stage: ValueStage, context: MathContext): MediaFeaturePlain {
+    return new MediaFeaturePlain(this.name, this.value.resolve(stage, context));
+  }
+
+  serialize(): string {
+    return `${serializeCssIdentifier(this.name)}: ${this.value.serialize()}`;
+  }
+}
+
+/** A feature tested without an explicit value. */
+class MediaFeatureBoolean implements Value<MathContext> {
+  /** The ASCII-lowercase feature name. */
+  name: string;
+
+  constructor(name: string) {
+    this.name = name;
+  }
+
+  resolve(_stage: ValueStage, _context: MathContext): MediaFeatureBoolean {
+    return this;
+  }
+
+  serialize(): string {
+    return serializeCssIdentifier(this.name);
+  }
+}
+
+/** One or two comparisons around a named feature. */
+class MediaFeatureRange implements Value<MathContext> {
+  /** The ASCII-lowercase feature name. */
+  name: string;
+  /** The optional comparison preceding the feature name. */
+  left: MediaFeatureBound | undefined;
+  /** The optional comparison following the feature name. */
+  right: MediaFeatureBound | undefined;
+
+  constructor(name: string, left?: MediaFeatureBound, right?: MediaFeatureBound) {
+    this.name = name;
+    this.left = left;
+    this.right = right;
+  }
+
+  resolve(stage: ValueStage, context: MathContext): MediaFeatureRange {
+    const left = this.left === undefined ? undefined
+      : { comparison: this.left.comparison, value: this.left.value.resolve(stage, context) };
+    const right = this.right === undefined ? undefined
+      : { comparison: this.right.comparison, value: this.right.value.resolve(stage, context) };
+    return new MediaFeatureRange(this.name, left, right);
+  }
+
+  serialize(): string {
+    const left = this.left === undefined ? ''
+      : `${this.left.value.serialize()} ${this.left.comparison} `;
+    const right = this.right === undefined ? ''
+      : ` ${this.right.comparison} ${this.right.value.serialize()}`;
+    return `${left}${serializeCssIdentifier(this.name)}${right}`;
+  }
+}
+
+type MediaFeatureBound = {
+  comparison: MediaFeatureComparison;
   value: MediaFeatureValue;
 };
-
-type MediaFeatureBoolean = {
-  type: 'media-feature-boolean';
-  name: string;
-};
-
-type MediaFeatureRange = {
-  type: 'media-feature-range';
-  name: string;
-  left?: {
-    comparison: MediaFeatureComparison;
-    value: MediaFeatureValue;
-  };
-  right?: {
-    comparison: MediaFeatureComparison;
-    value: MediaFeatureValue;
-  };
-};
-
-type MediaFeatureValue =
-  | NumberOrRatioValue
-  | DimensionValue
-  | IdentValue;
-
+type MediaFeatureValue = NumberOrRatioValue | DimensionValue | IdentValue;
 type MediaFeatureComparison = '<' | '<=' | '>' | '>=' | '=';
-
-/** Match one complete media-query grammar, without list error recovery. */
-// https://drafts.csswg.org/mediaqueries-4/#mq-syntax
-export function parseMediaQuery(
-  input: ParserInput,
-  context: MathContext,
-): MediaQuery | null {
-  return mediaQueryParser(input, context);
-}
-
-/** Parse independent queries, replacing invalid entries with `not all`. */
-// https://drafts.csswg.org/cssom/#parse-a-media-query-list
-// https://drafts.csswg.org/mediaqueries-4/#mq-syntax
-export function parseMediaQueryList(
-  input: ParserInput,
-  context: MathContext,
-): MediaQuery[] {
-  const list = parseListOfComponentValues(input, context);
-  const queries = parseListAsComponentGrammar(list, withTrivia(mediaQueryConsumer), context)
-    .map((query) => query ?? invalidMediaQuery());
-
-  // SPEC_CLASH(media-query-trailing-comma): Follow browsers by retaining the
-  // final empty query; Syntax's comma-list algorithm drops it. Inspect folded
-  // components so a comma inside an unclosed function/block is not a separator.
-  if (list.tokens.at(-1)?.type === TokenKind.Comma) queries.push(invalidMediaQuery());
-  return queries;
-}
-
-export function consumeMediaQuery(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<MediaQuery> {
-  return mediaQueryConsumer(c);
-}
-
-export function resolveMediaQuery(
-  query: MediaQuery,
-  stage: ValueStage,
-  context: MathContext = {},
-): MediaQuery {
-  if (query.type === 'media-condition-query') {
-    return {
-      ...query,
-      condition: resolveMediaCondition(query.condition, stage, context),
-    };
-  }
-
-  return {
-    ...query,
-    ...(query.condition === undefined
-      ? {}
-      : { condition: resolveMediaConditionWithoutOr(query.condition, stage, context) }),
-  };
-}
-
-export function resolveMediaQueryList(
-  queries: MediaQuery[],
-  stage: ValueStage,
-  context: MathContext = {},
-): MediaQuery[] {
-  return queries.map((query) => resolveMediaQuery(query, stage, context));
-}
-
-/** Serialize an interpreted query without resolving its values. */
-// https://drafts.csswg.org/cssom/#serialize-a-media-query
-export function serializeMediaQuery(query: MediaQuery): string {
-  if (query.type === 'media-condition-query') {
-    return serializeMediaCondition(query.condition);
-  }
-
-  const mediaType = serializeCssIdentifier(query.mediaType);
-  // SPEC_CLASH(media-query-only-serialization): Preserve `only`, as all three
-  // browsers do; CSSOM's written serializer only accounts for `not`.
-  const head = query.modifier === undefined
-    ? mediaType
-    : `${query.modifier} ${mediaType}`;
-
-  if (query.condition === undefined) return head;
-
-  const condition = serializeMediaCondition(query.condition);
-  return query.modifier === undefined && query.mediaType === 'all'
-    ? condition
-    : `${head} and ${condition}`;
-}
-
-export function serializeMediaQueryList(
-  queries: MediaQuery[],
-): string {
-  return queries.map(serializeMediaQuery).join(', ');
-}
-
-function resolveMediaCondition(
-  condition: MediaCondition,
-  stage: ValueStage,
-  context: MathContext,
-): MediaCondition {
-  switch (condition.type) {
-    case 'media-not':
-      return {
-        ...condition,
-        value: resolveMediaInParens(condition.value, stage, context),
-      };
-
-    case 'media-and':
-    case 'media-or':
-      return {
-        ...condition,
-        values: resolveMediaConditionOperands(condition.values, stage, context),
-      };
-
-    default:
-      return resolveMediaInParens(condition, stage, context);
-  }
-}
-
-function resolveMediaConditionWithoutOr(
-  condition: MediaConditionWithoutOr,
-  stage: ValueStage,
-  context: MathContext,
-): MediaConditionWithoutOr {
-  switch (condition.type) {
-    case 'media-not':
-      return {
-        ...condition,
-        value: resolveMediaInParens(condition.value, stage, context),
-      };
-
-    case 'media-and':
-      return {
-        ...condition,
-        values: resolveMediaConditionOperands(condition.values, stage, context),
-      };
-
-    default:
-      return resolveMediaInParens(condition, stage, context);
-  }
-}
-
-function resolveMediaConditionOperands(
-  values: MediaConditionOperands,
-  stage: ValueStage,
-  context: MathContext,
-): MediaConditionOperands {
-  const [first, second, ...rest] = values;
-  return [
-    resolveMediaInParens(first, stage, context),
-    resolveMediaInParens(second, stage, context),
-    ...rest.map((value) => resolveMediaInParens(value, stage, context)),
-  ];
-}
-
-function resolveMediaInParens(
-  value: MediaInParens,
-  stage: ValueStage,
-  context: MathContext,
-): MediaInParens {
-  if (value.type === 'general-enclosed') {
-    return resolveGeneralEnclosed(value);
-  }
-
-  if (isMediaFeature(value.value)) {
-    const resolved: MediaFeatureBlock = {
-      ...value,
-      value: resolveMediaFeature(value.value, stage, context),
-    };
-    return resolved;
-  }
-
-  const resolved: MediaConditionBlock = {
-    ...value,
-    value: resolveMediaCondition(value.value, stage, context),
-  };
-  return resolved;
-}
-
-function resolveMediaFeature(
-  feature: MediaFeature,
-  stage: ValueStage,
-  context: MathContext,
-): MediaFeature {
-  if (feature.type === 'media-feature-boolean') return feature;
-
-  if (feature.type === 'media-feature-plain') {
-    return {
-      ...feature,
-      value: resolveMediaFeatureValue(feature.value, stage, context),
-    };
-  }
-
-  return {
-    ...feature,
-    ...(feature.left === undefined
-      ? {}
-      : {
-        left: {
-          ...feature.left,
-          value: resolveMediaFeatureValue(feature.left.value, stage, context),
-        },
-      }),
-    ...(feature.right === undefined
-      ? {}
-      : {
-        right: {
-          ...feature.right,
-          value: resolveMediaFeatureValue(feature.right.value, stage, context),
-        },
-      }),
-  };
-}
-
-function resolveMediaFeatureValue(
-  value: MediaFeatureValue,
-  stage: ValueStage,
-  context: MathContext,
-): MediaFeatureValue {
-  switch (value.type) {
-    case 'ident':
-      return resolveIdent(value);
-
-    case 'dimension':
-    case 'angle':
-    case 'frequency':
-    case 'length':
-    case 'resolution':
-    case 'time':
-      return resolveDimension(value, stage, context);
-
-    case 'number':
-    case 'ratio':
-      return resolveNumberOrRatio(value, stage, context);
-
-    case 'math':
-      return value.valueType === 'number'
-        ? resolveNumberOrRatio(value, stage, context)
-        : resolveDimension(value, stage, context);
-  }
-}
-
-function serializeMediaCondition(condition: MediaCondition): string {
-  switch (condition.type) {
-    case 'media-not':
-      return `not ${serializeMediaInParens(condition.value)}`;
-
-    case 'media-and':
-      return condition.values.map(serializeMediaInParens).join(' and ');
-
-    case 'media-or':
-      return condition.values.map(serializeMediaInParens).join(' or ');
-
-    default:
-      return serializeMediaInParens(condition);
-  }
-}
-
-function serializeMediaInParens(value: MediaInParens): string {
-  if (value.type === 'general-enclosed') {
-    return serializeGeneralEnclosed(value);
-  }
-
-  const contents = isMediaFeature(value.value)
-    ? serializeMediaFeature(value.value)
-    : serializeMediaCondition(value.value);
-  return `(${contents})`;
-}
-
-function serializeMediaFeature(feature: MediaFeature): string {
-  const name = serializeCssIdentifier(feature.name);
-
-  if (feature.type === 'media-feature-boolean') return name;
-
-  if (feature.type === 'media-feature-plain') {
-    return `${name}: ${serializeMediaFeatureValue(feature.value)}`;
-  }
-
-  const left = feature.left === undefined
-    ? ''
-    : `${serializeMediaFeatureValue(feature.left.value)} ${feature.left.comparison} `;
-  const right = feature.right === undefined
-    ? ''
-    : ` ${feature.right.comparison} ${serializeMediaFeatureValue(feature.right.value)}`;
-  return `${left}${name}${right}`;
-}
-
-function serializeMediaFeatureValue(value: MediaFeatureValue): string {
-  switch (value.type) {
-    case 'ident':
-      return serializeIdent(value);
-
-    case 'dimension':
-    case 'angle':
-    case 'frequency':
-    case 'length':
-    case 'resolution':
-    case 'time':
-      return serializeDimension(value);
-
-    case 'number':
-    case 'ratio':
-      return serializeNumberOrRatio(value);
-
-    case 'math':
-      return value.valueType === 'number'
-        ? serializeNumberOrRatio(value)
-        : serializeDimension(value);
-  }
-}
-
-function isMediaFeature(value: MediaCondition | MediaFeature): value is MediaFeature {
-  switch (value.type) {
-    case 'media-feature-plain':
-    case 'media-feature-boolean':
-    case 'media-feature-range':
-      return true;
-
-    default:
-      return false;
-  }
-}
-
-function invalidMediaQuery(): MediaTypeQuery {
-  return {
-    type: 'media-type-query',
-    modifier: 'not',
-    mediaType: 'all',
-  };
-}
 
 /** Canonicalize the keyword productions specified by CSSOM; preserve unknown values. */
 // https://drafts.csswg.org/cssom/#serialize-a-media-feature-value
 // Remaining feature grammars belong to Conditional Rules, not this generic parser.
 function canonicalizeMediaFeatureValue(name: string, value: MediaFeatureValue): MediaFeatureValue {
-  if (value.type !== 'ident' || (name !== 'orientation' && name !== 'scan')) return value;
+  if (!(value instanceof IdentValue) || (name !== 'orientation' && name !== 'scan')) return value;
 
   const keyword = asciiLower(value.value);
   if (name === 'orientation'
     ? keyword === 'landscape' || keyword === 'portrait'
     : keyword === 'progressive' || keyword === 'interlace'
   ) {
-    return { type: 'ident', value: keyword };
+    return new IdentValue(keyword);
   }
   return value;
 }
-
-// =============================================================================
-// Syntax
-// =============================================================================
 
 /*
  * <media-query> = <media-condition>
@@ -508,7 +330,7 @@ const mediaFeatureValueConsumer = oneOf(
   [
     one(consumeNumberOrRatio),
     one(consumeDimension),
-    one(consumeIdent),
+    one(IdentValue.consume),
   ],
   ([value]) => value,
 );
@@ -551,20 +373,13 @@ const mediaFeaturePlainConsumer = sequenceOf(
     one(withTrivia(consumeColon)),
     one(withTrivia(mediaFeatureValueConsumer)),
   ],
-  ([[name], , [value]]): MediaFeaturePlain => ({
-    type: 'media-feature-plain',
-    name,
-    value: canonicalizeMediaFeatureValue(name, value),
-  }),
+  ([[name], , [value]]) => new MediaFeaturePlain(name, canonicalizeMediaFeatureValue(name, value)),
 );
 
 // <mf-boolean> = <mf-name>
 const mediaFeatureBooleanConsumer = adaptConsumer(
   mediaFeatureNameConsumer,
-  (name): MediaFeatureBoolean => ({
-    type: 'media-feature-boolean',
-    name,
-  }),
+  (name) => new MediaFeatureBoolean(name),
 );
 
 // <mf-range> = <mf-name> <mf-comparison> <mf-value>
@@ -583,11 +398,7 @@ const mediaFeatureRangeConsumer = oneOf(
         one(withTrivia(mediaFeatureComparisonConsumer)),
         one(withTrivia(mediaFeatureValueConsumer)),
       ],
-      ([[name], [comparison], [value]]): MediaFeatureRange => ({
-        type: 'media-feature-range',
-        name,
-        right: { comparison, value },
-      }),
+      ([[name], [comparison], [value]]) => new MediaFeatureRange(name, undefined, { comparison, value }),
     )),
     one(sequenceOf(
       [
@@ -595,11 +406,7 @@ const mediaFeatureRangeConsumer = oneOf(
         one(withTrivia(mediaFeatureComparisonConsumer)),
         one(withTrivia(mediaFeatureNameConsumer)),
       ],
-      ([[value], [comparison], [name]]): MediaFeatureRange => ({
-        type: 'media-feature-range',
-        name,
-        left: { comparison, value },
-      }),
+      ([[value], [comparison], [name]]) => new MediaFeatureRange(name, { comparison, value }),
     )),
   ],
   ([range]) => range,
@@ -616,18 +423,11 @@ function createMediaFeatureIntervalConsumer(
       one(withTrivia(comparisonConsumer)),
       one(withTrivia(mediaFeatureValueConsumer)),
     ],
-    ([[left], [leftComparison], [name], [rightComparison], [right]]) => ({
-      type: 'media-feature-range',
+    ([[left], [leftComparison], [name], [rightComparison], [right]]) => new MediaFeatureRange(
       name,
-      left: {
-        comparison: leftComparison,
-        value: left,
-      },
-      right: {
-        comparison: rightComparison,
-        value: right,
-      },
-    }),
+      { comparison: leftComparison, value: left },
+      { comparison: rightComparison, value: right },
+    ),
   );
 }
 
@@ -647,29 +447,29 @@ const mediaInParensConsumer: TryConsumer<MediaInParens, MathContext> = oneOf(
   [
     one(adaptConsumer(
       consumeParensBlock,
-      (component, context: MathContext): MediaConditionBlock | null => {
+      (component, context: MathContext): MediaBlock | null => {
         const value = parseAsComponentGrammar(
           component.value,
           withTrivia(mediaConditionConsumer),
           context,
         );
 
-        return value === null ? null : { ...component, value };
+        return value === null ? null : new MediaBlock(value);
       },
     )),
     one(adaptConsumer(
       consumeParensBlock,
-      (component, context: MathContext): MediaFeatureBlock | null => {
+      (component, context: MathContext): MediaBlock | null => {
         const value = parseAsComponentGrammar(
           component.value,
           withTrivia(mediaFeatureConsumer),
           context,
         );
 
-        return value === null ? null : { ...component, value };
+        return value === null ? null : new MediaBlock(value);
       },
     )),
-    one(consumeGeneralEnclosed),
+    one(GeneralEnclosedValue.consume),
   ],
   ([value]) => value,
 );
@@ -680,10 +480,7 @@ const mediaNotConsumer = sequenceOf(
     one(createKeywordConsumer('not')),
     one(withTrivia(mediaInParensConsumer)),
   ],
-  ([, [value]]): MediaNot => ({
-    type: 'media-not',
-    value,
-  }),
+  ([, [value]]) => new MediaNot(value),
 );
 
 // <media-and> = and <media-in-parens>
@@ -715,10 +512,7 @@ const mediaConditionWithoutOrConsumer: TryConsumer<MediaConditionWithoutOr, Math
       ],
       ([[first], rest]): MediaConditionWithoutOr => rest.length === 0
         ? first
-        : {
-          type: 'media-and',
-          values: [first, rest[0]!, ...rest.slice(1)],
-        },
+        : new MediaJunction('and', [first, rest[0]!, ...rest.slice(1)]),
     )),
   ],
   ([condition]) => condition,
@@ -743,20 +537,14 @@ const mediaConditionConsumer: TryConsumer<MediaCondition, MathContext> = oneOf(
         one(mediaInParensConsumer),
         plus(mediaAndConsumer),
       ],
-      ([[first], rest]): MediaAnd => ({
-        type: 'media-and',
-        values: [first, rest[0], ...rest.slice(1)],
-      }),
+      ([[first], rest]) => new MediaJunction('and', [first, rest[0], ...rest.slice(1)]),
     )),
     one(sequenceOf(
       [
         one(mediaInParensConsumer),
         plus(mediaOrConsumer),
       ],
-      ([[first], rest]): MediaOr => ({
-        type: 'media-or',
-        values: [first, rest[0], ...rest.slice(1)],
-      }),
+      ([[first], rest]) => new MediaJunction('or', [first, rest[0], ...rest.slice(1)]),
     )),
     one(mediaInParensConsumer),
   ],
@@ -806,7 +594,8 @@ const mediaQueryConsumer: TryConsumer<MediaQuery, MathContext> = oneOf(
       }),
     )),
   ],
-  ([query]) => query,
+  ([query]) => new MediaQuery(query),
 );
 
-const mediaQueryParser = createComponentParser(withTrivia(mediaQueryConsumer));
+const mediaQueryGrammar = withTrivia(mediaQueryConsumer);
+const mediaQueryParser = createComponentParser(mediaQueryGrammar);

@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { createAsyncExecution, type TimerHost } from '../../../src/infra/execution';
 import { createStyleletEnvironment, Stylelet } from '../../../src/stylelet/index';
 import { ValueStage } from '../../../src/stylelet/value-processing/stage';
-import { parseSyntax } from '../../../src/stylelet/values/syntax-value';
-import { defineCustomWholeValue } from '../../../src/stylelet/values/whole-value';
+import { SyntaxValue } from '../../../src/stylelet/values/syntax-value';
+import { WholeValue } from '../../../src/stylelet/values/whole-value';
 import { decodeStylesheetBytes } from '../../../src/stylelet/syntax/tokens';
 
 describe('Stylelet standalone scheduling', () => {
@@ -92,15 +92,15 @@ describe('Stylelet URL integration', () => {
     const engine = styles.documentScope.cascade;
     const cascaded = engine.getCascadedProperty('--image', styles.documentScope)!;
     const context = engine.getPropertyContext(cascaded);
-    const definition = defineCustomWholeValue({ syntax: parseSyntax('<url>', {})! });
-    const raw = definition.parse('url("icon.svg")', {})!;
-    const value = definition.resolve(raw, ValueStage.Computed, context);
+    const parseValue = WholeValue.createParser(SyntaxValue.parse('<url>', {})!.createParser(), true);
+    const raw = parseValue('url("icon.svg")', {})!;
+    const value = raw.resolve(ValueStage.Computed, context);
 
     expect(styles.context.env.userAgent.URL).toBe(HostURL);
     if (source === 'environment') expect(styles.context.env).toBe(env);
     expect(sheet.location).toBeNull();
     expect(sheet.baseURL).toBeInstanceOf(HostURL);
-    expect(definition.serialize(value)).toBe('url("https://example.test/assets/icon.svg")');
+    expect(value.serialize()).toBe('url("https://example.test/assets/icon.svg")');
     expect(calls).toContainEqual(['icon.svg', 'https://example.test/assets/']);
 
     const embedded = styles.documentScope.createStyleElementStyleSheet(document.querySelector('style')!, '');

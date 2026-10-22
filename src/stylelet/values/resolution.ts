@@ -1,154 +1,91 @@
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import {
-  accumulateDimensions, addDimensions, interpolateDimensions, canonicalizeResolution,
-  createResolutionConsumer as createResolutionLiteralConsumer,
-  serializeResolution as serializeResolutionLiteral,
-  type ResolutionConsumerOptions, type ResolutionLiteral,
-} from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { ResolutionLiteral, type ResolutionConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <resolution> =
- *   <nonnegative dimension-token with a resolution unit> | <math-function>
- */
+/** A <resolution> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#resolution-value
+export class ResolutionValue<Representation extends Resolution = Resolution> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type ResolutionValue = ResolutionLiteral | MathValue<'resolution'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export const resolutionDef: ValueDefinition<ResolutionValue, MathContext> = {
-  consume: consumeResolution,
-  resolve: resolveResolution,
-  serialize: serializeResolution,
-};
+  /** Parse one complete <resolution>. */
+  static parse(input: ParserInput, context: MathContext): ResolutionValue | null {
+    return parseAsComponentGrammar(input, resolutionGrammar, context);
+  }
 
-export function parseResolution(
-  input: ParserInput,
-  context: MathContext,
-): ResolutionValue | null {
-  return resolutionParser(input, context);
-}
+  /** Consume one <resolution> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<ResolutionValue> {
+    return resolutionConsumer(c);
+  }
 
-export function consumeResolution(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<ResolutionValue> {
-  return resolutionConsumer(c);
-}
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: ResolutionConsumerOptions = {}): TryConsumer<ResolutionValue, MathContext> {
+    const literalConsumer = ResolutionLiteral.createConsumer(options);
 
-export function createResolutionConsumer(
-  options: ResolutionConsumerOptions = {},
-): TryConsumer<ResolutionValue, MathContext> {
-  const literalConsumer = createResolutionLiteralConsumer(options);
-
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'resolution',
-        range: resolutionRange(options),
+        range: [Math.max(0, options.min ?? 0), options.max ?? Infinity],
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveResolution(
-  value: ResolutionValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): ResolutionValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, context);
+    ], ([parsed]) => new ResolutionValue(parsed));
   }
 
-  return stage < ValueStage.Computed
-    ? value
-    : canonicalizeResolution(value);
-}
-
-export function serializeResolution(
-  value: ResolutionValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeResolutionLiteral(value);
-}
-
-export function addResolutions(
-  a: ResolutionValue,
-  b: ResolutionValue,
-  context: MathContext = {},
-): ResolutionValue {
-  if (a.type === 'resolution' && b.type === 'resolution') {
-    return addDimensions(a, b);
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): ResolutionValue {
+    const previous = this.value;
+    const resolved = previous.resolve(stage, context);
+    return resolved === previous ? this : new ResolutionValue(resolved);
   }
 
-  return addMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-export function interpolateResolutions(
-  a: ResolutionValue,
-  b: ResolutionValue,
-  p: number,
-  context: MathContext = {},
-): ResolutionValue {
-  if (a.type === 'resolution' && b.type === 'resolution') {
-    return interpolateDimensions(a, b, p);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  return interpolateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    p,
-    context,
-  );
-}
-
-export function accumulateResolutions(
-  a: ResolutionValue,
-  b: ResolutionValue,
-  context: MathContext = {},
-): ResolutionValue {
-  if (a.type === 'resolution' && b.type === 'resolution') {
-    return accumulateDimensions(a, b);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: ResolutionValue, context: MathContext = {}): ResolutionValue {
+    if (this.value instanceof ResolutionLiteral && other.value instanceof ResolutionLiteral && this.value.unit === other.value.unit) {
+      return new ResolutionValue(this.value.add(other.value));
+    }
+    return new ResolutionValue(
+      this.asMathValue(context).add(other.asMathValue(context), context),
+    );
   }
 
-  return accumulateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: ResolutionValue, progress: number, context: MathContext = {}): ResolutionValue {
+    if (this.value instanceof ResolutionLiteral && other.value instanceof ResolutionLiteral && this.value.unit === other.value.unit) {
+      return new ResolutionValue(this.value.interpolate(other.value, progress));
+    }
+    return new ResolutionValue(
+      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+    );
+  }
+
+  /** Accumulation is addition. */
+  accumulate(other: ResolutionValue, context: MathContext = {}): ResolutionValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'resolution'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'resolution', context);
+  }
 }
 
-function asMathValue(
-  value: ResolutionValue,
-  context: MathContext,
-): MathValue<'resolution'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'resolution', context);
-}
+/** Literal or calculation accepted by this numeric grammar. */
+type Resolution = ResolutionLiteral | MathValue<'resolution'>;
 
-function resolutionRange(
-  options: ResolutionConsumerOptions,
-): MathRange {
-  return [
-    Math.max(0, options.min ?? -Infinity),
-    options.max ?? Infinity,
-  ];
-}
-
-// <resolution> = <dimension-token with a resolution unit> | <math-function>
-const resolutionConsumer = createResolutionConsumer();
-const resolutionParser = createComponentParser(withTrivia(resolutionConsumer));
+const resolutionConsumer = ResolutionValue.createConsumer();
+const resolutionGrammar = withTrivia(resolutionConsumer);

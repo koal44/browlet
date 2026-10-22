@@ -1,14 +1,69 @@
 import { asciiLower } from '../../infra/ascii';
 
 import {
-  consumeDimensionToken, consumeIdentToken, consumeIntegerToken, consumeMinusDelim, consumePlusDelim, one,
-  oneOf, opt, adaptConsumer, sequenceOf, withTrivia, NumericSign, NumberTokenFlag, TokenKind,
+  createKeywordConsumer, consumeDimensionToken, consumeIdentToken, consumeIntegerToken,
+  consumeMinusDelim, consumePlusDelim, one, oneOf, opt, adaptConsumer, sequenceOf, withTrivia,
+  parseAsComponentGrammar, NumericSign, NumberTokenFlag, TokenKind,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type DimensionToken, type IdentToken,
-  type NumberToken,
+  type NumberToken, type ParserInput,
 } from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
 import { serializeCssInteger } from './numeric-literal/index';
 
-import { createKeywordConsumer } from './keyword';
+import type { Value } from './value';
+
+/** Integer step and offset in an An+B formula. */
+// https://drafts.csswg.org/css-syntax-3/#the-anb-type
+export class AnPlusBValue implements Value {
+  /** Finite integer coefficients, normalized when parsing. */
+  value: AnPlusB;
+
+  constructor(value: AnPlusB) {
+    this.value = value;
+  }
+
+  /** Parse a complete An+B formula. */
+  static parse(input: ParserInput, context: unknown): AnPlusBValue | null {
+    return parseAsComponentGrammar(input, anPlusBGrammar, context);
+  }
+
+  /** Consume a formula, leaving any following selector clause unread. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<AnPlusBValue> {
+    return anPlusBConsumer(c);
+  }
+
+  /** Coefficients have no contextual resolution. */
+  resolve(_stage: ValueStage, _context: unknown): AnPlusBValue {
+    return this;
+  }
+
+  /** Serialize the stored coefficients in canonical An+B form. */
+  // https://drafts.csswg.org/css-syntax-3/#serializing-anb
+  serialize(): string {
+    const { a, b } = this.value;
+    if (a === 0) {
+      return serializeCssInteger(b);
+    }
+
+    const nTerm = a === 1
+      ? 'n'
+      : a === -1
+        ? '-n'
+        : `${serializeCssInteger(a)}n`;
+
+    if (b > 0) {
+      return `${nTerm}+${serializeCssInteger(b)}`;
+    }
+
+    if (b < 0) {
+      return `${nTerm}${serializeCssInteger(b)}`;
+    }
+
+    return nTerm;
+  }
+}
+
+type AnPlusB = { a: number; b: number; };
 
 /*
  * <a-n-plus-b> =
@@ -26,94 +81,6 @@ import { createKeywordConsumer } from './keyword';
  * † The plus sign must be adjacent to the ident beginning with "n".
  */
 
-/** Integer step and offset, represented within the finite JavaScript-number range. */
-export type AnPlusBValue = {
-  a: number;
-  b: number;
-};
-
-/** Consumes an An+B formula, leaving any following selector clause unread. */
-// https://drafts.csswg.org/css-syntax-3/#the-anb-type
-export function consumeAnPlusB(
-  c: TokenCursor,
-): TryConsumerResult<AnPlusBValue> {
-  return anPlusBConsumer(c);
-}
-
-/** Serializes the stored integer coefficients using the canonical An+B form. */
-// https://drafts.csswg.org/css-syntax-3/#serializing-anb
-// SPEC_MISMATCH: (A, B) -> string
-// The existing coefficient record carries both specification inputs.
-export function serializeAnPlusB(value: AnPlusBValue): string {
-  if (value.a === 0) {
-    return serializeCssInteger(value.b);
-  }
-
-  const a = value.a === 1
-    ? 'n'
-    : value.a === -1
-      ? '-n'
-      : `${serializeCssInteger(value.a)}n`;
-
-  if (value.b > 0) {
-    return `${a}+${serializeCssInteger(value.b)}`;
-  }
-
-  if (value.b < 0) {
-    return `${a}${serializeCssInteger(value.b)}`;
-  }
-
-  return a;
-}
-
-/** Limits overflow while interpreting coefficients, and canonicalizes signed zero. */
-// https://drafts.csswg.org/css-values-4/#numeric-types
-// The supported range is implementation-defined. Preserve finite values;
-// overflowing numeric tokens or embedded decimal offsets use the nearest bound.
-function interpretCoefficient(value: number): number {
-  if (value === Infinity) return Number.MAX_VALUE;
-  if (value === -Infinity) return -Number.MAX_VALUE;
-  return value === 0 ? 0 : value;
-}
-
-function createIntegerConsumer(
-  sign: 'any' | 'signed' | 'signless',
-): TryConsumer<NumberToken> {
-  return adaptConsumer(consumeIntegerToken, (component) => {
-    const isSigned = component.sign !== NumericSign.None;
-
-    return (
-      (sign === 'signed' && !isSigned) ||
-      (sign === 'signless' && isSigned)
-    )
-      ? null
-      : component;
-  });
-}
-
-function createIntegerDimensionConsumer(
-  unitPattern: RegExp,
-): TryConsumer<DimensionToken> {
-  return adaptConsumer(consumeDimensionToken, (component) =>
-    (
-      component.flag !== NumberTokenFlag.Integer ||
-      !unitPattern.test(asciiLower(component.unit))
-    )
-      ? null
-      : component,
-  );
-}
-
-function createIdentPatternConsumer(
-  valuePattern: RegExp,
-): TryConsumer<IdentToken> {
-  return adaptConsumer(consumeIdentToken, (component) =>
-    valuePattern.test(asciiLower(component.value))
-      ? component
-      : null,
-  );
-}
-
 // <n-dimension>
 const nDimensionConsumer = createIntegerDimensionConsumer(/^n$/);
 
@@ -128,9 +95,6 @@ const nDashDigitIdentConsumer = createIdentPatternConsumer(/^n-[0-9]+$/);
 
 // <dashndashdigit-ident>
 const dashNDashDigitIdentConsumer = createIdentPatternConsumer(/^-n-[0-9]+$/);
-
-// <integer>
-const integerConsumer = createIntegerConsumer('any');
 
 // <signed-integer>
 const signedIntegerConsumer = createIntegerConsumer('signed');
@@ -225,7 +189,7 @@ const offsetConsumer: TryConsumer<number> = oneOf(
 );
 
 // <n-expression> = <n-head> <offset>?
-const nExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
+const nExpressionConsumer: TryConsumer<AnPlusB> = sequenceOf(
   [
     one(nHeadConsumer),
     opt(offsetConsumer),
@@ -237,7 +201,7 @@ const nExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
 );
 
 // <ndash-expression> = <ndash-head> <signless-integer>
-const nDashExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
+const nDashExpressionConsumer: TryConsumer<AnPlusB> = sequenceOf(
   [
     one(nDashHeadConsumer),
     one(withTrivia(signlessIntegerConsumer)),
@@ -249,7 +213,7 @@ const nDashExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
 );
 
 // <embedded-negative> = <ndashdigit-dimension> | '+'?† <ndashdigit-ident> | <dashndashdigit-ident>
-const embeddedNegativeConsumer: TryConsumer<AnPlusBValue> = oneOf(
+const embeddedNegativeConsumer: TryConsumer<AnPlusB> = oneOf(
   [
     one(nDashDigitDimensionConsumer),
     one(
@@ -282,7 +246,7 @@ const embeddedNegativeConsumer: TryConsumer<AnPlusBValue> = oneOf(
 );
 
 // <parity> = odd | even
-const parityConsumer: TryConsumer<AnPlusBValue> = oneOf(
+const parityConsumer: TryConsumer<AnPlusB> = oneOf(
   [
     one(oddConsumer),
     one(evenConsumer),
@@ -293,34 +257,59 @@ const parityConsumer: TryConsumer<AnPlusBValue> = oneOf(
 );
 
 // <integer-expression> = <integer>
-const integerExpressionConsumer: TryConsumer<AnPlusBValue> = sequenceOf(
-  [one(integerConsumer)],
-  ([[integer]]) => ({ a: 0, b: integer.value }),
-);
-
-// <a-n-plus-b-atomic> = <parity> | <integer-expression> | <embedded-negative>
-const anPlusBAtomicConsumer: TryConsumer<AnPlusBValue> = oneOf(
-  [
-    one(parityConsumer),
-    one(integerExpressionConsumer),
-    one(embeddedNegativeConsumer),
-  ],
-  ([value]) => value,
+const integerExpressionConsumer = adaptConsumer(
+  consumeIntegerToken,
+  (integer): AnPlusB => ({ a: 0, b: integer.value }),
 );
 
 /*
  * Implementation factorization of the expanded <a-n-plus-b> production:
  *
- * <a-n-plus-b> = <a-n-plus-b-atomic> | <n-expression> | <ndash-expression>
+ * <a-n-plus-b> = <parity> | <integer-expression> | <embedded-negative> |
+ *   <n-expression> | <ndash-expression>
  */
 const anPlusBConsumer: TryConsumer<AnPlusBValue> = oneOf(
   [
-    one(anPlusBAtomicConsumer),
+    one(parityConsumer),
+    one(integerExpressionConsumer),
+    one(embeddedNegativeConsumer),
     one(nExpressionConsumer),
     one(nDashExpressionConsumer),
   ],
-  ([value]) => ({
-    a: interpretCoefficient(value.a),
-    b: interpretCoefficient(value.b),
+  ([coefficients]) => new AnPlusBValue({
+    a: normalizeCoefficient(coefficients.a),
+    b: normalizeCoefficient(coefficients.b),
   }),
 );
+
+const anPlusBGrammar = withTrivia(anPlusBConsumer);
+
+function createIntegerConsumer(sign: 'signed' | 'signless'): TryConsumer<NumberToken> {
+  const requireSign = sign === 'signed';
+  return adaptConsumer(consumeIntegerToken, (component) =>
+    (component.sign !== NumericSign.None) === requireSign ? component : null,
+  );
+}
+
+function createIntegerDimensionConsumer(unitPattern: RegExp): TryConsumer<DimensionToken> {
+  return adaptConsumer(consumeDimensionToken, (component) =>
+    component.flag === NumberTokenFlag.Integer && unitPattern.test(asciiLower(component.unit))
+      ? component : null,
+  );
+}
+
+function createIdentPatternConsumer(valuePattern: RegExp): TryConsumer<IdentToken> {
+  return adaptConsumer(consumeIdentToken, (component) =>
+    valuePattern.test(asciiLower(component.value)) ? component : null,
+  );
+}
+
+/** Limits overflowing coefficients to finite bounds and canonicalizes signed zero. */
+// https://drafts.csswg.org/css-values-4/#numeric-types
+// The supported range is implementation-defined. Preserve finite values;
+// overflowing numeric tokens or embedded decimal offsets use the nearest bound.
+function normalizeCoefficient(value: number): number {
+  if (value === Infinity) return Number.MAX_VALUE;
+  if (value === -Infinity) return -Number.MAX_VALUE;
+  return value === 0 ? 0 : value;
+}

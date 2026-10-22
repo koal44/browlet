@@ -1,189 +1,122 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
-  createFrequencyPercentageConsumer as createFrequencyPercentageLiteralConsumer,
-  serializeFrequencyPercentage as serializeFrequencyPercentageLiteral,
-  tryAccumulateFrequencyPercentages as tryAccumulateFrequencyPercentageLiterals,
-  tryAddFrequencyPercentages as tryAddFrequencyPercentageLiterals,
-  tryInterpolateFrequencyPercentages as tryInterpolateFrequencyPercentageLiterals,
-  tryResolveFrequencyPercentage as tryResolveFrequencyPercentageLiteral,
-  type FrequencyPercentageConsumerOptions, type FrequencyPercentageLiteral,
+  FrequencyLiteral, PercentageLiteral, createFrequencyPercentageConsumer,
+  type FrequencyPercentageLiteral, type FrequencyPercentageConsumerOptions,
 } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, MathExpression, type MathContext } from './math-value';
 
-/*
- * <frequency-percentage> = <frequency> | <percentage> | <math-function>
- */
+/** A <frequency-percentage> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#typedef-frequency-percentage
+export class FrequencyPercentageValue<Representation extends FrequencyPercentage = FrequencyPercentage> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type FrequencyPercentageValue =
-  FrequencyPercentageLiteral | MathValue<'frequency-percentage'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export function parseFrequencyPercentage(
-  input: ParserInput,
-  context: MathContext,
-): FrequencyPercentageValue | null {
-  return frequencyPercentageParser(input, context);
-}
+  /** Parse one complete <frequency-percentage>. */
+  static parse(input: ParserInput, context: MathContext): FrequencyPercentageValue | null {
+    return parseAsComponentGrammar(input, frequencyPercentageGrammar, context);
+  }
 
-export function consumeFrequencyPercentage(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<FrequencyPercentageValue> {
-  return frequencyPercentageConsumer(c);
-}
+  /** Consume one <frequency-percentage> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<FrequencyPercentageValue> {
+    return frequencyPercentageConsumer(c);
+  }
 
-export function createFrequencyPercentageConsumer(
-  options: FrequencyPercentageConsumerOptions = {},
-): TryConsumer<FrequencyPercentageValue, MathContext> {
-  const literalConsumer = createFrequencyPercentageLiteralConsumer(options);
-  const range = frequencyPercentageRange(options);
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: FrequencyPercentageConsumerOptions = {}): TryConsumer<FrequencyPercentageValue, MathContext> {
+    // <frequency-percentage> = <frequency> | <percentage>
+    // Percentages resolve to frequencies, including within math functions.
+    const literalConsumer = createFrequencyPercentageConsumer(options);
 
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'frequency-percentage',
         percentHint: 'frequency',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveFrequencyPercentage(
-  value: FrequencyPercentageValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): FrequencyPercentageValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, frequencyPercentageMathContext(context));
+    ], ([parsed]) => new FrequencyPercentageValue(parsed));
   }
 
-  if (stage < ValueStage.Computed) {
-    return value;
-  }
-
-  const reference = context.percentageReferenceValue;
-  return tryResolveFrequencyPercentageLiteral(value, {
-    percentageReferenceValue: reference?.type === 'frequency' ? reference : undefined,
-  }) ?? value;
-}
-
-export function serializeFrequencyPercentage(
-  value: FrequencyPercentageValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeFrequencyPercentageLiteral(value);
-}
-
-export function addFrequencyPercentages(
-  a: FrequencyPercentageValue,
-  b: FrequencyPercentageValue,
-  context: MathContext = {},
-): FrequencyPercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryAddFrequencyPercentageLiterals(a, b);
-
-    if (result !== null) {
-      return result;
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): FrequencyPercentageValue {
+    const previous = this.value;
+    if (previous instanceof MathValue) {
+      const resolved = previous.resolve(stage, frequencyPercentageMathContext(context));
+      const value = resolved.value instanceof MathExpression ? resolved : resolved.value;
+      return value === previous ? this : new FrequencyPercentageValue(value);
     }
+
+    if (stage < ValueStage.Computed || (previous.type === 'frequency' && previous.unit === 'hz')) return this;
+
+    const reference = context.percentageReferenceValue;
+    const resolved = previous instanceof FrequencyLiteral
+      ? previous.canonicalize()
+      : reference?.type === 'frequency' ? new FrequencyLiteral(reference.value * previous.value / 100, 'hz') : null;
+    return resolved === null ? this : new FrequencyPercentageValue(resolved);
   }
 
-  const mathContext = frequencyPercentageMathContext(context);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
+  }
 
-  return addMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
-}
-
-export function interpolateFrequencyPercentages(
-  a: FrequencyPercentageValue,
-  b: FrequencyPercentageValue,
-  p: number,
-  context: MathContext = {},
-): FrequencyPercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryInterpolateFrequencyPercentageLiterals(a, b, p);
-
-    if (result !== null) {
-      return result;
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: FrequencyPercentageValue, context: MathContext = {}): FrequencyPercentageValue {
+    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
+      return new FrequencyPercentageValue(this.value.add(other.value));
     }
-  }
-
-  const mathContext = frequencyPercentageMathContext(context);
-
-  return interpolateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    p,
-    mathContext,
-  );
-}
-
-export function accumulateFrequencyPercentages(
-  a: FrequencyPercentageValue,
-  b: FrequencyPercentageValue,
-  context: MathContext = {},
-): FrequencyPercentageValue {
-  if (a.type !== 'math' && b.type !== 'math') {
-    const result = tryAccumulateFrequencyPercentageLiterals(a, b);
-
-    if (result !== null) {
-      return result;
+    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
+      return new FrequencyPercentageValue(this.value.add(other.value));
     }
+    const mathContext = frequencyPercentageMathContext(context);
+    return new FrequencyPercentageValue(
+      this.asMathValue(mathContext).add(other.asMathValue(mathContext), mathContext),
+    );
   }
 
-  const mathContext = frequencyPercentageMathContext(context);
-
-  return accumulateMathValues(
-    asMathValue(a, mathContext),
-    asMathValue(b, mathContext),
-    mathContext,
-  );
-}
-
-function asMathValue(
-  value: FrequencyPercentageValue,
-  context: MathContext,
-): MathValue<'frequency-percentage'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'frequency-percentage', context);
-}
-
-function frequencyPercentageMathContext(
-  context: MathContext,
-): MathContext {
-  return {
-    ...context,
-    percentHint: 'frequency',
-  };
-}
-
-function frequencyPercentageRange(
-  options: FrequencyPercentageConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: FrequencyPercentageValue, progress: number, context: MathContext = {}): FrequencyPercentageValue {
+    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
+      return new FrequencyPercentageValue(this.value.interpolate(other.value, progress));
+    }
+    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
+      return new FrequencyPercentageValue(this.value.interpolate(other.value, progress));
+    }
+    const mathContext = frequencyPercentageMathContext(context);
+    return new FrequencyPercentageValue(
+      this.asMathValue(mathContext).interpolate(other.asMathValue(mathContext), progress, mathContext),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation of frequency-percentages is addition. */
+  accumulate(other: FrequencyPercentageValue, context: MathContext = {}): FrequencyPercentageValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'frequency-percentage'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'frequency-percentage', context);
+  }
 }
 
-// <frequency-percentage> = <frequency> | <percentage> | <math-function>
-const frequencyPercentageConsumer = createFrequencyPercentageConsumer();
-const frequencyPercentageParser = createComponentParser(withTrivia(frequencyPercentageConsumer));
+/** Literal or calculation accepted by this numeric grammar. */
+type FrequencyPercentage = FrequencyPercentageLiteral | MathValue<'frequency-percentage'>;
+
+function frequencyPercentageMathContext(context: MathContext): MathContext {
+  return { ...context, percentHint: 'frequency' };
+}
+
+const frequencyPercentageConsumer = FrequencyPercentageValue.createConsumer();
+const frequencyPercentageGrammar = withTrivia(frequencyPercentageConsumer);

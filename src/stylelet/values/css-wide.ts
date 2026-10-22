@@ -1,9 +1,39 @@
 import {
-  withTrivia, parseAsComponentGrammar,
+  createKeywordConsumer, adaptConsumer, withTrivia, parseAsComponentGrammar,
   type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
 
-import { createKeywordConsumer } from './keyword';
+import type { Value } from './value';
+
+/** A CSS-wide keyword awaiting property defaulting and inheritance. */
+export class CssWideValue implements Value {
+  /** The canonical keyword; its property-specific meaning is not resolved here. */
+  value: CssWideKeyword;
+
+  constructor(value: CssWideKeyword) {
+    this.value = value;
+  }
+
+  static parse(input: ParserInput, context: unknown): CssWideValue | null {
+    return parseAsComponentGrammar(input, cssWideGrammar, context);
+  }
+
+  static consume(this: void, c: TokenCursor): TryConsumerResult<CssWideValue> {
+    return cssWideConsumer(c);
+  }
+
+  resolve(_stage: ValueStage, _context: unknown): CssWideValue {
+    // TODO: The engine must apply property defaulting and inheritance.
+    return this;
+  }
+
+  serialize(): string {
+    return this.value;
+  }
+}
+
+export type CssWideKeyword = (typeof CSS_WIDE_KEYWORDS)[number];
 
 /*
  * CSS-wide keywords:
@@ -18,33 +48,5 @@ export const CSS_WIDE_KEYWORDS = [
   'revert-layer',
 ] as const;
 
-export type CssWideKeyword = (typeof CSS_WIDE_KEYWORDS)[number];
-
-export type CssWideValue = {
-  type: 'css-wide';
-  keyword: CssWideKeyword;
-};
-
-export function parseCssWideValue(
-  input: ParserInput,
-  context: unknown,
-): CssWideValue | null {
-  return parseAsComponentGrammar(
-    input,
-    withTrivia(consumeCssWideValue),
-    context,
-  );
-}
-
-export function consumeCssWideValue(
-  c: TokenCursor,
-): TryConsumerResult<CssWideValue> {
-  const keyword = cssWideKeywordConsumer(c);
-
-  if (keyword === null) return null;
-
-  return { type: 'css-wide', keyword };
-}
-
-// <css-wide-keyword> = inherit | initial | unset | revert | revert-layer
-const cssWideKeywordConsumer = createKeywordConsumer(...CSS_WIDE_KEYWORDS);
+const cssWideConsumer = adaptConsumer(createKeywordConsumer(...CSS_WIDE_KEYWORDS), (keyword) => new CssWideValue(keyword));
+const cssWideGrammar = withTrivia(cssWideConsumer);

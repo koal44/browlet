@@ -1,104 +1,18 @@
-import {
-  withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
-} from '../../syntax/index';
+import type { TryConsumer } from '../../syntax/index';
 
-import {
-  canonicalizeFrequency, serializeFrequency, consumeFrequency,
-  type CanonicalFrequencyLiteral,
-  type FrequencyLiteral,
-} from './frequency';
-import {
-  createDimensionPercentageConsumer, serializeDimensionPercentage,
-  tryAccumulateDimensionPercentages, tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
-} from './dimension-percentage';
+import { FrequencyLiteral } from './frequency';
+import type { PercentageLiteral } from './percentage';
+import { createDimensionPercentageConsumer, type DimensionPercentageConsumerOptions } from './dimension-percentage';
 
-/*
- * <frequency-percentage> = [ <frequency> | <percentage> ]
- */
+/** The literal alternatives in <frequency-percentage>; there is no additional value container. */
+export type FrequencyPercentageLiteral = FrequencyLiteral | PercentageLiteral;
 
-export type FrequencyPercentageLiteral =
-  DimensionPercentageLiteral<FrequencyLiteral>;
+export type FrequencyPercentageConsumerOptions = DimensionPercentageConsumerOptions;
 
-export type FrequencyPercentageResolutionContext = {
-  percentageReferenceValue?: CanonicalFrequencyLiteral;
-};
-
-export function parseFrequencyPercentage(
-  input: ParserInput,
-  context: unknown,
-): FrequencyPercentageLiteral | null {
-  return frequencyPercentageParser(input, context);
-}
-
-export function consumeFrequencyPercentage(
-  c: TokenCursor,
-): TryConsumerResult<FrequencyPercentageLiteral> {
-  return frequencyPercentageConsumer(c);
-}
-
-export type FrequencyPercentageConsumerOptions =
-  DimensionPercentageConsumerOptions;
-
+/** Configure the literal alternatives before contextual percentage resolution. */
+// https://drafts.csswg.org/css-values-4/#typedef-frequency-percentage
 export function createFrequencyPercentageConsumer(
-  options: FrequencyPercentageConsumerOptions = {},
+  options: DimensionPercentageConsumerOptions = {},
 ): TryConsumer<FrequencyPercentageLiteral> {
-  return createDimensionPercentageConsumer(
-    consumeFrequency,
-    'Frequency-percentage',
-    options,
-  );
+  return createDimensionPercentageConsumer(FrequencyLiteral.consume, 'Frequency-percentage', options);
 }
-
-export function serializeFrequencyPercentage(
-  value: FrequencyPercentageLiteral,
-): string {
-  return serializeDimensionPercentage(value, serializeFrequency);
-}
-
-export function tryResolveFrequencyPercentage(
-  value: FrequencyPercentageLiteral,
-  context: FrequencyPercentageResolutionContext = {},
-): CanonicalFrequencyLiteral | null {
-  if (value.type === 'frequency') {
-    return canonicalizeFrequency(value);
-  }
-
-  const reference = context.percentageReferenceValue;
-
-  if (reference === undefined) {
-    return null;
-  }
-
-  return {
-    ...reference,
-    value: reference.value * value.value / 100,
-  };
-}
-
-export function tryAddFrequencyPercentages(
-  a: FrequencyPercentageLiteral,
-  b: FrequencyPercentageLiteral,
-): FrequencyPercentageLiteral | null {
-  return tryAddDimensionPercentages(a, b);
-}
-
-export function tryInterpolateFrequencyPercentages(
-  a: FrequencyPercentageLiteral,
-  b: FrequencyPercentageLiteral,
-  p: number,
-): FrequencyPercentageLiteral | null {
-  return tryInterpolateDimensionPercentages(a, b, p);
-}
-
-export function tryAccumulateFrequencyPercentages(
-  a: FrequencyPercentageLiteral,
-  b: FrequencyPercentageLiteral,
-): FrequencyPercentageLiteral | null {
-  return tryAccumulateDimensionPercentages(a, b);
-}
-
-// <frequency-percentage> = [ <frequency> | <percentage> ]
-const frequencyPercentageConsumer = createFrequencyPercentageConsumer();
-const frequencyPercentageParser = createComponentParser(withTrivia(frequencyPercentageConsumer));

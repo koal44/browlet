@@ -1,52 +1,42 @@
 import {
-  consumeIdentToken, serializeCssIdentifier, adaptConsumer, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  consumeIdentToken, serializeCssIdentifier, adaptConsumer, withTrivia, parseAsComponentGrammar,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueDefinition } from '../value-processing/index';
+import type { ValueStage } from '../value-processing/index';
 
-/*
- * <ident> = <ident-token>
- */
+import type { Value } from './value';
 
-export type IdentValue = {
-  type: 'ident';
+/** A parsed CSS <ident>. */
+// https://drafts.csswg.org/css-values-4/#typedef-ident
+export class IdentValue implements Value {
+  /** The decoded identifier, retaining its case. */
   value: string;
-};
 
-export const identDef: ValueDefinition<IdentValue> = {
-  consume: consumeIdent,
-  resolve: resolveIdent,
-  serialize: serializeIdent,
-};
+  constructor(value: string) {
+    this.value = value;
+  }
 
-export function parseIdent(
-  input: ParserInput,
-  context: unknown,
-): IdentValue | null {
-  return identParser(input, context);
+  /** Parse a complete <ident>. */
+  static parse(input: ParserInput, context: unknown): IdentValue | null {
+    return parseAsComponentGrammar(input, identGrammar, context);
+  }
+
+  /** Consume one <ident>. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<IdentValue> {
+    return identConsumer(c);
+  }
+
+  /** This grammar has no contextual resolution. */
+  resolve(_stage: ValueStage, _context: unknown): IdentValue {
+    return this;
+  }
+
+  /** Escape the retained text using CSS identifier syntax. */
+  serialize(): string {
+    return serializeCssIdentifier(this.value);
+  }
 }
 
-export function consumeIdent(
-  c: TokenCursor,
-): TryConsumerResult<IdentValue> {
-  return identConsumer(c);
-}
+const identConsumer = adaptConsumer(consumeIdentToken, (token) => new IdentValue(token.value));
 
-export function resolveIdent(value: IdentValue): IdentValue {
-  return value;
-}
-
-export function serializeIdent(value: IdentValue): string {
-  return serializeCssIdentifier(value.value);
-}
-
-// <ident> = <ident-token>
-const identConsumer: TryConsumer<IdentValue> = adaptConsumer(
-  consumeIdentToken,
-  (token) => ({
-    type: 'ident',
-    value: token.value,
-  }),
-);
-
-const identParser = createComponentParser(withTrivia(identConsumer));
+const identGrammar = withTrivia(identConsumer);

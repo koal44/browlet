@@ -6,21 +6,271 @@ import {
   consumeDimensionToken, consumeNumberToken, one, oneOf, adaptConsumer, withTrivia, createComponentParser,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../../syntax/index';
+import { ValueStage } from '../../value-processing/index';
 
-import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
+import { DimensionLiteral } from './dimension';
 
-/*
- * <length> = <dimension-token with a length unit> | <zero>
- *
- * In an ambiguous grammar, consume <number> before <length> so that a
- * unitless zero is parsed as a number, as required by CSS Values.
- */
+/** A length in its specified unit, including the unitless-zero spelling. */
+// https://drafts.csswg.org/css-values-4/#lengths
+export class LengthLiteral<Unit extends LengthUnit | '' = LengthUnit | ''> extends DimensionLiteral<Unit> {
+  declare type: 'length';
 
-export type LengthLiteral =
-  | DimensionLiteral<'length', LengthUnit>
-  | (DimensionLiteral<'length', ''> & { value: 0; });
+  constructor(value: number, unit: Unit & LengthUnit);
+  constructor(value: 0, unit: Unit & '');
+  constructor(value: number, unit: Unit) {
+    super(value, unit);
+    this.type = 'length';
+  }
 
-export type CanonicalLengthLiteral = DimensionLiteral<'length', 'px'>;
+  /** Parse a complete length literal. */
+  static override parse(input: ParserInput, context: unknown): LengthLiteral | null {
+    return lengthParser(input, context);
+  }
+
+  /** Consume a length; ambiguous grammars must try numbers before unitless zero. */
+  static override consume(this: void, c: TokenCursor): TryConsumerResult<LengthLiteral> {
+    return lengthConsumer(c);
+  }
+
+  /** Configure the bounds that can be checked before contextual unit resolution. */
+  static createConsumer(options: LengthConsumerOptions = {}): TryConsumer<LengthLiteral> {
+    const min = options.min ?? -Infinity;
+    const max = options.max ?? Infinity;
+    if (!canCheckLengthRangeWithoutResolution(min, max)) {
+      throw new InternalError('Length ranges with finite nonzero bounds are not yet supported');
+    }
+    return oneOf([
+      one(lengthDimensionConsumer),
+      one(unitlessZeroLengthConsumer),
+    ], ([literal]) => literal.value < min || literal.value > max ? null : literal);
+  }
+
+  /** Resolve available length references from the computed stage onward. */
+  override resolve(stage: ValueStage, context: LengthResolutionContext = {}): LengthLiteral {
+    return stage < ValueStage.Computed ? this : this.tryResolve(context) ?? this;
+  }
+
+  /** Preserve the unitless-zero spelling without introducing a unit. */
+  override serialize(): string {
+    return this.unit === '' ? '0' : super.serialize();
+  }
+
+  /** Return CSS pixels, or null when a required reference is unavailable. */
+  tryResolve(this: LengthLiteral, context: LengthResolutionContext = {}): CanonicalLengthLiteral | null {
+    let pixelsPerUnit: number | undefined;
+    const unit = this.unit;
+
+    switch (unit) {
+      case '':
+        return new LengthLiteral(0, 'px');
+      case 'px':
+        return this as CanonicalLengthLiteral;
+      case 'in':
+        pixelsPerUnit = 96;
+        break;
+      case 'cm':
+        pixelsPerUnit = 96 / 2.54;
+        break;
+      case 'mm':
+        pixelsPerUnit = 96 / 25.4;
+        break;
+      case 'q':
+        pixelsPerUnit = 96 / 101.6;
+        break;
+      case 'pt':
+        pixelsPerUnit = 96 / 72;
+        break;
+      case 'pc':
+        pixelsPerUnit = 16;
+        break;
+
+      case 'em': case 'rem':
+      case 'ex': case 'rex':
+      case 'cap': case 'rcap':
+      case 'ch': case 'rch':
+      case 'ic': case 'ric':
+      case 'lh': case 'rlh':
+        pixelsPerUnit = context[unit];
+        break;
+
+      case 'vw': case 'lvw':
+        pixelsPerUnit = percentOf(context.largeViewportWidth);
+        break;
+      case 'vh': case 'lvh':
+        pixelsPerUnit = percentOf(context.largeViewportHeight);
+        break;
+      case 'vi': case 'lvi':
+        pixelsPerUnit = percentOf(inlineSize(
+          context.largeViewportWidth,
+          context.largeViewportHeight,
+          context.viewportInlineAxis,
+        ));
+        break;
+      case 'vb': case 'lvb':
+        pixelsPerUnit = percentOf(blockSize(
+          context.largeViewportWidth,
+          context.largeViewportHeight,
+          context.viewportInlineAxis,
+        ));
+        break;
+      case 'vmin': case 'lvmin':
+        pixelsPerUnit = percentOf(minimumSize(
+          context.largeViewportWidth,
+          context.largeViewportHeight,
+        ));
+        break;
+      case 'vmax': case 'lvmax':
+        pixelsPerUnit = percentOf(maximumSize(
+          context.largeViewportWidth,
+          context.largeViewportHeight,
+        ));
+        break;
+
+      case 'svw':
+        pixelsPerUnit = percentOf(context.smallViewportWidth);
+        break;
+      case 'svh':
+        pixelsPerUnit = percentOf(context.smallViewportHeight);
+        break;
+      case 'svi':
+        pixelsPerUnit = percentOf(inlineSize(
+          context.smallViewportWidth,
+          context.smallViewportHeight,
+          context.viewportInlineAxis,
+        ));
+        break;
+      case 'svb':
+        pixelsPerUnit = percentOf(blockSize(
+          context.smallViewportWidth,
+          context.smallViewportHeight,
+          context.viewportInlineAxis,
+        ));
+        break;
+      case 'svmin':
+        pixelsPerUnit = percentOf(minimumSize(
+          context.smallViewportWidth,
+          context.smallViewportHeight,
+        ));
+        break;
+      case 'svmax':
+        pixelsPerUnit = percentOf(maximumSize(
+          context.smallViewportWidth,
+          context.smallViewportHeight,
+        ));
+        break;
+
+      case 'dvw':
+        pixelsPerUnit = percentOf(context.dynamicViewportWidth);
+        break;
+      case 'dvh':
+        pixelsPerUnit = percentOf(context.dynamicViewportHeight);
+        break;
+      case 'dvi':
+        pixelsPerUnit = percentOf(inlineSize(
+          context.dynamicViewportWidth,
+          context.dynamicViewportHeight,
+          context.viewportInlineAxis,
+        ));
+        break;
+      case 'dvb':
+        pixelsPerUnit = percentOf(blockSize(
+          context.dynamicViewportWidth,
+          context.dynamicViewportHeight,
+          context.viewportInlineAxis,
+        ));
+        break;
+      case 'dvmin':
+        pixelsPerUnit = percentOf(minimumSize(
+          context.dynamicViewportWidth,
+          context.dynamicViewportHeight,
+        ));
+        break;
+      case 'dvmax':
+        pixelsPerUnit = percentOf(maximumSize(
+          context.dynamicViewportWidth,
+          context.dynamicViewportHeight,
+        ));
+        break;
+
+      case 'cqw':
+        pixelsPerUnit = percentOf(context.containerWidth);
+        break;
+      case 'cqh':
+        pixelsPerUnit = percentOf(context.containerHeight);
+        break;
+      case 'cqi':
+        pixelsPerUnit = percentOf(context.containerInlineSize);
+        break;
+      case 'cqb':
+        pixelsPerUnit = percentOf(context.containerBlockSize);
+        break;
+      case 'cqmin':
+        pixelsPerUnit = percentOf(minimumSize(
+          context.containerInlineSize,
+          context.containerBlockSize,
+        ));
+        break;
+      case 'cqmax':
+        pixelsPerUnit = percentOf(maximumSize(
+          context.containerInlineSize,
+          context.containerBlockSize,
+        ));
+        break;
+      default:
+        return assertNever(unit);
+    }
+
+    if (pixelsPerUnit === undefined) {
+      return null;
+    }
+
+    return new LengthLiteral(this.value * pixelsPerUnit, 'px');
+  }
+
+  /** Snap a canonical line width to the device-pixel grid. */
+  // https://drafts.csswg.org/css-values-4/#snap-a-length-as-a-border-width
+  snapAsLineWidth(this: CanonicalLengthLiteral, devicePixelRatio: number): CanonicalLengthLiteral {
+    const devicePixels = this.value * devicePixelRatio;
+
+    if (Number.isInteger(devicePixels)) {
+      return this;
+    }
+
+    const magnitude = Math.abs(devicePixels);
+
+    if (magnitude > 0 && magnitude < 1) {
+      return new LengthLiteral(Math.sign(devicePixels) / devicePixelRatio, 'px');
+    }
+
+    if (magnitude > 1) {
+      return new LengthLiteral(Math.trunc(devicePixels) / devicePixelRatio, 'px');
+    }
+
+    return this;
+  }
+
+  /** Add same-unit lengths. Unitless zero remains unitless. */
+  override add(this: LengthLiteral, other: DimensionLiteral<LengthUnit | ''>): LengthLiteral {
+    this.assertSameUnit(other);
+    const unit = this.unit;
+    return unit === '' ? new LengthLiteral(0, '') : new LengthLiteral(this.value + other.value, unit);
+  }
+
+  /** Interpolate same-unit lengths. */
+  override interpolate(this: LengthLiteral, other: DimensionLiteral<LengthUnit | ''>, progress: number): LengthLiteral {
+    this.assertSameUnit(other);
+    const unit = this.unit;
+    return unit === '' ? new LengthLiteral(0, '')
+      : new LengthLiteral((1 - progress) * this.value + progress * other.value, unit);
+  }
+
+  /** Accumulation of lengths is addition. */
+  override accumulate(other: DimensionLiteral<LengthUnit | ''>): LengthLiteral {
+    return this.add(other);
+  }
+}
+
+export type CanonicalLengthLiteral = LengthLiteral<'px'>;
 
 export type LengthResolutionContext = {
   // Effective font-relative reference lengths, in CSS pixels per unit.
@@ -84,276 +334,12 @@ export const LENGTH_UNITS = [
 
 export type LengthUnit = (typeof LENGTH_UNITS)[number];
 
-export function lengthLiteral(value: number): CanonicalLengthLiteral;
-export function lengthLiteral<Unit extends LengthUnit>(
-  value: number,
-  unit: Unit,
-): DimensionLiteral<'length', Unit>;
-export function lengthLiteral(
-  value: number,
-  unit: LengthUnit = 'px',
-): DimensionLiteral<'length', LengthUnit> {
-  return dimensionLiteral('length', value, unit);
-}
-
-export function parseLength(
-  input: ParserInput,
-  context: unknown,
-): LengthLiteral | null {
-  return lengthParser(input, context);
-}
-
-export function consumeLength(
-  c: TokenCursor,
-): TryConsumerResult<LengthLiteral> {
-  return lengthConsumer(c);
-}
-
 export type LengthConsumerOptions = {
-  /** Inclusive lower bound in canonical CSS pixels. */
+  /** Inclusive lower bound in CSS pixels. */
   min?: number;
-
-  /** Inclusive upper bound in canonical CSS pixels. */
+  /** Inclusive upper bound in CSS pixels. */
   max?: number;
 };
-
-export function createLengthConsumer(
-  options: LengthConsumerOptions = {},
-): TryConsumer<LengthLiteral> {
-  const min = options.min ?? -Infinity;
-  const max = options.max ?? Infinity;
-
-  if (!canCheckLengthRangeWithoutResolution(min, max)) {
-    throw new InternalError(
-      'Length ranges with finite nonzero bounds are not yet supported',
-    );
-  }
-
-  return oneOf(
-    [
-      one(lengthDimensionConsumer),
-      one(unitlessZeroLengthConsumer),
-    ],
-    ([value]) => value.value < min || value.value > max
-      ? null
-      : value,
-  );
-}
-
-export function serializeLength(value: LengthLiteral): string {
-  return value.unit === '' ? '0' : serializeDimension(value);
-}
-
-export function serializeCanonicalLength(value: CanonicalLengthLiteral): string {
-  return serializeDimension(value);
-}
-
-export function snapLengthAsLineWidth(
-  value: CanonicalLengthLiteral,
-  devicePixelRatio: number,
-): CanonicalLengthLiteral {
-  const devicePixels = value.value * devicePixelRatio;
-
-  if (Number.isInteger(devicePixels)) {
-    return value;
-  }
-
-  const magnitude = Math.abs(devicePixels);
-
-  if (magnitude > 0 && magnitude < 1) {
-    return {
-      ...value,
-      value: Math.sign(devicePixels) / devicePixelRatio,
-    };
-  }
-
-  if (magnitude > 1) {
-    return {
-      ...value,
-      value: Math.trunc(devicePixels) / devicePixelRatio,
-    };
-  }
-
-  return value;
-}
-
-export function tryResolveLength(
-  value: LengthLiteral,
-  context: LengthResolutionContext = {},
-): CanonicalLengthLiteral | null {
-  let pixelsPerUnit: number | undefined;
-  const unit = value.unit;
-
-  switch (unit) {
-    case '':
-      return { type: 'length', value: 0, unit: 'px' };
-    case 'px':
-      return { type: 'length', value: value.value, unit: 'px' };
-    case 'in':
-      pixelsPerUnit = 96;
-      break;
-    case 'cm':
-      pixelsPerUnit = 96 / 2.54;
-      break;
-    case 'mm':
-      pixelsPerUnit = 96 / 25.4;
-      break;
-    case 'q':
-      pixelsPerUnit = 96 / 101.6;
-      break;
-    case 'pt':
-      pixelsPerUnit = 96 / 72;
-      break;
-    case 'pc':
-      pixelsPerUnit = 16;
-      break;
-
-    case 'em': case 'rem':
-    case 'ex': case 'rex':
-    case 'cap': case 'rcap':
-    case 'ch': case 'rch':
-    case 'ic': case 'ric':
-    case 'lh': case 'rlh':
-      pixelsPerUnit = context[unit];
-      break;
-
-    case 'vw': case 'lvw':
-      pixelsPerUnit = percentOf(context.largeViewportWidth);
-      break;
-    case 'vh': case 'lvh':
-      pixelsPerUnit = percentOf(context.largeViewportHeight);
-      break;
-    case 'vi': case 'lvi':
-      pixelsPerUnit = percentOf(inlineSize(
-        context.largeViewportWidth,
-        context.largeViewportHeight,
-        context.viewportInlineAxis,
-      ));
-      break;
-    case 'vb': case 'lvb':
-      pixelsPerUnit = percentOf(blockSize(
-        context.largeViewportWidth,
-        context.largeViewportHeight,
-        context.viewportInlineAxis,
-      ));
-      break;
-    case 'vmin': case 'lvmin':
-      pixelsPerUnit = percentOf(minimumSize(
-        context.largeViewportWidth,
-        context.largeViewportHeight,
-      ));
-      break;
-    case 'vmax': case 'lvmax':
-      pixelsPerUnit = percentOf(maximumSize(
-        context.largeViewportWidth,
-        context.largeViewportHeight,
-      ));
-      break;
-
-    case 'svw':
-      pixelsPerUnit = percentOf(context.smallViewportWidth);
-      break;
-    case 'svh':
-      pixelsPerUnit = percentOf(context.smallViewportHeight);
-      break;
-    case 'svi':
-      pixelsPerUnit = percentOf(inlineSize(
-        context.smallViewportWidth,
-        context.smallViewportHeight,
-        context.viewportInlineAxis,
-      ));
-      break;
-    case 'svb':
-      pixelsPerUnit = percentOf(blockSize(
-        context.smallViewportWidth,
-        context.smallViewportHeight,
-        context.viewportInlineAxis,
-      ));
-      break;
-    case 'svmin':
-      pixelsPerUnit = percentOf(minimumSize(
-        context.smallViewportWidth,
-        context.smallViewportHeight,
-      ));
-      break;
-    case 'svmax':
-      pixelsPerUnit = percentOf(maximumSize(
-        context.smallViewportWidth,
-        context.smallViewportHeight,
-      ));
-      break;
-
-    case 'dvw':
-      pixelsPerUnit = percentOf(context.dynamicViewportWidth);
-      break;
-    case 'dvh':
-      pixelsPerUnit = percentOf(context.dynamicViewportHeight);
-      break;
-    case 'dvi':
-      pixelsPerUnit = percentOf(inlineSize(
-        context.dynamicViewportWidth,
-        context.dynamicViewportHeight,
-        context.viewportInlineAxis,
-      ));
-      break;
-    case 'dvb':
-      pixelsPerUnit = percentOf(blockSize(
-        context.dynamicViewportWidth,
-        context.dynamicViewportHeight,
-        context.viewportInlineAxis,
-      ));
-      break;
-    case 'dvmin':
-      pixelsPerUnit = percentOf(minimumSize(
-        context.dynamicViewportWidth,
-        context.dynamicViewportHeight,
-      ));
-      break;
-    case 'dvmax':
-      pixelsPerUnit = percentOf(maximumSize(
-        context.dynamicViewportWidth,
-        context.dynamicViewportHeight,
-      ));
-      break;
-
-    case 'cqw':
-      pixelsPerUnit = percentOf(context.containerWidth);
-      break;
-    case 'cqh':
-      pixelsPerUnit = percentOf(context.containerHeight);
-      break;
-    case 'cqi':
-      pixelsPerUnit = percentOf(context.containerInlineSize);
-      break;
-    case 'cqb':
-      pixelsPerUnit = percentOf(context.containerBlockSize);
-      break;
-    case 'cqmin':
-      pixelsPerUnit = percentOf(minimumSize(
-        context.containerInlineSize,
-        context.containerBlockSize,
-      ));
-      break;
-    case 'cqmax':
-      pixelsPerUnit = percentOf(maximumSize(
-        context.containerInlineSize,
-        context.containerBlockSize,
-      ));
-      break;
-    default:
-      return assertNever(unit);
-  }
-
-  if (pixelsPerUnit === undefined) {
-    return null;
-  }
-
-  return {
-    type: 'length',
-    value: value.value * pixelsPerUnit,
-    unit: 'px',
-  };
-}
 
 function percentOf(value?: number): number | undefined {
   return value === undefined ? undefined : value / 100;
@@ -401,10 +387,6 @@ function maximumSize(
     : Math.max(width, height);
 }
 
-// =============================================================================
-// Syntax
-// =============================================================================
-
 /*
  * Implementation factorization of <length>:
  *
@@ -424,13 +406,7 @@ function canCheckLengthRangeWithoutResolution(min: number, max: number): boolean
 function lengthUnitFor(raw: string): LengthUnit | null {
   const normalized = asciiLower(raw);
 
-  return isLengthUnit(normalized)
-    ? normalized
-    : null;
-}
-
-function isLengthUnit(value: string): value is LengthUnit {
-  return LENGTH_UNITS.some((unit) => unit === value);
+  return LENGTH_UNITS.find((unit) => unit === normalized) ?? null;
 }
 
 // <length-dimension> = <dimension-token with a length unit>
@@ -441,7 +417,7 @@ const lengthDimensionConsumer: TryConsumer<LengthLiteral> = adaptConsumer(
 
     return unit === null
       ? null
-      : { type: 'length', value: component.value, unit };
+      : new LengthLiteral(component.value, unit);
   },
 );
 
@@ -449,10 +425,9 @@ const lengthDimensionConsumer: TryConsumer<LengthLiteral> = adaptConsumer(
 const unitlessZeroLengthConsumer: TryConsumer<LengthLiteral> = adaptConsumer(
   consumeNumberToken,
   (component) => component.value === 0
-    ? { type: 'length', value: 0, unit: '' }
+    ? new LengthLiteral(0, '')
     : null,
 );
 
-// <length> = <length-dimension> | <zero>
-const lengthConsumer = createLengthConsumer();
+const lengthConsumer = LengthLiteral.createConsumer();
 const lengthParser = createComponentParser(withTrivia(lengthConsumer));

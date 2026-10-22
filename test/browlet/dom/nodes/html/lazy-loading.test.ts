@@ -8,7 +8,7 @@ import {
   HTMLImageElementImpl, HTMLIFrameElementImpl, HTMLMediaElementImpl, HTMLVideoElementImpl,
 } from '../../../../../src/browlet/dom/nodes/html/embedded/index';
 import type { HTMLImageElement, HTMLIFrameElement, HTMLMediaElement, Window } from '../../../../../src/browlet/platform';
-import { lengthLiteral, percentageLiteral } from '../../../../../src/stylelet/index';
+import { LengthLiteral, PercentageLiteral } from '../../../../../src/stylelet/index';
 import { unwrap } from '../../../../support/browlet-binding';
 
 // Use Browlet's generated surface for media.loading, which TypeScript's ambient DOM lacks.
@@ -150,7 +150,7 @@ describe('document lazy-loading observer', () => {
     const first = createElement('img');
     const second = createElement('iframe');
     first.document.env.userAgent.lazyLoadScrollMargin = [
-      lengthLiteral(250), percentageLiteral(10), lengthLiteral(400), percentageLiteral(20),
+      new LengthLiteral(250, 'px'), new PercentageLiteral(10), new LengthLiteral(400, 'px'), new PercentageLiteral(20),
     ];
     first.document.startObservingLazyLoadingElement(first.element);
     first.document.startObservingLazyLoadingElement(first.element);
@@ -166,12 +166,12 @@ describe('document lazy-loading observer', () => {
     first.document.env.userAgent.lazyLoadScrollMargin[0].value = 999;
     expect(observer.options).toEqual({
       root: null,
-      rootMargin: [lengthLiteral(0), lengthLiteral(0), lengthLiteral(0), lengthLiteral(0)],
-      scrollMargin: [lengthLiteral(250), percentageLiteral(10), lengthLiteral(400), percentageLiteral(20)],
+      rootMargin: [new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px')],
+      scrollMargin: [new LengthLiteral(250, 'px'), new PercentageLiteral(10), new LengthLiteral(400, 'px'), new PercentageLiteral(20)],
       threshold: 0, delay: 0, trackVisibility: false,
     });
     expect(getObserver(second.element).options.scrollMargin).toEqual([
-      percentageLiteral(100), percentageLiteral(100), percentageLiteral(100), percentageLiteral(100),
+      new PercentageLiteral(100), new PercentageLiteral(100), new PercentageLiteral(100), new PercentageLiteral(100),
     ]);
     expect(first.element.registeredIntersectionObservers).toHaveLength(1);
   });

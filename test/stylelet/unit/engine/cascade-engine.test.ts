@@ -1,3 +1,4 @@
+import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
@@ -52,8 +53,8 @@ describe('cascade engine', () => {
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: { type: 'substitution-value' },
     });
+    expect(color.declaration).toHaveProperty('value.value.value', expect.any(OptionalDeclarationValue));
     const accent = engine.getCascadedProperty('--accent', scope)!;
     expect(accent.styleSheet).toBe(styleSheet);
     expect(accent.scope).toBe(scope);

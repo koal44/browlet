@@ -3,6 +3,7 @@ import { assertNever } from '../../infra/util';
 
 import {
   any, commaRepeat, one, oneOf, opt, plus, adaptConsumer, requiredSequenceOf, sequenceOf, withTrivia,
+  createKeywordConsumer,
   consumeAmpersandDelim, consumeAnyValueFunctionBlock, consumeAsteriskDelim, consumeBracketBlock,
   consumeCaretDelim, consumeColon, consumeDollarDelim, consumeDotDelim,
   consumeEqualsDelim, consumeGreaterDelim, consumeIdentToken, consumeIdHashToken,
@@ -14,10 +15,7 @@ import {
   type ParserInput,
 } from '../syntax/index';
 import { serializeCssInteger } from '../values/numeric-literal/index';
-import {
-  parseCustomIdent, serializeCustomIdent, consumeAnPlusB, serializeAnPlusB, createKeywordConsumer,
-  type CustomIdentValue, type AnPlusBValue,
-} from '../values/index';
+import { CustomIdentValue, AnPlusBValue } from '../values/index';
 
 export enum SelectorKind {
   ComplexSelectorList = 'complex-selector-list',
@@ -1350,13 +1348,13 @@ const pseudoClassSelectorConsumer: TryConsumer<PseudoClassSelector, SelectorCont
     one(consumeColon),
     one(oneOf(
       [one(consumeIdentToken), one(consumeAnyValueFunctionBlock)],
-      ([value], ctx: SelectorContext) => value.type === TokenKind.Ident
-        ? createPseudoClassSelector(value.value, null, ctx)
-        : createPseudoClassSelector(
-          value.name,
-          value.value.components,
-          ctx,
-        ),
+      ([component], ctx: SelectorContext) => {
+        if (component.type === TokenKind.Ident) {
+          return createPseudoClassSelector(component.value, null, ctx);
+        }
+        const { name, value: argument } = component;
+        return createPseudoClassSelector(name, argument, ctx);
+      },
     )),
   ],
   ([, [selector]]) => selector,
@@ -1396,14 +1394,13 @@ const pseudoElementSelectorConsumer: TryConsumer<PseudoElementSelector, Selector
           one(consumeColon),
           one(oneOf(
             [one(consumeIdentToken), one(consumeAnyValueFunctionBlock)],
-            ([value], ctx: SelectorContext) => value.type === TokenKind.Ident
-              ? createPseudoElementSelector(value.value, null, false, ctx)
-              : createPseudoElementSelector(
-                value.name,
-                value.value.components,
-                false,
-                ctx,
-              ),
+            ([component], ctx: SelectorContext) => {
+              if (component.type === TokenKind.Ident) {
+                return createPseudoElementSelector(component.value, null, false, ctx);
+              }
+              const { name, value: argument } = component;
+              return createPseudoElementSelector(name, argument, false, ctx);
+            },
           )),
         ],
         ([, , [selector]]) => selector,
@@ -2003,7 +2000,7 @@ function createPseudoElementSelector(
         return null;
       }
 
-      const ident = parseCustomIdent(list, [], context);
+      const ident = CustomIdentValue.parse(list, [], context);
 
       if (ident === null) {
         return null;
@@ -2381,7 +2378,8 @@ const simpleAsComplexRealSelectorConsumer = adaptConsumer(
 
 type AnPlusBPseudoArgument = {
   kind: PseudoArgumentKind.AnPlusB;
-} & AnPlusBValue;
+  formula: AnPlusBValue;
+};
 
 type NthChildPseudoArgument = {
   kind: PseudoArgumentKind.NthChild;
@@ -2393,7 +2391,7 @@ function parseAnPlusBArgument(
   list: TokenList<ComponentValue>,
   context: SelectorContext,
 ): AnPlusBPseudoArgument | null {
-  const anb = parseAsComponentGrammar(list, withTrivia(consumeAnPlusB), context);
+  const anb = parseAsComponentGrammar(list, withTrivia(AnPlusBValue.consume), context);
 
   if (anb === null) {
     return null;
@@ -2401,7 +2399,7 @@ function parseAnPlusBArgument(
 
   return {
     kind: PseudoArgumentKind.AnPlusB,
-    ...anb,
+    formula: anb,
   };
 }
 
@@ -2418,7 +2416,7 @@ function consumeNthChildArgument(c: TokenCursor<ComponentValue, SelectorContext>
 
 const nthChildArgumentConsumer = sequenceOf(
   [
-    one(withTrivia(consumeAnPlusB)),
+    one(withTrivia(AnPlusBValue.consume)),
     opt(consumeNthChildOfClause),
   ],
   ([[formula], of]): NthChildPseudoArgument => ({
@@ -3049,10 +3047,10 @@ function serializePseudoArgument(
       return argument.ranges.map(serializeCssString).join(', ');
 
     case PseudoArgumentKind.AnPlusB:
-      return serializeAnPlusB(argument);
+      return argument.formula.serialize();
 
     case PseudoArgumentKind.NthChild: {
-      const formula = serializeAnPlusB(argument.formula);
+      const formula = argument.formula.serialize();
       return argument.of === null
         ? formula
         : `${formula} of ${serializeComplexRealSelectorList(argument.of)}`;
@@ -3071,7 +3069,7 @@ function serializePseudoArgument(
       return argument.names.map(serializeCssIdentifier).join(' ');
 
     case PseudoArgumentKind.CustomIdent:
-      return serializeCustomIdent(argument.value);
+      return argument.value.serialize();
 
     default:
       return assertNever(argument);

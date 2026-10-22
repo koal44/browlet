@@ -3,7 +3,46 @@
 The [README](README.md) records the inspected shared machinery. This roadmap
 covers lifecycle dependencies and unfinished property-family helpers.
 The [property roadmap](../props/ROADMAP.md) owns the wider family inventory.
-Neither document prescribes a new representation hierarchy.
+The class migration below replaced the function/definition arrangement.
+
+## Value classes
+
+- [x] Introduce the shared instance contract with precise context types and
+  separate, static grammar entry points. Migrate MathValue, AnglePercentageValue,
+  and AnyValue, retaining existing syntax lists without copying arrays.
+- [x] Migrate the straightforward families: angle, dimension, frequency, time,
+  length, resolution, number, integer, percentage, and the remaining mixed
+  percentage grammars; auto, ident, custom-ident, dashed-ident, string, An+B,
+  and general-enclosed. Retain their existing behavior and numeric-literal helpers.
+- [x] Migrate the numeric literals to flat classes with static grammars and
+  instance operations. Share DimensionLiteral as the base of recognized
+  dimensions and retain it for unknown units. Remove the extra DimensionValue
+  container; keep mixed literal grammars as unions. Preserve numeric-variable
+  inputs and math's internal calculation records with dimensional hints.
+- [x] Migrate ordinary composites and conditions: ratio, opacity, position,
+  URL/modifiers, boolean expressions, supports, and media queries. Keep condition
+  evaluation separate from value-stage resolution. Update Browlet's
+  document/user-agent literal factories and IntersectionObserver margin copies
+  and fixtures to retain literal classes. BoxSides remains provisional and
+  unchanged pending clarification of its possible Typed OM role.
+- [x] Migrate color and gradient, retaining color-profile coordinate contracts,
+  relative-color context, gradient geometry, and stop fixup. Move image grammar
+  consumers to the URL/gradient union without another container or lifecycle
+  dispatcher. Keep unsupported gradient combinations explicit.
+- [x] Final slice: contextual and deferred assembly. Migrate registered syntax,
+  WholeValue, CSS-wide forms, invalidity, substitution, first-valid, and if;
+  finish property and selector integration. Preserve the consuming grammar for deferred reparsing,
+  lazy branch selection, and property-owned initial/inherited metadata. Remove
+  obsolete definition dispatch as its consumers migrate.
+
+The migrated consumers use one class API. Contextual behavior and missing
+dependencies remain explicit; a class migration alone does not implement them.
+
+Focused literal, numeric, elementary, composite, color, gradient, image,
+condition, opaque-sequence, and lifecycle tests exercise the new classes.
+URL tree-scope, MediaList, CSSOM, selector, engine, and Browlet integration suites
+also use the migrated property/registered-syntax graph. Existing expected
+failures and skips remain visible; migration failures are not reclassified.
 
 ## Substitution and custom values
 
@@ -69,13 +108,13 @@ roadmaps; these tasks concern the resulting values.
   recheck current draft algorithms before implementing them.
 - [ ] Provide typed registered-property interpolation when an actual consumer
   needs it: computed-value dispatch, equal-length lists, and transform-specific
-  behavior. WholeValue stores data; add shared definition operations when a
-  consumer needs them, using the existing type-specific combination helpers.
+  behavior. Extend value operations when a consumer needs them, using the
+  existing type-specific combination methods without restoring definition dispatch.
   [Registration interpolation](https://drafts.css-houdini.org/css-properties-values-api-1/#animation-behavior-of-custom-properties)
   does not require this folder to own timelines or animation scheduling.
 - [ ] Implement [Typed OM reification](https://drafts.css-houdini.org/css-typed-om-1/#reify-stylevalue)
   through CSSOM implementations, including unparsed variable-containing values
-  and property-associated fallback objects. Internal value records remain
+  and property-associated fallback objects. Internal value classes remain
   distinct. [Typed OM](../cssom/typed/ROADMAP.md)
   owns public values/maps and their mutation, identity and freshness tests.
 

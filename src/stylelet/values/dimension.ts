@@ -1,145 +1,36 @@
-import { InternalError } from '../../infra/internal-error';
-
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueDefinition, ValueStage } from '../value-processing/index';
-import {
-  consumeDimension as consumeDimensionLiteral, serializeDimension as serializeDimensionLiteral,
-  type DimensionLiteral,
-} from './numeric-literal/index';
+import { DimensionLiteral } from './numeric-literal/index';
 
-import { consumeAngle, resolveAngle, serializeAngle, type AngleValue } from './angle';
-import {
-  consumeFrequency, resolveFrequency, serializeFrequency, type FrequencyValue,
-} from './frequency';
-import { consumeLength, resolveLength, serializeLength, type LengthValue } from './length';
-import { type MathContext } from './math-value';
-import {
-  consumeResolution, resolveResolution, serializeResolution, type ResolutionValue,
-} from './resolution';
-import { consumeTime, resolveTime, serializeTime, type TimeValue } from './time';
+import { AngleValue } from './angle';
+import { FrequencyValue } from './frequency';
+import { LengthValue } from './length';
+import { ResolutionValue } from './resolution';
+import { TimeValue } from './time';
+import type { MathContext } from './math-value';
 
-/*
- * <dimension> = <dimension-token>
- */
+/** A recognized dimension value, or a literal whose unit remains uninterpreted. */
+export type DimensionValue = AngleValue | FrequencyValue | LengthValue | ResolutionValue | TimeValue | DimensionLiteral;
 
-export type DimensionValue =
-  | AngleValue
-  | FrequencyValue
-  | LengthValue
-  | ResolutionValue
-  | TimeValue
-  | DimensionLiteral;
-
-export const dimensionDef: ValueDefinition<DimensionValue, MathContext> = {
-  consume: consumeDimension,
-  resolve: resolveDimension,
-  serialize: serializeDimension,
-};
-
-export function parseDimension(
-  input: ParserInput,
-  context: MathContext,
-): DimensionValue | null {
-  return dimensionParser(input, context);
+/** Parse a dimension and return its concrete family directly. */
+// https://drafts.csswg.org/css-values-4/#dimensions
+export function parseDimension(input: ParserInput, context: MathContext): DimensionValue | null {
+  return parseAsComponentGrammar(input, dimensionGrammar, context);
 }
 
-export function consumeDimension(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<DimensionValue> {
+/** Consume one dimension without adding an intermediate container. */
+export function consumeDimension(c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<DimensionValue> {
   return dimensionConsumer(c);
 }
 
-export function resolveDimension(
-  value: DimensionValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): DimensionValue {
-  switch (value.type) {
-    case 'angle':
-      return resolveAngle(value, stage, context);
-
-    case 'frequency':
-      return resolveFrequency(value, stage, context);
-
-    case 'length':
-      return resolveLength(value, stage, context);
-
-    case 'resolution':
-      return resolveResolution(value, stage, context);
-
-    case 'time':
-      return resolveTime(value, stage, context);
-
-    case 'math':
-      switch (value.valueType) {
-        case 'angle':
-          return resolveAngle(value, stage, context);
-        case 'frequency':
-          return resolveFrequency(value, stage, context);
-        case 'length':
-          return resolveLength(value, stage, context);
-        case 'resolution':
-          return resolveResolution(value, stage, context);
-        case 'time':
-          return resolveTime(value, stage, context);
-      }
-      return value;
-
-    case 'dimension':
-      return value;
-  }
-}
-
-export function serializeDimension(value: DimensionValue): string {
-  switch (value.type) {
-    case 'angle':
-      return serializeAngle(value);
-
-    case 'frequency':
-      return serializeFrequency(value);
-
-    case 'length':
-      return serializeLength(value);
-
-    case 'resolution':
-      return serializeResolution(value);
-
-    case 'time':
-      return serializeTime(value);
-
-    case 'math':
-      switch (value.valueType) {
-        case 'angle':
-          return serializeAngle(value);
-        case 'frequency':
-          return serializeFrequency(value);
-        case 'length':
-          return serializeLength(value);
-        case 'resolution':
-          return serializeResolution(value);
-        case 'time':
-          return serializeTime(value);
-      }
-      throw new InternalError('Unsupported dimension math type');
-
-    case 'dimension':
-      return serializeDimensionLiteral(value);
-  }
-}
-
-const dimensionConsumer = oneOf(
-  [
-    one(consumeAngle),
-    one(consumeFrequency),
-    one(consumeLength),
-    one(consumeResolution),
-    one(consumeTime),
-    one(consumeDimensionLiteral),
-  ],
-  ([value]) => value,
-);
-
-const dimensionParser = createComponentParser(withTrivia(dimensionConsumer));
+const dimensionConsumer = oneOf([
+  one(AngleValue.consume),
+  one(FrequencyValue.consume),
+  one(LengthValue.consume),
+  one(ResolutionValue.consume),
+  one(TimeValue.consume),
+  one(DimensionLiteral.consume),
+], ([parsed]) => parsed);
+const dimensionGrammar = withTrivia(dimensionConsumer);

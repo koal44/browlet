@@ -1,6 +1,6 @@
 # Value-processing roadmap
 
-The [README](README.md) describes the two existing shared contracts. This
+The [README](README.md) describes the value contract and lifecycle stages. This
 roadmap accounts for lifecycle requirements without prescribing a new value
 class hierarchy, context bag, or cache.
 
@@ -27,7 +27,8 @@ Individual algorithms in these sections still need implementation review.
   the seven installed [property records](../props/README.md).
   Add further facts when their consumers are implemented: computed-value rules,
   applicability, percentage behavior, shorthand relationships, and logical
-  groups. Keep shared value grammar operations in each record's `definition`.
+  groups. Each record retains its shared `parse` function; parsed value instances
+  own resolution and serialization.
 - [ ] Preserve different outcomes: invalid syntax is discarded before cascade;
   an invalid substituted winner follows computed-time fallback, not an earlier
   declaration; a rollback keyword deliberately revisits cascade candidates.

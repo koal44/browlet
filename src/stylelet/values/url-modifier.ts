@@ -1,14 +1,142 @@
 import { asciiLower } from '../../infra/ascii';
 
 import {
-  createFunctionalNotationConsumer, consumeFunctionBlock, one, oneOf, withTrivia, createComponentParser,
-  isAnyValueContents, serializeCssString, TokenKind,
+  createKeywordConsumer, createFunctionalNotationConsumer, consumeFunctionBlock, one, oneOf, withTrivia, createComponentParser,
+  isAnyValueContents, serializeCssString, serializeComponentValues, TokenKind,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type FunctionBlock, type ParserInput,
 } from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
 
-import { consumeIdent, type IdentValue } from './ident';
-import { createKeywordConsumer } from './keyword';
-import { consumeString } from './string';
+import type { Value } from './value';
+import { IdentValue } from './ident';
+import { StringValue } from './string';
+
+/** A recognized request modifier or an opaque modifier retained during URL parsing. */
+export class UrlModifierValue<Representation extends UrlModifier = UrlModifier> implements Value {
+  /** The decoded request option or unknown identifier/function syntax. */
+  value: Representation;
+
+  constructor(value: Representation) {
+    this.value = value;
+  }
+
+  /** Parse one complete URL modifier. */
+  static parse(input: ParserInput, context: unknown): UrlModifierValue | null {
+    return urlModifierParser(input, context);
+  }
+
+  /** Consume one recognized or unknown modifier. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<UrlModifierValue> {
+    return urlModifierConsumer(c);
+  }
+
+  /** URL request options have no contextual value conversion. */
+  resolve(_stage: ValueStage, _context: unknown): UrlModifierValue<Representation> {
+    return this;
+  }
+
+  /** Whether this modifier contributes a recognized request option. */
+  isRequest(): this is UrlModifierValue<Representation & RequestUrlModifier> {
+    return !(this.value instanceof IdentValue) && this.value.type !== TokenKind.FunctionBlock;
+  }
+
+  /** Serialize the retained modifier without applying request behavior. */
+  serialize(): string {
+    const modifier = this.value;
+    return !(modifier instanceof IdentValue) && modifier.type === TokenKind.FunctionBlock
+      ? serializeComponentValues([modifier])
+      : modifier.serialize();
+  }
+}
+
+type UrlModifier = RequestUrlModifier | UnknownUrlModifier;
+type RequestUrlModifier = CrossOriginModifier | IntegrityModifier | ReferrerPolicyModifier;
+type UnknownUrlModifier = IdentValue | FunctionBlock;
+
+export type RequestUrlModifiers = {
+  crossOrigin?: CrossOriginModifier;
+  integrity?: IntegrityModifier;
+  referrerPolicy?: ReferrerPolicyModifier;
+};
+
+/** The credentials mode requested by cross-origin(). */
+class CrossOriginModifier {
+  /** The recognized credentials modifier kind. */
+  type = 'cross-origin-modifier' as const;
+  /** Whether the request includes credentials across origins. */
+  value: 'anonymous' | 'use-credentials';
+
+  constructor(value: CrossOriginModifier['value']) {
+    this.value = value;
+  }
+
+  /** Retain this option on the enclosing URL, rejecting a duplicate. */
+  applyTo(modifiers: RequestUrlModifiers): boolean {
+    if (modifiers.crossOrigin !== undefined) return false;
+    modifiers.crossOrigin = this;
+    return true;
+  }
+
+  serialize(): string {
+    return `cross-origin(${this.value})`;
+  }
+}
+
+/** The integrity metadata requested by integrity(). */
+class IntegrityModifier {
+  /** The recognized integrity modifier kind. */
+  type = 'integrity-modifier' as const;
+  /** Decoded integrity metadata, before CSS string escaping. */
+  value: string;
+
+  constructor(value: string) {
+    this.value = value;
+  }
+
+  /** Retain this option on the enclosing URL, rejecting a duplicate. */
+  applyTo(modifiers: RequestUrlModifiers): boolean {
+    if (modifiers.integrity !== undefined) return false;
+    modifiers.integrity = this;
+    return true;
+  }
+
+  serialize(): string {
+    return `integrity(${serializeCssString(this.value)})`;
+  }
+}
+
+/** The policy requested by referrer-policy(). */
+class ReferrerPolicyModifier {
+  /** The recognized referrer-policy modifier kind. */
+  type = 'referrer-policy-modifier' as const;
+  /** The policy keyword controlling the request's referrer. */
+  value: ReferrerPolicy;
+
+  constructor(value: ReferrerPolicy) {
+    this.value = value;
+  }
+
+  /** Retain this option on the enclosing URL, rejecting a duplicate. */
+  applyTo(modifiers: RequestUrlModifiers): boolean {
+    if (modifiers.referrerPolicy !== undefined) return false;
+    modifiers.referrerPolicy = this;
+    return true;
+  }
+
+  serialize(): string {
+    return `referrer-policy(${this.value})`;
+  }
+}
+
+export type ReferrerPolicy =
+  | 'no-referrer'
+  | 'no-referrer-when-downgrade'
+  | 'same-origin'
+  | 'origin'
+  | 'strict-origin'
+  | 'origin-when-cross-origin'
+  | 'strict-origin-when-cross-origin'
+  | 'unsafe-url';
 
 /*
  * NOTE: The URL modifier grammar is a provisional synthesis, not a verbatim
@@ -42,148 +170,19 @@ import { consumeString } from './string';
  *   | unsafe-url
  * )
  */
-export type UrlModifierValue =
-  | RequestUrlModifierValue
-  | UnknownUrlModifierValue;
-
-export type RequestUrlModifierValue =
-  | CrossOriginModifierValue
-  | IntegrityModifierValue
-  | ReferrerPolicyModifierValue;
-
-export type RequestUrlModifiers = {
-  crossOrigin?: CrossOriginModifierValue;
-  integrity?: IntegrityModifierValue;
-  referrerPolicy?: ReferrerPolicyModifierValue;
-};
-
-export type UnknownUrlModifierValue = IdentValue | FunctionBlock;
-
-export type CrossOriginModifierValue = {
-  type: 'cross-origin-modifier';
-  value: 'anonymous' | 'use-credentials';
-};
-
-export type IntegrityModifierValue = {
-  type: 'integrity-modifier';
-  value: string;
-};
-
-export type ReferrerPolicyModifierValue = {
-  type: 'referrer-policy-modifier';
-  value: ReferrerPolicy;
-};
-
-export type ReferrerPolicy =
-  | 'no-referrer'
-  | 'no-referrer-when-downgrade'
-  | 'same-origin'
-  | 'origin'
-  | 'strict-origin'
-  | 'origin-when-cross-origin'
-  | 'strict-origin-when-cross-origin'
-  | 'unsafe-url';
-
-export function parseUrlModifier(
-  input: ParserInput,
-  context: unknown,
-): UrlModifierValue | null {
-  return urlModifierParser(input, context);
-}
-
-export function consumeUrlModifier(
-  c: TokenCursor,
-): TryConsumerResult<UrlModifierValue> {
-  return urlModifierConsumer(c);
-}
-
-export function isRequestUrlModifierValue(
-  value: unknown,
-): value is RequestUrlModifierValue {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'type' in value &&
-    (
-      value.type === 'cross-origin-modifier' ||
-      value.type === 'integrity-modifier' ||
-      value.type === 'referrer-policy-modifier'
-    )
-  );
-}
-
-export function serializeRequestUrlModifiers(
-  modifiers: RequestUrlModifiers,
-): string[] {
-  // CSS Values 4 section 9.1 serializes arguments in grammar order; CSSWG
-  // issue #12151 applies that canonical ordering to request URL modifiers.
-  const serialized: string[] = [];
-
-  if (modifiers.crossOrigin !== undefined) {
-    serialized.push(serializeRequestUrlModifier(modifiers.crossOrigin));
-  }
-
-  if (modifiers.integrity !== undefined) {
-    serialized.push(serializeRequestUrlModifier(modifiers.integrity));
-  }
-
-  if (modifiers.referrerPolicy !== undefined) {
-    serialized.push(serializeRequestUrlModifier(modifiers.referrerPolicy));
-  }
-
-  return serialized;
-}
-
-export function serializeRequestUrlModifier(
-  value: RequestUrlModifierValue,
-): string {
-  const name = requestUrlModifierName(value);
-
-  switch (value.type) {
-    case 'cross-origin-modifier':
-      return `${name}(${value.value})`;
-    case 'integrity-modifier':
-      return `${name}(${serializeCssString(value.value)})`;
-    case 'referrer-policy-modifier':
-      return `${name}(${value.value})`;
-  }
-}
-
-export function requestUrlModifierName(
-  value: RequestUrlModifierValue,
-): 'cross-origin' | 'integrity' | 'referrer-policy' {
-  switch (value.type) {
-    case 'cross-origin-modifier':
-      return 'cross-origin';
-    case 'integrity-modifier':
-      return 'integrity';
-    case 'referrer-policy-modifier':
-      return 'referrer-policy';
-  }
-}
-
-// =============================================================================
-// Syntax
-// =============================================================================
 
 // <cross-origin-modifier> = cross-origin(anonymous | use-credentials)
 const crossOriginModifierConsumer = createFunctionalNotationConsumer(
   'cross-origin',
   createKeywordConsumer('anonymous', 'use-credentials'),
-  (value): CrossOriginModifierValue => ({
-    type: 'cross-origin-modifier',
-    value,
-  }),
+  (value) => new CrossOriginModifier(value),
 );
 
 // <integrity-modifier> = integrity(<string>)
 const integrityModifierConsumer = createFunctionalNotationConsumer(
   'integrity',
-  consumeString,
-  (value): IntegrityModifierValue => ({
-    type: 'integrity-modifier',
-    value: value.value,
-  }),
+  StringValue.consume,
+  (value) => new IntegrityModifier(value.value),
 );
 
 // <referrer-policy-modifier> = referrer-policy(no-referrer | no-referrer-when-downgrade | same-origin | origin | strict-origin | origin-when-cross-origin | strict-origin-when-cross-origin | unsafe-url)
@@ -199,14 +198,11 @@ const referrerPolicyModifierConsumer = createFunctionalNotationConsumer(
     'strict-origin-when-cross-origin',
     'unsafe-url',
   ),
-  (value): ReferrerPolicyModifierValue => ({
-    type: 'referrer-policy-modifier',
-    value,
-  }),
+  (value) => new ReferrerPolicyModifier(value),
 );
 
 // <request-url-modifier> = <cross-origin-modifier> | <integrity-modifier> | <referrer-policy-modifier>
-const requestUrlModifierConsumer: TryConsumer<RequestUrlModifierValue> =
+const requestUrlModifierConsumer: TryConsumer<RequestUrlModifier> =
   oneOf(
     [
       one(crossOriginModifierConsumer),
@@ -217,14 +213,14 @@ const requestUrlModifierConsumer: TryConsumer<RequestUrlModifierValue> =
   );
 
 // <unknown-url-modifier> = <ident> | <function-block>
-const unknownUrlModifierConsumer: TryConsumer<UnknownUrlModifierValue> =
+const unknownUrlModifierConsumer: TryConsumer<UnknownUrlModifier> =
   oneOf(
     [
-      one(consumeIdent),
+      one(IdentValue.consume),
       one(consumeFunctionBlock),
     ],
     ([value]) => {
-      if (value.type === TokenKind.FunctionBlock) {
+      if (!(value instanceof IdentValue)) {
         // A recognized request modifier does not become unknown when its arguments fail.
         switch (asciiLower(value.name)) {
           case 'cross-origin':
@@ -246,7 +242,7 @@ const urlModifierConsumer = oneOf(
     one(requestUrlModifierConsumer),
     one(unknownUrlModifierConsumer),
   ],
-  ([value]) => value,
+  ([value]) => new UrlModifierValue(value),
 );
 
 const urlModifierParser = createComponentParser(withTrivia(urlModifierConsumer));

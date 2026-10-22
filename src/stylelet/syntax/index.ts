@@ -5,7 +5,7 @@ export {
   consumeGreaterDelim, consumeLessDelim, consumeNumberToken, consumePercentageToken, consumeStringToken,
   createFreeFormConsumer, consumeSemicolon, consumeHashDelim, consumePipeDelim, consumeUrlToken,
   consumeAmpersandDelim, consumeAnyValueFunctionBlock, consumeBracketBlock, consumeCaretDelim,
-  consumeDollarDelim, consumeDotDelim, consumeIdHashToken, consumeTildeDelim,
+  consumeDollarDelim, consumeDotDelim, consumeIdHashToken, consumeTildeDelim, createKeywordConsumer,
 } from './component-consumers';
 export {
   adaptConsumer, withTrivia, commaRepeat, one, oneOf, sequenceOf, opt, plus, recursive, allOf, repeat,
@@ -17,6 +17,8 @@ export {
   isTokenKind, serializeComponentValues, serializeCssIdentifier, isDelimToken, serializeCssDimensionUnit,
   serializeCssString, serializeCssFunction, serializeCssLocal,
   isComponentBlock, isFunctionBlock, isBraceBlock, isWhitespaceToken,
+  isAnyValueContents, isAnyValueComponent,
+  type AnyValueComponent, type AnyValueContents, type AnyValueFunctionBlock,
 } from './component-value';
 export {
   createComponentParser, parseAsComponentGrammar, parseDeclarationList, consumeBlock, discardRuleBlock,
@@ -27,10 +29,5 @@ export {
 export {
   TokenKind, NumericSign, NumberTokenFlag, decodeStylesheetBytes,
   type DimensionToken, type IdentToken, type NumberToken, type ParensBlock, type FunctionBlock,
-  type ComponentValue, type Token,
+  type ComponentValue, type Token, type StaticToken,
 } from './tokens';
-export {
-  parseOptionalDeclarationValue, consumeDeclarationValue, consumeOptionalDeclarationValue,
-  type OptionalDeclarationValue, type DeclarationValue, type DeclarationComponent,
-} from './declaration-value';
-export { parseAnyValue, isAnyValueContents, type AnyValue } from './any-value';

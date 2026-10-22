@@ -1,4 +1,4 @@
-import type { BoxSides, CanonicalLengthPercentageLiteral } from '../../../stylelet/index';
+import { LengthLiteral, PercentageLiteral, type BoxSides, type CanonicalLengthPercentageLiteral } from '../../../stylelet/index';
 
 import type { DocumentImpl, ElementImpl } from '../nodes/index';
 import type { BrowletEnvironment } from '../../environment';
@@ -126,5 +126,11 @@ export type IntersectionObserverEntryImpl = {
 
 /** Capture each side so later changes to caller-owned values cannot retune an existing observer. */
 function copyMargin(margin: IntersectionObserverMargin): IntersectionObserverMargin {
-  return [{ ...margin[0] }, { ...margin[1] }, { ...margin[2] }, { ...margin[3] }];
+  return [copySide(margin[0]), copySide(margin[1]), copySide(margin[2]), copySide(margin[3])];
+}
+
+function copySide(side: CanonicalLengthPercentageLiteral): CanonicalLengthPercentageLiteral {
+  return side instanceof PercentageLiteral
+    ? new PercentageLiteral(side.value)
+    : new LengthLiteral(side.value, 'px');
 }

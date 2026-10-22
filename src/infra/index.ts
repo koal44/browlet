@@ -35,6 +35,7 @@ export {
   InternalPromise, internalType, type InternalPromiseWithResolvers,
   type PromiseResultType, type InternalType, type ResultValue, type PromiseResult,
 } from './promises';
+export { createNumericRange, type NumericRange } from './range';
 export {
   asciiEquals, asciiStartsWith, asciiEndsWith, asciiIncludes, asciiDashMatch, hasAsciiWhitespaceToken,
   isFormStateElementName,

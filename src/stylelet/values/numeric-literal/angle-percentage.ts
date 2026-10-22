@@ -1,97 +1,18 @@
-import {
-  withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
-} from '../../syntax/index';
+import type { TryConsumer } from '../../syntax/index';
 
-import {
-  canonicalizeAngle, serializeAngle, consumeAngle, type AngleLiteral,
-  type CanonicalAngleLiteral,
-} from './angle';
-import {
-  createDimensionPercentageConsumer, serializeDimensionPercentage,
-  tryAccumulateDimensionPercentages, tryAddDimensionPercentages, tryInterpolateDimensionPercentages,
-  type DimensionPercentageConsumerOptions, type DimensionPercentageLiteral,
-} from './dimension-percentage';
+import { AngleLiteral } from './angle';
+import type { PercentageLiteral } from './percentage';
+import { createDimensionPercentageConsumer, type DimensionPercentageConsumerOptions } from './dimension-percentage';
 
-/*
- * <angle-percentage> = [ <angle> | <percentage> ]
- */
+/** The literal alternatives in <angle-percentage>; there is no additional value container. */
+export type AnglePercentageLiteral = AngleLiteral | PercentageLiteral;
 
-export type AnglePercentageLiteral = DimensionPercentageLiteral<AngleLiteral>;
+export type AnglePercentageConsumerOptions = DimensionPercentageConsumerOptions;
 
-export type AnglePercentageResolutionContext = {
-  percentageReferenceValue?: CanonicalAngleLiteral;
-};
-
-export function parseAnglePercentage(
-  input: ParserInput,
-  context: unknown,
-): AnglePercentageLiteral | null {
-  return anglePercentageParser(input, context);
-}
-
-export function consumeAnglePercentage(
-  c: TokenCursor,
-): TryConsumerResult<AnglePercentageLiteral> {
-  return anglePercentageConsumer(c);
-}
-
+/** Configure the literal alternatives before contextual percentage resolution. */
+// https://drafts.csswg.org/css-values-4/#typedef-angle-percentage
 export function createAnglePercentageConsumer(
   options: DimensionPercentageConsumerOptions = {},
 ): TryConsumer<AnglePercentageLiteral> {
-  return createDimensionPercentageConsumer(
-    consumeAngle,
-    'Angle-percentage',
-    options,
-  );
+  return createDimensionPercentageConsumer(AngleLiteral.consume, 'Angle-percentage', options);
 }
-
-export function serializeAnglePercentage(value: AnglePercentageLiteral): string {
-  return serializeDimensionPercentage(value, serializeAngle);
-}
-
-export function tryResolveAnglePercentage(
-  value: AnglePercentageLiteral,
-  context: AnglePercentageResolutionContext = {},
-): CanonicalAngleLiteral | null {
-  if (value.type === 'angle') {
-    return canonicalizeAngle(value);
-  }
-
-  const reference = context.percentageReferenceValue;
-
-  if (reference === undefined) {
-    return null;
-  }
-
-  return {
-    ...reference,
-    value: reference.value * value.value / 100,
-  };
-}
-
-export function tryAddAnglePercentages(
-  a: AnglePercentageLiteral,
-  b: AnglePercentageLiteral,
-): AnglePercentageLiteral | null {
-  return tryAddDimensionPercentages(a, b);
-}
-
-export function tryInterpolateAnglePercentages(
-  a: AnglePercentageLiteral,
-  b: AnglePercentageLiteral,
-  p: number,
-): AnglePercentageLiteral | null {
-  return tryInterpolateDimensionPercentages(a, b, p);
-}
-
-export function tryAccumulateAnglePercentages(
-  a: AnglePercentageLiteral,
-  b: AnglePercentageLiteral,
-): AnglePercentageLiteral | null {
-  return tryAccumulateDimensionPercentages(a, b);
-}
-
-// <angle-percentage> = [ <angle> | <percentage> ]
-const anglePercentageConsumer = createAnglePercentageConsumer();
-const anglePercentageParser = createComponentParser(withTrivia(anglePercentageConsumer));

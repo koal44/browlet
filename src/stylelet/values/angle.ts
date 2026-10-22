@@ -1,157 +1,95 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import {
-  accumulateDimensions, addDimensions, interpolateDimensions, canonicalizeAngle,
-  createAngleConsumer as createAngleLiteralConsumer, serializeAngle as serializeAngleLiteral,
-  type AngleConsumerOptions, type AngleLiteral,
-} from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { AngleLiteral, type AngleConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, MathExpression, type MathContext } from './math-value';
 
-/*
- * <angle> = <dimension-token with an angle unit> | <math-function>
- */
+/** An <angle> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#angles
+export class AngleValue<Representation extends Angle = Angle> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type AngleValue = AngleLiteral | MathValue<'angle'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export const angleDef: ValueDefinition<AngleValue, MathContext> = {
-  consume: consumeAngle,
-  resolve: resolveAngle,
-  serialize: serializeAngle,
-};
+  /** Parse one complete <angle>. */
+  static parse(input: ParserInput, context: MathContext): AngleValue | null {
+    return parseAsComponentGrammar(input, angleGrammar, context);
+  }
 
-export function parseAngle(
-  input: ParserInput,
-  context: MathContext,
-): AngleValue | null {
-  return angleParser(input, context);
-}
+  /** Consume one <angle> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<AngleValue> {
+    return angleConsumer(c);
+  }
 
-export function consumeAngle(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<AngleValue> {
-  return angleConsumer(c);
-}
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: AngleConsumerOptions = {}): TryConsumer<AngleValue, MathContext> {
+    // <angle> is a dimension in deg, grad, rad, or turn; math functions can substitute for it.
+    const literalConsumer = AngleLiteral.createConsumer(options);
 
-export function createAngleConsumer(
-  options: AngleConsumerOptions = {},
-): TryConsumer<AngleValue, MathContext> {
-  const literalConsumer = createAngleLiteralConsumer(options);
-  const range = angleRange(options);
-
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'angle',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveAngle(
-  value: AngleValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): AngleValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, context);
+    ], ([parsed]) => new AngleValue(parsed));
   }
 
-  return stage < ValueStage.Computed
-    ? value
-    : canonicalizeAngle(value);
-}
-
-export function serializeAngle(
-  value: AngleValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeAngleLiteral(value);
-}
-
-export function addAngles(
-  a: AngleValue,
-  b: AngleValue,
-  context: MathContext = {},
-): AngleValue {
-  if (a.type === 'angle' && b.type === 'angle') {
-    return addDimensions(a, b);
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): AngleValue {
+    const resolved = this.value.resolve(stage, context);
+    const value = resolved instanceof MathValue && !(resolved.value instanceof MathExpression)
+      ? resolved.value : resolved;
+    return value === this.value ? this : new AngleValue(value);
   }
 
-  return addMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-export function interpolateAngles(
-  a: AngleValue,
-  b: AngleValue,
-  p: number,
-  context: MathContext = {},
-): AngleValue {
-  if (a.type === 'angle' && b.type === 'angle') {
-    return interpolateDimensions(a, b, p);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  return interpolateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    p,
-    context,
-  );
-}
-
-export function accumulateAngles(
-  a: AngleValue,
-  b: AngleValue,
-  context: MathContext = {},
-): AngleValue {
-  if (a.type === 'angle' && b.type === 'angle') {
-    return accumulateDimensions(a, b);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: AngleValue, context: MathContext = {}): AngleValue {
+    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
+      return new AngleValue(this.value.add(other.value));
+    }
+    return new AngleValue(
+      this.asMathValue(context).add(other.asMathValue(context), context),
+    );
   }
 
-  return accumulateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-function asMathValue(
-  value: AngleValue,
-  context: MathContext,
-): MathValue<'angle'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'angle', context);
-}
-
-function angleRange(
-  options: AngleConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: AngleValue, progress: number, context: MathContext = {}): AngleValue {
+    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
+      return new AngleValue(this.value.interpolate(other.value, progress));
+    }
+    return new AngleValue(
+      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation of angles is addition. */
+  accumulate(other: AngleValue, context: MathContext = {}): AngleValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'angle'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'angle', context);
+  }
 }
 
-// <angle> = <dimension-token with an angle unit> | <math-function>
-const angleConsumer = createAngleConsumer();
-const angleParser = createComponentParser(withTrivia(angleConsumer));
+/** Literal or calculation accepted by this numeric grammar. */
+type Angle = AngleLiteral | MathValue<'angle'>;
+
+const angleConsumer = AngleValue.createConsumer();
+const angleGrammar = withTrivia(angleConsumer);

@@ -195,15 +195,10 @@ a shared task source; `env.exec` selects the owning destination. Browlet's
 [`scripting/tasks.ts`](browlet/scripting/tasks.ts) maps these keys to shared source
 identities; HTML retains task queues and scheduling policy. Optional task metadata
 carries timer nesting levels without moving timer initialization into Infra.
-`StyleletExecution` also extends `WebIDLExecution`. Its supplied `DOMException`
-constructor creates platform exceptions in the owning environment while CSSOM
-implementations remain directly exposed. Full CSSOM member bindings must replace
-this interim allocation with method-realm exception projection.
-MediaList now follows that final arrangement: its implementation reports
-Core DOMExceptionImpl failures, and its host binding realizes them in the
-invoked method's realm. It no longer needs an environment solely for errors.
-The constructor's result uses Core's shared `DOMException` contract for
-`name`, `message`, and `code` while retaining the host-created exception.
+`StyleletExecution` uses Infra's `AsyncExecution` contract. CSSOM implementations
+report Core `DOMExceptionImpl` failures; the active host binding realizes those
+failures as Platform exceptions in the appropriate realm. MediaList needs no
+environment solely for exception reporting.
 Infra's `TimerHost` describes a native wake-up request returning a `TaskHandle`.
 `remove()` cancels pending work; native timer tokens remain private to the
 provider. Hosts may limit requested delays, so consumers enforcing a deadline
@@ -214,7 +209,7 @@ Infra's `createAsyncExecution(timerHost)` composes standalone Promise observatio
 background work, and task delivery around a supplied provider. Its `nativeTimerHost`
 captures scheduling and cancellation together, retaining their original receiver;
 it requires native timers only when scheduling work, not during module import.
-Stylelet composes this shared execution with its host's DOMException constructor.
+Stylelet combines this shared execution with its host's DOM, URL, and decoding facilities.
 Standalone Stylelet composes native facilities without requiring HTML settings
 or loading the engine runtime. `SelectletEnvironment` uses the same `userAgent.dom`
 owner and currently needs no execution facilities. `SelectletContext` retains
@@ -237,8 +232,8 @@ lazily creates the retained CSSOM object around that same block. The cascade's
 `inlineStyleBlock` provider returns null when there is no block; that result is
 authoritative. Only an absent provider permits raw-attribute parsing.
 Computed-style results have their own blocks and remain owned by their callers,
-not by the inline-style mixin. Until CSSOM projection owns indexed properties,
-attribute input synchronizes the indices of an existing CSSOM object explicitly.
+not by the inline-style mixin. Binding reads supported indices from the current
+declarations, so block changes are visible through the existing Platform object.
 A standalone host attaching to an existing element explicitly delivers its
 initial attribute through `attributeChanged()`. CSSOM writes the null-namespace `style` attribute through
 DOM operations so another namespace's `style` attribute cannot receive those writes.
@@ -257,11 +252,19 @@ provenance, and rule attachment/removal updates parent-sheet associations throug
 their children. Binding projects these implementations rather than creating a
 second representation of their state.
 
-Stylelet whole values retain data, while whole-value definitions own shared
-parsing, resolution, and serialization operations. Built-in property records pair
-that value definition with inheritance and typed initial-value metadata; their
-registry keys supply the property names. The records live in the property-family
-modules. Custom-property registrations retain their own definitions and metadata.
+Stylelet value classes implement `Value<Context>`: static parsing/consumption,
+instance resolution and serialization, and a `value` payload. Numeric literals
+keep their magnitude directly on the instance, with a unit for dimensions.
+Dimension and image grammars return concrete values through unions. Contexts
+remain invocation inputs.
+WholeValue retains its consuming parser for deferred reparsing and delegates
+ordinary resolution and serialization to the contained value. AnyValue and the
+declaration-value classes retain component lists; their raw component types and
+validation belong to Syntax.
+Built-in property records pair a shared parser with inheritance and typed
+initial-value metadata; their registry keys supply the property names. The
+records live in the property-family modules. Custom-property registrations retain
+their syntax, compiled whole-value parser, and metadata.
 Initial values remain shared Declared representations; resolution must not
 mutate them. Engine defaulting and inheritance remain unfinished.
 Property parsing returns values ready to retain in a declaration: ordinary
@@ -275,7 +278,7 @@ CSSRuleListImpl. The context module imports only types; the list dispatches to
 concrete rule and property grammars. Rule implementations and `context.ts` live
 under `cssom/rules/`; the coordinating `rule-list.ts` remains one level above.
 Property records, their registry, and declaration interpretation live in `props/`.
-The declaration implementations and provisional block storage live together in
+The declaration implementations and ordered declaration collection live together in
 `cssom/declarations/`; MediaList lives in `cssom/media/`. Both families sit below
 rules and sheets, alongside the type-only rule context. Their barrels provide
 narrow entry points without loading the rule dispatcher. ESLint checks these

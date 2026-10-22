@@ -1,22 +1,17 @@
-import type { ValueDefinition } from '../value-processing/index';
+import { NumberLiteral } from '../values/numeric-literal/index';
 import {
-  consumeOpacityValue, resolveOpacityValue, serializeOpacityValue, defineWholeValue,
-  type MathContext, type OpacityValue,
+  WholeValue, OpacityValue, NumberValue, type MathContext,
 } from '../values/index';
 
 import type { PropertyRecord } from './property';
 
-const opacityDef: ValueDefinition<OpacityValue, MathContext> = {
-  consume: consumeOpacityValue,
-  resolve: resolveOpacityValue,
-  serialize: serializeOpacityValue,
-};
-
-export const opacityWholeValueDef = defineWholeValue(opacityDef);
+export const parseOpacityProperty = WholeValue.createParser(OpacityValue.parse);
 
 // https://drafts.csswg.org/css-color-4/#transparency
 export const opacityProperty: PropertyRecord<OpacityValue, MathContext> = {
-  definition: opacityWholeValueDef,
+  parse: parseOpacityProperty,
   inherits: false,
-  initialValue: { type: 'ordinary', value: { type: 'number', value: 1 } },
+  initialValue: new WholeValue<OpacityValue, MathContext>(
+    new OpacityValue(new NumberValue(new NumberLiteral(1))), OpacityValue.parse,
+  ),
 };

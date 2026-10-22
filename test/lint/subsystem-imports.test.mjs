@@ -13,8 +13,8 @@ const options = [{
   entryPoints: {
     'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
     stylelet: ['index', 'environment', 'context'],
-    'stylelet/syntax': ['index'], 'stylelet/values': ['index'],
-    'stylelet/values/numeric-literal': ['index'],
+    'stylelet/syntax': ['index'], 'stylelet/values': ['index', 'value'],
+    'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
     'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
   },
 }];
@@ -29,6 +29,8 @@ tester.run('subsystem-imports', rule, {
     { filename: styleletFile('values/color'), options, code: "import { tokenize } from '../syntax/index';" },
     { filename: styleletFile('values/color'), options, code: "import { parseNumber } from './number';" },
     { filename: styleletFile('values/length'), options, code: "import { lengthLiteral } from './numeric-literal/index';" },
+    { filename: styleletFile('values/color'), options, code: "import { MixPercentages } from './collections/index';" },
+    { filename: styleletFile('values/numeric-literal/number'), options, code: "import type { Value } from '../value';" },
     { filename: styleletFile('values/color'), options, code: "import type { StyleletEnvironment } from '../environment';" },
     { filename, options, code: "import { tokenize } from '../stylelet/syntax/index';" },
     { filename, options, code: "import { FetchGroup } from '../fetch/index';" },
@@ -67,6 +69,10 @@ tester.run('subsystem-imports', rule, {
     },
     {
       filename: styleletFile('values/length'), options, code: "import { lengthLiteral } from './numeric-literal/length';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename: styleletFile('values/color'), options, code: "import { MixPercentages } from './collections/mix';",
       errors: [{ messageId: 'entryPoint' }],
     },
     {

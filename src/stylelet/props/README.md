@@ -11,9 +11,9 @@ The [longhand registry](property.ts) installs seven built-in names:
 
 | Module | Registered names | Current behavior |
 | --- | --- | --- |
-| [color.ts](color.ts) | `color`, `background-color` | Shared color value definition. Color inherits and starts at symbolic CanvasText; background-color does not inherit and starts at transparent. Property-specific currentColor rules remain unfinished. |
+| [color.ts](color.ts) | `color`, `background-color` | Shared color parser. Color inherits and starts at symbolic CanvasText; background-color does not inherit and starts at transparent. Property-specific currentColor rules remain unfinished. |
 | [margin.ts](margin.ts) | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | Each starts at zero, does not inherit, and accepts length-percentage or auto. Resolution preserves auto and delegates numeric values to the shared resolver. All belong to the physical margin group; logical longhands remain absent. |
-| [opacity.ts](opacity.ts) | `opacity` | Starts at one and does not inherit. Its value definition handles percentage conversion and computed-stage clamping. |
+| [opacity.ts](opacity.ts) | `opacity` | Starts at one and does not inherit. OpacityValue handles percentage conversion and computed-stage clamping. |
 
 [animation-name.ts](animation-name.ts) separately parses and serializes lists
 of none, custom identifiers, or strings. It is **not registered** and has no
@@ -22,16 +22,16 @@ the general value suite.
 
 ## How a property participates
 
-`defineWholeValue()` adapts a reusable ValueDefinition to the whole-value forms
+`WholeValue.createParser()` adapts an ordinary value parser to the whole-value forms
 described in the [value inventory](../values/README.md). It does not install the
 property or provide defaulting, inheritance, shorthand expansion, applicability,
 or a layout effect.
 
-The resulting constants use `WholeValueDef` names, such as `colorWholeValueDef`,
-because they describe reusable value behavior. Different property records can
-share one of these definitions.
+Different property records can share one parser, such as `parseColorProperty`.
+The parsed values own resolution and serialization; no definition dispatch is
+needed to call either operation.
 
-Each `PropertyRecord` pairs `definition` with `inherits` and a
+Each `PropertyRecord` pairs `parse` with `inherits` and a
 typed `initialValue`; its registry key supplies the name. The family modules
 create these records once. Initial values are shared Declared representations,
 not CSS strings to parse or per-element computed values. Resolution leaves them
@@ -46,8 +46,8 @@ shorthand support. CSSOM can already query/remove incomplete or mixed-priority
 sets without invoking those unfinished operations.
 
 Property interpretation looks up built-in names in the registry and rejects
-unknown built-ins, then uses the record's `definition` for parsing,
-resolution, and serialization. Custom properties use a separate token-preserving path.
+unknown built-ins, then uses the record's parser. Later processing calls the
+value's resolution and serialization methods. Custom properties use a separate token-preserving path.
 The [computed-style routine](../engine/computed-style.ts) also iterates the
 registry; adding a generic value parser alone does not extend this inventory.
 Engine defaulting and inheritance do not yet consume the new metadata; see

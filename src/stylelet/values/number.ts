@@ -1,158 +1,96 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import type { ValueStage, ValueDefinition } from '../value-processing/index';
-import {
-  accumulateNumbers as accumulateNumberLiterals, addNumbers as addNumberLiterals,
-  createNumberConsumer as createNumberLiteralConsumer, interpolateNumbers as interpolateNumberLiterals,
-  serializeNumber as serializeNumberLiteral,
-  type NumberConsumerOptions as NumberLiteralConsumerOptions, type NumberLiteral,
-} from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { NumberLiteral, type NumberConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <number> = <number-token> | <math-function>
- */
+/** A <number> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#numbers
+export class NumberValue<Representation extends NumberRepresentation = NumberRepresentation> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type NumberValue = NumberLiteral | MathValue<'number'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export const numberDef: ValueDefinition<NumberValue, MathContext> = {
-  consume: consumeNumber,
-  resolve: resolveNumber,
-  serialize: serializeNumber,
-};
+  /** Parse one complete <number>. */
+  static parse(input: ParserInput, context: MathContext): NumberValue | null {
+    return parseAsComponentGrammar(input, numberGrammar, context);
+  }
 
-export function parseNumber(
-  input: ParserInput,
-  context: MathContext,
-): NumberValue | null {
-  return numberParser(input, context);
-}
+  /** Consume one <number> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<NumberValue> {
+    return numberConsumer(c);
+  }
 
-export function consumeNumber(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<NumberValue> {
-  return numberConsumer(c);
-}
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: NumberConsumerOptions = {}): TryConsumer<NumberValue, MathContext> {
+    const literalConsumer = NumberLiteral.createConsumer(options);
 
-export type NumberConsumerOptions = NumberLiteralConsumerOptions;
-
-export function createNumberConsumer(
-  options: NumberConsumerOptions = {},
-): TryConsumer<NumberValue, MathContext> {
-  const literalConsumer = createNumberLiteralConsumer(options);
-  const range = numberRange(options);
-
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'number',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveNumber(
-  value: NumberValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): NumberValue {
-  if (value.type !== 'math') {
-    return value;
+    ], ([parsed]) => new NumberValue(parsed));
   }
 
-  return resolveMathValue(value, stage, context);
-}
-
-export function serializeNumber(
-  value: NumberValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeNumberLiteral(value);
-}
-
-export function addNumbers(
-  a: NumberValue,
-  b: NumberValue,
-  context: MathContext = {},
-): NumberValue {
-  if (a.type === 'number' && b.type === 'number') {
-    return addNumberLiterals(a, b);
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): NumberValue {
+    const previous = this.value;
+    if (previous instanceof MathValue) {
+      const resolved = previous.resolve(stage, context);
+      return resolved === previous ? this : new NumberValue(resolved);
+    }
+    return this;
   }
 
-  return addMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-export function interpolateNumbers(
-  a: NumberValue,
-  b: NumberValue,
-  p: number,
-  context: MathContext = {},
-): NumberValue {
-  if (a.type === 'number' && b.type === 'number') {
-    return interpolateNumberLiterals(a, b, p);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  return interpolateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    p,
-    context,
-  );
-}
-
-export function accumulateNumbers(
-  a: NumberValue,
-  b: NumberValue,
-  context: MathContext = {},
-): NumberValue {
-  if (a.type === 'number' && b.type === 'number') {
-    return accumulateNumberLiterals(a, b);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: NumberValue, context: MathContext = {}): NumberValue {
+    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
+      return new NumberValue(this.value.add(other.value));
+    }
+    return new NumberValue(
+      this.asMathValue(context).add(other.asMathValue(context), context),
+    );
   }
 
-  return accumulateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-function asMathValue(
-  value: NumberValue,
-  context: MathContext,
-): MathValue<'number'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'number', context);
-}
-
-function numberRange(
-  options: NumberConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: NumberValue, progress: number, context: MathContext = {}): NumberValue {
+    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
+      return new NumberValue(this.value.interpolate(other.value, progress));
+    }
+    return new NumberValue(
+      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation of numbers is addition. */
+  accumulate(other: NumberValue, context: MathContext = {}): NumberValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'number'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'number', context);
+  }
 }
 
-// <number> = <number-token> | <math-function>
-const numberConsumer = createNumberConsumer();
-const numberParser = createComponentParser(withTrivia(numberConsumer));
+/** Literal or calculation accepted by this numeric grammar. */
+type NumberRepresentation = NumberLiteral | MathValue<'number'>;
+
+const numberConsumer = NumberValue.createConsumer();
+const numberGrammar = withTrivia(numberConsumer);

@@ -1,152 +1,95 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
-import {
-  accumulateDimensions, addDimensions, interpolateDimensions, canonicalizeFrequency,
-  createFrequencyConsumer as createFrequencyLiteralConsumer,
-  serializeFrequency as serializeFrequencyLiteral,
-  type FrequencyConsumerOptions, type FrequencyLiteral,
-} from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { FrequencyLiteral, type FrequencyConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, MathExpression, type MathContext } from './math-value';
 
-/*
- * <frequency> = <dimension-token with a frequency unit> | <math-function>
- */
+/** A <frequency> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#frequency
+export class FrequencyValue<Representation extends Frequency = Frequency> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type FrequencyValue = FrequencyLiteral | MathValue<'frequency'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export function parseFrequency(
-  input: ParserInput,
-  context: MathContext,
-): FrequencyValue | null {
-  return frequencyParser(input, context);
-}
+  /** Parse one complete <frequency>. */
+  static parse(input: ParserInput, context: MathContext): FrequencyValue | null {
+    return parseAsComponentGrammar(input, frequencyGrammar, context);
+  }
 
-export function consumeFrequency(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<FrequencyValue> {
-  return frequencyConsumer(c);
-}
+  /** Consume one <frequency> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<FrequencyValue> {
+    return frequencyConsumer(c);
+  }
 
-export function createFrequencyConsumer(
-  options: FrequencyConsumerOptions = {},
-): TryConsumer<FrequencyValue, MathContext> {
-  const literalConsumer = createFrequencyLiteralConsumer(options);
-  const range = frequencyRange(options);
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: FrequencyConsumerOptions = {}): TryConsumer<FrequencyValue, MathContext> {
+    // <frequency> is a dimension in Hz or kHz; math functions can substitute for it.
+    const literalConsumer = FrequencyLiteral.createConsumer(options);
 
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'frequency',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveFrequency(
-  value: FrequencyValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): FrequencyValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, context);
+    ], ([parsed]) => new FrequencyValue(parsed));
   }
 
-  return stage < ValueStage.Computed
-    ? value
-    : canonicalizeFrequency(value);
-}
-
-export function serializeFrequency(
-  value: FrequencyValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeFrequencyLiteral(value);
-}
-
-export function addFrequencies(
-  a: FrequencyValue,
-  b: FrequencyValue,
-  context: MathContext = {},
-): FrequencyValue {
-  if (a.type === 'frequency' && b.type === 'frequency') {
-    return addDimensions(a, b);
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): FrequencyValue {
+    const resolved = this.value.resolve(stage, context);
+    const value = resolved instanceof MathValue && !(resolved.value instanceof MathExpression)
+      ? resolved.value : resolved;
+    return value === this.value ? this : new FrequencyValue(value);
   }
 
-  return addMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-export function interpolateFrequencies(
-  a: FrequencyValue,
-  b: FrequencyValue,
-  p: number,
-  context: MathContext = {},
-): FrequencyValue {
-  if (a.type === 'frequency' && b.type === 'frequency') {
-    return interpolateDimensions(a, b, p);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  return interpolateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    p,
-    context,
-  );
-}
-
-export function accumulateFrequencies(
-  a: FrequencyValue,
-  b: FrequencyValue,
-  context: MathContext = {},
-): FrequencyValue {
-  if (a.type === 'frequency' && b.type === 'frequency') {
-    return accumulateDimensions(a, b);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: FrequencyValue, context: MathContext = {}): FrequencyValue {
+    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
+      return new FrequencyValue(this.value.add(other.value));
+    }
+    return new FrequencyValue(
+      this.asMathValue(context).add(other.asMathValue(context), context),
+    );
   }
 
-  return accumulateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-function asMathValue(
-  value: FrequencyValue,
-  context: MathContext,
-): MathValue<'frequency'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'frequency', context);
-}
-
-function frequencyRange(
-  options: FrequencyConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: FrequencyValue, progress: number, context: MathContext = {}): FrequencyValue {
+    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
+      return new FrequencyValue(this.value.interpolate(other.value, progress));
+    }
+    return new FrequencyValue(
+      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation of frequencies is addition. */
+  accumulate(other: FrequencyValue, context: MathContext = {}): FrequencyValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'frequency'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'frequency', context);
+  }
 }
 
-// <frequency> = <dimension-token with a frequency unit> | <math-function>
-const frequencyConsumer = createFrequencyConsumer();
-const frequencyParser = createComponentParser(withTrivia(frequencyConsumer));
+/** Literal or calculation accepted by this numeric grammar. */
+type Frequency = FrequencyLiteral | MathValue<'frequency'>;
+
+const frequencyConsumer = FrequencyValue.createConsumer();
+const frequencyGrammar = withTrivia(frequencyConsumer);

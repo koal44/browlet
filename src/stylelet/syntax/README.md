@@ -73,8 +73,10 @@ own the resulting rules and location.
 - [component-grammar.ts](component-grammar.ts),
   [component-consumers.ts](component-consumers.ts), and
   [token-cursor.ts](token-cursor.ts) provide the common grammar machinery.
-  [any-value.ts](any-value.ts) and [declaration-value.ts](declaration-value.ts)
-  enforce their respective component restrictions.
+  [component-value.ts](component-value.ts) validates the raw `<any-value>`
+  component restrictions. Values' [AnyValue](../values/any-value.ts) and
+  [declaration-value classes](../values/declaration-value.ts) retain validated
+  lists and supply the value lifecycle API.
 
 `parseStylesheetContents()`, `parseRule()`, and `parseBlockContents()` require
 CSSOM's `RuleListContext`, as do their internal rule consumers.
@@ -108,7 +110,7 @@ context. Later resolution and substitution reparsing use the context selected
 for that value-processing stage.
 
 `TryConsumer<Value, Context>` declares the context a grammar reads. Parser
-factories, adapters, multipliers, and `ValueDefinition` retain that type.
+factories, adapters, multipliers, and value grammar methods retain that type.
 Combinators require the context needed by every participating production and
 their projector. A `contextAfter` update preserves the other fields supplied by
 the caller. Functional-notation grammars can explicitly select a different
@@ -175,6 +177,27 @@ the full preprocessed text, each with ranges for its own sequence.
 these operations rather than editing parallel arrays themselves. Range records
 are private and can be reused for unchanged tokens and sliced sequences.
 
+Values' [`AnyValue`](../values/any-value.ts) owns a validated, nonempty
+`<any-value>` sequence in its `value` field.
+Static `parse()` retains an existing component list, including its arrays and
+source metadata. `consume()` also reuses a complete valid source list; a partial
+run needs its own list of component references and source spans. Neither path
+creates a specialized collection subclass. Nested block contents remain ordinary
+lists because the grammar permits them to be empty.
+
+`resolve(stage, context)` leaves this opaque grammar unchanged; `serialize()`
+serializes its components without interpreting them. These methods implement
+the shared [Value contract](../values/value.ts). The retained list is
+shared, so callers must preserve its validated contents rather than emptying or
+replacing them after construction.
+
+Syntax's function consumers use the component predicates directly.
+`consumeAnyValueFunctionBlock()` returns the original function block with a
+validated, nonempty component list; it does not construct an AnyValue instance.
+Selectors consume that list directly. The generic functional-notation consumer
+also rejects malformed contents, while its argument grammar decides whether
+empty contents are allowed. Neither consumer imports Values.
+
 `TokenCursor` caches the tokens array for token reads and uses the list for
 source queries. Parser consumers build output lists; the cursor does not own
 output construction. Reopening a block or entering a component grammar therefore
@@ -201,7 +224,7 @@ conformance. Stylesheet creation remains in CSSOM.
 | Remaining section | Implementation / boundary |
 | --- | --- |
 | §6 An+B | Token grammar and coefficient interpretation in `values/an-plus-b.ts`; selector tests cover accepted/rejected forms and `of` clauses. |
-| §7 Rule and arbitrary-value grammars | `RuleListContext` forwards to its rule list for grammar selection and CSSOM construction while consuming. Descriptor grammars remain unfinished. `any-value.ts` and `declaration-value.ts` enforce recursive malformed-token restrictions and the latter's additional top-level restrictions. |
+| §7 Rule and arbitrary-value grammars | `RuleListContext` forwards to its rule list for grammar selection and CSSOM construction while consuming. Descriptor grammars remain unfinished. `component-value.ts` validates recursive malformed-token restrictions; Values' `declaration-value.ts` adds the declaration grammar's top-level restrictions. |
 | §8 Stylesheets, style rules, at-rules, @charset | CSSOM interprets selectors/properties and retains nested rules. Invalid selectors discard the rule; invalid declarations do not. Recognized unfinished at-rules reach explicit throwing dependencies; unknown at-rules and @charset are discarded. |
 | §9 Serialization | Component/token round trips and canonical An+B serialization; CSSOM and individual value specifications still own their further serialization requirements. |
 | §§10–11 Privacy/security | No additional runtime algorithm or API; consistent error recovery is supplied by the parser. |

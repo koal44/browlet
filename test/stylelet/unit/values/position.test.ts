@@ -2,24 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import {
-  accumulatePositions, addPositions, interpolatePositions, parsePosition,
-  resolvePosition, serializePosition, consumePosition,
-  tryResolvePositionOffsets, type PositionContext, type PositionFour,
-  type PositionOffsets, type PositionOffsetTuple, type PositionOne,
-  type PositionTwo, type PositionValue,
-} from '../../../../src/stylelet/values/position';
+import { PositionValue, type PositionContext, type PositionFour, type PositionOffsets, type PositionOffsetTuple, type PositionOne, type PositionTwo } from '../../../../src/stylelet/values/position';
+import { LengthPercentageValue } from '../../../../src/stylelet/values/length-percentage';
+import { LengthLiteral, PercentageLiteral } from '../../../../src/stylelet/values/numeric-literal/index';
 
-const length = (value: number, unit: 'px' | 'em' = 'px') => ({
-  type: 'length' as const,
-  value,
-  unit,
-});
+const length = (value: number, unit: 'px' | 'em' = 'px') => new LengthPercentageValue(new LengthLiteral(value, unit));
 
-const percentage = (value: number) => ({
-  type: 'percentage' as const,
-  value,
-});
+const percentage = (value: number) => new LengthPercentageValue(new PercentageLiteral(value));
 
 function position(
   components:
@@ -27,17 +16,11 @@ function position(
     | PositionTwo['components']
     | PositionFour['components'],
 ): PositionValue {
-  return {
-    type: 'position',
-    components,
-  } as PositionValue;
+  return PositionValue.fromComponents(...components);
 }
 
-function offsets(...offsets: PositionOffsetTuple): PositionOffsets {
-  return {
-    type: 'position',
-    offsets,
-  };
+function offsets(...offsets: PositionOffsetTuple): PositionValue<PositionOffsets> {
+  return new PositionValue({ offsets });
 }
 
 describe('position values', () => {
@@ -57,16 +40,16 @@ describe('position values', () => {
       'inline-start',
       'inline-end',
     ] as const)('parses the %s keyword', (keyword) => {
-      expect(parsePosition(keyword, {})).toEqual(position([keyword]));
+      expect(PositionValue.parse(keyword, {})).toEqual(position([keyword]));
     });
 
     it('parses a length-percentage', () => {
-      expect(parsePosition('25%', {})).toEqual(position([percentage(25)]));
-      expect(parsePosition('10px', {})).toEqual(position([length(10)]));
+      expect(PositionValue.parse('25%', {})).toEqual(position([percentage(25)]));
+      expect(PositionValue.parse('10px', {})).toEqual(position([length(10)]));
     });
 
     it('parses keywords case-insensitively', () => {
-      expect(parsePosition('InLiNe-EnD', {})).toEqual(position(['inline-end']));
+      expect(PositionValue.parse('InLiNe-EnD', {})).toEqual(position(['inline-end']));
     });
   });
 
@@ -81,7 +64,7 @@ describe('position values', () => {
       ['x-end y-start', ['x-end', 'y-start']],
       ['y-start x-end', ['x-end', 'y-start']],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(parsePosition(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
     });
 
     it.each([
@@ -92,7 +75,7 @@ describe('position values', () => {
       ['x-start 10px', ['x-start', length(10)]],
       ['10px y-start', [length(10), 'y-start']],
     ] as const)('parses the ordered form %s', (input, components) => {
-      expect(parsePosition(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
     });
 
     it.each([
@@ -103,7 +86,7 @@ describe('position values', () => {
       ['start end', ['start', 'end']],
       ['end start', ['end', 'start']],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(parsePosition(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
     });
   });
 
@@ -134,7 +117,7 @@ describe('position values', () => {
         ['start', length(1), 'end', percentage(25)],
       ],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(parsePosition(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
     });
   });
 
@@ -157,15 +140,15 @@ describe('position values', () => {
     'start inline-end',
     'start 10px end',
   ])('rejects %j as a complete position', (input) => {
-    expect(parsePosition(input, {})).toBeNull();
+    expect(PositionValue.parse(input, {})).toBeNull();
   });
 
   it('prefers the longest viable position production', () => {
-    expect(parsePosition('left 10px', {})).toEqual(position([
+    expect(PositionValue.parse('left 10px', {})).toEqual(position([
       'left',
       length(10),
     ]));
-    expect(parsePosition('left 10px top 20px', {})).toEqual(position([
+    expect(PositionValue.parse('left 10px top 20px', {})).toEqual(position([
       'left',
       length(10),
       'top',
@@ -179,24 +162,18 @@ describe('position values', () => {
     ), {});
     const one = new TokenCursor(parseListOfComponentValues('top 50px', {}), {});
 
-    expect(consumePosition(four))
+    expect(PositionValue.consume(four))
       .toEqual(position(['left', length(10), 'top', length(20)]));
     expect(four.pos()).toBe(7);
 
-    expect(consumePosition(one)).toEqual(position(['top']));
+    expect(PositionValue.consume(one)).toEqual(position(['top']));
     expect(one.pos()).toBe(1);
   });
 });
 
 describe('position resolution', () => {
   it('represents normalized positions as offsets rather than syntax components', () => {
-    expect(resolvePosition(
-      parsePosition('center', {})!,
-      ValueStage.Computed,
-    )).toEqual({
-      type: 'position',
-      offsets: [percentage(50), percentage(50)],
-    });
+    expect(PositionValue.parse('center', {})!.resolve(ValueStage.Computed)).toEqual(offsets(percentage(50), percentage(50)));
   });
 
   it.each([
@@ -209,10 +186,7 @@ describe('position resolution', () => {
     ['center', '50% 50%'],
     ['right 20px bottom 10px', 'calc(100% - 20px) calc(100% - 10px)'],
   ])('resolves %s to top-left offsets', (input, expected) => {
-    expect(serializePosition(resolvePosition(
-      parsePosition(input, {})!,
-      ValueStage.Computed,
-    ))).toBe(expected);
+    expect(PositionValue.parse(input, {})!.resolve(ValueStage.Computed).serialize()).toBe(expected);
   });
 
   it.each<[
@@ -269,11 +243,7 @@ describe('position resolution', () => {
     yStart,
     yEnd,
   ) => {
-    const resolve = (input: string) => serializePosition(resolvePosition(
-      parsePosition(input, context)!,
-      ValueStage.Computed,
-      context,
-    ));
+    const resolve = (input: string) => PositionValue.parse(input, context)!.resolve(ValueStage.Computed, context).serialize();
 
     expect(resolve('x-start')).toBe(xStart);
     expect(resolve('x-end')).toBe(xEnd);
@@ -286,11 +256,7 @@ describe('position resolution', () => {
     ['x-end 10px top 20px', 'calc(100% - 10px) 20px'],
     ['left 10px y-end 20%', '10px 80%'],
   ])('resolves %s with the default horizontal writing context', (input, expected) => {
-    expect(serializePosition(resolvePosition(
-      parsePosition(input, {})!,
-      ValueStage.Computed,
-      { writingMode: 'horizontal-tb', direction: 'ltr' },
-    ))).toBe(expected);
+    expect(PositionValue.parse(input, {})!.resolve(ValueStage.Computed, { writingMode: 'horizontal-tb', direction: 'ltr' }).serialize()).toBe(expected);
   });
 
   it('resolves block and inline positions into physical axis order', () => {
@@ -299,23 +265,15 @@ describe('position resolution', () => {
       direction: 'ltr',
     };
 
-    expect(serializePosition(resolvePosition(
-      parsePosition('block-start inline-end', {})!,
-      ValueStage.Computed,
-      context,
-    ))).toBe('100% 100%');
-    expect(serializePosition(resolvePosition(
-      parsePosition('start end', {})!,
-      ValueStage.Computed,
-      context,
-    ))).toBe('100% 100%');
+    expect(PositionValue.parse('block-start inline-end', {})!.resolve(ValueStage.Computed, context).serialize()).toBe('100% 100%');
+    expect(PositionValue.parse('start end', {})!.resolve(ValueStage.Computed, context).serialize()).toBe('100% 100%');
   });
 
   it('does not claim offsets when logical context is unavailable', () => {
-    const value = parsePosition('block-start inline-end', {})!;
+    const value = PositionValue.parse('block-start inline-end', {})!;
 
-    expect(resolvePosition(value, ValueStage.Computed)).toEqual(value);
-    expect(tryResolvePositionOffsets(value, ValueStage.Computed)).toBeNull();
+    expect(value.resolve(ValueStage.Computed)).toEqual(value);
+    expect(value.tryResolveOffsets(ValueStage.Computed)).toBeNull();
   });
 });
 
@@ -331,30 +289,23 @@ describe('position serialization', () => {
     ['bottom right', 'right bottom'],
     ['bottom 10% right 20%', 'right 20% bottom 10%'],
   ])('serializes %s as %s', (input, expected) => {
-    expect(serializePosition(parsePosition(input, {})!)).toBe(expected);
+    expect(PositionValue.parse(input, {})!.serialize()).toBe(expected);
   });
 });
 
 describe('position combination', () => {
   it('adds horizontal and vertical offsets independently', () => {
-    expect(addPositions(
-      offsets(percentage(10), percentage(20)),
-      offsets(percentage(30), percentage(40)),
-    )).toEqual(offsets(percentage(40), percentage(60)));
+    expect(offsets(percentage(10), percentage(20)).add(offsets(percentage(30), percentage(40)))).toEqual(offsets(percentage(40), percentage(60)));
   });
 
   it('interpolates horizontal and vertical offsets independently', () => {
-    expect(interpolatePositions(
-      offsets(percentage(10), percentage(20)),
-      offsets(percentage(30), percentage(60)),
-      0.25,
-    )).toEqual(offsets(percentage(15), percentage(30)));
+    expect(offsets(percentage(10), percentage(20)).interpolate(offsets(percentage(30), percentage(60)), 0.25)).toEqual(offsets(percentage(15), percentage(30)));
   });
 
   it('accumulates offsets by addition', () => {
     const a = offsets(percentage(10), percentage(20));
     const b = offsets(percentage(30), percentage(40));
 
-    expect(accumulatePositions(a, b)).toEqual(addPositions(a, b));
+    expect(a.accumulate(b)).toEqual(a.add(b));
   });
 });

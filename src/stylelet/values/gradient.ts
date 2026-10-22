@@ -2,39 +2,986 @@ import { assertNever, mapTuple } from '../../infra/util';
 import { InternalError } from '../../infra/internal-error';
 
 import {
-  createFunctionalNotationConsumer, consumeComma, adaptConsumer, one, oneOf, opt, repeat,
+  createKeywordConsumer, createFunctionalNotationConsumer, consumeComma, adaptConsumer, one, oneOf, opt, repeat,
   requiredSequenceOf, requiredSomeOf, sequenceOf, withTrivia, createComponentParser,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
 import {
-  angleLiteral, canonicalizeAngle, tryResolveAnglePercentage as tryResolveAnglePercentageLiteral,
-  lengthLiteral, percentageLiteral, consumeZero,
-  type CanonicalAngleLiteral, type CanonicalLengthLiteral, type PercentageLiteral, type ZeroValue,
+  AngleLiteral, LengthLiteral, PercentageLiteral, ZeroLiteral,
+  type CanonicalAngleLiteral, type CanonicalLengthLiteral,
 } from './numeric-literal/index';
 
-import { resolveAngle, serializeAngle, consumeAngle, type AngleValue } from './angle';
+import type { Value } from './value';
+import { AngleValue } from './angle';
+import { AnglePercentageValue } from './angle-percentage';
 import {
-  resolveAnglePercentage, serializeAnglePercentage, consumeAnglePercentage,
-  type AnglePercentageValue,
-} from './angle-percentage';
-import {
-  ColorKind, interpolateColors, isLegacySrgbColor, resolveColorValue,
-  serializeColorInterpolationMethod, serializeColorValue, consumeColor,
-  consumeColorInterpolationMethod, type AbsoluteColor, type ColorInterpolationMethod,
-  type ColorValueContext, type ColorValue,
+  ColorValue, ColorKind, serializeColorInterpolationMethod, consumeColorInterpolationMethod,
+  type AbsoluteColor, type ColorInterpolationMethod, type ColorValueContext,
 } from './color';
-import { createKeywordConsumer } from './keyword';
-import {
-  createLengthPercentageConsumer, resolveLengthPercentage, serializeLengthPercentage,
-  consumeLengthPercentage, type LengthPercentageValue,
-} from './length-percentage';
-import type { PercentageReferenceValue } from './math-value';
-import {
-  resolvePosition, serializePosition, consumePosition, positionLiteral,
-  type PositionOffsets, type PositionValue, type PositionValueContext,
-} from './position';
-import { serializeNumber } from './number';
+import { LengthPercentageValue } from './length-percentage';
+import { MathValue } from './math-value';
+import { PositionValue, type PositionOffsets, type PositionValueContext } from './position';
+
+/** A gradient whose geometry, stops, and colors resolve together. */
+// https://drafts.csswg.org/css-images-4/#gradients
+export class GradientValue<Representation extends Gradient = Gradient> implements Value<GradientValueContext> {
+  /** Gradient geometry and color stops at their current lifecycle stage. */
+  value: Representation;
+
+  constructor(value: Representation) {
+    this.value = value;
+  }
+
+  /** Parse a complete linear, radial, or conic gradient. */
+  static parse(input: ParserInput, context: GradientValueContext): GradientValue | null {
+    return gradientParser(input, context);
+  }
+
+  /** Consume one gradient function. */
+  static consume(this: void, c: TokenCursor<ComponentValue, GradientValueContext>): TryConsumerResult<GradientValue> {
+    return gradientConsumer(c);
+  }
+
+  /** Resolve child values with the available color and geometry context. */
+  resolve(stage: ValueStage, context: GradientValueContext = {}): GradientValue {
+    return new GradientValue(this.value.resolve(stage, context));
+  }
+
+  /** Resolve the geometry and stops required for interpolation, when enough context exists. */
+  tryResolveExplicit(stage: ValueStage, context: GradientValueContext = {}): GradientValue<ExplicitGradient> | null {
+    const explicit = this.value.tryResolveExplicit(stage, context);
+    return explicit === null ? null : new GradientValue(explicit);
+  }
+
+  /** Whether the retained representation already contains explicit geometry and stops. */
+  isExplicit(): this is GradientValue<ExplicitGradient> {
+    return this.value.isExplicit();
+  }
+
+  /** Serialize the current geometry and stops without resolving them. */
+  serialize(): string {
+    return this.value.serialize();
+  }
+
+  /** Interpolate compatible gradients using their explicit used values. */
+  interpolate(
+    other: GradientValue,
+    progress: number,
+    context: GradientValueContext = {},
+  ): GradientValue<ExplicitGradient> {
+    const a: Gradient = this.value;
+    const b = other.value;
+    const colorStopCountA = a.colorStopCount();
+    const colorStopCountB = b.colorStopCount();
+
+    if (a.gradientType !== b.gradientType ||
+      a.repeating !== b.repeating ||
+      !a.repeating && colorStopCountA !== colorStopCountB) {
+      // TODO: Return cross-fade() once image combinations are represented.
+      throw new InternalError('Gradient interpolation requires cross-fade()');
+    }
+
+    if (a.repeating && colorStopCountA !== colorStopCountB) {
+      throw new InternalError('TODO: Align repeating gradient stop lists before interpolation');
+    }
+
+    const explicitA = a.tryResolveExplicit(ValueStage.Used, context);
+    const explicitB = b.tryResolveExplicit(ValueStage.Used, context);
+
+    if (explicitA === null || explicitB === null) {
+      throw new InternalError('Gradient interpolation requires explicit used values');
+    }
+
+    if (a.hasMixedLengthPercentageStops() || b.hasMixedLengthPercentageStops()) {
+      return new GradientValue(progress < 0.5 ? explicitA : explicitB);
+    }
+
+    if (explicitA.stops[0].offsets[0].value.type
+      !== explicitB.stops[0].offsets[0].value.type) {
+      return new GradientValue(progress < 0.5 ? explicitA : explicitB);
+    }
+
+    switch (a.gradientType) {
+      case 'linear':
+        return new GradientValue((explicitA as ExplicitLinearGradient).interpolate(
+          explicitB as ExplicitLinearGradient, progress, context, a, b as LinearGradient,
+        ));
+      case 'radial':
+        return new GradientValue((explicitA as ExplicitRadialGradient).interpolate(
+          explicitB as ExplicitRadialGradient, progress, context,
+        ));
+      case 'conic':
+        // Images 4 omits conic gradients from its incomplete interpolation prose;
+        // apply the same component-wise model used for the other gradient forms.
+        return new GradientValue((explicitA as ExplicitConicGradient).interpolate(
+          explicitB as ExplicitConicGradient, progress, context,
+        ));
+      default:
+        return assertNever(a);
+    }
+  }
+}
+
+type Gradient = LinearGradient | RadialGradient | ConicGradient;
+
+type GradientType = 'linear' | 'radial' | 'conic';
+
+/** Shared stop-list processing and notation for the three gradient geometries. */
+abstract class GradientBase<
+  Type extends GradientType,
+  Offset extends GradientStopOffsetFor<Type>,
+  Stops extends GradientStops<Offset> = GradientStops<Offset>,
+> implements Value<GradientValueContext> {
+  /** The geometry used by the function and its stop offsets. */
+  abstract gradientType: Type;
+  /** Whether the stop sequence repeats beyond its first and last stops. */
+  repeating: boolean;
+  /** The color space and hue path used between stops. */
+  method: ColorInterpolationMethod;
+  /** Ordered color stops and interpolation hints. */
+  stops: Stops;
+
+  constructor(method: ColorInterpolationMethod, stops: Stops, repeating: boolean) {
+    this.method = method;
+    this.stops = stops;
+    this.repeating = repeating;
+  }
+
+  /** Legacy sRGB stops retain their historical default interpolation space. */
+  static defaultColorSpace<Offset>(stops: GradientStops<Offset>): 'srgb' | 'oklab' {
+    return stops.every((stop) => stop.type === 'color-hint' || stop.color.isLegacySrgb()) ? 'srgb' : 'oklab';
+  }
+
+  /** Interpolate two explicit stop lists in the selected color space. */
+  protected static interpolateStops<
+    Offset extends ExplicitGradientStopOffset,
+  >(
+    a: ExplicitGradientStops<Offset>,
+    b: ExplicitGradientStops<Offset>,
+    method: ColorInterpolationMethod,
+    progress: number,
+    context: GradientValueContext,
+  ): ExplicitGradientStops<Offset> {
+    if (a.length !== b.length) {
+      throw new InternalError('TODO: Define interpolation for unmatched gradient hints');
+    }
+
+    return mapTuple(a, (stop, index) => {
+      const other = b[index]!;
+
+      if (stop.type === 'color-hint' && other.type === 'color-hint') {
+        return {
+          type: 'color-hint',
+          offset: interpolateExplicitGradientStopOffset(
+            stop.offset,
+            other.offset,
+            progress,
+          ),
+        };
+      }
+
+      if (stop.type === 'color-stop' && other.type === 'color-stop') {
+        return {
+          type: 'color-stop',
+          color: (method.hue === undefined || method.hue === 'shorter') &&
+            areIdenticalAbsoluteColors(stop.color.value, other.color.value)
+            ? stop.color
+            : stop.color.interpolate(other.color, progress, method.space, method.hue, context),
+          offsets: [interpolateExplicitGradientStopOffset(
+            stop.offsets[0],
+            other.offsets[0],
+            progress,
+          )],
+        };
+      }
+
+      throw new InternalError('TODO: Define interpolation for unmatched gradient hints');
+    }) as ExplicitGradientStops<Offset>;
+  }
+
+  abstract resolve(stage: ValueStage, context: GradientValueContext): GradientBase<Type, Offset>;
+
+  /** Resolve the complete geometry and stop list needed for interpolation. */
+  tryResolveExplicit(stage: ValueStage, context: GradientValueContext): ExplicitGradient | null {
+    if (stage < ValueStage.Used) return null;
+    const computed = this.resolve(ValueStage.Computed, context);
+    // Keep comparable percentages when possible; geometry is only the fallback.
+    computed.stops[0].offsets ??= [computed.defaultStopOffset(0)];
+    let stops = computed.fixupStops(computed.stops, ValueStage.Used, {});
+    if (!computed.hasExplicitStops(stops)) {
+      stops = this.resolve(stage, context).stops;
+      if (!computed.hasExplicitStops(stops)) return null;
+    }
+    return computed.resolveExplicitGeometry(stops as GradientStops<ExplicitGradientStopOffset>, stage, context);
+  }
+
+  /** Whether geometry, colors, and offsets are already explicit. */
+  abstract isExplicit(): boolean;
+
+  serialize(): string {
+    const name = `${this.repeating ? 'repeating-' : ''}${this.gradientType}-gradient`;
+    const prelude = this.serializePrelude();
+    if (this.method.hue !== undefined && this.method.hue !== 'shorter' ||
+      this.method.space !== GradientBase.defaultColorSpace(this.stops)) {
+      prelude.push(serializeColorInterpolationMethod(this.method));
+    }
+    const stops = this.serializeStops();
+    const body = prelude.length === 0 ? stops : `${prelude.join(' ')}, ${stops}`;
+    return `${name}(${body})`;
+  }
+
+  /** Count both positions of a double-position color stop, excluding hints. */
+  colorStopCount(): number {
+    return this.stops.reduce((count, stop) => stop.type === 'color-hint'
+      ? count
+      : count + (stop.offsets?.length === 2 ? 2 : 1), 0);
+  }
+
+  /** Whether length and percentage stops prevent component-wise interpolation. */
+  hasMixedLengthPercentageStops(): boolean {
+    if (this.gradientType === 'conic') {
+      return false;
+    }
+
+    let hasLength = false;
+    let hasPercentage = false;
+
+    for (const stop of this.stops) {
+      const offsets = stop.type === 'color-hint'
+        ? [stop.offset]
+        : stop.offsets ?? [];
+
+      for (const offset of offsets) {
+        if (offset.value instanceof MathValue) {
+          return true;
+        }
+
+        if (offset.value instanceof LengthLiteral) {
+          hasLength = true;
+        } else {
+          hasPercentage = true;
+        }
+      }
+    }
+
+    return hasLength && hasPercentage;
+  }
+
+  /** Resolve child colors and offsets, then apply the used-stage stop fixup. */
+  protected resolveStops(stage: ValueStage, context: GradientValueContext): GradientStops<Offset> {
+    const resolved = mapTuple(this.stops, (stop) => {
+      if (stop.type === 'color-hint') {
+        return {
+          ...stop,
+          offset: resolveStopOffset(stop.offset, stage, context),
+        };
+      }
+
+      return {
+        ...stop,
+        color: stop.color.resolve(stage, context),
+        offsets: stop.offsets === undefined
+          ? undefined
+          : mapTuple(stop.offsets, (offset) =>
+            resolveStopOffset(offset, stage, context)),
+      };
+    }) as GradientStops<Offset>;
+
+    return this.fixupStops(resolved, stage, context);
+  }
+
+  /** Whether every stop has an absolute color and one comparable canonical offset. */
+  protected hasExplicitStops(stops: GradientStops<GradientStopOffset> = this.stops): boolean {
+    return this.hasComparableStopOffsets(stops) &&
+      stops.every((stop) => stop.type === 'color-hint' ||
+        stop.color.value.kind === ColorKind.Absolute && stop.offsets?.length === 1);
+  }
+
+  protected abstract resolveExplicitGeometry(
+    stops: GradientStops<ExplicitGradientStopOffset>, stage: ValueStage, context: GradientValueContext,
+  ): ExplicitGradient | null;
+
+  protected abstract serializePrelude(): string[];
+
+  /** Construct an endpoint percentage in this gradient's angular or length grammar. */
+  private defaultStopOffset(value: 0 | 100): Offset {
+    const percentage = new PercentageLiteral(value);
+    return (this.gradientType === 'conic'
+      ? new AnglePercentageValue(percentage)
+      : new LengthPercentageValue(percentage)) as Offset;
+  }
+
+  /** Whether all present offsets can be ordered without another conversion. */
+  private hasComparableStopOffsets(stops: GradientStops<GradientStopOffset>): boolean {
+    let kind: ExplicitGradientStopOffset['value']['type'] | undefined;
+    const conic = this.gradientType === 'conic';
+
+    for (const stop of stops) {
+      const offsets = stop.type === 'color-hint'
+        ? [stop.offset]
+        : stop.offsets ?? [];
+
+      for (const offset of offsets) {
+        if (!isComparableGradientStopOffset(offset, conic)) {
+          return false;
+        }
+
+        if (kind !== undefined && kind !== offset.value.type) {
+          return false;
+        }
+
+        kind = offset.value.type;
+      }
+    }
+
+    return true;
+  }
+
+  /** Fill missing offsets, clamp decreasing offsets, and distribute unpositioned stops. */
+  private fixupStops(
+    stops: GradientStops<Offset>, stage: ValueStage, context: GradientValueContext,
+  ): GradientStops<Offset> {
+    if (stage < ValueStage.Used) {
+      return stops;
+    }
+
+    // 1. If the first color stop has no offset, set it to 0%.
+    stops[0].offsets ??= [
+      this.gradientType === 'conic' ? new AnglePercentageValue(new AngleLiteral(0, 'deg')) : new LengthPercentageValue(new LengthLiteral(0, 'px')),
+    ] as StopOffsets<Offset>;
+
+    // 2. If the last color stop has no offset, set it to 100%.
+    const last = stops.at(-1)!;
+
+    if (last.type === 'color-stop' && last.offsets === undefined) {
+      const percentageReference = context.percentageReferenceValue;
+      const offset = percentageReference === undefined
+        ? this.defaultStopOffset(100)
+        : this.gradientType === 'conic'
+          ? new AnglePercentageValue(new AngleLiteral(percentageReference.value, 'deg'))
+          : new LengthPercentageValue(new LengthLiteral(percentageReference.value, 'px'));
+
+      last.offsets = [offset as Offset];
+    }
+
+    if (!this.hasComparableStopOffsets(stops)) {
+      return stops;
+    }
+
+    type ExplicitItem =
+      | GradientColorStop<ExplicitGradientStopOffset>
+      | GradientColorHint<ExplicitGradientStopOffset>;
+    const explicit = stops as GradientStops<ExplicitGradientStopOffset>;
+
+    const offsetOf = (item: ExplicitItem): ExplicitGradientStopOffset | undefined =>
+      item.type === 'color-hint' ? item.offset : item.offsets?.[0];
+    const withOffset = (
+      item: ExplicitItem,
+      offset: ExplicitGradientStopOffset,
+    ): ExplicitItem =>
+      item.type === 'color-hint'
+        ? { ...item, offset }
+        : { ...item, offsets: [offset] };
+    const fixed: ExplicitItem[] = [];
+
+    for (const stop of explicit) {
+      if (stop.type === 'color-stop' && stop.offsets?.length === 2) {
+        fixed.push(
+          { ...stop, offsets: [stop.offsets[0]] },
+          { ...stop, offsets: [stop.offsets[1]] },
+        );
+      } else {
+        fixed.push(stop);
+      }
+    }
+
+    // 3. Move every positioned item at least as far as all preceding items.
+    let largest: ExplicitGradientStopOffset | undefined;
+
+    for (let index = 0; index < fixed.length; index += 1) {
+      const item = fixed[index]!;
+      const offset = offsetOf(item);
+
+      if (offset === undefined) {
+        continue;
+      }
+
+      if (largest === undefined) {
+        largest = offset;
+        continue;
+      }
+
+      if (offset.value.value < largest.value.value) {
+        fixed[index] = withOffset(item, largest);
+      } else {
+        largest = offset;
+      }
+    }
+
+    // 4. Evenly distribute each run of color stops without offsets.
+    let index = 1;
+
+    while (index < fixed.length - 1) {
+      if (offsetOf(fixed[index]!) !== undefined) {
+        index += 1;
+        continue;
+      }
+
+      const start = index;
+
+      while (offsetOf(fixed[index]!) === undefined) {
+        index += 1;
+      }
+
+      const before = offsetOf(fixed[start - 1]!)!;
+      const after = offsetOf(fixed[index]!)!;
+      const count = index - start;
+
+      for (let offset = 0; offset < count; offset += 1) {
+        fixed[start + offset] = withOffset(
+          fixed[start + offset]!,
+          interpolateExplicitGradientStopOffset(
+            before,
+            after,
+            (offset + 1) / (count + 1),
+          ),
+        );
+      }
+    }
+
+    return fixed as GradientStops<Offset>;
+  }
+
+  /** Serialize stop colors, offsets, and hints in their retained order. */
+  private serializeStops(): string {
+    return this.stops.map((stop, index) => {
+      if (stop.type === 'color-hint') {
+        return stop.offset.serialize();
+      }
+
+      const offsets = stop.offsets?.length === 1 &&
+        (index === 0 && isZeroGradientStopOffset(stop.offsets[0]) ||
+          index === this.stops.length - 1 &&
+          isFullGradientStopOffset(stop.offsets[0]))
+        ? []
+        : stop.offsets ?? [];
+
+      return [
+        stop.color.serialize(),
+        ...offsets.map((offset) => offset.serialize()),
+      ].join(' ');
+    })
+      .join(', ');
+  }
+}
+
+export type GradientContext = {
+  /** Concrete dimensions into which the gradient is drawn, in CSS pixels. */
+  gradientBoxSize?: GradientBoxSize;
+};
+
+export type GradientValueContext =
+  & GradientContext
+  & ColorValueContext
+  & PositionValueContext;
+
+type GradientBoxSize = {
+  width: number;
+  height: number;
+};
+
+/** A straight gradient line, directed by an angle or a box side/corner. */
+export class LinearGradient<Stops extends ColorStops = ColorStops>
+  extends GradientBase<'linear', LengthPercentageValue, Stops> {
+  gradientType = 'linear' as const;
+  /** The direction of the gradient line. */
+  direction: LinearGradientDirection;
+  /** The concrete line length retained by an explicit gradient. */
+  lineLength?: CanonicalLengthLiteral;
+
+  constructor(
+    direction: LinearGradientDirection, method: ColorInterpolationMethod, stops: Stops,
+    repeating = false, lineLength?: CanonicalLengthLiteral,
+  ) {
+    super(method, stops, repeating);
+    this.direction = direction;
+    this.lineLength = lineLength;
+  }
+
+  /** Resolve an angle or side/corner direction against the gradient box. */
+  private static angleForDirection(
+    direction: LinearGradientDirection, boxSize: GradientBoxSize,
+  ): number | undefined {
+    let angle: number;
+
+    if (direction instanceof AngleValue) {
+      if (!(direction.value instanceof AngleLiteral)) return undefined;
+      angle = direction.value.canonicalize().value;
+    } else if (direction instanceof ZeroLiteral) {
+      angle = 0;
+    } else if (direction.horizontal === undefined) {
+      angle = direction.vertical === 'top' ? 0 : 180;
+    } else if (direction.vertical === undefined) {
+      angle = direction.horizontal === 'right' ? 90 : 270;
+    } else {
+      const { width, height } = boxSize;
+      const cornerAngle = Math.atan2(height, width) * 180 / Math.PI;
+
+      if (direction.vertical === 'top') {
+        angle = direction.horizontal === 'right'
+          ? cornerAngle
+          : 360 - cornerAngle;
+      } else {
+        angle = direction.horizontal === 'right'
+          ? 180 - cornerAngle
+          : 180 + cornerAngle;
+      }
+    }
+
+    return angle;
+  }
+
+  /** Measure the gradient line for a resolved angle in the concrete box. */
+  private static lineLengthForAngle(
+    angle: number | undefined, boxSize: GradientBoxSize,
+  ): number | undefined {
+    if (angle === undefined) {
+      return undefined;
+    }
+
+    const { width, height } = boxSize;
+    if (angle % 180 === 0) {
+      return height;
+    }
+
+    if ((angle - 90) % 180 === 0) {
+      return width;
+    }
+
+    const radians = angle * Math.PI / 180;
+
+    return Math.abs(width * Math.sin(radians))
+      + Math.abs(height * Math.cos(radians));
+  }
+
+  resolve(stage: ValueStage, context: GradientValueContext): LinearGradient {
+    const direction = this.direction instanceof AngleValue
+      ? this.direction.resolve(stage, context) : this.direction;
+    const boxSize = context.gradientBoxSize;
+    const lineLength = stage >= ValueStage.Used && boxSize !== undefined
+      ? LinearGradient.lineLengthForAngle(LinearGradient.angleForDirection(direction, boxSize), boxSize)
+      : undefined;
+    const percentageReferenceValue = lineLength === undefined ? undefined : new LengthLiteral(lineLength, 'px');
+    const stops = this.resolveStops(stage, { ...context, percentageReferenceValue });
+    return new LinearGradient(direction, this.method, stops, this.repeating, this.lineLength);
+  }
+
+  isExplicit(): this is ExplicitLinearGradient {
+    return this.hasExplicitStops() &&
+      isCanonicalAngle(this.direction) && this.lineLength !== undefined;
+  }
+
+  /** Interpolate explicit line geometry, retaining the original keyword-angle rule. */
+  interpolate(
+    this: ExplicitLinearGradient, other: ExplicitLinearGradient, progress: number, context: GradientValueContext,
+    originalA: LinearGradient, originalB: LinearGradient,
+  ): ExplicitLinearGradient {
+    let angleA = this.direction.value.value;
+    let angleB = other.direction.value.value;
+    const method = discreteGradientMethod(this.method, other.method, progress);
+    if (!(originalA.direction instanceof AngleValue) && !(originalA.direction instanceof ZeroLiteral) &&
+      !(originalB.direction instanceof AngleValue) && !(originalB.direction instanceof ZeroLiteral) &&
+      Math.abs(angleA - angleB) > 180) {
+      if (angleA < angleB) angleA += 360;
+      else angleB += 360;
+    }
+    return new LinearGradient(
+      new AngleValue(new AngleLiteral(interpolateNumber(angleA, angleB, progress), 'deg')),
+      method, GradientBase.interpolateStops(this.stops, other.stops, method, progress, context), this.repeating,
+      new LengthLiteral(interpolateNumber(this.lineLength.value, other.lineLength.value, progress), 'px'),
+    ) as ExplicitLinearGradient;
+  }
+
+  protected resolveExplicitGeometry(
+    stops: GradientStops<ExplicitGradientStopOffset>, stage: ValueStage, context: GradientValueContext,
+  ): ExplicitLinearGradient | null {
+    const boxSize = context.gradientBoxSize;
+    if (boxSize === undefined) return null;
+    const direction = this.direction instanceof AngleValue
+      ? this.direction.resolve(stage, context) : this.direction;
+    const angle = LinearGradient.angleForDirection(direction, boxSize);
+    const lineLength = LinearGradient.lineLengthForAngle(angle, boxSize);
+    return angle === undefined || lineLength === undefined ? null : new LinearGradient(
+      new AngleValue(new AngleLiteral(angle, 'deg')), this.method,
+      stops as ExplicitGradientStops<ExplicitLengthPercentage>, this.repeating, new LengthLiteral(lineLength, 'px'),
+    ) as ExplicitLinearGradient;
+  }
+
+  protected serializePrelude(): string[] {
+    const prelude: string[] = [];
+
+    if (!this.hasDefaultDirection()) {
+      const direction = this.direction;
+      prelude.push(direction instanceof AngleValue || direction instanceof ZeroLiteral
+        ? direction.serialize()
+        : 'to ' + [direction.horizontal, direction.vertical].filter((side) => side !== undefined).join(' '));
+    }
+    return prelude;
+  }
+
+  /** Whether the direction can be omitted without changing the gradient line. */
+  private hasDefaultDirection(): boolean {
+    const { direction } = this;
+    if (direction instanceof AngleValue) return direction.value instanceof AngleLiteral && direction.value.canonicalize().value === 180;
+    return !(direction instanceof ZeroLiteral) && direction.horizontal === undefined && direction.vertical === 'bottom';
+  }
+}
+
+type LinearGradientDirection = AngleValue | ZeroLiteral | SideOrCorner;
+
+type SideOrCorner =
+  | {
+    type: 'side-or-corner';
+    horizontal: HorizontalSide;
+    vertical?: VerticalSide;
+  }
+  | {
+    type: 'side-or-corner';
+    horizontal?: never;
+    vertical: VerticalSide;
+  };
+
+type HorizontalSide = 'left' | 'right';
+type VerticalSide = 'top' | 'bottom';
+
+/** A circle or ellipse whose radii determine the gradient line. */
+export class RadialGradient<Stops extends ColorStops = ColorStops>
+  extends GradientBase<'radial', LengthPercentageValue, Stops> {
+  gradientType = 'radial' as const;
+  /** The shape of the ending contour. */
+  shape: RadialShape;
+  /** Explicit radii or extents relative to the gradient box. */
+  size: RadialSize;
+  /** The center of the ending contour. */
+  position: PositionValue;
+
+  constructor(
+    shape: RadialShape, size: RadialSize, position: PositionValue,
+    method: ColorInterpolationMethod, stops: Stops, repeating = false,
+  ) {
+    super(method, stops, repeating);
+    this.shape = shape;
+    this.size = size;
+    this.position = position;
+  }
+
+  /** Infer a circle from a single literal length radius, otherwise an ellipse. */
+  static defaultShape(size: RadialSize): RadialShape {
+    return size.type === 'radial-radii' &&
+      size.radii.length === 1 &&
+      size.radii[0].value instanceof LengthLiteral
+      ? 'circle'
+      : 'ellipse';
+  }
+
+  resolve(stage: ValueStage, context: GradientValueContext): RadialGradient {
+    const geometryContext = { ...context, percentageReferenceValue: undefined };
+    const size: RadialSize = this.size.type === 'radial-radii'
+      ? { ...this.size, radii: mapTuple(this.size.radii, (radius) => radius.resolve(stage, geometryContext)) }
+      : this.size;
+    const resolved: RadialGradient = new RadialGradient(
+      this.shape, size,
+      this.position.resolve(stage, geometryContext), this.method, this.stops, this.repeating,
+    );
+    const lineLength = resolved.geometry(stage, geometryContext)?.radii[0];
+    const percentageReferenceValue = stage >= ValueStage.Used && lineLength !== undefined
+      ? new LengthLiteral(lineLength, 'px') : undefined;
+    resolved.stops = resolved.resolveStops(stage, { ...context, percentageReferenceValue });
+    return resolved;
+  }
+
+  isExplicit(): this is ExplicitRadialGradient {
+    return this.hasExplicitStops() &&
+      this.shape === 'ellipse' && this.size.type === 'radial-radii' &&
+      this.size.radii.length === 2 && this.size.radii.every(isExplicitLengthPercentage) &&
+      isExplicitGradientPosition(this.position);
+  }
+
+  /** Interpolate the explicit radii, center, and color stops. */
+  interpolate(
+    this: ExplicitRadialGradient, other: ExplicitRadialGradient, progress: number, context: GradientValueContext,
+  ): ExplicitRadialGradient {
+    const method = discreteGradientMethod(this.method, other.method, progress);
+    return new RadialGradient(
+      'ellipse', { type: 'radial-radii', radii: interpolateLengthTuple(this.size.radii, other.size.radii, progress, context) },
+      interpolateExplicitGradientPosition(this.position, other.position, progress, context),
+      method, GradientBase.interpolateStops(this.stops, other.stops, method, progress, context), this.repeating,
+    ) as ExplicitRadialGradient;
+  }
+
+  protected resolveExplicitGeometry(
+    stops: GradientStops<ExplicitGradientStopOffset>, stage: ValueStage, context: GradientValueContext,
+  ): ExplicitRadialGradient | null {
+    const size = this.shape === 'ellipse' && this.size.type === 'radial-radii' &&
+      this.size.radii.length === 2 && this.size.radii.every(isExplicitLengthPercentage)
+      ? this.size as ExplicitRadialSize : null;
+    const position = isExplicitGradientPosition(this.position) ? this.position : null;
+    const geometry = size === null || position === null ? this.geometry(stage, context) : undefined;
+    if ((size === null || position === null) && geometry === undefined) return null;
+    return new RadialGradient(
+      'ellipse', size ?? {
+        type: 'radial-radii',
+        radii: mapTuple(geometry!.radii, (radius) => new LengthPercentageValue(new LengthLiteral(radius, 'px'))),
+      }, position ?? explicitGradientPosition(geometry!.center), this.method,
+      stops as ExplicitGradientStops<ExplicitLengthPercentage>, this.repeating,
+    ) as ExplicitRadialGradient;
+  }
+
+  protected serializePrelude(): string[] {
+    const prelude: string[] = [];
+
+    if (this.shape !== RadialGradient.defaultShape(this.size)) {
+      prelude.push(this.shape);
+    }
+
+    if (!(this.size.type === 'radial-extent' && this.size.extents.length === 1 &&
+      this.size.extents[0] === 'farthest-corner')) {
+      prelude.push(this.size.type === 'radial-extent'
+        ? this.size.extents.join(' ')
+        : this.size.radii.map((radius) => radius.serialize()).join(' '));
+    }
+
+    if (!isCenterPosition(this.position)) {
+      prelude.push(`at ${this.position.serialize()}`);
+    }
+    return prelude;
+  }
+
+  private geometry(
+    stage: ValueStage, context: GradientValueContext,
+  ): { center: RadialCenter; radii: RadialRadii; } | undefined {
+    const boxSize = context.gradientBoxSize;
+
+    if (stage < ValueStage.Used || boxSize === undefined) {
+      return undefined;
+    }
+
+    const center = radialGradientCenter(this.position, boxSize, stage, context);
+
+    if (center === undefined) {
+      return undefined;
+    }
+
+    const radii = this.size.type === 'radial-radii'
+      ? resolveRadialRadii(this.shape, this.size.radii, boxSize, stage, context)
+      : extentRadialGradientRadii(this.shape, this.size.extents, center, boxSize);
+
+    // Degenerate radial gradients use arbitrary radii and have no unique length.
+    return radii === undefined ||
+      radii.some((radius) => !Number.isFinite(radius) || radius <= 0)
+      ? undefined
+      : { center, radii };
+  }
+}
+
+type RadialShape = 'circle' | 'ellipse';
+
+type RadialSize = RadialExtentSize | RadialRadiiSize;
+
+type RadialExtentSize = {
+  type: 'radial-extent';
+  extents: [RadialExtent] | [RadialExtent, RadialExtent];
+};
+
+type RadialRadiiSize = {
+  type: 'radial-radii';
+  radii: [LengthPercentageValue] | [LengthPercentageValue, LengthPercentageValue];
+};
+
+type RadialExtent =
+  | 'closest-corner'
+  | 'closest-side'
+  | 'farthest-corner'
+  | 'farthest-side';
+
+type RadialCenter = [horizontal: number, vertical: number];
+type RadialRadii = [horizontal: number, vertical: number];
+
+/** A gradient whose stop offsets turn around a center point. */
+export class ConicGradient<Stops extends GradientStops<AngularColorStopOffset> = GradientStops<AngularColorStopOffset>>
+  extends GradientBase<'conic', AngularColorStopOffset, Stops> {
+  gradientType = 'conic' as const;
+  /** The starting angle of the sweep. */
+  angle: AngleValue | ZeroLiteral;
+  /** The center of rotation. */
+  position: PositionValue;
+
+  constructor(
+    angle: AngleValue | ZeroLiteral, position: PositionValue,
+    method: ColorInterpolationMethod, stops: Stops, repeating = false,
+  ) {
+    super(method, stops, repeating);
+    this.angle = angle;
+    this.position = position;
+  }
+
+  resolve(stage: ValueStage, context: GradientValueContext): ConicGradient {
+    const percentageReferenceValue = stage >= ValueStage.Used ? new AngleLiteral(360, 'deg') : undefined;
+    return new ConicGradient(
+      this.resolveAngle(stage, context), this.position.resolve(stage, context), this.method,
+      this.resolveStops(stage, { ...context, percentageReferenceValue }), this.repeating,
+    );
+  }
+
+  isExplicit(): this is ExplicitConicGradient {
+    return this.hasExplicitStops() &&
+      isCanonicalAngle(this.angle) && isExplicitGradientPosition(this.position);
+  }
+
+  /** Interpolate the explicit angle, center, and color stops. */
+  interpolate(
+    this: ExplicitConicGradient, other: ExplicitConicGradient, progress: number, context: GradientValueContext,
+  ): ExplicitConicGradient {
+    const method = discreteGradientMethod(this.method, other.method, progress);
+    return new ConicGradient(
+      new AngleValue(new AngleLiteral(interpolateNumber(this.angle.value.value, other.angle.value.value, progress), 'deg')),
+      interpolateExplicitGradientPosition(this.position, other.position, progress, context),
+      method, GradientBase.interpolateStops(this.stops, other.stops, method, progress, context), this.repeating,
+    ) as ExplicitConicGradient;
+  }
+
+  protected resolveExplicitGeometry(
+    stops: GradientStops<ExplicitGradientStopOffset>, stage: ValueStage, context: GradientValueContext,
+  ): ExplicitConicGradient | null {
+    const center = context.gradientBoxSize === undefined ? undefined
+      : radialGradientCenter(this.position, context.gradientBoxSize, stage, context);
+    const position = isExplicitGradientPosition(this.position) ? this.position
+      : center === undefined ? null : explicitGradientPosition(center);
+    const resolvedAngle = this.resolveAngle(stage, context);
+    const angle = resolvedAngle instanceof ZeroLiteral ? new AngleValue(new AngleLiteral(0, 'deg'))
+      : resolvedAngle.value instanceof AngleLiteral ? new AngleValue(resolvedAngle.value.canonicalize()) : null;
+    return position === null || angle === null ? null : new ConicGradient(
+      angle, position, this.method, stops as ExplicitGradientStops<ExplicitAnglePercentage>, this.repeating,
+    ) as ExplicitConicGradient;
+  }
+
+  protected serializePrelude(): string[] {
+    const prelude: string[] = [];
+
+    if (!isZeroAngle(this.angle)) {
+      prelude.push(`from ${this.angle.serialize()}`);
+    }
+
+    if (!isCenterPosition(this.position)) {
+      prelude.push(`at ${this.position.serialize()}`);
+    }
+    return prelude;
+  }
+
+  /** Resolve an authored angle while retaining the unitless zero alternative. */
+  private resolveAngle(stage: ValueStage, context: GradientValueContext): AngleValue | ZeroLiteral {
+    return this.angle instanceof ZeroLiteral ? this.angle : this.angle.resolve(stage, context);
+  }
+}
+
+type GradientStops<Offset> = [
+  first: GradientColorStop<Offset>,
+  ...rest: (GradientColorStop<Offset> | GradientColorHint<Offset>)[],
+];
+
+type StopOffsets<Offset> = [Offset] | [Offset, Offset];
+
+type GradientColorStop<Offset> = {
+  type: 'color-stop';
+  color: ColorValue;
+  offsets?: StopOffsets<Offset>;
+};
+
+type GradientColorHint<Offset> = {
+  type: 'color-hint';
+  offset: Offset;
+};
+
+type ColorStops = GradientStops<LengthPercentageValue>;
+type LinearColorStop = GradientColorStop<LengthPercentageValue>;
+type LinearColorHint = GradientColorHint<LengthPercentageValue>;
+
+type AngularColorStopOffset = AnglePercentageValue | ZeroLiteral;
+type GradientStopOffsetFor<Type extends GradientType> =
+  Type extends 'conic' ? AngularColorStopOffset : LengthPercentageValue;
+type GradientStopOffset = GradientStopOffsetFor<GradientType>;
+type ColorStopLength = StopOffsets<LengthPercentageValue>;
+type ColorStopAngle = StopOffsets<AngularColorStopOffset>;
+
+/**
+ * An interpolation-ready extension of CSS Images 4's explicit gradient form,
+ * which names only canonical linear direction and radial size. This stronger
+ * form also has resolved positions and colors, with all geometry and offsets.
+ */
+export type ExplicitGradient =
+  | ExplicitLinearGradient
+  | ExplicitRadialGradient
+  | ExplicitConicGradient;
+
+type ExplicitLinearGradient = LinearGradient<ExplicitGradientStops<ExplicitLengthPercentage>> & {
+  direction: AngleValue<CanonicalAngleLiteral>;
+  lineLength: CanonicalLengthLiteral;
+};
+
+type ExplicitRadialGradient = RadialGradient<ExplicitGradientStops<ExplicitLengthPercentage>> & {
+  shape: 'ellipse';
+  size: ExplicitRadialSize;
+  position: ExplicitGradientPosition;
+};
+
+type ExplicitConicGradient = ConicGradient<ExplicitGradientStops<ExplicitAnglePercentage>> & {
+  angle: AngleValue<CanonicalAngleLiteral>;
+  position: ExplicitGradientPosition;
+};
+
+type ExplicitRadialSize = {
+  type: 'radial-radii';
+  radii: [
+    horizontal: ExplicitLengthPercentage,
+    vertical: ExplicitLengthPercentage,
+  ];
+};
+
+type ExplicitGradientPosition = PositionValue<Omit<PositionOffsets, 'offsets'> & {
+  offsets: [
+    horizontal: ExplicitLengthPercentage,
+    vertical: ExplicitLengthPercentage,
+  ];
+}>;
+
+type ExplicitGradientStops<Offset extends ExplicitGradientStopOffset> = [
+  first: ExplicitGradientColorStop<Offset>,
+  ...rest: (
+    | ExplicitGradientColorStop<Offset>
+    | GradientColorHint<Offset>
+  )[],
+];
+
+type ExplicitGradientColorStop<Offset extends ExplicitGradientStopOffset> =
+  Omit<GradientColorStop<Offset>, 'color' | 'offsets'> & {
+    color: ColorValue<AbsoluteColor>;
+    offsets: [Offset];
+  };
+
+type ExplicitLengthPercentage = LengthPercentageValue<CanonicalLengthLiteral | PercentageLiteral>;
+type ExplicitAnglePercentage = AnglePercentageValue<CanonicalAngleLiteral | PercentageLiteral>;
+type ExplicitGradientStopOffset =
+  | ExplicitLengthPercentage
+  | ExplicitAnglePercentage;
+
+type LinearGradientSyntax = { direction: LinearGradientDirection; method: ColorInterpolationMethod; stops: ColorStops; };
+type RadialGradientSyntax = {
+  shape: RadialShape; size: RadialSize; position: PositionValue; method: ColorInterpolationMethod; stops: ColorStops;
+};
+type ConicGradientSyntax = {
+  angle: AngleValue | ZeroLiteral; position: PositionValue; method: ColorInterpolationMethod; stops: GradientStops<AngularColorStopOffset>;
+};
 
 /*
  * <gradient> =
@@ -86,141 +1033,6 @@ import { serializeNumber } from './number';
  * <color-stop-angle> = [ <angle-percentage> | <zero> ]{1,2}
  */
 
-export type GradientValue = LinearGradient | RadialGradient | ConicGradient;
-
-type GradientType = 'linear' | 'radial' | 'conic';
-
-type Gradient<
-  Type extends GradientType,
-  Offset extends GradientStopOffsetFor<Type>,
-> = {
-  type: 'gradient';
-  gradientType: Type;
-  repeating: boolean;
-  method: ColorInterpolationMethod;
-  stops: GradientStops<Offset>;
-};
-
-export type GradientContext = {
-  /** Concrete dimensions into which the gradient is drawn, in CSS pixels. */
-  gradientBoxSize?: GradientBoxSize;
-};
-
-export type GradientValueContext =
-  & GradientContext
-  & ColorValueContext
-  & PositionValueContext;
-
-type GradientBoxSize = {
-  width: number;
-  height: number;
-};
-
-export type LinearGradient = Gradient<'linear', LengthPercentageValue> & {
-  direction: LinearGradientDirection;
-};
-
-type LinearGradientDirection = AngleValue | ZeroValue | SideOrCorner;
-
-type SideOrCorner =
-  | {
-    type: 'side-or-corner';
-    horizontal: HorizontalSide;
-    vertical?: VerticalSide;
-  }
-  | {
-    type: 'side-or-corner';
-    horizontal?: never;
-    vertical: VerticalSide;
-  };
-
-type HorizontalSide = 'left' | 'right';
-type VerticalSide = 'top' | 'bottom';
-
-export type RadialGradient = Gradient<'radial', LengthPercentageValue> & {
-  shape: RadialShape;
-  size: RadialSize;
-  position: PositionValue;
-};
-
-type RadialShape = 'circle' | 'ellipse';
-
-type RadialSize = RadialExtentSize | RadialRadiiSize;
-
-type RadialExtentSize = {
-  type: 'radial-extent';
-  extents: [RadialExtent] | [RadialExtent, RadialExtent];
-};
-
-type RadialRadiiSize = {
-  type: 'radial-radii';
-  radii: [LengthPercentageValue] | [LengthPercentageValue, LengthPercentageValue];
-};
-
-type RadialExtent =
-  | 'closest-corner'
-  | 'closest-side'
-  | 'farthest-corner'
-  | 'farthest-side';
-
-type RadialCenter = [horizontal: number, vertical: number];
-type RadialRadii = [horizontal: number, vertical: number];
-
-export type ConicGradient = Gradient<'conic', AngularColorStopOffset> & {
-  angle: AngleValue | ZeroValue;
-  position: PositionValue;
-};
-
-type GradientStops<Offset> = [
-  first: GradientColorStop<Offset>,
-  ...rest: (GradientColorStop<Offset> | GradientColorHint<Offset>)[],
-];
-
-type StopOffsets<Offset> = [Offset] | [Offset, Offset];
-
-type GradientColorStop<Offset> = {
-  type: 'color-stop';
-  color: ColorValue;
-  offsets?: StopOffsets<Offset>;
-};
-
-type GradientColorHint<Offset> = {
-  type: 'color-hint';
-  offset: Offset;
-};
-
-type ColorStops = GradientStops<LengthPercentageValue>;
-type LinearColorStop = GradientColorStop<LengthPercentageValue>;
-type LinearColorHint = GradientColorHint<LengthPercentageValue>;
-
-type AngularColorStopOffset = AnglePercentageValue | ZeroValue;
-type GradientStopOffsetFor<Type extends GradientType> =
-  Type extends 'conic' ? AngularColorStopOffset : LengthPercentageValue;
-type GradientStopOffset = GradientStopOffsetFor<GradientType>;
-type ColorStopLength = StopOffsets<LengthPercentageValue>;
-type ColorStopAngle = StopOffsets<AngularColorStopOffset>;
-
-type LinearGradientSyntax = Omit<LinearGradient, 'type' | 'gradientType' | 'repeating'>;
-type RadialGradientSyntax = Omit<RadialGradient, 'type' | 'gradientType' | 'repeating'>;
-type ConicGradientSyntax = Omit<ConicGradient, 'type' | 'gradientType' | 'repeating'>;
-
-export function parseGradient(
-  input: ParserInput,
-  context: GradientValueContext,
-): GradientValue | null {
-  return gradientParser(input, context);
-}
-
-export function consumeGradient(
-  c: TokenCursor<ComponentValue, GradientValueContext>,
-): TryConsumerResult<GradientValue> {
-  return gradientConsumer(c);
-}
-
-// =============================================================================
-// Syntax
-// =============================================================================
-
 const MAX_COLOR_STOPS = 2_048;
 
 function createGradientStopListConsumer<Offset>(
@@ -267,22 +1079,22 @@ function createGradientStopListConsumer<Offset>(
 // <color-stop-length> = <length-percentage>{1,2}
 const colorStopLengthConsumer: TryConsumer<ColorStopLength, GradientValueContext> = sequenceOf(
   [
-    one(consumeLengthPercentage),
-    opt(withTrivia(consumeLengthPercentage)),
+    one(LengthPercentageValue.consume),
+    opt(withTrivia(LengthPercentageValue.consume)),
   ],
   ([[first], second]) => second.length === 0 ? [first] : [first, second[0]],
 );
 
 // <linear-color-hint> = <length-percentage>
 const linearColorHintConsumer: TryConsumer<LinearColorHint, GradientValueContext> = adaptConsumer(
-  consumeLengthPercentage,
+  LengthPercentageValue.consume,
   (offset) => ({ type: 'color-hint', offset }),
 );
 
 // <linear-color-stop> = <color> <color-stop-length>?
 const linearColorStopConsumer: TryConsumer<LinearColorStop, GradientValueContext> = sequenceOf(
   [
-    one(consumeColor),
+    one(ColorValue.consume),
     opt(withTrivia(colorStopLengthConsumer)),
   ],
   ([[color], offsets]) => ({
@@ -294,7 +1106,7 @@ const linearColorStopConsumer: TryConsumer<LinearColorStop, GradientValueContext
 
 // <angle-percentage> | <zero>
 const angularColorStopOffsetConsumer: TryConsumer<AngularColorStopOffset, GradientValueContext> = oneOf(
-  [one(consumeAnglePercentage), one(consumeZero)],
+  [one(AnglePercentageValue.consume), one(ZeroLiteral.consume)],
   ([offset]) => offset,
 );
 
@@ -318,7 +1130,7 @@ const angularColorHintConsumer: TryConsumer<GradientColorHint<AngularColorStopOf
 const angularColorStopConsumer: TryConsumer<GradientColorStop<AngularColorStopOffset>, GradientValueContext> =
   sequenceOf(
     [
-      one(consumeColor),
+      one(ColorValue.consume),
       opt(withTrivia(colorStopAngleConsumer)),
     ],
     ([[color], offsets]) => ({
@@ -383,8 +1195,8 @@ const radialSizeConsumer: TryConsumer<RadialSize, GradientValueContext> = oneOf(
     )),
     one(sequenceOf(
       [
-        one(createLengthPercentageConsumer({ min: 0 })),
-        opt(withTrivia(createLengthPercentageConsumer({ min: 0 }))),
+        one(LengthPercentageValue.createConsumer({ min: 0 })),
+        opt(withTrivia(LengthPercentageValue.createConsumer({ min: 0 }))),
       ],
       ([[first], second]): RadialRadiiSize => ({
         type: 'radial-radii',
@@ -405,8 +1217,8 @@ const linearGradientSyntaxConsumer: TryConsumer<LinearGradientSyntax, GradientVa
           [
             one(withTrivia(oneOf(
               [
-                one(consumeAngle),
-                one(consumeZero),
+                one(AngleValue.consume),
+                one(ZeroLiteral.consume),
                 one(sequenceOf(
                   [
                     one(createKeywordConsumer('to')),
@@ -433,8 +1245,8 @@ const linearGradientSyntaxConsumer: TryConsumer<LinearGradientSyntax, GradientVa
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
     return {
-      direction: syntax.direction ?? defaultLinearGradientDirection(),
-      method: syntax.method ?? defaultGradientMethod(stops),
+      direction: syntax.direction ?? new AngleValue(new AngleLiteral(180, 'deg')),
+      method: syntax.method ?? { space: GradientBase.defaultColorSpace(stops) },
       stops,
     };
   },
@@ -475,7 +1287,7 @@ const radialGradientSyntaxConsumer: TryConsumer<RadialGradientSyntax, GradientVa
                 opt(sequenceOf(
                   [
                     one(withTrivia(createKeywordConsumer('at'))),
-                    one(withTrivia(consumePosition)),
+                    one(withTrivia(PositionValue.consume)),
                   ],
                   ([, [position]]) => position,
                 )),
@@ -500,12 +1312,12 @@ const radialGradientSyntaxConsumer: TryConsumer<RadialGradientSyntax, GradientVa
   ],
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
-    const size = syntax.size ?? defaultRadialGradientSize();
+    const size: RadialSize = syntax.size ?? { type: 'radial-extent', extents: ['farthest-corner'] };
     return {
-      shape: syntax.shape ?? defaultRadialGradientShape(size),
+      shape: syntax.shape ?? RadialGradient.defaultShape(size),
       size,
-      position: syntax.position ?? defaultGradientPosition(),
-      method: syntax.method ?? defaultGradientMethod(stops),
+      position: syntax.position ?? PositionValue.fromComponents('center'),
+      method: syntax.method ?? { space: GradientBase.defaultColorSpace(stops) },
       stops,
     };
   },
@@ -525,7 +1337,7 @@ const conicGradientSyntaxConsumer: TryConsumer<ConicGradientSyntax, GradientValu
                   [
                     one(createKeywordConsumer('from')),
                     one(withTrivia(oneOf(
-                      [one(consumeAngle), one(consumeZero)],
+                      [one(AngleValue.consume), one(ZeroLiteral.consume)],
                       ([angle]) => angle,
                     ))),
                   ],
@@ -534,7 +1346,7 @@ const conicGradientSyntaxConsumer: TryConsumer<ConicGradientSyntax, GradientValu
                 opt(sequenceOf(
                   [
                     one(withTrivia(createKeywordConsumer('at'))),
-                    one(withTrivia(consumePosition)),
+                    one(withTrivia(PositionValue.consume)),
                   ],
                   ([, [position]]) => position,
                 )),
@@ -560,9 +1372,9 @@ const conicGradientSyntaxConsumer: TryConsumer<ConicGradientSyntax, GradientValu
   ([prelude, [stops]]) => {
     const syntax = prelude.length === 0 ? {} : prelude[0];
     return {
-      angle: syntax.angle ?? defaultConicGradientAngle(),
-      position: syntax.position ?? defaultGradientPosition(),
-      method: syntax.method ?? defaultGradientMethod(stops),
+      angle: syntax.angle ?? new AngleValue(new AngleLiteral(0, 'deg')),
+      position: syntax.position ?? PositionValue.fromComponents('center'),
+      method: syntax.method ?? { space: GradientBase.defaultColorSpace(stops) },
       stops,
     };
   },
@@ -572,72 +1384,42 @@ const conicGradientSyntaxConsumer: TryConsumer<ConicGradientSyntax, GradientValu
 const linearGradientFnConsumer = createFunctionalNotationConsumer(
   'linear-gradient',
   linearGradientSyntaxConsumer,
-  (syntax): LinearGradient => ({
-    type: 'gradient',
-    gradientType: 'linear',
-    repeating: false,
-    ...syntax,
-  }),
+  (syntax) => new LinearGradient(syntax.direction, syntax.method, syntax.stops, false),
 );
 
 // <repeating-linear-gradient()> = repeating-linear-gradient( [ <linear-gradient-syntax> ] )
 const repeatingLinearGradientFnConsumer = createFunctionalNotationConsumer(
   'repeating-linear-gradient',
   linearGradientSyntaxConsumer,
-  (syntax): LinearGradient => ({
-    type: 'gradient',
-    gradientType: 'linear',
-    repeating: true,
-    ...syntax,
-  }),
+  (syntax) => new LinearGradient(syntax.direction, syntax.method, syntax.stops, true),
 );
 
 // <radial-gradient()> = radial-gradient( [ <radial-gradient-syntax> ] )
 const radialGradientFnConsumer = createFunctionalNotationConsumer(
   'radial-gradient',
   radialGradientSyntaxConsumer,
-  (syntax): RadialGradient => ({
-    type: 'gradient',
-    gradientType: 'radial',
-    repeating: false,
-    ...syntax,
-  }),
+  (syntax) => new RadialGradient(syntax.shape, syntax.size, syntax.position, syntax.method, syntax.stops, false),
 );
 
 // <repeating-radial-gradient()> = repeating-radial-gradient( [ <radial-gradient-syntax> ] )
 const repeatingRadialGradientFnConsumer = createFunctionalNotationConsumer(
   'repeating-radial-gradient',
   radialGradientSyntaxConsumer,
-  (syntax): RadialGradient => ({
-    type: 'gradient',
-    gradientType: 'radial',
-    repeating: true,
-    ...syntax,
-  }),
+  (syntax) => new RadialGradient(syntax.shape, syntax.size, syntax.position, syntax.method, syntax.stops, true),
 );
 
 // <conic-gradient()> = conic-gradient( [ <conic-gradient-syntax> ] )
 const conicGradientFnConsumer = createFunctionalNotationConsumer(
   'conic-gradient',
   conicGradientSyntaxConsumer,
-  (syntax): ConicGradient => ({
-    type: 'gradient',
-    gradientType: 'conic',
-    repeating: false,
-    ...syntax,
-  }),
+  (syntax) => new ConicGradient(syntax.angle, syntax.position, syntax.method, syntax.stops, false),
 );
 
 // <repeating-conic-gradient()> = repeating-conic-gradient( [ <conic-gradient-syntax> ] )
 const repeatingConicGradientFnConsumer = createFunctionalNotationConsumer(
   'repeating-conic-gradient',
   conicGradientSyntaxConsumer,
-  (syntax): ConicGradient => ({
-    type: 'gradient',
-    gradientType: 'conic',
-    repeating: true,
-    ...syntax,
-  }),
+  (syntax) => new ConicGradient(syntax.angle, syntax.position, syntax.method, syntax.stops, true),
 );
 
 // <gradient> = <linear-gradient()> | <repeating-linear-gradient()> | <radial-gradient()> | <repeating-radial-gradient()> | <conic-gradient()> | <repeating-conic-gradient()>
@@ -650,309 +1432,32 @@ const gradientConsumer: TryConsumer<GradientValue, GradientValueContext> = oneOf
     one(conicGradientFnConsumer),
     one(repeatingConicGradientFnConsumer),
   ],
-  ([gradient]) => gradient,
+  ([gradient]) => new GradientValue(gradient),
 );
 
 const gradientParser = createComponentParser(withTrivia(gradientConsumer));
 
-// ██████   ███████ ███████  █████  ██    ██ ██      ████████
-// ██   ██  ██      ██      ██   ██ ██    ██ ██         ██
-// ██    ██ ██      ██      ██   ██ ██    ██ ██         ██
-// ██    ██ █████   █████   ███████ ██    ██ ██         ██
-// ██    ██ ██      ██      ██   ██ ██    ██ ██         ██
-// ██   ██  ██      ██      ██   ██ ██    ██ ██         ██
-// ██████   ███████ ██      ██   ██  ██████  ███████    ██
-
-function defaultGradientStopOffset(
-  value: 0 | 100,
-): PercentageLiteral {
-  return percentageLiteral(value);
+function isZeroAngle(angle: AngleValue | ZeroLiteral): boolean {
+  return angle instanceof ZeroLiteral || angle.value instanceof AngleLiteral && angle.value.value === 0;
 }
 
-function defaultLinearGradientDirection(): LinearGradientDirection {
-  return angleLiteral(180);
-}
-
-function defaultRadialGradientShape(size: RadialSize): RadialShape {
-  return size.type === 'radial-radii' &&
-    size.radii.length === 1 &&
-    size.radii[0].type === 'length'
-    ? 'circle'
-    : 'ellipse';
-}
-
-function defaultRadialGradientSize(): RadialSize {
-  return { type: 'radial-extent', extents: ['farthest-corner'] };
-}
-
-function defaultConicGradientAngle(): AngleValue {
-  return angleLiteral(0);
-}
-
-function defaultGradientPosition(): PositionValue {
-  return positionLiteral('center');
-}
-
-function defaultGradientMethod<Offset>(
-  stops: GradientStops<Offset>,
-): ColorInterpolationMethod {
-  const colors = stops.flatMap((stop) =>
-    stop.type === 'color-stop' ? [stop.color] : []);
-
-  return {
-    space: colors.every(isLegacySrgbColor) ? 'srgb' : 'oklab',
-  };
-}
-
-function isDefaultLinearGradientDirection(
-  value: LinearGradientDirection,
-): boolean {
-  return value.type === 'angle'
-    ? canonicalizeAngle(value).value === 180
-    : value.type === 'side-or-corner' &&
-      value.horizontal === undefined &&
-      value.vertical === 'bottom';
-}
-
-function isDefaultRadialGradientShape(
-  shape: RadialShape,
-  size: RadialSize,
-): boolean {
-  return shape === defaultRadialGradientShape(size);
-}
-
-function isDefaultRadialGradientSize(size: RadialSize): boolean {
-  return size.type === 'radial-extent' &&
-    size.extents.length === 1 &&
-    size.extents[0] === 'farthest-corner';
-}
-
-function isZeroAngle(value: AngleValue | ZeroValue): boolean {
-  return value.type === 'number' ||
-    value.type === 'angle' && value.value === 0;
-}
-
-function isCenterPosition(value: PositionValue): boolean {
+function isCenterPosition(position: PositionValue): boolean {
+  const { value } = position;
   const components = value.offsets ?? value.components;
-
-  return components.length <= 2 &&
-    components.every((component) => component === 'center' ||
-      typeof component !== 'string' &&
-      component.type === 'percentage' &&
-      component.value === 50);
+  return components.length <= 2 && components.every((component) => component === 'center' ||
+    typeof component !== 'string' && component.value instanceof PercentageLiteral && component.value.value === 50);
 }
 
-function isDefaultGradientMethod<Offset>(
-  method: ColorInterpolationMethod,
-  stops: GradientStops<Offset>,
-): boolean {
-  if (method.hue !== undefined && method.hue !== 'shorter') {
-    return false;
-  }
-
-  return method.space === defaultGradientMethod(stops).space;
+function isZeroGradientStopOffset(offset: GradientStopOffset): boolean {
+  return offset instanceof ZeroLiteral || !(offset.value instanceof MathValue) && offset.value.value === 0;
 }
 
-function isZeroGradientStopOffset(value: GradientStopOffset): boolean {
-  return value.type !== 'math' && value.value === 0;
-}
-
-function isFullGradientStopOffset(value: GradientStopOffset): boolean {
-  return value.type === 'percentage' && value.value === 100;
+function isFullGradientStopOffset(offset: GradientStopOffset): boolean {
+  return offset.value instanceof PercentageLiteral && offset.value.value === 100;
 }
 
 function isSideExtent(extent: RadialExtent): extent is 'closest-side' | 'farthest-side' {
   return extent === 'closest-side' || extent === 'farthest-side';
-}
-
-
-
-// ████████  ████████  ██████   ███████  ██       ██     ██ ████████
-// ██     ██ ██       ██    ██ ██     ██ ██       ██     ██ ██
-// ██     ██ ██       ██       ██     ██ ██       ██     ██ ██
-// ████████  ██████    ██████  ██     ██ ██       ██     ██ ██████
-// ██   ██   ██             ██ ██     ██ ██        ██   ██  ██
-// ██    ██  ██       ██    ██ ██     ██ ██         ██ ██   ██
-// ██     ██ ████████  ██████   ███████  ████████    ███    ████████
-
-export function resolveGradient(
-  value: GradientValue,
-  stage: ValueStage,
-  context: GradientValueContext = {},
-): GradientValue {
-  switch (value.gradientType) {
-    case 'linear':
-      return resolveLinearGradient(value, stage, context);
-    case 'radial':
-      return resolveRadialGradient(value, stage, context);
-    case 'conic':
-      return resolveConicGradient(value, stage, context);
-    default:
-      return assertNever(value);
-  }
-}
-
-function resolveLinearGradient(
-  value: LinearGradient,
-  stage: ValueStage,
-  context: GradientValueContext,
-): LinearGradient {
-  const direction = resolveLinearGradientDirection(value.direction, stage, context);
-  const lineLength = linearGradientLineLength(direction, context.gradientBoxSize);
-  const percentageReferenceValue = resolvePercentageReference(lineLength, stage, lengthLiteral);
-  const resolved = { ...value, direction };
-  const stops = resolveGradientStops(
-    resolved,
-    stage,
-    { ...context, percentageReferenceValue },
-  );
-
-  return {
-    ...resolved,
-    stops,
-  };
-}
-
-function resolveLinearGradientDirection(
-  value: LinearGradientDirection,
-  stage: ValueStage,
-  context: GradientValueContext,
-): LinearGradientDirection {
-  return value.type === 'angle' || value.type === 'math'
-    ? resolveAngle(value, stage, context)
-    : value;
-}
-
-function resolvePercentageReference<Reference extends PercentageReferenceValue>(
-  value: number | undefined,
-  stage: ValueStage,
-  create: (value: number) => Reference,
-): Reference | undefined {
-  return stage < ValueStage.Used || value === undefined
-    ? undefined
-    : create(value);
-}
-
-function linearGradientLineLength(
-  direction: LinearGradientDirection,
-  boxSize: GradientBoxSize | undefined,
-): number | undefined {
-  if (boxSize === undefined) {
-    return undefined;
-  }
-
-  const { width, height } = boxSize;
-  const angle = linearGradientAngle(direction, boxSize);
-
-  if (angle === undefined) {
-    return undefined;
-  }
-
-  if (angle % 180 === 0) {
-    return height;
-  }
-
-  if ((angle - 90) % 180 === 0) {
-    return width;
-  }
-
-  const radians = angle * Math.PI / 180;
-
-  return Math.abs(width * Math.sin(radians))
-    + Math.abs(height * Math.cos(radians));
-}
-
-function linearGradientAngle(
-  direction: LinearGradientDirection,
-  boxSize: GradientBoxSize | undefined,
-): number | undefined {
-  let angle: number;
-
-  if (direction.type === 'math') {
-    return undefined;
-  } else if (direction.type === 'number') {
-    angle = 0;
-  } else if (direction.type === 'angle') {
-    angle = canonicalizeAngle(direction).value;
-  } else if (direction.horizontal === undefined) {
-    angle = direction.vertical === 'top' ? 0 : 180;
-  } else if (direction.vertical === undefined) {
-    angle = direction.horizontal === 'right' ? 90 : 270;
-  } else {
-    if (boxSize === undefined) {
-      return undefined;
-    }
-
-    const { width, height } = boxSize;
-    const cornerAngle = Math.atan2(height, width) * 180 / Math.PI;
-
-    if (direction.vertical === 'top') {
-      angle = direction.horizontal === 'right'
-        ? cornerAngle
-        : 360 - cornerAngle;
-    } else {
-      angle = direction.horizontal === 'right'
-        ? 180 - cornerAngle
-        : 180 + cornerAngle;
-    }
-  }
-
-  return angle;
-}
-
-function resolveRadialGradient(
-  value: RadialGradient,
-  stage: ValueStage,
-  context: GradientValueContext,
-): RadialGradient {
-  const geometryContext = { ...context, percentageReferenceValue: undefined };
-  const size = resolveRadialGradientSize(value.size, stage, geometryContext);
-  const position = resolvePosition(value.position, stage, geometryContext);
-  const resolved = { ...value, size, position };
-  const lineLength = radialGradientLineLength(resolved, stage, geometryContext);
-  const percentageReferenceValue = resolvePercentageReference(lineLength, stage, lengthLiteral);
-  const stops = resolveGradientStops(resolved, stage, { ...context, percentageReferenceValue });
-
-  return {
-    ...resolved,
-    stops,
-  };
-}
-
-function radialGradientLineLength(
-  gradient: RadialGradient,
-  stage: ValueStage,
-  context: GradientValueContext,
-): number | undefined {
-  return radialGradientGeometry(gradient, stage, context)?.radii[0];
-}
-
-function radialGradientGeometry(
-  gradient: RadialGradient,
-  stage: ValueStage,
-  context: GradientValueContext,
-): { center: RadialCenter; radii: RadialRadii; } | undefined {
-  const boxSize = context.gradientBoxSize;
-
-  if (stage < ValueStage.Used || boxSize === undefined) {
-    return undefined;
-  }
-
-  const center = radialGradientCenter(gradient.position, boxSize, stage, context);
-
-  if (center === undefined) {
-    return undefined;
-  }
-
-  const radii = gradient.size.type === 'radial-radii'
-    ? resolveRadialRadii(gradient.shape, gradient.size.radii, boxSize, stage, context)
-    : extentRadialGradientRadii(gradient.shape, gradient.size.extents, center, boxSize);
-
-  // Degenerate radial gradients use arbitrary radii and have no unique length.
-  return radii === undefined ||
-    radii.some((radius) => !Number.isFinite(radius) || radius <= 0)
-    ? undefined
-    : { center, radii };
 }
 
 function radialGradientCenter(
@@ -961,12 +1466,12 @@ function radialGradientCenter(
   stage: ValueStage,
   context: GradientValueContext,
 ): RadialCenter | undefined {
-  if (position.offsets === undefined) {
+  if (position.value.offsets === undefined) {
     return undefined;
   }
 
-  const horizontal = resolveLengthPercentageInPixels(position.offsets[0], boxSize.width, stage, context);
-  const vertical = resolveLengthPercentageInPixels(position.offsets[1], boxSize.height, stage, context);
+  const horizontal = resolveLengthPercentageInPixels(position.value.offsets[0], boxSize.width, stage, context);
+  const vertical = resolveLengthPercentageInPixels(position.value.offsets[1], boxSize.height, stage, context);
 
   return horizontal === undefined || vertical === undefined
     ? undefined
@@ -1077,895 +1582,45 @@ function resolveLengthPercentageInPixels(
   stage: ValueStage,
   context: GradientValueContext,
 ): number | undefined {
-  const resolved = resolveLengthPercentage(value, stage, {
-    ...context,
-    percentageReferenceValue: lengthLiteral(percentageBasis),
-  });
-
-  return resolved.type === 'length' && resolved.unit === 'px'
-    ? resolved.value
-    : undefined;
+  const resolved = value.resolve(stage, { ...context, percentageReferenceValue: new LengthLiteral(percentageBasis, 'px') }).value;
+  return resolved instanceof LengthLiteral && resolved.unit === 'px' ? resolved.value : undefined;
 }
 
-function resolveRadialGradientSize(
-  value: RadialSize,
+function resolveStopOffset(
+  offset: GradientStopOffset,
   stage: ValueStage,
   context: GradientValueContext,
-): RadialSize {
-  return value.type === 'radial-radii'
-    ? {
-      ...value,
-      radii: mapTuple(value.radii, (radius) =>
-        resolveLengthPercentage(radius, stage, context)),
-    }
-    : value;
-}
-
-function resolveConicGradient(
-  value: ConicGradient,
-  stage: ValueStage,
-  context: GradientValueContext,
-): ConicGradient {
-  const percentageReferenceValue = resolvePercentageReference(360, stage, angleLiteral);
-  const angle = resolveAngleOrZero(value.angle, stage, context);
-  const position = resolvePosition(value.position, stage, context);
-  const resolved = { ...value, angle, position };
-  const stops = resolveGradientStops(
-    resolved,
-    stage,
-    { ...context, percentageReferenceValue },
-  );
-
-  return {
-    ...resolved,
-    stops,
-  };
-}
-
-function resolveGradientStops<
-  Type extends GradientType,
-  Offset extends GradientStopOffsetFor<Type>,
->(
-  gradient: Gradient<Type, Offset>,
-  stage: ValueStage,
-  context: GradientValueContext,
-): GradientStops<Offset> {
-  const { stops } = gradient;
-  const resolved = mapTuple(stops, (stop) => {
-    if (stop.type === 'color-hint') {
-      return {
-        ...stop,
-        offset: resolveStopOffset(stop.offset, gradient, stage, context),
-      };
-    }
-
-    return {
-      ...stop,
-      color: resolveColorValue(stop.color, stage, context),
-      offsets: stop.offsets === undefined
-        ? undefined
-        : mapTuple(stop.offsets, (offset) =>
-          resolveStopOffset(offset, gradient, stage, context)),
-    };
-  }) as GradientStops<Offset>;
-
-  return colorStopFixup(resolved, gradient, stage, context);
-}
-
-function resolveStopOffset<
-  Type extends GradientType,
-  Offset extends GradientStopOffsetFor<Type>,
->(
-  offset: Offset,
-  gradient: Gradient<Type, Offset>,
-  stage: ValueStage,
-  context: GradientValueContext,
-): Offset {
-  return (gradient.gradientType === 'conic'
-    ? resolveAngularColorStopOffset(
-      offset as AngularColorStopOffset,
-      stage,
-      context,
-    )
-    : resolveLengthPercentage(
-      offset as LengthPercentageValue,
-      stage,
-      context,
-    )) as Offset;
-}
-
-function resolveAngularColorStopOffset(
-  value: AngularColorStopOffset,
-  stage: ValueStage,
-  context: GradientValueContext,
-): AngularColorStopOffset {
-  if (value.type === 'number') {
-    return stage < ValueStage.Used ? value : angleLiteral(0);
+): GradientStopOffset {
+  if (offset instanceof ZeroLiteral) {
+    return stage < ValueStage.Used ? offset : new AnglePercentageValue(new AngleLiteral(0, 'deg'));
   }
-
-  if (stage >= ValueStage.Used && value.type !== 'math') {
-    return tryResolveAnglePercentageLiteral(value, {
-      percentageReferenceValue: angleLiteral(360),
-    })!;
-  }
-
-  return resolveAnglePercentage(value, stage, context);
-}
-
-function resolveAngleOrZero(
-  value: AngleValue | ZeroValue,
-  stage: ValueStage,
-  context: GradientValueContext,
-): AngleValue | ZeroValue {
-  return value.type === 'number' ? value : resolveAngle(value, stage, context);
-}
-
-
-
-// ████████ ████ ██     ██ ██     ██ ████████
-// ██        ██   ██   ██  ██     ██ ██     ██
-// ██        ██    ██ ██   ██     ██ ██     ██
-// ██████    ██     ███    ██     ██ ████████
-// ██        ██    ██ ██   ██     ██ ██
-// ██        ██   ██   ██  ██     ██ ██
-// ██       ████ ██     ██  ███████  ██
-
-function hasComparableGradientStopOffsets(
-  stops: GradientStops<GradientStopOffset>,
-  gradientType: GradientType,
-): boolean {
-  let kind: ExplicitGradientStopOffset['type'] | undefined;
-
-  for (const stop of stops) {
-    const offsets = stop.type === 'color-hint'
-      ? [stop.offset]
-      : stop.offsets ?? [];
-
-    for (const offset of offsets) {
-      if (!isComparableGradientStopOffset(offset, gradientType)) {
-        return false;
-      }
-
-      if (kind !== undefined && kind !== offset.type) {
-        return false;
-      }
-
-      kind = offset.type;
-    }
-  }
-
-  return true;
+  return offset.resolve(stage, context);
 }
 
 function isComparableGradientStopOffset(
   offset: GradientStopOffset,
-  gradientType: GradientType,
+  conic: boolean,
 ): offset is ExplicitGradientStopOffset {
-  return offset.type === 'percentage' ||
-    (gradientType === 'conic'
-      ? offset.type === 'angle' && offset.unit === 'deg'
-      : offset.type === 'length' && offset.unit === 'px');
+  const literal = offset.value;
+  return literal instanceof PercentageLiteral || (conic
+    ? literal instanceof AngleLiteral && literal.unit === 'deg'
+    : literal instanceof LengthLiteral && literal.unit === 'px');
 }
 
-function colorStopFixup<
-  Type extends GradientType,
-  Offset extends GradientStopOffsetFor<Type>,
->(
-  stops: GradientStops<Offset>,
-  gradient: Gradient<Type, Offset>,
-  stage: ValueStage,
-  context: GradientValueContext,
-): GradientStops<Offset> {
-  if (stage < ValueStage.Used) {
-    return stops;
-  }
-
-  // 1. If the first color stop has no offset, set it to 0%.
-  stops[0].offsets ??= [
-    gradient.gradientType === 'conic' ? angleLiteral(0) : lengthLiteral(0),
-  ] as StopOffsets<Offset>;
-
-  // 2. If the last color stop has no offset, set it to 100%.
-  const last = stops.at(-1)!;
-
-  if (last.type === 'color-stop' && last.offsets === undefined) {
-    const percentageReference = context.percentageReferenceValue;
-    const offset = percentageReference === undefined
-      ? defaultGradientStopOffset(100)
-      : gradient.gradientType === 'conic'
-        ? angleLiteral(percentageReference.value)
-        : lengthLiteral(percentageReference.value);
-
-    last.offsets = [offset as Offset];
-  }
-
-  if (!hasComparableGradientStopOffsets(stops, gradient.gradientType)) {
-    return stops;
-  }
-
-  type ExplicitItem =
-    | GradientColorStop<ExplicitGradientStopOffset>
-    | GradientColorHint<ExplicitGradientStopOffset>;
-  const explicit = stops as GradientStops<ExplicitGradientStopOffset>;
-
-  const offsetOf = (item: ExplicitItem): ExplicitGradientStopOffset | undefined =>
-    item.type === 'color-hint' ? item.offset : item.offsets?.[0];
-  const withOffset = (
-    item: ExplicitItem,
-    offset: ExplicitGradientStopOffset,
-  ): ExplicitItem =>
-    item.type === 'color-hint'
-      ? { ...item, offset }
-      : { ...item, offsets: [offset] };
-  const interpolateOffset = (
-    a: ExplicitGradientStopOffset,
-    b: ExplicitGradientStopOffset,
-    p: number,
-  ): ExplicitGradientStopOffset => ({
-    ...a,
-    value: (1 - p) * a.value + p * b.value,
-  });
-  const fixed: ExplicitItem[] = [];
-
-  for (const stop of explicit) {
-    if (stop.type === 'color-stop' && stop.offsets?.length === 2) {
-      fixed.push(
-        { ...stop, offsets: [stop.offsets[0]] },
-        { ...stop, offsets: [stop.offsets[1]] },
-      );
-    } else {
-      fixed.push(stop);
-    }
-  }
-
-  // 3. Move every positioned item at least as far as all preceding items.
-  let largest: ExplicitGradientStopOffset | undefined;
-
-  for (let index = 0; index < fixed.length; index += 1) {
-    const item = fixed[index]!;
-    const offset = offsetOf(item);
-
-    if (offset === undefined) {
-      continue;
-    }
-
-    if (largest === undefined) {
-      largest = offset;
-      continue;
-    }
-
-    if (offset.value < largest.value) {
-      fixed[index] = withOffset(item, largest);
-    } else {
-      largest = offset;
-    }
-  }
-
-  // 4. Evenly distribute each run of color stops without offsets.
-  let index = 1;
-
-  while (index < fixed.length - 1) {
-    if (offsetOf(fixed[index]!) !== undefined) {
-      index += 1;
-      continue;
-    }
-
-    const start = index;
-
-    while (offsetOf(fixed[index]!) === undefined) {
-      index += 1;
-    }
-
-    const before = offsetOf(fixed[start - 1]!)!;
-    const after = offsetOf(fixed[index]!)!;
-    const count = index - start;
-
-    for (let offset = 0; offset < count; offset += 1) {
-      fixed[start + offset] = withOffset(
-        fixed[start + offset]!,
-        interpolateOffset(
-          before,
-          after,
-          (offset + 1) / (count + 1),
-        ),
-      );
-    }
-  }
-
-  return fixed as GradientStops<Offset>;
+function isCanonicalAngle(value: LinearGradientDirection): value is AngleValue<CanonicalAngleLiteral> {
+  return value instanceof AngleValue && value.value instanceof AngleLiteral && value.value.unit === 'deg';
 }
 
-
-
-// ███████ ██     ██ ████████  ██       ████  ██████  ████ ████████
-// ██       ██   ██  ██     ██ ██        ██  ██        ██     ██
-// ██        ██ ██   ██     ██ ██        ██  ██        ██     ██
-// █████      ███    ████████  ██        ██  ██        ██     ██
-// ██        ██ ██   ██        ██        ██  ██        ██     ██
-// ██       ██   ██  ██        ██        ██  ██        ██     ██
-// ███████ ██     ██ ██        ████████ ████  ██████  ████   ██
-
-/**
- * An interpolation-ready extension of CSS Images 4's explicit gradient form,
- * which names only canonical linear direction and radial size. This stronger
- * form also has resolved positions and colors, with all geometry and offsets.
- */
-export type ExplicitGradient =
-  | ExplicitLinearGradient
-  | ExplicitRadialGradient
-  | ExplicitConicGradient;
-
-type ExplicitLinearGradient = Omit<LinearGradient, 'direction' | 'stops'> & {
-  direction: CanonicalAngleLiteral;
-  lineLength: CanonicalLengthLiteral;
-  stops: ExplicitGradientStops<ExplicitLengthPercentageLiteral>;
-};
-
-type ExplicitRadialGradient = Omit<
-  RadialGradient,
-  'shape' | 'size' | 'position' | 'stops'
-> & {
-  shape: 'ellipse';
-  size: ExplicitRadialSize;
-  position: ExplicitGradientPosition;
-  stops: ExplicitGradientStops<ExplicitLengthPercentageLiteral>;
-};
-
-type ExplicitConicGradient = Omit<ConicGradient, 'angle' | 'position' | 'stops'> & {
-  angle: CanonicalAngleLiteral;
-  position: ExplicitGradientPosition;
-  stops: ExplicitGradientStops<ExplicitAnglePercentageLiteral>;
-};
-
-type ExplicitRadialSize = {
-  type: 'radial-radii';
-  radii: [
-    horizontal: ExplicitLengthPercentageLiteral,
-    vertical: ExplicitLengthPercentageLiteral,
-  ];
-};
-
-type ExplicitGradientPosition = Omit<PositionOffsets, 'offsets'> & {
-  offsets: [
-    horizontal: ExplicitLengthPercentageLiteral,
-    vertical: ExplicitLengthPercentageLiteral,
-  ];
-};
-
-type ExplicitGradientStops<Offset extends ExplicitGradientStopOffset> = [
-  first: ExplicitGradientColorStop<Offset>,
-  ...rest: (
-    | ExplicitGradientColorStop<Offset>
-    | GradientColorHint<Offset>
-  )[],
-];
-
-type ExplicitGradientColorStop<Offset extends ExplicitGradientStopOffset> =
-  Omit<GradientColorStop<Offset>, 'color' | 'offsets'> & {
-    color: AbsoluteColor;
-    offsets: [Offset];
-  };
-
-type ExplicitLengthPercentageLiteral = CanonicalLengthLiteral | PercentageLiteral;
-type ExplicitAnglePercentageLiteral = CanonicalAngleLiteral | PercentageLiteral;
-type ExplicitGradientStopOffset =
-  | ExplicitLengthPercentageLiteral
-  | ExplicitAnglePercentageLiteral;
-
-export function tryResolveExplicitGradient(
-  value: GradientValue,
-  stage: ValueStage,
-  context: GradientValueContext = {},
-): ExplicitGradient | null {
-  if (stage < ValueStage.Used) {
-    return null;
-  }
-
-  const resolved = resolveGradient(value, ValueStage.Computed, context);
-  const boxSize = context.gradientBoxSize;
-  const stops = tryResolveExplicitGradientStops(resolved, value, stage, context);
-
-  if (stops === null) {
-    return null;
-  }
-
-  switch (resolved.gradientType) {
-    case 'linear': {
-      const direction = resolveLinearGradientDirection(
-        resolved.direction,
-        stage,
-        context,
-      );
-      const angle = linearGradientAngle(direction, boxSize);
-      const lineLength = linearGradientLineLength(direction, boxSize);
-
-      return angle === undefined || lineLength === undefined
-        ? null
-        : {
-          ...resolved,
-          direction: angleLiteral(angle),
-          lineLength: lengthLiteral(lineLength),
-          stops,
-        } as ExplicitLinearGradient;
-    }
-    case 'radial': {
-      const size = resolved.shape === 'ellipse' &&
-        resolved.size.type === 'radial-radii' &&
-        resolved.size.radii.length === 2 &&
-        resolved.size.radii.every(isExplicitLengthPercentage)
-        ? resolved.size as ExplicitRadialSize
-        : null;
-      const position = isExplicitGradientPosition(resolved.position)
-        ? resolved.position
-        : null;
-      const geometry = size === null || position === null
-        ? radialGradientGeometry(resolved, stage, context)
-        : undefined;
-
-      if ((size === null || position === null) && geometry === undefined) {
-        return null;
-      }
-
-      return {
-        ...resolved,
-        shape: 'ellipse',
-        size: size ?? {
-          type: 'radial-radii',
-          radii: mapTuple(geometry!.radii, (radius) => lengthLiteral(radius)),
-        },
-        position: position ?? explicitGradientPosition(geometry!.center),
-        stops,
-      } as ExplicitRadialGradient;
-    }
-    case 'conic': {
-      const center = boxSize === undefined
-        ? undefined
-        : radialGradientCenter(resolved.position, boxSize, stage, context);
-      const position = isExplicitGradientPosition(resolved.position)
-        ? resolved.position
-        : center === undefined
-          ? null
-          : explicitGradientPosition(center);
-      const resolvedAngle = resolveAngleOrZero(resolved.angle, stage, context);
-      const angle = resolvedAngle.type === 'number'
-        ? angleLiteral(0)
-        : resolvedAngle.type === 'angle'
-          ? canonicalizeAngle(resolvedAngle)
-          : null;
-
-      return position === null || angle === null
-        ? null
-        : {
-          ...resolved,
-          angle,
-          position,
-          stops,
-        } as ExplicitConicGradient;
-    }
-    default:
-      return assertNever(resolved);
-  }
+function isExplicitLengthPercentage(value: LengthPercentageValue): value is ExplicitLengthPercentage {
+  return value.value instanceof PercentageLiteral || value.value instanceof LengthLiteral && value.value.unit === 'px';
 }
 
-function tryResolveExplicitGradientStops(
-  computed: GradientValue,
-  original: GradientValue,
-  stage: ValueStage,
-  context: GradientValueContext,
-): GradientStops<ExplicitGradientStopOffset> | null {
-  const stops = computed.stops as GradientStops<GradientStopOffset>;
-
-  stops[0].offsets ??= [defaultGradientStopOffset(0)];
-
-  const fixed = colorStopFixup(
-    stops,
-    computed as Gradient<GradientType, GradientStopOffset>,
-    ValueStage.Used,
-    {},
-  );
-
-  if (hasExplicitGradientStops(fixed, computed.gradientType)) {
-    return fixed as GradientStops<ExplicitGradientStopOffset>;
-  }
-
-  const used = resolveGradient(original, stage, context);
-
-  return hasExplicitGradientStops(used.stops, used.gradientType)
-    ? used.stops as GradientStops<ExplicitGradientStopOffset>
-    : null;
+function isExplicitGradientPosition(position: PositionValue): position is ExplicitGradientPosition {
+  return position.value.offsets !== undefined && position.value.offsets.every(isExplicitLengthPercentage);
 }
 
-export function isExplicitGradient(
-  value: GradientValue,
-): value is ExplicitGradient {
-  if (!hasExplicitGradientStops(value.stops, value.gradientType)) {
-    return false;
-  }
-
-  switch (value.gradientType) {
-    case 'linear':
-      return isCanonicalAngle(value.direction) &&
-        'lineLength' in value &&
-        isCanonicalLength(value.lineLength);
-    case 'radial':
-      return value.shape === 'ellipse' &&
-        value.size.type === 'radial-radii' &&
-        value.size.radii.length === 2 &&
-        value.size.radii.every(isExplicitLengthPercentage) &&
-        isExplicitGradientPosition(value.position);
-    case 'conic':
-      return isCanonicalAngle(value.angle) &&
-        isExplicitGradientPosition(value.position);
-    default:
-      return assertNever(value);
-  }
-}
-
-function hasExplicitGradientStops(
-  stops: GradientStops<GradientStopOffset>,
-  gradientType: GradientType,
-): boolean {
-  return hasComparableGradientStopOffsets(stops, gradientType) &&
-    stops.every((stop) => stop.type === 'color-hint' ||
-      stop.color.kind === ColorKind.Absolute && stop.offsets?.length === 1);
-}
-
-function isCanonicalAngle(
-  value: LinearGradientDirection | AngleValue | ZeroValue,
-): value is CanonicalAngleLiteral {
-  return value.type === 'angle' && value.unit === 'deg';
-}
-
-function isCanonicalLength(value: unknown): value is CanonicalLengthLiteral {
-  return typeof value === 'object' &&
-    value !== null &&
-    'type' in value &&
-    value.type === 'length' &&
-    'unit' in value &&
-    value.unit === 'px' &&
-    'value' in value &&
-    typeof value.value === 'number';
-}
-
-function isExplicitLengthPercentage(
-  value: LengthPercentageValue,
-): value is ExplicitLengthPercentageLiteral {
-  return value.type === 'percentage' ||
-    value.type === 'length' && value.unit === 'px';
-}
-
-function isExplicitGradientPosition(
-  value: PositionValue,
-): value is ExplicitGradientPosition {
-  return value.offsets !== undefined &&
-    value.offsets.every(isExplicitLengthPercentage);
-}
-
-function explicitGradientPosition(
-  center: RadialCenter,
-): ExplicitGradientPosition {
-  return {
-    type: 'position',
-    offsets: mapTuple(center, (offset) => lengthLiteral(offset)),
-  };
-}
-
-
-
-//  ██████  ████████ ████████  ████    ███    ██
-// ██    ██ ██       ██     ██  ██    ██ ██   ██
-// ██       ██       ██     ██  ██   ██   ██  ██
-//  ██████  ██████   ████████   ██  ██     ██ ██
-//       ██ ██       ██   ██    ██  █████████ ██
-// ██    ██ ██       ██    ██   ██  ██     ██ ██
-//  ██████  ████████ ██     ██ ████ ██     ██ ████████
-
-export function serializeGradient(value: GradientValue): string {
-  const name = `${value.repeating ? 'repeating-' : ''}${value.gradientType}-gradient`;
-  let prelude: string[];
-
-  switch (value.gradientType) {
-    case 'linear':
-      prelude = serializeLinearGradientPrelude(value);
-      break;
-    case 'radial':
-      prelude = serializeRadialGradientPrelude(value);
-      break;
-    case 'conic':
-      prelude = serializeConicGradientPrelude(value);
-      break;
-    default:
-      return assertNever(value);
-  }
-
-  const stops = value.gradientType === 'conic'
-    ? serializeGradientStops(value.stops, serializeAngularColorStopOffset)
-    : serializeGradientStops(value.stops, serializeLengthPercentage);
-  const body = prelude.length === 0
-    ? stops
-    : `${prelude.join(' ')}, ${stops}`;
-
-  return `${name}(${body})`;
-}
-
-function serializeLinearGradientPrelude(value: LinearGradient): string[] {
-  const prelude: string[] = [];
-
-  if (!isDefaultLinearGradientDirection(value.direction)) {
-    prelude.push(serializeLinearGradientDirection(value.direction));
-  }
-
-  if (!isDefaultGradientMethod(value.method, value.stops)) {
-    prelude.push(serializeColorInterpolationMethod(value.method));
-  }
-
-  return prelude;
-}
-
-function serializeLinearGradientDirection(
-  value: LinearGradientDirection,
-): string {
-  if (value.type === 'side-or-corner') {
-    return `to ${[value.horizontal, value.vertical]
-      .filter((side) => side !== undefined)
-      .join(' ')}`;
-  }
-
-  return value.type === 'number'
-    ? serializeNumber(value)
-    : serializeAngle(value);
-}
-
-function serializeRadialGradientPrelude(value: RadialGradient): string[] {
-  const prelude: string[] = [];
-
-  if (!isDefaultRadialGradientShape(value.shape, value.size)) {
-    prelude.push(value.shape);
-  }
-
-  if (!isDefaultRadialGradientSize(value.size)) {
-    prelude.push(value.size.type === 'radial-extent'
-      ? value.size.extents.join(' ')
-      : value.size.radii.map(serializeLengthPercentage).join(' '));
-  }
-
-  if (!isCenterPosition(value.position)) {
-    prelude.push(`at ${serializePosition(value.position)}`);
-  }
-
-  if (!isDefaultGradientMethod(value.method, value.stops)) {
-    prelude.push(serializeColorInterpolationMethod(value.method));
-  }
-
-  return prelude;
-}
-
-function serializeConicGradientPrelude(value: ConicGradient): string[] {
-  const prelude: string[] = [];
-
-  if (!isZeroAngle(value.angle)) {
-    prelude.push(`from ${value.angle.type === 'number'
-      ? serializeNumber(value.angle)
-      : serializeAngle(value.angle)}`);
-  }
-
-  if (!isCenterPosition(value.position)) {
-    prelude.push(`at ${serializePosition(value.position)}`);
-  }
-
-  if (!isDefaultGradientMethod(value.method, value.stops)) {
-    prelude.push(serializeColorInterpolationMethod(value.method));
-  }
-
-  return prelude;
-}
-
-function serializeGradientStops<
-  Offset extends GradientStopOffset,
->(
-  stops: GradientStops<Offset>,
-  serializeStopOffset: (
-    value: Offset,
-  ) => string,
-): string {
-  return stops.map((stop, index) => {
-    if (stop.type === 'color-hint') {
-      return serializeStopOffset(stop.offset);
-    }
-
-    const offsets = stop.offsets?.length === 1 &&
-      (index === 0 && isZeroGradientStopOffset(stop.offsets[0]) ||
-        index === stops.length - 1 &&
-        isFullGradientStopOffset(stop.offsets[0]))
-      ? []
-      : stop.offsets ?? [];
-
-    return [
-      serializeColorValue(stop.color),
-      ...offsets.map(serializeStopOffset),
-    ].join(' ');
-  })
-    .join(', ');
-}
-
-function serializeAngularColorStopOffset(
-  value: AngularColorStopOffset,
-): string {
-  return value.type === 'number'
-    ? serializeNumber(value)
-    : serializeAnglePercentage(value);
-}
-
-
-
-// ████ ██    ██ ████████ ████████ ████████  ████████   ███████  ██          ███    ████████ ████████
-//  ██  ███   ██    ██    ██       ██     ██ ██     ██ ██     ██ ██         ██ ██      ██    ██
-//  ██  ████  ██    ██    ██       ██     ██ ██     ██ ██     ██ ██        ██   ██     ██    ██
-//  ██  ██ ██ ██    ██    ██████   ████████  ████████  ██     ██ ██       ██     ██    ██    ██████
-//  ██  ██  ████    ██    ██       ██   ██   ██        ██     ██ ██       █████████    ██    ██
-//  ██  ██   ███    ██    ██       ██    ██  ██        ██     ██ ██       ██     ██    ██    ██
-// ████ ██    ██    ██    ████████ ██     ██ ██         ███████  ████████ ██     ██    ██    ████████
-
-export function interpolateGradients(
-  a: GradientValue,
-  b: GradientValue,
-  progress: number,
-  context: GradientValueContext = {},
-): ExplicitGradient {
-  const colorStopCountA = gradientColorStopCount(a.stops);
-  const colorStopCountB = gradientColorStopCount(b.stops);
-
-  if (a.gradientType !== b.gradientType ||
-    a.repeating !== b.repeating ||
-    !a.repeating && colorStopCountA !== colorStopCountB) {
-    // TODO: Return cross-fade() once image combinations are represented.
-    throw new InternalError('Gradient interpolation requires cross-fade()');
-  }
-
-  if (a.repeating && colorStopCountA !== colorStopCountB) {
-    throw new InternalError('TODO: Align repeating gradient stop lists before interpolation');
-  }
-
-  const explicitA = tryResolveExplicitGradient(a, ValueStage.Used, context);
-  const explicitB = tryResolveExplicitGradient(b, ValueStage.Used, context);
-
-  if (explicitA === null || explicitB === null) {
-    throw new InternalError('Gradient interpolation requires explicit used values');
-  }
-
-  if (usesMixedLengthPercentageStops(a) || usesMixedLengthPercentageStops(b)) {
-    return progress < 0.5 ? explicitA : explicitB;
-  }
-
-  if (explicitA.stops[0].offsets[0].type
-    !== explicitB.stops[0].offsets[0].type) {
-    return progress < 0.5 ? explicitA : explicitB;
-  }
-
-  switch (a.gradientType) {
-    case 'linear':
-      return interpolateLinearGradients(
-        a,
-        b as LinearGradient,
-        explicitA as ExplicitLinearGradient,
-        explicitB as ExplicitLinearGradient,
-        progress,
-        context,
-      );
-    case 'radial':
-      return interpolateRadialGradients(
-        explicitA as ExplicitRadialGradient,
-        explicitB as ExplicitRadialGradient,
-        progress,
-        context,
-      );
-    case 'conic':
-      // Images 4 omits conic gradients from its incomplete interpolation prose;
-      // apply the same component-wise model used for the other gradient forms.
-      return interpolateConicGradients(
-        explicitA as ExplicitConicGradient,
-        explicitB as ExplicitConicGradient,
-        progress,
-        context,
-      );
-    default:
-      return assertNever(a);
-  }
-}
-
-function interpolateLinearGradients(
-  originalA: LinearGradient,
-  originalB: LinearGradient,
-  a: ExplicitLinearGradient,
-  b: ExplicitLinearGradient,
-  progress: number,
-  context: GradientValueContext,
-): ExplicitLinearGradient {
-  let angleA = a.direction.value;
-  let angleB = b.direction.value;
-  const method = discreteGradientMethod(a.method, b.method, progress);
-
-  if (originalA.direction.type === 'side-or-corner' &&
-    originalB.direction.type === 'side-or-corner' &&
-    Math.abs(angleA - angleB) > 180) {
-    if (angleA < angleB) {
-      angleA += 360;
-    } else {
-      angleB += 360;
-    }
-  }
-
-  return {
-    ...a,
-    method,
-    direction: angleLiteral(interpolateNumber(angleA, angleB, progress)),
-    lineLength: lengthLiteral(interpolateNumber(
-      a.lineLength.value,
-      b.lineLength.value,
-      progress,
-    )),
-    stops: interpolateExplicitGradientStops(
-      a.stops,
-      b.stops,
-      method,
-      progress,
-      context,
-    ),
-  };
-}
-
-function interpolateRadialGradients(
-  a: ExplicitRadialGradient,
-  b: ExplicitRadialGradient,
-  progress: number,
-  context: GradientValueContext,
-): ExplicitRadialGradient {
-  const method = discreteGradientMethod(a.method, b.method, progress);
-
-  return {
-    ...a,
-    method,
-    size: {
-      type: 'radial-radii',
-      radii: interpolateLengthTuple(
-        a.size.radii,
-        b.size.radii,
-        progress,
-        context,
-      ),
-    },
-    position: interpolateExplicitGradientPosition(a.position, b.position, progress, context),
-    stops: interpolateExplicitGradientStops(
-      a.stops,
-      b.stops,
-      method,
-      progress,
-      context,
-    ),
-  };
-}
-
-function interpolateConicGradients(
-  a: ExplicitConicGradient,
-  b: ExplicitConicGradient,
-  progress: number,
-  context: GradientValueContext,
-): ExplicitConicGradient {
-  const method = discreteGradientMethod(a.method, b.method, progress);
-
-  return {
-    ...a,
-    method,
-    angle: angleLiteral(interpolateNumber(a.angle.value, b.angle.value, progress)),
-    position: interpolateExplicitGradientPosition(a.position, b.position, progress, context),
-    stops: interpolateExplicitGradientStops(
-      a.stops,
-      b.stops,
-      method,
-      progress,
-      context,
-    ),
-  };
+function explicitGradientPosition(center: RadialCenter): ExplicitGradientPosition {
+  return new PositionValue({ offsets: mapTuple(center, (offset) => new LengthPercentageValue(new LengthLiteral(offset, 'px'))) });
 }
 
 function interpolateExplicitGradientPosition(
@@ -1974,18 +1629,15 @@ function interpolateExplicitGradientPosition(
   progress: number,
   context: GradientValueContext,
 ): ExplicitGradientPosition {
-  return {
-    type: 'position',
-    offsets: interpolateLengthTuple(a.offsets, b.offsets, progress, context),
-  };
+  return new PositionValue({ offsets: interpolateLengthTuple(a.value.offsets, b.value.offsets, progress, context) });
 }
 
 function interpolateLengthTuple(
-  a: [ExplicitLengthPercentageLiteral, ExplicitLengthPercentageLiteral],
-  b: [ExplicitLengthPercentageLiteral, ExplicitLengthPercentageLiteral],
+  a: [ExplicitLengthPercentage, ExplicitLengthPercentage],
+  b: [ExplicitLengthPercentage, ExplicitLengthPercentage],
   progress: number,
   context: GradientValueContext,
-): [ExplicitLengthPercentageLiteral, ExplicitLengthPercentageLiteral] {
+): [ExplicitLengthPercentage, ExplicitLengthPercentage] {
   const boxSize = context.gradientBoxSize;
   const percentageBases = [boxSize?.width, boxSize?.height] as const;
 
@@ -2000,18 +1652,13 @@ function interpolateLengthTuple(
 }
 
 function interpolateExplicitLengthPercentage(
-  a: ExplicitLengthPercentageLiteral,
-  b: ExplicitLengthPercentageLiteral,
+  a: ExplicitLengthPercentage,
+  b: ExplicitLengthPercentage,
   progress: number,
   percentageBasis: number | undefined,
   context: GradientValueContext,
-): ExplicitLengthPercentageLiteral {
-  if (a.type === b.type) {
-    return {
-      ...a,
-      value: interpolateNumber(a.value, b.value, progress),
-    };
-  }
+): ExplicitLengthPercentage {
+  if (a.value.type === b.value.type) return interpolateExplicitGradientStopOffset(a, b, progress);
 
   if (percentageBasis === undefined) {
     throw new InternalError('Gradient interpolation requires a percentage basis');
@@ -2034,60 +1681,7 @@ function interpolateExplicitLengthPercentage(
     throw new InternalError('Gradient interpolation could not resolve its geometry');
   }
 
-  return lengthLiteral(interpolateNumber(resolvedA, resolvedB, progress));
-}
-
-function interpolateExplicitGradientStops<
-  Offset extends ExplicitGradientStopOffset,
->(
-  a: ExplicitGradientStops<Offset>,
-  b: ExplicitGradientStops<Offset>,
-  method: ColorInterpolationMethod,
-  progress: number,
-  context: GradientValueContext,
-): ExplicitGradientStops<Offset> {
-  if (a.length !== b.length) {
-    throw new InternalError('TODO: Define interpolation for unmatched gradient hints');
-  }
-
-  return mapTuple(a, (stop, index) => {
-    const other = b[index]!;
-
-    if (stop.type === 'color-hint' && other.type === 'color-hint') {
-      return {
-        type: 'color-hint',
-        offset: interpolateExplicitGradientStopOffset(
-          stop.offset,
-          other.offset,
-          progress,
-        ),
-      };
-    }
-
-    if (stop.type === 'color-stop' && other.type === 'color-stop') {
-      return {
-        type: 'color-stop',
-        color: (method.hue === undefined || method.hue === 'shorter') &&
-          areIdenticalAbsoluteColors(stop.color, other.color)
-          ? stop.color
-          : interpolateColors(
-            stop.color,
-            other.color,
-            progress,
-            method.space,
-            method.hue,
-            context,
-          ),
-        offsets: [interpolateExplicitGradientStopOffset(
-          stop.offsets[0],
-          other.offsets[0],
-          progress,
-        )],
-      };
-    }
-
-    throw new InternalError('TODO: Define interpolation for unmatched gradient hints');
-  }) as ExplicitGradientStops<Offset>;
+  return new LengthPercentageValue(new LengthLiteral(interpolateNumber(resolvedA, resolvedB, progress), 'px'));
 }
 
 function areIdenticalAbsoluteColors(a: AbsoluteColor, b: AbsoluteColor): boolean {
@@ -2099,21 +1693,23 @@ function areIdenticalAbsoluteColors(a: AbsoluteColor, b: AbsoluteColor): boolean
     a.components.every((component, index) => component === b.components[index]);
 }
 
-function interpolateExplicitGradientStopOffset<
-  Offset extends ExplicitGradientStopOffset,
->(
+function interpolateExplicitGradientStopOffset<Offset extends ExplicitGradientStopOffset>(
   a: Offset,
   b: Offset,
   progress: number,
 ): Offset {
-  if (a.type !== b.type) {
+  const first = a.value;
+  const second = b.value;
+  if (first.type !== second.type) {
     throw new InternalError('Explicit gradient stop offsets must use the same unit');
   }
 
-  return {
-    ...a,
-    value: interpolateNumber(a.value, b.value, progress),
-  };
+  const number = interpolateNumber(first.value, second.value, progress);
+  return (a instanceof AnglePercentageValue
+    ? new AnglePercentageValue(first instanceof PercentageLiteral
+      ? new PercentageLiteral(number) : new AngleLiteral(number, 'deg'))
+    : new LengthPercentageValue(first instanceof PercentageLiteral
+      ? new PercentageLiteral(number) : new LengthLiteral(number, 'px'))) as Offset;
 }
 
 function discreteGradientMethod(
@@ -2126,41 +1722,4 @@ function discreteGradientMethod(
 
 function interpolateNumber(a: number, b: number, progress: number): number {
   return (1 - progress) * a + progress * b;
-}
-
-function gradientColorStopCount(
-  stops: GradientStops<GradientStopOffset>,
-): number {
-  return stops.reduce((count, stop) => stop.type === 'color-hint'
-    ? count
-    : count + (stop.offsets?.length === 2 ? 2 : 1), 0);
-}
-
-function usesMixedLengthPercentageStops(value: GradientValue): boolean {
-  if (value.gradientType === 'conic') {
-    return false;
-  }
-
-  let hasLength = false;
-  let hasPercentage = false;
-
-  for (const stop of value.stops) {
-    const offsets = stop.type === 'color-hint'
-      ? [stop.offset]
-      : stop.offsets ?? [];
-
-    for (const offset of offsets) {
-      if (offset.type === 'math') {
-        return true;
-      }
-
-      if (offset.type === 'length') {
-        hasLength = true;
-      } else {
-        hasPercentage = true;
-      }
-    }
-  }
-
-  return hasLength && hasPercentage;
 }

@@ -1,12 +1,12 @@
 import { asciiLower } from '../../infra/ascii';
 
-import { isAnyValueContents, consumeAnyValue, type AnyValue } from './any-value';
 import { type TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
 import { adaptConsumer, withTrivia } from './component-grammar';
 import {
   isBraceBlock, isBracketBlock, isDelimToken, isFunctionBlock, isIdentToken, isParensBlock,
-  isTokenKind, isWhitespaceToken, type BraceBlock, type BracketBlock, type ComponentValue,
-  type FunctionBlock, type ParensBlock,
+  isTokenKind, isWhitespaceToken, isAnyValueContents, isAnyValueFunctionBlock,
+  type BraceBlock, type BracketBlock, type ComponentValue,
+  type FunctionBlock, type ParensBlock, type AnyValueFunctionBlock,
 } from './component-value';
 import { parseAsComponentGrammar } from './parser';
 import type {
@@ -19,6 +19,25 @@ import { TokenList } from './token-list';
 // =============================================================================
 // Consumer creators
 // =============================================================================
+
+/** Match an identifier case-insensitively and return the supplied keyword spelling. */
+export function createKeywordConsumer<const Keywords extends [string, ...string[]]>(
+  ...keywords: Keywords
+): TryConsumer<Keywords[number]> {
+  const normalized = keywords.map(
+    (keyword) => [asciiLower(keyword), keyword] as const,
+  );
+
+  return adaptConsumer(consumeIdentToken, (ident) => {
+    const value = asciiLower(ident.value);
+
+    for (const [text, keyword] of normalized) {
+      if (value === text) return keyword;
+    }
+
+    return null;
+  });
+}
 
 export type FunctionalNotationConsumerOptions<Context, ArgumentContext> = {
   contextForArguments: (context: Context) => ArgumentContext;
@@ -352,24 +371,16 @@ export function consumeFunctionBlock(c: TokenCursor): TryConsumerResult<Function
  * CSS Syntax represents the complete functional notation as a function block,
  * whether it ended with an explicit closing parenthesis or at EOF.
  */
-export type AnyValueFunctionBlock = FunctionBlock<AnyValue>;
-
 export function consumeAnyValueFunctionBlock(
   c: TokenCursor,
 ): TryConsumerResult<AnyValueFunctionBlock> {
-  return anyValueFunctionBlockConsumer(c);
+  const component = c.peek();
+
+  if (!isAnyValueFunctionBlock(component)) return null;
+
+  c.next();
+  return component;
 }
-
-const anyValueFunctionBlockConsumer = adaptConsumer(
-  consumeFunctionBlock,
-  (fn, context) => {
-    const value = parseAsComponentGrammar(fn.value, consumeAnyValue, context);
-
-    return value === null
-      ? null
-      : { ...fn, value };
-  },
-);
 
 // =============================================================================
 // Helpers

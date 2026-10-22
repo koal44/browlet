@@ -1,30 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import {
-  ColorKind, ColorRgba, SPACES, areColorsEquivalent, convertAbsoluteColor,
-  defineColorProfile, deltaE2000, deltaEOK,
-  gamutMapColor, interpolateColors, isLegacySrgbColor,
-  parseColorInterpolationMethod, parseColorValue, resolveColorValue,
-  serializeColorInterpolationMethod, serializeColorValue,
-  tryResolveAbsoluteColor,
+  ColorValue, ColorKind, ColorRgba, SPACES, defineColorProfile,
+  parseColorInterpolationMethod, serializeColorInterpolationMethod,
   type AbsoluteColor, type CustomColorSpace, type HueInterpolationMethod,
   type PredefinedAbsoluteColor, type SystemColorName,
 } from '../../../../src/stylelet/values/color';
+
+import { NumberValue } from '../../../../src/stylelet/values/number';
+import { PercentageValue } from '../../../../src/stylelet/values/percentage';
+import { AngleValue } from '../../../../src/stylelet/values/angle';
+import { MathValue } from '../../../../src/stylelet/values/math-value';
+import { NumberLiteral, PercentageLiteral, AngleLiteral } from '../../../../src/stylelet/values/numeric-literal/index';
 
 type ColorVector3 = [number, number, number];
 type ColorVector4 = [number, number, number, number];
 type ColorVector = ColorVector3 | ColorVector4;
 
 function promotedVariable(name: string) {
-  return {
-    type: 'math' as const,
-    calculation: {
-      type: 'variable' as const,
-      name,
-    },
-    valueType: 'number' as const,
-    promoted: true,
-  };
+  return new NumberValue(MathValue.fromVariable(name, 'number', {
+    numericVariables: new Map([[name, { valueType: 'number', value: undefined }]]),
+  }));
 }
 
 function isColorVector(value: unknown): value is ColorVector {
@@ -46,10 +42,10 @@ function expectColorCloseTo(
       expect(actual.alpha).toBeCloseTo(expected[3], 12);
     }
 
-    expect(deltaEOK(actual, {
+    expect(new ColorValue(actual).deltaEOK(new ColorValue({
       ...actual,
       components: [first, second, third],
-    })).toBeLessThan(0.001);
+    }))).toBeLessThan(0.001);
     return;
   }
 
@@ -59,7 +55,7 @@ function expectColorCloseTo(
     expect(actual.alpha).toBeCloseTo(expected.alpha, 12);
   }
 
-  expect(deltaEOK(actual, expected)).toBeLessThan(0.001);
+  expect(new ColorValue(actual).deltaEOK(new ColorValue(expected))).toBeLessThan(0.001);
 }
 
 function expectComponentsCloseTo(
@@ -77,10 +73,7 @@ function expectComponentsCloseTo(
 }
 
 function resolveComputedAbsoluteColor(input: string): AbsoluteColor {
-  const color = tryResolveAbsoluteColor(
-    parseColorValue(input, {})!,
-    ValueStage.Computed,
-  );
+  const color = ColorValue.parse(input, {})!.tryResolveAbsolute(ValueStage.Computed)?.value ?? null;
 
   if (color === null) {
     throw new TypeError('Expected an absolute computed color');
@@ -107,7 +100,7 @@ function testColorProfile() {
     },
     fromAbsoluteColor: (color) => {
       const [red = 0, green = 0, blue = 0] =
-        convertAbsoluteColor(color, 'srgb').components;
+        new ColorValue(color).convert('srgb').value.components;
 
       return [red, green, blue, 0.25];
     },
@@ -129,7 +122,7 @@ function swappedSrgbProfile() {
     }),
     fromAbsoluteColor: (color) => {
       const [red = 0, green = 0, blue = 0] =
-        convertAbsoluteColor(color, 'srgb').components;
+        new ColorValue(color).convert('srgb').value.components;
 
       return [green, red, blue];
     },
@@ -137,6 +130,18 @@ function swappedSrgbProfile() {
 }
 
 describe('color values', () => {
+  it('resolves a retained relative color with the context supplied to each call', () => {
+    const color = ColorValue.parse('rgb(from currentcolor r g b)', {})!;
+    const red = ColorValue.parse('rgb(255 0 0 / .25)', {})!.tryResolveAbsolute(ValueStage.Computed)!;
+    const blue = ColorValue.parse('rgb(0 0 255 / .75)', {})!.tryResolveAbsolute(ValueStage.Computed)!;
+
+    expect(color.tryResolveAbsolute(ValueStage.Used, { currentColor: red.value })!.value)
+      .toMatchObject({ components: [1, 0, 0], alpha: .25 });
+    expect(color.tryResolveAbsolute(ValueStage.Used, { currentColor: blue.value })!.value)
+      .toMatchObject({ components: [0, 0, 1], alpha: .75 });
+    expect(color.serialize()).toBe('rgb(from currentcolor r g b)');
+  });
+
   it.each([
     ['red', true],
     ['#f00', true],
@@ -147,24 +152,24 @@ describe('color values', () => {
     ['rgb(from red r g b)', false],
     ['lab(50 0 0)', false],
   ] as const)('classifies %s for legacy sRGB interpolation', (input, expected) => {
-    expect(isLegacySrgbColor(parseColorValue(input, {})!)).toBe(expected);
+    expect(ColorValue.parse(input, {})!.isLegacySrgb()).toBe(expected);
   });
 
   it('parses named colors case-insensitively', () => {
-    expect(parseColorValue('ReD', {})).toMatchObject({
+    expect(ColorValue.parse('ReD', {})?.value ?? null).toMatchObject({
       kind: ColorKind.Named,
       name: 'red',
     });
-    expect(parseColorValue('notacolor', {})).toBeNull();
-    expect(parseColorValue('constructor', {})).toBeNull();
+    expect(ColorValue.parse('notacolor', {})).toBeNull();
+    expect(ColorValue.parse('constructor', {})).toBeNull();
   });
 
   it('parses system colors case-insensitively', () => {
-    expect(parseColorValue('CanvasText', {})).toEqual({
+    expect(ColorValue.parse('CanvasText', {})?.value ?? null).toEqual({
       kind: ColorKind.System,
       name: 'canvastext',
     });
-    expect(parseColorValue('ACCENTcolortext', {})).toEqual({
+    expect(ColorValue.parse('ACCENTcolortext', {})?.value ?? null).toEqual({
       kind: ColorKind.System,
       name: 'accentcolortext',
     });
@@ -186,15 +191,15 @@ describe('color values', () => {
   ] as const)(
     'parses and resolves the deprecated color %s',
     (name, systemName) => {
-      const color = parseColorValue(name.toUpperCase(), {})!;
+      const color = ColorValue.parse(name.toUpperCase(), {})!.value;
 
       expect(color).toEqual({
         kind: ColorKind.Deprecated,
         name,
       });
-      expect(serializeColorValue(color)).toBe(name);
-      expect(resolveColorValue(color, ValueStage.Specified)).toBe(color);
-      expect(resolveColorValue(color, ValueStage.Computed)).toEqual({
+      expect(new ColorValue(color).serialize()).toBe(name);
+      expect(new ColorValue(color).resolve(ValueStage.Specified).value).toBe(color);
+      expect(new ColorValue(color).resolve(ValueStage.Computed).value).toEqual({
         kind: ColorKind.System,
         name: systemName,
       });
@@ -210,27 +215,27 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(resolveColorValue(parseColorValue('ActiveCaption', {})!, ValueStage.Computed, {
+    expect(ColorValue.parse('ActiveCaption', {})!.resolve(ValueStage.Computed, {
       systemColors: new Map<SystemColorName, AbsoluteColor>([['canvas', absolute]]),
-    })).toBe(absolute);
+    }).value).toBe(absolute);
   });
 
   it('parses transparent and currentcolor', () => {
-    expect(parseColorValue('transparent', {})).toEqual({
+    expect(ColorValue.parse('transparent', {})?.value ?? null).toEqual({
       kind: ColorKind.Named,
       name: 'transparent',
     });
-    expect(parseColorValue('CURRENTcolor', {})).toEqual({
+    expect(ColorValue.parse('CURRENTcolor', {})?.value ?? null).toEqual({
       kind: ColorKind.CurrentColor,
     });
   });
 
   it('resolves transparent to transparent black at computed-value time', () => {
-    const transparent = parseColorValue('transparent', {})!;
+    const transparent = ColorValue.parse('transparent', {})!.value;
 
-    expect(resolveColorValue(transparent, ValueStage.Specified))
+    expect(new ColorValue(transparent).resolve(ValueStage.Specified).value)
       .toBe(transparent);
-    expect(resolveColorValue(transparent, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(transparent).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 0, 0],
@@ -250,7 +255,7 @@ describe('color values', () => {
   ] as const)(
     'resolves the declared hex color %s',
     (text, components, alpha) => {
-      expect(parseColorValue(text, {})).toEqual({
+      expect(ColorValue.parse(text, {})?.value ?? null).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         components,
@@ -272,7 +277,7 @@ describe('color values', () => {
       '#ggg',
       '#12g',
     ]) {
-      expect(parseColorValue(text, {})).toBeNull();
+      expect(ColorValue.parse(text, {})).toBeNull();
     }
   });
 
@@ -286,7 +291,7 @@ describe('color values', () => {
     ['\\31 23', '#123'],
     ['12\\33 ', '#000123'],
   ])('parses the quirky color %s as %s', (input, hex) => {
-    expect(parseColorValue(input, {}, true)).toEqual(parseColorValue(hex, {}));
+    expect(ColorValue.parse(input, {}, true)?.value ?? null).toEqual(ColorValue.parse(hex, {})?.value ?? null);
   });
 
   it.each([
@@ -294,7 +299,7 @@ describe('color values', () => {
     '123',
     '1ab',
   ])('does not parse the quirky color %s unless enabled', (input) => {
-    expect(parseColorValue(input, {})).toBeNull();
+    expect(ColorValue.parse(input, {})).toBeNull();
   });
 
   it.each([
@@ -306,14 +311,14 @@ describe('color values', () => {
     '1e1',
     '12345g',
   ])('rejects the invalid quirky color %s', (input) => {
-    expect(parseColorValue(input, {}, true)).toBeNull();
+    expect(ColorValue.parse(input, {}, true)).toBeNull();
   });
 
   it('resolves named colors at computed-value time', () => {
-    const red = parseColorValue('red', {})!;
+    const red = ColorValue.parse('red', {})!.value;
 
-    expect(resolveColorValue(red, ValueStage.Specified)).toBe(red);
-    expect(resolveColorValue(red, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(red).resolve(ValueStage.Specified).value).toBe(red);
+    expect(new ColorValue(red).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [255, 0, 0],
@@ -331,24 +336,24 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     };
-    const current = parseColorValue('currentcolor', {})!;
-    const system = parseColorValue('CanvasText', {})!;
+    const current = ColorValue.parse('currentcolor', {})!.value;
+    const system = ColorValue.parse('CanvasText', {})!.value;
     const systemColors = new Map<SystemColorName, AbsoluteColor>([
       ['canvastext', absolute],
     ]);
 
-    expect(resolveColorValue(current, ValueStage.Computed, {
+    expect(new ColorValue(current).resolve(ValueStage.Computed, {
       currentColor: absolute,
-    })).toBe(current);
-    expect(resolveColorValue(current, ValueStage.Used, {
+    }).value).toBe(current);
+    expect(new ColorValue(current).resolve(ValueStage.Used, {
       currentColor: absolute,
-    })).toBe(absolute);
-    expect(resolveColorValue(system, ValueStage.Specified, {
+    }).value).toBe(absolute);
+    expect(new ColorValue(system).resolve(ValueStage.Specified, {
       systemColors,
-    })).toBe(system);
-    expect(resolveColorValue(system, ValueStage.Computed, {
+    }).value).toBe(system);
+    expect(new ColorValue(system).resolve(ValueStage.Computed, {
       systemColors,
-    })).toBe(absolute);
+    }).value).toBe(absolute);
   });
 
   it('tries to resolve a color to its absolute form', () => {
@@ -359,22 +364,14 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     };
-    const current = parseColorValue('currentcolor', {})!;
+    const current = ColorValue.parse('currentcolor', {})!.value;
 
-    expect(tryResolveAbsoluteColor(
-      current,
-      ValueStage.Computed,
-      { currentColor: absolute },
-    )).toBeNull();
-    expect(tryResolveAbsoluteColor(
-      current,
-      ValueStage.Used,
-      { currentColor: absolute },
-    )).toBe(absolute);
+    expect(new ColorValue(current).tryResolveAbsolute(ValueStage.Computed, { currentColor: absolute })).toBeNull();
+    expect(new ColorValue(current).tryResolveAbsolute(ValueStage.Used, { currentColor: absolute })?.value ?? null).toBe(absolute);
   });
 
   it('resolves legacy rgb and rgba functions to absolute sRGB', () => {
-    expect(parseColorValue('rgb(255, 0, 127)', {})).toEqual({
+    expect(ColorValue.parse('rgb(255, 0, 127)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [255, 0, 127],
@@ -382,7 +379,7 @@ describe('color values', () => {
       isLegacySrgb: true,
       is8Bit: true,
     });
-    expect(parseColorValue('rgba(255, 0, 127, 0)', {})).toEqual({
+    expect(ColorValue.parse('rgba(255, 0, 127, 0)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [255, 0, 127],
@@ -390,7 +387,7 @@ describe('color values', () => {
       isLegacySrgb: true,
       is8Bit: true,
     });
-    expect(parseColorValue('rgba(100%, 0%, 50%, 25%)', {})).toEqual({
+    expect(ColorValue.parse('rgba(100%, 0%, 50%, 25%)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0, 0.5],
@@ -400,14 +397,14 @@ describe('color values', () => {
   });
 
   it('resolves modern rgb and rgba functions to absolute sRGB', () => {
-    expect(parseColorValue('rgb(255 20% none / 0.5)', {})).toEqual({
+    expect(ColorValue.parse('rgb(255 20% none / 0.5)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0.2, undefined],
       alpha: 0.5,
       isLegacySrgb: true,
     });
-    expect(parseColorValue('rgba(none 0 100% / none)', {})).toEqual({
+    expect(ColorValue.parse('rgba(none 0 100% / none)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [undefined, 0, 1],
@@ -417,7 +414,7 @@ describe('color values', () => {
   });
 
   it('parses relative rgb component keywords only after an origin color', () => {
-    const color = parseColorValue('rgba(from red alpha g b / r)', {});
+    const color = ColorValue.parse('rgba(from red alpha g b / r)', {})?.value ?? null;
 
     expect(color).toMatchObject({
       kind: ColorKind.RgbFn,
@@ -433,32 +430,26 @@ describe('color values', () => {
         promotedVariable('r'),
       ],
     });
-    expect(serializeColorValue(color!))
+    expect(new ColorValue(color!).serialize())
       .toBe('rgb(from red alpha g b / r)');
-    expect(parseColorValue('rgb(r g b)', {})).toBeNull();
-    expect(parseColorValue('rgb(calc(r / 2) 0 0)', {})).toBeNull();
-    expect(parseColorValue('rgb(from red h g b)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(r g b)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(calc(r / 2) 0 0)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(from red h g b)', {})).toBeNull();
   });
 
   it('resolves relative rgb component keywords and math variables', () => {
-    const color = parseColorValue(
-      'rgb(from red calc(r / 2) g b / alpha)', {},
-    )!;
+    const color = ColorValue.parse('rgb(from red calc(r / 2) g b / alpha)', {})!.value;
 
     expect(color).toMatchObject({
       kind: ColorKind.RgbFn,
       components: [
-        {
-          type: 'math',
-          valueType: 'number',
-          promoted: false,
-        },
+        { value: { valueType: 'number', value: { promoted: false } } },
         promotedVariable('g'),
         promotedVariable('b'),
         promotedVariable('alpha'),
       ],
     });
-    expect(resolveColorValue(color, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(color).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0],
@@ -480,9 +471,7 @@ describe('color values', () => {
   });
 
   it('does not resolve relative colors before computed-value time', () => {
-    const declared = parseColorValue(
-      'rgb(from rgb(20%, 40%, 60%, 80%) r g b / alpha)', {},
-    )!;
+    const declared = ColorValue.parse('rgb(from rgb(20%, 40%, 60%, 80%) r g b / alpha)', {})!.value;
 
     expect(declared).toMatchObject({
       kind: ColorKind.RgbFn,
@@ -490,9 +479,9 @@ describe('color values', () => {
         kind: ColorKind.RgbFn,
       },
     });
-    expect(serializeColorValue(declared))
+    expect(new ColorValue(declared).serialize())
       .toBe('rgb(from rgb(20% 40% 60% / 80%) r g b / alpha)');
-    expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(declared).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.2, 0.4, 0.6],
@@ -502,14 +491,12 @@ describe('color values', () => {
   });
 
   it('resolves an alpha function used as another relative color origin', () => {
-    const declared = parseColorValue(
-      'rgb(from alpha(from red / 0.5) r g b / alpha)', {},
-    )!;
+    const declared = ColorValue.parse('rgb(from alpha(from red / 0.5) r g b / alpha)', {})!.value;
 
-    expect(serializeColorValue(declared)).toBe(
+    expect(new ColorValue(declared).serialize()).toBe(
       'rgb(from alpha(from red / 0.5) r g b / alpha)',
     );
-    expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(declared).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0, 0],
@@ -519,55 +506,43 @@ describe('color values', () => {
   });
 
   it('serializes origin functions without clamping or dropping explicit alpha', () => {
-    expect(serializeColorValue(parseColorValue(
-      'rgb(from rgba(300, -10, 20, 1) r g b)', {},
-    )!)).toBe('rgb(from rgb(300 -10 20 / 1) r g b)');
-    expect(serializeColorValue(parseColorValue(
-      'hsl(from hsla(0.5turn, 120%, -20%, 100%) h s l / alpha)', {},
-    )!)).toBe(
+    expect(ColorValue.parse('rgb(from rgba(300, -10, 20, 1) r g b)', {})!.serialize()).toBe('rgb(from rgb(300 -10 20 / 1) r g b)');
+    expect(ColorValue.parse('hsl(from hsla(0.5turn, 120%, -20%, 100%) h s l / alpha)', {})!.serialize()).toBe(
       'hsl(from hsl(180deg 120% -20% / 100%) h s l / alpha)',
     );
-    expect(serializeColorValue(parseColorValue(
-      'rgb(from color(xyz 120% -1 0 / 100%) r g b)', {},
-    )!)).toBe(
+    expect(ColorValue.parse('rgb(from color(xyz 120% -1 0 / 100%) r g b)', {})!.serialize()).toBe(
       'rgb(from color(xyz-d65 120% -1 0 / 100%) r g b)',
     );
   });
 
   it('canonicalizes specified hue angles without coercing hue numbers', () => {
-    const angles = parseColorValue(
-      'hsl(from hsl(.5turn 120% -20%) .5turn s l)', {},
-    );
+    const angles = ColorValue.parse('hsl(from hsl(.5turn 120% -20%) .5turn s l)', {})?.value ?? null;
     expect(angles).toHaveProperty(
       'origin.components.0',
-      { type: 'angle', value: 180, unit: 'deg' },
+      new AngleValue(new AngleLiteral(180, 'deg')),
     );
     expect(angles).toHaveProperty(
       'components.0',
-      { type: 'angle', value: 180, unit: 'deg' },
+      new AngleValue(new AngleLiteral(180, 'deg')),
     );
 
-    const numbers = parseColorValue(
-      'hsl(from hsl(.5 120% -20%) .5 s l)', {},
-    );
+    const numbers = ColorValue.parse('hsl(from hsl(.5 120% -20%) .5 s l)', {})?.value ?? null;
     expect(numbers).toHaveProperty(
       'origin.components.0',
-      { type: 'number', value: 0.5 },
+      new NumberValue(new NumberLiteral(0.5)),
     );
     expect(numbers).toHaveProperty(
       'components.0',
-      { type: 'number', value: 0.5 },
+      new NumberValue(new NumberLiteral(0.5)),
     );
   });
 
   it('resolves unit alpha omission while preserving it on origin functions', () => {
-    expect(parseColorValue('color(--custom 0 0 0 / 1)', {}))
+    expect(ColorValue.parse('color(--custom 0 0 0 / 1)', {})?.value ?? null)
       .toHaveProperty('components.3', undefined);
-    expect(parseColorValue(
-      'rgb(from color(--custom 0 0 0 / 1) r g b)', {},
-    )).toHaveProperty(
+    expect(ColorValue.parse('rgb(from color(--custom 0 0 0 / 1) r g b)', {})?.value ?? null).toHaveProperty(
       'origin.components.3',
-      { type: 'number', value: 1 },
+      new NumberValue(new NumberLiteral(1)),
     );
   });
 
@@ -619,15 +594,13 @@ describe('color values', () => {
   ] as const)(
     'serializes the declared relative color %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('resolves a relative currentcolor origin at used-value time', () => {
-    const declared = parseColorValue(
-      'rgb(from currentcolor g r b / alpha)', {},
-    )!;
-    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const declared = ColorValue.parse('rgb(from currentcolor g r b / alpha)', {})!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
     const currentColor = resolveComputedAbsoluteColor(
       'rgb(20% 40% 60% / 80%)',
     );
@@ -636,9 +609,9 @@ describe('color values', () => {
       kind: ColorKind.RgbFn,
       origin: { kind: ColorKind.CurrentColor },
     });
-    expect(resolveColorValue(computed, ValueStage.Used, {
+    expect(new ColorValue(computed).resolve(ValueStage.Used, {
       currentColor,
-    })).toEqual({
+    }).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.4, 0.2, 0.6],
@@ -648,9 +621,7 @@ describe('color values', () => {
   });
 
   it('preserves relative colors whose origin channels are unavailable', () => {
-    const declared = parseColorValue(
-      'rgb(from currentcolor 1 2 3)', {},
-    )!;
+    const declared = ColorValue.parse('rgb(from currentcolor 1 2 3)', {})!.value;
     const currentColor: AbsoluteColor = {
       kind: ColorKind.Absolute,
       space: { name: '--origin', keys: ['x'] },
@@ -658,11 +629,11 @@ describe('color values', () => {
       alpha: 0.4,
       isLegacySrgb: false,
     };
-    const resolved = resolveColorValue(declared, ValueStage.Used, {
+    const resolved = new ColorValue(declared).resolve(ValueStage.Used, {
       currentColor,
-    });
+    }).value;
 
-    expect(serializeColorValue(resolved)).toBe(
+    expect(new ColorValue(resolved).serialize()).toBe(
       'rgb(from color(--origin 0.2 / 0.4) 1 2 3 / 0.4)',
     );
   });
@@ -713,14 +684,14 @@ describe('color values', () => {
   });
 
   it('rejects invalid mixtures of legacy and modern rgb syntax', () => {
-    expect(parseColorValue('rgb(100%, 0, 50%)', {})).toBeNull();
-    expect(parseColorValue('rgb(none, 0, 0)', {})).toBeNull();
-    expect(parseColorValue('rgb(1 2)', {})).toBeNull();
-    expect(parseColorValue('rgb(1 2 3, 0.5)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(100%, 0, 50%)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(none, 0, 0)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(1 2)', {})).toBeNull();
+    expect(ColorValue.parse('rgb(1 2 3, 0.5)', {})).toBeNull();
   });
 
   it('accepts math functions wherever rgb accepts a numeric value', () => {
-    expect(parseColorValue('rgb(calc(50%) 0 calc(255 / 2) / calc(25%))', {}))
+    expect(ColorValue.parse('rgb(calc(50%) 0 calc(255 / 2) / calc(25%))', {})?.value ?? null)
       .not.toBeNull();
   });
 
@@ -737,38 +708,34 @@ describe('color values', () => {
   ] as const)(
     'serializes the deferred legacy RGB calculation %s in modern syntax',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('stores deferred legacy RGB in its serializable modern form', () => {
-    expect(parseColorValue(
-      'rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)', {},
-    )).toMatchObject({
+    expect(ColorValue.parse('rgb(calc(50% + (sign(1em - 10px) * 10%)), 0%, 0%, 50%)', {})?.value ?? null).toMatchObject({
       kind: ColorKind.RgbFn,
       useLegacySyntax: false,
       components: [
-        { type: 'math', valueType: 'number' },
-        { type: 'number', value: 0 },
-        { type: 'number', value: 0 },
-        { type: 'number', value: 0.5 },
+        { value: { valueType: 'number' } },
+        new NumberValue(new NumberLiteral(0)),
+        new NumberValue(new NumberLiteral(0)),
+        new NumberValue(new NumberLiteral(0.5)),
       ],
     });
   });
 
   it('clamps independent RGB components while preserving deferred math', () => {
-    const color = parseColorValue(
-      'rgb(128 300 calc(sign(1em - 10px)))', {},
-    )!;
+    const color = ColorValue.parse('rgb(128 300 calc(sign(1em - 10px)))', {})!.value;
 
-    expect(serializeColorValue(color))
+    expect(new ColorValue(color).serialize())
       .toBe('rgb(128 255 sign(1em - 10px))');
   });
 
   it('resolves color calculations as their value stage permits', () => {
     const input = 'rgb(calc(255 / 2) calc(50%) 0)';
 
-    expect(parseColorValue(input, {})).toEqual({
+    expect(ColorValue.parse(input, {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0.5, 0],
@@ -776,16 +743,16 @@ describe('color values', () => {
       isLegacySrgb: true,
     });
 
-    const deferred = parseColorValue(input, {
+    const deferred = ColorValue.parse(input, {
       unwrapMathAt: ValueStage.Computed,
-    })!;
+    })!.value;
 
     expect(deferred).toMatchObject({
       kind: ColorKind.RgbFn,
     });
-    expect(resolveColorValue(deferred, ValueStage.Declared, {
+    expect(new ColorValue(deferred).resolve(ValueStage.Declared, {
       unwrapMathAt: ValueStage.Declared,
-    })).toEqual({
+    }).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0.5, 0],
@@ -793,24 +760,22 @@ describe('color values', () => {
       isLegacySrgb: true,
     });
 
-    const declared = parseColorValue(
-      'rgb(calc(255 / 2) 0 0 / calc(.25 + .25))', {},
-    )!;
+    const declared = ColorValue.parse('rgb(calc(255 / 2) 0 0 / calc(.25 + .25))', {})!.value;
 
     expect(declared).toMatchObject({
       kind: ColorKind.RgbFn,
       useLegacySyntax: false,
     });
-    expect(resolveColorValue(declared, ValueStage.Declared, {
+    expect(new ColorValue(declared).resolve(ValueStage.Declared, {
       unwrapMathAt: ValueStage.Declared,
-    })).toEqual({
+    }).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0],
       alpha: 0.5,
       isLegacySrgb: true,
     });
-    expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(declared).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0],
@@ -820,16 +785,10 @@ describe('color values', () => {
   });
 
   it('matches the section 15.1 sRGB calculation examples', () => {
-    expect(serializeColorValue(
-      parseColorValue('rgb(calc(64 * 2) 127 255)', {})!,
-    )).toBe('rgb(128, 127, 255)');
-    expect(serializeColorValue(
-      parseColorValue('rgb(calc(100 * 4) 127 calc(20 - 35))', {})!,
-    )).toBe('rgb(255, 127, 0)');
+    expect(ColorValue.parse('rgb(calc(64 * 2) 127 255)', {})!.serialize()).toBe('rgb(128, 127, 255)');
+    expect(ColorValue.parse('rgb(calc(100 * 4) 127 calc(20 - 35))', {})!.serialize()).toBe('rgb(255, 127, 0)');
 
-    const hsl = parseColorValue(
-      'hsl(38.82 calc(2 * 50%) 50%)', {},
-    ) as AbsoluteColor;
+    const hsl = (ColorValue.parse('hsl(38.82 calc(2 * 50%) 50%)', {})?.value ?? null) as AbsoluteColor;
 
     expect(hsl).toMatchObject({
       space: SPACES.srgb,
@@ -844,7 +803,7 @@ describe('color values', () => {
   ] as const)(
     'does not apply legacy sRGB clamping to color(%s)',
     (space) => {
-      expect(parseColorValue(`color(${space} -0.25 1.5 0.75)`, {})).toEqual({
+      expect(ColorValue.parse(`color(${space} -0.25 1.5 0.75)`, {})?.value ?? null).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES[space],
         components: [-0.25, 1.5, 0.75],
@@ -855,29 +814,27 @@ describe('color values', () => {
   );
 
   it('parses legacy and modern device CMYK syntax', () => {
-    expect(parseColorValue('device-cmyk(0, .81, .81, .25)', {}))
+    expect(ColorValue.parse('device-cmyk(0, .81, .81, .25)', {})?.value ?? null)
       .toMatchObject({
         kind: ColorKind.DeviceCmykFn,
         useLegacySyntax: true,
         components: [
-          { type: 'number', value: 0 },
-          { type: 'number', value: 0.81 },
-          { type: 'number', value: 0.81 },
-          { type: 'number', value: 0.25 },
+          new NumberValue(new NumberLiteral(0)),
+          new NumberValue(new NumberLiteral(0.81)),
+          new NumberValue(new NumberLiteral(0.81)),
+          new NumberValue(new NumberLiteral(0.25)),
           undefined,
         ],
       });
-    expect(parseColorValue(
-      'device-cmyk(10% none 0.5 120% / 25%)', {},
-    )).toMatchObject({
+    expect(ColorValue.parse('device-cmyk(10% none 0.5 120% / 25%)', {})?.value ?? null).toMatchObject({
       kind: ColorKind.DeviceCmykFn,
       useLegacySyntax: false,
       components: [
-        { type: 'percentage', value: 10 },
+        new PercentageValue(new PercentageLiteral(10)),
         'none',
-        { type: 'number', value: 0.5 },
-        { type: 'percentage', value: 120 },
-        { type: 'number', value: 0.25 },
+        new NumberValue(new NumberLiteral(0.5)),
+        new PercentageValue(new PercentageLiteral(120)),
+        new NumberValue(new NumberLiteral(0.25)),
       ],
     });
   });
@@ -889,21 +846,16 @@ describe('color values', () => {
     'device-cmyk(0, 0, 0, 0 / 0.5)',
     'device-cmyk(0 0 0 0, 0.5)',
   ])('rejects invalid device CMYK syntax %s', (input) => {
-    expect(parseColorValue(input, {})).toBeNull();
+    expect(ColorValue.parse(input, {})).toBeNull();
   });
 
   it('resolves and serializes device CMYK without implicit conversion', () => {
-    const declared = parseColorValue(
-      'device-cmyk(-0.2 25% none 1.2 / 50%)', {},
-    )!;
+    const declared = ColorValue.parse('device-cmyk(-0.2 25% none 1.2 / 50%)', {})!.value;
 
-    expect(serializeColorValue(declared))
+    expect(new ColorValue(declared).serialize())
       .toBe('device-cmyk(-0.2 25% none 1.2 / 0.5)');
 
-    const computed = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-    );
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
@@ -915,7 +867,7 @@ describe('color values', () => {
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('device-cmyk(0 0.25 none 1 / 0.5)');
   });
 
@@ -934,7 +886,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     });
     expectComponentsCloseTo(computed.components, [0, 0.7, 0.2, 0], 12);
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('device-cmyk(0 0.7 0.2 0)');
   });
 
@@ -942,7 +894,7 @@ describe('color values', () => {
     const cmyk = resolveComputedAbsoluteColor(
       'device-cmyk(0 0.81 0.81 0.3 / 0.5)',
     );
-    const srgb = convertAbsoluteColor(cmyk, 'srgb');
+    const srgb = new ColorValue(cmyk).convert('srgb').value;
 
     expect(srgb).toMatchObject({
       kind: ColorKind.Absolute,
@@ -977,15 +929,8 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'device-cmyk(0.1 0.2 0.3 0.4 / 0.5)',
-      context,
-    )!;
-    const native = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      context,
-    );
+    const declared = ColorValue.parse('device-cmyk(0.1 0.2 0.3 0.4 / 0.5)', context)!.value;
+    const native = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     expect(native).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1002,7 +947,7 @@ describe('color values', () => {
       throw new TypeError('Expected an absolute computed color');
     }
 
-    const computed = convertAbsoluteColor(native, 'srgb', context);
+    const computed = new ColorValue(native).convert('srgb', context).value;
 
     expect(computed).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1016,7 +961,7 @@ describe('color values', () => {
   });
 
   it('parses and serializes the light-dark color production', () => {
-    const color = parseColorValue('LiGhT-DaRk(black, white)', {});
+    const color = ColorValue.parse('LiGhT-DaRk(black, white)', {})?.value ?? null;
 
     expect(color).toEqual({
       kind: ColorKind.LightDarkColor,
@@ -1029,7 +974,7 @@ describe('color values', () => {
         name: 'white',
       },
     });
-    expect(serializeColorValue(color!)).toBe('light-dark(black, white)');
+    expect(new ColorValue(color!).serialize()).toBe('light-dark(black, white)');
   });
 
   it.each([
@@ -1040,7 +985,7 @@ describe('color values', () => {
     'light-dark(red, blue, green)',
     'light-dark(red, url(dark.png))',
   ])('rejects invalid light-dark color syntax %s', (input) => {
-    expect(parseColorValue(input, {})).toBeNull();
+    expect(ColorValue.parse(input, {})).toBeNull();
   });
 
   it.each([
@@ -1049,54 +994,30 @@ describe('color values', () => {
   ] as const)(
     'resolves the %s light-dark color at computed-value time',
     (colorScheme, serialized) => {
-      const declared = parseColorValue('light-dark(white, black)', {})!;
+      const declared = ColorValue.parse('light-dark(white, black)', {})!.value;
 
-      expect(resolveColorValue(
-        declared,
-        ValueStage.Declared,
-        { colorScheme },
-      )).toEqual(declared);
-      expect(serializeColorValue(resolveColorValue(
-        declared,
-        ValueStage.Computed,
-        { colorScheme },
-      ))).toBe(serialized);
+      expect(new ColorValue(declared).resolve(ValueStage.Declared, { colorScheme }).value).toEqual(declared);
+      expect(new ColorValue(declared).resolve(ValueStage.Computed, { colorScheme }).serialize()).toBe(serialized);
     },
   );
 
   it('preserves light-dark until color-scheme context is available', () => {
-    const color = parseColorValue('light-dark(white, black)', {})!;
+    const color = ColorValue.parse('light-dark(white, black)', {})!.value;
 
-    expect(resolveColorValue(color, ValueStage.Computed)).toEqual(color);
-    expect(serializeColorValue(color)).toBe('light-dark(white, black)');
+    expect(new ColorValue(color).resolve(ValueStage.Computed).value).toEqual(color);
+    expect(new ColorValue(color).serialize()).toBe('light-dark(white, black)');
   });
 
   it('resolves nested light-dark colors using the same color scheme', () => {
-    const color = parseColorValue(
-      'light-dark(light-dark(white, red), red)', {},
-    )!;
+    const color = ColorValue.parse('light-dark(light-dark(white, red), red)', {})!.value;
 
-    expect(serializeColorValue(resolveColorValue(
-      color,
-      ValueStage.Computed,
-      { colorScheme: 'light' },
-    ))).toBe('rgb(255, 255, 255)');
-    expect(serializeColorValue(resolveColorValue(
-      color,
-      ValueStage.Computed,
-      { colorScheme: 'dark' },
-    ))).toBe('rgb(255, 0, 0)');
+    expect(new ColorValue(color).resolve(ValueStage.Computed, { colorScheme: 'light' }).serialize()).toBe('rgb(255, 255, 255)');
+    expect(new ColorValue(color).resolve(ValueStage.Computed, { colorScheme: 'dark' }).serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it('selects currentcolor without resolving it before the used stage', () => {
-    const declared = parseColorValue(
-      'light-dark(red, currentcolor)', {},
-    )!;
-    const computed = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      { colorScheme: 'dark' },
-    );
+    const declared = ColorValue.parse('light-dark(red, currentcolor)', {})!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed, { colorScheme: 'dark' }).value;
 
     expect(computed).toEqual({
       kind: ColorKind.CurrentColor,
@@ -1104,15 +1025,11 @@ describe('color values', () => {
 
     const currentColor = resolveComputedAbsoluteColor('blue');
 
-    expect(resolveColorValue(
-      computed,
-      ValueStage.Used,
-      { colorScheme: 'dark', currentColor },
-    )).toBe(currentColor);
+    expect(new ColorValue(computed).resolve(ValueStage.Used, { colorScheme: 'dark', currentColor }).value).toBe(currentColor);
   });
 
   it('parses and serializes the contrast color production', () => {
-    const color = parseColorValue('CoNtRaSt-CoLoR(rebeccapurple)', {});
+    const color = ColorValue.parse('CoNtRaSt-CoLoR(rebeccapurple)', {})?.value ?? null;
 
     expect(color).toEqual({
       kind: ColorKind.ContrastColorFn,
@@ -1121,7 +1038,7 @@ describe('color values', () => {
         name: 'rebeccapurple',
       },
     });
-    expect(serializeColorValue(color!))
+    expect(new ColorValue(color!).serialize())
       .toBe('contrast-color(rebeccapurple)');
   });
 
@@ -1135,7 +1052,7 @@ describe('color values', () => {
     'contrast-color(red, blue)',
     'contrast-color(red / 0.5)',
   ])('rejects invalid contrast color syntax %s', (input) => {
-    expect(parseColorValue(input, {})).toBeNull();
+    expect(ColorValue.parse(input, {})).toBeNull();
   });
 
   it.each([
@@ -1154,13 +1071,10 @@ describe('color values', () => {
   ])(
     'chooses the maximum WCAG 2.1 contrast for %s',
     (background, expected) => {
-      const color = parseColorValue(`contrast-color(${background})`, {})!;
+      const color = ColorValue.parse(`contrast-color(${background})`, {})!.value;
 
-      expect(resolveColorValue(color, ValueStage.Declared)).toEqual(color);
-      expect(serializeColorValue(resolveColorValue(
-        color,
-        ValueStage.Computed,
-      ))).toBe(expected);
+      expect(new ColorValue(color).resolve(ValueStage.Declared).value).toEqual(color);
+      expect(new ColorValue(color).resolve(ValueStage.Computed).serialize()).toBe(expected);
     },
   );
 
@@ -1172,66 +1086,49 @@ describe('color values', () => {
     (_position, offset, expected) => {
       const luminance = Math.sqrt(0.0525) - 0.05 + offset;
       const component = 1.055 * luminance ** (1 / 2.4) - 0.055;
-      const color = parseColorValue(
-        `contrast-color(color(srgb ${component} ${component} ${component}))`, {},
-      )!;
+      const color = ColorValue.parse(`contrast-color(color(srgb ${component} ${component} ${component}))`, {})!.value;
 
-      expect(serializeColorValue(resolveColorValue(
-        color,
-        ValueStage.Computed,
-      ))).toBe(expected);
+      expect(new ColorValue(color).resolve(ValueStage.Computed).serialize()).toBe(expected);
     },
   );
 
   it('preserves contrast color until its input can be resolved', () => {
-    const color = parseColorValue('contrast-color(currentcolor)', {})!;
-    const computed = resolveColorValue(color, ValueStage.Computed);
+    const color = ColorValue.parse('contrast-color(currentcolor)', {})!.value;
+    const computed = new ColorValue(color).resolve(ValueStage.Computed).value;
 
     expect(computed).toEqual(color);
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('contrast-color(currentcolor)');
 
     const currentColor = resolveComputedAbsoluteColor('white');
 
-    expect(serializeColorValue(resolveColorValue(
-      computed,
-      ValueStage.Used,
-      { currentColor },
-    ))).toBe('rgb(0, 0, 0)');
+    expect(new ColorValue(computed).resolve(ValueStage.Used, { currentColor }).serialize()).toBe('rgb(0, 0, 0)');
   });
 
   it('uses color profile context only when contrast resolution needs it', () => {
     const { profile } = testColorProfile();
-    const color = parseColorValue(
-      'contrast-color(color(--four-channel 1 1 1 0))', {},
-    )!;
+    const color = ColorValue.parse('contrast-color(color(--four-channel 1 1 1 0))', {})!.value;
 
-    expect(resolveColorValue(color, ValueStage.Computed))
+    expect(new ColorValue(color).resolve(ValueStage.Computed).value)
       .toMatchObject({ kind: ColorKind.ContrastColorFn });
-    expect(serializeColorValue(resolveColorValue(
-      color,
-      ValueStage.Computed,
-      { colorProfiles: new Map([[profile.space, profile]]) },
-    ))).toBe('rgb(0, 0, 0)');
+    expect(new ColorValue(color).resolve(ValueStage.Computed, { colorProfiles: new Map([[profile.space, profile]]) }).serialize()).toBe('rgb(0, 0, 0)');
   });
 
   it('parses and serializes custom color space parameters', () => {
-    const color = parseColorValue(
-      'color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)', {},
-    )!;
+    const color = ColorValue.parse('color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)', {})!.value;
 
     expect(color).toMatchObject({
       kind: ColorKind.CustomColorFn,
       space: '--four-channel',
       components: [
-        { type: 'number', value: 0.125 },
-        { type: 'number', value: 0.25 },
-        { type: 'number', value: 0.5 },
-        { type: 'number', value: 0.75 },
-        { type: 'number', value: 0.5 },
+        new NumberValue(new NumberLiteral(0.125)),
+        new NumberValue(new NumberLiteral(0.25)),
+        new NumberValue(new NumberLiteral(0.5)),
+        new NumberValue(new NumberLiteral(0.75)),
+        new NumberValue(new NumberLiteral(0.5)),
       ],
     });
-    expect(serializeColorValue(color))
+    expect(new ColorValue(color).serialize())
       .toBe('color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)');
   });
 
@@ -1240,14 +1137,7 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const custom = resolveColorValue(
-      parseColorValue(
-        'color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)',
-        context,
-      )!,
-      ValueStage.Computed,
-      context,
-    );
+    const custom = ColorValue.parse('color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)', context)!.resolve(ValueStage.Computed, context).value;
 
     expect(custom.kind).toBe(ColorKind.Absolute);
     expect(inputs).toEqual([]);
@@ -1256,9 +1146,9 @@ describe('color values', () => {
       throw new TypeError('Expected an absolute computed color');
     }
 
-    const converted = convertAbsoluteColor(custom, 'srgb', context);
+    const converted = new ColorValue(custom).convert('srgb', context).value;
 
-    expect(serializeColorValue(custom))
+    expect(new ColorValue(custom).serialize())
       .toBe('color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)');
     expect(converted).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1269,14 +1159,7 @@ describe('color values', () => {
     expectComponentsCloseTo(converted.components, [0.2, 0.4, 0.6], 12);
     expect(inputs).toHaveLength(1);
     expectComponentsCloseTo(inputs[0]!, [0.2, 0.4, 0.6, 0.8], 12);
-    expect(interpolateColors(
-      custom,
-      converted,
-      0.5,
-      'srgb',
-      'shorter',
-      context,
-    )).toEqual(converted);
+    expect(new ColorValue(custom).interpolate(new ColorValue(converted), 0.5, 'srgb', 'shorter', context).value).toEqual(converted);
   });
 
   it('converts a resolved custom color to an explicit target', () => {
@@ -1284,29 +1167,18 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)',
-      context,
-    )!;
+    const declared = ColorValue.parse('color(--four-channel 0.2 0.4 0.6 0.8 / 0.5)', context)!.value;
 
-    expect(resolveColorValue(
-      declared,
-      ValueStage.Declared,
-      context,
-    )).toEqual(declared);
+    expect(new ColorValue(declared).resolve(ValueStage.Declared, context).value).toEqual(declared);
     expect(inputs).toEqual([]);
 
-    const computed = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      context,
-    );
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     if (computed.kind !== ColorKind.Absolute) {
       throw new TypeError('Expected an absolute computed color');
     }
 
-    const resolved = convertAbsoluteColor(computed, 'srgb', context);
+    const resolved = new ColorValue(computed).convert('srgb', context).value;
 
     expect(resolved).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1321,16 +1193,13 @@ describe('color values', () => {
   });
 
   it('converts a resolved predefined color to an explicit target', () => {
-    const declared = parseColorValue('color(display-p3 0.2 0.4 0.6)', {})!;
-    const source = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-    );
+    const declared = ColorValue.parse('color(display-p3 0.2 0.4 0.6)', {})!.value;
+    const source = new ColorValue(declared).resolve(ValueStage.Computed).value;
     if (source.kind !== ColorKind.Absolute) {
       throw new TypeError('Expected an absolute computed color');
     }
 
-    const resolved = convertAbsoluteColor(source, 'srgb');
+    const resolved = new ColorValue(source).convert('srgb').value;
 
     expect(resolved).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1339,7 +1208,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     });
 
-    expect(resolved).toEqual(convertAbsoluteColor(source, 'srgb'));
+    expect(resolved).toEqual(new ColorValue(source).convert('srgb').value);
   });
 
   it('converts missing custom-space components as zero', () => {
@@ -1356,9 +1225,9 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(custom, 'srgb', {
+    expect(new ColorValue(custom).convert('srgb', {
       colorProfiles: new Map([[profile.space, profile]]),
-    })).toEqual({
+    }).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 0.4, 0.6],
@@ -1381,7 +1250,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(() => convertAbsoluteColor(custom, 'srgb'))
+    expect(() => new ColorValue(custom).convert('srgb').value)
       .toThrow('Cannot convert color space --missing');
   });
 
@@ -1390,11 +1259,8 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(--foo 0.6 0 0)',
-      context,
-    )!;
-    const color = resolveColorValue(declared, ValueStage.Computed, context);
+    const declared = ColorValue.parse('color(--foo 0.6 0 0)', context)!.value;
+    const color = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     expect(color).toMatchObject({
       kind: ColorKind.Absolute,
@@ -1411,7 +1277,7 @@ describe('color values', () => {
       expectComponentsCloseTo(color.components, [0.6, 0, 0], 12);
     }
 
-    expect(serializeColorValue(color)).toBe('color(--foo 0.6 0 0)');
+    expect(new ColorValue(color).serialize()).toBe('color(--foo 0.6 0 0)');
   });
 
   it('does not implicitly convert custom colors at later stages', () => {
@@ -1419,10 +1285,7 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)',
-      context,
-    )!;
+    const declared = ColorValue.parse('color(--four-channel 0.125 0.25 0.5 0.75 / 0.5)', context)!.value;
     const expected = {
       kind: ColorKind.Absolute,
       space: {
@@ -1434,9 +1297,9 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(resolveColorValue(declared, ValueStage.Used, context))
+    expect(new ColorValue(declared).resolve(ValueStage.Used, context).value)
       .toEqual(expected);
-    expect(resolveColorValue(declared, ValueStage.Actual, context))
+    expect(new ColorValue(declared).resolve(ValueStage.Actual, context).value)
       .toEqual(expected);
     expect(inputs).toEqual([]);
   });
@@ -1444,27 +1307,25 @@ describe('color values', () => {
   it('clamps custom profile components at computed-value time', () => {
     const { inputs, profile } = testColorProfile();
     const profiles = new Map([[profile.space, profile]]);
-    const declared = parseColorValue(
-      'color(--four-channel -0.25 125% 0.5 2)', {},
-    )!;
+    const declared = ColorValue.parse('color(--four-channel -0.25 125% 0.5 2)', {})!.value;
 
-    expect(resolveColorValue(declared, ValueStage.Declared, {
+    expect(new ColorValue(declared).resolve(ValueStage.Declared, {
       colorProfiles: profiles,
-    })).toMatchObject({
+    }).value).toMatchObject({
       kind: ColorKind.CustomColorFn,
       components: [
-        { type: 'number', value: -0.25 },
-        { type: 'number', value: 1.25 },
-        { type: 'number', value: 0.5 },
-        { type: 'number', value: 2 },
+        new NumberValue(new NumberLiteral(-0.25)),
+        new NumberValue(new NumberLiteral(1.25)),
+        new NumberValue(new NumberLiteral(0.5)),
+        new NumberValue(new NumberLiteral(2)),
         undefined,
       ],
     });
     expect(inputs).toEqual([]);
 
-    const computed = resolveColorValue(declared, ValueStage.Computed, {
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed, {
       colorProfiles: profiles,
-    });
+    }).value;
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
@@ -1476,7 +1337,7 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     });
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('color(--four-channel 0 1 0.5 1)');
     expect(inputs).toEqual([]);
   });
@@ -1487,22 +1348,8 @@ describe('color values', () => {
       colorProfiles: new Map([[profile.space, profile]]),
     };
 
-    const missing = resolveColorValue(
-      parseColorValue(
-        'color(--four-channel 0.125 0.25)',
-        context,
-      )!,
-      ValueStage.Computed,
-      context,
-    );
-    const excess = resolveColorValue(
-      parseColorValue(
-        'color(--four-channel 0.125 0.25 0.5 0.75 0.9)',
-        context,
-      )!,
-      ValueStage.Computed,
-      context,
-    );
+    const missing = ColorValue.parse('color(--four-channel 0.125 0.25)', context)!.resolve(ValueStage.Computed, context).value;
+    const excess = ColorValue.parse('color(--four-channel 0.125 0.25 0.5 0.75 0.9)', context)!.resolve(ValueStage.Computed, context).value;
 
     expect(missing).toEqual({
       kind: ColorKind.Absolute,
@@ -1532,15 +1379,8 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(--four-channel none 0.25)',
-      context,
-    )!;
-    const computed = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      context,
-    );
+    const declared = ColorValue.parse('color(--four-channel none 0.25)', context)!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
@@ -1552,7 +1392,7 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     });
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('color(--four-channel none 0.25 0 0)');
     expect(inputs).toEqual([]);
   });
@@ -1561,10 +1401,7 @@ describe('color values', () => {
     const { profile } = testColorProfile();
     const profiles = new Map([[profile.space, profile]]);
 
-    expect(parseColorValue(
-      'color(from red --four-channel r g b spot / alpha)',
-      { colorProfiles: profiles },
-    )).toBeNull();
+    expect(ColorValue.parse('color(from red --four-channel r g b spot / alpha)', { colorProfiles: profiles })).toBeNull();
 
     const alphaProfile = defineColorProfile({
       space: '--alpha-channel',
@@ -1582,12 +1419,9 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[alphaProfile.space, alphaProfile]]),
     };
-    const declared = parseColorValue(
-      'color(from red --alpha-channel alpha)',
-      context,
-    )!;
+    const declared = ColorValue.parse('color(from red --alpha-channel alpha)', context)!.value;
 
-    expect(resolveColorValue(declared, ValueStage.Computed, context)).toEqual({
+    expect(new ColorValue(declared).resolve(ValueStage.Computed, context).value).toEqual({
       kind: ColorKind.Absolute,
       space: {
         name: alphaProfile.space,
@@ -1604,12 +1438,9 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(from rgb(25.5 51 76.5 / 0.4) --four-channel '
-      + 'calc(r + 0.1) g b calc(spot * 2) / calc(r + 0.4))',
-      context,
-    )!;
-    const color = resolveColorValue(declared, ValueStage.Computed, context);
+    const declared = ColorValue.parse('color(from rgb(25.5 51 76.5 / 0.4) --four-channel '
+      + 'calc(r + 0.1) g b calc(spot * 2) / calc(r + 0.4))', context)!.value;
+    const color = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     expect(color).toEqual({
       kind: ColorKind.Absolute,
@@ -1621,7 +1452,7 @@ describe('color values', () => {
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(serializeColorValue(color))
+    expect(new ColorValue(color).serialize())
       .toBe('color(--four-channel 0.2 0.2 0.3 0.5 / 0.5)');
     expect(inputs).toEqual([]);
   });
@@ -1631,11 +1462,8 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(from red --four-channel calc(r + 1) g b spot)',
-      context,
-    )!;
-    const color = resolveColorValue(declared, ValueStage.Computed, context);
+    const declared = ColorValue.parse('color(from red --four-channel calc(r + 1) g b spot)', context)!.value;
+    const color = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     expect(color).toEqual({
       kind: ColorKind.Absolute,
@@ -1655,15 +1483,8 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const declared = parseColorValue(
-      'color(from currentcolor --four-channel 0.1 0.2 0.3 0.4 / 0.5)',
-      context,
-    )!;
-    const computed = resolveColorValue(
-      declared,
-      ValueStage.Computed,
-      context,
-    );
+    const declared = ColorValue.parse('color(from currentcolor --four-channel 0.1 0.2 0.3 0.4 / 0.5)', context)!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed, context).value;
 
     expect(computed).toMatchObject({
       kind: ColorKind.CustomColorFn,
@@ -1672,7 +1493,7 @@ describe('color values', () => {
         kind: ColorKind.CurrentColor,
       },
     });
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('color(from currentcolor --four-channel 0.1 0.2 0.3 0.4 / 0.5)');
     expect(inputs).toEqual([]);
   });
@@ -1702,10 +1523,7 @@ describe('color values', () => {
   ])(
     'resolves the relative color() WPT case %s',
     (input, space, components, alpha) => {
-      const color = resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      );
+      const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value;
 
       expect(color).toMatchObject({
         kind: ColorKind.Absolute,
@@ -1722,9 +1540,7 @@ describe('color values', () => {
   );
 
   it('serializes a deferred relative color() function', () => {
-    const color = parseColorValue(
-      'color(from currentColor display-p3 r g b / alpha)', {},
-    )!;
+    const color = ColorValue.parse('color(from currentColor display-p3 r g b / alpha)', {})!.value;
 
     expect(color).toMatchObject({
       kind: ColorKind.ColorFn,
@@ -1733,18 +1549,14 @@ describe('color values', () => {
         kind: ColorKind.CurrentColor,
       },
     });
-    expect(serializeColorValue(color))
+    expect(new ColorValue(color).serialize())
       .toBe('color(from currentcolor display-p3 r g b / alpha)');
   });
 
   it('scopes relative color() channel keywords to the selected profile', () => {
-    expect(parseColorValue('color(srgb r g b)', {})).toBeNull();
-    expect(parseColorValue(
-      'color(from red srgb x g b)', {},
-    )).toBeNull();
-    expect(parseColorValue(
-      'color(from red xyz r y z)', {},
-    )).toBeNull();
+    expect(ColorValue.parse('color(srgb r g b)', {})).toBeNull();
+    expect(ColorValue.parse('color(from red srgb x g b)', {})).toBeNull();
+    expect(ColorValue.parse('color(from red xyz r y z)', {})).toBeNull();
   });
 
   it.each<[string, keyof typeof SPACES, ColorVector3]>([
@@ -1771,7 +1583,7 @@ describe('color values', () => {
   ])(
     'matches the section 15 resolved color example %s',
     (input, space, components) => {
-      const color = parseColorValue(input, {});
+      const color = ColorValue.parse(input, {})?.value ?? null;
 
       expect(color).toMatchObject({
         kind: ColorKind.Absolute,
@@ -1789,7 +1601,7 @@ describe('color values', () => {
   );
 
   it('clamps rgb components at parsed-value time', () => {
-    expect(parseColorValue('rgb(300 -10 0 / 2)', {})).toEqual({
+    expect(ColorValue.parse('rgb(300 -10 0 / 2)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0, 0],
@@ -1822,9 +1634,9 @@ describe('color values', () => {
   ] as const)(
     'clamps special calculations in the computed color %s',
     (input, isLegacySrgb, expected) => {
-      const declared = parseColorValue(input, {})!;
+      const declared = ColorValue.parse(input, {})!.value;
 
-      expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+      expect(new ColorValue(declared).resolve(ValueStage.Computed).value).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         ...expected,
@@ -1884,11 +1696,11 @@ describe('color values', () => {
   ] as const)(
     'clamps special color calculations at the correct stage for %s',
     (input, declaredSerialization, computedSerialization) => {
-      const declared = parseColorValue(input, {})!;
-      const computed = resolveColorValue(declared, ValueStage.Computed);
+      const declared = ColorValue.parse(input, {})!.value;
+      const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
 
-      expect(serializeColorValue(declared)).toBe(declaredSerialization);
-      expect(serializeColorValue(computed))
+      expect(new ColorValue(declared).serialize()).toBe(declaredSerialization);
+      expect(new ColorValue(computed).serialize())
         .toBe(computedSerialization);
     },
   );
@@ -1905,9 +1717,9 @@ describe('color values', () => {
   ] as const)(
     'preserves missing components in the computed color %s',
     (input, components, alpha) => {
-      const declared = parseColorValue(input, {})!;
+      const declared = ColorValue.parse(input, {})!.value;
 
-      expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+      expect(new ColorValue(declared).resolve(ValueStage.Computed).value).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES.srgb,
         components,
@@ -1918,14 +1730,14 @@ describe('color values', () => {
   );
 
   it('resolves legacy hsl and hsla functions to absolute sRGB', () => {
-    expect(parseColorValue('hsl(120, 100%, 50%)', {})).toEqual({
+    expect(ColorValue.parse('hsl(120, 100%, 50%)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 1,
       isLegacySrgb: true,
     });
-    expect(parseColorValue('hsla(0.5turn, 25%, 75%, 20%)', {})).toEqual({
+    expect(ColorValue.parse('hsla(0.5turn, 25%, 75%, 20%)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.6875, 0.8125, 0.8125],
@@ -1935,14 +1747,14 @@ describe('color values', () => {
   });
 
   it('resolves modern HSL without missing components to absolute sRGB', () => {
-    expect(parseColorValue('hsl(120deg 100% 50 / 0.5)', {})).toEqual({
+    expect(ColorValue.parse('hsl(120deg 100% 50 / 0.5)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
       isLegacySrgb: true,
     });
-    expect(parseColorValue('hsla(none 0 100% / none)', {})).toEqual({
+    expect(ColorValue.parse('hsla(none 0 100% / none)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hsl,
       components: [undefined, 0, 100],
@@ -1952,7 +1764,7 @@ describe('color values', () => {
   });
 
   it('parses relative HSL component keywords only after an origin color', () => {
-    const color = parseColorValue('hsla(from red alpha s l / h)', {});
+    const color = ColorValue.parse('hsla(from red alpha s l / h)', {})?.value ?? null;
 
     expect(color).toMatchObject({
       kind: ColorKind.HslFn,
@@ -1968,11 +1780,11 @@ describe('color values', () => {
         promotedVariable('h'),
       ],
     });
-    expect(serializeColorValue(color!))
+    expect(new ColorValue(color!).serialize())
       .toBe('hsl(from red alpha s l / h)');
-    expect(parseColorValue('hsl(h s l)', {})).toBeNull();
-    expect(parseColorValue('hsl(calc(h + 180) 0 0)', {})).toBeNull();
-    expect(parseColorValue('hsl(from red r s l)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(h s l)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(calc(h + 180) 0 0)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(from red r s l)', {})).toBeNull();
   });
 
   it('resolves relative HSL component keywords and math variables', () => {
@@ -1996,7 +1808,7 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     });
-    expect(serializeColorValue(color)).toBe('hsl(none 20% 50%)');
+    expect(new ColorValue(color).serialize()).toBe('hsl(none 20% 50%)');
   });
 
   it.each([
@@ -2011,7 +1823,7 @@ describe('color values', () => {
   ] as const)(
     'preserves missing HSL components in %s',
     (input, components, alpha) => {
-      expect(parseColorValue(input, {})).toEqual({
+      expect(ColorValue.parse(input, {})?.value ?? null).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES.hsl,
         components,
@@ -2022,14 +1834,14 @@ describe('color values', () => {
   );
 
   it('rejects invalid mixtures of legacy and modern hsl syntax', () => {
-    expect(parseColorValue('hsl(120, 100, 50%)', {})).toBeNull();
-    expect(parseColorValue('hsl(none, 100%, 50%)', {})).toBeNull();
-    expect(parseColorValue('hsl(120 100%)', {})).toBeNull();
-    expect(parseColorValue('hsl(120 100% 50%, 0.5)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(120, 100, 50%)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(none, 100%, 50%)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(120 100%)', {})).toBeNull();
+    expect(ColorValue.parse('hsl(120 100% 50%, 0.5)', {})).toBeNull();
   });
 
   it('accepts math functions wherever hsl accepts a numeric value', () => {
-    expect(parseColorValue('hsl(calc(0.5turn) calc(50%) calc(25) / calc(20%))', {}))
+    expect(ColorValue.parse('hsl(calc(0.5turn) calc(50%) calc(25) / calc(20%))', {})?.value ?? null)
       .not.toBeNull();
   });
 
@@ -2046,21 +1858,19 @@ describe('color values', () => {
   ] as const)(
     'serializes the deferred legacy HSL calculation %s in modern syntax',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('stores deferred HSL in its canonical serializable form', () => {
-    expect(parseColorValue(
-      'hsl(.5turn, calc(50% + (sign(1em - 10px) * 10%)), 25%, 50%)', {},
-    )).toMatchObject({
+    expect(ColorValue.parse('hsl(.5turn, calc(50% + (sign(1em - 10px) * 10%)), 25%, 50%)', {})?.value ?? null).toMatchObject({
       kind: ColorKind.HslFn,
       useLegacySyntax: false,
       components: [
-        { type: 'number', value: 180 },
-        { type: 'math', valueType: 'percentage' },
-        { type: 'percentage', value: 25 },
-        { type: 'number', value: 0.5 },
+        new NumberValue(new NumberLiteral(180)),
+        { value: { valueType: 'percentage' } },
+        new PercentageValue(new PercentageLiteral(25)),
+        new NumberValue(new NumberLiteral(0.5)),
       ],
     });
   });
@@ -2069,7 +1879,7 @@ describe('color values', () => {
     'hsl(120 -10% 50%)',
     'hsl(120 -10 50)',
   ])('clamps negative hsl saturation at parsed-value time for %s', (input) => {
-    expect(parseColorValue(input, {})).toEqual({
+    expect(ColorValue.parse(input, {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0.5, 0.5],
@@ -2085,20 +1895,20 @@ describe('color values', () => {
     ['hsl(-300 100% 37.5%)', [0.75, 0.75, 0]],
   ])('normalizes the hue in %s', (input, expected) => {
     expectColorCloseTo(
-      parseColorValue(input, {}) as AbsoluteColor,
+      (ColorValue.parse(input, {})?.value ?? null) as AbsoluteColor,
       expected,
     );
   });
 
   it('resolves HWB without missing components to absolute sRGB', () => {
-    expect(parseColorValue('hwb(120deg 20% 30 / 0.5)', {})).toEqual({
+    expect(ColorValue.parse('hwb(120deg 20% 30 / 0.5)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.2, 0.7, 0.2],
       alpha: 0.5,
       isLegacySrgb: true,
     });
-    expect(parseColorValue('hwb(none 0 100% / none)', {})).toEqual({
+    expect(ColorValue.parse('hwb(none 0 100% / none)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [undefined, 0, 100],
@@ -2108,7 +1918,7 @@ describe('color values', () => {
   });
 
   it('parses relative HWB component keywords only after an origin color', () => {
-    const color = parseColorValue('hwb(from red alpha w b / h)', {});
+    const color = ColorValue.parse('hwb(from red alpha w b / h)', {})?.value ?? null;
 
     expect(color).toMatchObject({
       kind: ColorKind.HwbFn,
@@ -2123,10 +1933,10 @@ describe('color values', () => {
         promotedVariable('h'),
       ],
     });
-    expect(serializeColorValue(color!))
+    expect(new ColorValue(color!).serialize())
       .toBe('hwb(from red alpha w b / h)');
-    expect(parseColorValue('hwb(h w b)', {})).toBeNull();
-    expect(parseColorValue('hwb(from red r w b)', {})).toBeNull();
+    expect(ColorValue.parse('hwb(h w b)', {})).toBeNull();
+    expect(ColorValue.parse('hwb(from red r w b)', {})).toBeNull();
   });
 
   it('resolves relative HWB component keywords and math variables', () => {
@@ -2139,15 +1949,15 @@ describe('color values', () => {
   });
 
   it('rejects invalid hwb syntax', () => {
-    expect(parseColorValue('hwba(120 20% 30%)', {})).toBeNull();
-    expect(parseColorValue('hwb(120, 20%, 30%)', {})).toBeNull();
-    expect(parseColorValue('hwb(120 20%)', {})).toBeNull();
-    expect(parseColorValue('hwb(120 20% 30% 0.5)', {})).toBeNull();
-    expect(parseColorValue('hwb(120 20% 30% /)', {})).toBeNull();
+    expect(ColorValue.parse('hwba(120 20% 30%)', {})).toBeNull();
+    expect(ColorValue.parse('hwb(120, 20%, 30%)', {})).toBeNull();
+    expect(ColorValue.parse('hwb(120 20%)', {})).toBeNull();
+    expect(ColorValue.parse('hwb(120 20% 30% 0.5)', {})).toBeNull();
+    expect(ColorValue.parse('hwb(120 20% 30% /)', {})).toBeNull();
   });
 
   it('accepts math functions wherever hwb accepts a numeric value', () => {
-    expect(parseColorValue('hwb(calc(0.5turn) calc(20%) calc(30) / calc(50%))', {}))
+    expect(ColorValue.parse('hwb(calc(0.5turn) calc(20%) calc(30) / calc(50%))', {})?.value ?? null)
       .not.toBeNull();
   });
 
@@ -2164,20 +1974,18 @@ describe('color values', () => {
   ] as const)(
     'serializes the deferred HWB calculation %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('stores deferred HWB percentage channels as percentages', () => {
-    expect(parseColorValue(
-      'hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)', {},
-    )).toMatchObject({
+    expect(ColorValue.parse('hwb(calc(110deg + (sign(1em - 10px) * 10deg)) 30% 50% / 50%)', {})?.value ?? null).toMatchObject({
       kind: ColorKind.HwbFn,
       components: [
-        { type: 'math', valueType: 'angle' },
-        { type: 'percentage', value: 30 },
-        { type: 'percentage', value: 50 },
-        { type: 'number', value: 0.5 },
+        { value: { valueType: 'angle' } },
+        new PercentageValue(new PercentageLiteral(30)),
+        new PercentageValue(new PercentageLiteral(50)),
+        new NumberValue(new NumberLiteral(0.5)),
       ],
     });
   });
@@ -2186,7 +1994,7 @@ describe('color values', () => {
     ['hwb(45 40% 60%)', 0.4],
     ['hwb(45 40% 80%)', 1 / 3],
   ])('normalizes achromatic white and black in %s', (input, gray) => {
-    expect(parseColorValue(input, {})).toEqual({
+    expect(ColorValue.parse(input, {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [gray, gray, gray],
@@ -2201,7 +2009,7 @@ describe('color values', () => {
     ['hwb(30 -10% 20%)', [0.8, 0.35, -0.1]],
     ['hwb(30 20% -10%)', [1.1, 0.65, 0.2]],
   ])('preserves finite negative components in %s', (input, components) => {
-    const color = parseColorValue(input, {});
+    const color = ColorValue.parse(input, {})?.value ?? null;
 
     expect(color).toMatchObject({
       kind: ColorKind.Absolute,
@@ -2218,7 +2026,7 @@ describe('color values', () => {
   });
 
   it('preserves missing HWB components outside interpolation', () => {
-    expect(parseColorValue('hwb(none none 100%)', {})).toEqual({
+    expect(ColorValue.parse('hwb(none none 100%)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [undefined, undefined, 100],
@@ -2240,7 +2048,7 @@ describe('color values', () => {
   ] as const)(
     'preserves missing HWB components in %s',
     (input, components, alpha) => {
-      expect(parseColorValue(input, {})).toEqual({
+      expect(ColorValue.parse(input, {})?.value ?? null).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES.hwb,
         components,
@@ -2251,14 +2059,14 @@ describe('color values', () => {
   );
 
   it('resolves lab and oklab functions to absolute colors', () => {
-    expect(parseColorValue('lab(50% 20 -30% / 0.4)', {})).toEqual({
+    expect(ColorValue.parse('lab(50% 20 -30% / 0.4)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.lab,
       components: [50, 20, -37.5],
       alpha: 0.4,
       isLegacySrgb: false,
     });
-    expect(parseColorValue('oklab(none 0.1 -20% / none)', {})).toEqual({
+    expect(ColorValue.parse('oklab(none 0.1 -20% / none)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
       components: [undefined, 0.1, -0.08],
@@ -2274,7 +2082,7 @@ describe('color values', () => {
     'parses relative %s component keywords only after an origin color',
     (name, kind) => {
       const input = `${name}(from red alpha a b / l)`;
-      const color = parseColorValue(input, {});
+      const color = ColorValue.parse(input, {})?.value ?? null;
 
       expect(color).toMatchObject({
         kind,
@@ -2289,9 +2097,9 @@ describe('color values', () => {
           promotedVariable('l'),
         ],
       });
-      expect(serializeColorValue(color!)).toBe(input);
-      expect(parseColorValue(`${name}(l a b)`, {})).toBeNull();
-      expect(parseColorValue(`${name}(from red r a b)`, {})).toBeNull();
+      expect(new ColorValue(color!).serialize()).toBe(input);
+      expect(ColorValue.parse(`${name}(l a b)`, {})).toBeNull();
+      expect(ColorValue.parse(`${name}(from red r a b)`, {})).toBeNull();
     },
   );
 
@@ -2322,14 +2130,14 @@ describe('color values', () => {
   );
 
   it('resolves lch and oklch functions to absolute colors', () => {
-    expect(parseColorValue('lch(50 40% 270deg / 25%)', {})).toEqual({
+    expect(ColorValue.parse('lch(50 40% 270deg / 25%)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.lch,
       components: [50, 60, 270],
       alpha: 0.25,
       isLegacySrgb: false,
     });
-    expect(parseColorValue('oklch(none 0.2 none)', {})).toEqual({
+    expect(ColorValue.parse('oklch(none 0.2 none)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklch,
       components: [undefined, 0.2, undefined],
@@ -2345,7 +2153,7 @@ describe('color values', () => {
     'parses relative %s component keywords only after an origin color',
     (name, kind) => {
       const input = `${name}(from red alpha c h / l)`;
-      const color = parseColorValue(input, {});
+      const color = ColorValue.parse(input, {})?.value ?? null;
 
       expect(color).toMatchObject({
         kind,
@@ -2360,9 +2168,9 @@ describe('color values', () => {
           promotedVariable('l'),
         ],
       });
-      expect(serializeColorValue(color!)).toBe(input);
-      expect(parseColorValue(`${name}(l c h)`, {})).toBeNull();
-      expect(parseColorValue(`${name}(from red l a h)`, {})).toBeNull();
+      expect(new ColorValue(color!).serialize()).toBe(input);
+      expect(ColorValue.parse(`${name}(l c h)`, {})).toBeNull();
+      expect(ColorValue.parse(`${name}(from red l a h)`, {})).toBeNull();
     },
   );
 
@@ -2406,7 +2214,7 @@ describe('color values', () => {
 
   it('parses alpha functions and scopes the alpha component keyword', () => {
     const input = 'alpha(from currentcolor / alpha)';
-    const color = parseColorValue(input, {});
+    const color = ColorValue.parse(input, {})?.value ?? null;
 
     expect(color).toMatchObject({
       kind: ColorKind.AlphaFn,
@@ -2415,11 +2223,11 @@ describe('color values', () => {
       },
       components: [promotedVariable('alpha')],
     });
-    expect(serializeColorValue(color!)).toBe(input);
-    expect(parseColorValue('alpha()', {})).toBeNull();
-    expect(parseColorValue('alpha(red / 0.5)', {})).toBeNull();
-    expect(parseColorValue('alpha(from red 0.5)', {})).toBeNull();
-    expect(parseColorValue('alpha(from red / r)', {})).toBeNull();
+    expect(new ColorValue(color!).serialize()).toBe(input);
+    expect(ColorValue.parse('alpha()', {})).toBeNull();
+    expect(ColorValue.parse('alpha(red / 0.5)', {})).toBeNull();
+    expect(ColorValue.parse('alpha(from red 0.5)', {})).toBeNull();
+    expect(ColorValue.parse('alpha(from red / r)', {})).toBeNull();
   });
 
   it('replaces, inherits, and removes alpha without changing color components', () => {
@@ -2449,9 +2257,9 @@ describe('color values', () => {
   });
 
   it('clamps alpha and uses the origin color processing space', () => {
-    expect(serializeColorValue(resolveComputedAbsoluteColor(
+    expect(new ColorValue(resolveComputedAbsoluteColor(
       'alpha(from red)',
-    ))).toBe('color(srgb 1 0 0)');
+    )).serialize()).toBe('color(srgb 1 0 0)');
     expect(resolveComputedAbsoluteColor('alpha(from red / 2)')).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
@@ -2468,23 +2276,23 @@ describe('color values', () => {
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(serializeColorValue(translucent))
+    expect(new ColorValue(translucent).serialize())
       .toBe('color(srgb 1 0 0 / 0.5)');
     expect(resolveComputedAbsoluteColor('alpha(from red / -1)'))
       .toEqual({ ...translucent, alpha: 0 });
-    expect(serializeColorValue(resolveComputedAbsoluteColor(
+    expect(new ColorValue(resolveComputedAbsoluteColor(
       'alpha(from hsl(120 20% 50%) / 0.5)',
-    ))).toBe('color(srgb 0.4 0.6 0.4 / 0.5)');
-    expect(serializeColorValue(resolveComputedAbsoluteColor(
+    )).serialize()).toBe('color(srgb 0.4 0.6 0.4 / 0.5)');
+    expect(new ColorValue(resolveComputedAbsoluteColor(
       'alpha(from hsl(none 20% 50%) / 0.5)',
-    ))).toBe('hsl(none 20% 50% / 0.5)');
+    )).serialize()).toBe('hsl(none 20% 50% / 0.5)');
   });
 
   it('rejects invalid Lab-family syntax', () => {
-    expect(parseColorValue('lab(50%, 0, 0)', {})).toBeNull();
-    expect(parseColorValue('oklab(0.5 0)', {})).toBeNull();
-    expect(parseColorValue('lch(50 20 30 0.5)', {})).toBeNull();
-    expect(parseColorValue('oklch(0.5 0.2 30 /)', {})).toBeNull();
+    expect(ColorValue.parse('lab(50%, 0, 0)', {})).toBeNull();
+    expect(ColorValue.parse('oklab(0.5 0)', {})).toBeNull();
+    expect(ColorValue.parse('lch(50 20 30 0.5)', {})).toBeNull();
+    expect(ColorValue.parse('oklch(0.5 0.2 30 /)', {})).toBeNull();
   });
 
   it('accepts math functions throughout Lab-family colors', () => {
@@ -2493,7 +2301,7 @@ describe('color values', () => {
       'oklab(calc(0.5) calc(10%) calc(-0.1))',
       'lch(calc(50%) calc(20) calc(90deg))',
       'oklch(calc(0.5) calc(20%) calc(0.25turn) / calc(0.5))',
-    ].map((input) => parseColorValue(input, {}));
+    ].map((input) => (ColorValue.parse(input, {})?.value ?? null));
 
     expect(colors).not.toContain(null);
   });
@@ -2508,7 +2316,7 @@ describe('color values', () => {
   ] as const)(
     'resolves the bounded components of %s',
     (input, space, components, alpha) => {
-      expect(parseColorValue(input, {})).toEqual({
+      expect(ColorValue.parse(input, {})?.value ?? null).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES[space],
         components,
@@ -2538,7 +2346,7 @@ describe('color values', () => {
   ])(
     'resolves independent Lab-family components while preserving math in %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -2575,10 +2383,7 @@ describe('color values', () => {
   ] as const)(
     'resolves calculated components in the computed color %s',
     (input, space, components, alpha) => {
-      expect(resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      )).toEqual({
+      expect(ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value).toEqual({
         kind: ColorKind.Absolute,
         space: SPACES[space],
         components,
@@ -2603,33 +2408,31 @@ describe('color values', () => {
     ] as const;
 
     for (const space of spaces) {
-      expect(parseColorValue(`color(${space} 0 0 0)`, {})).toMatchObject({
+      expect(ColorValue.parse(`color(${space} 0 0 0)`, {})?.value ?? null).toMatchObject({
         kind: ColorKind.Absolute,
         space: SPACES[space === 'xyz' ? 'xyz-d65' : space],
         isLegacySrgb: false,
       });
     }
 
-    expect(parseColorValue('color(DISPLAY-P3 0 0 0)', {})).toMatchObject({
+    expect(ColorValue.parse('color(DISPLAY-P3 0 0 0)', {})?.value ?? null).toMatchObject({
       space: SPACES['display-p3'],
     });
   });
 
   it('canonicalizes xyz while retaining deferred components', () => {
-    const color = parseColorValue(
-      'color(xyz calc(sign(1em - 1px)) 0 0)', {},
-    )!;
+    const color = ColorValue.parse('color(xyz calc(sign(1em - 1px)) 0 0)', {})!.value;
 
     expect(color).toMatchObject({
       kind: ColorKind.ColorFn,
       space: 'xyz-d65',
     });
-    expect(serializeColorValue(color))
+    expect(new ColorValue(color).serialize())
       .toBe('color(xyz-d65 sign(1em - 1px) 0 0)');
   });
 
   it('resolves color function components and alpha', () => {
-    expect(parseColorValue('color(display-p3 1 50% none / 25%)', {})).toEqual({
+    expect(ColorValue.parse('color(display-p3 1 50% none / 25%)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES['display-p3'],
       components: [1, 0.5, undefined],
@@ -2637,7 +2440,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     });
 
-    expect(parseColorValue('color(xyz-d50 none 0.5 120% / none)', {})).toEqual({
+    expect(ColorValue.parse('color(xyz-d50 none 0.5 120% / none)', {})?.value ?? null).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES['xyz-d50'],
       components: [undefined, 0.5, 1.2],
@@ -2647,7 +2450,7 @@ describe('color values', () => {
   });
 
   it('retains out-of-range color function components', () => {
-    expect(parseColorValue('color(prophoto-rgb -0.2 1.4 120% / 2)', {}))
+    expect(ColorValue.parse('color(prophoto-rgb -0.2 1.4 120% / 2)', {})?.value ?? null)
       .toEqual({
         kind: ColorKind.Absolute,
         space: SPACES['prophoto-rgb'],
@@ -2658,28 +2461,26 @@ describe('color values', () => {
   });
 
   it('rejects invalid color function syntax', () => {
-    expect(parseColorValue('color(srgb 0 0)', {})).toBeNull();
-    expect(parseColorValue('color(srgb 0 0 0 0)', {})).toBeNull();
-    expect(parseColorValue('color(srgb, 0, 0, 0)', {})).toBeNull();
-    expect(parseColorValue('color(profoto-rgb 0 0 0)', {})).toBeNull();
-    expect(parseColorValue('color(srgb 0 0 0 /)', {})).toBeNull();
+    expect(ColorValue.parse('color(srgb 0 0)', {})).toBeNull();
+    expect(ColorValue.parse('color(srgb 0 0 0 0)', {})).toBeNull();
+    expect(ColorValue.parse('color(srgb, 0, 0, 0)', {})).toBeNull();
+    expect(ColorValue.parse('color(profoto-rgb 0 0 0)', {})).toBeNull();
+    expect(ColorValue.parse('color(srgb 0 0 0 /)', {})).toBeNull();
   });
 
   it('accepts math functions throughout color()', () => {
-    expect(parseColorValue(
-      'color(display-p3 calc(0.5) calc(25%) none / calc(40%))', {},
-    )).not.toBeNull();
+    expect(ColorValue.parse('color(display-p3 calc(0.5) calc(25%) none / calc(40%))', {})?.value ?? null).not.toBeNull();
   });
 
   it('parses color-mix() with its optional interpolation method', () => {
-    expect(parseColorValue('color-mix(red)', {})).toMatchObject({
+    expect(ColorValue.parse('color-mix(red)', {})?.value ?? null).toMatchObject({
       kind: ColorKind.ColorMixFn,
       items: [
         { color: { kind: ColorKind.Named, name: 'red' } },
       ],
     });
 
-    expect(parseColorValue('color-mix(red, blue)', {})).toEqual({
+    expect(ColorValue.parse('color-mix(red, blue)', {})?.value ?? null).toEqual({
       kind: ColorKind.ColorMixFn,
       method: undefined,
       items: [
@@ -2694,28 +2495,26 @@ describe('color values', () => {
       ],
     });
 
-    expect(parseColorValue(
-      'color-mix(in lch longer hue, red 25%, 75% blue, green)', {},
-    )).toEqual({
+    expect(ColorValue.parse('color-mix(in lch longer hue, red 25%, 75% blue, green)', {})?.value ?? null).toEqual({
       kind: ColorKind.ColorMixFn,
       method: { space: 'lch', hue: 'longer' },
       items: [
         {
           color: { kind: ColorKind.Named, name: 'red' },
-          percentage: { type: 'percentage', value: 25 },
+          percentage: new PercentageValue(new PercentageLiteral(25)),
         },
         {
           color: { kind: ColorKind.Named, name: 'blue' },
-          percentage: { type: 'percentage', value: 75 },
+          percentage: new PercentageValue(new PercentageLiteral(75)),
         },
         {
           color: { kind: ColorKind.Named, name: 'green' },
-          percentage: { type: 'percentage', value: 0 },
+          percentage: new PercentageValue(new PercentageLiteral(0)),
         },
       ],
     });
 
-    expect(parseColorValue('color-mix(red calc(50%), blue)', {})).not.toBeNull();
+    expect(ColorValue.parse('color-mix(red calc(50%), blue)', {})?.value ?? null).not.toBeNull();
   });
 
   it.each([
@@ -2747,7 +2546,7 @@ describe('color values', () => {
   ])(
     'stores the canonical declared mix %s',
     (input, method, percentages) => {
-      const value = parseColorValue(input, {});
+      const value = ColorValue.parse(input, {})?.value ?? null;
 
       expect(value?.kind).toBe(ColorKind.ColorMixFn);
       if (value?.kind !== ColorKind.ColorMixFn) {
@@ -2755,15 +2554,15 @@ describe('color values', () => {
       }
       expect(value.method).toEqual(method);
       expect(value.items.map(({ percentage }) =>
-        percentage === undefined || percentage.type === 'math'
+        percentage === undefined || percentage.value instanceof MathValue
           ? undefined
-          : percentage.value
+          : percentage.value.value
       )).toEqual(percentages);
     },
   );
 
   it('parses nested color-mix() values', () => {
-    expect(parseColorValue('color-mix(red, color-mix(blue, green))', {}))
+    expect(ColorValue.parse('color-mix(red, color-mix(blue, green))', {})?.value ?? null)
       .toMatchObject({
         kind: ColorKind.ColorMixFn,
         items: [
@@ -2815,7 +2614,7 @@ describe('color values', () => {
       'color-mix(currentcolor, rgb(255, 255, 255))',
     ],
   ])('serializes the declared color mix %s', (input, expected) => {
-    expect(serializeColorValue(parseColorValue(input, {})!)).toBe(expected);
+    expect(ColorValue.parse(input, {})!.serialize()).toBe(expected);
   });
 
   it.each([
@@ -2827,16 +2626,16 @@ describe('color values', () => {
     'color-mix(red 101%, blue)',
     'color-mix(red 20% 30%, blue)',
   ])('rejects the invalid color mix %s', (input) => {
-    expect(parseColorValue(input, {})).toBeNull();
+    expect(ColorValue.parse(input, {})).toBeNull();
   });
 
   it('calculates color-mix() at computed-value time', () => {
-    const declared = parseColorValue('color-mix(in srgb, red, blue)', {})!;
+    const declared = ColorValue.parse('color-mix(in srgb, red, blue)', {})!.value;
 
     expect(declared).toMatchObject({
       kind: ColorKind.ColorMixFn,
     });
-    expect(resolveColorValue(declared, ValueStage.Computed)).toEqual({
+    expect(new ColorValue(declared).resolve(ValueStage.Computed).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0.5],
@@ -2859,21 +2658,21 @@ describe('color values', () => {
     expect(hsl.space).toBe(SPACES.srgb);
     expect(hwb.space).toBe(SPACES.srgb);
     expect(missing.space).toBe(SPACES.hsl);
-    expect(serializeColorValue(hsl)).toMatch(/^color\(srgb /);
-    expect(serializeColorValue(hwb)).toMatch(/^color\(srgb /);
-    expect(serializeColorValue(missing)).toBe('hsl(none 50% 50%)');
+    expect(new ColorValue(hsl).serialize()).toMatch(/^color\(srgb /);
+    expect(new ColorValue(hwb).serialize()).toMatch(/^color\(srgb /);
+    expect(new ColorValue(missing).serialize()).toBe('hsl(none 50% 50%)');
   });
 
   it('produces different results in different mixing color spaces', () => {
-    const lch = convertAbsoluteColor(resolveComputedAbsoluteColor(
+    const lch = new ColorValue(resolveComputedAbsoluteColor(
       'color-mix(in lch, white, black)',
-    ), 'lch');
-    const xyz = convertAbsoluteColor(resolveComputedAbsoluteColor(
+    )).convert('lch').value;
+    const xyz = new ColorValue(resolveComputedAbsoluteColor(
       'color-mix(in xyz, white, black)',
-    ), 'lch');
-    const srgb = convertAbsoluteColor(resolveComputedAbsoluteColor(
+    )).convert('lch').value;
+    const srgb = new ColorValue(resolveComputedAbsoluteColor(
       'color-mix(in srgb, white, black)',
-    ), 'lch');
+    )).convert('lch').value;
 
     expect(lch.components[0]).toBeCloseTo(50, 8);
     expect(xyz.components[0]).toBeCloseTo(76, 0);
@@ -2885,7 +2684,7 @@ describe('color values', () => {
       'color-mix(in xyz, rgb(82.02% 30.21% 35.02%) 75.23%,'
       + ' rgb(5.64% 55.94% 85.31%))',
     );
-    const rendered = convertAbsoluteColor(computed, 'srgb');
+    const rendered = new ColorValue(computed).convert('srgb').value;
 
     expect(computed.space.name).toBe('xyz-d65');
     expectComponentsCloseTo(
@@ -2946,12 +2745,10 @@ describe('color values', () => {
   });
 
   it('mixes any number of colors in order', () => {
-    const computed = resolveColorValue(parseColorValue(
-      'color-mix('
+    const computed = ColorValue.parse('color-mix('
       + 'oklab(.3 .1 .1),'
       + 'oklab(.6 .2 .2),'
-      + 'oklab(.9 .3 .3))', {},
-    )!, ValueStage.Computed);
+      + 'oklab(.9 .3 .3))', {})!.resolve(ValueStage.Computed).value;
 
     expect(computed.kind).toBe(ColorKind.Absolute);
 
@@ -2965,9 +2762,7 @@ describe('color values', () => {
   });
 
   it('converts a sole mix item and applies its alpha multiplier', () => {
-    const computed = resolveColorValue(parseColorValue(
-      'color-mix(in oklab, red 30%)', {},
-    )!, ValueStage.Computed);
+    const computed = ColorValue.parse('color-mix(in oklab, red 30%)', {})!.resolve(ValueStage.Computed).value;
 
     expect(computed).toMatchObject({
       kind: ColorKind.Absolute,
@@ -2983,9 +2778,7 @@ describe('color values', () => {
   });
 
   it('carries missing components through color-mix()', () => {
-    const computed = resolveColorValue(parseColorValue(
-      'color-mix(in srgb, rgb(none 0 0), rgb(100% 100% 0))', {},
-    )!, ValueStage.Computed);
+    const computed = ColorValue.parse('color-mix(in srgb, rgb(none 0 0), rgb(100% 100% 0))', {})!.resolve(ValueStage.Computed).value;
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
@@ -2997,10 +2790,8 @@ describe('color values', () => {
   });
 
   it('resolves other color-mix() items while preserving currentcolor', () => {
-    const declared = parseColorValue(
-      'color-mix(in srgb, currentcolor, blue)', {},
-    )!;
-    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const declared = ColorValue.parse('color-mix(in srgb, currentcolor, blue)', {})!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
 
     expect(computed).toMatchObject({
       kind: ColorKind.ColorMixFn,
@@ -3009,21 +2800,18 @@ describe('color values', () => {
         { color: { kind: ColorKind.Absolute, space: SPACES.srgb } },
       ],
     });
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('color-mix(in srgb, currentcolor, rgb(0, 0, 255))');
 
-    const currentColor = resolveColorValue(
-      parseColorValue('red', {})!,
-      ValueStage.Computed,
-    );
+    const currentColor = ColorValue.parse('red', {})!.resolve(ValueStage.Computed).value;
 
     if (currentColor.kind !== ColorKind.Absolute) {
       throw new TypeError('Expected an absolute current color');
     }
 
-    expect(resolveColorValue(computed, ValueStage.Used, {
+    expect(new ColorValue(computed).resolve(ValueStage.Used, {
       currentColor,
-    })).toEqual({
+    }).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.5, 0, 0.5],
@@ -3033,22 +2821,18 @@ describe('color values', () => {
   });
 
   it('completes mix percentages after resolving calculated percentages', () => {
-    const computed = resolveColorValue(parseColorValue(
-      'color-mix(in srgb, currentcolor calc(25%), blue)', {},
-    )!, ValueStage.Computed);
+    const computed = ColorValue.parse('color-mix(in srgb, currentcolor calc(25%), blue)', {})!.resolve(ValueStage.Computed).value;
 
-    expect(serializeColorValue(computed)).toBe(
+    expect(new ColorValue(computed).serialize()).toBe(
       'color-mix('
       + 'in srgb, currentcolor 25%, rgb(0, 0, 255) 75%)',
     );
   });
 
   it('resolves other colors in nested color-mix() around currentcolor', () => {
-    const declared = parseColorValue(
-      'color-mix(in srgb, '
-      + 'color-mix(in srgb, currentcolor, red), white)', {},
-    )!;
-    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const declared = ColorValue.parse('color-mix(in srgb, '
+      + 'color-mix(in srgb, currentcolor, red), white)', {})!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
     const currentColor = resolveComputedAbsoluteColor('blue');
 
     expect(computed.kind).toBe(ColorKind.ColorMixFn);
@@ -3063,14 +2847,14 @@ describe('color values', () => {
     expect(inner.items[0].color).toEqual({
       kind: ColorKind.CurrentColor,
     });
-    expect(serializeColorValue(computed)).toBe(
+    expect(new ColorValue(computed).serialize()).toBe(
       'color-mix(in srgb, '
       + 'color-mix(in srgb, currentcolor, rgb(255, 0, 0)), '
       + 'rgb(255, 255, 255))',
     );
-    expect(resolveColorValue(computed, ValueStage.Used, {
+    expect(new ColorValue(computed).resolve(ValueStage.Used, {
       currentColor,
-    })).toEqual({
+    }).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0.75, 0.5, 0.75],
@@ -3080,23 +2864,19 @@ describe('color values', () => {
   });
 
   it('preserves color-mix() while a percentage remains deferred', () => {
-    const computed = resolveColorValue(parseColorValue(
-      'color-mix(red calc(50% + sign(1em - 1px) * 10%), blue)', {},
-    )!, ValueStage.Computed);
+    const computed = ColorValue.parse('color-mix(red calc(50% + sign(1em - 1px) * 10%), blue)', {})!.resolve(ValueStage.Computed).value;
 
     expect(computed).toMatchObject({
       kind: ColorKind.ColorMixFn,
       items: [
-        { percentage: { type: 'math', valueType: 'percentage' } },
+        { percentage: { value: { valueType: 'percentage' } } },
         { percentage: undefined },
       ],
     });
   });
 
   it('clamps calculated mix percentages before normalization', () => {
-    const computed = resolveColorValue(parseColorValue(
-      'color-mix(in srgb, red calc(200%), blue 100%)', {},
-    )!, ValueStage.Computed);
+    const computed = ColorValue.parse('color-mix(in srgb, red calc(200%), blue 100%)', {})!.resolve(ValueStage.Computed).value;
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
@@ -3181,11 +2961,8 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const color = parseColorValue(
-      'color-mix(in --four-channel, red 25%, blue 75%)',
-      context,
-    )!;
-    const result = resolveColorValue(color, ValueStage.Computed, context);
+    const color = ColorValue.parse('color-mix(in --four-channel, red 25%, blue 75%)', context)!.value;
+    const result = new ColorValue(color).resolve(ValueStage.Computed, context).value;
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
@@ -3204,13 +2981,10 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const color = parseColorValue(
-      'color-mix(in --four-channel, ' +
+    const color = ColorValue.parse('color-mix(in --four-channel, ' +
       'color(--four-channel 1 0 0 0 / 0.5), ' +
-      'color(--four-channel 0 0 1 1))',
-      context,
-    )!;
-    const result = resolveColorValue(color, ValueStage.Computed, context);
+      'color(--four-channel 0 0 1 1))', context)!.value;
+    const result = new ColorValue(color).resolve(ValueStage.Computed, context).value;
 
     expect(result.kind).toBe(ColorKind.Absolute);
     if (result.kind !== ColorKind.Absolute) {
@@ -3229,13 +3003,10 @@ describe('color values', () => {
     const context = {
       colorProfiles: new Map([[profile.space, profile]]),
     };
-    const color = parseColorValue(
-      'color-mix(in --four-channel, ' +
+    const color = ColorValue.parse('color-mix(in --four-channel, ' +
       'color(--four-channel none 0 0 0), ' +
-      'color(--four-channel 1 0 0 0))',
-      context,
-    )!;
-    const result = resolveColorValue(color, ValueStage.Computed, context);
+      'color(--four-channel 1 0 0 0))', context)!.value;
+    const result = new ColorValue(color).resolve(ValueStage.Computed, context).value;
 
     expect(result).toMatchObject({
       kind: ColorKind.Absolute,
@@ -3262,20 +3033,20 @@ describe('color values', () => {
     ];
 
     for (const [input, serialized] of cases) {
-      const color = parseColorValue(input, {});
+      const color = ColorValue.parse(input, {})?.value ?? null;
 
       expect(color).not.toBeNull();
-      expect(serializeColorValue(color!)).toBe(serialized);
+      expect(new ColorValue(color!).serialize()).toBe(serialized);
     }
   });
 
   // Section 16.2.1 HTML-compatible serialization of sRGB values.
   it('serializes opaque 8-bit sRGB colors in hexadecimal notation', () => {
-    const color = parseColorValue('#ff00ff', {})!;
+    const color = ColorValue.parse('#ff00ff', {})!.value;
 
-    expect(serializeColorValue(color, true))
+    expect(new ColorValue(color).serialize(true))
       .toBe('#ff00ff');
-    expect(serializeColorValue(color)).toBe('rgb(255, 0, 255)');
+    expect(new ColorValue(color).serialize()).toBe('rgb(255, 0, 255)');
   });
 
   it.each([
@@ -3289,18 +3060,13 @@ describe('color values', () => {
   ] as const)(
     'serializes %s as %s in HTML-compatible mode',
     (input, serialized) => {
-      expect(serializeColorValue(
-        parseColorValue(input, {})!,
-        true,
-      )).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize(true)).toBe(serialized);
     },
   );
 
   it('preserves percentage RGB encoding while alpha is deferred', () => {
-    const declared = parseColorValue(
-      'rgb(100% 0% 100% / calc(infinity))', {},
-    )!;
-    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const declared = ColorValue.parse('rgb(100% 0% 100% / calc(infinity))', {})!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
 
     expect(computed).toEqual({
       kind: ColorKind.Absolute,
@@ -3309,7 +3075,7 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: true,
     });
-    expect(serializeColorValue(computed, true))
+    expect(new ColorValue(computed).serialize(true))
       .toBe('rgb(255, 0, 255)');
   });
 
@@ -3326,12 +3092,9 @@ describe('color values', () => {
   ] as const)(
     'matches the section 16.2.2 serialization example %s',
     (input, serialized) => {
-      const color = resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      );
+      const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value;
 
-      expect(serializeColorValue(color)).toBe(serialized);
+      expect(new ColorValue(color).serialize()).toBe(serialized);
     },
   );
 
@@ -3344,7 +3107,7 @@ describe('color values', () => {
   ] as const)(
     'matches the section 16.3 serialization example %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3357,12 +3120,9 @@ describe('color values', () => {
   ] as const)(
     'matches section 16.3 WPT serialization coverage for %s',
     (input, serialized) => {
-      const color = resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      );
+      const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value;
 
-      expect(serializeColorValue(color)).toBe(serialized);
+      expect(new ColorValue(color).serialize()).toBe(serialized);
     },
   );
 
@@ -3375,7 +3135,7 @@ describe('color values', () => {
   ] as const)(
     'matches the section 16.4 serialization example %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3388,12 +3148,9 @@ describe('color values', () => {
   ] as const)(
     'matches section 16.4 WPT serialization coverage for %s',
     (input, serialized) => {
-      const color = resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      );
+      const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value;
 
-      expect(serializeColorValue(color)).toBe(serialized);
+      expect(new ColorValue(color).serialize()).toBe(serialized);
     },
   );
 
@@ -3416,7 +3173,7 @@ describe('color values', () => {
   ] as const)(
     'matches the section 16.5 serialization example %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3431,33 +3188,25 @@ describe('color values', () => {
   ] as const)(
     'matches section 16.5 WPT serialization coverage for %s',
     (input, serialized) => {
-      const color = resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      );
+      const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value;
 
-      expect(serializeColorValue(color)).toBe(serialized);
+      expect(new ColorValue(color).serialize()).toBe(serialized);
     },
   );
 
   // Section 16.6 serialization of currentcolor.
   it('serializes computed currentcolor in ASCII lowercase', () => {
-    const color = resolveColorValue(
-      parseColorValue('currentColor', {})!,
-      ValueStage.Computed,
-    );
+    const color = ColorValue.parse('currentColor', {})!.resolve(ValueStage.Computed).value;
 
-    expect(serializeColorValue(color)).toBe('currentcolor');
+    expect(new ColorValue(color).serialize()).toBe('currentcolor');
   });
 
   it('serializes context-dependent calc color components', () => {
-    const contextual = parseColorValue(
-      ' color( display-p3  calc(sign(1em - 1px))  20%  0'
-      + ' / calc(.25 + .25) ) ', {},
-    );
+    const contextual = ColorValue.parse(' color( display-p3  calc(sign(1em - 1px))  20%  0'
+      + ' / calc(.25 + .25) ) ', {})?.value ?? null;
 
     expect(contextual).not.toBeNull();
-    expect(serializeColorValue(contextual!))
+    expect(new ColorValue(contextual!).serialize())
       .toBe('color(display-p3 sign(1em - 1px) 0.2 0 / calc(0.5))');
   });
 
@@ -3473,19 +3222,17 @@ describe('color values', () => {
   ] as const)(
     'canonicalizes resolved components around deferred math in %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('uses the value stage to serialize reducible calc color components', () => {
-    const declared = parseColorValue(
-      'color(display-p3 calc(.1 + .2) 0 0 / calc(.25 + .25))', {},
-    )!;
-    const computed = resolveColorValue(declared, ValueStage.Computed);
+    const declared = ColorValue.parse('color(display-p3 calc(.1 + .2) 0 0 / calc(.25 + .25))', {})!.value;
+    const computed = new ColorValue(declared).resolve(ValueStage.Computed).value;
 
-    expect(serializeColorValue(declared))
+    expect(new ColorValue(declared).serialize())
       .toBe('color(display-p3 calc(0.3) 0 0 / calc(0.5))');
-    expect(serializeColorValue(computed))
+    expect(new ColorValue(computed).serialize())
       .toBe('color(display-p3 0.3 0 0 / 0.5)');
   });
 
@@ -3505,16 +3252,14 @@ describe('color values', () => {
   it.each(calculatedAlphaSerializationCases)(
     'resolves calculated alpha in the declared color %s',
     (input, declared) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(declared);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(declared);
     },
   );
 
   it.each(calculatedAlphaSerializationCases)(
     'clamps calculated alpha in the computed color %s',
     (input, _declared, computed) => {
-      expect(serializeColorValue(
-        resolveColorValue(parseColorValue(input, {})!, ValueStage.Computed),
-      )).toBe(computed);
+      expect(ColorValue.parse(input, {})!.resolve(ValueStage.Computed).serialize()).toBe(computed);
     },
   );
 
@@ -3524,17 +3269,15 @@ describe('color values', () => {
   ] as const)(
     'resolves calculated alpha %s as %s math',
     (alpha, valueType) => {
-      const color = parseColorValue(
-        `color(display-p3 0 1 0 / ${alpha})`, {},
-      );
+      const color = ColorValue.parse(`color(display-p3 0 1 0 / ${alpha})`, {})?.value ?? null;
 
       expect(color).toMatchObject({
         kind: ColorKind.ColorFn,
         components: [
-          { type: 'number', value: 0 },
-          { type: 'number', value: 1 },
-          { type: 'number', value: 0 },
-          { type: 'math', valueType },
+          new NumberValue(new NumberLiteral(0)),
+          new NumberValue(new NumberLiteral(1)),
+          new NumberValue(new NumberLiteral(0)),
+          { value: { valueType: valueType } },
         ],
       });
     },
@@ -3552,7 +3295,7 @@ describe('color values', () => {
   ] as const)(
     'clamps literal alpha while preserving deferred components in %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3568,79 +3311,66 @@ describe('color values', () => {
   ] as const)(
     'clamps calculated alpha while preserving computed deferred components in %s',
     (input, serialized) => {
-      const computed = resolveColorValue(
-        parseColorValue(input, {})!,
-        ValueStage.Computed,
-      );
+      const computed = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value;
 
-      expect(serializeColorValue(computed)).toBe(serialized);
+      expect(new ColorValue(computed).serialize()).toBe(serialized);
     },
   );
 
   it('canonicalizes unresolved calculated percentage alpha as number math', () => {
-    const color = parseColorValue(
-      'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px)))', {},
-    )!;
+    const color = ColorValue.parse('color(display-p3 0 1 0 / calc(60% * sign(1em - 1px)))', {})!.value;
 
-    expect(serializeColorValue(color)).toBe(
+    expect(new ColorValue(color).serialize()).toBe(
       'color(display-p3 0 1 0 / calc(60% * sign(1em - 1px) / 100%))',
     );
   });
 
   it('serializes keyword colors in lowercase', () => {
-    expect(serializeColorValue({
+    expect(new ColorValue({
       kind: ColorKind.Named,
       name: 'rebeccapurple',
-    })).toBe('rebeccapurple');
-    expect(serializeColorValue({
+    }).serialize()).toBe('rebeccapurple');
+    expect(new ColorValue({
       kind: ColorKind.Named,
       name: 'transparent',
-    })).toBe('transparent');
-    expect(serializeColorValue({
+    }).serialize()).toBe('transparent');
+    expect(new ColorValue({
       kind: ColorKind.System,
       name: 'canvastext',
-    })).toBe('canvastext');
-    expect(serializeColorValue({
+    }).serialize()).toBe('canvastext');
+    expect(new ColorValue({
       kind: ColorKind.Deprecated,
       name: 'windowtext',
-    })).toBe('windowtext');
-    expect(serializeColorValue({
+    }).serialize()).toBe('windowtext');
+    expect(new ColorValue({
       kind: ColorKind.CurrentColor,
-    })).toBe('currentcolor');
+    }).serialize()).toBe('currentcolor');
   });
 
   it('serializes computed sRGB keywords numerically', () => {
-    expect(serializeColorValue(resolveColorValue(
-      parseColorValue('goldenrod', {})!,
-      ValueStage.Computed,
-    ))).toBe('rgb(218, 165, 32)');
-    expect(serializeColorValue(resolveColorValue(
-      parseColorValue('transparent', {})!,
-      ValueStage.Computed,
-    ))).toBe('rgba(0, 0, 0, 0)');
+    expect(ColorValue.parse('goldenrod', {})!.resolve(ValueStage.Computed).serialize()).toBe('rgb(218, 165, 32)');
+    expect(ColorValue.parse('transparent', {})!.resolve(ValueStage.Computed).serialize()).toBe('rgba(0, 0, 0, 0)');
   });
 
   it('serializes absolute sRGB colors in legacy rgb form', () => {
-    expect(serializeColorValue({
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0.5, 0],
       alpha: 1,
       isLegacySrgb: true,
-    })).toBe('rgb(255, 127.5, 0)');
-    expect(serializeColorValue(
-      parseColorValue('rgb(306 -25.5 0 / 0.5)', {})!,
-    )).toBe('rgba(255, 0, 0, 0.5)');
+    }).serialize()).toBe('rgb(255, 127.5, 0)');
+    expect(ColorValue.parse('rgb(306 -25.5 0 / 0.5)', {})!.serialize()).toBe('rgba(255, 0, 0, 0.5)');
   });
 
   it('preserves missing absolute sRGB components through color()', () => {
-    expect(serializeColorValue({
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [undefined, 0.5, 0],
       alpha: undefined,
       isLegacySrgb: true,
-    })).toBe('color(srgb none 0.5 0 / none)');
+    }).serialize()).toBe('color(srgb none 0.5 0 / none)');
   });
 
   it.each([
@@ -3651,7 +3381,7 @@ describe('color values', () => {
   ] as const)(
     'preserves missing components while serializing %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3677,15 +3407,12 @@ describe('color values', () => {
   ] as const)(
     'preserves percentage serialization with a missing component in %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('retains RGB while its alpha is deferred', () => {
-    expect(resolveColorValue(
-      parseColorValue('rgb(none 0 0)', {})!,
-      ValueStage.Declared,
-    )).toEqual({
+    expect(ColorValue.parse('rgb(none 0 0)', {})!.resolve(ValueStage.Declared).value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [undefined, 0, 0],
@@ -3693,22 +3420,14 @@ describe('color values', () => {
       isLegacySrgb: true,
     });
 
-    expect(resolveColorValue(
-      parseColorValue(
-        'rgb(none 0 0 / calc(60% * sign(1em - 1px)))', {},
-      )!,
-      ValueStage.Declared,
-    )).toMatchObject({
+    expect(ColorValue.parse('rgb(none 0 0 / calc(60% * sign(1em - 1px)))', {})!.resolve(ValueStage.Declared).value).toMatchObject({
       kind: ColorKind.RgbFn,
       useLegacySyntax: false,
       components: [
         'none',
-        { type: 'number', value: 0 },
-        { type: 'number', value: 0 },
-        {
-          type: 'math',
-          valueType: 'number',
-        },
+        new NumberValue(new NumberLiteral(0)),
+        new NumberValue(new NumberLiteral(0)),
+        { value: { valueType: 'number' } },
       ],
     });
   });
@@ -3729,7 +3448,7 @@ describe('color values', () => {
   ] as const)(
     'retains deferred RGB and lowers resolved missing RGB for %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3757,7 +3476,7 @@ describe('color values', () => {
   ] as const)(
     'canonicalizes resolved RGB components without lowering deferred %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3773,34 +3492,27 @@ describe('color values', () => {
   ] as const)(
     'lowers fully resolved missing RGB to color(srgb) for %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('keeps color(srgb) distinct from rgb()', () => {
-    expect(serializeColorValue({
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0, 0],
       alpha: 1,
       isLegacySrgb: false,
-    })).toBe('color(srgb 1 0 0)');
+    }).serialize()).toBe('color(srgb 1 0 0)');
   });
 
   it('clamps and rounds numerical alpha values', () => {
-    expect(serializeColorValue(
-      parseColorValue('color(display-p3 1 0 0 / 2)', {})!,
-    )).toBe('color(display-p3 1 0 0)');
-    expect(serializeColorValue(
-      parseColorValue('color(display-p3 1 0 0 / 0.123456789)', {})!,
-    )).toBe('color(display-p3 1 0 0 / 0.123457)');
+    expect(ColorValue.parse('color(display-p3 1 0 0 / 2)', {})!.serialize()).toBe('color(display-p3 1 0 0)');
+    expect(ColorValue.parse('color(display-p3 1 0 0 / 0.123456789)', {})!.serialize()).toBe('color(display-p3 1 0 0 / 0.123457)');
 
-    const nan = resolveColorValue(
-      parseColorValue('color(display-p3 1 0 0 / calc(NaN))', {})!,
-      ValueStage.Computed,
-    );
+    const nan = ColorValue.parse('color(display-p3 1 0 0 / calc(NaN))', {})!.resolve(ValueStage.Computed).value;
 
-    expect(serializeColorValue(nan)).toBe('color(display-p3 1 0 0 / 0)');
+    expect(new ColorValue(nan).serialize()).toBe('color(display-p3 1 0 0 / 0)');
   });
 
   it.each([
@@ -3814,7 +3526,7 @@ describe('color values', () => {
   ] as const)(
     'serializes the alpha value in %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
@@ -3825,42 +3537,42 @@ describe('color values', () => {
   ] as const)(
     'serializes the 8-bit alpha value in %s',
     (input, serialized) => {
-      expect(serializeColorValue(parseColorValue(input, {})!)).toBe(serialized);
+      expect(ColorValue.parse(input, {})!.serialize()).toBe(serialized);
     },
   );
 
   it('serializes absolute HSL and HWB colors with missing components', () => {
-    expect(serializeColorValue({
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.hsl,
       components: [20, undefined, 30],
       alpha: undefined,
       isLegacySrgb: false,
-    })).toBe('hsl(20 none 30% / none)');
-    expect(serializeColorValue({
+    }).serialize()).toBe('hsl(20 none 30% / none)');
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [20, undefined, 30],
       alpha: 1,
       isLegacySrgb: false,
-    })).toBe('hwb(20 none 30%)');
+    }).serialize()).toBe('hwb(20 none 30%)');
   });
 
   it('serializes absolute HSL and HWB colors without converting their spaces', () => {
-    expect(serializeColorValue({
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.hsl,
       components: [20, 40, 30],
       alpha: 1,
       isLegacySrgb: false,
-    })).toBe('hsl(20 40% 30%)');
-    expect(serializeColorValue({
+    }).serialize()).toBe('hsl(20 40% 30%)');
+    expect(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [20, 40, 30],
       alpha: 1,
       isLegacySrgb: false,
-    })).toBe('hwb(20 40% 30%)');
+    }).serialize()).toBe('hwb(20 40% 30%)');
   });
 
   it('serializes absolute wide-gamut colors in their notation', () => {
@@ -3903,7 +3615,7 @@ describe('color values', () => {
     ];
 
     for (const [color, serialized] of cases) {
-      expect(serializeColorValue(color)).toBe(serialized);
+      expect(new ColorValue(color).serialize()).toBe(serialized);
     }
   });
 
@@ -3930,18 +3642,16 @@ describe('color values', () => {
       'color(xyz-d65 0.9505 1 1.089)',
     ],
   ])('matches the equivalent %s example', (_, first, second) => {
-    const firstColor = parseColorValue(first, {}) as AbsoluteColor;
-    const secondColor = parseColorValue(second, {}) as AbsoluteColor;
+    const firstColor = (ColorValue.parse(first, {})?.value ?? null) as AbsoluteColor;
+    const secondColor = (ColorValue.parse(second, {})?.value ?? null) as AbsoluteColor;
 
     expectColorCloseTo(firstColor, secondColor);
   });
 
   it('matches the Rec.2020 out-of-gamut conversion example', () => {
-    const rec2020 = parseColorValue(
-      'color(rec2020 0.42053 0.979780 0.00579)', {},
-    ) as AbsoluteColor;
-    const lch = convertAbsoluteColor(rec2020, 'lch');
-    const displayP3 = convertAbsoluteColor(rec2020, 'display-p3');
+    const rec2020 = (ColorValue.parse('color(rec2020 0.42053 0.979780 0.00579)', {})?.value ?? null) as AbsoluteColor;
+    const lch = new ColorValue(rec2020).convert('lch').value;
+    const displayP3 = new ColorValue(rec2020).convert('display-p3').value;
 
     expectComponentsCloseTo(lch.components, [85.9017, 166.116, 138.207], 3);
     expectComponentsCloseTo(
@@ -3964,13 +3674,13 @@ describe('color values', () => {
   ] as const)(
     'matches the %s green WPT conversion reference',
     (space, components) => {
-      const converted = convertAbsoluteColor({
+      const converted = new ColorValue({
         kind: ColorKind.Absolute,
         space: SPACES[space],
         components: [...components],
         alpha: 1,
         isLegacySrgb: false,
-      }, 'srgb');
+      }).convert('srgb').value;
 
       expectColorCloseTo(converted, [0, 128 / 255, 0]);
     },
@@ -3990,11 +3700,8 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     };
-    const xyz = convertAbsoluteColor(
-      color,
-      space === 'prophoto-rgb' ? 'xyz-d50' : 'xyz-d65',
-    );
-    const roundTrip = convertAbsoluteColor(xyz, space);
+    const xyz = new ColorValue(color).convert(space === 'prophoto-rgb' ? 'xyz-d50' : 'xyz-d65').value;
+    const roundTrip = new ColorValue(xyz).convert(space).value;
 
     expect(xyz.components.every(Number.isFinite)).toBe(true);
     expectComponentsCloseTo(roundTrip.components, color.components, 12);
@@ -4053,10 +3760,10 @@ describe('color values', () => {
         ...srgb,
         space: SPACES['display-p3'],
       };
-      const actualSrgbXyz = convertAbsoluteColor(srgb, 'xyz-d65');
-      const actualSrgbLch = convertAbsoluteColor(srgb, 'lch');
-      const actualDisplayP3Xyz = convertAbsoluteColor(displayP3, 'xyz-d65');
-      const actualDisplayP3Lch = convertAbsoluteColor(displayP3, 'lch');
+      const actualSrgbXyz = new ColorValue(srgb).convert('xyz-d65').value;
+      const actualSrgbLch = new ColorValue(srgb).convert('lch').value;
+      const actualDisplayP3Xyz = new ColorValue(displayP3).convert('xyz-d65').value;
+      const actualDisplayP3Lch = new ColorValue(displayP3).convert('lch').value;
 
       expect(actualSrgbXyz.space.name).toBe('xyz-d65');
       expectColorCloseTo(actualSrgbXyz, {
@@ -4109,14 +3816,14 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
+    expect(new ColorValue(hsl).convert('srgb').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(convertAbsoluteColor(hwb, 'srgb')).toEqual({
+    expect(new ColorValue(hwb).convert('srgb').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
@@ -4126,9 +3833,9 @@ describe('color values', () => {
   });
 
   it('normalizes 8-bit sRGB values before color conversion', () => {
-    const color = parseColorValue('#ff0080cc', {}) as AbsoluteColor;
+    const color = (ColorValue.parse('#ff0080cc', {})?.value ?? null) as AbsoluteColor;
 
-    expect(convertAbsoluteColor(color, 'srgb')).toEqual({
+    expect(new ColorValue(color).convert('srgb').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 0, 128 / 255],
@@ -4146,14 +3853,14 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(rgb, 'hsl')).toEqual({
+    expect(new ColorValue(rgb).convert('hsl').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hsl,
       components: [120, 100, 50],
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(convertAbsoluteColor(rgb, 'hwb')).toEqual({
+    expect(new ColorValue(rgb).convert('hwb').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [120, 0, 0],
@@ -4170,10 +3877,10 @@ describe('color values', () => {
       alpha: 0.5,
       isLegacySrgb: false,
     };
-    const hsl = convertAbsoluteColor(rgb, 'hsl');
+    const hsl = new ColorValue(rgb).convert('hsl').value;
 
     expectComponentsCloseTo(hsl.components, [180, 100 / 3, 175], 12);
-    expectColorCloseTo(convertAbsoluteColor(hsl, 'srgb'), rgb);
+    expectColorCloseTo(new ColorValue(hsl).convert('srgb').value, rgb);
   });
 
   it('replaces missing components with zero during color conversion', () => {
@@ -4192,9 +3899,9 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(hsl, 'srgb').components).toEqual([1, 0, 0]);
-    expect(convertAbsoluteColor(gray, 'hsl').components[0]).toBeUndefined();
-    expect(convertAbsoluteColor(gray, 'hwb').components[0]).toBeUndefined();
+    expect(new ColorValue(hsl).convert('srgb').value.components).toEqual([1, 0, 0]);
+    expect(new ColorValue(gray).convert('hsl').value.components[0]).toBeUndefined();
+    expect(new ColorValue(gray).convert('hwb').value.components[0]).toBeUndefined();
   });
 
   it.each([
@@ -4205,16 +3912,13 @@ describe('color values', () => {
   ] as const)(
     'uses the %s powerless-hue epsilon when conversion produces the hue',
     (_, target, source, components, hueIndex) => {
-      const converted = convertAbsoluteColor(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES[source],
-          components: [...components],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        target,
-      );
+      const converted = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES[source],
+        components: [...components],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).convert(target).value;
 
       expect(converted.components[hueIndex]).toBeUndefined();
     },
@@ -4226,26 +3930,20 @@ describe('color values', () => {
   ] as const)(
     'applies the %s powerless-hue epsilon inclusively',
     (_, target, source, epsilon) => {
-      const atBoundary = convertAbsoluteColor(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES[source],
-          components: [0.5, epsilon, 0],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        target,
-      );
-      const aboveBoundary = convertAbsoluteColor(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES[source],
-          components: [0.5, epsilon * 1.0001, 0],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        target,
-      );
+      const atBoundary = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES[source],
+        components: [0.5, epsilon, 0],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).convert(target).value;
+      const aboveBoundary = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES[source],
+        components: [0.5, epsilon * 1.0001, 0],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).convert(target).value;
 
       expect(atBoundary.components[2]).toBeUndefined();
       expect(aboveBoundary.components[2]).toBe(0);
@@ -4261,14 +3959,14 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(hsl, 'hwb')).toEqual({
+    expect(new ColorValue(hsl).convert('hwb').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.hwb,
       components: [120, 0, 0],
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(convertAbsoluteColor(hsl, 'srgb')).toEqual({
+    expect(new ColorValue(hsl).convert('srgb').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [0, 1, 0],
@@ -4293,32 +3991,26 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(lab, 'lch')).toEqual({
+    expect(new ColorValue(lab).convert('lch').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.lch,
       components: [50, 40, 90],
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    const labRoundTrip = convertAbsoluteColor(
-      convertAbsoluteColor(lab, 'lch'),
-      'lab',
-    );
+    const labRoundTrip = new ColorValue(lab).convert('lch').convert('lab').value;
 
     expect(labRoundTrip.space.name).toBe('lab');
     expect(labRoundTrip.alpha).toBe(lab.alpha);
     expectComponentsCloseTo(labRoundTrip.components, [50, 0, 40], 12);
-    expect(convertAbsoluteColor(oklab, 'oklch')).toEqual({
+    expect(new ColorValue(oklab).convert('oklch').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklch,
       components: [0.5, 0.1, 0],
       alpha: 0.25,
       isLegacySrgb: false,
     });
-    const oklabRoundTrip = convertAbsoluteColor(
-      convertAbsoluteColor(oklab, 'oklch'),
-      'oklab',
-    );
+    const oklabRoundTrip = new ColorValue(oklab).convert('oklch').convert('oklab').value;
 
     expect(oklabRoundTrip.space.name).toBe('oklab');
     expect(oklabRoundTrip.alpha).toBe(oklab.alpha);
@@ -4341,14 +4033,14 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(lch, 'lab')).toEqual({
+    expect(new ColorValue(lch).convert('lab').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.lab,
       components: [50, 0, 0],
       alpha: 0.5,
       isLegacySrgb: false,
     });
-    expect(convertAbsoluteColor(oklch, 'oklab')).toEqual({
+    expect(new ColorValue(oklch).convert('oklab').value).toEqual({
       kind: ColorKind.Absolute,
       space: SPACES.oklab,
       components: [0.5, 0, 0],
@@ -4369,8 +4061,8 @@ describe('color values', () => {
       ...red,
       space: SPACES['display-p3'],
     };
-    const srgbXyz = convertAbsoluteColor(red, 'xyz-d65').components;
-    const p3Xyz = convertAbsoluteColor(p3Red, 'xyz-d65').components;
+    const srgbXyz = new ColorValue(red).convert('xyz-d65').value.components;
+    const p3Xyz = new ColorValue(p3Red).convert('xyz-d65').value.components;
 
     expectComponentsCloseTo(
       srgbXyz,
@@ -4389,7 +4081,7 @@ describe('color values', () => {
       alpha: 0.75,
       isLegacySrgb: false,
     };
-    const srgb = convertAbsoluteColor(labWhite, 'srgb');
+    const srgb = new ColorValue(labWhite).convert('srgb').value;
 
     expect(srgb.alpha).toBe(0.75);
 
@@ -4509,8 +4201,8 @@ describe('color values', () => {
       const intermediate = color.space.name === 'xyz-d50'
         ? 'xyz-d65'
         : 'xyz-d50';
-      const converted = convertAbsoluteColor(color, intermediate);
-      const roundTrip = convertAbsoluteColor(converted, color.space.name);
+      const converted = new ColorValue(color).convert(intermediate).value;
+      const roundTrip = new ColorValue(converted).convert(color.space.name).value;
 
       expect(roundTrip.space.name).toBe(color.space.name);
       expect(roundTrip.alpha).toBe(color.alpha);
@@ -4532,7 +4224,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(convertAbsoluteColor(color, 'display-p3')).toBe(color);
+    expect(new ColorValue(color).convert('display-p3').value).toBe(color);
   });
 
   it('calculates color difference as Euclidean distance in Oklab', () => {
@@ -4548,7 +4240,7 @@ describe('color values', () => {
       components: [0.6, 0.3, -0.4],
     };
 
-    expect(deltaEOK(reference, sample)).toBeCloseTo(0.3, 12);
+    expect(new ColorValue(reference).deltaEOK(new ColorValue(sample))).toBeCloseTo(0.3, 12);
   });
 
   it.each<[ColorVector3, ColorVector3, number]>([
@@ -4597,7 +4289,7 @@ describe('color values', () => {
         isLegacySrgb: false,
       });
 
-      expect(deltaE2000(color(reference), color(sample)))
+      expect(new ColorValue(color(reference)).deltaE2000(new ColorValue(color(sample))))
         .toBeCloseTo(expected, 4);
     },
   );
@@ -4611,15 +4303,15 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(areColorsEquivalent(color, {
+    expect(new ColorValue(color).isEquivalent(new ColorValue({
       ...color,
       components: [0.500009, 0.099991, -0.2],
       alpha: 0.400009,
-    })).toBe(true);
-    expect(areColorsEquivalent(color, {
+    }))).toBe(true);
+    expect(new ColorValue(color).isEquivalent(new ColorValue({
       ...color,
       alpha: 0.40002,
-    })).toBe(false);
+    }))).toBe(false);
   });
 
   it.each([
@@ -4638,16 +4330,10 @@ describe('color values', () => {
     'color(xyz-d65 0 0 0)',
     'lab(0 0 0)',
   ])('matches the section 12 equivalent-black WPT case %s', (input) => {
-    const black = resolveColorValue(
-      parseColorValue('black', {})!,
-      ValueStage.Computed,
-    ) as AbsoluteColor;
-    const color = resolveColorValue(
-      parseColorValue(input, {})!,
-      ValueStage.Computed,
-    ) as AbsoluteColor;
+    const black = ColorValue.parse('black', {})!.resolve(ValueStage.Computed).value as AbsoluteColor;
+    const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value as AbsoluteColor;
 
-    expect(areColorsEquivalent(color, black)).toBe(true);
+    expect(new ColorValue(color).isEquivalent(new ColorValue(black))).toBe(true);
   });
 
   it.each([
@@ -4658,29 +4344,17 @@ describe('color values', () => {
     'oklch(0 0 none)',
     'oklab(0 none none)',
   ])('matches the section 12 non-equivalent-black WPT case %s', (input) => {
-    const black = resolveColorValue(
-      parseColorValue('black', {})!,
-      ValueStage.Computed,
-    ) as AbsoluteColor;
-    const color = resolveColorValue(
-      parseColorValue(input, {})!,
-      ValueStage.Computed,
-    ) as AbsoluteColor;
+    const black = ColorValue.parse('black', {})!.resolve(ValueStage.Computed).value as AbsoluteColor;
+    const color = ColorValue.parse(input, {})!.resolve(ValueStage.Computed).value as AbsoluteColor;
 
-    expect(areColorsEquivalent(color, black)).toBe(false);
+    expect(new ColorValue(color).isEquivalent(new ColorValue(black))).toBe(false);
   });
 
   it('makes a powerless Oklch hue missing before comparison', () => {
-    const black = resolveColorValue(
-      parseColorValue('black', {})!,
-      ValueStage.Computed,
-    ) as AbsoluteColor;
-    const oklch = resolveColorValue(
-      parseColorValue('oklch(0 0 0)', {})!,
-      ValueStage.Computed,
-    ) as AbsoluteColor;
+    const black = ColorValue.parse('black', {})!.resolve(ValueStage.Computed).value as AbsoluteColor;
+    const oklch = ColorValue.parse('oklch(0 0 0)', {})!.resolve(ValueStage.Computed).value as AbsoluteColor;
 
-    expect(areColorsEquivalent(oklch, black)).toBe(false);
+    expect(new ColorValue(oklch).isEquivalent(new ColorValue(black))).toBe(false);
   });
 
   it('uses the standardized epsilon for different color spaces', () => {
@@ -4691,32 +4365,32 @@ describe('color values', () => {
       alpha: 0.8,
       isLegacySrgb: false,
     };
-    const oklab = convertAbsoluteColor(srgb, 'oklab');
+    const oklab = new ColorValue(srgb).convert('oklab').value;
 
-    expect(areColorsEquivalent(srgb, {
+    expect(new ColorValue(srgb).isEquivalent(new ColorValue({
       ...oklab,
       components: [
         oklab.components[0]! + 0.000009,
         oklab.components[1],
         oklab.components[2],
       ],
-    })).toBe(true);
-    expect(areColorsEquivalent(srgb, {
+    }))).toBe(true);
+    expect(new ColorValue(srgb).isEquivalent(new ColorValue({
       ...oklab,
       components: [
         oklab.components[0]! + 0.00002,
         oklab.components[1],
         oklab.components[2],
       ],
-    })).toBe(false);
-    expect(areColorsEquivalent(srgb, {
+    }))).toBe(false);
+    expect(new ColorValue(srgb).isEquivalent(new ColorValue({
       ...oklab,
       alpha: oklab.alpha! + 0.000009,
-    })).toBe(true);
-    expect(areColorsEquivalent(srgb, {
+    }))).toBe(true);
+    expect(new ColorValue(srgb).isEquivalent(new ColorValue({
       ...oklab,
       alpha: oklab.alpha! + 0.00002,
-    })).toBe(false);
+    }))).toBe(false);
   });
 
   it('only considers missing components equal to missing components', () => {
@@ -4728,15 +4402,15 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(areColorsEquivalent(color, { ...color })).toBe(true);
-    expect(areColorsEquivalent(color, {
+    expect(new ColorValue(color).isEquivalent(new ColorValue({ ...color }))).toBe(true);
+    expect(new ColorValue(color).isEquivalent(new ColorValue({
       ...color,
       components: [0.5, 0.2, 0],
-    })).toBe(false);
-    expect(areColorsEquivalent(color, {
+    }))).toBe(false);
+    expect(new ColorValue(color).isEquivalent(new ColorValue({
       ...color,
       alpha: 0,
-    })).toBe(false);
+    }))).toBe(false);
   });
 
   it.each([
@@ -4755,10 +4429,10 @@ describe('color values', () => {
         isLegacySrgb: false,
       };
 
-      expect(areColorsEquivalent(color, {
+      expect(new ColorValue(color).isEquivalent(new ColorValue({
         ...color,
         components: [...expectedComponents],
-      })).toBe(true);
+      }))).toBe(true);
     },
   );
 
@@ -4778,10 +4452,10 @@ describe('color values', () => {
         isLegacySrgb: false,
       };
 
-      expect(areColorsEquivalent(color, {
+      expect(new ColorValue(color).isEquivalent(new ColorValue({
         ...color,
         components: [...expectedComponents],
-      })).toBe(false);
+      }))).toBe(false);
     },
   );
 
@@ -4794,12 +4468,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    const result = interpolateColors(
-      gray,
-      { ...gray, components: [240, 100, 50] },
-      0.5,
-      'hsl',
-    );
+    const result = new ColorValue(gray).interpolate(new ColorValue({ ...gray, components: [240, 100, 50] }), 0.5, 'hsl').value;
 
     expectComponentsCloseTo(result.components, [180, 50.0005, 50], 12);
   });
@@ -4813,12 +4482,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    const result = interpolateColors(
-      gray,
-      { ...gray, components: [240, 0, 0] },
-      0.5,
-      'hwb',
-    );
+    const result = new ColorValue(gray).interpolate(new ColorValue({ ...gray, components: [240, 0, 0] }), 0.5, 'hwb').value;
 
     expectComponentsCloseTo(result.components, [180, 24.9995, 25], 12);
   });
@@ -4832,12 +4496,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    const result = interpolateColors(
-      gray,
-      { ...gray, components: [70, 40, 240] },
-      0.5,
-      'lch',
-    );
+    const result = new ColorValue(gray).interpolate(new ColorValue({ ...gray, components: [70, 40, 240] }), 0.5, 'lch').value;
 
     expectComponentsCloseTo(result.components, [60, 20.00075, 180], 12);
   });
@@ -4851,12 +4510,7 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    const result = interpolateColors(
-      gray,
-      { ...gray, components: [0.7, 0.2, 240] },
-      0.5,
-      'oklch',
-    );
+    const result = new ColorValue(gray).interpolate(new ColorValue({ ...gray, components: [0.7, 0.2, 240] }), 0.5, 'oklch').value;
 
     expectComponentsCloseTo(result.components, [0.6, 0.100002, 180], 12);
   });
@@ -4870,17 +4524,11 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(areColorsEquivalent(
-      srgb,
-      convertAbsoluteColor(srgb, 'display-p3'),
-    )).toBe(true);
-    expect(areColorsEquivalent(
-      srgb,
-      {
-        ...convertAbsoluteColor(srgb, 'display-p3'),
-        alpha: 0.7,
-      },
-    )).toBe(false);
+    expect(new ColorValue(srgb).isEquivalent(new ColorValue(srgb).convert('display-p3'))).toBe(true);
+    expect(new ColorValue(srgb).isEquivalent(new ColorValue({
+      ...new ColorValue(srgb).convert('display-p3').value,
+      alpha: 0.7,
+    }))).toBe(false);
   });
 
   it('rejects different-space colors with missing components', () => {
@@ -4892,10 +4540,10 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(areColorsEquivalent(missing, {
+    expect(new ColorValue(missing).isEquivalent(new ColorValue({
       ...missing,
       space: SPACES['display-p3'],
-    })).toBe(false);
+    }))).toBe(false);
   });
 
   it('compares legacy and 8-bit sRGB colors as sRGB', () => {
@@ -4908,58 +4556,48 @@ describe('color values', () => {
       is8Bit: true,
     };
 
-    expect(areColorsEquivalent(legacy, {
+    expect(new ColorValue(legacy).isEquivalent(new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.srgb,
       components: [1, 128 / 255, 0],
       alpha: 128 / 255,
       isLegacySrgb: false,
-    })).toBe(true);
+    }))).toBe(true);
   });
 
   it('carries an analogous missing component into the interpolation space', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [undefined, 0.2, 0.4],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES['xyz-d65'],
-        components: [0.8, 0.3, 0.2],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'xyz-d65',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [undefined, 0.2, 0.4],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES['xyz-d65'],
+      components: [0.8, 0.3, 0.2],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'xyz-d65').value;
 
     expect(result.space.name).toBe('xyz-d65');
     expect(result.components[0]).toBe(0.8);
   });
 
   it('carries an analogous hue between polar color spaces', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lch,
-        components: [50, 0.02, undefined],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.7, 0.2, 80],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lch,
+      components: [50, 0.02, undefined],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.7, 0.2, 80],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'oklch').value;
 
     expect(result.components[2]).toBe(80);
   });
@@ -4970,24 +4608,19 @@ describe('color values', () => {
   ] as const)(
     'treats HWB whiteness and blackness as an analogous set',
     (components, expected) => {
-      const result = interpolateColors(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES.hwb,
-          components: [...components],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES.hwb,
-          components: [30, 30, 40],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        0.5,
-        'hwb',
-      );
+      const result = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES.hwb,
+        components: [...components],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).interpolate(new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES.hwb,
+        components: [30, 30, 40],
+        alpha: 1,
+        isLegacySrgb: false,
+      }), 0.5, 'hwb').value;
 
       expect(result.components).toEqual(expected);
     },
@@ -5001,44 +4634,34 @@ describe('color values', () => {
       alpha: 0.6,
       isLegacySrgb: false,
     };
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [undefined, undefined, undefined],
-        alpha: 0.4,
-        isLegacySrgb: false,
-      },
-      {
-        ...expected,
-        alpha: 0.8,
-      },
-      0.5,
-      'oklab',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [undefined, undefined, undefined],
+      alpha: 0.4,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      ...expected,
+      alpha: 0.8,
+    }), 0.5, 'oklab').value;
 
     expectColorCloseTo(result, expected);
   });
 
   it('keeps a component missing when both analogous sets are missing', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [undefined, undefined, undefined],
-        alpha: 0.4,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES['display-p3'],
-        components: [undefined, undefined, undefined],
-        alpha: 0.8,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklab',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [undefined, undefined, undefined],
+      alpha: 0.4,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES['display-p3'],
+      components: [undefined, undefined, undefined],
+      alpha: 0.8,
+      isLegacySrgb: false,
+    }), 0.5, 'oklab').value;
 
     expect(result).toMatchObject({
       kind: ColorKind.Absolute,
@@ -5058,33 +4681,23 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(interpolateColors(
-      { ...color, alpha: undefined },
-      color,
-      0.5,
-      'oklab',
-    )).toEqual(color);
+    expect(new ColorValue({ ...color, alpha: undefined }).interpolate(new ColorValue(color), 0.5, 'oklab').value).toEqual(color);
   });
 
   it('restores a missing alpha before premultiplication', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.783, 0.108, 326.5],
-        alpha: 0.5,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.392, 0.4, 0],
-        alpha: undefined,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.783, 0.108, 326.5],
+      alpha: 0.5,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.392, 0.4, 0],
+      alpha: undefined,
+      isLegacySrgb: false,
+    }), 0.5, 'oklch').value;
 
     expect(result.alpha).toBe(0.5);
     expectComponentsCloseTo(result.components, [0.5875, 0.254, 343.25], 12);
@@ -5098,94 +4711,74 @@ describe('color values', () => {
       alpha: 1,
       isLegacySrgb: false,
     };
-    const expected = convertAbsoluteColor({
+    const expected = new ColorValue({
       ...source,
       components: [0, 0.2, 0.4],
-    }, 'oklab');
-    const result = interpolateColors(
-      source,
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklab,
-        components: [0.8, 0.1, 0.1],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0,
-      'oklab',
-    );
+    }).convert('oklab').value;
+    const result = new ColorValue(source).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklab,
+      components: [0.8, 0.1, 0.1],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0, 'oklab').value;
 
     expectColorCloseTo(result, expected);
   });
 
   // Section 13.3, "Interpolating with Alpha."
   it('matches the premultiplied sRGB interpolation example', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0.24, 0.12, 0.98],
-        alpha: 0.4,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0.62, 0.26, 0.64],
-        alpha: 0.6,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'srgb',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.24, 0.12, 0.98],
+      alpha: 0.4,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.62, 0.26, 0.64],
+      alpha: 0.6,
+      isLegacySrgb: false,
+    }), 0.5, 'srgb').value;
 
     expect(result.alpha).toBeCloseTo(0.5, 12);
     expectComponentsCloseTo(result.components, [0.468, 0.204, 0.776], 12);
   });
 
   it('matches the premultiplied Lab interpolation example', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lab,
-        components: [66.927, 4.873, 68.622],
-        alpha: 0.4,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lab,
-        components: [53.503, 82.672, -33.901],
-        alpha: 0.6,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'lab',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lab,
+      components: [66.927, 4.873, 68.622],
+      alpha: 0.4,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lab,
+      components: [53.503, 82.672, -33.901],
+      alpha: 0.6,
+      isLegacySrgb: false,
+    }), 0.5, 'lab').value;
 
     expect(result.alpha).toBeCloseTo(0.5, 12);
     expectComponentsCloseTo(result.components, [58.873, 51.552, 7.108], 3);
   });
 
   it('matches the premultiplied LCH interpolation example', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lch,
-        components: [66.93, 68.79, 85.94],
-        alpha: 0.4,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lch,
-        components: [53.5, 89.35, 337.7],
-        alpha: 0.6,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'lch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lch,
+      components: [66.93, 68.79, 85.94],
+      alpha: 0.4,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lch,
+      components: [53.5, 89.35, 337.7],
+      alpha: 0.6,
+      isLegacySrgb: false,
+    }), 0.5, 'lch').value;
 
     expect(result.alpha).toBeCloseTo(0.5, 12);
     expect(result.components[0]).toBeCloseTo(58.873, 2);
@@ -5194,24 +4787,19 @@ describe('color values', () => {
   });
 
   it('does not premultiply when alpha is missing', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklab,
-        components: [0.2, 0.1, -0.1],
-        alpha: undefined,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklab,
-        components: [0.6, 0.3, 0.1],
-        alpha: undefined,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklab',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklab,
+      components: [0.2, 0.1, -0.1],
+      alpha: undefined,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklab,
+      components: [0.6, 0.3, 0.1],
+      alpha: undefined,
+      isLegacySrgb: false,
+    }), 0.5, 'oklab').value;
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
@@ -5223,24 +4811,19 @@ describe('color values', () => {
   });
 
   it('does not unpremultiply a zero-alpha result', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklab,
-        components: [0.2, 0.1, -0.1],
-        alpha: 0,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklab,
-        components: [0.6, 0.3, 0.1],
-        alpha: 0,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklab',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklab,
+      components: [0.2, 0.1, -0.1],
+      alpha: 0,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklab,
+      components: [0.6, 0.3, 0.1],
+      alpha: 0,
+      isLegacySrgb: false,
+    }), 0.5, 'oklab').value;
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
@@ -5258,24 +4841,19 @@ describe('color values', () => {
   ] as const)(
     'matches the same-space zero-chroma %s WPT',
     (_, space, a, b, expected) => {
-      const result = interpolateColors(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES[space],
-          components: [...a],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES[space],
-          components: [...b],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        0.5,
-        space,
-      );
+      const result = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES[space],
+        components: [...a],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).interpolate(new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES[space],
+        components: [...b],
+        alpha: 1,
+        isLegacySrgb: false,
+      }), 0.5, space).value;
 
       expect(result.components).toEqual(expected);
     },
@@ -5289,25 +4867,19 @@ describe('color values', () => {
   ])(
     'matches the %s hue interpolation example',
     (method, a, b, expected) => {
-      const result = interpolateColors(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES.oklch,
-          components: [...a],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES.oklch,
-          components: [...b],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        0.5,
-        'oklch',
-        method,
-      );
+      const result = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES.oklch,
+        components: [...a],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).interpolate(new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES.oklch,
+        components: [...b],
+        alpha: 1,
+        isLegacySrgb: false,
+      }), 0.5, 'oklch', method).value;
 
       expect(result.alpha).toBe(1);
 
@@ -5325,96 +4897,74 @@ describe('color values', () => {
   ] as const)(
     'handles the 180-degree boundary for %s hue interpolation',
     (method, hueA, hueB, expected) => {
-      const result = interpolateColors(
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES.oklch,
-          components: [0.5, 0.1, hueA],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        {
-          kind: ColorKind.Absolute,
-          space: SPACES.oklch,
-          components: [0.5, 0.1, hueB],
-          alpha: 1,
-          isLegacySrgb: false,
-        },
-        0.5,
-        'oklch',
-        method,
-      );
+      const result = new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES.oklch,
+        components: [0.5, 0.1, hueA],
+        alpha: 1,
+        isLegacySrgb: false,
+      }).interpolate(new ColorValue({
+        kind: ColorKind.Absolute,
+        space: SPACES.oklch,
+        components: [0.5, 0.1, hueB],
+        alpha: 1,
+        isLegacySrgb: false,
+      }), 0.5, 'oklch', method).value;
 
       expect(result.components[2]).toBe(expected);
     },
   );
 
   it('takes a full circle for longer interpolation between equal hues', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.4, 0.1, 30],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.8, 0.1, 30],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklch',
-      'longer',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.4, 0.1, 30],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.8, 0.1, 30],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'oklch', 'longer').value;
 
     expect(result.components[2]).toBe(210);
   });
 
   it('borrows the other hue when one hue is missing', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.2, 0.1, undefined],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.8, 0.4, 180],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.2, 0.1, undefined],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.8, 0.4, 180],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'oklch').value;
 
     expect(result.components).toEqual([0.5, 0.25, 180]);
   });
 
   it('keeps the hue missing when both hues are missing', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.2, 0.1, undefined],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.8, 0.4, undefined],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.2, 0.1, undefined],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.8, 0.4, undefined],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'oklch').value;
 
     expect(result.components).toEqual([0.5, 0.25, undefined]);
   });
@@ -5423,46 +4973,37 @@ describe('color values', () => {
     ['hsl', [350, 100, 50], [10, 100, 50], [0, 100, 50]],
     ['hwb', [350, 20, 30], [10, 20, 30], [0, 20, 30]],
   ] as const)('uses the first component as the %s hue', (space, a, b, expected) => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES[space],
-        components: [...a],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES[space],
-        components: [...b],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      space,
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES[space],
+      components: [...a],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES[space],
+      components: [...b],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, space).value;
 
     expect(result.components).toEqual(expected);
   });
 
   it('defaults two legacy colors to sRGB interpolation', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0.2, 0.4, 0.6],
-        alpha: 1,
-        isLegacySrgb: true,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0.8, 0.6, 0.4],
-        alpha: 1,
-        isLegacySrgb: true,
-      },
-      0.5,
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.2, 0.4, 0.6],
+      alpha: 1,
+      isLegacySrgb: true,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.8, 0.6, 0.4],
+      alpha: 1,
+      isLegacySrgb: true,
+    }), 0.5).value;
 
     expect(result).toEqual({
       kind: ColorKind.Absolute,
@@ -5474,93 +5015,74 @@ describe('color values', () => {
   });
 
   it('defaults to Oklab when either color is not legacy', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0, 0, 0],
-        alpha: 1,
-        isLegacySrgb: true,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [1, 1, 1],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0, 0, 0],
+      alpha: 1,
+      isLegacySrgb: true,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [1, 1, 1],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5).value;
 
     expect(result.space.name).toBe('oklab');
     expectComponentsCloseTo(result.components, [0.5, 0, 0], 7);
   });
 
   it('takes an individual missing component from the other color', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0.5, 0, 0],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [undefined, 0.5, 0.5],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'srgb',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0.5, 0, 0],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [undefined, 0.5, 0.5],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'srgb').value;
 
     expect(result.components).toEqual([0.5, 0.25, 0.25]);
   });
 
   it('carries the Lab opponent set into LCH', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lab,
-        components: [50, undefined, undefined],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.lch,
-        components: [70, undefined, undefined],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'lch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lab,
+      components: [50, undefined, undefined],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.lch,
+      components: [70, undefined, undefined],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'lch').value;
 
     expect(result.components).toEqual([60, undefined, undefined]);
   });
 
   it('treats a hue that becomes powerless during conversion as missing', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [0, 0, 0],
-        alpha: 0,
-        isLegacySrgb: true,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.oklch,
-        components: [0.8, 0.2, 120],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'oklch',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [0, 0, 0],
+      alpha: 0,
+      isLegacySrgb: true,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.oklch,
+      components: [0.8, 0.2, 120],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'oklch').value;
 
     expect(result.alpha).toBe(0.5);
     expectComponentsCloseTo(result.components, [0.8, 0.2], 7);
@@ -5568,24 +5090,19 @@ describe('color values', () => {
   });
 
   it('does not clip out-of-range values during interpolation', () => {
-    const result = interpolateColors(
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [-1, 2, 3],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      {
-        kind: ColorKind.Absolute,
-        space: SPACES.srgb,
-        components: [3, 4, -1],
-        alpha: 1,
-        isLegacySrgb: false,
-      },
-      0.5,
-      'srgb',
-    );
+    const result = new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [-1, 2, 3],
+      alpha: 1,
+      isLegacySrgb: false,
+    }).interpolate(new ColorValue({
+      kind: ColorKind.Absolute,
+      space: SPACES.srgb,
+      components: [3, 4, -1],
+      alpha: 1,
+      isLegacySrgb: false,
+    }), 0.5, 'srgb').value;
 
     expect(result.components).toEqual([1, 3, 1]);
   });
@@ -5606,13 +5123,13 @@ describe('color values', () => {
   it.each(binarySearchGamutMappingReferences)(
     'matches the WPT binary-search gamut mapping reference %j',
     (oklch, srgb) => {
-      const mapped = gamutMapColor({
+      const mapped = new ColorValue({
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [...oklch],
         alpha: 1,
         isLegacySrgb: false,
-      }, 'srgb');
+      }).gamutMap('srgb').value;
 
       expect(mapped.space.name).toBe('srgb');
       expectColorCloseTo(mapped, {
@@ -5626,13 +5143,13 @@ describe('color values', () => {
   );
 
   it('returns the clipped color below the just-noticeable difference', () => {
-    const mapped = gamutMapColor({
+    const mapped = new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.oklch,
       components: [0.7, 0.2, 30],
       alpha: 0.5,
       isLegacySrgb: false,
-    }, 'srgb');
+    }).gamutMap('srgb').value;
 
     expectColorCloseTo(mapped, {
       kind: ColorKind.Absolute,
@@ -5644,13 +5161,13 @@ describe('color values', () => {
   });
 
   it('supports clipping as an explicit gamut-mapping method', () => {
-    const mapped = gamutMapColor({
+    const mapped = new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES['srgb-linear'],
       components: [0.5, 1, 3],
       alpha: 0.4,
       isLegacySrgb: false,
-    }, 'srgb-linear', 'clip');
+    }).gamutMap('srgb-linear', 'clip').value;
 
     expect(mapped).toEqual({
       kind: ColorKind.Absolute,
@@ -5673,13 +5190,13 @@ describe('color values', () => {
     ][];
 
     for (const [oklch, srgb] of cases) {
-      const mapped = gamutMapColor({
+      const mapped = new ColorValue({
         kind: ColorKind.Absolute,
         space: SPACES.oklch,
         components: [...oklch],
         alpha: 0.4,
         isLegacySrgb: false,
-      }, 'srgb');
+      }).gamutMap('srgb').value;
 
       expectColorCloseTo(mapped, {
         kind: ColorKind.Absolute,
@@ -5699,7 +5216,7 @@ describe('color values', () => {
       alpha: 0.35,
       isLegacySrgb: false,
     };
-    const mapped = gamutMapColor(origin, 'srgb');
+    const mapped = new ColorValue(origin).gamutMap('srgb').value;
 
     expect(mapped.space.name).toBe('srgb');
     expectColorCloseTo(mapped, origin);
@@ -5714,8 +5231,8 @@ describe('color values', () => {
       isLegacySrgb: false,
     };
 
-    expect(gamutMapColor(origin, 'xyz-d65'))
-      .toEqual(convertAbsoluteColor(origin, 'xyz-d65'));
+    expect(new ColorValue(origin).gamutMap('xyz-d65').value)
+      .toEqual(new ColorValue(origin).convert('xyz-d65').value);
   });
 
   it.each([
@@ -5727,13 +5244,13 @@ describe('color values', () => {
     'prophoto-rgb',
     'rec2020',
   ] as const)('returns an in-gamut color in %s', (destination) => {
-    const mapped = gamutMapColor({
+    const mapped = new ColorValue({
       kind: ColorKind.Absolute,
       space: SPACES.oklch,
       components: [0.7, 0.8, 40],
       alpha: 0.25,
       isLegacySrgb: false,
-    }, destination);
+    }).gamutMap(destination).value;
 
     expect(mapped.space.name).toBe(destination);
     expect(mapped.alpha).toBe(0.25);

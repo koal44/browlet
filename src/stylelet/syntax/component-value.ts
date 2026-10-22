@@ -1,5 +1,6 @@
 import { asciiLower } from '../../infra/ascii';
 
+import type { TokenList, NonEmptyTokenList } from './token-list';
 import {
   HashTokenFlag, NumericSign, NumberTokenFlag, TokenKind, isNonAsciiIdentCodePoint,
   type BlockKind, type BraceBlock, type BracketBlock, type ComponentBlock, type ComponentValue,
@@ -21,6 +22,25 @@ export {
 };
 
 type PreservedTokenKind = PreservedToken['type'];
+
+/** A component allowed by <any-value>, including recursively validated block contents. */
+export type AnyValueComponent =
+  | Exclude<PreservedToken, InvalidAnyValueToken>
+  | { type: SimpleBlockKind; value: AnyValueContents; }
+  | FunctionBlock<AnyValueContents>;
+
+/** Validated component contents; nested blocks may be empty. */
+export type AnyValueContents = TokenList<AnyValueComponent>;
+
+/** A function block whose contents match the nonempty <any-value> production. */
+export type AnyValueFunctionBlock = FunctionBlock<NonEmptyTokenList<AnyValueComponent>>;
+
+type InvalidAnyValueToken =
+  | StaticToken<TokenKind.BadString>
+  | StaticToken<TokenKind.BadUrl>
+  | StaticToken<TokenKind.RightParen>
+  | StaticToken<TokenKind.RightBracket>
+  | StaticToken<TokenKind.RightBrace>;
 
 export function isTokenKind<K extends PreservedTokenKind>(
   token: Token,
@@ -91,6 +111,34 @@ export function isParensBlock(token: Token): token is ParensBlock {
 
 export function isFunctionBlock(token: Token): token is FunctionBlock {
   return isBlockKind(token, TokenKind.FunctionBlock);
+}
+
+/** Check a function's nonempty contents without constructing a value or replacing its list. */
+export function isAnyValueFunctionBlock(token: Token): token is AnyValueFunctionBlock {
+  return isFunctionBlock(token) && token.value.tokens.length > 0 && isAnyValueContents(token.value);
+}
+
+/** Validate opaque contents, accepting empty nested blocks and rejecting malformed tokens. */
+// https://drafts.csswg.org/css-syntax-3/#any-value
+export function isAnyValueContents(list: TokenList<ComponentValue>): list is AnyValueContents {
+  return list.tokens.every(isAnyValueComponent);
+}
+
+/** Check the <any-value> token restrictions recursively through blocks. */
+export function isAnyValueComponent(token: Token): token is AnyValueComponent {
+  if (isComponentBlock(token)) return isAnyValueContents(token.value);
+
+  switch (token.type) {
+    case TokenKind.BadString:
+    case TokenKind.BadUrl:
+    case TokenKind.RightParen:
+    case TokenKind.RightBracket:
+    case TokenKind.RightBrace:
+    case TokenKind.EOF:
+      return false;
+    default:
+      return true;
+  }
 }
 
 /** Serializes components so reparsing preserves their structure and token flags. */

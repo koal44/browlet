@@ -5,117 +5,97 @@ import {
   consumeDimensionToken, adaptConsumer, withTrivia, createComponentParser,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../../syntax/index';
+import { ValueStage } from '../../value-processing/index';
 
-import { dimensionLiteral, serializeDimension, type DimensionLiteral } from './dimension';
+import { DimensionLiteral } from './dimension';
 
-/*
- * <time> = <dimension-token with a time unit>
- */
+/** A literal <time> in a recognized unit. */
+// https://drafts.csswg.org/css-values-4/#times
+export class TimeLiteral<Unit extends TimeUnit = TimeUnit> extends DimensionLiteral<Unit> {
+  declare type: 'time';
 
-export type TimeLiteral = DimensionLiteral<'time', TimeUnit>;
-export type CanonicalTimeLiteral = DimensionLiteral<'time', 's'>;
+  constructor(value: number, unit: Unit) {
+    super(value, unit);
+    this.type = 'time';
+  }
 
+  /** Parse a complete literal. */
+  static override parse(input: ParserInput, context: unknown): TimeLiteral | null {
+    return timeParser(input, context);
+  }
+
+  /** Consume one literal with the default range. */
+  static override consume(this: void, c: TokenCursor): TryConsumerResult<TimeLiteral> {
+    return timeConsumer(c);
+  }
+
+  /** Configure inclusive bounds in the canonical unit. */
+  static createConsumer(options: TimeConsumerOptions = {}): TryConsumer<TimeLiteral> {
+    const min = options.min ?? -Infinity;
+    const max = options.max ?? Infinity;
+    const unbounded = min === -Infinity && max === Infinity;
+
+    return adaptConsumer(consumeDimensionToken, (component) => {
+      const unit = timeUnitFor(component.unit);
+      if (unit === null) return null;
+      const result = new TimeLiteral(component.value, unit);
+      if (unbounded) return result;
+      const canonical = result.canonicalize();
+      return canonical.value < min || canonical.value > max ? null : result;
+    });
+  }
+
+  /** Convert to the canonical unit from the computed stage onward. */
+  override resolve(stage: ValueStage, _context: unknown): TimeLiteral {
+    return stage < ValueStage.Computed ? this : this.canonicalize();
+  }
+
+  /** Convert the magnitude to s, retaining an already canonical literal. */
+  canonicalize(): CanonicalTimeLiteral {
+    switch (this.unit) {
+      case 's':
+        return this as TimeLiteral<Unit & 's'>;
+      case 'ms':
+        return new TimeLiteral(this.value / 1000, 's');
+      default:
+        return assertNever(this.unit);
+    }
+  }
+
+  /** Add same-unit literals without losing their concrete type. */
+  override add(other: DimensionLiteral<TimeUnit>): TimeLiteral<Unit> {
+    this.assertSameUnit(other);
+    return new TimeLiteral(this.value + other.value, this.unit);
+  }
+
+  /** Interpolate same-unit literals without converting their units. */
+  override interpolate(other: DimensionLiteral<TimeUnit>, progress: number): TimeLiteral<Unit> {
+    this.assertSameUnit(other);
+    return new TimeLiteral((1 - progress) * this.value + progress * other.value, this.unit);
+  }
+
+  /** Accumulation of these dimensions is addition. */
+  override accumulate(other: DimensionLiteral<TimeUnit>): TimeLiteral<Unit> {
+    return this.add(other);
+  }
+}
+
+export type CanonicalTimeLiteral = TimeLiteral<'s'>;
 export const TIME_UNITS = ['s', 'ms'] as const;
 export type TimeUnit = (typeof TIME_UNITS)[number];
 
-export function timeLiteral(value: number): CanonicalTimeLiteral;
-export function timeLiteral<Unit extends TimeUnit>(
-  value: number,
-  unit: Unit,
-): DimensionLiteral<'time', Unit>;
-export function timeLiteral(
-  value: number,
-  unit: TimeUnit = 's',
-): TimeLiteral {
-  return dimensionLiteral('time', value, unit);
-}
-
-export function parseTime(
-  input: ParserInput,
-  context: unknown,
-): TimeLiteral | null {
-  return timeParser(input, context);
-}
-
-export function consumeTime(
-  c: TokenCursor,
-): TryConsumerResult<TimeLiteral> {
-  return timeConsumer(c);
-}
-
 export type TimeConsumerOptions = {
-  /** Inclusive lower bound in canonical seconds. */
+  /** Inclusive lower bound in s. */
   min?: number;
-
-  /** Inclusive upper bound in canonical seconds. */
+  /** Inclusive upper bound in s. */
   max?: number;
 };
-
-export function createTimeConsumer(
-  options: TimeConsumerOptions = {},
-): TryConsumer<TimeLiteral> {
-  const min = options.min ?? -Infinity;
-  const max = options.max ?? Infinity;
-
-  return adaptConsumer(consumeDimensionToken, (component) => {
-    const unit = timeUnitFor(component.unit);
-
-    if (unit === null) return null;
-
-    const result: TimeLiteral = {
-      type: 'time',
-      value: component.value,
-      unit,
-    };
-    const canonical = canonicalizeTime(result);
-
-    return canonical.value < min || canonical.value > max
-      ? null
-      : result;
-  });
-}
-
-export function serializeTime(value: TimeLiteral): string {
-  return serializeDimension(value);
-}
-
-export function serializeCanonicalTime(value: CanonicalTimeLiteral): string {
-  return serializeDimension(value);
-}
-
-export function canonicalizeTime(value: TimeLiteral): CanonicalTimeLiteral {
-  let seconds: number;
-
-  switch (value.unit) {
-    case 's':
-      seconds = value.value;
-      break;
-    case 'ms':
-      seconds = value.value / 1000;
-      break;
-    default:
-      return assertNever(value.unit);
-  }
-
-  return {
-    type: 'time',
-    value: seconds,
-    unit: 's',
-  };
-}
 
 function timeUnitFor(raw: string): TimeUnit | null {
   const normalized = asciiLower(raw);
 
-  return isTimeUnit(normalized)
-    ? normalized
-    : null;
+  return TIME_UNITS.find((unit) => unit === normalized) ?? null;
 }
 
-function isTimeUnit(value: string): value is TimeUnit {
-  return TIME_UNITS.some((unit) => unit === value);
-}
-
-// <time> = <dimension-token with a time unit>
-const timeConsumer = createTimeConsumer();
+const timeConsumer = TimeLiteral.createConsumer();
 const timeParser = createComponentParser(withTrivia(timeConsumer));

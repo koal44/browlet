@@ -28,7 +28,7 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 - [ ] Add a retained pending-substitution representation shared by a shorthand's
   expanded longhands, including partial overwrites and computed-time failure.
   See [Variables](https://drafts.csswg.org/css-variables-1/#variables-in-shorthands).
-  The existing whole-value substitution record does not by itself identify a
+  The existing `SubstitutionValue` does not by itself identify a
   shorthand's pending longhand values.
 - [ ] Cover shorthand queries, cssText shortening, mixed importance, removal,
   source-order replacement, and invalid values through projected CSSOM.

@@ -1,46 +1,54 @@
 import {
-  adaptConsumer, withTrivia, createComponentParser, serializeCssIdentifier,
+  consumeIdentToken, adaptConsumer, withTrivia, parseAsComponentGrammar, serializeCssIdentifier,
   type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
 
-import { consumeCustomIdent } from './custom-ident';
+import type { Value } from './value';
+
+/** An author-defined identifier in the reserved double-dash namespace. */
+// https://drafts.csswg.org/css-values-4/#dashed-idents
+export class DashedIdentValue implements Value {
+  /** The decoded identifier, including its leading dashes. */
+  value: `--${string}`;
+
+  constructor(value: `--${string}`) {
+    this.value = value;
+  }
+
+  /** Parse a complete dashed identifier. */
+  static parse(input: ParserInput, context: unknown): DashedIdentValue | null {
+    return parseAsComponentGrammar(input, dashedIdentGrammar, context);
+  }
+
+  /** Consume one dashed identifier. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<DashedIdentValue> {
+    return dashedIdentConsumer(c);
+  }
+
+  /** Identifier text has no contextual resolution. */
+  resolve(_stage: ValueStage, _context: unknown): DashedIdentValue {
+    return this;
+  }
+
+  /** Escape the retained identifier without changing its case. */
+  serialize(): string {
+    return serializeCssIdentifier(this.value);
+  }
+}
 
 /*
- * <dashed-ident> = a <custom-ident> that starts with two dashes
+ * <dashed-ident> is a <custom-ident> that starts with two dashes.
  */
+const dashedIdentConsumer = adaptConsumer(
+  consumeIdentToken,
+  ({ value: name }) => isDashedIdentifier(name)
+    ? new DashedIdentValue(name)
+    : null,
+);
 
-export type DashedIdentValue = {
-  type: 'dashed-ident';
-  value: `--${string}`;
-};
-
-export function parseDashedIdent(
-  input: ParserInput,
-  context: unknown,
-): DashedIdentValue | null {
-  return dashedIdentParser(input, context);
-}
-
-export function consumeDashedIdent(
-  c: TokenCursor,
-): TryConsumerResult<DashedIdentValue> {
-  return dashedIdentConsumer(c);
-}
-
-export function serializeDashedIdent(value: DashedIdentValue): string {
-  return serializeCssIdentifier(value.value);
-}
+const dashedIdentGrammar = withTrivia(dashedIdentConsumer);
 
 function isDashedIdentifier(value: string): value is `--${string}` {
   return value.startsWith('--');
 }
-
-// <dashed-ident> = a <custom-ident> that starts with two dashes
-const dashedIdentConsumer = adaptConsumer(
-  consumeCustomIdent,
-  ({ value }) => isDashedIdentifier(value)
-    ? { type: 'dashed-ident' as const, value }
-    : null,
-);
-
-const dashedIdentParser = createComponentParser(withTrivia(dashedIdentConsumer));

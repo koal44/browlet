@@ -1,51 +1,49 @@
 import { describe, expect, it } from 'vitest';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import {
-  isTokenKind, serializeComponentValues,
+  isTokenKind,
 } from '../../../../src/stylelet/syntax/component-value';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import {
-  parseFirstValid, serializeFirstValid, consumeFirstValid,
+  FirstValidValue,
 } from '../../../../src/stylelet/values/substitution/first-valid';
 
 describe('<first-valid()>', () => {
   it('parses a nonempty comma-separated list of declaration values', () => {
-    const value = parseFirstValid('first-valid(red, 1px, rgb(0, 0, 0))', {});
+    const value = FirstValidValue.parse('first-valid(red, 1px, rgb(0, 0, 0))', {});
 
-    expect(value?.type).toBe('first-valid');
-    expect(value?.arguments.map((argument) =>
-      serializeComponentValues(argument.components.tokens)
+    expect(value).toBeInstanceOf(FirstValidValue);
+    expect(value?.value.map((argument) =>
+      argument.serialize()
     )).toEqual(['red', '1px', 'rgb(0, 0, 0)']);
   });
 
   it('matches the function name case-insensitively with outer trivia', () => {
-    expect(parseFirstValid('  FIRST-VALID(red)  ', {})?.type).toBe('first-valid');
+    expect(FirstValidValue.parse('  FIRST-VALID(red)  ', {})).toBeInstanceOf(FirstValidValue);
   });
 
   it('uses braces to bound an argument containing top-level commas', () => {
-    const value = parseFirstValid(
-      'first-valid({Times, serif}, sans-serif)', {},
-    );
+    const value = FirstValidValue.parse('first-valid({Times, serif}, sans-serif)', {});
 
-    expect(value?.arguments.map((argument) =>
-      serializeComponentValues(argument.components.tokens)
+    expect(value?.value.map((argument) =>
+      argument.serialize()
     )).toEqual(['Times, serif', 'sans-serif']);
   });
 
   it('allows braces around an argument that does not require them', () => {
-    const value = parseFirstValid('first-valid({red}, blue)', {});
+    const value = FirstValidValue.parse('first-valid({red}, blue)', {});
 
-    expect(value?.arguments.map((argument) =>
-      serializeComponentValues(argument.components.tokens)
+    expect(value?.value.map((argument) =>
+      argument.serialize()
     )).toEqual(['red', 'blue']);
-    expect(serializeFirstValid(value!)).toBe('first-valid(red, blue)');
+    expect(value!.serialize()).toBe('first-valid(red, blue)');
   });
 
   it('preserves braces required to bound a free-form argument', () => {
-    const value = parseFirstValid('first-valid({Times, serif}, sans-serif)', {});
+    const value = FirstValidValue.parse('first-valid({Times, serif}, sans-serif)', {});
 
-    expect(serializeFirstValid(value!))
+    expect(value!.serialize())
       .toBe('first-valid({Times, serif}, sans-serif)');
   });
 
@@ -57,7 +55,7 @@ describe('<first-valid()>', () => {
     'first-valid(red; blue, green)',
     'first-valid(red {blue}, green)',
   ])('rejects %j', (input) => {
-    expect(parseFirstValid(input, {})).toBeNull();
+    expect(FirstValidValue.parse(input, {})).toBeNull();
   });
 
   it('consumes one notation without consuming following input', () => {
@@ -65,7 +63,7 @@ describe('<first-valid()>', () => {
       parseListOfComponentValues('first-valid(red, blue) trailing', {}), {},
     );
 
-    expect(consumeFirstValid(c)?.type).toBe('first-valid');
+    expect(FirstValidValue.consume(c)).toBeInstanceOf(FirstValidValue);
     expect(isTokenKind(c.peek(), TokenKind.Whitespace)).toBe(true);
   });
 
@@ -74,7 +72,7 @@ describe('<first-valid()>', () => {
       parseListOfComponentValues('first-valid(red,)', {}), {},
     );
 
-    expect(consumeFirstValid(c)).toBeNull();
+    expect(FirstValidValue.consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
   });
 });

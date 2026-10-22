@@ -1,23 +1,36 @@
-# Value-processing contracts
+# Value processing
 
-This folder currently contains two shared definitions. It is not yet a pipeline that
+This folder currently defines lifecycle stages. It is not yet a pipeline that
 assigns all properties to an element. The [roadmap](ROADMAP.md) separates that
 missing orchestration from the working [value algorithms](../values/README.md).
 
-## Current definitions
+## Current contracts
+
+[Value](../values/value.ts), owned by the values folder, is the instance contract:
+`resolve(stage, context)` returns a value and `serialize()` describes its current
+representation. Each class keeps its own context type; contexts are supplied per
+invocation, not stored in the value. Parsing and consuming are static factories.
+Configured grammars can additionally provide `createConsumer(options)`.
+Static signatures differ where a grammar needs configuration, such as MathValue's
+expected numeric type; they are not forced into the instance interface.
+
+Numeric literals, ordinary values, WholeValue, and the opaque component-list values
+implement this contract. Their public `value` field holds the magnitude or
+representation. Dimension literals also retain their unit directly. Resolution
+can replace a representation or return a different value type; the contract does
+not require the parser's exact result type to survive every stage. Opaque values
+and identifiers retain their identity when there is no contextual work to perform.
+The [value roadmap](../values/ROADMAP.md#value-classes) records the migration scope.
 
 [ValueStage](stage.ts) names Declared, Cascaded, Specified, Computed, Used, and
 Actual in lifecycle order. Resolvers compare those enum values to decide when
 to simplify, convert, clamp, or retain a dependency. The enum does not track
 which stages a value has passed through or whether all required facts exist.
 
-[ValueDefinition](definition.ts) supplies a component consumer, a resolver
-taking `(value, stage, context)`, and a serializer taking only the value. Its
-optional `custom` flag selects registered-property handling in WholeValueDefinition.
-It has no initial/inherited-property metadata or generic interpolation method.
-When used as a property grammar, its consumer prepares the Declared
-representation, including normalization appropriate at that stage. The
-whole-value parser does not call its resolver again to finish ordinary parsing.
+Property grammars prepare the Declared representation, including normalization
+appropriate at that stage. The whole-value parser does not call a resolver again
+to finish ordinary parsing. There is no separate definition object dispatching
+resolution or serialization. Initial values and inheritance remain property metadata.
 
 ## Where the stages are used
 
@@ -38,18 +51,23 @@ used-value facts. It is not another enum entry or a synonym for Computed.
 ## Ownership and serialization
 
 The current call chain runs from [property interpretation](../props/property.ts)
-through [WholeValueDefinition](../values/whole-value.ts) to a concrete ValueDefinition.
+through [WholeValue](../values/whole-value.ts) to a concrete value class.
 [computeStyle()](../engine/computed-style.ts) selects declarations and requests
-Computed resolution. Syntax records, WholeValue, and numeric/color records are
+Computed resolution. Syntax records, WholeValue, and numeric/color values are
 internal representations, not CSSStyleValue Platform objects.
 
-WholeValue is retained data. Its property definition supplies the operations,
-while each call supplies the stage and context. Raw components, deferred
+WholeValue retains its consuming parser for deferred reparsing,
+while each resolution call supplies the stage and context. Raw components, deferred
 alternatives, CSS-wide keywords, and guaranteed-invalid values remain distinct.
 Raw whole values now mean registered syntax awaiting Computed-time validation,
 not ordinary built-in values whose initial interpretation is unfinished.
-Removing per-value methods does not implement the missing defaulting,
+Migrating ownership of these methods does not implement the missing defaulting,
 substitution, dependency tracking, or Used/Actual orchestration.
+
+RawWholeValue, FirstValidValue, and SubstitutionValue are notation payloads whose
+property-dependent resolution belongs to WholeValue. IfValue and IfArguments
+describe conditional grammars; they do not pretend to implement substitution.
+These grammar objects are distinct from independently resolvable values.
 
 The consume/resolve/serialize split supports the project's lifecycle rule:
 serialization describes an already-established value. Parsing owns initial

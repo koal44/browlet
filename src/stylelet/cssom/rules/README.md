@@ -5,7 +5,7 @@
 [RuleListContext](context.ts) supplies the complete interpretation contract to
 Syntax consumption by forwarding to a supplied `CSSRuleListImpl`. It imports only types.
 The list coordinates concrete rule and property grammars without retaining a second
-interpreted tree or whole sheet source string. Selector/value records remain internal parsed data;
+interpreted tree or whole sheet source string. Selector records and value instances remain internal;
 custom-property source text is retained where its representation needs it.
 
 CSSOM and loading callers create RuleListContext with their existing rule list, enclosing selectors,

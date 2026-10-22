@@ -11,7 +11,7 @@ import {
 } from '../../../web-idl/core/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import {
-  Stylelet, lengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
+  Stylelet, LengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
 } from '../../../stylelet/index';
 import { utf8DecodeWithoutBOM, utf8Encode } from '../../../encoding/index';
 import {
@@ -1312,7 +1312,7 @@ export class DocumentImpl extends NodeImpl {
       (entries: IntersectionObserverEntryImpl[]) => this.#resumeLazyLoadingElements(entries),
       {
         root: null,
-        rootMargin: [lengthLiteral(0), lengthLiteral(0), lengthLiteral(0), lengthLiteral(0)],
+        rootMargin: [new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px'), new LengthLiteral(0, 'px')],
         scrollMargin: this.env.userAgent.lazyLoadScrollMargin,
         threshold: 0,
         delay: 0,

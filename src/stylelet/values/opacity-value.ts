@@ -5,112 +5,87 @@ import {
   type ComponentValue, type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
 import { ValueStage } from '../value-processing/index';
+import { NumberLiteral, PercentageLiteral } from './numeric-literal/index';
 
-import type { MathContext } from './math-value';
-import {
-  accumulateNumbers, addNumbers, interpolateNumbers, resolveNumber, serializeNumber,
-  consumeNumber, type NumberValue,
-} from './number';
-import {
-  resolvePercentage, serializePercentage, consumePercentage,
-  type PercentageValue,
-} from './percentage';
+import type { Value } from './value';
+import { MathValue, MathExpression, type MathContext } from './math-value';
+import { NumberValue } from './number';
+import { PercentageValue } from './percentage';
 
-/*
- * <opacity-value> = <number> | <percentage>
- */
+/** An opacity with percentage conversion and computed-stage clamping. */
+// https://drafts.csswg.org/css-color-4/#transparency
+export class OpacityValue<Representation extends Opacity = Opacity> implements Value<MathContext> {
+  /** The retained number or percentage, including an unresolved calculation. */
+  value: Representation;
 
-export type OpacityValue = NumberValue | PercentageValue;
-
-export function parseOpacityValue(
-  input: ParserInput,
-  context: MathContext,
-): OpacityValue | null {
-  return opacityValueParser(input, context);
-}
-
-export function consumeOpacityValue(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<OpacityValue> {
-  return opacityValueConsumer(c);
-}
-
-export function resolveOpacityValue(
-  value: OpacityValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): OpacityValue {
-  const mathContext: MathContext = {
-    ...context,
-    unwrapMathAt: context.unwrapMathAt ?? ValueStage.Computed,
-  };
-  const resolved = isNumberOpacityValue(value)
-    ? resolveNumber(value, stage, mathContext)
-    : resolvePercentage(value, stage, mathContext);
-
-  if (resolved.type === 'math') {
-    return resolved;
+  constructor(value: Representation) {
+    this.value = value;
   }
 
-  const number = resolved.type === 'percentage'
-    ? resolved.value / 100
-    : resolved.value;
+  /** Parse a complete <opacity-value>. */
+  static parse(this: void, input: ParserInput, context: MathContext): OpacityValue | null {
+    return opacityValueParser(input, context);
+  }
 
-  return {
-    type: 'number',
-    value: stage < ValueStage.Computed
-      ? number
-      : clamp(number, 0, 1),
-  };
+  /** Consume one opacity and prepare its declared representation. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<OpacityValue> {
+    return opacityValueConsumer(c);
+  }
+
+  /** Convert resolved percentages to numbers and clamp from the computed stage onward. */
+  resolve(stage: ValueStage, context: MathContext = {}): OpacityValue {
+    const resolved = this.value.resolve(stage, {
+      ...context,
+      unwrapMathAt: context.unwrapMathAt ?? ValueStage.Computed,
+    });
+    const numeric = resolved.value;
+    const literal = numeric instanceof MathValue ? numeric.value : numeric;
+    if (literal instanceof MathExpression) {
+      return resolved === this.value ? this : new OpacityValue(resolved);
+    }
+
+    const magnitude = literal instanceof PercentageLiteral ? literal.value / 100 : literal.value;
+    const number = stage < ValueStage.Computed ? magnitude : clamp(magnitude, 0, 1);
+    if (numeric instanceof NumberLiteral && Object.is(number, numeric.value)) {
+      return resolved === this.value ? this : new OpacityValue(resolved);
+    }
+    return new OpacityValue(new NumberValue(new NumberLiteral(number)));
+  }
+
+  /** Serialize the current representation without conversion or clamping. */
+  serialize(): string {
+    return this.value.serialize();
+  }
+
+  /** Add opacities in their number scale; resolution applies the stage's limits. */
+  add(other: OpacityValue, context: MathContext = {}): OpacityValue {
+    return new OpacityValue(this.asNumber().add(other.asNumber(), context));
+  }
+
+  /** Interpolate opacities in their number scale. */
+  interpolate(other: OpacityValue, progress: number, context: MathContext = {}): OpacityValue {
+    return new OpacityValue(this.asNumber().interpolate(other.asNumber(), progress, context));
+  }
+
+  /** Accumulation is addition. */
+  accumulate(other: OpacityValue, context: MathContext = {}): OpacityValue {
+    return this.add(other, context);
+  }
+
+  private asNumber(): NumberValue {
+    if (this.value instanceof NumberValue) return this.value;
+    const percentage = this.value.value;
+    return new NumberValue(percentage instanceof MathValue
+      ? percentage.toNumber(1 / 100, 1)
+      : new NumberLiteral(percentage.value / 100));
+  }
 }
 
-export function serializeOpacityValue(value: OpacityValue): string {
-  return isNumberOpacityValue(value)
-    ? serializeNumber(value)
-    : serializePercentage(value);
-}
-
-export function addOpacities(
-  a: NumberValue,
-  b: NumberValue,
-  context: MathContext = {},
-): NumberValue {
-  return addNumbers(a, b, context);
-}
-
-export function interpolateOpacities(
-  a: NumberValue,
-  b: NumberValue,
-  p: number,
-  context: MathContext = {},
-): NumberValue {
-  return interpolateNumbers(a, b, p, context);
-}
-
-export function accumulateOpacities(
-  a: NumberValue,
-  b: NumberValue,
-  context: MathContext = {},
-): NumberValue {
-  return accumulateNumbers(a, b, context);
-}
-
-function isNumberOpacityValue(
-  value: OpacityValue,
-): value is NumberValue {
-  return value.type === 'number' || (
-    value.type === 'math' &&
-    value.valueType === 'number'
-  );
-}
+type Opacity = NumberValue | PercentageValue;
 
 // <opacity-value> = <number> | <percentage>
 const opacityValueConsumer = oneOf(
-  [
-    one(consumeNumber),
-    one(consumePercentage),
-  ],
-  ([value], context: MathContext) => resolveOpacityValue(value, ValueStage.Declared, context),
+  [one(NumberValue.consume), one(PercentageValue.consume)],
+  ([value], context: MathContext) => new OpacityValue(value).resolve(ValueStage.Declared, context),
 );
-
 const opacityValueParser = createComponentParser(withTrivia(opacityValueConsumer));

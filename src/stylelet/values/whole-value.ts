@@ -1,174 +1,121 @@
 import { InternalError } from '../../infra/internal-error';
 
 import {
-  serializeComponentValues, adaptConsumer, withTrivia, createComponentParser,
-  parseOptionalDeclarationValue,
-  type TryConsumer, type TokenCursor, type ParserInput, type OptionalDeclarationValue,
+  withTrivia, createComponentParser,
+  type TokenCursor, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import type { PropertyContext } from '../props/index';
+import { ValueStage } from '../value-processing/index';
 
-import {
-  consumeCssWideValue, type CssWideValue,
-} from './css-wide';
-import {
-  isSubstitutionDeclaration, resolveSubstitutionFunction,
-  type SubstitutionValue,
-} from './substitution-value';
-import {
-  serializeFirstValid, consumeFirstValid,
-  type FirstValidValue,
-} from './substitution/first-valid';
-import {
-  createSyntaxConsumer, resolveParsedSyntaxValue, serializeParsedSyntaxValue,
-  type ParsedSyntaxValue, type SyntaxValue,
-} from './syntax-value';
+import type { Value } from './value';
+import { OptionalDeclarationValue } from './declaration-value';
+import { CssWideValue } from './css-wide';
+import { SubstitutionValue } from './substitution-value';
+import { FirstValidValue } from './substitution/first-valid';
+import { GuaranteedInvalidValue, guaranteedInvalidValue } from './guaranteed-invalid';
 
-/** Retained value data; its whole-value definition supplies lifecycle operations. */
-export type WholeValue<Value> =
-  | RawWholeValue
-  | SubstitutionValue
-  | CssWideValue
-  | OrdinaryWholeValue<Value>
-  | FirstValidValue
-  | GuaranteedInvalidValue;
+/** A property's complete value, including notation deferred until its grammar can be applied. */
+export class WholeValue<Ordinary extends Value<Context>, Context = unknown> implements Value<Context> {
+  /** The parsed value or retained whole-value notation. */
+  value: Ordinary | RawWholeValue | SubstitutionValue | CssWideValue | FirstValidValue | GuaranteedInvalidValue;
+  /** The consuming grammar, retained for deferred reparsing without retaining context. */
+  private parseValue: (input: ParserInput, context: Context) => Ordinary | null;
+  /** Registered declarations defer their ordinary grammar until Computed time. */
+  private registered: boolean;
 
-/** Registered-property syntax retained until Computed-time grammar validation. */
-export type RawWholeValue = {
-  type: 'raw';
-  declaration: OptionalDeclarationValue;
-};
+  constructor(
+    value: WholeValue<Ordinary, Context>['value'],
+    parseValue: (input: ParserInput, context: Context) => Ordinary | null,
+    registered = false,
+  ) {
+    this.value = value;
+    this.parseValue = parseValue;
+    this.registered = registered;
+  }
 
-type OrdinaryWholeValue<Value> = {
-  type: 'ordinary';
-  value: Value;
-};
+  /** Bind a shared ordinary parser to whole-value notation once per property grammar. */
+  static createParser<Ordinary extends Value<Context>, Context>(
+    parseValue: (input: ParserInput, context: Context) => Ordinary | null,
+    registered = false,
+  ): (input: ParserInput, context: Context) => WholeValue<Ordinary, Context> | null {
+    return (input, context) => WholeValue.parse(input, context, parseValue, registered);
+  }
 
-type ParsedWholeValue<Value> =
-  | CssWideValue
-  | OrdinaryWholeValue<Value>
-  | FirstValidValue;
+  /** Parse a complete declaration; registered ordinary syntax remains deferred. */
+  static parse<Ordinary extends Value<Context>, Context>(
+    input: ParserInput,
+    context: Context,
+    parseValue: (input: ParserInput, context: Context) => Ordinary | null,
+    registered = false,
+  ): WholeValue<Ordinary, Context> | null {
+    const declaration = OptionalDeclarationValue.parse(input, context);
+    if (declaration === null) return null;
 
-/** Shared grammar and lifecycle behavior for whole-property values. */
-export type WholeValueDefinition<Value, Context> = {
-  /** Interpret a Declared value, preserving syntax whose validation must wait until Computed. */
-  parse: (input: ParserInput, context: Context) => WholeValue<Value> | null;
-  /** Process a retained value at the requested stage; invalid computed values remain explicit. */
-  resolve: (value: WholeValue<Value>, stage: ValueStage, context: Context) => WholeValue<Value>;
-  /** Serialize the retained representation without advancing its stage. */
-  serialize: (value: WholeValue<Value>) => string;
-};
+    const value = SubstitutionValue.containsFunction(declaration.value)
+      ? new SubstitutionValue(declaration)
+      : wholeValueNotationParser(declaration.value, context) ??
+        (registered ? new RawWholeValue(declaration) : parseValue(declaration.value, context));
 
-export type GuaranteedInvalidValue = {
-  type: 'guaranteed-invalid';
-};
+    return value === null ? null : new WholeValue<Ordinary, Context>(value, parseValue, registered);
+  }
 
-export const guaranteedInvalidValue: GuaranteedInvalidValue = {
-  type: 'guaranteed-invalid',
-};
+  /** Resolve with fresh context, preserving ordinary values or returning their resolver's result. */
+  resolve(stage: ValueStage, context: Context): WholeValue<Ordinary | ReturnType<Ordinary['resolve']>, Context>;
+  resolve(stage: ValueStage, context: Context): WholeValue<Value<Context>, Context> {
+    const value = this.value;
+    if (value instanceof RawWholeValue) {
+      if (stage < ValueStage.Computed) return this;
+      const declaration = value.value;
+      const parsed = this.parseValue(declaration.value, context);
+      return this.withValue(parsed === null ? guaranteedInvalidValue : parsed.resolve(stage, context));
+    }
+    if (value instanceof FirstValidValue) {
+      if (stage < ValueStage.Computed) return this;
+      for (const argument of value.value) {
+        const parsed = WholeValue.parse(argument.value, context, this.parseValue, this.registered);
+        if (parsed === null) continue;
+        const resolved = parsed.resolve(stage, context);
+        if (!(resolved.value instanceof GuaranteedInvalidValue)) return resolved;
+      }
+      return this.withValue(guaranteedInvalidValue);
+    }
+    if (value instanceof SubstitutionValue) {
+      if (stage < ValueStage.Computed) return this;
+      const substituted = value.substitute(context);
+      if (substituted instanceof GuaranteedInvalidValue) return this.withValue(substituted);
+      const parsed = WholeValue.parse(substituted, context, this.parseValue, this.registered);
+      if (parsed === null) throw new InternalError('Handling substituted parse failure is not implemented');
+      return parsed.resolve(stage, context);
+    }
+    return this.withValue(value.resolve(stage, context));
+  }
 
-/** Bind a registered property's syntax to the shared whole-value lifecycle. */
-export function defineCustomWholeValue(definition: { syntax: SyntaxValue; }) {
-  const syntaxDef: ValueDefinition<ParsedSyntaxValue, PropertyContext> = {
-    consume: createSyntaxConsumer(definition.syntax),
-    resolve: resolveParsedSyntaxValue,
-    serialize: serializeParsedSyntaxValue,
-    custom: true,
-  };
+  /** Serialization delegates to the current representation and never reparses or resolves it. */
+  serialize(): string {
+    return this.value.serialize();
+  }
 
-  return defineWholeValue(syntaxDef);
+  private withValue(value: WholeValue<Value<Context>, Context>['value']): WholeValue<Value<Context>, Context> {
+    return value === this.value ? this : new WholeValue<Value<Context>, Context>(value, this.parseValue, this.registered);
+  }
 }
 
-/** Add whole-value forms to a grammar whose consumer prepares its Declared representation. */
-export function defineWholeValue<Value, Context>(
-  definition: ValueDefinition<Value, Context>,
-): WholeValueDefinition<Value, Context> {
-  const ordinaryConsumer = adaptConsumer(
-    definition.consume,
-    (value): OrdinaryWholeValue<Value> => ({ type: 'ordinary', value }),
-  );
-  const consume: TryConsumer<ParsedWholeValue<Value>, Context> = (c) =>
-    consumeWholeValueNotation(c) ?? ordinaryConsumer(c);
-  const parseValue = createComponentParser(withTrivia(consume));
-  const parseInitialValue = definition.custom
-    ? wholeValueNotationParser
-    : parseValue;
+/** A registered declaration whose ordinary syntax is not checked before Computed time. */
+export class RawWholeValue {
+  /** The original declaration, including valid empty input and source spans. */
+  value: OptionalDeclarationValue;
 
-  const wholeValueDef: WholeValueDefinition<Value, Context> = {
-    parse(input, context) {
-      const declaration = parseOptionalDeclarationValue(input, context);
-      if (declaration === null) return null;
+  constructor(value: OptionalDeclarationValue) {
+    this.value = value;
+  }
 
-      if (isSubstitutionDeclaration(declaration)) {
-        return { type: 'substitution-value', declaration };
-      }
-
-      const parsed = parseInitialValue(declaration.components, context);
-      return parsed ?? (definition.custom ? { type: 'raw', declaration } : null);
-    },
-    resolve(value, stage, context) {
-      switch (value.type) {
-        case 'raw': {
-          if (stage < ValueStage.Computed) return value;
-
-          const parsed = parseValue(value.declaration.components, context);
-          return parsed === null ? guaranteedInvalidValue : wholeValueDef.resolve(parsed, stage, context);
-        }
-        case 'ordinary':
-          return { type: 'ordinary', value: definition.resolve(value.value, stage, context) };
-        case 'first-valid':
-          if (stage < ValueStage.Computed) return value;
-
-          for (const argument of value.arguments) {
-            const parsed = wholeValueDef.parse(argument.components, context);
-            if (parsed === null) continue;
-
-            const resolved = wholeValueDef.resolve(parsed, stage, context);
-            if (resolved.type !== 'guaranteed-invalid') return resolved;
-          }
-          return guaranteedInvalidValue;
-        case 'substitution-value': {
-          if (stage < ValueStage.Computed) return value;
-
-          const substituted = resolveSubstitutionFunction(value.declaration.components, context);
-          if ('type' in substituted) return substituted;
-
-          const parsed = wholeValueDef.parse(substituted, context);
-          if (parsed === null) {
-            throw new InternalError('Handling substituted parse failure is not implemented');
-          }
-          return wholeValueDef.resolve(parsed, stage, context);
-        }
-        case 'css-wide':
-          // TODO: Apply CSS-wide keywords through engine defaulting.
-          return value;
-        case 'guaranteed-invalid':
-          return value;
-      }
-    },
-    serialize(value) {
-      switch (value.type) {
-        case 'raw':
-        case 'substitution-value':
-          return serializeComponentValues(value.declaration.components.tokens);
-        case 'ordinary':
-          return definition.serialize(value.value);
-        case 'first-valid':
-          return serializeFirstValid(value);
-        case 'css-wide':
-          return value.keyword;
-        case 'guaranteed-invalid':
-          return '';
-      }
-    },
-  };
-
-  return wholeValueDef;
+  /** Serialize the retained declaration without applying its registered grammar. */
+  serialize(): string {
+    return this.value.serialize();
+  }
 }
 
-/** Recognize whole-value notation independently of the property's ordinary grammar. */
 function consumeWholeValueNotation(c: TokenCursor): CssWideValue | FirstValidValue | null {
-  return consumeCssWideValue(c) ?? consumeFirstValid(c);
+  return CssWideValue.consume(c) ?? FirstValidValue.consume(c);
 }
 
 const wholeValueNotationParser = createComponentParser(withTrivia(consumeWholeValueNotation));

@@ -3,10 +3,7 @@ import {
   nullable, op, reference, roAttr, xattr,
 } from '../../../web-idl/core/index';
 
-import {
-  parseMediaQueryList, serializeMediaQuery, serializeMediaQueryList,
-  type MathContext, type MediaQuery,
-} from '../../values/index';
+import { MediaQuery, type MathContext } from '../../values/index';
 
 /** Retain and edit a media query list; device matching belongs to Conditional Rules. */
 // https://drafts.csswg.org/cssom/#the-medialist-interface
@@ -23,11 +20,11 @@ export class MediaListImpl {
   /** Serialized query list; assignment replaces its contents with newly parsed queries. */
   // https://drafts.csswg.org/cssom/#dom-medialist-mediatext
   get mediaText(): string {
-    return serializeMediaQueryList(this.#queries);
+    return MediaQuery.serializeList(this.#queries);
   }
 
   set mediaText(value: string) {
-    this.#queries = parseMediaQueryList(value, {});
+    this.#queries = MediaQuery.parseList(value, {});
   }
 
   /** Current number of media queries, including duplicates retained from parsed input. */
@@ -40,7 +37,7 @@ export class MediaListImpl {
   // https://drafts.csswg.org/cssom/#dom-medialist-item
   item(index: number): string | null {
     const query = this.#queries[index];
-    return query === undefined ? null : serializeMediaQuery(query);
+    return query === undefined ? null : query.serialize();
   }
 
   /** Append one query unless its serialization is already present. */
@@ -51,8 +48,8 @@ export class MediaListImpl {
     const query = parseSingleMediaQuery(medium, {});
     if (query === null) return;
 
-    const serialized = serializeMediaQuery(query);
-    if (!this.#queries.some((item) => serializeMediaQuery(item) === serialized)) {
+    const serialized = query.serialize();
+    if (!this.#queries.some((item) => item.serialize() === serialized)) {
       this.#queries.push(query);
     }
   }
@@ -65,9 +62,9 @@ export class MediaListImpl {
     const query = parseSingleMediaQuery(medium, {});
     if (query === null) return;
 
-    const serialized = serializeMediaQuery(query);
+    const serialized = query.serialize();
     const length = this.#queries.length;
-    this.#queries = this.#queries.filter((item) => serializeMediaQuery(item) !== serialized);
+    this.#queries = this.#queries.filter((item) => item.serialize() !== serialized);
 
     if (this.#queries.length === length) {
       throw new DOMExceptionImpl(`"${medium}" was not found in the media list.`, 'NotFoundError');
@@ -111,6 +108,6 @@ export const mediaListIDL = defineInterface({
 // SPEC_CLASH(media-list-mutation-input): Follow CSSOM/Chromium's list recovery
 // and ignore empty/multiple-query input. Firefox/WebKit differ; see the roadmap.
 function parseSingleMediaQuery(input: string, context: MathContext): MediaQuery | null {
-  const queries = parseMediaQueryList(input, context);
+  const queries = MediaQuery.parseList(input, context);
   return queries.length === 1 ? queries[0]! : null;
 }

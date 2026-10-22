@@ -6,15 +6,90 @@ import {
   createComponentParser, serializeCssString, serializeCssFunction,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
+import { ValueStage } from '../value-processing/index';
 import type { TreeScope } from '../engine/index';
 
-import { consumeString } from './string';
-import {
-  isRequestUrlModifierValue, serializeRequestUrlModifiers,
-  consumeUrlModifier, type RequestUrlModifiers, type RequestUrlModifierValue,
-  type UrlModifierValue,
-} from './url-modifier';
+import type { Value } from './value';
+import { StringValue } from './string';
+import { UrlModifierValue, type RequestUrlModifiers } from './url-modifier';
+
+/** A URL and request modifiers retaining their declaration's local-fragment provenance. */
+// https://drafts.csswg.org/css-values-4/#urls
+export class UrlValue<Representation extends Url = Url> implements Value<UrlContext> {
+  /** The URL text, notation, modifiers, and any captured local tree scope. */
+  value: Representation;
+
+  constructor(value: Representation) {
+    this.value = value;
+  }
+
+  /** Parse a complete url() or src() value. */
+  static parse(input: ParserInput, context: unknown): UrlValue | null {
+    return urlParser(input, context);
+  }
+
+  /** Consume a URL without resolving against a base URL. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<UrlValue> {
+    return urlConsumer(c);
+  }
+
+  /** Construct an interpreted URL and identify local fragment syntax. */
+  static fromString(notation: UrlNotation, href: string, modifiers: RequestUrlModifiers): UrlValue {
+    return new UrlValue({ notation, href, modifiers, ...(href.startsWith('#') ? { local: true as const } : {}) });
+  }
+
+  /** Capture local scope from the specified stage; resolve other URLs from the computed stage. */
+  resolve(stage: ValueStage, context: UrlContext = {}): UrlValue {
+    const url = this.value;
+    if (url.local === true) {
+      return stage < ValueStage.Specified || url.treeScope !== undefined || context.treeScope === undefined
+        ? this : new UrlValue({ ...url, treeScope: context.treeScope });
+    }
+    if (stage < ValueStage.Computed || url.href === '') return this;
+    const URL = context.URL;
+    if (URL === undefined) throw new InternalError('URL resolution requires a host URL constructor');
+    try {
+      const href = new URL(url.href, context.baseUrl?.href).href;
+      return href === url.href ? this : new UrlValue({ ...url, href });
+    } catch {
+      // A URL that cannot be made absolute retains its specified value.
+      return this;
+    }
+  }
+
+  /** Serialize the retained URL and modifiers without resolving against a new base. */
+  // https://drafts.csswg.org/cssom/#serialize-a-url
+  // CSS Values extends URL notation with src() and request modifiers.
+  serialize(): string {
+    const url = this.value;
+    const { crossOrigin, integrity, referrerPolicy } = url.modifiers;
+    let args = serializeCssString(url.href);
+    // CSS Values 4 section 9.1 and CSSWG issue #12151 use grammar order.
+    if (crossOrigin !== undefined) args += ` ${crossOrigin.serialize()}`;
+    if (integrity !== undefined) args += ` ${integrity.serialize()}`;
+    if (referrerPolicy !== undefined) args += ` ${referrerPolicy.serialize()}`;
+    return serializeCssFunction(url.notation, args);
+  }
+}
+
+type Url = {
+  notation: UrlNotation;
+  href: string;
+  modifiers: RequestUrlModifiers;
+  // Fragment-only URLs carry this flag before their scope is known.
+  local?: true;
+  // Captured declaration provenance for local URL matching.
+  treeScope?: TreeScope;
+};
+
+export type UrlNotation = 'url' | 'src';
+
+export type UrlContext = {
+  /** Required when computing a nonempty URL without the local fragment flag. */
+  URL?: StyleletURLConstructor;
+  baseUrl?: StyleletURL;
+  treeScope?: TreeScope;
+};
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL
@@ -32,198 +107,29 @@ import {
  * <src()> = src( <string> <url-modifier>* )
  */
 
-export type UrlValue = {
-  type: 'url';
-  notation: UrlNotation;
-  value: string;
-  modifiers: RequestUrlModifiers;
-  // Fragment-only URLs carry this flag before their scope is known.
-  local?: true;
-  // Captured declaration provenance for local URL matching.
-  treeScope?: TreeScope;
-};
-
-export type UrlNotation = 'url' | 'src';
-
-export type UrlContext = {
-  /** Required when computing a nonempty URL without the local fragment flag. */
-  URL?: StyleletURLConstructor;
-  baseUrl?: StyleletURL;
-  treeScope?: TreeScope;
-};
-
-export const urlDef: ValueDefinition<UrlValue, UrlContext> = {
-  consume: consumeUrl,
-  resolve: resolveUrl,
-  serialize: serializeUrl,
-};
-
-export function parseUrl(
-  input: ParserInput,
-  context: unknown,
-): UrlValue | null {
-  return urlParser(input, context);
-}
-
-export function consumeUrl(
-  c: TokenCursor,
-): TryConsumerResult<UrlValue> {
-  return urlConsumer(c);
-}
-
-export function resolveUrl(
-  value: UrlValue,
-  stage: ValueStage,
-  context: UrlContext = {},
-): UrlValue {
-  if (value.local === true) {
-    if (
-      stage < ValueStage.Specified ||
-      value.treeScope !== undefined ||
-      context.treeScope === undefined
-    ) {
-      return value;
+// Shared arguments for url() and src(); unknown modifiers do not become request options.
+const urlArgumentsConsumer = sequenceOf(
+  [one(StringValue.consume), any(withTrivia(UrlModifierValue.consume))],
+  ([[string], values]) => {
+    const modifiers: RequestUrlModifiers = {};
+    for (const modifier of values) {
+      if (modifier.isRequest() && !modifier.value.applyTo(modifiers)) return null;
     }
-
-    return { ...value, treeScope: context.treeScope };
-  }
-
-  if (
-    stage < ValueStage.Computed ||
-    value.value === ''
-  ) {
-    return value;
-  }
-
-  const URL = context.URL;
-  if (URL === undefined) throw new InternalError('URL resolution requires a host URL constructor');
-
-  try {
-    return {
-      ...value,
-      value: new URL(value.value, context.baseUrl?.href).href,
-    };
-  } catch {
-    // A URL that cannot be made absolute retains its specified value.
-    return value;
-  }
-}
-
-/** Serialize the retained URL value and its modifiers without resolving against a new base. */
-// https://drafts.csswg.org/cssom/#serialize-a-url
-// CSS Values extends URL notation with src() and request modifiers.
-export function serializeUrl(value: UrlValue): string {
-  const args = [
-    serializeCssString(value.value),
-    ...serializeRequestUrlModifiers(value.modifiers),
-  ];
-
-  return serializeCssFunction(value.notation, args.join(' '));
-}
-
-type UrlFunctionContext = {
-  seenRequestModifiers?: ReadonlySet<RequestUrlModifierValue['type']>;
-};
-
-function createUrlValue(
-  notation: UrlNotation,
-  value: string,
-  modifiers: RequestUrlModifiers,
-): UrlValue {
-  return {
-    type: 'url',
-    notation,
-    value,
-    modifiers,
-    ...(value.startsWith('#') ? { local: true as const } : {}),
-  };
-}
-
-function contextForUrlFunctionArguments(): UrlFunctionContext {
-  return {};
-}
-
-function urlModifiersFromArray(
-  values: UrlModifierValue[],
-): RequestUrlModifiers {
-  const modifiers: RequestUrlModifiers = {};
-
-  for (const value of values) {
-    if (!isRequestUrlModifierValue(value)) {
-      continue;
-    }
-
-    switch (value.type) {
-      case 'cross-origin-modifier':
-        modifiers.crossOrigin = value;
-        break;
-      case 'integrity-modifier':
-        modifiers.integrity = value;
-        break;
-      case 'referrer-policy-modifier':
-        modifiers.referrerPolicy = value;
-        break;
-    }
-  }
-
-  return modifiers;
-}
-
-function contextAfterUrlFunctionModifier<Context extends UrlFunctionContext>(
-  value: UrlModifierValue,
-  context: Context,
-): Context {
-  if (!isRequestUrlModifierValue(value)) {
-    return context;
-  }
-
-  return {
-    ...context,
-    seenRequestModifiers: new Set([
-      ...(context.seenRequestModifiers ?? []),
-      value.type,
-    ]),
-  };
-}
-
-// =============================================================================
-// Syntax
-// =============================================================================
-
-// Implementation adapter rejecting duplicate recognized request modifiers.
-const urlFunctionModifierConsumer = adaptConsumer(
-  consumeUrlModifier,
-  (value, context: UrlFunctionContext) => (
-    isRequestUrlModifierValue(value) &&
-    context.seenRequestModifiers?.has(value.type) === true
-  )
-    ? null
-    : value,
+    return { href: string.value, modifiers };
+  },
 );
 
 // <url-token>
 const urlTokenValueConsumer: TryConsumer<UrlValue> = adaptConsumer(
   consumeUrlToken,
-  (component) => createUrlValue('url', component.value, {}),
+  (component) => UrlValue.fromString('url', component.value, {}),
 );
 
 // <src()> = src( <string> <url-modifier>* )
 const srcFnConsumer = createFunctionalNotationConsumer(
   'src',
-  sequenceOf(
-    [
-      one(consumeString),
-      any(withTrivia(urlFunctionModifierConsumer), {
-        contextAfter: contextAfterUrlFunctionModifier,
-      }),
-    ],
-    ([[string], modifiers]) => ({
-      value: string.value,
-      modifiers: urlModifiersFromArray(modifiers),
-    }),
-  ),
-  (value) => createUrlValue('src', value.value, value.modifiers),
-  { contextForArguments: contextForUrlFunctionArguments },
+  urlArgumentsConsumer,
+  ({ href, modifiers }) => UrlValue.fromString('src', href, modifiers),
 );
 
 // <url()> = url( <string> <url-modifier>* ) | <url-token>
@@ -231,20 +137,8 @@ const urlFnConsumer: TryConsumer<UrlValue> = oneOf(
   [
     one(createFunctionalNotationConsumer(
       'url',
-      sequenceOf(
-        [
-          one(consumeString),
-          any(withTrivia(urlFunctionModifierConsumer), {
-            contextAfter: contextAfterUrlFunctionModifier,
-          }),
-        ],
-        ([[string], modifiers]) => ({
-          value: string.value,
-          modifiers: urlModifiersFromArray(modifiers),
-        }),
-      ),
-      (value) => createUrlValue('url', value.value, value.modifiers),
-      { contextForArguments: contextForUrlFunctionArguments },
+      urlArgumentsConsumer,
+      ({ href, modifiers }) => UrlValue.fromString('url', href, modifiers),
     )),
     one(urlTokenValueConsumer),
   ],

@@ -1,27 +1,41 @@
-import { adaptConsumer, type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/index';
+import {
+  createKeywordConsumer, adaptConsumer, withTrivia, parseAsComponentGrammar,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
+} from '../syntax/index';
+import type { ValueStage } from '../value-processing/index';
 
-import { createKeywordConsumer } from './keyword';
+import type { Value } from './value';
 
-/*
- * auto
- */
+/** The auto keyword; its meaning is determined by the property that uses it. */
+export class AutoValue implements Value {
+  /** The retained keyword. */
+  value = 'auto' as const;
 
-export type AutoValue = {
-  type: 'auto';
-};
+  /** Parse a complete auto keyword. */
+  static parse(input: ParserInput, context: unknown): AutoValue | null {
+    return parseAsComponentGrammar(input, autoGrammar, context);
+  }
 
-export function consumeAuto(
-  c: TokenCursor,
-): TryConsumerResult<AutoValue> {
-  return autoConsumer(c);
-}
+  /** Consume one auto keyword. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<AutoValue> {
+    return autoConsumer(c);
+  }
 
-export function serializeAuto(value: AutoValue): string {
-  return value.type;
+  /** Property-specific auto handling remains with the containing value or property. */
+  resolve(_stage: ValueStage, _context: unknown): AutoValue {
+    return this;
+  }
+
+  /** Serialize the retained keyword. */
+  serialize(): string {
+    return this.value;
+  }
 }
 
 // auto
-const autoConsumer: TryConsumer<AutoValue> = adaptConsumer(
+const autoConsumer = adaptConsumer(
   createKeywordConsumer('auto'),
-  () => ({ type: 'auto' }),
+  () => new AutoValue(),
 );
+
+const autoGrammar = withTrivia(autoConsumer);

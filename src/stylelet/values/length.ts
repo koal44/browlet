@@ -1,160 +1,101 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import {
-  accumulateDimensions, addDimensions, interpolateDimensions,
-  createLengthConsumer as createLengthLiteralConsumer, serializeLength as serializeLengthLiteral,
-  tryResolveLength,
-  type LengthConsumerOptions, type LengthLiteral,
-} from './numeric-literal/index';
+import { ValueStage } from '../value-processing/index';
+import { LengthLiteral, type LengthConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <length> =
- *   <dimension-token with a length unit> | <zero> | <math-function>
- */
+/** A <length> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#lengths
+export class LengthValue<Representation extends Length = Length> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type LengthValue = LengthLiteral | MathValue<'length'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export const lengthDef: ValueDefinition<LengthValue, MathContext> = {
-  consume: consumeLength,
-  resolve: resolveLength,
-  serialize: serializeLength,
-};
+  /** Parse one complete <length>. */
+  static parse(input: ParserInput, context: MathContext): LengthValue | null {
+    return parseAsComponentGrammar(input, lengthGrammar, context);
+  }
 
-export function parseLength(
-  input: ParserInput,
-  context: MathContext,
-): LengthValue | null {
-  return lengthParser(input, context);
-}
+  /** Consume one <length> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<LengthValue> {
+    return lengthConsumer(c);
+  }
 
-export function consumeLength(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<LengthValue> {
-  return lengthConsumer(c);
-}
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: LengthConsumerOptions = {}): TryConsumer<LengthValue, MathContext> {
+    const literalConsumer = LengthLiteral.createConsumer(options);
 
-export function createLengthConsumer(
-  options: LengthConsumerOptions = {},
-): TryConsumer<LengthValue, MathContext> {
-  const literalConsumer = createLengthLiteralConsumer(options);
-  const range = lengthRange(options);
-
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'length',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveLength(
-  value: LengthValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): LengthValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, context);
+    ], ([parsed]) => new LengthValue(parsed));
   }
 
-  if (stage < ValueStage.Computed) return value;
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): LengthValue {
+    const previous = this.value;
+    if (previous instanceof MathValue) {
+      const resolved = previous.resolve(stage, context);
+      return resolved === previous ? this : new LengthValue(resolved);
+    }
 
-  return tryResolveLength(value, context.length) ?? value;
-}
+    if (stage < ValueStage.Computed || previous.unit === 'px') return this;
 
-export function serializeLength(
-  value: LengthValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeLengthLiteral(value);
-}
-
-export function addLengths(
-  a: LengthValue,
-  b: LengthValue,
-  context: MathContext = {},
-): LengthValue {
-  if (a.type === 'length' && b.type === 'length') {
-    return addDimensions(a, b);
+    const resolved = previous.tryResolve(context.length);
+    return resolved === null ? this : new LengthValue(resolved);
   }
 
-  return addMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-export function interpolateLengths(
-  a: LengthValue,
-  b: LengthValue,
-  p: number,
-  context: MathContext = {},
-): LengthValue {
-  if (a.type === 'length' && b.type === 'length') {
-    return interpolateDimensions(a, b, p);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  return interpolateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    p,
-    context,
-  );
-}
-
-export function accumulateLengths(
-  a: LengthValue,
-  b: LengthValue,
-  context: MathContext = {},
-): LengthValue {
-  if (a.type === 'length' && b.type === 'length') {
-    return accumulateDimensions(a, b);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: LengthValue, context: MathContext = {}): LengthValue {
+    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue) && this.value.unit === other.value.unit) {
+      return new LengthValue(this.value.add(other.value));
+    }
+    return new LengthValue(
+      this.asMathValue(context).add(other.asMathValue(context), context),
+    );
   }
 
-  return accumulateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-function asMathValue(
-  value: LengthValue,
-  context: MathContext,
-): MathValue<'length'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'length', context);
-}
-
-
-function lengthRange(
-  options: LengthConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: LengthValue, progress: number, context: MathContext = {}): LengthValue {
+    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue) && this.value.unit === other.value.unit) {
+      return new LengthValue(this.value.interpolate(other.value, progress));
+    }
+    return new LengthValue(
+      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation of lengths is addition. */
+  accumulate(other: LengthValue, context: MathContext = {}): LengthValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'length'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'length', context);
+  }
 }
 
-// <length> = <dimension-token with a length unit> | <zero> | <math-function>
-const lengthConsumer = createLengthConsumer();
-const lengthParser = createComponentParser(withTrivia(lengthConsumer));
+const lengthConsumer = LengthValue.createConsumer();
+
+const lengthGrammar = withTrivia(lengthConsumer);
+
+/** Literal or calculation accepted by this numeric grammar. */
+type Length = LengthLiteral | MathValue<'length'>;

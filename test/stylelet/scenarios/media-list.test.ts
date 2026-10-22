@@ -1,8 +1,11 @@
 import { expect, type Page } from '@playwright/test';
+import { require as tsRequire } from 'tsx/cjs/api';
 
-import { MediaListImpl } from '../../../src/stylelet/cssom/media/media-list';
+import type * as MediaListModule from '../../../src/stylelet/cssom/media/media-list';
 import { runScenarios } from '../../scenario/dispatch';
 import { BROWSER_NAMES } from '../../scenario/harness';
+
+const { MediaListImpl } = tsRequire('../../../src/stylelet/cssom/media/media-list.ts', __filename) as typeof MediaListModule;
 
 const mediaQueries: [string, string][] = [
   ['', ''],

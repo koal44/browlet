@@ -1,12 +1,9 @@
 import { InternalError } from '../../infra/internal-error';
 
-import { one, oneOf, type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import {
-  serializeAuto, consumeAuto, resolveLengthPercentage, serializeLengthPercentage, consumeLengthPercentage,
-  defineWholeValue,
-  type AutoValue, type MathContext, type LengthPercentageValue,
-} from '../values/index';
+import { one, oneOf, withTrivia, createComponentParser, type TryConsumer } from '../syntax/index';
+import { ValueStage } from '../value-processing/index';
+import { LengthLiteral } from '../values/numeric-literal/index';
+import { WholeValue, AutoValue, LengthPercentageValue, type MathContext } from '../values/index';
 
 import type { PropertyRecord } from './property';
 import type { ShorthandRecord } from './shorthand';
@@ -18,13 +15,13 @@ import type { ShorthandRecord } from './shorthand';
 
 type MarginSideValue = LengthPercentageValue | AutoValue;
 
-const marginSideDef: ValueDefinition<MarginSideValue, MathContext> = {
-  consume: consumeMarginSideValue,
-  resolve: resolveMarginSideValue,
-  serialize: serializeMarginSideValue,
-};
-
-export const marginSideWholeValueDef = defineWholeValue(marginSideDef);
+// <margin-top>, <margin-right>, <margin-bottom>, <margin-left> = <length-percentage> | auto
+const marginSideValueConsumer: TryConsumer<MarginSideValue, MathContext> = oneOf(
+  [one(LengthPercentageValue.consume), one(AutoValue.consume)],
+  ([value], context: MathContext) => value.resolve(ValueStage.Declared, context),
+);
+const parseMarginSideValue = createComponentParser(withTrivia(marginSideValueConsumer));
+export const parseMarginSideProperty = WholeValue.createParser(parseMarginSideValue);
 
 /** Margin's canonical longhands; its grammar and pending-substitution representation remain unfinished. */
 // https://drafts.csswg.org/css-box-4/#margin-shorthand
@@ -46,38 +43,10 @@ export const marginShorthand: ShorthandRecord = {
 /** Shared grammar and metadata for the four physical margin longhands. */
 // https://drafts.csswg.org/css-box-4/#margin-physical
 export const marginSideProperty: PropertyRecord<MarginSideValue, MathContext> = {
-  definition: marginSideWholeValueDef,
+  parse: parseMarginSideProperty,
   inherits: false,
-  initialValue: { type: 'ordinary', value: { type: 'length', value: 0, unit: '' } },
+  initialValue: new WholeValue<MarginSideValue, MathContext>(
+    new LengthPercentageValue(new LengthLiteral(0, '')), parseMarginSideValue,
+  ),
   logicalGroup: { name: 'margin', mapping: 'physical' },
 };
-
-function consumeMarginSideValue(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<MarginSideValue> {
-  return marginSideValueConsumer(c);
-}
-
-/** Resolve a margin longhand's numeric value while preserving the auto keyword. */
-function resolveMarginSideValue(
-  value: MarginSideValue,
-  stage: ValueStage,
-  context: MathContext,
-): MarginSideValue {
-  return value.type === 'auto' ? value : resolveLengthPercentage(value, stage, context);
-}
-
-function serializeMarginSideValue(value: MarginSideValue): string {
-  return value.type === 'auto'
-    ? serializeAuto(value)
-    : serializeLengthPercentage(value);
-}
-
-// <margin-top>, <margin-right>, <margin-bottom>, <margin-left> = <length-percentage> | auto
-const marginSideValueConsumer: TryConsumer<MarginSideValue, MathContext> = oneOf(
-  [
-    one(consumeLengthPercentage),
-    one(consumeAuto),
-  ],
-  ([value], context: MathContext) => resolveMarginSideValue(value, ValueStage.Declared, context),
-);

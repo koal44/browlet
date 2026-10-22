@@ -9,7 +9,7 @@ import {
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
-import { parseFirstValid } from '../../../../src/stylelet/values/substitution/first-valid';
+import { FirstValidValue } from '../../../../src/stylelet/values/substitution/first-valid';
 
 describe('token-list whitespace boundaries', () => {
   it('keeps source ranges and nested whitespace intact when trimming a collected value', () => {
@@ -110,10 +110,11 @@ describe('source spelling through component parsing', () => {
   );
 
   it('retains source when a first-valid argument is collected and parsed again', () => {
-    const value = parseFirstValid('first-valid({ --x: fn(a) /**/ foo\\62 ar })', {});
+    const value = FirstValidValue.parse('first-valid({ --x: fn(a) /**/ foo\\62 ar })', {});
 
     expect(value).not.toBeNull();
-    expect(parseDeclaration(value!.arguments[0].components, {})?.originalText)
+    const [argument] = value!.value;
+    expect(parseDeclaration(argument.value, {})?.originalText)
       .toBe('fn(a) /**/ foo\\62 ar');
   });
 });

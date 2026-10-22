@@ -10,12 +10,12 @@ import { CSSRuleListImpl } from '../../../../../src/stylelet/cssom/rule-list';
 import { parseListOfComponentValues, parseStylesheetContents } from '../../../../../src/stylelet/syntax/parser';
 import { CSSStyleRuleImpl } from '../../../../../src/stylelet/cssom/rules/style';
 import { CSSNestedDeclarationsImpl } from '../../../../../src/stylelet/cssom/rules/nested-declarations';
-import { parseOptionalDeclarationValue } from '../../../../../src/stylelet/syntax/declaration-value';
+import { OptionalDeclarationValue } from '../../../../../src/stylelet/values/declaration-value';
 import {
   parseSelectorList, serializeSelectorList,
 } from '../../../../../src/stylelet/selector/parser';
 import { ValueStage } from '../../../../../src/stylelet/value-processing/stage';
-import { ColorKind } from '../../../../../src/stylelet/values/color';
+import { ColorValue, ColorKind } from '../../../../../src/stylelet/values/color';
 
 const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
@@ -25,16 +25,14 @@ describe('CSS rule construction', () => {
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: propertyRegistry.color.definition.parse('red', {})!,
+      value: propertyRegistry.color.parse('red', {})!,
       important: false,
     };
-    const resolved = propertyRegistry[declaration.name].definition.resolve(
-      declaration.value, ValueStage.Computed, {},
-    );
+    const resolved = declaration.value.resolve(ValueStage.Computed, {});
 
-    expect(resolved.type).toBe('ordinary');
-    if (resolved.type === 'ordinary') {
-      expect(resolved.value.kind).toBe(ColorKind.Absolute);
+    expect(resolved.value).toBeInstanceOf(ColorValue);
+    if (resolved.value instanceof ColorValue) {
+      expect(resolved.value.value.kind).toBe(ColorKind.Absolute);
     }
   });
 
@@ -43,14 +41,14 @@ describe('CSS rule construction', () => {
       type: 'property-declaration',
       custom: true,
       name: '--accent',
-      value: parseOptionalDeclarationValue('red', {})!,
+      value: OptionalDeclarationValue.parse('red', {})!,
       important: false,
     };
     const rule = new CSSStyleRuleImpl(parseSelectorList('*', {})!, [{
       type: 'property-declaration',
       custom: false,
       name: 'color',
-      value: propertyRegistry.color.definition.parse('var(--accent)', {})!,
+      value: propertyRegistry.color.parse('var(--accent)', {})!,
       important: false,
     }, custom], {}, new CSSRuleListImpl(), env);
 
@@ -76,10 +74,11 @@ describe('CSS rule construction', () => {
       custom: false,
       name: 'color',
       value: {
-        type: 'ordinary',
         value: {
-          kind: ColorKind.Named,
-          name: 'blue',
+          value: {
+            kind: ColorKind.Named,
+            name: 'blue',
+          },
         },
       },
       important: false,
@@ -200,8 +199,9 @@ describe('CSS rule construction', () => {
     expect((rule as CSSStyleRuleImpl).style.declarations).toMatchObject([{
       custom: false,
       name: 'color',
-      value: { type: 'substitution-value' },
     }]);
+    expect((rule as CSSStyleRuleImpl).style.declarations[0])
+      .toHaveProperty('value.value.value', expect.any(OptionalDeclarationValue));
   });
 
   // CSS Nesting Level 1 defines nested style rules and declaration runs.

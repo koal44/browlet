@@ -1,13 +1,11 @@
 import { asciiLower } from '../../infra/ascii';
 
-import {
-  parseOptionalDeclarationValue, serializeComponentValues,
-  type OptionalDeclarationValue, type Declaration,
-} from '../syntax/index';
+import type { Declaration, ParserInput } from '../syntax/index';
 import type { ValueStage } from '../value-processing/index';
-import type {
-  ColorContext, GradientContext, MathContext, PositionContext, ParsedSyntaxValue, SyntaxValue, UrlContext,
-  WholeValue, WholeValueDefinition, SupportsContext,
+import {
+  OptionalDeclarationValue,
+  type Value, type ColorContext, type GradientContext, type MathContext, type PositionContext,
+  type ParsedSyntaxValue, type SyntaxValue, type UrlContext, type WholeValue, type SupportsContext,
 } from '../values/index';
 
 import { backgroundColorProperty, colorProperty } from './color';
@@ -16,19 +14,20 @@ import { marginSideProperty } from './margin';
 import { getShorthand } from './shorthand';
 
 /** Shared built-in property record; its registry key supplies the name. */
-export type PropertyRecord<Value, Context> = {
-  definition: WholeValueDefinition<Value, Context>;
+export type PropertyRecord<Ordinary extends Value<Context>, Context> = {
+  /** Shared parser for this property's ordinary grammar and whole-value notation. */
+  parse: (input: ParserInput, context: Context) => WholeValue<Ordinary, Context> | null;
   /** Whether defaulting inherits the parent's computed value. */
   inherits: boolean;
   /** Shared Declared representation; resolution must leave this value unchanged. */
-  initialValue: WholeValue<Value>;
+  initialValue: WholeValue<Ordinary, Context>;
   /** Group and mapping used to preserve order between physical and logical properties. */
   logicalGroup?: { name: string; mapping: 'physical' | 'logical'; };
 };
 
 /** CSS declaration data; custom distinguishes case-sensitive names from normalized built-ins. */
 // https://drafts.csswg.org/cssom/#css-declarations
-// Built-in values are interpreted value records rather than retained syntax tokens.
+// Built-in values are interpreted value instances rather than retained syntax tokens.
 export type PropertyDeclaration<Name extends PropertyName = PropertyName> =
   | BuiltInPropertyDeclaration<Name>
   | CustomPropertyDeclaration;
@@ -58,22 +57,16 @@ export type SerializedPropertyDeclaration = {
   important: boolean;
 };
 
-export type PropertyValue<Name extends PropertyName> =
-  WholeValue<PropertyData[Name]>;
+export type PropertyValue<Name extends PropertyName> = PropertyValues[Name];
 
-type PropertyData = {
-  [Name in PropertyName]: ValueFor<(typeof propertyRegistry)[Name]>;
+type PropertyValues = {
+  [Name in PropertyName]: NonNullable<ReturnType<(typeof propertyRegistry)[Name]['parse']>>;
 };
-
-type ValueFor<Property> =
-  Property extends PropertyRecord<infer Value, PropertyContext>
-    ? Value
-    : never;
 
 // This mapped view keeps each registry key paired with its value type during
 // generic lookup. It describes the existing registry, not another registration.
 type PropertyRecords = {
-  [Name in PropertyName]: PropertyRecord<PropertyData[Name], PropertyContext>;
+  [Name in PropertyName]: { parse: (input: ParserInput, context: PropertyContext) => PropertyValue<Name> | null; };
 };
 
 export type PropertyContext =
@@ -101,9 +94,9 @@ export type CustomPropertyName = `--${string}`;
 export type CustomPropertyRegistration = {
   name: CustomPropertyName;
   syntax: SyntaxValue;
-  definition: WholeValueDefinition<ParsedSyntaxValue, PropertyContext>;
+  parse: (input: ParserInput, context: PropertyContext) => WholeValue<ParsedSyntaxValue, PropertyContext> | null;
   inherits: boolean;
-  initialValue: WholeValue<ParsedSyntaxValue>;
+  initialValue: WholeValue<ParsedSyntaxValue, PropertyContext>;
 };
 
 export type CustomPropertyRegistry = ReadonlyMap<
@@ -149,19 +142,11 @@ export function interpretPropertyDeclaration(
 export function serializePropertyDeclaration<Name extends PropertyName>(
   declaration: PropertyDeclaration<Name>,
 ): SerializedPropertyDeclaration {
-  if (declaration.custom) {
-    return {
-      name: declaration.name,
-      value: declaration.originalText ??
-        serializeComponentValues(declaration.value.components.tokens),
-      important: declaration.important,
-    };
-  }
+  const originalText = declaration.custom ? declaration.originalText : undefined;
 
-  const property: PropertyRecords[Name] = propertyRegistry[declaration.name];
   return {
     name: declaration.name,
-    value: property.definition.serialize(declaration.value),
+    value: originalText ?? declaration.value.serialize(),
     important: declaration.important,
   };
 }
@@ -171,8 +156,7 @@ export function resolveBuiltInPropertyDeclaration<Name extends PropertyName>(
   stage: ValueStage,
   context: PropertyContext = {},
 ): BuiltInPropertyDeclaration<Name> {
-  const property: PropertyRecords[Name] = propertyRegistry[declaration.name];
-  const value = property.definition.resolve(declaration.value, stage, context);
+  const value = declaration.value.resolve(stage, context);
 
   return { ...declaration, value };
 }
@@ -182,7 +166,7 @@ function interpretCustomPropertyDeclaration(
   name: CustomPropertyName,
   context: PropertyContext,
 ): CustomPropertyDeclaration | null {
-  const value = parseOptionalDeclarationValue(declaration.value, context);
+  const value = OptionalDeclarationValue.parse(declaration.value, context);
   if (value === null) return null;
 
   return {
@@ -203,7 +187,7 @@ function interpretBuiltInPropertyDeclaration<Name extends PropertyName>(
   context: PropertyContext,
 ): BuiltInPropertyDeclaration<Name> | null {
   const property: PropertyRecords[Name] = propertyRegistry[name];
-  const value = property.definition.parse(declaration.value, context);
+  const value = property.parse(declaration.value, context);
 
   if (value === null) return null;
 

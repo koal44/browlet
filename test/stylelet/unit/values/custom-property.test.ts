@@ -1,3 +1,13 @@
+import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
+import { RawWholeValue } from '../../../../src/stylelet/values/whole-value';
+import { CssWideValue } from '../../../../src/stylelet/values/css-wide';
+import { IdentValue } from '../../../../src/stylelet/values/ident';
+import { CustomIdentValue } from '../../../../src/stylelet/values/custom-ident';
+import { ColorValue } from '../../../../src/stylelet/values/color';
+import { SyntaxListValue } from '../../../../src/stylelet/values/syntax-value';
+import { NumberLiteral } from '../../../../src/stylelet/values/numeric-literal/number';
+import { FirstValidValue } from '../../../../src/stylelet/values/substitution/first-valid';
+import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
 import { describe, expect, it } from 'vitest';
 
 import type {
@@ -6,24 +16,31 @@ import type {
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 import { CSS_WIDE_KEYWORDS } from '../../../../src/stylelet/values/css-wide';
-import { defineCustomWholeValue, guaranteedInvalidValue } from '../../../../src/stylelet/values/whole-value';
-import { parseSyntax, type SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
+import { WholeValue } from '../../../../src/stylelet/values/whole-value';
+import { SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 
 function syntax(input: string): SyntaxValue {
-  const value = parseSyntax(input, {});
+  const value = SyntaxValue.parse(input, {});
   expect(value).not.toBeNull();
   return value!;
 }
 
 describe('custom property', () => {
-  it('holds a synthesized definition and initial whole value in a registration', () => {
+  it('retains a multiplied syntax value when its items do not change', () => {
+    const parsed = syntax('<number>+').createParser()('1 2', {})!;
+
+    expect(parsed.resolve(ValueStage.Computed, {})).toBe(parsed);
+    expect(parsed.serialize()).toBe('1 2');
+  });
+
+  it('holds a compiled parser and initial whole value in a registration', () => {
     const syntaxValue = syntax('<color>');
-    const definition = defineCustomWholeValue({ syntax: syntaxValue });
-    const initialValue = definition.parse('red', {})!;
+    const parseValue = WholeValue.createParser(syntaxValue.createParser(), true);
+    const initialValue = parseValue('red', {})!;
     const registration: CustomPropertyRegistration = {
       name: '--accent',
       syntax: syntaxValue,
-      definition,
+      parse: parseValue,
       inherits: false,
       initialValue,
     };
@@ -32,106 +49,96 @@ describe('custom property', () => {
     ]);
 
     expect(registry.get('--accent')).toBe(registration);
-    expect(definition.serialize(registration.initialValue)).toBe('red');
+    expect(registration.initialValue.serialize()).toBe('red');
   });
 
   it('defers registered syntax validation until the computed stage', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>') });
+    const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
 
     for (const input of ['red', '10px']) {
-      const raw = property.parse(input, {})!;
-      const value = property.resolve(raw, ValueStage.Specified, {});
+      const raw = parseValue(input, {})!;
+      const value = raw.resolve(ValueStage.Specified, {});
 
       expect(value).toBe(raw);
-      expect(value).toMatchObject({ type: 'raw' });
-      expect(property.serialize(value)).toBe(input);
-      expect(property.resolve(value, ValueStage.Specified, {})).toBe(value);
+      expect(value.value).toBeInstanceOf(RawWholeValue);
+      expect(value.serialize()).toBe(input);
+      expect(value.resolve(ValueStage.Specified, {})).toBe(value);
     }
   });
 
   it('does not consult registered grammar dependencies before the computed stage', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<number>') });
+    const parseValue = WholeValue.createParser(syntax('<number>').createParser(), true);
     const unavailable: PropertyContext = {
       get numericVariables(): never {
         throw new Error('Numeric bindings are not available before Computed');
       },
     };
-    const declared = property.parse('calc(progress)', unavailable)!;
+    const declared = parseValue('calc(progress)', unavailable)!;
 
     for (const stage of [ValueStage.Declared, ValueStage.Cascaded, ValueStage.Specified]) {
-      expect(property.resolve(declared, stage, unavailable)).toBe(declared);
+      expect(declared.resolve(stage, unavailable)).toBe(declared);
     }
-    expect(property.serialize(declared)).toBe('calc(progress)');
+    expect(declared.serialize()).toBe('calc(progress)');
 
-    const computed = property.resolve(declared, ValueStage.Computed, {
+    const computed = declared.resolve(ValueStage.Computed, {
       numericVariables: new Map([['progress', {
         valueType: 'number',
-        value: { type: 'number', value: 0.5 },
+        value: new NumberLiteral(0.5),
       }]]),
     });
-    expect(property.serialize(computed)).toBe('0.5');
+    expect(computed.serialize()).toBe('0.5');
   });
 
   it('represents a custom property requiring substitution as a substitution value', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>') });
-    const value = property.parse('var(--color)', {})!;
+    const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
+    const value = parseValue('var(--color)', {})!;
 
-    expect(value).toMatchObject({
-      type: 'substitution-value',
-      declaration: {
-        type: 'declaration-value',
-      },
-    });
-    expect(property.serialize(value)).toBe('var(--color)');
-    expect(property.resolve(value, ValueStage.Specified, {})).toBe(value);
+    expect(value).toHaveProperty('value.value', expect.any(OptionalDeclarationValue));
+    expect(value.serialize()).toBe('var(--color)');
+    expect(value.resolve(ValueStage.Specified, {})).toBe(value);
   });
 
   it('distinguishes an empty custom property from the guaranteed-invalid value', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('*') });
-    const value = property.parse('', {})!;
+    const parseValue = WholeValue.createParser(syntax('*').createParser(), true);
+    const value = parseValue('', {})!;
 
     expect(value).toMatchObject({
-      type: 'raw',
-      declaration: {
-        type: 'declaration-value',
-        components: { tokens: [] },
+      value: {
+        value: {
+          value: { tokens: [] },
+        },
       },
     });
-    expect(property.serialize(value)).toBe('');
-    expect(value).not.toBe(guaranteedInvalidValue);
-    expect(property.serialize(guaranteedInvalidValue)).toBe('');
+    expect(value.serialize()).toBe('');
+    expect(value.value).not.toBe(guaranteedInvalidValue);
+    expect(value.resolve(ValueStage.Computed, {}).value).toBeInstanceOf(OptionalDeclarationValue);
+    expect(guaranteedInvalidValue.serialize()).toBe('');
   });
 
   it('rejects an invalid nonempty declaration value', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('*') });
+    const parseValue = WholeValue.createParser(syntax('*').createParser(), true);
 
-    expect(property.parse('red ! blue', {})).toBeNull();
+    expect(parseValue('red ! blue', {})).toBeNull();
   });
 
   // CSS Properties and Values API 1, 2.3. Specified Value-Time Behavior
   it.each(CSS_WIDE_KEYWORDS)(
     'accepts the CSS-wide keyword %s independently of registered syntax',
     (keyword) => {
-      const property = defineCustomWholeValue({ syntax: syntax('<color>') });
-      const value = property.parse(keyword, {})!;
+      const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
+      const value = parseValue(keyword, {})!;
 
-      expect(value).toMatchObject({
-        type: 'css-wide',
-        keyword,
-      });
+      expect(value).toMatchObject({ value: new CssWideValue(keyword) });
     },
   );
 
   // CSS Properties and Values API 1, 2.4. Computed Value-Time Behavior
   it('parses a valid registered value at the computed stage', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>') });
-    const value = property.parse('red', {})!;
+    const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
+    const value = parseValue('red', {})!;
 
-    expect(property.resolve(value, ValueStage.Computed, {})).toMatchObject({
-      type: 'ordinary',
+    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({
       value: {
-        type: 'parsed-syntax-type',
-        name: 'color',
         value: {
           kind: ColorKind.Absolute,
         },
@@ -140,13 +147,13 @@ describe('custom property', () => {
   });
 
   it('tries deferred alternatives against registered syntax at the computed stage', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>') });
-    const value = property.parse('first-valid(10px, red)', {})!;
+    const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
+    const value = parseValue('first-valid(10px, red)', {})!;
 
-    expect(value.type).toBe('first-valid');
-    expect(property.resolve(value, ValueStage.Specified, {})).toBe(value);
-    const computed = property.resolve(value, ValueStage.Computed, {});
-    expect(property.serialize(computed)).toBe('rgb(255, 0, 0)');
+    expect(value.value).toBeInstanceOf(FirstValidValue);
+    expect(value.resolve(ValueStage.Specified, {})).toBe(value);
+    const computed = value.resolve(ValueStage.Computed, {});
+    expect(computed.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.each([
@@ -161,12 +168,12 @@ describe('custom property', () => {
   ] as const)(
     'parses, resolves, and serializes calculated %s value %s',
     (syntaxText, input, context, serialized) => {
-      const property = defineCustomWholeValue({ syntax: syntax(syntaxText) });
-      const declared = property.parse(input, context)!;
-      const computed = property.resolve(declared, ValueStage.Computed, context);
+      const parseValue = WholeValue.createParser(syntax(syntaxText).createParser(), true);
+      const declared = parseValue(input, context)!;
+      const computed = declared.resolve(ValueStage.Computed, context);
 
-      expect(property.serialize(declared)).toBe(input);
-      expect(property.serialize(computed)).toBe(serialized);
+      expect(declared.serialize()).toBe(input);
+      expect(computed.serialize()).toBe(serialized);
     },
   );
 
@@ -179,32 +186,30 @@ describe('custom property', () => {
     it(
       `resolves and serializes literal ${syntaxText} value ${input}`,
       () => {
-        const property = defineCustomWholeValue({ syntax: syntax(syntaxText) });
-        const declared = property.parse(input, {})!;
-        const computed = property.resolve(declared, ValueStage.Computed, context);
+        const parseValue = WholeValue.createParser(syntax(syntaxText).createParser(), true);
+        const declared = parseValue(input, {})!;
+        const computed = declared.resolve(ValueStage.Computed, context);
 
-        expect(property.serialize(declared)).toBe(input);
-        expect(property.serialize(computed)).toBe(serialized);
+        expect(declared.serialize()).toBe(input);
+        expect(computed.serialize()).toBe(serialized);
       },
     );
   }
 
   it('resolves and serializes a registered color with property context', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>') });
-    const declared = property.parse('light-dark(white, black)', {})!;
-    const computed = property.resolve(declared, ValueStage.Computed, { colorScheme: 'dark' });
+    const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
+    const declared = parseValue('light-dark(white, black)', {})!;
+    const computed = declared.resolve(ValueStage.Computed, { colorScheme: 'dark' });
 
-    expect(property.serialize(computed)).toBe('rgb(0, 0, 0)');
+    expect(computed.serialize()).toBe('rgb(0, 0, 0)');
   });
 
   it('resolves and serializes every item in a multiplied syntax value', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>#') });
-    const declared = property.parse(
-      'light-dark(white, black), light-dark(red, blue)', {},
-    )!;
-    const computed = property.resolve(declared, ValueStage.Computed, { colorScheme: 'dark' });
+    const parseValue = WholeValue.createParser(syntax('<color>#').createParser(), true);
+    const declared = parseValue('light-dark(white, black), light-dark(red, blue)', {})!;
+    const computed = declared.resolve(ValueStage.Computed, { colorScheme: 'dark' });
 
-    expect(property.serialize(computed))
+    expect(computed.serialize())
       .toBe('rgb(0, 0, 0), rgb(0, 0, 255)');
   });
 
@@ -219,33 +224,33 @@ describe('custom property', () => {
   ])(
     'computes the registered %s literal %s as specified',
     (syntaxText, input, serialized) => {
-      const property = defineCustomWholeValue({ syntax: syntax(syntaxText) });
-      const raw = property.parse(input, {})!;
-      const computed = property.resolve(raw, ValueStage.Computed, { URL });
+      const parseValue = WholeValue.createParser(syntax(syntaxText).createParser(), true);
+      const raw = parseValue(input, {})!;
+      const computed = raw.resolve(ValueStage.Computed, { URL });
 
-      expect(property.serialize(computed)).toBe(serialized);
+      expect(computed.serialize()).toBe(serialized);
     },
   );
 
   it('computes a registered image value', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<image>') });
-    const raw = property.parse('linear-gradient(red, blue)', {})!;
-    const computed = property.resolve(raw, ValueStage.Computed, {});
+    const parseValue = WholeValue.createParser(syntax('<image>').createParser(), true);
+    const raw = parseValue('linear-gradient(red, blue)', {})!;
+    const computed = raw.resolve(ValueStage.Computed, {});
 
-    expect(property.serialize(computed))
+    expect(computed.serialize())
       .toBe('linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
   });
 
   it('resolves a relative registered URL against its stylesheet', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<url>') });
+    const parseValue = WholeValue.createParser(syntax('<url>').createParser(), true);
     const context: PropertyContext = {
       URL,
       baseUrl: new URL('https://example.com/styles/site.css'),
     };
-    const raw = property.parse('url("image.png")', {})!;
-    const computed = property.resolve(raw, ValueStage.Computed, context);
+    const raw = parseValue('url("image.png")', {})!;
+    const computed = raw.resolve(ValueStage.Computed, context);
 
-    expect(property.serialize(computed))
+    expect(computed.serialize())
       .toBe('url("https://example.com/styles/image.png")');
   });
 
@@ -255,13 +260,13 @@ describe('custom property', () => {
   ])(
     'computes lengths in a registered %s value',
     (syntaxText, input, serialized) => {
-      const property = defineCustomWholeValue({ syntax: syntax(syntaxText) });
-      const raw = property.parse(input, {})!;
-      const computed = property.resolve(raw, ValueStage.Computed, {
+      const parseValue = WholeValue.createParser(syntax(syntaxText).createParser(), true);
+      const raw = parseValue(input, {})!;
+      const computed = raw.resolve(ValueStage.Computed, {
         length: { em: 16 },
       });
 
-      expect(property.serialize(computed)).toBe(serialized);
+      expect(computed.serialize()).toBe(serialized);
     },
   );
 
@@ -272,96 +277,70 @@ describe('custom property', () => {
   ])(
     'serializes %s value %s after computed-stage parsing',
     (syntaxText, input, serialized) => {
-      const property = defineCustomWholeValue({ syntax: syntax(syntaxText) });
-      const raw = property.parse(input, {})!;
-      const computed = property.resolve(raw, ValueStage.Computed, {});
+      const parseValue = WholeValue.createParser(syntax(syntaxText).createParser(), true);
+      const raw = parseValue(input, {})!;
+      const computed = raw.resolve(ValueStage.Computed, {});
 
-      expect(property.serialize(computed)).toBe(serialized);
+      expect(computed.serialize()).toBe(serialized);
     },
   );
 
   it('makes a registered value with invalid syntax guaranteed-invalid at computation', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>') });
-    const value = property.parse('10px', {})!;
+    const parseValue = WholeValue.createParser(syntax('<color>').createParser(), true);
+    const value = parseValue('10px', {})!;
 
-    expect(property.resolve(value, ValueStage.Computed, {})).toBe(guaranteedInvalidValue);
+    expect(value.resolve(ValueStage.Computed, {}).value).toBe(guaranteedInvalidValue);
   });
 
   it('returns the first syntax alternative that matches the entire value', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('red | <color>') });
-    const value = property.parse('red', {})!;
+    const parseValue = WholeValue.createParser(syntax('red | <color>').createParser(), true);
+    const value = parseValue('red', {})!;
 
-    expect(property.resolve(value, ValueStage.Computed, {})).toMatchObject({
-      type: 'ordinary',
-      value: {
-        type: 'parsed-syntax-keyword',
-        name: 'red',
-      },
-    });
+    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({ value: new IdentValue('red') });
   });
 
   it('matches syntax keywords codepoint-wise', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('Red | <color>') });
-    const exact = property.parse('Red', {})!;
-    const lower = property.parse('red', {})!;
+    const parseValue = WholeValue.createParser(syntax('Red | <color>').createParser(), true);
+    const exact = parseValue('Red', {})!;
+    const lower = parseValue('red', {})!;
 
-    expect(property.resolve(exact, ValueStage.Computed, {})).toMatchObject({
-      value: {
-        type: 'parsed-syntax-keyword',
-        name: 'Red',
-      },
+    expect(exact.resolve(ValueStage.Computed, {})).toMatchObject({
+      value: new IdentValue('Red'),
     });
-    expect(property.resolve(lower, ValueStage.Computed, {})).toMatchObject({
-      value: {
-        type: 'parsed-syntax-type',
-        name: 'color',
-      },
-    });
+    expect(lower.resolve(ValueStage.Computed, {}).value).toBeInstanceOf(ColorValue);
   });
 
   it('does not commit to an alternative that matches only a prefix', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('auto | <custom-ident>+') });
-    const value = property.parse('auto extra', {})!;
+    const parseValue = WholeValue.createParser(syntax('auto | <custom-ident>+').createParser(), true);
+    const value = parseValue('auto extra', {})!;
 
-    expect(property.resolve(value, ValueStage.Computed, {})).toMatchObject({
-      type: 'ordinary',
-      value: {
-        type: 'parsed-syntax-list',
-        multiplier: '+',
-        values: [
-          { type: 'parsed-syntax-type', name: 'custom-ident' },
-          { type: 'parsed-syntax-type', name: 'custom-ident' },
+    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({
+      value: new SyntaxListValue({
+        multiplier: '+', values: [
+          new CustomIdentValue('auto'),
+          new CustomIdentValue('extra'),
         ],
-      },
+      }),
     });
   });
 
   it('preserves the separator and values of a multiplied syntax component', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('<color>#') });
-    const value = property.parse('red, blue', {})!;
+    const parseValue = WholeValue.createParser(syntax('<color>#').createParser(), true);
+    const value = parseValue('red, blue', {})!;
 
-    expect(property.resolve(value, ValueStage.Computed, {})).toMatchObject({
-      type: 'ordinary',
-      value: {
-        type: 'parsed-syntax-list',
-        multiplier: '#',
-        values: [
-          { type: 'parsed-syntax-type', name: 'color' },
-          { type: 'parsed-syntax-type', name: 'color' },
-        ],
-      },
-    });
+    const computed = value.resolve(ValueStage.Computed, {}).value;
+    expect(computed).toBeInstanceOf(SyntaxListValue);
+    if (!(computed instanceof SyntaxListValue)) throw new Error('Expected a multiplied syntax value');
+    expect(computed.value.multiplier).toBe('#');
+    expect(computed.value.values).toHaveLength(2);
+    for (const item of computed.value.values) expect(item).toBeInstanceOf(ColorValue);
+    expect(computed.serialize()).toBe('rgb(255, 0, 0), rgb(0, 0, 255)');
   });
 
   it('preserves a value parsed with the universal syntax', () => {
-    const property = defineCustomWholeValue({ syntax: syntax('*') });
-    const value = property.parse('10px / anything', {})!;
+    const parseValue = WholeValue.createParser(syntax('*').createParser(), true);
+    const value = parseValue('10px / anything', {})!;
 
-    expect(property.resolve(value, ValueStage.Computed, {})).toMatchObject({
-      type: 'ordinary',
-      value: {
-        type: 'parsed-universal-syntax',
-      },
-    });
+    expect(value.resolve(ValueStage.Computed, {}).value).toBeInstanceOf(OptionalDeclarationValue);
   });
 });

@@ -1,58 +1,54 @@
 import {
   createFreeFormConsumer, createFunctionalNotationConsumer, isBraceBlock, isTokenKind,
-  serializeComponentValues, commaRepeat, withTrivia, createComponentParser, TokenKind,
-  consumeDeclarationValue,
-  type ComponentValue, type TokenList, type TokenCursor, type TryConsumerResult, type ParserInput, type DeclarationValue,
+  commaRepeat, withTrivia, parseAsComponentGrammar, TokenKind,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../../syntax/index';
 
-export type FirstValidValue = {
-  type: 'first-valid';
-  arguments: [DeclarationValue, ...DeclarationValue[]];
-};
+import { DeclarationValue } from '../declaration-value';
 
-export function parseFirstValid(input: ParserInput, context: unknown): FirstValidValue | null {
-  return firstValidParser(input, context);
+/** Ordered alternatives whose validity belongs to the consuming whole-value grammar. */
+// https://drafts.csswg.org/css-values-5/#first-valid
+export class FirstValidValue {
+  /** Unevaluated alternatives, retained for lazy selection at Computed time. */
+  value: [DeclarationValue, ...DeclarationValue[]];
+
+  constructor(value: [DeclarationValue, ...DeclarationValue[]]) {
+    this.value = value;
+  }
+
+  static parse(input: ParserInput, context: unknown): FirstValidValue | null {
+    return parseAsComponentGrammar(input, firstValidGrammar, context);
+  }
+
+  static consume(this: void, c: TokenCursor): TryConsumerResult<FirstValidValue> {
+    return firstValidConsumer(c);
+  }
+
+  serialize(): string {
+    const args = this.value.map((declaration) => {
+      const text = declaration.serialize();
+      const requiresBraces = declaration.value.tokens.some((component) =>
+        isTokenKind(component, TokenKind.Comma) || isBraceBlock(component)
+      );
+      return requiresBraces ? `{${text}}` : text;
+    });
+    return `first-valid(${args.join(', ')})`;
+  }
 }
 
-export function consumeFirstValid(
-  c: TokenCursor,
-): TryConsumerResult<FirstValidValue> {
-  return firstValidConsumer(c);
-}
-
-export function serializeFirstValid(value: FirstValidValue): string {
-  const args = value.arguments.map(({ components: list }) =>
-    requiresFreeFormWrapper(list)
-      ? `{${serializeComponentValues(list.tokens)}}`
-      : serializeComponentValues(list.tokens)
-  );
-
-  return `first-valid(${args.join(', ')})`;
-}
-
-function requiresFreeFormWrapper(list: TokenList<ComponentValue>): boolean {
-  return list.tokens.some((component) =>
-    isTokenKind(component, TokenKind.Comma) || isBraceBlock(component)
-  );
-}
-
-// =============================================================================
-// Syntax
-// =============================================================================
+/*
+ * <first-valid()> = first-valid( <declaration-value># )
+ */
 
 // <declaration-value> as a strict free-form function argument
 const firstValidArgumentConsumer = createFreeFormConsumer(
-  consumeDeclarationValue,
+  DeclarationValue.consume,
 );
 
-// <first-valid()> = first-valid( <declaration-value># )
 const firstValidConsumer = createFunctionalNotationConsumer(
   'first-valid',
   commaRepeat(firstValidArgumentConsumer),
-  (args): FirstValidValue => ({
-    type: 'first-valid',
-    arguments: args,
-  }),
+  (args) => new FirstValidValue(args),
 );
 
-const firstValidParser = createComponentParser(withTrivia(firstValidConsumer));
+const firstValidGrammar = withTrivia(firstValidConsumer);

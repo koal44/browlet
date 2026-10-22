@@ -20,8 +20,8 @@ entry points and implementation types.
 | --- | --- |
 | [syntax/](syntax/README.md) | CSS input, tokens, component values, and generic syntax rules/declarations |
 | [selector/](selector/README.md) | Selector parsing, serialization, specificity, stylesheet matching, and its caches; separate from Selectlet's selector engine |
-| [values/](values/README.md) | Reusable value grammars, representations, resolution, and serialization, including media queries and supports conditions |
-| [value-processing/](value-processing/README.md) | Value stages and shared processing contracts; complete element-level orchestration remains missing |
+| [values/](values/README.md) | The shared Value contract, reusable value grammars, representations, resolution, and serialization, with supporting numeric literals and collections |
+| [value-processing/](value-processing/README.md) | Value stages; complete element-level orchestration remains missing |
 | [props/](props/README.md) | Property records, the installed registry, and declaration interpretation; seven installed names. Animation-name has a separate unregistered parser. |
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
@@ -38,7 +38,7 @@ The public [index](index.ts) also exports Infra's `InternalPromise` for standalo
 hosts supplying `exec.Promise`. Implementation modules import it directly from Infra.
 
 The provisional [component order](../../scripts/eslint/import-hierarchy.mjs) puts
-syntax and value-processing contracts below numeric literals, values, conditions,
+syntax, the Value contract, and lifecycle stages below numeric literals, collections, values, conditions,
 property definitions/selectors, declaration data, CSSOM, and the engine. Streams
 and Selectlet precede Stylelet; this does not add dependencies on either one.
 Selector parsing consumes generic syntax and value grammars from this higher
@@ -209,7 +209,7 @@ expected failures and skips. Full cascade/defaulting and live queries remain mis
 **9 files, 958 tests passed**, with no skips or expected failures.
 
 ```text
-node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/props/property.test.ts test/stylelet/unit/values/supports-condition.test.ts test/stylelet/unit/values/color.test.ts test/stylelet/unit/values/gradient.test.ts test/stylelet/unit/values/image.test.ts test/stylelet/unit/values/media-query.test.ts test/stylelet/unit/values/position.test.ts test/stylelet/unit/values/mix.test.ts test/stylelet/unit/values/boolean-expr.test.ts
+node scripts/with-node.mjs vitest run --project=unit test/stylelet/unit/props/property.test.ts test/stylelet/unit/values/supports-condition.test.ts test/stylelet/unit/values/color.test.ts test/stylelet/unit/values/gradient.test.ts test/stylelet/unit/values/image.test.ts test/stylelet/unit/values/media-query.test.ts test/stylelet/unit/values/position.test.ts test/stylelet/unit/values/collections/mix.test.ts test/stylelet/unit/values/boolean-expr.test.ts
 ```
 
 This covers installed definitions, value operations and condition grammar.

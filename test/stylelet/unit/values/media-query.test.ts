@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import {
-  parseMediaQuery, parseMediaQueryList, resolveMediaQuery,
-  serializeMediaQuery, serializeMediaQueryList,
-} from '../../../../src/stylelet/values/media-query';
+import { MediaQuery } from '../../../../src/stylelet/values/media-query';
+import { LengthValue } from '../../../../src/stylelet/values/length';
+import { LengthLiteral, NumberLiteral } from '../../../../src/stylelet/values/numeric-literal/index';
+import { NumberValue } from '../../../../src/stylelet/values/number';
+import { RatioValue } from '../../../../src/stylelet/values/ratio';
+import { IdentValue } from '../../../../src/stylelet/values/ident';
 
 describe('<media-query>', () => {
   it.each([
@@ -12,7 +14,7 @@ describe('<media-query>', () => {
     ['ONLY Screen', 'only', 'screen'],
     ['not print', 'not', 'print'],
   ] as const)('parses the media type query %s', (input, modifier, mediaType) => {
-    expect(parseMediaQuery(input, {})).toEqual({
+    expect(MediaQuery.parse(input, {})?.value).toEqual({
       type: 'media-type-query',
       ...(modifier === undefined ? {} : { modifier }),
       mediaType,
@@ -20,13 +22,11 @@ describe('<media-query>', () => {
   });
 
   it('parses a media type followed by a condition without or', () => {
-    expect(parseMediaQuery('screen and (color)', {})).toMatchObject({
+    expect(MediaQuery.parse('screen and (color)', {})?.value).toMatchObject({
       type: 'media-type-query',
       mediaType: 'screen',
       condition: {
-        type: TokenKind.ParensBlock,
         value: {
-          type: 'media-feature-boolean',
           name: 'color',
         },
       },
@@ -34,26 +34,23 @@ describe('<media-query>', () => {
   });
 
   it('parses not as a media condition when followed by parentheses', () => {
-    expect(parseMediaQuery('not (color)', {})).toMatchObject({
+    expect(MediaQuery.parse('not (color)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        type: 'media-not',
         value: {
-          type: TokenKind.ParensBlock,
-          value: { type: 'media-feature-boolean', name: 'color' },
+          value: { name: 'color' },
         },
       },
     });
   });
 
   it('parses a plain media feature', () => {
-    expect(parseMediaQuery('(width: 10px)', {})).toMatchObject({
+    expect(MediaQuery.parse('(width: 10px)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-plain',
           name: 'width',
-          value: { type: 'length', value: 10, unit: 'px' },
+          value: new LengthValue(new LengthLiteral(10, 'px')),
         },
       },
     });
@@ -65,23 +62,22 @@ describe('<media-query>', () => {
     ['SCAN', 'INTERLACE', 'interlace'],
     ['scan', 'PROGRESSIVE', 'progressive'],
   ])('interprets the keyword in (%s: %s)', (name, keyword, expected) => {
-    const query = parseMediaQuery(`(${name}: ${keyword})`, {})!;
-    expect(query).toMatchObject({
-      condition: { value: { value: { type: 'ident', value: expected } } },
+    const query = MediaQuery.parse(`(${name}: ${keyword})`, {})!;
+    expect(query.value).toMatchObject({
+      condition: { value: { value: new IdentValue(expected) } },
     });
-    expect(serializeMediaQuery(query)).toBe(`(${name.toLowerCase()}: ${expected})`);
+    expect(query.serialize()).toBe(`(${name.toLowerCase()}: ${expected})`);
   });
 
   it('parses a one-sided range with the name first', () => {
-    expect(parseMediaQuery('(width >= 10px)', {})).toMatchObject({
+    expect(MediaQuery.parse('(width >= 10px)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-range',
           name: 'width',
           right: {
             comparison: '>=',
-            value: { type: 'length', value: 10, unit: 'px' },
+            value: new LengthValue(new LengthLiteral(10, 'px')),
           },
         },
       },
@@ -89,15 +85,14 @@ describe('<media-query>', () => {
   });
 
   it('parses a one-sided range with the value first', () => {
-    expect(parseMediaQuery('(10px < width)', {})).toMatchObject({
+    expect(MediaQuery.parse('(10px < width)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-range',
           name: 'width',
           left: {
             comparison: '<',
-            value: { type: 'length', value: 10, unit: 'px' },
+            value: new LengthValue(new LengthLiteral(10, 'px')),
           },
         },
       },
@@ -111,11 +106,10 @@ describe('<media-query>', () => {
     ['(width >= 10px)', '>='],
     ['(width = 10px)', '='],
   ] as const)('parses the comparison in %s', (input, comparison) => {
-    expect(parseMediaQuery(input, {})).toMatchObject({
+    expect(MediaQuery.parse(input, {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-range',
           right: { comparison },
         },
       },
@@ -123,19 +117,18 @@ describe('<media-query>', () => {
   });
 
   it('does not let a one-sided range mask a two-sided range', () => {
-    expect(parseMediaQuery('(10px < width < 20px)', {})).toMatchObject({
+    expect(MediaQuery.parse('(10px < width < 20px)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-range',
           name: 'width',
           left: {
             comparison: '<',
-            value: { type: 'length', value: 10, unit: 'px' },
+            value: new LengthValue(new LengthLiteral(10, 'px')),
           },
           right: {
             comparison: '<',
-            value: { type: 'length', value: 20, unit: 'px' },
+            value: new LengthValue(new LengthLiteral(20, 'px')),
           },
         },
       },
@@ -143,11 +136,10 @@ describe('<media-query>', () => {
   });
 
   it('parses a descending two-sided range', () => {
-    expect(parseMediaQuery('(20px >= width > 10px)', {})).toMatchObject({
+    expect(MediaQuery.parse('(20px >= width > 10px)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-range',
           name: 'width',
           left: { comparison: '>=' },
           right: { comparison: '>' },
@@ -157,57 +149,54 @@ describe('<media-query>', () => {
   });
 
   it('does not let the number alternative mask a ratio value', () => {
-    expect(parseMediaQuery('(aspect-ratio: 16/9)', {})).toMatchObject({
+    expect(MediaQuery.parse('(aspect-ratio: 16/9)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-plain',
           name: 'aspect-ratio',
-          value: { type: 'ratio', numerator: 16, denominator: 9 },
+          value: new RatioValue({ numerator: 16, denominator: 9 }),
         },
       },
     });
-    expect(parseMediaQuery('(aspect-ratio: 3/1)', {})).toMatchObject({
+    expect(MediaQuery.parse('(aspect-ratio: 3/1)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-plain',
-          value: { type: 'ratio', numerator: 3, denominator: 1 },
+          value: new RatioValue({ numerator: 3, denominator: 1 }),
         },
       },
     });
   });
 
   it('does not reinterpret a standalone number as a ratio', () => {
-    expect(parseMediaQuery('(color: 2)', {})).toMatchObject({
+    expect(MediaQuery.parse('(color: 2)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-plain',
-          value: { type: 'number', value: 2 },
+          value: new NumberValue(new NumberLiteral(2)),
         },
       },
     });
   });
 
   it('does not let the nullable and tail mask an or condition', () => {
-    expect(parseMediaQuery('(color) or (monochrome)', {})).toMatchObject({
+    expect(MediaQuery.parse('(color) or (monochrome)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        type: 'media-or',
+        operator: 'or',
         values: [
-          { value: { type: 'media-feature-boolean', name: 'color' } },
-          { value: { type: 'media-feature-boolean', name: 'monochrome' } },
+          { value: { name: 'color' } },
+          { value: { name: 'monochrome' } },
         ],
       },
     });
   });
 
   it('keeps and operands in one flat condition', () => {
-    expect(parseMediaQuery('(color) and (monochrome) and (grid)', {})).toMatchObject({
+    expect(MediaQuery.parse('(color) and (monochrome) and (grid)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        type: 'media-and',
+        operator: 'and',
         values: [
           { value: { name: 'color' } },
           { value: { name: 'monochrome' } },
@@ -218,26 +207,21 @@ describe('<media-query>', () => {
   });
 
   it('folds unknown media feature names without changing their ident values', () => {
-    expect(parseMediaQuery('(FUTURE-FEATURE: CUSTOM)', {})).toMatchObject({
+    expect(MediaQuery.parse('(FUTURE-FEATURE: CUSTOM)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
         value: {
-          type: 'media-feature-plain',
           name: 'future-feature',
-          value: {
-            type: 'ident',
-            value: 'CUSTOM',
-          },
+          value: new IdentValue('CUSTOM'),
         },
       },
     });
   });
 
   it('accepts an unknown function as general-enclosed', () => {
-    expect(parseMediaQuery('future-query(value)', {})).toMatchObject({
+    expect(MediaQuery.parse('future-query(value)', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        type: 'general-enclosed',
         value: {
           type: TokenKind.FunctionBlock,
           name: 'future-query',
@@ -247,12 +231,11 @@ describe('<media-query>', () => {
   });
 
   it('parses nested conditions before the general-enclosed fallback', () => {
-    expect(parseMediaQuery('((color) and (monochrome))', {})).toMatchObject({
+    expect(MediaQuery.parse('((color) and (monochrome))', {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        type: TokenKind.ParensBlock,
         value: {
-          type: 'media-and',
+          operator: 'and',
         },
       },
     });
@@ -269,17 +252,16 @@ describe('<media-query>', () => {
     '(color) or (monochrome) and (grid)',
     'not not (color)',
   ])('rejects %j', (input) => {
-    expect(parseMediaQuery(input, {})).toBeNull();
+    expect(MediaQuery.parse(input, {})).toBeNull();
   });
 
   it.each([
     '(width < = 10px)',
     '(10px < width > 20px)',
   ])('preserves the unrecognized parenthetical %s as general-enclosed', (input) => {
-    expect(parseMediaQuery(input, {})).toMatchObject({
+    expect(MediaQuery.parse(input, {})?.value).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        type: 'general-enclosed',
         value: { type: TokenKind.ParensBlock },
       },
     });
@@ -288,18 +270,18 @@ describe('<media-query>', () => {
 
 describe('<media-query-list>', () => {
   it('accepts an empty list', () => {
-    expect(parseMediaQueryList('', {})).toEqual([]);
+    expect(MediaQuery.parseList('', {})).toEqual([]);
   });
 
   it('parses entries independently in source order', () => {
-    expect(parseMediaQueryList('screen, (color)', {})).toMatchObject([
+    expect(MediaQuery.parseList('screen, (color)', {}).map((query) => query.value)).toMatchObject([
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-condition-query' },
     ]);
   });
 
   it('replaces only an invalid entry with not all', () => {
-    expect(parseMediaQueryList('screen, &, print', {})).toMatchObject([
+    expect(MediaQuery.parseList('screen, &, print', {}).map((query) => query.value)).toMatchObject([
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', mediaType: 'print' },
@@ -307,14 +289,14 @@ describe('<media-query-list>', () => {
   });
 
   it('replaces both empty entries around a lone comma with not all', () => {
-    expect(parseMediaQueryList(',', {})).toMatchObject([
+    expect(MediaQuery.parseList(',', {}).map((query) => query.value)).toMatchObject([
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
     ]);
   });
 
   it('recovers independently across leading, consecutive, and trailing empty entries', () => {
-    expect(parseMediaQueryList(', screen,, print,', {})).toMatchObject([
+    expect(MediaQuery.parseList(', screen,, print,', {}).map((query) => query.value)).toMatchObject([
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
@@ -324,44 +306,57 @@ describe('<media-query-list>', () => {
   });
 
   it.each(['screen,', 'screen,/**/', 'screen, '])('retains a final empty query in %j', (input) => {
-    expect(serializeMediaQueryList(parseMediaQueryList(input, {}))).toBe('screen, not all');
+    expect(MediaQuery.serializeList(MediaQuery.parseList(input, {}))).toBe('screen, not all');
   });
 
   it('does not mistake a comma inside an unclosed function for a list separator', () => {
-    expect(serializeMediaQueryList(parseMediaQueryList('future(a,', {}))).toBe('future(a,)');
+    expect(MediaQuery.serializeList(MediaQuery.parseList('future(a,', {}))).toBe('future(a,)');
   });
 });
 
 describe('media query resolution', () => {
-  it('retains interpreted keywords through value resolution', () => {
-    const query = parseMediaQuery('(ORIENTATION: LANDSCAPE)', {})!;
+  it('resolves nested conditions repeatedly with fresh context and retains unknown syntax', () => {
+    const source = 'screen and (color) and ((width: 2em) or (not (1em < width <= 3em))) and future(foo)';
+    const query = MediaQuery.parse(source, {})!;
+    const deferred = query.resolve(ValueStage.Computed);
 
-    expect(resolveMediaQuery(query, ValueStage.Declared)).toEqual(query);
-    expect(serializeMediaQuery(resolveMediaQuery(query, ValueStage.Computed)))
+    expect(deferred.resolve(ValueStage.Computed, { length: { em: 10 } }).serialize())
+      .toBe('screen and (color) and ((width: 20px) or (not (10px < width <= 30px))) and future(foo)');
+    expect(deferred.resolve(ValueStage.Computed, { length: { em: 20 } }).serialize())
+      .toBe('screen and (color) and ((width: 40px) or (not (20px < width <= 60px))) and future(foo)');
+    expect(deferred.serialize()).toBe(source);
+    expect(query.serialize()).toBe(source);
+  });
+
+  it('retains interpreted keywords through value resolution', () => {
+    const query = MediaQuery.parse('(ORIENTATION: LANDSCAPE)', {})!;
+
+    expect(query.resolve(ValueStage.Declared)).toEqual(query);
+    expect(query.resolve(ValueStage.Computed).serialize())
       .toBe('(orientation: landscape)');
   });
 
   it('delegates known dimensions to their value resolvers', () => {
-    const absolute = parseMediaQuery('(width >= 1in)', {})!;
-    const relative = parseMediaQuery('(width >= 50em)', {})!;
-    const resolution = parseMediaQuery('(resolution: 96dpi)', {})!;
+    const absolute = MediaQuery.parse('(width >= 1in)', {})!;
+    const relative = MediaQuery.parse('(width >= 50em)', {})!;
+    const resolution = MediaQuery.parse('(resolution: 96dpi)', {})!;
 
-    expect(serializeMediaQuery(resolveMediaQuery(absolute, ValueStage.Computed)))
+    expect(absolute.resolve(ValueStage.Computed).serialize())
       .toBe('(width >= 96px)');
-    expect(serializeMediaQuery(resolveMediaQuery(relative, ValueStage.Computed)))
+    expect(relative.resolve(ValueStage.Computed).serialize())
       .toBe('(width >= 50em)');
-    expect(serializeMediaQuery(resolveMediaQuery(relative, ValueStage.Computed, {
+    expect(relative.resolve(ValueStage.Computed, {
       length: { em: 16 },
-    }))).toBe('(width >= 800px)');
-    expect(serializeMediaQuery(resolveMediaQuery(resolution, ValueStage.Computed)))
+    }).serialize()).toBe('(width >= 800px)');
+    expect(resolution.resolve(ValueStage.Computed).serialize())
       .toBe('(resolution: 1dppx)');
   });
 
   it('delegates number-valued math to the number resolver', () => {
-    const query = parseMediaQuery('(color: calc(1 + 2))', {})!;
+    const query = MediaQuery.parse('(color: calc(1 + 2))', {})!;
 
-    expect(serializeMediaQuery(query)).toBe('(color: calc(3))');
-    expect(serializeMediaQuery(resolveMediaQuery(query, ValueStage.Computed)))
+    expect(query.serialize()).toBe('(color: calc(3))');
+    expect(query.resolve(ValueStage.Computed).serialize())
       .toBe('(color: 3)');
   });
 });
@@ -379,11 +374,11 @@ describe('media query serialization', () => {
     ['future(foo  bar)', 'future(foo bar)'],
     ['(unknown-feature: FOO)', '(unknown-feature: FOO)'],
   ])('serializes %j as %j', (input, expected) => {
-    expect(serializeMediaQuery(parseMediaQuery(input, {})!)).toBe(expected);
+    expect(MediaQuery.parse(input, {})!.serialize()).toBe(expected);
   });
 
   it('serializes lists and recovered invalid entries', () => {
-    expect(serializeMediaQueryList(parseMediaQueryList('screen, &, print', {})))
+    expect(MediaQuery.serializeList(MediaQuery.parseList('screen, &, print', {})))
       .toBe('screen, not all, print');
   });
 });

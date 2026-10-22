@@ -2,56 +2,72 @@ import {
   consumeIntegerToken, adaptConsumer, withTrivia, createComponentParser,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../../syntax/index';
+import type { ValueStage } from '../../value-processing/index';
+import type { Value } from '../value';
 
-/*
- * <integer> = <integer-number-token>
- * <integer-number-token> = a <number-token> whose type flag is "integer"
- */
-
-export type IntegerLiteral = {
-  type: 'integer';
+/** A literal <integer> with its numeric magnitude and arithmetic operations. */
+// https://drafts.csswg.org/css-values-4/#integers
+export class IntegerLiteral implements Value {
+  /** The CSS numeric category. */
+  type = 'integer' as const;
+  /** The magnitude expressed by the literal. */
   value: number;
-};
 
-export function integerLiteral(value: number): IntegerLiteral {
-  return { type: 'integer', value };
-}
+  constructor(value: number) {
+    this.value = value;
+  }
 
-export function parseInteger(
-  input: ParserInput,
-  context: unknown,
-): IntegerLiteral | null {
-  return integerParser(input, context);
-}
+  /** Parse a complete literal. */
+  static parse(input: ParserInput, context: unknown): IntegerLiteral | null {
+    return integerParser(input, context);
+  }
 
-export function consumeInteger(
-  c: TokenCursor,
-): TryConsumerResult<IntegerLiteral> {
-  return integerConsumer(c);
+  /** Consume one literal with the default range. */
+  static consume(this: void, c: TokenCursor): TryConsumerResult<IntegerLiteral> {
+    return integerConsumer(c);
+  }
+
+  /** Configure the inclusive literal bounds once for a consuming grammar. */
+  static createConsumer(options: IntegerConsumerOptions = {}): TryConsumer<IntegerLiteral> {
+    const min = options.min ?? -Infinity;
+    const max = options.max ?? Infinity;
+
+    return adaptConsumer(consumeIntegerToken, (token) =>
+      token.value < min || token.value > max ? null : new IntegerLiteral(token.value),
+    );
+  }
+
+  /** This literal has no contextual conversion of its own. */
+  resolve(_stage: ValueStage, _context: unknown): IntegerLiteral {
+    return this;
+  }
+
+  /** Serialize the retained magnitude without resolving it. */
+  serialize(): string {
+    return serializeCssInteger(this.value);
+  }
+
+  /** Add two literals of this numeric category. */
+  // https://drafts.csswg.org/css-values-4/#combine-integer
+  add(other: IntegerLiteral): IntegerLiteral {
+    return integerResult(this.value + other.value);
+  }
+
+  /** Interpolate the magnitudes, rounding ties toward positive infinity. */
+  interpolate(other: IntegerLiteral, progress: number): IntegerLiteral {
+    return integerResult(Math.round((1 - progress) * this.value + progress * other.value));
+  }
+
+  /** Accumulation of these literals is addition. */
+  accumulate(other: IntegerLiteral): IntegerLiteral {
+    return this.add(other);
+  }
 }
 
 export type IntegerConsumerOptions = {
   min?: number;
   max?: number;
 };
-
-export function createIntegerConsumer(
-  options: IntegerConsumerOptions = {},
-): TryConsumer<IntegerLiteral> {
-  const min = options.min ?? -Infinity;
-  const max = options.max ?? Infinity;
-
-  return adaptConsumer(consumeIntegerToken, (token) =>
-    token.value < min || token.value > max
-      ? null
-      : { type: 'integer', value: token.value },
-  );
-}
-
-// CSSOM, "To serialize a CSS component value", <integer>.
-export function serializeInteger(value: IntegerLiteral): string {
-  return serializeCssInteger(value.value);
-}
 
 export function serializeCssInteger(value: number): string {
   if (Number.isSafeInteger(value)) {
@@ -61,33 +77,9 @@ export function serializeCssInteger(value: number): string {
   return BigInt(value).toString();
 }
 
-// CSS Values, "Computation and Combination of <integer>".
-export function addIntegers(a: IntegerLiteral, b: IntegerLiteral): IntegerLiteral {
-  return integerResult(a.value + b.value);
-}
-
-export function interpolateIntegers(
-  a: IntegerLiteral,
-  b: IntegerLiteral,
-  p: number,
-): IntegerLiteral {
-  return integerResult(Math.round((1 - p) * a.value + p * b.value));
-}
-
-export function accumulateIntegers(
-  a: IntegerLiteral,
-  b: IntegerLiteral,
-): IntegerLiteral {
-  return addIntegers(a, b);
-}
-
 function integerResult(value: number): IntegerLiteral {
-  return {
-    type: 'integer',
-    value: value === 0 ? 0 : value,
-  };
+  return new IntegerLiteral(value === 0 ? 0 : value);
 }
 
-// <integer> = <integer-number-token>
-const integerConsumer = createIntegerConsumer();
+const integerConsumer = IntegerLiteral.createConsumer();
 const integerParser = createComponentParser(withTrivia(integerConsumer));

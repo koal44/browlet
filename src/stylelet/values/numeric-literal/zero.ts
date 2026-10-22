@@ -1,37 +1,29 @@
 import {
   consumeNumberToken, adaptConsumer, withTrivia, createComponentParser,
-  type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
+  type TokenCursor, type TryConsumerResult, type ParserInput,
 } from '../../syntax/index';
 
-import type { NumberLiteral } from './number';
+import { NumberLiteral } from './number';
 
-/*
- * <zero> = <number-token with a value of 0>
- */
+/** A number literal accepted by the <zero> grammar. Arithmetic can produce ordinary numbers. */
+// https://drafts.csswg.org/css-values-4/#zero-value
+export class ZeroLiteral extends NumberLiteral {
+  declare value: 0;
 
-export type ZeroValue = NumberLiteral & {
-  value: 0;
-};
+  constructor() {
+    super(0);
+  }
 
-export function parseZero(
-  input: ParserInput,
-  context: unknown,
-): ZeroValue | null {
-  return zeroParser(input, context);
+  /** Parse a complete zero literal, including decimal and exponent spellings. */
+  static override parse(input: ParserInput, context: unknown): ZeroLiteral | null {
+    return zeroParser(input, context);
+  }
+
+  /** Consume a number token whose magnitude is zero. */
+  static override consume(this: void, c: TokenCursor): TryConsumerResult<ZeroLiteral> {
+    return zeroConsumer(c);
+  }
 }
 
-export function consumeZero(
-  c: TokenCursor,
-): TryConsumerResult<ZeroValue> {
-  return zeroConsumer(c);
-}
-
-// <zero> = <number-token with a value of 0>
-const zeroConsumer: TryConsumer<ZeroValue> = adaptConsumer(
-  consumeNumberToken,
-  (token) => token.value === 0
-    ? { type: 'number', value: 0 }
-    : null,
-);
-
+const zeroConsumer = adaptConsumer(consumeNumberToken, (token) => token.value === 0 ? new ZeroLiteral() : null);
 const zeroParser = createComponentParser(withTrivia(zeroConsumer));

@@ -27,7 +27,7 @@ Neither implementation installs numeric or property-name accessors.
 `PropertyDeclaration` implements §6.5's record: normalized built-in names or
 case-sensitive custom names, an interpreted value, and importance. Its `custom`
 discriminant supplies the case distinction; it needs no second case flag.
-Built-in value records retain their grammar/lifecycle representation rather
+Built-in value instances retain their grammar/lifecycle representation rather
 than turning back into a generic component list.
 
 `setProperty()` parses its value independently of the decoded property name.

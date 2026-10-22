@@ -1,157 +1,93 @@
+import { createNumericRange } from '../../infra/range';
+
 import {
-  one, oneOf, withTrivia, createComponentParser,
+  one, oneOf, withTrivia, parseAsComponentGrammar,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage, type ValueDefinition } from '../value-processing/index';
-import {
-  accumulateDimensions, addDimensions, interpolateDimensions, canonicalizeTime,
-  createTimeConsumer as createTimeLiteralConsumer, serializeTime as serializeTimeLiteral,
-  type TimeConsumerOptions, type TimeLiteral,
-} from './numeric-literal/index';
+import type { ValueStage } from '../value-processing/index';
+import { TimeLiteral, type TimeConsumerOptions } from './numeric-literal/index';
 
-import {
-  accumulateMathValues, addMathValues, createMathValueConsumer, createMathValueFromLiteral,
-  interpolateMathValues, resolveMathValue, serializeMathValue, type MathContext, type MathRange,
-  type MathValue,
-} from './math-value';
+import type { Value } from './value';
+import { MathValue, type MathContext } from './math-value';
 
-/*
- * <time> = <dimension-token with a time unit> | <math-function>
- */
+/** A <time> literal or calculation with its own lifecycle operations. */
+// https://drafts.csswg.org/css-values-4/#time
+export class TimeValue<Representation extends Time = Time> implements Value<MathContext> {
+  /** The literal or math value at the current lifecycle stage. */
+  value: Representation;
 
-export type TimeValue = TimeLiteral | MathValue<'time'>;
+  constructor(value: Representation) {
+    this.value = value;
+  }
 
-export const timeDef: ValueDefinition<TimeValue, MathContext> = {
-  consume: consumeTime,
-  resolve: resolveTime,
-  serialize: serializeTime,
-};
+  /** Parse one complete <time>. */
+  static parse(input: ParserInput, context: MathContext): TimeValue | null {
+    return parseAsComponentGrammar(input, timeGrammar, context);
+  }
 
-export function parseTime(
-  input: ParserInput,
-  context: MathContext,
-): TimeValue | null {
-  return timeParser(input, context);
-}
+  /** Consume one <time> using the default literal limits. */
+  static consume(this: void, c: TokenCursor<ComponentValue, MathContext>): TryConsumerResult<TimeValue> {
+    return timeConsumer(c);
+  }
 
-export function consumeTime(
-  c: TokenCursor<ComponentValue, MathContext>,
-): TryConsumerResult<TimeValue> {
-  return timeConsumer(c);
-}
+  /** Apply literal limits and the corresponding calculation range to this grammar. */
+  static createConsumer(options: TimeConsumerOptions = {}): TryConsumer<TimeValue, MathContext> {
+    const literalConsumer = TimeLiteral.createConsumer(options);
 
-export function createTimeConsumer(
-  options: TimeConsumerOptions = {},
-): TryConsumer<TimeValue, MathContext> {
-  const literalConsumer = createTimeLiteralConsumer(options);
-  const range = timeRange(options);
-
-  return oneOf(
-    [
+    return oneOf([
       one(literalConsumer),
-      one(createMathValueConsumer({
+      one(MathValue.createConsumer({
         expectedType: 'time',
-        ...(range === undefined ? {} : { range }),
+        range: createNumericRange(options.min, options.max),
       })),
-    ],
-    ([value]) => value,
-  );
-}
-
-export function resolveTime(
-  value: TimeValue,
-  stage: ValueStage,
-  context: MathContext = {},
-): TimeValue {
-  if (value.type === 'math') {
-    return resolveMathValue(value, stage, context);
+    ], ([parsed]) => new TimeValue(parsed));
   }
 
-  return stage < ValueStage.Computed
-    ? value
-    : canonicalizeTime(value);
-}
-
-export function serializeTime(
-  value: TimeValue,
-): string {
-  return value.type === 'math'
-    ? serializeMathValue(value)
-    : serializeTimeLiteral(value);
-}
-
-export function addTimes(
-  a: TimeValue,
-  b: TimeValue,
-  context: MathContext = {},
-): TimeValue {
-  if (a.type === 'time' && b.type === 'time') {
-    return addDimensions(a, b);
+  /** Resolve with the current context, preserving identity when the representation is unchanged. */
+  resolve(stage: ValueStage, context: MathContext = {}): TimeValue {
+    const previous = this.value;
+    const resolved = previous.resolve(stage, context);
+    return resolved === previous ? this : new TimeValue(resolved);
   }
 
-  return addMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-export function interpolateTimes(
-  a: TimeValue,
-  b: TimeValue,
-  p: number,
-  context: MathContext = {},
-): TimeValue {
-  if (a.type === 'time' && b.type === 'time') {
-    return interpolateDimensions(a, b, p);
+  /** Serialize the current representation without resolving it. */
+  serialize(): string {
+    return this.value.serialize();
   }
 
-  return interpolateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    p,
-    context,
-  );
-}
-
-export function accumulateTimes(
-  a: TimeValue,
-  b: TimeValue,
-  context: MathContext = {},
-): TimeValue {
-  if (a.type === 'time' && b.type === 'time') {
-    return accumulateDimensions(a, b);
+  /** Add compatible literals directly, retaining other combinations as math. */
+  add(other: TimeValue, context: MathContext = {}): TimeValue {
+    if (this.value instanceof TimeLiteral && other.value instanceof TimeLiteral && this.value.unit === other.value.unit) {
+      return new TimeValue(this.value.add(other.value));
+    }
+    return new TimeValue(
+      this.asMathValue(context).add(other.asMathValue(context), context),
+    );
   }
 
-  return accumulateMathValues(
-    asMathValue(a, context),
-    asMathValue(b, context),
-    context,
-  );
-}
-
-function asMathValue(
-  value: TimeValue,
-  context: MathContext,
-): MathValue<'time'> {
-  return value.type === 'math'
-    ? value
-    : createMathValueFromLiteral(value, 'time', context);
-}
-
-function timeRange(
-  options: TimeConsumerOptions,
-): MathRange | undefined {
-  if (options.min === undefined && options.max === undefined) {
-    return undefined;
+  /** Interpolate compatible literals directly, retaining other combinations as math. */
+  interpolate(other: TimeValue, progress: number, context: MathContext = {}): TimeValue {
+    if (this.value instanceof TimeLiteral && other.value instanceof TimeLiteral && this.value.unit === other.value.unit) {
+      return new TimeValue(this.value.interpolate(other.value, progress));
+    }
+    return new TimeValue(
+      this.asMathValue(context).interpolate(other.asMathValue(context), progress, context),
+    );
   }
 
-  return [
-    options.min ?? -Infinity,
-    options.max ?? Infinity,
-  ];
+  /** Accumulation is addition. */
+  accumulate(other: TimeValue, context: MathContext = {}): TimeValue {
+    return this.add(other, context);
+  }
+
+  private asMathValue(context: MathContext): MathValue<'time'> {
+    return this.value instanceof MathValue
+      ? this.value : MathValue.fromLiteral(this.value, 'time', context);
+  }
 }
 
-// <time> = <dimension-token with a time unit> | <math-function>
-const timeConsumer = createTimeConsumer();
-const timeParser = createComponentParser(withTrivia(timeConsumer));
+/** Literal or calculation accepted by this numeric grammar. */
+type Time = TimeLiteral | MathValue<'time'>;
+
+const timeConsumer = TimeValue.createConsumer();
+const timeGrammar = withTrivia(timeConsumer);
