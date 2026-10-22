@@ -190,11 +190,7 @@ describe('any-value', () => {
 
     expect(consumeAnyValue(c)).toEqual({
       type: 'any-value',
-      components: {
-        tokens: list.tokens.slice(0, 1),
-        text: list.text,
-        ranges: list.ranges.slice(0, 1),
-      },
+      components: list.slice(0, 1),
     });
     expect(c.pos()).toBe(1);
     expect(c.peek()).toBe(RightParenToken);
@@ -535,15 +531,19 @@ describe('url-modifier', () => {
   });
 
   it('parses unknown functional notation as a function block', () => {
-    expect(parseUrlModifier('future-modifier(value)', {})).toEqual({
+    const modifier = parseUrlModifier('future-modifier(value)', {});
+
+    expect(modifier).toEqual({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
       value: {
         tokens: [identToken('value')],
         text: 'future-modifier(value)',
-        ranges: [{ start: 16, end: 21 }],
       },
     });
+    if (modifier?.type === TokenKind.FunctionBlock) {
+      expect(modifier.value.sourceText()).toBe('value');
+    }
   });
 
   it.each([
@@ -611,12 +611,16 @@ describe('url-modifier', () => {
 
   it('consumes a URL modifier through the component grammar', () => {
     const c = new TokenCursor(parseListOfComponentValues('future-modifier()', {}), {});
+    const modifier = consumeUrlModifier(c);
 
-    expect(consumeUrlModifier(c)).toEqual({
+    expect(modifier).toEqual({
       type: TokenKind.FunctionBlock,
       name: 'future-modifier',
-      value: { tokens: [], text: 'future-modifier()', ranges: [] },
+      value: { tokens: [], text: 'future-modifier()' },
     });
+    if (modifier?.type === TokenKind.FunctionBlock) {
+      expect(modifier.value.sourceText()).toBe('');
+    }
     expect(c.pos()).toBe(1);
   });
 

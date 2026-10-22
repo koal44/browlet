@@ -7,12 +7,12 @@ families and their dependencies.
 
 ## Installed properties
 
-The [registry](property.ts) installs exactly seven built-in names:
+The [longhand registry](property.ts) installs seven built-in names:
 
 | Module | Registered names | Current behavior |
 | --- | --- | --- |
 | [color.ts](color.ts) | `color`, `background-color` | Shared color value definition. Color inherits and starts at symbolic CanvasText; background-color does not inherit and starts at transparent. Property-specific currentColor rules remain unfinished. |
-| [margin.ts](margin.ts) | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | Each starts at zero, does not inherit, and accepts length-percentage or auto. Resolution preserves auto and delegates numeric values to the shared resolver. No shorthand or logical longhands are registered. |
+| [margin.ts](margin.ts) | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | Each starts at zero, does not inherit, and accepts length-percentage or auto. Resolution preserves auto and delegates numeric values to the shared resolver. All belong to the physical margin group; logical longhands remain absent. |
 | [opacity.ts](opacity.ts) | `opacity` | Starts at one and does not inherit. Its value definition handles percentage conversion and computed-stage clamping. |
 
 [animation-name.ts](animation-name.ts) separately parses and serializes lists
@@ -36,6 +36,14 @@ typed `initialValue`; its registry key supplies the name. The family modules
 create these records once. Initial values are shared Declared representations,
 not CSS strings to parse or per-element computed values. Resolution leaves them
 unchanged and receives the current context, including the system palette.
+An optional `logicalGroup` records the family name and physical/logical mapping
+used by CSSOM's declaration ordering rules.
+
+[Shorthand records](shorthand.ts) separately identify canonical longhands and
+family-owned expansion/serialization. Margin's record exposes those dependencies
+now, but its expansion and serialization throw explicitly. It is not implemented
+shorthand support. CSSOM can already query/remove incomplete or mixed-priority
+sets without invoking those unfinished operations.
 
 Property interpretation looks up built-in names in the registry and rejects
 unknown built-ins, then uses the record's `definition` for parsing,
@@ -57,18 +65,20 @@ in source order through `interpretPropertyDeclaration()`, which recognizes
 installed built-ins and custom properties. The declaration-block parser uses the
 list helper; CSSOM's parsing context calls the same single-declaration interpreter
 during consumption. See the [parsing pipeline](../README.md#parsing-and-object-construction).
+One syntax declaration returns a list of interpreted declarations, allowing a
+shorthand to expand into longhands without creating another retained value tree.
 Both paths accept `PropertyContext`, carrying property/value settings without
 rule-interpretation hooks. Specialized grammars remain with their owning modules.
 Unknown properties and invalid values are discarded without invalidating their
 containing rule. Built-in names are ASCII-lowercased;
-custom names retain case and their component values remain available for later
+custom names retain case, exclude the reserved `--`, and their component values remain available for later
 substitution. Custom values can retain original text.
 
 ## Existing foundations outside this folder
 
 Reusable color, image/gradient, position, math, and numeric-unit machinery lives
 in [values/](../values/README.md#property-family-helpers). Declaration objects and
-provisional storage live in
+shared declaration storage live in
 [cssom/declarations/](../cssom/declarations/README.md); selection and computation
 live in `engine/`. The provisional BoxSides tuple supplies physical-side typing, not a
 shorthand parser or a box model.

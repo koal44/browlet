@@ -8,10 +8,11 @@ import type { ElementImpl } from '../dom/nodes/index';
 /** Owns accepted inline declarations and lazily exposes their CSSOM object. */
 // https://drafts.csswg.org/cssom/#elementcssinlinestyle
 export class ElementCSSInlineStyleMixin {
+  /** Element whose attribute input and CSSOM writes share these accepted declarations. */
   #element: ElementImpl;
+  /** Owner supplying DOM operations for the lazily created declaration object. */
   #env: StyleletEnvironment;
   /** Accepted inline declarations, retained independently of the raw attribute. */
-  // PROVISIONAL(CSSOM): The separate block and lazy CSSOM ownership split await the declaration audit.
   #block?: CSSDeclarationBlock;
   /** Stable CSSStyleProperties implementation returned by the element's style getter. */
   #style?: CSSStylePropertiesImpl;
@@ -52,8 +53,8 @@ export class ElementCSSInlineStyleMixin {
   }
 }
 
-// External links await CSSOM fetching and HTML linked-resource processing;
-// XML processing instructions and HTTP Link headers await their host owners.
+// External links await HTML linked-resource processing; PI and HTTP-header
+// associations have separate owners in processing-instruction.ts and Document.
 /** Maintains a style element's sheet as its attributes, text, and tree scope change. */
 // https://drafts.csswg.org/cssom/#the-linkstyle-interface
 // The declaration lives in Stylelet; Browlet owns the DOM association behavior.

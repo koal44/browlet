@@ -6,9 +6,9 @@ import {
 } from '../../../web-idl/core/index';
 
 import type { StyleletEnvironment } from '../../environment';
-import { parseDeclaration } from '../../syntax/index';
+import { parseListOfComponentValues } from '../../syntax/index';
 import {
-  interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration,
+  getShorthand, interpretPropertyDeclaration, propertyRegistry, serializePropertyDeclaration,
   type PropertyDeclaration, type PropertyContext,
 } from '../../props/index';
 import type { CSSRuleImpl } from '../rules/index';
@@ -19,7 +19,6 @@ import { CSSDeclarationBlock } from './declaration-block';
 // https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
 export class CSSStyleDeclarationImpl {
   /** Parsed declarations shared with the owning rule, inline style, or computed result. */
-  // PROVISIONAL(CSSOM): Revisit this separate block's state and mutation ownership during the declaration audit.
   #block: CSSDeclarationBlock;
   /** Whether this object represents a computed result rather than authored declarations. */
   #computed: boolean;
@@ -60,7 +59,7 @@ export class CSSStyleDeclarationImpl {
   set cssText(value: string) {
     this.#assertMutable();
     this.#block.setText(value, {});
-    this.#commit();
+    this.#updateStyleAttribute();
   }
 
   /** Number of property declarations currently retained by the block. */
@@ -99,7 +98,13 @@ export class CSSStyleDeclarationImpl {
   /** Serialize a retained property's value, or return empty text when it is absent. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertyvalue
   getPropertyValue(property: string): string {
-    const declaration = this.#block.find(normalizePropertyName(property));
+    const name = normalizePropertyName(property);
+    const shorthand = getShorthand(name);
+    if (shorthand !== undefined) {
+      const longhands = this.#block.getLonghands(shorthand);
+      return longhands === null ? '' : shorthand.serialize(longhands);
+    }
+    const declaration = this.#block.find(name);
     return declaration === undefined
       ? ''
       : serializePropertyDeclaration(declaration).value;
@@ -108,7 +113,12 @@ export class CSSStyleDeclarationImpl {
   /** Return `important` for an important declaration, otherwise an empty string. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertypriority
   getPropertyPriority(property: string): string {
-    return this.#block.find(normalizePropertyName(property))?.important
+    const name = normalizePropertyName(property);
+    const shorthand = getShorthand(name);
+    if (shorthand !== undefined) {
+      return this.#block.getLonghands(shorthand)?.[0]?.important ? 'important' : '';
+    }
+    return this.#block.find(name)?.important
       ? 'important'
       : '';
   }
@@ -123,8 +133,10 @@ export class CSSStyleDeclarationImpl {
     this.#assertMutable();
 
     const name = normalizePropertyName(property);
-    if (!isCustomPropertyName(name) && !isSupportedPropertyName(name)) return;
+    if (!isCustomPropertyName(name) && !isSupportedPropertyName(name) && getShorthand(name) === undefined) return;
 
+    // SPEC_CLASH(empty-value-priority-order): Follow CSSOM/Firefox by removing
+    // an empty value before checking priority; Chromium/WebKit check priority first.
     if (value === '') {
       this.removeProperty(name);
       return;
@@ -132,15 +144,18 @@ export class CSSStyleDeclarationImpl {
 
     if (priority !== '' && asciiLower(priority) !== 'important') return;
 
-    const declaration = parsePropertyDeclaration(
+    const declarations = parsePropertyDeclaration(
       name,
       value,
       priority !== '',
       {},
     );
-    if (declaration === null || !this.#block.set(declaration)) return;
-
-    this.#commit();
+    if (declarations === null) return;
+    let updated = false;
+    for (const declaration of declarations) {
+      if (this.#block.set(declaration)) updated = true;
+    }
+    if (updated) this.#updateStyleAttribute();
   }
 
   /** Remove a property and return its previous serialized value. */
@@ -150,8 +165,12 @@ export class CSSStyleDeclarationImpl {
 
     const name = normalizePropertyName(property);
     const value = this.getPropertyValue(name);
-    if (!this.#block.remove(name)) return value;
-    this.#commit();
+    const shorthand = getShorthand(name);
+    let removed = false;
+    for (const longhand of shorthand?.longhands ?? [name]) {
+      if (this.#block.remove(longhand)) removed = true;
+    }
+    if (removed) this.#updateStyleAttribute();
     return value;
   }
 
@@ -190,11 +209,6 @@ export class CSSStyleDeclarationImpl {
     }
   }
 
-  /** Publish a successful CSSOM edit to the element that owns this declaration block. */
-  #commit(): void {
-    this.#updateStyleAttribute();
-  }
-
   /** Reject CSSOM writes when the declaration block is read-only. */
   #assertMutable(): void {
     if (!this.#readonly) return;
@@ -227,12 +241,15 @@ function parsePropertyDeclaration(
   value: string,
   important: boolean,
   context: PropertyContext,
-): PropertyDeclaration | null {
-  const syntaxDeclaration = parseDeclaration(`${property}: ${value}`, context);
-  if (syntaxDeclaration === null || syntaxDeclaration.important) return null;
-
-  syntaxDeclaration.important = important;
-  return interpretPropertyDeclaration(syntaxDeclaration, context);
+): PropertyDeclaration[] | null {
+  // The property is an already-decoded name, not declaration syntax. Parsing
+  // only the value also makes trailing semicolons and extra declarations fail
+  // the property's grammar rather than ending a successful declaration parse.
+  // https://drafts.csswg.org/cssom/#parse-a-css-value
+  const list = parseListOfComponentValues(value, context);
+  list.trimWhitespace();
+  const originalText = isCustomPropertyName(property) ? list.sourceText() : undefined;
+  return interpretPropertyDeclaration({ name: property, value: list, important, originalText }, context);
 }
 
 /** Canonicalize a built-in property name while preserving custom-property case. */
@@ -249,7 +266,7 @@ function isSupportedPropertyName(
 
 /** Whether a name has the custom-property prefix rather than a built-in property's spelling. */
 function isCustomPropertyName(name: string): name is `--${string}` {
-  return name.startsWith('--');
+  return name.length > 2 && name.startsWith('--');
 }
 
 /*
@@ -278,6 +295,8 @@ export const cssStyleDeclarationIDL = defineInterface({
     roAttr('length', idlType.unsignedLong),
     op('item', reference('CSSOMString'),
       [arg('index', idlType.unsignedLong)],
+      // SPEC_CLASH(css-declaration-indexed-write): Follow Web IDL/Firefox/WebKit:
+      // indexed writes fail without an indexed setter; Chromium reports success.
       indexedGetter((style: CSSStyleDeclarationImpl) => style.getSupportedPropertyIndices(), {
         supportsIndex: (style, index) => index < style.length,
       }),

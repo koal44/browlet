@@ -104,7 +104,7 @@ export class CSSRuleListImpl {
   }
 
   /** Interpret one property before Syntax decides whether to retry it as a rule. */
-  interpretDeclaration(declaration: Declaration, context: RuleListContext): PropertyDeclaration | null {
+  interpretDeclaration(declaration: Declaration, context: RuleListContext): PropertyDeclaration[] | null {
     return interpretPropertyDeclaration(declaration, context);
   }
 

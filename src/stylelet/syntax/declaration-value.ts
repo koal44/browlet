@@ -3,7 +3,8 @@ import {
 } from './token-cursor';
 import { isDelimToken, isTokenKind, type ComponentValue } from './component-value';
 import { parseListOfComponentValues, type ParserInput } from './parser';
-import { createTokenList, TokenKind, type StaticToken, type TokenList, type NonEmptyTokenList } from './tokens';
+import { TokenList, type NonEmptyTokenList } from './token-list';
+import { TokenKind, type StaticToken } from './tokens';
 import {
   isAnyValueContents, consumeAnyValue, type AnyValueComponent,
 } from './any-value';
@@ -73,7 +74,7 @@ export function consumeOptionalDeclarationValue(
 
   if (value === null) {
     return c.peek().type === TokenKind.EOF
-      ? { type: 'declaration-value', components: createTokenList(c.source.text) }
+      ? { type: 'declaration-value', components: new TokenList(c.source.text) }
       : null;
   }
 

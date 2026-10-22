@@ -13,7 +13,8 @@ import type {
   DimensionToken, HashToken, IdentToken, NumberToken, PercentageToken,
   StringToken, UrlToken,
 } from './tokens';
-import { createTokenList, HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
+import { HashTokenFlag, NumberTokenFlag, TokenKind } from './tokens';
+import { TokenList } from './token-list';
 
 // =============================================================================
 // Consumer creators
@@ -90,7 +91,7 @@ export function createFreeFormConsumer<Value, Context = unknown>(
       return result;
     }
 
-    const list = createTokenList<ComponentValue>(c.source.text);
+    const list = new TokenList<ComponentValue>(c.source.text);
 
     while (true) {
       const component = c.peek();
@@ -106,8 +107,7 @@ export function createFreeFormConsumer<Value, Context = unknown>(
 
       const start = c.pos();
       c.next();
-      list.tokens.push(component);
-      list.ranges.push(c.sourceRange(start, c.pos()));
+      list.append(component, c.source, start, c.pos());
     }
 
     const result = parseAsComponentGrammar(

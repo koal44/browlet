@@ -12,6 +12,7 @@ export {
   requiredSequenceOf, requiredSomeOf, any,
 } from './component-grammar';
 export { TokenCursor, type TryConsumerResult, type TryConsumer } from './token-cursor';
+export { TokenList, type NonEmptyTokenList } from './token-list';
 export {
   isTokenKind, serializeComponentValues, serializeCssIdentifier, isDelimToken, serializeCssDimensionUnit,
   serializeCssString, serializeCssFunction, serializeCssLocal,
@@ -26,7 +27,7 @@ export {
 export {
   TokenKind, NumericSign, NumberTokenFlag, decodeStylesheetBytes,
   type DimensionToken, type IdentToken, type NumberToken, type ParensBlock, type FunctionBlock,
-  type ComponentValue, type Token, type TokenList, type NonEmptyTokenList, type TokenSource, type TokenSourceRange,
+  type ComponentValue, type Token,
 } from './tokens';
 export {
   parseOptionalDeclarationValue, consumeDeclarationValue, consumeOptionalDeclarationValue,

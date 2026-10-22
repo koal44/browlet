@@ -13,13 +13,13 @@ conformance.
 | Stage | Existing implementation | Result / boundary |
 | --- | --- | --- |
 | Bytes | [tokens.ts](tokens.ts), `decodeStylesheetBytes()` | Chooses a fallback from transport metadata, the initial `@charset` byte sequence, environment encoding, then UTF-8; the supplied decoder handles decoding, including BOM precedence. Callers decode before using the string parser. |
-| Code points and tokens | `filterCodePoints()`, `tokenize()` | CSS newline/replacement preprocessing and tokens, with the preprocessed text and parallel source ranges. |
+| Code points and tokens | `filterCodePoints()`, [TokenList.tokenize()](token-list.ts) | CSS newline/replacement preprocessing and tokens, with the preprocessed text and parallel source ranges. |
 | Components | [parser.ts](parser.ts), [component-value.ts](component-value.ts) | Preserved tokens, nested blocks, and functions. These are syntax, not resolved CSS values. |
 | Stylesheet contents | `parseStylesheetContents()` | Rules interpreted by the required caller-supplied grammar context. |
 | Block syntax | `parseBlockContents()` | Interpreted declaration runs interleaved with rules, preserving the distinction needed by nesting. |
 | CSS rule construction | [CSSOM rule list](../cssom/rule-list.ts) | Coordinates rule/property interpretation through the caller's RuleListContext; see the [rule inventory](../cssom/rules/README.md#parsing-and-ownership). |
 
-`ParserInput` accepts a string, `TokenList` record, or existing `TokenCursor`.
+`ParserInput` accepts a string, `TokenList`, or existing `TokenCursor`.
 Every parser entry point requires a context, including component and value
 parsers. Existing cursors retain their source ranges; parsing consumes from
 their current position using the explicitly selected context and restores the
@@ -162,22 +162,29 @@ context-specific range choice permitted by CSS Values, not a general numeric
 range policy for all properties. Selector matching owns positive-index and
 nonnegative-iteration behavior.
 
-`TokenList` extends `TokenSource` as an explicit record: `tokens`, `text`, and
-`ranges`. Source is required. `tokenize()` produces this record; folding tokens
-into components creates matching ranges while sharing the full preprocessed
-text. Block/function children, comma-list arms, and collected grammar values
-retain that same text with ranges for their own sequences.
+`TokenList` in [token-list.ts](token-list.ts) owns its token array and private
+source ranges. Callers read `tokens` directly and use the list's methods for
+structural edits. Source is required. `TokenList.tokenize()` creates a list from
+text; folding tokens into components retains their complete consumed spans.
+Block/function children, comma-list arms, and collected grammar values share
+the full preprocessed text, each with ranges for its own sequence.
 
-`TokenCursor` caches the tokens array for token reads and uses the record for
+`append()` retains a consumed interval from another list sharing the source text.
+`slice()`, `truncate()`, and `trimWhitespace()` keep tokens and ranges aligned;
+`sourceText()` reads the retained source span. Declaration parsing and CSSOM share
+these operations rather than editing parallel arrays themselves. Range records
+are private and can be reused for unchanged tokens and sliced sequences.
+
+`TokenCursor` caches the tokens array for token reads and uses the list for
 source queries. Parser consumers build output lists; the cursor does not own
 output construction. Reopening a block or entering a component grammar therefore
-preserves custom-property spelling and unicode-range reparsing. Slicing a list
-requires slicing its ranges alongside its tokens. A bare array is not parser
-input; serialization can still read a component array without source information.
+preserves custom-property spelling and unicode-range reparsing. A bare array is
+not parser input; serialization can still read a component array without source
+information.
 
 Use `component` for one component value and `components` for an array of them;
 use `token` for a lexical or unspecialized token. Name the complete `TokenList`
-record `list`, `input`, or a specific role such as `prelude`. The `tokens` member
+object `list`, `input`, or a specific role such as `prelude`. The `tokens` member
 can contain lexical tokens or folded components, as its type argument specifies.
 Retain `value` for payload fields and interpreted values.
 

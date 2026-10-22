@@ -1,8 +1,10 @@
-import { TextCursor } from '../../infra/text-cursor';
+import type { TextCursor } from '../../infra/text-cursor';
 import { asciiLower } from '../../infra/ascii';
 import { getEncoding, type Encoding } from '../../encoding/core/index';
 
 import type { StyleletEnvironment } from '../environment';
+
+import type { TokenList } from './token-list';
 
 export enum TokenKind {
   Ident = 1,
@@ -452,61 +454,9 @@ type IdentLikeToken =
   | UrlToken
   | StaticToken<TokenKind.BadUrl>;
 
-/** Half-open UTF-16 offsets in the preprocessed source, excluding preceding comments. */
-export type TokenSourceRange = {
-  start: number;
-  end: number;
-};
-
-/** Source text and ranges parallel to a particular token or component sequence. */
-export type TokenSource = {
-  text: string;
-  ranges: TokenSourceRange[];
-};
-
-/** Tokens/components and their parallel ranges in the shared preprocessed text. */
-export interface TokenList<Value extends Token = Token> extends TokenSource {
-  tokens: Value[];
-}
-
-export interface NonEmptyTokenList<Value extends Token> extends TokenList<Value> {
-  tokens: [Value, ...Value[]];
-}
-
-/** Create an empty sequence sharing its input's preprocessed text. */
-export function createTokenList<Value extends Token>(text: string): TokenList<Value> {
-  return { tokens: [], text, ranges: [] };
-}
-
-/**
- * Tokenize complete CSS input; TokenCursor supplies EOF when the array is exhausted.
- * Enable unicode ranges only for the unicode-range descriptor's special parsing path.
- */
-// https://drafts.csswg.org/css-syntax-3/#tokenization
-// consumeUnicodeRangeDescriptorValue() opts in; ordinary parsing leaves it false.
-export function tokenize(input: string, unicodeRangesAllowed = false): TokenList {
-  const text = filterCodePoints(input);
-  const c = new TextCursor(text);
-  const list = createTokenList(text);
-
-  while (true) {
-    // Consume a token's leading comments before recording its source range.
-    consumeComments(c);
-    const start = c.pos();
-    const token = consumeToken(c, unicodeRangesAllowed);
-
-    if (token.type === TokenKind.EOF) {
-      return list;
-    }
-
-    list.tokens.push(token);
-    list.ranges.push({ start, end: c.pos() });
-  }
-}
-
 /** Consume one token from filtered input after the caller has discarded leading comments. */
 // https://drafts.csswg.org/css-syntax-3/#consume-token
-function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
+export function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
   const pos = c.pos();
   const ch = c.next();
 
@@ -661,7 +611,7 @@ function consumeToken(c: TextCursor, unicodeRangesAllowed: boolean): Token {
 
 /** Consume consecutive comments, including the remainder of an unterminated comment. */
 // https://drafts.csswg.org/css-syntax-3/#consume-comment
-function consumeComments(c: TextCursor): void {
+export function consumeComments(c: TextCursor): void {
   while (c.peek() === '/' && c.peek(1) === '*') {
     c.advance(2);
 

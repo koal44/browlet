@@ -7,18 +7,60 @@ import {
   parseListOfComponentValues,
 } from '../../../../src/stylelet/syntax/parser';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
-import { tokenize, TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 import { parseFirstValid } from '../../../../src/stylelet/values/substitution/first-valid';
 
+describe('token-list whitespace boundaries', () => {
+  it('keeps source ranges and nested whitespace intact when trimming a collected value', () => {
+    const list = parseListOfComponentValues(' \t/**/ --x: fn( a ) /**/ foo\\62 ar \n/**/', {});
+    list.trimWhitespace();
+
+    expect(list.sourceText()).toBe('--x: fn( a ) /**/ foo\\62 ar');
+    expect(parseDeclaration(list, {})?.originalText).toBe('fn( a ) /**/ foo\\62 ar');
+  });
+
+  it.each(['', ' \t\n', '/**/ \n/**/'])('trims empty or whitespace-only input: %j', (input) => {
+    const list = TokenList.tokenize(input);
+    list.trimWhitespace();
+
+    expect(list.sourceText()).toBe('');
+    expect(new TokenCursor(list, {}).eof()).toBe(true);
+  });
+
+  it('preserves whitespace escaped inside an identifier', () => {
+    const list = TokenList.tokenize(' \t\\  \n');
+    list.trimWhitespace();
+
+    expect(list.sourceText()).toBe('\\ ');
+    expect(new TokenCursor(list, {}).next()).toEqual({ type: TokenKind.Ident, value: ' ' });
+  });
+});
+
 describe('source spelling through component parsing', () => {
+  it('slices and truncates independently while preserving original source spans', () => {
+    const source = parseListOfComponentValues('skip --x: fn( a ) /**/ foo\\62 ar', {});
+    const list = source.slice(2);
+    list.truncate(5);
+
+    expect(parseDeclaration(list, {})?.originalText).toBe('fn( a )');
+    expect(list.sourceText()).toBe('--x: fn( a ) ');
+    expect(source.sourceText()).toBe('skip --x: fn( a ) /**/ foo\\62 ar');
+
+    list.truncate(0);
+    expect(list.sourceText()).toBe('');
+    expect(new TokenCursor(list, {}).eof()).toBe(true);
+    expect(parseDeclaration(source.slice(2), {})?.originalText).toBe('fn( a ) /**/ foo\\62 ar');
+  });
+
   it('retains token-list source when creating another cursor', () => {
-    const list = tokenize('--x: foo\\62 ar');
+    const list = TokenList.tokenize('--x: foo\\62 ar');
 
     expect(parseDeclaration(list, {})?.originalText).toBe('foo\\62 ar');
   });
 
   it('aligns folded component ranges after consuming an existing cursor prefix', () => {
-    const inputList = tokenize('skip --x: fn(a) /**/ [b] foo\\62 ar !important');
+    const inputList = TokenList.tokenize('skip --x: fn(a) /**/ [b] foo\\62 ar !important');
     const input = new TokenCursor(inputList, {});
     input.next();
     const list = parseListOfComponentValues(input, input.context);

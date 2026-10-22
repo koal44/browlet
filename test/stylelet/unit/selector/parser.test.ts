@@ -1,5 +1,5 @@
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
-import { tokenize } from '../../../../src/stylelet/syntax/tokens';
+import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 import { describe, expect, it } from 'vitest';
 import type {
   AttributeSelector, AttrMatcher, AttrModifier, Combinator, ComplexSelector, ComplexSelectorList,
@@ -1835,7 +1835,7 @@ describe('specificity', () => {
     const parent = parseSelectorList('article, #featured', {})!;
     const input = '&.active, > span, :is(&)';
     const previous = { insideHas: true };
-    const c = new TokenCursor(tokenize(`skip ${input}`), previous);
+    const c = new TokenCursor(TokenList.tokenize(`skip ${input}`), previous);
     c.restore(2);
 
     expect(parseNestedSelectorList(c, parent, {}))

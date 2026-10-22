@@ -56,7 +56,7 @@ export class RuleListContext implements SelectorNamespaces, PropertyContext {
   }
 
   /** Validate and interpret a property once, before declaration-versus-rule recovery. */
-  interpretDeclaration(declaration: Declaration): PropertyDeclaration | null {
+  interpretDeclaration(declaration: Declaration): PropertyDeclaration[] | null {
     return this.ruleList.interpretDeclaration(declaration, this);
   }
 

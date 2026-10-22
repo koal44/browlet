@@ -26,7 +26,7 @@ entry points and implementation types.
 | [conditional/](conditional/README.md) | Roadmap for condition evaluation and applicability; supports capability checks and device/container matching are not implemented |
 | [engine/](engine/README.md) | Sheet participation, tree-scope collections, cascade selection, and computed-style construction |
 | [cssom/](cssom/README.md) | Rule construction, authoritative stylesheet/rule implementations, collections, and mutation behavior |
-| [cssom/declarations/](cssom/declarations/README.md) | CSSStyleDeclaration, CSSStyleProperties, and their provisional declaration-block storage |
+| [cssom/declarations/](cssom/declarations/README.md) | CSSStyleDeclaration, CSSStyleProperties, and their shared ordered declaration collection |
 | [cssom/media/](cssom/media/README.md) | MediaList mutation and serialization, below rules and sheets |
 | [web-idl.ts](web-idl.ts) | CSSOM declarations and host contributions, including observable adopted-sheet mutation steps |
 | [environment.ts](environment.ts), [context.ts](context.ts) | Host facilities and document/query state, respectively |
@@ -83,7 +83,9 @@ The same distinction applies to declarations. `PropertyDeclaration` is internal
 data; `CSSDeclarationBlock` is the current retained data container;
 `CSSStyleDeclarationImpl` provides mutation/query behavior, and
 `CSSStylePropertiesImpl` supplies the property-facing subtype. Both interfaces
-are bound; the existing container and class split remains under review.
+are bound. The collection owns ordering/mutation independently of CSSOM identity;
+the implementation owns flags and associations. Shorthand expansion and value
+serialization stop at explicit property-family dependencies.
 
 Keep implementation contracts in JSDoc, with specification URLs in ordinary
 comments. Copied Web IDL belongs in a plain multiline comment immediately above

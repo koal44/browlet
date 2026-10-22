@@ -1,14 +1,13 @@
-import { parseDeclarationList, type ParserInput } from '../../syntax/index';
+import { parseDeclarationList, serializeCssIdentifier, type ParserInput } from '../../syntax/index';
 import {
-  interpretPropertyDeclarations, serializePropertyDeclaration, type PropertyDeclaration, type PropertyContext,
+  getShorthands, interpretPropertyDeclarations, propertyRegistry, serializePropertyDeclaration,
+  type BuiltInPropertyDeclaration, type PropertyDeclaration, type PropertyContext, type ShorthandRecord,
 } from '../../props/index';
 
 /** Parsed declarations shared by style resolution and a separately created CSSOM object. */
 // https://drafts.csswg.org/cssom/#css-declaration-blocks
-// PROVISIONAL(CSSOM): This separate storage/mutation class is an interim inline-style design.
-// Before closing the CSSOM audit, replace it with plain declaration state or direct
-// implementation ownership unless a separate class earns an explicit justification.
-// See ROADMAP.md#declaration-state-and-lifecycle.
+// This collection owns ordering and mutation, not the associated CSSOM flags,
+// owner, or Platform identity. Inline style can retain it before .style is read.
 export class CSSDeclarationBlock {
   /** Winning declaration for each property, retaining the block's property order. */
   #declarations: PropertyDeclaration[] = [];
@@ -26,7 +25,27 @@ export class CSSDeclarationBlock {
   /** Serialize the retained declarations at their current value stage. */
   // https://drafts.csswg.org/cssom/#serialize-a-css-declaration-block
   get cssText(): string {
-    return this.#declarations.map(serializeDeclaration).join(' ');
+    const serialized: string[] = [];
+    const alreadySerialized = new Set<string>();
+    declarations: for (const declaration of this.#declarations) {
+      if (alreadySerialized.has(declaration.name)) continue;
+      if (!declaration.custom) {
+        for (const [name, shorthand] of getShorthands(declaration.name)) {
+          const longhands = this.getLonghands(shorthand);
+          if (longhands === null || longhands.some(({ name }) => alreadySerialized.has(name))) continue;
+          if (this.#hasInterleavedLogicalGroup(longhands)) continue;
+          const value = shorthand.serialize(longhands);
+          if (value === '') continue;
+          serialized.push(serializeDeclaration(name, value, declaration.important));
+          for (const longhand of longhands) alreadySerialized.add(longhand.name);
+          continue declarations;
+        }
+      }
+      const { name, value, important } = serializePropertyDeclaration(declaration);
+      serialized.push(serializeDeclaration(name, value, important));
+      alreadySerialized.add(name);
+    }
+    return serialized.join(' ');
   }
 
   /** Replace the block with parsed attribute or CSSOM text. */
@@ -44,12 +63,33 @@ export class CSSDeclarationBlock {
     return this.#declarations.find((declaration) => declaration.name === name);
   }
 
-  /** Set a declaration through CSSOM, retaining an existing property's position. */
+  /** Return complete, equally important shorthand longhands in canonical order, or null. */
+  getLonghands(shorthand: ShorthandRecord): BuiltInPropertyDeclaration[] | null {
+    const longhands: BuiltInPropertyDeclaration[] = [];
+    for (const name of shorthand.longhands) {
+      const declaration = this.find(name);
+      if (declaration === undefined || declaration.custom) return null;
+      if (longhands.length > 0 && declaration.important !== longhands[0]!.important) return null;
+      longhands.push(declaration);
+    }
+    return longhands;
+  }
+
+  /** Set a declaration, retaining its position unless an opposite logical mapping follows it. */
+  // https://drafts.csswg.org/cssom/#set-a-css-declaration
   set(declaration: PropertyDeclaration): boolean {
     const index = this.#declarations.findIndex(({ name }) => name === declaration.name);
     if (index < 0) {
       this.#declarations.push(declaration);
       return true;
+    }
+
+    for (let i = index + 1; i < this.#declarations.length; i++) {
+      if (hasDifferentMapping(declaration, this.#declarations[i]!)) {
+        this.#declarations.splice(index, 1);
+        this.#declarations.push(declaration);
+        return true;
+      }
     }
 
     const previous = this.#declarations[index]!;
@@ -67,6 +107,19 @@ export class CSSDeclarationBlock {
     if (index < 0) return false;
     this.#declarations.splice(index, 1);
     return true;
+  }
+
+  /** Whether combining these longhands would reorder an intervening opposite logical mapping. */
+  #hasInterleavedLogicalGroup(longhands: BuiltInPropertyDeclaration[]): boolean {
+    const indices = longhands.map((declaration) => this.#declarations.indexOf(declaration));
+    const first = Math.min(...indices);
+    const last = Math.max(...indices);
+    for (let i = first + 1; i < last; i++) {
+      const declaration = this.#declarations[i]!;
+      if (longhands.some((longhand) => longhand === declaration)) continue;
+      if (longhands.some((longhand) => hasDifferentMapping(longhand, declaration))) return true;
+    }
+    return false;
   }
 
   /** Keep each winning declaration at its specified position, rather than its first occurrence. */
@@ -92,8 +145,21 @@ export function parseDeclarationBlock(input: ParserInput, context: PropertyConte
   return interpretPropertyDeclarations(parseDeclarationList(input, context), context);
 }
 
-/** Serialize one declaration without changing its value stage. */
-function serializeDeclaration(declaration: PropertyDeclaration): string {
-  const { name, value, important } = serializePropertyDeclaration(declaration);
-  return `${name}: ${value}${important ? ' !important' : ''};`;
+/** Serialize a name, an already serialized value, and its priority. */
+// https://drafts.csswg.org/cssom/#serialize-a-css-declaration
+function serializeDeclaration(name: string, value: string, important: boolean): string {
+  // SPEC_CLASH(custom-property-name-serialization): Follow Chromium/Firefox by
+  // escaping decoded custom names; CSSOM's literal steps and WebKit emit them raw.
+  const property = name.startsWith('--') ? serializeCssIdentifier(name) : name;
+  const text = /[^\t\n\f\r ]/.test(value) ? value : '';
+  return `${property}: ${text}${important ? ' !important' : ''};`;
+}
+
+/** Whether two properties belong to one logical group but map its sides differently. */
+// https://drafts.csswg.org/css-logical-1/#logical-property-group
+function hasDifferentMapping(a: PropertyDeclaration, b: PropertyDeclaration): boolean {
+  if (a.custom || b.custom) return false;
+  const left = propertyRegistry[a.name].logicalGroup;
+  const right = propertyRegistry[b.name].logicalGroup;
+  return left !== undefined && right !== undefined && left.name === right.name && left.mapping !== right.mapping;
 }

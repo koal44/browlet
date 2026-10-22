@@ -6,18 +6,19 @@ This roadmap maps outstanding CSS work to its owners;
 
 ## Review starting point
 
-Continue the CSSOM audit from §6.1 into collections/adoption and association,
-then rule and declaration behavior. Sheets and their result graph now use
-real bindings. The [CSSOM review order](cssom/ROADMAP.md#next-review-order)
-keeps declaration state, attribute input, mutation and engine reads together.
+The CSSOM audit has reached §6.6; sheets, collections/adoption, associations,
+and rule/declaration APIs use real bindings. Implement the explicit shorthand
+dependencies next, then continue §6.7. The
+[CSSOM review order](cssom/ROADMAP.md#next-review-order)
+keeps attribute input, mutation and engine reads together.
 Missing resource/layout consumers remain explicit at their owners.
 
 ## Missing contracts
 
 | Missing or incomplete contract | Owning work and stopping point |
 | --- | --- |
-| CSSOM Platform interfaces | Sheets, rules, lists, and declarations are bound; adoption still needs its typed observable-array boundary. Continue later interface and behavior audits. See [CSSOM projection](cssom/ROADMAP.md#projection-and-declaration-lifecycle). |
-| Declaration mutation ownership | Review the current separate block alongside CSSStyleDeclaration/CSSStyleProperties. Rule edits and the engine already use one implementation tree. Preserve observable behavior without treating current storage tests as architecture requirements. |
+| CSSOM Platform interfaces | Sheets, rules, lists, declarations, and observable-array adoption are bound. Continue later interface and behavior audits. See [CSSOM projection](cssom/ROADMAP.md#projection-and-declaration-lifecycle). |
+| Declaration property dependencies | Shared ordered storage and CSSOM ownership are established. Margin mapping is wired, but expansion, pending substitution, and shorthand value serialization explicitly stop as unfinished. See the [property roadmap](props/ROADMAP.md#shorthand-and-logical-property-dependencies). |
 | Stylesheet rule participation | Unknown at-rules are discarded; recognized unfinished grammars stop at explicit context methods. Nested style rules are retained but not matched by the cascade. Namespace context, grouping, layers, imports, and scope need connected consumers. Later declaration runs are separate child implementations. See the [rule roadmap](cssom/rules/ROADMAP.md). |
 | Selector context and support | Parsing covers more than runtime matching. Preserve namespace/nesting context, stylesheet tree scope, pseudo-element subjects, and dynamic host facts; review overlap with Selectlet through existing DOMOperations. See the [selector roadmap](selector/ROADMAP.md). |
 | Full computed and resolved values | The [engine roadmap](engine/ROADMAP.md) owns complete selection/defaulting/inheritance; the [lifecycle roadmap](value-processing/ROADMAP.md) records property metadata and stage inputs. Connectedness, flat-tree/pseudo-element identity, and rendering facts come from their owners. Live views and caches require explicit freshness/invalidation contracts. |
@@ -31,10 +32,6 @@ Missing resource/layout consumers remain explicit at their owners.
 
 ## Decisions still open
 
-- Final declaration-state ownership: replace or explicitly justify the provisional
-  `CSSDeclarationBlock` class before closing the CSSOM audit. Its current shape
-  does not constrain `CSSStylePropertiesImpl`; see the
-  [declaration lifecycle review](cssom/ROADMAP.md#projection-and-declaration-lifecycle).
 - The standalone author's CSSOM binding surface versus direct, post-conversion
   implementation APIs. Keep host-specific Platform objects out of Stylelet.
 - Live computed-style queries and any engine-owned cached value state. Neither

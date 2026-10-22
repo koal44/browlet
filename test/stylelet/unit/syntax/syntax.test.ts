@@ -14,7 +14,8 @@ import {
   parseDeclaration, parseListOfComponentValues, parseRule, parseStylesheetContents,
   type BlockContents, type Declaration,
 } from '../../../../src/stylelet/syntax/parser';
-import { tokenize, TokenKind, type TokenList } from '../../../../src/stylelet/syntax/tokens';
+import { TokenKind } from '../../../../src/stylelet/syntax/tokens';
+import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 
 const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
@@ -77,7 +78,7 @@ function expectFunctionBlock(
 
 describe('5.4 parser entry points', () => {
   test('normalizes an existing token stream without restarting or copying it', () => {
-    const input = new TokenCursor(tokenize('discarded color: red; margin-left: 1px'), {});
+    const input = new TokenCursor(TokenList.tokenize('discarded color: red; margin-left: 1px'), {});
     input.next();
     const declaration = expectDeclaration(parseDeclaration(input, context));
     expect(declaration.name).toBe('color');
@@ -95,7 +96,7 @@ describe('5.4 parser entry points', () => {
   });
 
   test('preserves source spelling from an existing token stream', () => {
-    const list = tokenize('--x: fn(a) /**/ foo\\62 ar !important; unicode-range: U+4??');
+    const list = TokenList.tokenize('--x: fn(a) /**/ foo\\62 ar !important; unicode-range: U+4??');
     const input = new TokenCursor(list, {});
 
     expect(parseDeclaration(input, context)).toMatchObject({
@@ -518,11 +519,7 @@ describe('mixed token and component-value input', () => {
     const list = parseListOfComponentValues('red fn(x) [y]', {});
 
     expect(parseListOfComponentValues(list, {})).toEqual(list);
-    const functionInput = {
-      tokens: list.tokens.slice(2, 3),
-      text: list.text,
-      ranges: list.ranges.slice(2, 3),
-    };
+    const functionInput = list.slice(2, 3);
     expect(parseComponentValue(functionInput, {})).toBe(list.tokens[2]);
   });
 

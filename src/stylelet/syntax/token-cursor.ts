@@ -1,7 +1,8 @@
 import {
   EOFToken, TokenKind,
-  type ComponentValue, type Token, type TokenList, type TokenSource, type TokenSourceRange,
+  type ComponentValue, type Token,
 } from './tokens';
+import type { TokenList } from './token-list';
 
 /** Optional initial position within an existing token list. */
 export type TokenCursorOptions = {
@@ -35,7 +36,7 @@ export class TokenCursor<Value extends Token = ComponentValue, Context = unknown
   /** Grammar state selected by the caller or a temporarily scoped nested consumer. */
   context: Context;
   /** Original input text and the source range corresponding to each retained token. */
-  source: TokenSource;
+  source: TokenList<Value>;
   /** Tokens or folded component values traversed by this cursor. */
   #input: Value[];
   /** Index of the next token to read. */
@@ -130,18 +131,7 @@ export class TokenCursor<Value extends Token = ComponentValue, Context = unknown
 
   /** Read the original text for the token interval [start, end). */
   sourceText(start: number, end: number): string {
-    if (start === end) return '';
-
-    const first = this.source.ranges[start]!;
-    const last = this.source.ranges[end - 1]!;
-    return this.source.text.slice(first.start, last.end);
-  }
-
-  /** Read the source range of a nonempty token interval [start, end). */
-  sourceRange(start: number, end: number): TokenSourceRange {
-    const first = this.source.ranges[start]!;
-    const last = this.source.ranges[end - 1]!;
-    return first === last ? first : { start: first.start, end: last.end };
+    return this.source.sourceText(start, end);
   }
 
   /** Throw a parsing diagnostic at the current token index. */

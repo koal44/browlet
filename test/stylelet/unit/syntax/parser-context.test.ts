@@ -8,7 +8,7 @@ import { consumeIdentToken, createFreeFormConsumer, createFunctionalNotationCons
 import type { ComponentValue } from '../../../../src/stylelet/syntax/component-value';
 import { createComponentParser, parseAsComponentGrammar, parseListAsComponentGrammar } from '../../../../src/stylelet/syntax/parser';
 import { TokenCursor, type TryConsumer } from '../../../../src/stylelet/syntax/token-cursor';
-import { tokenize } from '../../../../src/stylelet/syntax/tokens';
+import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 import { parseSelectorList } from '../../../../src/stylelet/selector/parser';
 import { parseDeclarationBlock } from '../../../../src/stylelet/cssom/declarations/declaration-block';
 import type { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
@@ -45,7 +45,7 @@ describe('typed parsing contexts', () => {
       (count, context: NameContext) => `${context.name}:${count}`,
       { contextForArguments: (context: NameContext): CountContext => ({ count: context.name.length }) },
     );
-    const c = new TokenCursor(tokenize('example(value)'), outer);
+    const c = new TokenCursor(TokenList.tokenize('example(value)'), outer);
 
     expect(parseAsComponentGrammar(c, consume, outer)).toBe('outer:5');
     expect(c.context).toBe(outer);
@@ -53,7 +53,7 @@ describe('typed parsing contexts', () => {
 
   it('restores the caller context when a typed argument consumer throws', () => {
     const caller = { caller: true };
-    const c = new TokenCursor(tokenize('example(value)'), caller);
+    const c = new TokenCursor(TokenList.tokenize('example(value)'), caller);
     const consume = createFunctionalNotationConsumer(
       'example',
       (inner: TokenCursor<ComponentValue, CountContext>): never => {
@@ -77,7 +77,7 @@ export function checkParserContextContracts(ruleContext: RuleListContext): void 
   // @ts-expect-error A parser must reject a context that cannot satisfy its consumer.
   parseName('value', { count: 1 });
   // @ts-expect-error The selected context must satisfy the grammar, even for cursor input.
-  parseAsComponentGrammar(new TokenCursor(tokenize('value'), { name: 'old' }), consumeName, {});
+  parseAsComponentGrammar(new TokenCursor(TokenList.tokenize('value'), { name: 'old' }), consumeName, {});
   // @ts-expect-error List parsing retains the same requirement.
   parseListAsComponentGrammar('one, two', consumeName, {});
 

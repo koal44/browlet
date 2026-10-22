@@ -51,8 +51,8 @@ List owners use `join(', ')` or `join(' ')` for CSSOM's separators.
 ## Declaration data and mutation
 
 [declarations/](declarations/README.md) owns the declaration implementations,
-their bindings, and provisional block storage. Its [roadmap](declarations/ROADMAP.md)
-tracks the ownership review and the input/CSP/CSSOM lifecycle to preserve.
+their bindings, and shared ordered declaration storage. Its [roadmap](declarations/ROADMAP.md)
+tracks unfinished shorthand/property dependencies and browser differences.
 [media/](media/README.md) owns MediaList mutation and serialization. Both
 object families sit below rules and sheets and have export-only barrels.
 

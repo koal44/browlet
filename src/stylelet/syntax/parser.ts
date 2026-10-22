@@ -9,7 +9,8 @@ import {
   type ComponentValue, type FunctionBlock, type SimpleBlock,
 } from './component-value';
 import { TokenCursor, type TryConsumer, type TryConsumerResult } from './token-cursor';
-import { createTokenList, tokenize, TokenKind, type Token, type TokenList } from './tokens';
+import { TokenList } from './token-list';
+import { TokenKind, type Token } from './tokens';
 
 /** Statement syntax supplied to the owning stylesheet's rule interpretation. */
 // https://drafts.csswg.org/css-syntax-3/#css-tree
@@ -260,7 +261,7 @@ function consumeInput<Context, Result>(
 function normalize<Context>(input: string | TokenList, context: Context): TokenCursor<Token, Context> {
   if (typeof input !== 'string') return new TokenCursor(input, context);
 
-  return new TokenCursor(tokenize(input), context);
+  return new TokenCursor(TokenList.tokenize(input), context);
 }
 
 /** Recognize a list whose nested blocks/functions have already been folded. */
@@ -338,7 +339,7 @@ function consumeAtRule<Value extends Token>(
   }
 
   const name = token.value;
-  const prelude = createTokenList<ComponentValue>(c.source.text);
+  const prelude = new TokenList<ComponentValue>(c.source.text);
 
   while (true) {
     switch (c.peek().type) {
@@ -373,7 +374,7 @@ function consumeQualifiedRule<Value extends Token>(
   stopToken?: TokenKind,
   nested = false,
 ): CSSRuleImpl | null {
-  const prelude = createTokenList<ComponentValue>(c.source.text);
+  const prelude = new TokenList<ComponentValue>(c.source.text);
 
   while (true) {
     const token = c.peek();
@@ -460,10 +461,10 @@ function consumeBlockContents<Value extends Token>(
       default: {
         const start = c.pos();
         const syntax = consumeDeclaration(c, true);
-        const declaration = syntax === null ? null : c.context.interpretDeclaration(syntax);
+        const expanded = syntax === null ? null : c.context.interpretDeclaration(syntax);
 
-        if (declaration !== null) {
-          declarations.push(declaration);
+        if (expanded !== null) {
+          declarations.push(...expanded);
           break;
         }
 
@@ -518,12 +519,13 @@ function consumeDeclaration<Value extends Token>(
   };
   const valueEnd = c.pos();
 
-  const removed = consumeImportantFlag(declaration) + trimTrailingWhitespace(declaration.value);
+  consumeImportantFlag(declaration);
+  declaration.value.trimWhitespace();
 
   if (declaration.name.startsWith('--')) {
     // SPEC_CLASH(css-custom-property-boundary-comments): Keep token-span text,
     // matching Syntax and Chromium/WebKit; Firefox also retains trailing comments.
-    declaration.originalText = c.sourceText(valueStart, valueEnd - removed);
+    declaration.originalText = declaration.value.sourceText();
   } else if (hasDisallowedTopLevelBraceBlock(declaration.value.tokens)) {
     return null;
   } else if (asciiLower(declaration.name) === 'unicode-range') {
@@ -558,15 +560,15 @@ function consumeBadDeclarationRemnants<Value extends Token>(
   }
 }
 
-/** Remove a final important flag and following whitespace, returning the removed token count. */
+/** Remove a final important flag and following whitespace. */
 // Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
-function consumeImportantFlag(declaration: Declaration): number {
+function consumeImportantFlag(declaration: Declaration): void {
   const components = declaration.value.tokens;
   const importantIndex = lastNonWhitespaceIndex(components, components.length - 1);
-  if (importantIndex < 0) return 0;
+  if (importantIndex < 0) return;
 
   const bangIndex = lastNonWhitespaceIndex(components, importantIndex - 1);
-  if (bangIndex < 0) return 0;
+  if (bangIndex < 0) return;
 
   const bang = components[bangIndex]!;
   const important = components[importantIndex]!;
@@ -576,14 +578,9 @@ function consumeImportantFlag(declaration: Declaration): number {
     isIdentToken(important) &&
     asciiLower(important.value) === 'important'
   ) {
-    const removed = components.length - bangIndex;
-    components.splice(bangIndex);
-    declaration.value.ranges.length = bangIndex;
+    declaration.value.truncate(bangIndex);
     declaration.important = true;
-    return removed;
   }
-
-  return 0;
 }
 
 /** Locate the last significant component at or before start, or return -1. */
@@ -596,20 +593,6 @@ function lastNonWhitespaceIndex(
   }
 
   return -1;
-}
-
-/** Trim trailing whitespace and return the number of tokens removed. */
-// Extracted from https://drafts.csswg.org/css-syntax-3/#consume-declaration
-function trimTrailingWhitespace(list: TokenList<ComponentValue>): number {
-  const { tokens: components } = list;
-  const start = components.length;
-
-  while (components.length > 0 && isWhitespaceToken(components[components.length - 1]!)) {
-    components.pop();
-  }
-  list.ranges.length = components.length;
-
-  return start - components.length;
 }
 
 /** Detect a brace block mixed with another significant value in a non-custom declaration. */
@@ -628,7 +611,7 @@ function consumeListOfComponentValues<Value extends Token>(
   stopToken?: TokenKind,
   nested = false,
 ): TokenList<ComponentValue> {
-  const list = createTokenList<ComponentValue>(c.source.text);
+  const list = new TokenList<ComponentValue>(c.source.text);
 
   while (true) {
     const token = c.peek();
@@ -649,8 +632,7 @@ function consumeListOfComponentValues<Value extends Token>(
 function consumeComponentValueInto<Value extends Token>(c: TokenCursor<Value>, list: TokenList<ComponentValue>): void {
   const start = c.pos();
   const component = consumeComponentValue(c);
-  list.tokens.push(component);
-  list.ranges.push(c.sourceRange(start, c.pos()));
+  list.append(component, c.source, start, c.pos());
 }
 
 /** Consume a preserved token or fold an opening token into a block/function. */
@@ -733,5 +715,5 @@ function consumeFunction<Value extends Token>(
 /** Retokenize a unicode-range descriptor's source; its grammar validates the resulting ranges. */
 // CSS Syntax: https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-value
 function consumeUnicodeRangeDescriptorValue<Context>(input: string, context: Context): TokenList<ComponentValue> {
-  return parseListOfComponentValues(tokenize(input, true), context);
+  return parseListOfComponentValues(TokenList.tokenize(input, true), context);
 }

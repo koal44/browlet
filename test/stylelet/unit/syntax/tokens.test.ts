@@ -3,8 +3,9 @@ import { decode } from '../../../../src/encoding/index';
 import { createStyleletEnvironment, defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
 import {
   decodeStylesheetBytes as decodeBytes, filterCodePoints, HashTokenFlag, identToken,
-  NumericSign, NumberTokenFlag, tokenize, TokenKind, WhitespaceToken, type DecodeStylesheetOptions,
+  NumericSign, NumberTokenFlag, TokenKind, WhitespaceToken, type DecodeStylesheetOptions,
 } from '../../../../src/stylelet/syntax/tokens';
+import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 
 describe('filterCodePoints', () => {
   it('should filter code points correctly', () => {
@@ -24,7 +25,7 @@ describe('filterCodePoints', () => {
 });
 
 function view(input: string): unknown[] {
-  return tokenize(input).tokens.map((token) => {
+  return TokenList.tokenize(input).tokens.map((token) => {
     switch (token.type) {
       case TokenKind.Ident: return ['ident', token.value];
       case TokenKind.Function: return ['function', token.value];
@@ -78,7 +79,7 @@ describe('style tokenizer consumers', () => {
   });
 
   it('consume a token recognizes unicode ranges only when allowed', () => {
-    expect(tokenize('U+416 U+4?? U+400-4ff', true).tokens).toMatchObject([
+    expect(TokenList.tokenize('U+416 U+4?? U+400-4ff', true).tokens).toMatchObject([
       { type: TokenKind.UnicodeRange, start: 0x416, end: 0x416 },
       { type: TokenKind.Whitespace },
       { type: TokenKind.UnicodeRange, start: 0x400, end: 0x4ff },
@@ -93,7 +94,7 @@ describe('style tokenizer consumers', () => {
   });
 
   it('limits each unicode-range segment to six digits without validating the range', () => {
-    expect(tokenize('U+1234567 U+??????? U+20-10 U+FFFFFF', true).tokens).toMatchObject([
+    expect(TokenList.tokenize('U+1234567 U+??????? U+20-10 U+FFFFFF', true).tokens).toMatchObject([
       { type: TokenKind.UnicodeRange, start: 0x123456, end: 0x123456 },
       { type: TokenKind.Number, value: 7 },
       { type: TokenKind.Whitespace },
@@ -104,7 +105,7 @@ describe('style tokenizer consumers', () => {
       { type: TokenKind.Whitespace },
       { type: TokenKind.UnicodeRange, start: 0xFFFFFF, end: 0xFFFFFF },
     ]);
-    expect(tokenize('U+1-1234567', true).tokens).toMatchObject([
+    expect(TokenList.tokenize('U+1-1234567', true).tokens).toMatchObject([
       { type: TokenKind.UnicodeRange, start: 1, end: 0x123456 },
       { type: TokenKind.Number, value: 7 },
     ]);
@@ -133,7 +134,7 @@ describe('style tokenizer consumers', () => {
   });
 
   it('consume numeric token preserves its optional sign character', () => {
-    expect(tokenize('+1 -2 3 +4% -5px').tokens).toMatchObject([
+    expect(TokenList.tokenize('+1 -2 3 +4% -5px').tokens).toMatchObject([
       { type: TokenKind.Number, sign: NumericSign.Plus },
       { type: TokenKind.Whitespace },
       { type: TokenKind.Number, sign: NumericSign.Minus },
@@ -321,7 +322,7 @@ describe('style tokenizer consumers', () => {
     { name: 'zero with a large exponent', input: '0e9999', value: 0 },
     { name: 'negative zero with a large exponent', input: '-0e9999', value: -0 },
   ])('consume number converts $name without intermediate overflow or underflow', ({ input, value }) => {
-    expect(tokenize(input).tokens).toMatchObject([{ type: TokenKind.Number, value }]);
+    expect(TokenList.tokenize(input).tokens).toMatchObject([{ type: TokenKind.Number, value }]);
   });
 
   it('consume bad url remnants resumes after the url recovery point', () => {
@@ -376,31 +377,24 @@ describe('style tokenizer consumers', () => {
   });
 
   it('retains separate source ranges for whitespace on either side of a comment', () => {
-    const list = tokenize('a /**/ b');
+    const list = TokenList.tokenize('a /**/ b');
     expect(list.tokens).toEqual([
       identToken('a'), WhitespaceToken, WhitespaceToken, identToken('b'),
     ]);
-    expect(list.ranges).toEqual([
-      { start: 0, end: 1 },
-      { start: 1, end: 2 },
-      { start: 6, end: 7 },
-      { start: 7, end: 8 },
-    ]);
+    expect(list.tokens.map((_, i) => list.sourceText(i, i + 1))).toEqual(['a', ' ', ' ', 'b']);
+    expect(list.sourceText(1, 3)).toBe(' /**/ ');
   });
 
   it('records UTF-16 offsets in preprocessed source and omits trailing comments', () => {
-    const list = tokenize('/**/💩\r\n\\41 /**/');
+    const list = TokenList.tokenize('/**/💩\r\n\\41 /**/');
     expect(list.text).toBe('/**/💩\n\\41 /**/');
     expect(list.tokens).toMatchObject([
       { type: TokenKind.Ident, value: '💩' },
       { type: TokenKind.Whitespace },
       { type: TokenKind.Ident, value: 'A' },
     ]);
-    expect(list.ranges).toEqual([
-      { start: 4, end: 6 },
-      { start: 6, end: 7 },
-      { start: 7, end: 11 },
-    ]);
+    expect(list.tokens.map((_, i) => list.sourceText(i, i + 1))).toEqual(['💩', '\n', '\\41 ']);
+    expect(list.sourceText()).toBe('💩\n\\41 ');
   });
 
   it('consume token handles hash tokens and at-keywords', () => {
@@ -521,13 +515,13 @@ describe('style tokenizer consumers', () => {
     ];
 
     for (const input of allowed) {
-      expect(tokenize(input).tokens, input).toMatchObject([
+      expect(TokenList.tokenize(input).tokens, input).toMatchObject([
         { type: TokenKind.Ident, value: input },
       ]);
     }
 
     for (const input of excluded) {
-      expect(tokenize(input).tokens, input).toMatchObject([
+      expect(TokenList.tokenize(input).tokens, input).toMatchObject([
         { type: TokenKind.Delim, value: input },
       ]);
     }

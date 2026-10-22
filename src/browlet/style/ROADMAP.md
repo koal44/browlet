@@ -238,8 +238,9 @@ lowercasing is invalid for nonce/hash payloads and URL paths. Parsed-source
 caching would first need a deliberate policy for the currently mutable `tokens`
 array. These are review concerns, not authorization for a broader CSP rewrite.
 
-Review the current [declaration-state owners](../../stylelet/cssom/README.md#declaration-data-and-mutation)
-alongside the bound CSSStyleDeclaration/CSSStyleProperties API; their split is provisional.
+The [declaration-state owners](../../stylelet/cssom/README.md#declaration-data-and-mutation)
+retain one collection; CSSOM owns flags, associations, and write-back.
+Preserve that lifecycle when adding shorthand, descriptor, or URL-bearing properties.
 
 ## Unchanged style type
 

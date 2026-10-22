@@ -19,6 +19,23 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
   context-dependent resolver. Add direct value tests and a connected consumer
   regression; parser coverage alone cannot demonstrate the feature.
 
+## Shorthand and logical-property dependencies
+
+- [ ] Implement `marginShorthand.expand()` and `.serialize()` in `margin.ts`.
+  Their call paths are connected and currently throw: validate the 1–4-value
+  grammar, expand in top/right/bottom/left order, preserve importance and
+  CSS-wide values, and serialize compatible longhands without resolving them.
+- [ ] Add a retained pending-substitution representation shared by a shorthand's
+  expanded longhands, including partial overwrites and computed-time failure.
+  See [Variables](https://drafts.csswg.org/css-variables-1/#variables-in-shorthands).
+  The existing whole-value substitution record does not by itself identify a
+  shorthand's pending longhand values.
+- [ ] Cover shorthand queries, cssText shortening, mixed importance, removal,
+  source-order replacement, and invalid values through projected CSSOM.
+- [ ] Add logical margin records with their actual grammars and mapping metadata;
+  test opposing mapping order and shorthand barriers. Existing physical margin
+  metadata and CSSOM branches do not establish logical-property support.
+
 ## Family homes and stopping points
 
 `props/` remains the home for property definitions, with family subfolders only

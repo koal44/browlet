@@ -43,7 +43,7 @@ or Platform behavior have been verified.
 | [Sheet collections](https://drafts.csswg.org/cssom/#css-style-sheet-collections) | Ordered document/shadow sheets, real observable-array binding and adoption checks, retained identities, preferred/selected sets, and ordered Default-Style response processing. Header order survives reversed fetch completion. | Script blocking and resource completion; shadow-tree cascade selection is separate from collection ownership. See the [collection disagreements](../../browlet/style/ROADMAP.md#stylesheet-collection-disagreements). |
 | [Association and fetching](https://drafts.csswg.org/cssom/#style-sheet-association) | LinkStyle bindings for HTML/SVG inline style owners and ProcessingInstruction; Fetch-backed PI/header loading, cancellation on PI mutation/removal/adoption, policy, MIME/status/CORS, encoding, and URL metadata. | HTML `<link>`, imports, script/load/render blocking, and XML document parsing retain explicit owners. See [resource boundaries and browser choices](../../browlet/style/ROADMAP.md#external-stylesheet-loading). |
 | [CSS rules](https://drafts.csswg.org/cssom/#css-rules) | One implementation tree, parent links/live lists, selector edits, style/nested-declaration serialization, nested mutation, namespace grammar, and required CSSOM-owned interfaces. | Conditional/font/animation rule grammars and consumers; page/margin descriptors and import lifecycle. See the [rule interface accounting](rules/ROADMAP.md#rule-and-interface-coverage). |
-| [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | Retained declarations, queries/edits, attribute write-back, readonly checks, and CSSStyleDeclaration/CSSStyleProperties bindings with supported indices/property attributes. | Full declaration algorithm audit, shorthand/longhand and logical-group rules, URL provenance, descriptors, and the final mutation owner. |
+| [Declarations and declaration blocks](https://drafts.csswg.org/cssom/#css-declaration-blocks) | §6.5–6.6 longhand/custom mutation, independent name/value parsing, indices/property bindings, shared collection ownership, and shorthand/logical metadata paths. | Margin expansion and value serialization explicitly throw; pending substitution, logical property families, URL provenance, and descriptors remain unfinished. |
 | [CSS values](https://drafts.csswg.org/cssom/#css-values) | Registry-driven value parsing/serialization and broader reusable value machinery. | Complete property grammar coverage, shorthand serialization, custom-property processing, and stage-correct representations through the value-lifecycle owner. |
 | [ElementCSSInlineStyle](https://drafts.csswg.org/cssom/#the-elementcssinlinestyle-mixin) | Permanent HTML/SVG/MathML mixins, explicit attribute input, stable lazy projected CSSStyleProperties, and CSP gating in Browlet. | Audit clone/import and parse-time URL behavior, alongside declaration ownership. |
 | [Window.getComputedStyle](https://drafts.csswg.org/cssom/#extensions-to-the-window-interface) | Typed Window partial and projected readonly snapshot for selected installed properties. | Target-document selection, pseudo-elements, eligibility, complete enumeration, live results, and resolved-value dependencies. |
@@ -88,9 +88,9 @@ grammars, and the rule-specific disagreements and gaps.
 ## Projection and declaration lifecycle
 
 The [declarations roadmap](declarations/ROADMAP.md#declaration-state-and-lifecycle)
-owns the provisional block review, mutation semantics, attribute/CSP input,
-and declaration URL provenance. Preserve the existing explicit initialization
-and CSSOM write-back contract while settling representation.
+owns shorthand expansion/serialization, future logical families, and declaration
+URL provenance. The collection owns ordered data; CSSOM owns flags and associations.
+Preserve explicit initialization, CSP input, and CSSOM write-back bypass.
 
 Rule-family mutation work is tracked in the [rules roadmap](rules/ROADMAP.md#rule-mutation-ownership).
 
@@ -133,8 +133,8 @@ not prerequisites for every CSSOM interface.
 
 ## Next review order
 
-1. Audit §6.5 declarations and §6.6 `CSSStyleDeclaration`/`CSSStyleProperties`.
-   Settle declaration ownership while preserving the input/CSP/CSSOM behavior.
+1. Implement the explicit [shorthand dependencies](../props/ROADMAP.md#shorthand-and-logical-property-dependencies),
+   starting with margin, then continue §6.7 value serialization.
 2. Review `ElementCSSInlineStyle`, then Window's computed-style partial.
    Separate what can work now from cascade, pseudo-element, and layout
    dependencies; record each unfinished branch at its owner.

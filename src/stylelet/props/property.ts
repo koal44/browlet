@@ -12,7 +12,8 @@ import type {
 
 import { backgroundColorProperty, colorProperty } from './color';
 import { opacityProperty } from './opacity';
-import { marginBottomProperty, marginLeftProperty, marginRightProperty, marginTopProperty } from './margin';
+import { marginSideProperty } from './margin';
+import { getShorthand } from './shorthand';
 
 /** Shared built-in property record; its registry key supplies the name. */
 export type PropertyRecord<Value, Context> = {
@@ -21,8 +22,13 @@ export type PropertyRecord<Value, Context> = {
   inherits: boolean;
   /** Shared Declared representation; resolution must leave this value unchanged. */
   initialValue: WholeValue<Value>;
+  /** Group and mapping used to preserve order between physical and logical properties. */
+  logicalGroup?: { name: string; mapping: 'physical' | 'logical'; };
 };
 
+/** CSS declaration data; custom distinguishes case-sensitive names from normalized built-ins. */
+// https://drafts.csswg.org/cssom/#css-declarations
+// Built-in values are interpreted value records rather than retained syntax tokens.
 export type PropertyDeclaration<Name extends PropertyName = PropertyName> =
   | BuiltInPropertyDeclaration<Name>
   | CustomPropertyDeclaration;
@@ -81,10 +87,10 @@ export type PropertyContext =
 export const propertyRegistry = {
   'background-color': backgroundColorProperty,
   color: colorProperty,
-  'margin-bottom': marginBottomProperty,
-  'margin-left': marginLeftProperty,
-  'margin-right': marginRightProperty,
-  'margin-top': marginTopProperty,
+  'margin-bottom': marginSideProperty,
+  'margin-left': marginSideProperty,
+  'margin-right': marginSideProperty,
+  'margin-top': marginSideProperty,
   opacity: opacityProperty,
 } as const;
 
@@ -114,24 +120,30 @@ export function interpretPropertyDeclarations(
 ): PropertyDeclaration[] {
   const declarations: PropertyDeclaration[] = [];
   for (const item of syntax) {
-    const declaration = interpretPropertyDeclaration(item, context);
-    if (declaration !== null) declarations.push(declaration);
+    const expanded = interpretPropertyDeclaration(item, context);
+    if (expanded !== null) declarations.push(...expanded);
   }
   return declarations;
 }
 
+/** Interpret a declaration into longhands or one custom property; null rejects its grammar. */
+// https://drafts.csswg.org/css-cascade-5/#shorthand
 export function interpretPropertyDeclaration(
   declaration: Declaration,
   context: PropertyContext,
-): PropertyDeclaration | null {
+): PropertyDeclaration[] | null {
   if (isCustomPropertyName(declaration.name)) {
-    return interpretCustomPropertyDeclaration(declaration, declaration.name, context);
+    const custom = interpretCustomPropertyDeclaration(declaration, declaration.name, context);
+    return custom === null ? null : [custom];
   }
 
   const name = asciiLower(declaration.name);
+  const shorthand = getShorthand(name);
+  if (shorthand !== undefined) return shorthand.expand(declaration, context);
   if (!isPropertyName(name)) return null;
 
-  return interpretBuiltInPropertyDeclaration(declaration, name, context);
+  const builtIn = interpretBuiltInPropertyDeclaration(declaration, name, context);
+  return builtIn === null ? null : [builtIn];
 }
 
 export function serializePropertyDeclaration<Name extends PropertyName>(
@@ -209,5 +221,7 @@ function isPropertyName(name: string): name is PropertyName {
 }
 
 function isCustomPropertyName(name: string): name is CustomPropertyName {
-  return name.startsWith('--');
+  // https://drafts.csswg.org/css-variables-1/#defining-variables
+  // The bare -- name is reserved and is not a custom property.
+  return name.length > 2 && name.startsWith('--');
 }

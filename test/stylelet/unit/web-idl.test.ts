@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { styleletIDLDefinitions } from '../../../src/stylelet/web-idl';
 import { mediaListIDL } from '../../../src/stylelet/cssom/media/media-list';
+import { cssStylePropertiesIDL } from '../../../src/stylelet/cssom/declarations/style-properties';
 import { serializeDefinitions } from '../../../src/web-idl/core/index';
 
 describe('Stylelet Web IDL declarations', () => {
@@ -24,5 +25,12 @@ interface MediaList {
     expect(declarations).toContain('readonly attribute CSSStyleSheet? sheet;');
     expect(declarations).toContain('[NewObject] CSSStyleProperties getComputedStyle(Element elt, optional CSSOMString? pseudoElt);');
     expect(declarations).toContain('getter CSSRule? item(unsigned long index);');
+  });
+
+  it('declares CSSStyleProperties aliases with CSSOM conversion and reactions', () => {
+    const declaration = serializeDefinitions([cssStylePropertiesIDL]);
+    for (const attribute of ['cssFloat', 'color', 'backgroundColor', 'background-color', 'marginTop', 'margin-top', 'margin']) {
+      expect(declaration).toContain(`[CEReactions] attribute [LegacyNullToEmptyString] CSSOMString ${attribute};`);
+    }
   });
 });

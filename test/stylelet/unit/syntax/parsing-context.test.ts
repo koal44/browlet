@@ -11,7 +11,7 @@ import {
 } from '../../../../src/stylelet/syntax/parser';
 import { serializeComponentValues } from '../../../../src/stylelet/syntax/component-value';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
-import { tokenize } from '../../../../src/stylelet/syntax/tokens';
+import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 
 const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
@@ -31,7 +31,7 @@ describe('stylesheet parsing context', () => {
       throw new Error('Unexpected property interpretation');
     });
     for (const selected of [{}, context]) {
-      const cursor = new TokenCursor(tokenize('unknown-property: something'), selected);
+      const cursor = new TokenCursor(TokenList.tokenize('unknown-property: something'), selected);
       expect(parseDeclaration(cursor, selected)).toMatchObject({ name: 'unknown-property' });
       expect(cursor.context).toBe(selected);
     }
@@ -76,7 +76,7 @@ describe('stylesheet parsing context', () => {
       return null;
     });
     const text = '@test { opacity: .5; color: red } color: blue';
-    const list = prebuilt ? parseListOfComponentValues(text, {}) : tokenize(text);
+    const list = prebuilt ? parseListOfComponentValues(text, {}) : TokenList.tokenize(text);
     const original = { purpose: 'caller context' };
     const cursor = new TokenCursor(list, original);
     expectTypeOf(cursor.context).toEqualTypeOf<typeof original>();
@@ -101,7 +101,7 @@ describe('stylesheet parsing context', () => {
       block = c.withContext(context, consumeBlock);
       return null;
     });
-    const cursor = new TokenCursor(tokenize('@test { @first } .after {}'), {});
+    const cursor = new TokenCursor(TokenList.tokenize('@test { @first } .after {}'), {});
     const rules = parseStylesheetContents(cursor, context);
     expect(block).toEqual([accepted]);
     expect(rules).toHaveLength(1);
@@ -132,7 +132,7 @@ describe('stylesheet parsing context', () => {
       return null;
     });
     const original = { purpose: 'caller context' };
-    const cursor = new TokenCursor(tokenize('@test { descriptor: x }'), original);
+    const cursor = new TokenCursor(TokenList.tokenize('@test { descriptor: x }'), original);
 
     expect(() => parse(cursor, context)).toThrow(failure);
     expect(cursor.context).toBe(original);

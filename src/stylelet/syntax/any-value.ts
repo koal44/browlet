@@ -3,7 +3,8 @@ import {
   type ComponentValue, type PreservedToken, type SimpleBlockKind, isComponentBlock,
 } from './component-value';
 import { parseListOfComponentValues, type ParserInput } from './parser';
-import { TokenKind, type StaticToken, type Token, type TokenList, type NonEmptyTokenList } from './tokens';
+import { TokenList, type NonEmptyTokenList } from './token-list';
+import { TokenKind, type StaticToken, type Token } from './tokens';
 
 /*
  * <any-value>
@@ -48,11 +49,8 @@ export function consumeAnyValue(
 
   const start = c.pos();
   c.next();
-  const list: AnyValueComponents = {
-    tokens: [first],
-    text: c.source.text,
-    ranges: [c.sourceRange(start, c.pos())],
-  };
+  const list = new TokenList<AnyValueComponent>(c.source.text);
+  list.append(first, c.source, start, c.pos());
 
   while (true) {
     const component = c.peek();
@@ -61,11 +59,11 @@ export function consumeAnyValue(
 
     const start = c.pos();
     c.next();
-    list.tokens.push(component);
-    list.ranges.push(c.sourceRange(start, c.pos()));
+    list.append(component, c.source, start, c.pos());
   }
 
-  return { type: 'any-value', components: list };
+  // The first component was required before constructing the list.
+  return { type: 'any-value', components: list as AnyValueComponents };
 }
 
 export function isAnyValueComponents(
