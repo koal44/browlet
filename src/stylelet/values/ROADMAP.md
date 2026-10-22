@@ -65,6 +65,8 @@ audit those sources together rather than implementing two replacement engines.
 - [ ] Preserve shorthand pending-substitution values and their original source
   relationship until longhands can be assigned. CSSOM serialization must retain
   the distinction between an unexpanded shorthand and independent longhands.
+  Ordinary margin is now connected; the [next-slice handoff](../props/ROADMAP.md#shorthand-substitution-handoff)
+  records the shared grammar, overwrite/equality, and computed-failure requirements.
 - [ ] Give `env()` a named/indexed variable lookup and fallback behavior supplied
   by the relevant UA/viewport owner. Do not confuse this with the JS owning
   environment or turn missing facts into zero. The draft's unresolved

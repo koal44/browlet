@@ -70,6 +70,13 @@ describe('property value', () => {
   });
 
   describe('ordinary value', () => {
+    it('prepares unitless margin zero as a length before serialization', () => {
+      const declared = propertyRegistry['margin-top'].parse('0', {})!;
+
+      expect(declared.value).toMatchObject({ value: { value: 0, unit: 'px' } });
+      expect(declared.serialize()).toBe('0px');
+    });
+
     it('returns a parsed color ready to retain in a declaration', () => {
       const declared = parseColorProperty('red', {})!;
 

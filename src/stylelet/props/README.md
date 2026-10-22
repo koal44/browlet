@@ -41,10 +41,14 @@ An optional `logicalGroup` records the family name and physical/logical mapping
 used by CSSOM's declaration ordering rules.
 
 [Shorthand records](shorthand.ts) separately identify canonical longhands and
-family-owned expansion/serialization. Margin's record exposes those dependencies
-now, but its expansion and serialization throw explicitly. It is not implemented
-shorthand support. CSSOM can already query/remove incomplete or mixed-priority
-sets without invoking those unfinished operations.
+family-owned expansion/serialization. Margin expands one through four values or
+a CSS-wide keyword into top/right/bottom/left values. CSSOM creates declaration
+occurrences with those names and the original importance; the property layer
+does not construct declarations. Compatible longhands serialize to the shortest
+one-to-four-value form without resolving them. Unitless margin zero becomes a
+`0px` length during parsing. Deferred margin syntax, including arbitrary
+substitution and `first-valid()`, still throws at an explicit unfinished boundary;
+see the [substitution handoff](ROADMAP.md#shorthand-substitution-handoff).
 
 Property interpretation looks up built-in names in the registry and rejects
 unknown built-ins, then uses the record's parser. Later processing calls the

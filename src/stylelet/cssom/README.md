@@ -168,3 +168,15 @@ provenance remain explicit dependencies in the [declaration roadmap](declaration
 All 36 declaration browser comparisons completed: 27 ordinary passes and
 9 approved native expected failures. Browlet passed before each annotation;
 the final 16-test declaration recheck also passed.
+
+The 2026-10-21 §6.7 audit added ordinary margin expansion/serialization and
+recorded the remaining [component and property dependencies](declarations/ROADMAP.md#section-67-value-accounting).
+The Stylelet unit and Browlet style suites passed **3,309 tests across 68 files**,
+with 7 existing expected failures and 14 existing skips, including all 23
+fresh-process module checks. Stylelet/test typechecking, scoped ESLint, and
+repository import checks passed. All 36 existing declaration browser comparisons
+completed with their 9 approved expected failures. The final margin browser run
+completed 27 comparisons: 25 ordinary passes and 2 approved native
+shorthand-removal return failures; Browlet passed before those annotations.
+Deferred shorthand expansion remains intentionally unfinished for the
+[substitution slice](../props/ROADMAP.md#shorthand-substitution-handoff).

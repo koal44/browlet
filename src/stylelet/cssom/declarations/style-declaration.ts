@@ -99,7 +99,7 @@ export class CSSStyleDeclarationImpl {
     const shorthand = getShorthand(name);
     if (shorthand !== undefined) {
       const longhands = this.#block.getLonghands(shorthand);
-      return longhands === null ? '' : shorthand.serialize(longhands);
+      return longhands === null ? '' : shorthand.serialize(longhands.map(({ value }) => value));
     }
     const declaration = this.#block.find(name);
     return declaration === undefined
@@ -161,6 +161,8 @@ export class CSSStyleDeclarationImpl {
     this.#assertMutable();
 
     const name = normalizePropertyName(property);
+    // SPEC_CLASH(shorthand-removal-return): Follow CSSOM/Firefox by returning the
+    // former shorthand value; Chromium/WebKit return empty text for shorthands.
     const value = this.getPropertyValue(name);
     const shorthand = getShorthand(name);
     let removed = false;

@@ -97,12 +97,15 @@ The local CSSWG and Houdini references were refreshed on 2026-10-21 to
 entry point and non-ASCII identifier serialization rule already matched our
 implementation; the shorthand loop now follows the extracted algorithm.
 
-Margin's mapping is present, but its expansion, pending-substitution representation,
-and value serialization explicitly throw as unfinished. Thus incomplete or
-mixed-priority margin longhands can be queried/removed together, but assigning
-`margin`, querying its complete value, or serializing a compatible complete set
-of margin longhands stops at that dependency. This is not working shorthand
-support. The [roadmap](ROADMAP.md) records the next property work and browser choices.
+Ordinary margin assignment expands one through four values or a CSS-wide keyword.
+The property record returns values in canonical longhand order; interpreted
+declarations supply their names and importance. Complete compatible sets shorten
+to one through four components. Incomplete, mixed-priority, mixed CSS-wide, or
+independently deferred longhands return an empty shorthand query and remain
+separate in block text. Deferred shorthand expansion still throws explicitly;
+the [substitution handoff](../../props/ROADMAP.md#shorthand-substitution-handoff)
+records its prerequisites. The [roadmap](ROADMAP.md) accounts for §6.7's other
+value-family dependencies and browser choices.
 
 The export-only [barrel](index.ts) is the entry point for declaration consumers.
 Shared property contracts, concrete grammars, and registries live in
@@ -112,5 +115,7 @@ declarations do not construct rules or sheets.
 [Projected regressions](../../../../test/browlet/style/declarations.test.ts) cover
 name/value separation, escaping, priority, readonly behavior, and Binding.
 [Collection tests](../../../../test/stylelet/unit/cssom/declarations/style-declaration.test.ts)
-cover shared state and the explicit shorthand boundary. The matching browser
+cover shared state, ordinary margins, and the explicit deferred boundary.
+[Margin contracts](../../../../test/stylelet/margin.contracts.ts) cover inline
+styles, rules, mutation, and shortening through projected CSSOM. The matching browser
 scenarios assert Browlet before applying any native expected-failure annotation.

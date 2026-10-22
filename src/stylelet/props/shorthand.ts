@@ -1,18 +1,17 @@
-import type { Declaration } from '../syntax/index';
+import type { ParserInput } from '../syntax/index';
 import { marginShorthand } from './built-in/index';
-import type { BuiltInDeclaration } from '../cssom/declarations/index';
 
 import type { PropertyContext } from './property';
-import type { PropertyName } from './registry';
+import type { PropertyName, PropertyValue } from './registry';
 
 /** A shorthand's longhand mapping and property-family grammar/serialization. */
 export type ShorthandRecord = {
   /** Longhands in the shorthand's canonical order, including reset-only properties. */
   longhands: PropertyName[];
-  /** Validate and expand one declaration, retaining deferred substitution when required. */
-  expand: (declaration: Declaration, context: PropertyContext) => BuiltInDeclaration[] | null;
-  /** Serialize complete, equally important longhands, or return empty text if unrepresentable. */
-  serialize: (declarations: readonly BuiltInDeclaration[]) => string;
+  /** Parse into values in longhand order; the declaration owner supplies names and importance. */
+  expand: (input: ParserInput, context: PropertyContext) => PropertyValue<PropertyName>[] | null;
+  /** Serialize complete, equally important longhand values in canonical order, or empty text if incompatible. */
+  serialize: (values: PropertyValue<PropertyName>[]) => string;
 };
 
 /** Known shorthand dependencies; a record may still expose explicit unfinished operations. */

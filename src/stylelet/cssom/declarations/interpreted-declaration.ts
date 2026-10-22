@@ -42,7 +42,12 @@ export const InterpretedDeclaration = class <Name extends DeclarationName> {
 
     const property = asciiLower(name);
     const shorthand = getShorthand(property);
-    if (shorthand !== undefined) return shorthand.expand(declaration, context);
+    if (shorthand !== undefined) {
+      const values = shorthand.expand(declaration.value, context);
+      return values === null ? null : values.map((value, index) =>
+        new InterpretedDeclaration(shorthand.longhands[index]!, value, important) as BuiltInDeclaration,
+      );
+    }
     if (!isPropertyName(property)) return null;
 
     const value = propertyRegistry[property].parse(declaration.value, context);

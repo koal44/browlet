@@ -21,16 +21,16 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 
 ## Shorthand and logical-property dependencies
 
-- [ ] Implement `marginShorthand.expand()` and `.serialize()` in `built-in/margin.ts`.
-  Their call paths are connected and currently throw: validate the 1–4-value
-  grammar, expand in top/right/bottom/left order, preserve importance and
-  CSS-wide values, and serialize compatible longhands without resolving them.
+- [x] Implement ordinary `marginShorthand.expand()` and `.serialize()` in `built-in/margin.ts`:
+  validate the 1–4-value grammar, expand in top/right/bottom/left order, preserve
+  importance and CSS-wide values, and shorten compatible longhands without
+  resolving them. The record returns values; CSSOM constructs their occurrences.
 - [ ] Add a retained pending-substitution representation shared by a shorthand's
   expanded longhands, including partial overwrites and computed-time failure.
-  See [Variables](https://drafts.csswg.org/css-variables-1/#variables-in-shorthands).
+  See [Values 5](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands).
   The existing `SubstitutionValue` does not by itself identify a
   shorthand's pending longhand values.
-- [ ] Cover shorthand queries, cssText shortening, mixed importance, removal,
+- [x] Cover ordinary shorthand queries, cssText shortening, mixed importance, removal,
   source-order replacement, and invalid values through projected CSSOM.
 - [ ] When adding legacy shorthands, exclude unprefixed legacy names from
   CSSOM's [preferred shorthand order](https://drafts.csswg.org/cssom/#concept-shorthands-preferred-order).
@@ -38,6 +38,33 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 - [ ] Add logical margin records with their actual grammars and mapping metadata;
   test opposing mapping order and shorthand barriers. Existing physical margin
   metadata and CSSOM branches do not establish logical-property support.
+
+### Shorthand substitution handoff
+
+Deferred margin expansion is intentionally left for the substitution slice.
+`marginShorthand.expand()` throws for recognized arbitrary-substitution syntax
+and `first-valid()` rather than discarding it as an invalid ordinary value.
+The general function detector does not validate each function's arguments.
+
+1. Finish the [value substitution prerequisites](../values/ROADMAP.md#substitution-and-custom-values):
+   per-element custom-property computation/lookup, cycles, fallback and invalidity,
+   and component-preserving substitution. `SubstitutionValue.substitute()` is
+   currently the explicit throwing endpoint; recognition is not substitution.
+2. Retain the original shorthand grammar/source once, with a pending value for
+   each longhand. Cascade these occurrences normally; after substitution, parse
+   the original shorthand and select each surviving longhand. Failed computation
+   uses the winning declaration's invalid-at-computed-value-time behavior, not an
+   earlier declaration. Review `first-valid()` whole-value selection alongside
+   this, without treating it as an arbitrary-substitution function.
+3. Preserve CSSOM's distinction: pending longhands query as empty text; a complete
+   compatible set from the same shorthand returns its original value; mixed or
+   independently deferred longhands cannot serialize as a shorthand. Ordinary
+   serialization already refuses the latter case.
+4. Test replacement of one pending side, removal, importance, and repeated
+   `margin: var(--a)` / `margin: var(--b)` assignments. Both pending longhands
+   serialize as empty text, so `CSSDeclarationBlock.set()`'s current serialized
+   equality alone will not distinguish those edits. Include source/base provenance
+   and computed-time failure without adding context caches to values.
 
 ## Family homes and stopping points
 

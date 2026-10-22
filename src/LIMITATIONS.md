@@ -162,10 +162,10 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 - **CSSOM projection:** Sheets, rules, declaration results, and MediaList use
   real bindings. DocumentOrShadowRoot's adopted sheets now use the real observable
   array binding, current-document checks, and realm exception realization.
-  CSSStyleProperties exposes the small implemented longhand set and an explicit
-  unfinished margin shorthand. Assigning `margin`, querying a complete margin
-  value, or serializing equally important complete margin longhands throws until
-  property-layer expansion, pending substitution, and serialization are implemented.
+  CSSStyleProperties exposes the small implemented longhand set and ordinary
+  margin shorthand expansion/serialization, including CSS-wide keywords.
+  Deferred margin syntax such as `var()` and `first-valid()` still throws at the
+  explicit [substitution boundary](stylelet/props/ROADMAP.md#shorthand-substitution-handoff).
   The [CSSOM roadmap](stylelet/cssom/ROADMAP.md#projection-and-declaration-lifecycle)
   owns the remaining property and declaration dependencies.
   [Style integration](browlet/style/ROADMAP.md#next-boundary-change)

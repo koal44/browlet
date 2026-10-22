@@ -1,6 +1,6 @@
 # CSSOM declarations roadmap
 
-The [README](README.md) records the §6.5–6.6 implementation and ownership.
+The [README](README.md) records the §6.5–6.7 implementation and ownership.
 The APIs and Web IDL are present; incomplete property families still limit them.
 
 ## Declaration typing
@@ -16,18 +16,18 @@ The APIs and Web IDL are present; incomplete property families still limit them.
 
 ## Declaration state and lifecycle
 
-- [ ] Finish shorthand expansion and serialization in the property layer,
-  starting with [margin](../../props/built-in/margin.ts). The mapping, CSSOM query/removal,
-  block selection, and expanded-declaration return contract exist. The family
-  operations throw explicitly; do not count those stubs as supported CSS.
+- [x] Implement ordinary shorthand expansion and serialization in the property
+  layer, starting with [margin](../../props/built-in/margin.ts). The property record
+  returns ordered values; CSSOM supplies declaration names and importance.
+  One-to-four sides, CSS-wide values, incompatible combinations, and canonical
+  shortening now work through inline-style and rule bindings.
 - [ ] Retain pending substitution across a shorthand's longhands. A `var()`
   shorthand cannot be split into independently parsed longhands before
   substitution; partial overwrites must remain distinguishable. See
-  [Variables](https://drafts.csswg.org/css-variables-1/#variables-in-shorthands)
-  and the [property roadmap](../../props/ROADMAP.md#shorthand-and-logical-property-dependencies).
-- [ ] Complete §6.7 value serialization, including CSS-wide shorthand values,
-  reset-only longhands, incompatible combinations, and canonical shortening.
-  Serialization must not resolve values to manufacture a shorthand.
+  [Values 5](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands)
+  and the [next-slice handoff](../../props/ROADMAP.md#shorthand-substitution-handoff).
+- [ ] Add reset-only longhands with the first property family that has them.
+  Margin has none; its passing tests do not establish reset-only support.
 - [ ] Add actual logical-property families. Physical margin metadata and
   CSSOM's ordering/serialization constraints are present, but no registered
   logical longhands exercise the opposite-mapping branches yet. Cover both
@@ -48,12 +48,45 @@ The [computed-result contract](../ROADMAP.md#computed-results-and-external-facts
 needs invalidation and external facts; [Typed OM](../typed/ROADMAP.md) must
 eventually use the same declaration mutations.
 
+## Section 6.7 value accounting
+
+Reviewed the current CSSOM parsing and serialization rules on 2026-10-21,
+including their references to CSS Values, Box, Cascade, and Color. The live
+[§6.7](https://drafts.csswg.org/cssom/#css-values) agrees with the local source
+used here. Its examples explicitly warn that some are outdated; the normative
+rules and each value family's current specification take precedence.
+
+| Requirement | Current owner and remaining boundary |
+| --- | --- |
+| Parse a CSS value against its property's grammar; reject embedded `!important` | `InterpretedDeclaration.parse()` tokenizes only the value and applies the registered grammar. It retains interpreted values instead of returning the specification's component list, as already reviewed. Invalid input leaves existing declarations unchanged. Unsupported property names still have no grammar. |
+| Exact shorthand representation, canonical order, shortest equivalent spelling | Ordinary margin expands and shortens in top/right/bottom/left order. Equal importance and completeness belong to the block; the family rejects incompatible values. There are no reset-only or logical margin records yet. |
+| Keywords, identifiers, strings, separators | Value-owned serializers use Syntax's identifier/string escaping and function/list formatting. Opaque custom-property source preservation follows Variables rather than stripping all whitespace. There is no property-independent whitespace rewrite over parsed values. |
+| Integer, number, percentage | Numeric literals use shortest base-ten text, no exponent notation, at most six fractional digits, and normalized negative zero; numeric literal tests exercise rounding and large integers. |
+| Angle, frequency, length, time, resolution | Literal serialization formats the retained unit. Resolvers prepare canonical computed units; margin additionally prepares unitless declared zero as `0px`. Time/resolution-valued properties are not registered: their future property consumers must prepare any required declared seconds/dppx representation before serialization. Generic value parsers and media-query components are not proof of those property contracts. |
+| Color and alpha | `ColorValue` prepares declared representations and serializes the retained stage; existing color tests cover the family's formats and alpha rules. Contextual colors still need the palette/current-color/profile facts listed in the value roadmap. No color-record reorganization is needed for this section. |
+| Ratio | `RatioValue` serializes the retained numerator and denominator with ` / `; existing tests cover this primitive. No ratio-valued property is registered. |
+| URL | `UrlValue` quotes and escapes the retained URL. Resolution owns absolutization; future URL properties must retain each declaration's parse-time base. CSSOM itself flags the declared/computed distinction as unresolved. |
+| Counter, legacy `rect()` shape, font-family name | Concrete value/property grammars and their consumers are absent. Implement the counter/counters argument and default-decimal rules, rect components, and font-family quoting with those families; generic strings/functions alone do not establish support. These remain on the property-family roadmap. |
+
+Serialization must not resolve units, supply contextual defaults, or run
+substitution to manufacture the required representation. See the
+[value lifecycle](../../value-processing/ROADMAP.md) and
+[property-family owners](../../props/ROADMAP.md#family-homes-and-stopping-points).
+This audit accounts for the section; it does not claim all property families,
+computed/resolved values, or deferred shorthand syntax are implemented.
+
 ## Continuing browser differences
 
 Observed with installed Chromium, Firefox, and WebKit on 2026-10-21; approved
 choices are covered by separate native-browser expected failures. Browlet
 assertions run before those annotations.
 
+- `SPEC_CLASH(shorthand-removal-return)`: Follow
+  [CSSOM removeProperty](https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-removeproperty)
+  and Firefox by returning the previous serialized shorthand value. Chromium
+  and WebKit remove the longhands but return empty text even for a complete
+  representable margin. Separate native-browser cases isolate the return value;
+  mutation, rule text, and Browlet behavior remain ordinary passing assertions.
 - `SPEC_CLASH(custom-property-name-serialization)`: CSSOM's
   [literal declaration serializer](https://drafts.csswg.org/cssom/#serialize-a-css-declaration)
   appends the decoded property name without escaping; WebKit does likewise.
@@ -86,6 +119,14 @@ assertions run before those annotations.
   [Web IDL regular attributes](https://webidl.spec.whatwg.org/#es-attributes)
   and Firefox/WebKit by putting generated property attributes on the prototype.
   Chromium exposes enumerable own attributes instead. Binding owns this behavior.
+
+Unchanged shorthand assignment is a permitted implementation choice rather than
+a specification clash. CSSOM's
+[set-a-declaration constraints](https://drafts.csswg.org/cssom/#set-a-css-declaration)
+allow a true result even when serialization did not change. Browlet, Chromium,
+and Firefox avoid rewriting `style="margin: 1px 1px; color: red"` after assigning
+`margin = '1px'`; WebKit rewrites canonical text. The native comparison accepts
+either permitted spelling, while Browlet's test requires its unchanged attribute.
 
 The earlier important-declaration source-order choice remains documented in the
 [rule roadmap](../rules/ROADMAP.md); custom-value boundary comments retain the

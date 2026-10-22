@@ -107,7 +107,7 @@ export class CSSDeclarationBlock {
       const longhands = this.getLonghands(shorthand);
       if (longhands === null || longhands.some(({ name }) => alreadySerialized.has(name))) continue;
       if (this.#hasInterleavedLogicalGroup(longhands)) continue;
-      const value = shorthand.serialize(longhands);
+      const value = shorthand.serialize(longhands.map(({ value }) => value));
       if (value === '') continue;
       for (const longhand of longhands) alreadySerialized.add(longhand.name);
       return InterpretedDeclaration.serializeText(name, value, declaration.important);
