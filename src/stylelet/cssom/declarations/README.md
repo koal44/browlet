@@ -18,15 +18,22 @@ and serialization shared by inline and CSSOM consumers. It is not another
 Platform implementation or a second declaration tree. Keeping this collection
 separate lets accepted inline data exist before `.style` is requested.
 
-[CSSStyleDeclarationImpl](style-declaration.ts) holds a block and supplies CSSOM operations.
+[CSSStyleDeclarationImpl](style-declaration.ts) exposes either an authored block
+or the engine's [ComputedStyle](../../engine/computed-style.ts) collection.
+Computed data contains existing property definitions and whole values, without
+creating interpreted declarations. Authored-only `declarations` and
+`getDeclaration()` expose no occurrences for computed results; `computedStyle`
+provides internal access to their retained values.
 `CSSStylePropertiesImpl` adds the projected subtype identity; supported property
 attributes declared beside the implementation forward to
 `getPropertyValue()`/`setProperty()` through Binding.
 Neither implementation installs numeric or property-name accessors.
 
-[InterpretedDeclaration](interpreted-declaration.ts) implements §6.5's record as a class: normalized built-in names or
-case-sensitive custom names, an interpreted value, and importance. Its `custom`
-discriminant supplies the case distinction; it needs no second case flag.
+[InterpretedDeclaration](interpreted-declaration.ts) implements §6.5's record as a class:
+a retained named property record, an interpreted value, and importance. Its `name`
+and `custom` accessors forward to that record without storing duplicate state.
+Property records own value resolution and serialization; the declaration retains
+its lazy serialization cache and adds the name and priority to complete declaration text.
 Built-in value instances retain their grammar/lifecycle representation rather
 than turning back into a generic component list.
 
@@ -46,19 +53,19 @@ serializes as `--name: ;`.
 The declaration is an internal instance, not a Platform implementation; descriptor
 interpretation remains unfinished with its owning rule families.
 
-Each occurrence owns `resolve()`, `serializeValue()`, `serialize()`, and
-`hasDifferentMapping()`. Resolution creates a separate occurrence with the
-resolved value and its own empty serialization cache. Retained values and nested
-payloads must not be mutated: CSSOM replaces declaration occurrences instead.
+Each occurrence owns `serializeValue()`, `serialize()`, and `hasDifferentMapping()`.
+Value resolution belongs to property records and whole values, leaving the source
+occurrence unchanged. Retained values and nested payloads must not be mutated:
+CSSOM replaces declaration occurrences instead.
 Serialization only describes the current representation; `serializeValue()` lazily
 caches its result for subsequent equality checks and property queries.
 `serializeValue()` supplies CSSOM property queries; `serialize()` produces the
 complete declaration, including its name, priority, and semicolon. Shorthand
 output uses the same static `serializeText()` formatter without creating a
-temporary declaration or serialized record. Custom values remain opaque;
-calling their resolver does not implement variable substitution or registration.
+temporary declaration or serialized record. Custom-property records substitute
+opaque components using the supplied context. Registered computation remains unfinished.
 
-The class stores its name, value, and importance directly. Its exported instance
+The class stores its property record, value, and importance directly. Its exported instance
 union preserves narrowing by custom status and by each registered property name.
 
 `setProperty()` parses its value independently of the decoded property name.
@@ -72,7 +79,7 @@ There are three current uses of declaration state:
 | --- | --- |
 | Inline style | Browlet's permanent element mixin retains a block and lazily creates the declaration object around it. Attribute input changes the block; CSSOM writes serialize back to the owner with an updating flag. |
 | Style-rule declarations | Each style or nested-declarations rule owns its declaration object. The engine reads that object's parsed declarations directly; edits do not replace child rules or synchronize a second tree. |
-| Computed result | The engine creates a separate block and readonly/computed declaration object for each query. The object contains a snapshot and has no owner node or update mechanism. |
+| Computed result | The engine fills a ComputedStyle collection and exposes it through a readonly CSSOM object. The collection is a snapshot with no element attachment or update mechanism. |
 
 Construction itself does not read an owner's attribute. A standalone host
 attaching to an existing element explicitly delivers its attribute through
@@ -81,7 +88,7 @@ checks CSP there. Its `.style` getter does not reread raw input. This preserves
 accepted declarations after a blocked replacement and avoids a second parsing
 path on first access.
 
-Binding reads supported indices from the current declarations. Attribute input
+Binding reads supported indices from the current authored or computed collection. Attribute input
 therefore needs no `synchronizeIndices()` call or block observer to update the
 already-retained Platform object.
 

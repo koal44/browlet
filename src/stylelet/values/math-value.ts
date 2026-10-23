@@ -26,15 +26,15 @@ import type { Value } from './value';
 // https://drafts.csswg.org/css-values-4/#math
 export class MathValue<
   Type extends MathValueType = MathValueType,
-  Representation extends MathRepresentation<Type> = MathRepresentation<Type>,
+  R extends MathRepresentation<Type> = MathRepresentation<Type>,
 > implements Value<MathContext> {
   /** The expression or literal at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
   /** Numeric grammar retained even when a calculation resolves to a shared literal form. */
   valueType: Type;
 
-  constructor(value: Representation, valueType: Type) {
-    this.value = value;
+  constructor(value: R, valueType: Type) {
+    this.repr = value;
     this.valueType = valueType;
   }
 
@@ -96,7 +96,7 @@ export class MathValue<
 
   /** Resolve with current inputs, retaining the value object when its representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): MathValue<Type> {
-    const previous = this.value;
+    const previous = this.repr;
     const calculation = simplifyCalculationTree(this.#calculation(context), stage, context, this.valueType);
     const unwrapMathAt = context.unwrapMathAt ?? ValueStage.Computed;
 
@@ -115,7 +115,7 @@ export class MathValue<
 
   /** Serialize the current representation without resolving or converting it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add calculations of the same numeric grammar. */
@@ -164,8 +164,8 @@ export class MathValue<
   }
 
   #calculation(context: MathContext): CalculationTree {
-    return this.value instanceof MathExpression
-      ? this.value.calculation : createNumericLeafFromLiteral(this.value, context);
+    return this.repr instanceof MathExpression
+      ? this.repr.calculation : createNumericLeafFromLiteral(this.repr, context);
   }
 
   #combine(
@@ -3016,7 +3016,7 @@ function combineProductNumbers(
   children: CalculationTree[],
 ): CalculationTree[] {
   const numbers = children.filter(
-    (child): child is NumericLeaf & NumberLiteral => child.type === 'number',
+    (child): child is NumberLeaf => child.type === 'number',
   );
 
   if (

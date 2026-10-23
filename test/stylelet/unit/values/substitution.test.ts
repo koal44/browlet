@@ -10,6 +10,7 @@ import { ColorValue } from '../../../../src/stylelet/values/color';
 import { LengthValue } from '../../../../src/stylelet/values/length';
 import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
+import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 
 describe('arbitrary substitution', () => {
   it('finishes substitution and argument parsing before reading any source text', () => {
@@ -25,7 +26,7 @@ describe('arbitrary substitution', () => {
       expect(OptionalDeclarationValue.parse(result, {})).not.toBeNull();
       expect(read).not.toHaveBeenCalled();
       expect(result.sourceText()).toBe('calc(01.00e+0, 02px)');
-      expect(original.value.sourceText()).toBe('calc(var(...var(--args), var(--tail)))');
+      expect(original.repr.sourceText()).toBe('calc(var(...var(--args), var(--tail)))');
     } finally {
       read.mockRestore();
     }
@@ -88,7 +89,7 @@ describe('arbitrary substitution', () => {
     };
     const queried: string[] = [];
     const value = OptionalDeclarationValue.parse(input, {})!;
-    expect(SubstitutionValue.hasValidVarArguments(value.value)).toBe(true);
+    expect(SubstitutionValue.hasValidVarArguments(value.repr)).toBe(true);
     const result = new SubstitutionValue(value).substitute((name) => {
       queried.push(name);
       return Object.hasOwn(values, name) ? OptionalDeclarationValue.parse(values[name]!, {})! : guaranteedInvalidValue;
@@ -97,7 +98,7 @@ describe('arbitrary substitution', () => {
     expect(result).not.toBeInstanceOf(GuaranteedInvalidValue);
     if (result instanceof GuaranteedInvalidValue) return;
     expect(result.sourceText()).toBe(expected);
-    expect(value.value.sourceText()).toBe(input);
+    expect(value.repr.sourceText()).toBe(input);
     expect(queried).not.toContain('--unused');
     // Reparse only in the test: serialization must keep the same token boundaries.
     expect(serializeComponentValues(parseListOfComponentValues(result.sourceText(), {}).tokens))
@@ -130,7 +131,7 @@ describe('arbitrary substitution', () => {
 
   it('keeps source and list identity when there is nothing to substitute', () => {
     const value = OptionalDeclarationValue.parse('foo\\62 ar(01.00e+0EM)', {})!;
-    expect(new SubstitutionValue(value).substitute(() => guaranteedInvalidValue)).toBe(value.value);
+    expect(new SubstitutionValue(value).substitute(() => guaranteedInvalidValue)).toBe(value.repr);
   });
 
   it('keeps replacements separate across computations of the same declaration', () => {
@@ -142,19 +143,20 @@ describe('arbitrary substitution', () => {
 
     expect(first.sourceText()).toBe('calc(01px + 01px)');
     expect(second.sourceText()).toBe('calc(2em + 2em)');
-    expect(original.value.sourceText()).toBe('calc(var(--x) + var(--x))');
+    expect(original.repr.sourceText()).toBe('calc(var(--x) + var(--x))');
   });
 
   it.each([
     ['--absent,/**/var(--value)/**/', 'green', '/**/green/**/'],
     ['--absent, /*only*/ var(--value)', '', '/*only*/'],
   ])('retains comments when a spread fallback comes from computed %s', (input, value, expected) => {
-    const original = InterpretedDeclaration.parseBlock(`--args: ${input};`, {})[0]!.value;
-    if (!(original instanceof OptionalDeclarationValue)) throw new Error('Expected a custom declaration');
-    const computed = new SubstitutionValue(original).substitute(() => OptionalDeclarationValue.parse(value, {})!);
-    if (computed instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
+    const original = InterpretedDeclaration.parseBlock(`--args: ${input};`, {})[0]!;
+    if (!original.custom) throw new Error('Expected a custom declaration');
+    const computed = original.value.resolve(ValueStage.Computed, {
+      getCustomProperty: () => OptionalDeclarationValue.parse(value, {})!,
+    }).ordinaryValue();
     const result = new SubstitutionValue(OptionalDeclarationValue.parse('var(...var(--args))', {})!)
-      .substitute((name) => name === '--args' ? OptionalDeclarationValue.parse(computed, {})! : guaranteedInvalidValue);
+      .substitute((name) => name === '--args' ? computed : guaranteedInvalidValue);
     if (result instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
     expect(result.sourceText()).toBe(expected);
   });
@@ -181,8 +183,8 @@ describe('arbitrary substitution', () => {
 
   it('preserves declared spelling without restoring trimmed whitespace in its replacement', () => {
     const declaration = InterpretedDeclaration.parseBlock('--term: /*before*/ + 2px;', {})[0]!;
-    const value = declaration.value;
-    if (!(value instanceof OptionalDeclarationValue)) throw new Error('Expected a custom declaration');
+    if (!declaration.custom) throw new Error('Expected a custom declaration');
+    const value = declaration.value.resolve(ValueStage.Computed, {}).ordinaryValue();
     const result = new SubstitutionValue(OptionalDeclarationValue.parse('calc(1px/**/var(--term))', {})!)
       .substitute(() => value);
     if (result instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
@@ -210,12 +212,12 @@ describe('arbitrary substitution', () => {
   it('bounds counting and rendering work for repeatedly shared empty replacements', () => {
     const reference = new SubstitutionValue(OptionalDeclarationValue.parse('var(--previous)var(--previous)', {})!);
     let previous = OptionalDeclarationValue.parse('', {})!;
-    const lists = [previous.value];
+    const lists = [previous.repr];
     for (let i = 0; i < 12; i++) {
       const result = reference.substitute(() => previous);
       if (result instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
       previous = OptionalDeclarationValue.parse(result, {})!;
-      lists.push(previous.value);
+      lists.push(previous.repr);
     }
 
     // Measure traversal rather than elapsed time. The completed lists are shared,
@@ -252,14 +254,14 @@ describe('arbitrary substitution', () => {
       previous = OptionalDeclarationValue.parse(result, {})!;
     }
 
-    expect(previous.value.tokens).toHaveLength(65536);
+    expect(previous.repr.tokens).toHaveLength(65536);
     expect(reference.substitute(() => previous)).toBe(guaranteedInvalidValue);
   });
 
   it.each(['attr(data-x)', 'env(safe-area-inset-top)', 'if(else: red)', 'inherit(--x)', 'ident(foo)', 'random-item(red, blue)', '--fn()'])(
     'keeps the unfinished function dependency explicit: %s', (input) => {
       const value = OptionalDeclarationValue.parse(input, {})!;
-      expect(SubstitutionValue.containsFunction(value.value)).toBe(true);
+      expect(SubstitutionValue.containsFunction(value.repr)).toBe(true);
       expect(() => new SubstitutionValue(value).substitute(() => guaranteedInvalidValue))
         .toThrow('is not implemented');
     },

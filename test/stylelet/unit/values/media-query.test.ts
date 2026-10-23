@@ -14,7 +14,7 @@ describe('<media-query>', () => {
     ['ONLY Screen', 'only', 'screen'],
     ['not print', 'not', 'print'],
   ] as const)('parses the media type query %s', (input, modifier, mediaType) => {
-    expect(MediaQuery.parse(input, {})?.value).toEqual({
+    expect(MediaQuery.parse(input, {})?.repr).toEqual({
       type: 'media-type-query',
       ...(modifier === undefined ? {} : { modifier }),
       mediaType,
@@ -22,11 +22,11 @@ describe('<media-query>', () => {
   });
 
   it('parses a media type followed by a condition without or', () => {
-    expect(MediaQuery.parse('screen and (color)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('screen and (color)', {})?.repr).toMatchObject({
       type: 'media-type-query',
       mediaType: 'screen',
       condition: {
-        value: {
+        repr: {
           name: 'color',
         },
       },
@@ -34,23 +34,23 @@ describe('<media-query>', () => {
   });
 
   it('parses not as a media condition when followed by parentheses', () => {
-    expect(MediaQuery.parse('not (color)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('not (color)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
-          value: { name: 'color' },
+        repr: {
+          repr: { name: 'color' },
         },
       },
     });
   });
 
   it('parses a plain media feature', () => {
-    expect(MediaQuery.parse('(width: 10px)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(width: 10px)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'width',
-          value: new LengthValue(new LengthLiteral(10, 'px')),
+          repr: new LengthValue(new LengthLiteral(10, 'px')),
         },
       },
     });
@@ -63,17 +63,17 @@ describe('<media-query>', () => {
     ['scan', 'PROGRESSIVE', 'progressive'],
   ])('interprets the keyword in (%s: %s)', (name, keyword, expected) => {
     const query = MediaQuery.parse(`(${name}: ${keyword})`, {})!;
-    expect(query.value).toMatchObject({
-      condition: { value: { value: new IdentValue(expected) } },
+    expect(query.repr).toMatchObject({
+      condition: { repr: { repr: new IdentValue(expected) } },
     });
     expect(query.serialize()).toBe(`(${name.toLowerCase()}: ${expected})`);
   });
 
   it('parses a one-sided range with the name first', () => {
-    expect(MediaQuery.parse('(width >= 10px)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(width >= 10px)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'width',
           right: {
             comparison: '>=',
@@ -85,10 +85,10 @@ describe('<media-query>', () => {
   });
 
   it('parses a one-sided range with the value first', () => {
-    expect(MediaQuery.parse('(10px < width)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(10px < width)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'width',
           left: {
             comparison: '<',
@@ -106,10 +106,10 @@ describe('<media-query>', () => {
     ['(width >= 10px)', '>='],
     ['(width = 10px)', '='],
   ] as const)('parses the comparison in %s', (input, comparison) => {
-    expect(MediaQuery.parse(input, {})?.value).toMatchObject({
+    expect(MediaQuery.parse(input, {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           right: { comparison },
         },
       },
@@ -117,10 +117,10 @@ describe('<media-query>', () => {
   });
 
   it('does not let a one-sided range mask a two-sided range', () => {
-    expect(MediaQuery.parse('(10px < width < 20px)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(10px < width < 20px)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'width',
           left: {
             comparison: '<',
@@ -136,10 +136,10 @@ describe('<media-query>', () => {
   });
 
   it('parses a descending two-sided range', () => {
-    expect(MediaQuery.parse('(20px >= width > 10px)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(20px >= width > 10px)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'width',
           left: { comparison: '>=' },
           right: { comparison: '>' },
@@ -149,80 +149,80 @@ describe('<media-query>', () => {
   });
 
   it('does not let the number alternative mask a ratio value', () => {
-    expect(MediaQuery.parse('(aspect-ratio: 16/9)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(aspect-ratio: 16/9)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'aspect-ratio',
-          value: new RatioValue({ numerator: 16, denominator: 9 }),
+          repr: new RatioValue({ numerator: 16, denominator: 9 }),
         },
       },
     });
-    expect(MediaQuery.parse('(aspect-ratio: 3/1)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(aspect-ratio: 3/1)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
-          value: new RatioValue({ numerator: 3, denominator: 1 }),
+        repr: {
+          repr: new RatioValue({ numerator: 3, denominator: 1 }),
         },
       },
     });
   });
 
   it('does not reinterpret a standalone number as a ratio', () => {
-    expect(MediaQuery.parse('(color: 2)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(color: 2)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
-          value: new NumberValue(new NumberLiteral(2)),
+        repr: {
+          repr: new NumberValue(new NumberLiteral(2)),
         },
       },
     });
   });
 
   it('does not let the nullable and tail mask an or condition', () => {
-    expect(MediaQuery.parse('(color) or (monochrome)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(color) or (monochrome)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
         operator: 'or',
         values: [
-          { value: { name: 'color' } },
-          { value: { name: 'monochrome' } },
+          { repr: { name: 'color' } },
+          { repr: { name: 'monochrome' } },
         ],
       },
     });
   });
 
   it('keeps and operands in one flat condition', () => {
-    expect(MediaQuery.parse('(color) and (monochrome) and (grid)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(color) and (monochrome) and (grid)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
         operator: 'and',
         values: [
-          { value: { name: 'color' } },
-          { value: { name: 'monochrome' } },
-          { value: { name: 'grid' } },
+          { repr: { name: 'color' } },
+          { repr: { name: 'monochrome' } },
+          { repr: { name: 'grid' } },
         ],
       },
     });
   });
 
   it('folds unknown media feature names without changing their ident values', () => {
-    expect(MediaQuery.parse('(FUTURE-FEATURE: CUSTOM)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('(FUTURE-FEATURE: CUSTOM)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           name: 'future-feature',
-          value: new IdentValue('CUSTOM'),
+          repr: new IdentValue('CUSTOM'),
         },
       },
     });
   });
 
   it('accepts an unknown function as general-enclosed', () => {
-    expect(MediaQuery.parse('future-query(value)', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('future-query(value)', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           type: TokenKind.FunctionBlock,
           name: 'future-query',
         },
@@ -231,10 +231,10 @@ describe('<media-query>', () => {
   });
 
   it('parses nested conditions before the general-enclosed fallback', () => {
-    expect(MediaQuery.parse('((color) and (monochrome))', {})?.value).toMatchObject({
+    expect(MediaQuery.parse('((color) and (monochrome))', {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: {
+        repr: {
           operator: 'and',
         },
       },
@@ -259,10 +259,10 @@ describe('<media-query>', () => {
     '(width < = 10px)',
     '(10px < width > 20px)',
   ])('preserves the unrecognized parenthetical %s as general-enclosed', (input) => {
-    expect(MediaQuery.parse(input, {})?.value).toMatchObject({
+    expect(MediaQuery.parse(input, {})?.repr).toMatchObject({
       type: 'media-condition-query',
       condition: {
-        value: { type: TokenKind.ParensBlock },
+        repr: { type: TokenKind.ParensBlock },
       },
     });
   });
@@ -274,14 +274,14 @@ describe('<media-query-list>', () => {
   });
 
   it('parses entries independently in source order', () => {
-    expect(MediaQuery.parseList('screen, (color)', {}).map((query) => query.value)).toMatchObject([
+    expect(MediaQuery.parseList('screen, (color)', {}).map((query) => query.repr)).toMatchObject([
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-condition-query' },
     ]);
   });
 
   it('replaces only an invalid entry with not all', () => {
-    expect(MediaQuery.parseList('screen, &, print', {}).map((query) => query.value)).toMatchObject([
+    expect(MediaQuery.parseList('screen, &, print', {}).map((query) => query.repr)).toMatchObject([
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', mediaType: 'print' },
@@ -289,14 +289,14 @@ describe('<media-query-list>', () => {
   });
 
   it('replaces both empty entries around a lone comma with not all', () => {
-    expect(MediaQuery.parseList(',', {}).map((query) => query.value)).toMatchObject([
+    expect(MediaQuery.parseList(',', {}).map((query) => query.repr)).toMatchObject([
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
     ]);
   });
 
   it('recovers independently across leading, consecutive, and trailing empty entries', () => {
-    expect(MediaQuery.parseList(', screen,, print,', {}).map((query) => query.value)).toMatchObject([
+    expect(MediaQuery.parseList(', screen,, print,', {}).map((query) => query.repr)).toMatchObject([
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },
       { type: 'media-type-query', mediaType: 'screen' },
       { type: 'media-type-query', modifier: 'not', mediaType: 'all' },

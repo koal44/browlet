@@ -70,7 +70,7 @@ describe('retained comment boundaries', () => {
     );
     if (result instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
     expect(result.sourceText()).toBe(expected);
-    expect(original.value.sourceText()).toBe(input);
+    expect(original.repr.sourceText()).toBe(input);
   });
 
   it.each([

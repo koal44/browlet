@@ -1,21 +1,21 @@
+import { InternalError } from '../../../infra/internal-error';
+
 import { one, oneOf, repeat, withTrivia, createComponentParser, type ParserInput, type TryConsumer } from '../../syntax/index';
 import { ValueStage } from '../../value-processing/index';
 import { LengthLiteral } from '../../values/numeric-literal/index';
 import {
-  AutoValue, LengthPercentageValue, type WholeValue, type MathContext, type Value,
+  AutoValue, LengthPercentageValue, type WholeValueContents, type MathContext, type Value,
 } from '../../values/index';
-import { PropertyRecord, type PropertyContext } from '../property';
+import type { PropertyContext } from '../base-property';
 import { Shorthand } from '../shorthand';
+import { BuiltInProperty, type BuiltInPropertyDefinition } from '../builtin-property';
 
 /** The physical margin shorthand, expanding values in top/right/bottom/left order. */
 // https://drafts.csswg.org/css-box-4/#margin-shorthand
 export class MarginShorthand extends Shorthand<MarginSideValue> {
   constructor() {
     super('margin', [
-      ['margin-top', marginSideProperty],
-      ['margin-right', marginSideProperty],
-      ['margin-bottom', marginSideProperty],
-      ['margin-left', marginSideProperty],
+      marginTopProperty, marginRightProperty, marginBottomProperty, marginLeftProperty,
     ]);
   }
 
@@ -26,7 +26,7 @@ export class MarginShorthand extends Shorthand<MarginSideValue> {
     return [top, right, bottom, left];
   }
 
-  protected override serializeValues(values: WholeValue<Value>['value'][]): string {
+  protected override serializeValues(values: WholeValueContents<Value>[]): string {
     if (!values.every((value) => value instanceof LengthPercentageValue || value instanceof AutoValue)) return '';
     const text = values.map((value) => value.serialize());
     if (text[3] === text[1]) {
@@ -55,7 +55,7 @@ const marginSideValueConsumer: TryConsumer<MarginSideValue, MathContext> = oneOf
     const resolved = value.resolve(ValueStage.Declared, context);
     // The property accepts unitless zero as a length; retain its declared px representation.
     // https://drafts.csswg.org/css-values-4/#lengths
-    return resolved instanceof LengthPercentageValue && resolved.value instanceof LengthLiteral && resolved.value.unit === ''
+    return resolved instanceof LengthPercentageValue && resolved.repr instanceof LengthLiteral && resolved.repr.unit === ''
       ? new LengthPercentageValue(new LengthLiteral(0, 'px'))
       : resolved;
   },
@@ -65,10 +65,47 @@ const parseMarginValues = createComponentParser(repeat(withTrivia(marginSideValu
 
 /** Shared grammar and metadata for the four physical margin longhands. */
 // https://drafts.csswg.org/css-box-4/#margin-physical
-export const marginSideProperty = new PropertyRecord(parseMarginSideValue, {
+const marginSideDefinition: Omit<BuiltInPropertyDefinition<MarginSideValue>, 'name'> = {
+  parse: parseMarginSideValue,
   inherits: false,
   initialValue: new LengthPercentageValue(new LengthLiteral(0, 'px')),
+  animationType: {
+    // The auto branch requests discrete fallback; numeric pairs use their existing operations.
+    interpolate(from, to, progress, context) {
+      const fromInner = from.ordinaryValue();
+      const toInner = to.ordinaryValue();
+      if (fromInner instanceof AutoValue || toInner instanceof AutoValue) return null;
+      return from.withValue(fromInner.interpolate(toInner, progress, context), to);
+    },
+    add(underlying, effect, context) {
+      const underlyingInner = underlying.ordinaryValue();
+      const effectInner = effect.ordinaryValue();
+      if (underlyingInner instanceof AutoValue || effectInner instanceof AutoValue) return null;
+      return underlying.withValue(underlyingInner.add(effectInner, context), effect);
+    },
+    accumulate(underlying, effect, context) {
+      const underlyingInner = underlying.ordinaryValue();
+      const effectInner = effect.ordinaryValue();
+      if (underlyingInner instanceof AutoValue || effectInner instanceof AutoValue) return null;
+      return underlying.withValue(underlyingInner.accumulate(effectInner, context), effect);
+    },
+  },
+  percentages: {
+    resolveAt: ValueStage.Used,
+    reference: (context) => context.containingBlockInlineSize === undefined
+      ? undefined : new LengthLiteral(context.containingBlockInlineSize, 'px'),
+  },
+  // https://drafts.csswg.org/cssom/#resolved-values
+  resolvedValueStage() {
+    // TODO: Use Used when applicable and resolved display is neither none nor contents; otherwise Computed.
+    throw new InternalError('Margin resolved-value stage requires property applicability and resolved display');
+  },
   logicalGroup: { name: 'margin', mapping: 'physical' },
-});
+};
+
+export const marginTopProperty = new BuiltInProperty({ name: 'margin-top', ...marginSideDefinition });
+export const marginRightProperty = new BuiltInProperty({ name: 'margin-right', ...marginSideDefinition });
+export const marginBottomProperty = new BuiltInProperty({ name: 'margin-bottom', ...marginSideDefinition });
+export const marginLeftProperty = new BuiltInProperty({ name: 'margin-left', ...marginSideDefinition });
 
 export const marginShorthand = new MarginShorthand();

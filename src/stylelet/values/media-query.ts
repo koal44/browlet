@@ -19,12 +19,12 @@ import { consumeNumberOrRatio, type NumberOrRatioValue } from './ratio';
 
 /** A media query retaining its condition syntax and interpreted feature values. */
 // https://drafts.csswg.org/mediaqueries-4/#mq-syntax
-export class MediaQuery<Representation extends MediaQuerySyntax = MediaQuerySyntax> implements Value<MathContext> {
+export class MediaQuery<R extends MediaQuerySyntax = MediaQuerySyntax> implements Value<MathContext> {
   /** The media type, modifier, and condition at the current value stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete media query without list error recovery. */
@@ -63,7 +63,7 @@ export class MediaQuery<Representation extends MediaQuerySyntax = MediaQuerySynt
 
   /** Resolve feature values without deciding whether this query matches a device. */
   resolve(stage: ValueStage, context: MathContext = {}): MediaQuery {
-    const query = this.value;
+    const query = this.repr;
     if (query.type === 'media-condition-query') {
       return new MediaQuery({
         ...query,
@@ -82,7 +82,7 @@ export class MediaQuery<Representation extends MediaQuerySyntax = MediaQuerySynt
   /** Serialize the current query without resolving its values. */
   // https://drafts.csswg.org/cssom/#serialize-a-media-query
   serialize(): string {
-    const query = this.value;
+    const query = this.repr;
     if (query.type === 'media-condition-query') {
       return query.condition.serialize();
     }
@@ -135,36 +135,36 @@ type MediaInParens =
 /** Parentheses preserve grouping around a condition or feature. */
 class MediaBlock implements Value<MathContext> {
   /** The interpreted contents of the parentheses. */
-  value: MediaCondition | MediaFeature;
+  repr: MediaCondition | MediaFeature;
 
   constructor(value: MediaCondition | MediaFeature) {
-    this.value = value;
+    this.repr = value;
   }
 
   resolve(stage: ValueStage, context: MathContext): MediaBlock {
-    return new MediaBlock(this.value.resolve(stage, context));
+    return new MediaBlock(this.repr.resolve(stage, context));
   }
 
   serialize(): string {
-    return `(${this.value.serialize()})`;
+    return `(${this.repr.serialize()})`;
   }
 }
 
 /** A negated parenthesized condition or unknown condition grammar. */
 class MediaNot implements Value<MathContext> {
   /** The condition following not. */
-  value: MediaInParens;
+  repr: MediaInParens;
 
   constructor(value: MediaInParens) {
-    this.value = value;
+    this.repr = value;
   }
 
   resolve(stage: ValueStage, context: MathContext): MediaNot {
-    return new MediaNot(this.value.resolve(stage, context));
+    return new MediaNot(this.repr.resolve(stage, context));
   }
 
   serialize(): string {
-    return `not ${this.value.serialize()}`;
+    return `not ${this.repr.serialize()}`;
   }
 }
 
@@ -199,19 +199,19 @@ class MediaFeaturePlain implements Value<MathContext> {
   /** The ASCII-lowercase feature name. */
   name: string;
   /** The value interpreted by the generic media-feature grammar. */
-  value: MediaFeatureValue;
+  repr: MediaFeatureValue;
 
   constructor(name: string, value: MediaFeatureValue) {
     this.name = name;
-    this.value = value;
+    this.repr = value;
   }
 
   resolve(stage: ValueStage, context: MathContext): MediaFeaturePlain {
-    return new MediaFeaturePlain(this.name, this.value.resolve(stage, context));
+    return new MediaFeaturePlain(this.name, this.repr.resolve(stage, context));
   }
 
   serialize(): string {
-    return `${serializeCssIdentifier(this.name)}: ${this.value.serialize()}`;
+    return `${serializeCssIdentifier(this.name)}: ${this.repr.serialize()}`;
   }
 }
 
@@ -278,7 +278,7 @@ type MediaFeatureComparison = '<' | '<=' | '>' | '>=' | '=';
 function canonicalizeMediaFeatureValue(name: string, value: MediaFeatureValue): MediaFeatureValue {
   if (!(value instanceof IdentValue) || (name !== 'orientation' && name !== 'scan')) return value;
 
-  const keyword = asciiLower(value.value);
+  const keyword = asciiLower(value.repr);
   if (name === 'orientation'
     ? keyword === 'landscape' || keyword === 'portrait'
     : keyword === 'progressive' || keyword === 'interlace'

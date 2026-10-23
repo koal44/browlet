@@ -564,18 +564,18 @@ describe('length-percentage', () => {
     const value = new LengthPercentageValue(new PercentageLiteral(25));
     const context = { percentageReferenceValue: new LengthLiteral(200, 'px') };
 
-    expect(value.resolve(ValueStage.Computed, context).value).toEqual(new LengthLiteral(50, 'px'));
+    expect(value.resolve(ValueStage.Computed, context).repr).toEqual(new LengthLiteral(50, 'px'));
   });
 
   it('resolves a length using the length resolution context', () => {
     const value = new LengthPercentageValue(new LengthLiteral(2, 'em'));
 
-    expect(value.resolve(ValueStage.Computed, { length: { em: 16 } }).value).toEqual(new LengthLiteral(32, 'px'));
+    expect(value.resolve(ValueStage.Computed, { length: { em: 16 } }).repr).toEqual(new LengthLiteral(32, 'px'));
   });
 
   it('retains the literal when the required resolution input is missing', () => {
-    expect(new LengthPercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).value).toEqual(new PercentageLiteral(25));
-    expect(new LengthPercentageValue(new LengthLiteral(2, 'em')).resolve(ValueStage.Computed, {}).value).toEqual(new LengthLiteral(2, 'em'));
+    expect(new LengthPercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).repr).toEqual(new PercentageLiteral(25));
+    expect(new LengthPercentageValue(new LengthLiteral(2, 'em')).resolve(ValueStage.Computed, {}).repr).toEqual(new LengthLiteral(2, 'em'));
   });
 
   it.each([
@@ -591,9 +591,9 @@ describe('length-percentage', () => {
     const tenPercent = new LengthPercentageValue(new PercentageLiteral(10));
     const thirtyPercent = new LengthPercentageValue(new PercentageLiteral(30));
 
-    expect(tenPixels.add(fivePixels).value).toEqual(new LengthLiteral(15, 'px'));
-    expect(tenPercent.interpolate(thirtyPercent, 0.25).value).toEqual(new PercentageLiteral(15));
-    expect(tenPixels.accumulate(fivePixels).value).toEqual(new LengthLiteral(15, 'px'));
+    expect(tenPixels.add(fivePixels).repr).toEqual(new LengthLiteral(15, 'px'));
+    expect(tenPercent.interpolate(thirtyPercent, 0.25).repr).toEqual(new PercentageLiteral(15));
+    expect(tenPixels.accumulate(fivePixels).repr).toEqual(new LengthLiteral(15, 'px'));
   });
 
   it('retains mixed alternatives and different units as math', () => {
@@ -604,9 +604,9 @@ describe('length-percentage', () => {
     const em = new LengthPercentageValue(new LengthLiteral(1, 'em'));
     const sixteenPixels = new LengthPercentageValue(new LengthLiteral(16, 'px'));
 
-    expect(tenPixels.add(zeroPercent).value).toBeInstanceOf(MathValue);
-    expect(zeroPixels.add(twentyPercent).value).toBeInstanceOf(MathValue);
-    expect(em.interpolate(sixteenPixels, 0.5).value).toBeInstanceOf(MathValue);
+    expect(tenPixels.add(zeroPercent).repr).toBeInstanceOf(MathValue);
+    expect(zeroPixels.add(twentyPercent).repr).toBeInstanceOf(MathValue);
+    expect(em.interpolate(sixteenPixels, 0.5).repr).toBeInstanceOf(MathValue);
   });
 });
 
@@ -668,11 +668,11 @@ describe('angle-percentage', () => {
       90,
     ],
   ] as const)('resolves %j to %ddeg', (value, context, expected) => {
-    expect(new AnglePercentageValue(value).resolve(ValueStage.Computed, context).value).toEqual(new AngleLiteral(expected, 'deg'));
+    expect(new AnglePercentageValue(value).resolve(ValueStage.Computed, context).repr).toEqual(new AngleLiteral(expected, 'deg'));
   });
 
   it('retains the percentage when its basis is missing', () => {
-    expect(new AnglePercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).value).toEqual(new PercentageLiteral(25));
+    expect(new AnglePercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).repr).toEqual(new PercentageLiteral(25));
   });
 
   it.each([
@@ -688,10 +688,10 @@ describe('angle-percentage', () => {
     const twentyPercent = new AnglePercentageValue(new PercentageLiteral(20));
     const sixtyPercent = new AnglePercentageValue(new PercentageLiteral(60));
 
-    expect(tenDegrees.add(twentyDegrees).value).toEqual(new AngleLiteral(30, 'deg'));
-    expect(twentyPercent.interpolate(sixtyPercent, 0.5).value).toEqual(new PercentageLiteral(40));
-    expect(tenDegrees.accumulate(twentyDegrees).value).toEqual(new AngleLiteral(30, 'deg'));
-    expect(tenDegrees.add(twentyPercent).value).toBeInstanceOf(MathValue);
+    expect(tenDegrees.add(twentyDegrees).repr).toEqual(new AngleLiteral(30, 'deg'));
+    expect(twentyPercent.interpolate(sixtyPercent, 0.5).repr).toEqual(new PercentageLiteral(40));
+    expect(tenDegrees.accumulate(twentyDegrees).repr).toEqual(new AngleLiteral(30, 'deg'));
+    expect(tenDegrees.add(twentyPercent).repr).toBeInstanceOf(MathValue);
   });
 });
 
@@ -753,11 +753,11 @@ describe('frequency-percentage', () => {
       500,
     ],
   ] as const)('resolves %j to %dhz', (value, context, expected) => {
-    expect(new FrequencyPercentageValue(value).resolve(ValueStage.Computed, context).value).toEqual(new FrequencyLiteral(expected, 'hz'));
+    expect(new FrequencyPercentageValue(value).resolve(ValueStage.Computed, context).repr).toEqual(new FrequencyLiteral(expected, 'hz'));
   });
 
   it('retains the percentage when its basis is missing', () => {
-    expect(new FrequencyPercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).value).toEqual(new PercentageLiteral(25));
+    expect(new FrequencyPercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).repr).toEqual(new PercentageLiteral(25));
   });
 
   it.each([
@@ -774,10 +774,10 @@ describe('frequency-percentage', () => {
     const threeHundredHz = new FrequencyPercentageValue(new FrequencyLiteral(300, 'hz'));
     const kilohertz = new FrequencyPercentageValue(new FrequencyLiteral(1, 'khz'));
 
-    expect(tenPercent.add(fifteenPercent).value).toEqual(new PercentageLiteral(25));
-    expect(hundredHz.interpolate(threeHundredHz, 0.5).value).toEqual(new FrequencyLiteral(200, 'hz'));
-    expect(tenPercent.accumulate(fifteenPercent).value).toEqual(new PercentageLiteral(25));
-    expect(kilohertz.add(hundredHz).value).toBeInstanceOf(MathValue);
+    expect(tenPercent.add(fifteenPercent).repr).toEqual(new PercentageLiteral(25));
+    expect(hundredHz.interpolate(threeHundredHz, 0.5).repr).toEqual(new FrequencyLiteral(200, 'hz'));
+    expect(tenPercent.accumulate(fifteenPercent).repr).toEqual(new PercentageLiteral(25));
+    expect(kilohertz.add(hundredHz).repr).toBeInstanceOf(MathValue);
   });
 });
 
@@ -839,11 +839,11 @@ describe('time-percentage', () => {
       0.5,
     ],
   ] as const)('resolves %j to %ds', (value, context, expected) => {
-    expect(new TimePercentageValue(value).resolve(ValueStage.Computed, context).value).toEqual(new TimeLiteral(expected, 's'));
+    expect(new TimePercentageValue(value).resolve(ValueStage.Computed, context).repr).toEqual(new TimeLiteral(expected, 's'));
   });
 
   it('retains the percentage when its basis is missing', () => {
-    expect(new TimePercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).value).toEqual(new PercentageLiteral(25));
+    expect(new TimePercentageValue(new PercentageLiteral(25)).resolve(ValueStage.Computed, {}).repr).toEqual(new PercentageLiteral(25));
   });
 
   it.each([
@@ -860,10 +860,10 @@ describe('time-percentage', () => {
     const threeQuarters = new TimePercentageValue(new PercentageLiteral(75));
     const full = new TimePercentageValue(new PercentageLiteral(100));
 
-    expect(second.add(twoSeconds).value).toEqual(new TimeLiteral(3, 's'));
-    expect(quarter.interpolate(threeQuarters, 0.5).value).toEqual(new PercentageLiteral(50));
-    expect(second.accumulate(twoSeconds).value).toEqual(new TimeLiteral(3, 's'));
-    expect(second.interpolate(full, 0.5).value).toBeInstanceOf(MathValue);
+    expect(second.add(twoSeconds).repr).toEqual(new TimeLiteral(3, 's'));
+    expect(quarter.interpolate(threeQuarters, 0.5).repr).toEqual(new PercentageLiteral(50));
+    expect(second.accumulate(twoSeconds).repr).toEqual(new TimeLiteral(3, 's'));
+    expect(second.interpolate(full, 0.5).repr).toBeInstanceOf(MathValue);
   });
 });
 

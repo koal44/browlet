@@ -18,9 +18,9 @@ describe.each([
 
     expect(value).toBeInstanceOf(ValueClass);
     expect(value).toEqual({
-      value: list,
+      repr: list,
     });
-    expect(value?.value).toBe(list);
+    expect(value?.repr).toBe(list);
   });
 
   it('consumes a nonempty declaration value', () => {
@@ -30,7 +30,7 @@ describe.each([
 
     expect(value).toBeInstanceOf(ValueClass);
     expect(value).toEqual({
-      value: list,
+      repr: list,
     });
   });
 
@@ -59,9 +59,9 @@ describe.each([
     const consumed = ValueClass.consume(cursor)!;
 
     for (const declaration of [parsed, consumed]) {
-      expect(declaration.value).toBe(list);
-      expect(declaration.value.tokens).toBe(list.tokens);
-      expect(declaration.value.sourceText()).toBe('a /**/ fn( b )');
+      expect(declaration.repr).toBe(list);
+      expect(declaration.repr.tokens).toBe(list.tokens);
+      expect(declaration.repr.sourceText()).toBe('a /**/ fn( b )');
       expect(declaration.serialize()).toBe('a  fn( b )');
     }
     expect(cursor.eof()).toBe(true);
@@ -72,8 +72,8 @@ describe.each([
     const cursor = new TokenCursor(list, {}, { position: 2 });
     const declaration = ValueClass.consume(cursor)!;
 
-    expect(declaration.value.sourceText()).toBe('a /**/ fn(b)');
-    expect(declaration.value.tokens[0]).toBe(list.tokens[2]);
+    expect(declaration.repr.sourceText()).toBe('a /**/ fn(b)');
+    expect(declaration.repr.tokens[0]).toBe(list.tokens[2]);
     expect(cursor.pos()).toBe(6);
     expect(list.sourceText()).toBe('skip a /**/ fn(b)) rest');
   });
@@ -111,8 +111,8 @@ describe('DeclarationValue nonempty grammar', () => {
   it('preserves the nonempty guarantee in parsing and resolution types', () => {
     const declaration = DeclarationValue.parse('red', {})!;
 
-    expectTypeOf(declaration.value).toEqualTypeOf<NonEmptyTokenList<DeclarationComponent>>();
-    expectTypeOf(declaration.resolve(ValueStage.Computed, {}).value)
+    expectTypeOf(declaration.repr).toEqualTypeOf<NonEmptyTokenList<DeclarationComponent>>();
+    expectTypeOf(declaration.resolve(ValueStage.Computed, {}).repr)
       .toEqualTypeOf<NonEmptyTokenList<DeclarationComponent>>();
   });
 });
@@ -122,7 +122,7 @@ describe('OptionalDeclarationValue optional grammar', () => {
     const list = parseListOfComponentValues('/**/red/**/', {});
     const declaration = OptionalDeclarationValue.parse(list, {})!;
 
-    expect(declaration.value.sourceText()).toBe('/**/red/**/');
+    expect(declaration.repr.sourceText()).toBe('/**/red/**/');
   });
 
   it('retains its own class for both empty and nonempty input', () => {
@@ -131,7 +131,7 @@ describe('OptionalDeclarationValue optional grammar', () => {
       const parsed = OptionalDeclarationValue.parse(list, {})!;
       const consumed = OptionalDeclarationValue.consume(new TokenCursor(list, {}))!;
 
-      expect(parsed.value).toBe(list);
+      expect(parsed.repr).toBe(list);
       for (const declaration of [parsed, consumed]) {
         expect(declaration).toBeInstanceOf(OptionalDeclarationValue);
         expect(declaration).not.toBeInstanceOf(DeclarationValue);
@@ -144,7 +144,7 @@ describe('OptionalDeclarationValue optional grammar', () => {
   it('does not claim a nonempty payload', () => {
     const optional = OptionalDeclarationValue.parse('', {})!;
 
-    expectTypeOf(optional.value).toEqualTypeOf<TokenList<DeclarationComponent>>();
+    expectTypeOf(optional.repr).toEqualTypeOf<TokenList<DeclarationComponent>>();
     expectTypeOf(optional).not.toExtend<DeclarationValue>();
     expectTypeOf(optional.resolve(ValueStage.Computed, {})).toEqualTypeOf<OptionalDeclarationValue>();
   });

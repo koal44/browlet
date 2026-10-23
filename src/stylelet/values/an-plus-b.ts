@@ -16,10 +16,10 @@ import type { Value } from './value';
 // https://drafts.csswg.org/css-syntax-3/#the-anb-type
 export class AnPlusBValue implements Value {
   /** Finite integer coefficients, normalized when parsing. */
-  value: AnPlusB;
+  repr: AnPlusB;
 
   constructor(value: AnPlusB) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete An+B formula. */
@@ -40,7 +40,7 @@ export class AnPlusBValue implements Value {
   /** Serialize the stored coefficients in canonical An+B form. */
   // https://drafts.csswg.org/css-syntax-3/#serializing-anb
   serialize(): string {
-    const { a, b } = this.value;
+    const { a, b } = this.repr;
     if (a === 0) {
       return serializeCssInteger(b);
     }

@@ -10,10 +10,10 @@ import { DeclarationValue } from '../declaration-value';
 // https://drafts.csswg.org/css-values-5/#first-valid
 export class FirstValidValue {
   /** Unevaluated alternatives, retained for lazy selection at Computed time. */
-  value: [DeclarationValue, ...DeclarationValue[]];
+  repr: [DeclarationValue, ...DeclarationValue[]];
 
   constructor(value: [DeclarationValue, ...DeclarationValue[]]) {
-    this.value = value;
+    this.repr = value;
   }
 
   static parse(input: ParserInput, context: unknown): FirstValidValue | null {
@@ -25,9 +25,9 @@ export class FirstValidValue {
   }
 
   serialize(): string {
-    const args = this.value.map((declaration) => {
+    const args = this.repr.map((declaration) => {
       const text = declaration.serialize();
-      const requiresBraces = declaration.value.tokens.some((component) =>
+      const requiresBraces = declaration.repr.tokens.some((component) =>
         isTokenKind(component, TokenKind.Comma) || isBraceBlock(component)
       );
       return requiresBraces ? `{${text}}` : text;

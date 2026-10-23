@@ -16,6 +16,25 @@ import { StyleletContext } from '../../../../src/stylelet/context';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('cascade engine', () => {
+  it('retains property records in computed values, including inherited custom properties', () => {
+    const document = createBrowletDocument('<main><span></span></main>');
+    const { engine, scope } = createCascade({ context: new StyleletContext(document, document.env) });
+    const sheet = addStyleSheet(scope, 'main { --base: 10px; --gap: var(--base); color: red } span { --base: 20px }');
+    const rule = sheet.cssRules.item(0) as CSSStyleRuleImpl;
+    const gap = rule.style.getDeclaration('--gap')!;
+    const color = rule.style.getDeclaration('color')!;
+    const parent = engine.getComputedStyle(document.querySelector('main')!, scope);
+    const child = engine.getComputedStyle(document.querySelector('span')!, scope);
+
+    expect(parent.computedStyle!.get('color')!.property).toBe(color.property);
+    expect(parent.computedStyle!.get('--gap')!.property).toBe(gap.property);
+    expect(child.computedStyle!.get('--gap')!.property).toBe(gap.property);
+    expect(parent.declarations).toEqual([]);
+    expect(parent.getDeclaration('color')).toBeUndefined();
+    expect(child.getPropertyValue('--gap')).toBe('10px');
+    expect(gap.serializeValue()).toBe('var(--base)');
+  });
+
   it('reads the root-owned final stylesheets in document order', () => {
     const { engine, scope } = createCascade();
     const first = addStyleSheet(scope, '* { color: red }');
@@ -52,7 +71,7 @@ describe('cascade engine', () => {
       custom: false,
       name: 'color',
     });
-    expect(color.declaration).toHaveProperty('value.value.value', expect.any(OptionalDeclarationValue));
+    expect(color.declaration).toHaveProperty('value.inner.repr', expect.any(OptionalDeclarationValue));
     const accent = engine.getCascadedProperty('--accent', scope)!;
     expect(accent.styleSheet).toBe(styleSheet);
     expect(accent.scope).toBe(scope);

@@ -13,9 +13,9 @@ describe('AnyValue', () => {
     const value = AnyValue.parse(list, {})!;
 
     expect(value).toBeInstanceOf(AnyValue);
-    expect(value.value).toBe(list);
-    expect(value.value.tokens).toBe(list.tokens);
-    expect(value.value.sourceText()).toBe('a /**/ fn(b)');
+    expect(value.repr).toBe(list);
+    expect(value.repr.tokens).toBe(list.tokens);
+    expect(value.repr.sourceText()).toBe('a /**/ fn(b)');
     // The comment separates two whitespace tokens; serialization retains both.
     expect(value.serialize()).toBe('a  fn(b)');
   });
@@ -25,8 +25,8 @@ describe('AnyValue', () => {
     const cursor = new TokenCursor(list, {});
     const value = AnyValue.consume(cursor)!;
 
-    expect(value.value).toBe(list);
-    expect(value.value.sourceText()).toBe('fn( a ) foo\\62 ar');
+    expect(value.repr).toBe(list);
+    expect(value.repr.sourceText()).toBe('fn( a ) foo\\62 ar');
     expect(cursor.eof()).toBe(true);
   });
 
@@ -35,8 +35,8 @@ describe('AnyValue', () => {
     const cursor = new TokenCursor(list, {}, { position: 2 });
     const value = AnyValue.consume(cursor)!;
 
-    expect(value.value.sourceText()).toBe('a /**/ fn(b)');
-    expect(value.value.tokens[0]).toBe(list.tokens[2]);
+    expect(value.repr.sourceText()).toBe('a /**/ fn(b)');
+    expect(value.repr.tokens[0]).toBe(list.tokens[2]);
     expect(cursor.pos()).toBe(6);
     expect(list.sourceText()).toBe('skip a /**/ fn(b)) rest');
   });
@@ -69,7 +69,7 @@ describe('any-value', () => {
   it('parses a nonempty sequence of arbitrary component values', () => {
     const expected = parseListOfComponentValues('a ! b; fn() []', {});
     expect(AnyValue.parse('a ! b; fn() []', {})).toEqual({
-      value: expected,
+      repr: expected,
     });
   });
 
@@ -77,13 +77,13 @@ describe('any-value', () => {
     const list = parseListOfComponentValues('a /**/ fn( b )', {});
     const value = AnyValue.parse(list, {});
 
-    expect(value?.value).toBeInstanceOf(TokenList);
-    expect(value?.value).toBe(list);
-    expect(value?.value.tokens).toEqual(list.tokens);
+    expect(value?.repr).toBeInstanceOf(TokenList);
+    expect(value?.repr).toBe(list);
+    expect(value?.repr.tokens).toEqual(list.tokens);
     for (let i = 0; i < list.tokens.length; i++) {
-      expect(value?.value.tokens[i]).toBe(list.tokens[i]);
+      expect(value?.repr.tokens[i]).toBe(list.tokens[i]);
     }
-    expect(value?.value.sourceText()).toBe('a /**/ fn( b )');
+    expect(value?.repr.sourceText()).toBe('a /**/ fn( b )');
   });
 
   it('consumes the remaining nonempty component-value sequence', () => {
@@ -91,9 +91,9 @@ describe('any-value', () => {
     const c = new TokenCursor(list, {});
     const value = AnyValue.consume(c);
 
-    expect(value?.value).toBeInstanceOf(TokenList);
+    expect(value?.repr).toBeInstanceOf(TokenList);
     expect(value).toEqual({
-      value: list,
+      repr: list,
     });
     expect(c.pos()).toBe(list.tokens.length);
   });
@@ -103,7 +103,7 @@ describe('any-value', () => {
     const c = new TokenCursor(list, {});
 
     expect(AnyValue.consume(c)).toEqual({
-      value: list.slice(0, 1),
+      repr: list.slice(0, 1),
     });
     expect(c.pos()).toBe(1);
     expect(c.peek()).toBe(RightParenToken);

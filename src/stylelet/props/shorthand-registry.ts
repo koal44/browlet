@@ -1,6 +1,6 @@
 import { marginShorthand } from './built-in/index';
 
-import { propertyRegistry, type BuiltInPropertyName } from './registry';
+import { builtInRegistry, type BuiltInPropertyName } from './registry';
 
 /** Known shorthands; each instance owns its shared handling and family grammar. */
 export const shorthandRegistry = {
@@ -33,7 +33,7 @@ const preferredShorthands = Object.values(shorthandRegistry)
 
 // Each relationship is declared once, on its shorthand; build the reverse lookup once too.
 const shorthandsByLonghand = new Map<BuiltInPropertyName, RegisteredShorthand[]>();
-for (const name of Object.keys(propertyRegistry) as BuiltInPropertyName[]) shorthandsByLonghand.set(name, []);
+for (const name of Object.keys(builtInRegistry) as BuiltInPropertyName[]) shorthandsByLonghand.set(name, []);
 for (const shorthand of preferredShorthands) {
-  for (const [name] of shorthand.longhands) shorthandsByLonghand.get(name)!.push(shorthand);
+  for (const { name } of shorthand.longhands) shorthandsByLonghand.get(name)!.push(shorthand);
 }

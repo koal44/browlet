@@ -14,7 +14,9 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 tester.run('dependency-direction', direction, {
   valid: [
     { filename: sourceFile('stylelet/props/registry'), code: "import { colorProperty } from './built-in/index';" },
-    { filename: sourceFile('stylelet/props/built-in/color'), code: "import { PropertyRecord } from '../property';" },
+    { filename: sourceFile('stylelet/props/built-in/color'), code: "import { BuiltInProperty } from '../builtin-property';" },
+    { filename: sourceFile('stylelet/props/builtin-property'), code: "import { BaseProperty } from './base-property';" },
+    { filename: sourceFile('stylelet/props/custom-property'), code: "import { BaseProperty } from './base-property';" },
     { filename: sourceFile('stylelet/props/built-in/margin'), code: "import { Shorthand } from '../shorthand';" },
     { filename: sourceFile('stylelet/syntax/parser'), code: "import type { InterpretedDeclaration } from '../cssom/declarations/index';" },
     { filename: sourceFile('stylelet/cssom/rules/style'), code: "import { CSSStylePropertiesImpl } from '../declarations/index';" },
@@ -77,8 +79,8 @@ tester.run('dependency-direction', direction, {
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/cssom/media', target: 'stylelet/cssom/rules' } }],
     },
     {
-      filename: sourceFile('stylelet/props/property'), code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';",
-      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/property', target: 'stylelet/cssom/declarations' } }],
+      filename: sourceFile('stylelet/props/base-property'), code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/base-property', target: 'stylelet/cssom/declarations' } }],
     },
 
     {

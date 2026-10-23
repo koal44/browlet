@@ -12,12 +12,12 @@ import { MathValue, type MathContext } from './math-value';
 
 /** A <time> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#time
-export class TimeValue<Representation extends Time = Time> implements Value<MathContext> {
+export class TimeValue<R extends Time = Time> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <time>. */
@@ -45,20 +45,20 @@ export class TimeValue<Representation extends Time = Time> implements Value<Math
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): TimeValue {
-    const previous = this.value;
+    const previous = this.repr;
     const resolved = previous.resolve(stage, context);
     return resolved === previous ? this : new TimeValue(resolved);
   }
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: TimeValue, context: MathContext = {}): TimeValue {
-    if (this.value instanceof TimeLiteral && other.value instanceof TimeLiteral && this.value.unit === other.value.unit) {
-      return new TimeValue(this.value.add(other.value));
+    if (this.repr instanceof TimeLiteral && other.repr instanceof TimeLiteral && this.repr.unit === other.repr.unit) {
+      return new TimeValue(this.repr.add(other.repr));
     }
     return new TimeValue(
       this.#asMathValue(context).add(other.#asMathValue(context), context),
@@ -67,8 +67,8 @@ export class TimeValue<Representation extends Time = Time> implements Value<Math
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: TimeValue, progress: number, context: MathContext = {}): TimeValue {
-    if (this.value instanceof TimeLiteral && other.value instanceof TimeLiteral && this.value.unit === other.value.unit) {
-      return new TimeValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof TimeLiteral && other.repr instanceof TimeLiteral && this.repr.unit === other.repr.unit) {
+      return new TimeValue(this.repr.interpolate(other.repr, progress));
     }
     return new TimeValue(
       this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
@@ -81,8 +81,8 @@ export class TimeValue<Representation extends Time = Time> implements Value<Math
   }
 
   #asMathValue(context: MathContext): MathValue<'time'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'time', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'time', context);
   }
 }
 

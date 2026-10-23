@@ -13,10 +13,10 @@ import { CSS_WIDE_KEYWORDS } from './css-wide';
 // https://drafts.csswg.org/css-values-4/#custom-idents
 export class CustomIdentValue implements Value {
   /** The decoded identifier with its original case. */
-  value: string;
+  repr: string;
 
   constructor(value: string) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete identifier using the containing grammar's exclusions. */
@@ -51,7 +51,7 @@ export class CustomIdentValue implements Value {
 
   /** Escape the retained identifier without changing its case. */
   serialize(): string {
-    return serializeCssIdentifier(this.value);
+    return serializeCssIdentifier(this.repr);
   }
 }
 

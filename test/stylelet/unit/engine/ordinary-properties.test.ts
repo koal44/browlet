@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { marginShorthand } from '../../../../src/stylelet/props/built-in/margin';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
-import { PendingSubstitutionValue } from '../../../../src/stylelet/values/pending-substitution';
+import { WholeValue } from '../../../../src/stylelet/values/whole-value';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('computed ordinary properties', () => {
@@ -69,6 +69,16 @@ describe('computed ordinary properties', () => {
     expect(document.getStyleEngine().getComputedStyle(element).getPropertyValue('opacity')).toBe('0.5');
   });
 
+  it('selects a custom whole value before substituting its consumers', () => {
+    const document = createBrowletDocument('<main style="--gap: first-valid(2px, var(--gap)); margin-left: var(--gap)"></main>');
+    const element = document.querySelector('main')!;
+    const computed = document.getStyleEngine().getComputedStyle(element);
+
+    expect(computed.getPropertyValue('--gap')).toBe('2px');
+    expect(computed.getPropertyValue('margin-left')).toBe('2px');
+    expect(element.getInlineStyleBlock()!.find('--gap')!.serializeValue()).toBe('first-valid(2px, var(--gap))');
+  });
+
   it('does not retry first-valid alternatives after a selected var() fails computation', () => {
     const document = createBrowletDocument('<main style="opacity: first-valid(var(--missing), .5)"></main>');
     const element = document.querySelector('main')!;
@@ -99,7 +109,7 @@ describe('computed ordinary properties', () => {
     const document = createBrowletDocument(`<main style="margin: 3px; margin: ${value}; margin-left: 9px"></main>`);
     const element = document.querySelector('main')!;
     element.getInlineStyleBlock();
-    const expand = vi.spyOn(PendingSubstitutionValue.prototype, 'expand');
+    const expand = vi.spyOn(WholeValue.prototype, 'expandShorthand');
     try {
       expect(document.getStyleEngine().getComputedStyle(element).getPropertyValue('margin')).toBe('0px 0px 0px 9px');
       expect(expand).toHaveBeenCalledTimes(1);

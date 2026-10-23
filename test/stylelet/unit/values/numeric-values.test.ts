@@ -22,8 +22,8 @@ type NumericValue = NumberValue | AngleValue | FrequencyValue | LengthValue | Re
 
 function representation(numeric: NumericValue | null) {
   if (numeric === null) return null;
-  const payload = numeric.value;
-  return payload instanceof MathValue ? payload.value : payload;
+  const payload = numeric.repr;
+  return payload instanceof MathValue ? payload.repr : payload;
 }
 
 function expectLiteralResolution(
@@ -185,8 +185,8 @@ describe('number values', () => {
     const math = NumberValue.parse('calc(4)', {})!;
     const forward = literal.add(math);
     const reverse = math.add(literal);
-    expect(forward.value).toBeInstanceOf(MathValue);
-    expect(reverse.value).toBeInstanceOf(MathValue);
+    expect(forward.repr).toBeInstanceOf(MathValue);
+    expect(reverse.repr).toBeInstanceOf(MathValue);
     expect(forward.serialize()).toBe('calc(6)');
     expect(reverse.serialize()).toBe('calc(6)');
   });
@@ -196,8 +196,8 @@ describe('number values', () => {
     const math = NumberValue.parse('calc(4)', {})!;
     const interpolated = literal.interpolate(math, 0.25);
     const accumulated = literal.accumulate(math);
-    expect(interpolated.value).toBeInstanceOf(MathValue);
-    expect(accumulated.value).toBeInstanceOf(MathValue);
+    expect(interpolated.repr).toBeInstanceOf(MathValue);
+    expect(accumulated.repr).toBeInstanceOf(MathValue);
     expect(interpolated.serialize()).toBe('calc(2.5)');
     expect(accumulated.serialize()).toBe('calc(6)');
   });

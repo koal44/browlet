@@ -12,10 +12,10 @@ import { AnyValue } from './any-value';
 // https://drafts.csswg.org/css-syntax-3/#any-value
 export class DeclarationValue implements Value {
   /** Validated components and source spans, retained without copying an existing list. */
-  value: NonEmptyTokenList<DeclarationComponent>;
+  repr: NonEmptyTokenList<DeclarationComponent>;
 
   private constructor(value: NonEmptyTokenList<DeclarationComponent>) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete nonempty declaration, retaining an existing component list. */
@@ -37,7 +37,7 @@ export class DeclarationValue implements Value {
 
   /** Serialize the retained components without interpreting the property's grammar. */
   serialize(): string {
-    return serializeComponentValues(this.value.tokens);
+    return serializeComponentValues(this.repr.tokens);
   }
 }
 
@@ -45,14 +45,14 @@ export class DeclarationValue implements Value {
 // https://drafts.csswg.org/css-syntax-3/#any-value
 export class OptionalDeclarationValue implements Value {
   /** Validated components and source spans, retained without copying an existing list. */
-  value: TokenList<DeclarationComponent>;
+  repr: TokenList<DeclarationComponent>;
 
   private constructor(value: TokenList<DeclarationComponent>) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete declaration, also accepting an empty component list. */
-  static parse(input: ParserInput, context: unknown): OptionalDeclarationValue | null {
+  static parse(this: void, input: ParserInput, context: unknown): OptionalDeclarationValue | null {
     const list = parseListOfComponentValues(input, context);
     return isDeclarationValueContents(list) ? new OptionalDeclarationValue(list) : null;
   }
@@ -72,7 +72,7 @@ export class OptionalDeclarationValue implements Value {
 
   /** Serialize the retained components without interpreting the property's grammar. */
   serialize(): string {
-    return serializeComponentValues(this.value.tokens);
+    return serializeComponentValues(this.repr.tokens);
   }
 }
 
@@ -93,12 +93,12 @@ function consumeDeclarationValueContents(c: TokenCursor): NonEmptyTokenList<Decl
   const result = AnyValue.consume(c);
 
   if (result === null) return null;
-  if (!hasOnlyDeclarationComponents(result.value)) {
+  if (!hasOnlyDeclarationComponents(result.repr)) {
     c.restore(start);
     return null;
   }
 
-  return result.value;
+  return result.repr;
 }
 
 function isDeclarationValueContents(

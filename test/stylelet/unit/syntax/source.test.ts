@@ -145,8 +145,8 @@ describe('source spelling through component parsing', () => {
     const value = FirstValidValue.parse('first-valid({ --x: fn(a) /**/ foo\\62 ar })', {});
 
     expect(value).not.toBeNull();
-    const [argument] = value!.value;
-    expect(parseDeclaration(argument.value, {})?.value.sourceText())
+    const [argument] = value!.repr;
+    expect(parseDeclaration(argument.repr, {})?.value.sourceText())
       .toBe('fn(a) /**/ foo\\62 ar');
   });
 });

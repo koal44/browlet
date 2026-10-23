@@ -3,13 +3,12 @@ import { InternalError } from '../../infra/internal-error';
 
 import type { StyleletURL } from '../environment';
 import { ValueStage } from '../value-processing/index';
+import type { PendingShorthand, WholeValue, Value } from '../values/index';
 import {
-  CssWideValue, GuaranteedInvalidValue, guaranteedInvalidValue, OptionalDeclarationValue, SubstitutionValue,
-  PendingSubstitutionValue, type PendingShorthand, type WholeValue, type Value,
-} from '../values/index';
-import {
-  propertyRegistry, type BuiltInPropertyName, type CustomPropertyName, type CustomPropertyRegistration,
-  type CustomPropertyRegistry, type PropertyContext, type PropertyName, type PropertyValue,
+  propertyRegistry, CustomProperty, type BuiltInPropertyName,
+  type CustomPropertyName, type CustomPropertyRegistration, type CustomPropertyValue,
+  type CustomPropertyRegistry, type PropertyContext, type PropertyName,
+  type BuiltInProperty,
 } from '../props/index';
 import { matchSelectorList, type Specificity } from '../selector/index';
 import type { StyleletContext } from '../context';
@@ -20,6 +19,7 @@ import {
 } from '../cssom/index';
 
 import type { TreeScope } from './tree-scope';
+import { ComputedStyle } from './computed-style';
 import { createSystemColorPalette, type SystemColorPalette } from './system-colors';
 
 /** Select declarations and compute values using the owning document's context. */
@@ -27,7 +27,7 @@ export class CascadeEngine {
   /** Specificity used by element-free declaration queries. */
   static #zeroSpecificity: Specificity = { a: 0, b: 0, c: 0 };
 
-  /** Document-wide custom-property registrations, pending integration with the document's registry. */
+  /** Explicit document registrations, pending integration with CSS.registerProperty(). */
   registeredPropertySet: CustomPropertyRegistry;
 
   /** Document API base URL used when a declaration's stylesheet supplies neither a base nor a location. */
@@ -41,7 +41,7 @@ export class CascadeEngine {
 
   /** Retain the document context, fallback URL base, and optional registration map. */
   constructor(options: CascadeEngineOptions) {
-    this.registeredPropertySet = options.registeredPropertySet ?? new Map();
+    this.registeredPropertySet = options.registeredPropertySet ?? new Map<CustomPropertyName, CustomPropertyRegistration>();
     this.environmentBaseUrl = options.environmentBaseUrl;
     this.context = options.context;
   }
@@ -86,24 +86,31 @@ export class CascadeEngine {
     scope: TreeScope,
   ): CSSStyleDeclarationImpl {
     // Reuse parent results within this query; DOM, sheet, registration, and host inputs can change before the next one.
-    const declarations = new Map<Element, CascadedProperties>();
-    const customPropertiesByElement = new Map<Element, ComputedCustomProperties>();
-    const builtInPropertiesByElement = new Map<Element, ComputedBuiltInProperties>();
-    const guards: CustomPropertyGuard[] = [];
-    const computed: InterpretedDeclaration[] = [];
-    for (const name of Object.keys(propertyRegistry) as BuiltInPropertyName[]) {
-      const value = this.#getBuiltInProperty(name, element, scope, declarations, builtInPropertiesByElement, customPropertiesByElement, guards);
-      computed.push(new InterpretedDeclaration(name, value) as InterpretedDeclaration<BuiltInPropertyName>);
+    const cascadedByElement = new Map<Element, CascadedProperties>();
+    const customValuesByElement = new Map<Element, ComputedCustomValues>();
+    const builtInCacheByElement = new Map<Element, BuiltInPropertyCache>();
+    const customPropertyRegistry = this.collectCustomPropertyRegistry(scope);
+    const dependencyStack: CustomPropertyDependency[] = [];
+    const computedStyle = new ComputedStyle();
+    for (const property of Object.values(propertyRegistry)) {
+      const value = this.#getComputedBuiltInValue(
+        property, element, scope, cascadedByElement, builtInCacheByElement,
+        customValuesByElement, dependencyStack, customPropertyRegistry,
+      );
+      computedStyle.set(property, value);
     }
-    for (const name of this.#getCustomPropertyNames(element, scope, declarations)) {
-      const value = this.#getCustomProperty(name, element, scope, declarations, customPropertiesByElement, guards);
+    for (const property of this.#getCustomProperties(element, scope, cascadedByElement).values()) {
+      const value = this.#getComputedCustomValue(
+        property.name, element, scope, cascadedByElement, customValuesByElement, dependencyStack, customPropertyRegistry,
+      );
       // SPEC_CLASH(guaranteed-invalid-enumeration): Follow CSSOM by excluding invalid
       // values; Chromium, Firefox, and WebKit enumerate names explicitly reset to initial.
-      if (!(value instanceof GuaranteedInvalidValue)) computed.push(new InterpretedDeclaration(name, value));
+      if (!value.isGuaranteedInvalid()) {
+        computedStyle.set(property, value);
+      }
     }
     return new CSSStylePropertiesImpl({
-      computed: true,
-      block: new CSSDeclarationBlock(computed),
+      computedStyle,
       readonly: true,
     }, this.context.env);
   }
@@ -113,7 +120,7 @@ export class CascadeEngine {
     name: PropertyName,
     scope: TreeScope,
   ): CascadedProperty | null {
-    return this.#getCascadedProperties(scope).get(name) ?? null;
+    return this.#getCascadedSheetDeclarations(scope).get(name) ?? null;
   }
 
   /** Select a property from rules matching this element in the supplied scope. */
@@ -122,12 +129,12 @@ export class CascadeEngine {
     element: Element,
     scope: TreeScope,
   ): CascadedProperty | null {
-    return this.#getCascadedProperties(scope, element).get(name) ?? null;
+    return this.#getCascadedSheetDeclarations(scope, element).get(name) ?? null;
   }
 
   /** Supply host color inputs and, when present, the selected declaration's URL base and scope. */
-  getPropertyContext(property?: CascadedProperty): PropertyContext {
-    const styleSheet = property?.styleSheet;
+  getPropertyContext(cascaded?: CascadedProperty): PropertyContext {
+    const styleSheet = cascaded?.styleSheet;
     const baseUrl = styleSheet?.baseURL ??
       styleSheet?.location ??
       this.environmentBaseUrl;
@@ -135,29 +142,25 @@ export class CascadeEngine {
     return {
       URL: this.context.env.userAgent.URL,
       systemColors: this.context.env.userAgent.systemColors ?? (this.#defaultSystemColors ??= createSystemColorPalette()),
-      treeScope: property?.scope,
+      treeScope: cascaded?.scope,
       ...(baseUrl === undefined ? {} : { baseUrl }),
     };
   }
 
-  /** Find a document registration or the last applicable @property registration in the scope. */
+  /** Collect active @property rules, then apply the higher-priority explicit registrations. */
   // https://drafts.css-houdini.org/css-properties-values-api-1/#determining-registration
-  getCustomPropertyRegistration(
-    name: CustomPropertyName,
-    scope: TreeScope,
-  ): CustomPropertyRegistration | null {
-    const registered = this.registeredPropertySet.get(name);
-    if (registered !== undefined) return registered;
-
-    let declared = null;
+  collectCustomPropertyRegistry(scope: TreeScope): CustomPropertyRegistry {
+    // TODO: Collect registrations across the document's shadow scopes as well.
+    const registry = new Map<CustomPropertyName, CustomPropertyRegistration>();
     for (const styleSheet of this.getActiveStyleSheets(scope)) {
       for (const rule of styleSheet.ruleList) {
-        if (rule instanceof CSSPropertyRuleImpl && rule.registration.name === name) {
-          declared = rule.registration;
+        if (rule instanceof CSSPropertyRuleImpl) {
+          registry.set(rule.registration.name, rule.registration);
         }
       }
     }
-    return declared;
+    for (const [name, registration] of this.registeredPropertySet) registry.set(name, registration);
+    return registry;
   }
 
   /** Select all property names together so custom properties participate without a fixed registry. */
@@ -165,7 +168,7 @@ export class CascadeEngine {
   // This is the author-normal/important slice of cascade sorting. Origins,
   // encapsulation context, layers, animations, and transitions enter here as
   // their representations are added to the engine.
-  #getCascadedProperties(scope: TreeScope, element?: Element): CascadedProperties {
+  #getCascadedSheetDeclarations(scope: TreeScope, element?: Element): CascadedProperties {
     const result = new Map<PropertyName, CascadedProperty & { specificity: Specificity; }>();
 
     for (const styleSheet of this.getActiveStyleSheets(scope)) {
@@ -202,12 +205,12 @@ export class CascadeEngine {
   }
 
   /** Select between inline and sheet declarations; inline wins at equal importance. */
-  #getDeclarations(
+  #getCascadedDeclarations(
     element: Element,
     scope: TreeScope,
-    declarations: Map<Element, CascadedProperties>,
+    cascadedByElement: Map<Element, CascadedProperties>,
   ): CascadedProperties {
-    const cached = declarations.get(element);
+    const cached = cascadedByElement.get(element);
     if (cached !== undefined) return cached;
     const dom = this.context.dom;
     const root = dom.root(element);
@@ -221,14 +224,14 @@ export class CascadeEngine {
     const inline = block === undefined
       ? new CSSDeclarationBlock(InterpretedDeclaration.parseBlock(dom.getAttributeNS(element, null, 'style') ?? '', {}))
       : block instanceof CSSDeclarationBlock ? block : null;
-    const selected = this.#getCascadedProperties(scope, element);
+    const selected = this.#getCascadedSheetDeclarations(scope, element);
     for (const declaration of inline?.declarations ?? []) {
       const cascaded = selected.get(declaration.name)?.declaration;
       if (cascaded === undefined || declaration.important || !cascaded.important) {
         selected.set(declaration.name, { declaration, styleSheet: null, scope });
       }
     }
-    declarations.set(element, selected);
+    cascadedByElement.set(element, selected);
     return selected;
   }
 
@@ -236,138 +239,148 @@ export class CascadeEngine {
   // https://drafts.csswg.org/css-values-5/#resolve-property
   // https://drafts.csswg.org/css-values-5/#invalid-at-computed-value-time
   // https://drafts.csswg.org/css-cascade-5/#defaulting
-  #getBuiltInProperty(
-    name: BuiltInPropertyName,
+  #getComputedBuiltInValue(
+    property: BuiltInProperty<Value, BuiltInPropertyName>,
     element: Element,
     scope: TreeScope,
-    declarations: Map<Element, CascadedProperties>,
-    builtInPropertiesByElement: Map<Element, ComputedBuiltInProperties>,
-    customPropertiesByElement: Map<Element, ComputedCustomProperties>,
-    guards: CustomPropertyGuard[],
-  ): PropertyValue<BuiltInPropertyName> {
-    let values = builtInPropertiesByElement.get(element);
-    if (values === undefined) {
-      values = { properties: new Map(), shorthands: new Map() };
-      builtInPropertiesByElement.set(element, values);
+    cascadedByElement: Map<Element, CascadedProperties>,
+    builtInCacheByElement: Map<Element, BuiltInPropertyCache>,
+    customValuesByElement: Map<Element, ComputedCustomValues>,
+    dependencyStack: CustomPropertyDependency[],
+    customPropertyRegistry: CustomPropertyRegistry,
+  ): WholeValue {
+    const { name } = property;
+    let elementCache = builtInCacheByElement.get(element);
+    if (elementCache === undefined) {
+      elementCache = { propertyValues: new Map(), shorthandExpansions: new Map() };
+      builtInCacheByElement.set(element, elementCache);
     }
-    const cached = values.properties.get(name);
+    const cached = elementCache.propertyValues.get(name);
     if (cached !== undefined) return cached;
 
-    const property = this.#getDeclarations(element, scope, declarations).get(name);
-    const context = this.getPropertyContext(property);
-    const declaration = property?.declaration;
-    context.getCustomProperty = (referencedName) =>
-      this.#getCustomProperty(referencedName, element, scope, declarations, customPropertiesByElement, guards);
-    let specified = declaration !== undefined && !declaration.custom ? declaration.value : undefined;
-    if (specified instanceof PendingSubstitutionValue) {
-      let expanded = values.shorthands.get(specified.shorthand);
-      if (expanded === undefined) {
-        expanded = specified.expand(context);
-        values.shorthands.set(specified.shorthand, expanded);
+    const cascaded = this.#getCascadedDeclarations(element, scope, cascadedByElement).get(name);
+    const context = this.getPropertyContext(cascaded);
+    context.customPropertyRegistry = customPropertyRegistry;
+    const declaration = cascaded?.declaration;
+    context.getCustomProperty = (referencedName) => {
+      const computed = this.#getComputedCustomValue(
+        referencedName, element, scope, cascadedByElement, customValuesByElement, dependencyStack, customPropertyRegistry,
+      );
+      if (computed.isOrdinaryValue() || computed.isGuaranteedInvalid()) return computed.inner;
+      throw new InternalError('Custom-property computation left unresolved notation');
+    };
+    let specified: WholeValue | undefined = declaration !== undefined && !declaration.custom ? declaration.value : undefined;
+    if (specified?.isPendingSubstitution()) {
+      let longhandValues = elementCache.shorthandExpansions.get(specified.shorthand);
+      if (longhandValues === undefined) {
+        longhandValues = specified.expandShorthand(context);
+        elementCache.shorthandExpansions.set(specified.shorthand, longhandValues);
       }
-      specified = expanded?.[specified.index] as PropertyValue<BuiltInPropertyName> | undefined;
+      specified = longhandValues?.[specified.shorthandIndex];
     }
-    let computed = specified?.resolve(ValueStage.Computed, context);
-    const value = computed?.value;
-    const keyword = value instanceof CssWideValue ? value.value : undefined;
-    const record = propertyRegistry[name];
+    let computed = specified === undefined ? undefined : property.resolve(specified, ValueStage.Computed, context);
+    const keyword = computed?.cssWideKeyword();
 
     if (keyword === 'revert' || keyword === 'revert-layer') {
       // TODO: Preserve origin/layer candidates for rollback during the full Cascade review.
       throw new InternalError('Built-in property cascade rollback is not implemented');
     }
-    if (computed === undefined || value instanceof GuaranteedInvalidValue || keyword !== undefined) {
+    if (computed === undefined || computed.isGuaranteedInvalid() || keyword !== undefined) {
       // A computed-time failure defaults like unset; it never revives an earlier declaration.
-      const inherit = keyword === 'inherit' || (keyword !== 'initial' && record.inherits);
+      const inherit = keyword === 'inherit' || (keyword !== 'initial' && property.inherits);
       const parent = inherit ? this.#getInheritanceParent(element, scope) : null;
       computed = parent === null
-        ? record.initialValue.resolve(ValueStage.Computed, context)
-        : this.#getBuiltInProperty(name, parent, scope, declarations, builtInPropertiesByElement, customPropertiesByElement, guards);
+        ? property.resolve(property.initialValue, ValueStage.Computed, context)
+        : this.#getComputedBuiltInValue(
+          property, parent, scope, cascadedByElement, builtInCacheByElement,
+          customValuesByElement, dependencyStack, customPropertyRegistry,
+        );
     }
 
     // TODO: Supply font/viewport facts, per-element color-scheme selection, and
     // currentColor/other used-value inputs required by CSSOM.
-    // Resolution stays within this registry entry's value family.
-    const result = computed as PropertyValue<BuiltInPropertyName>;
-    values.properties.set(name, result);
-    return result;
+    elementCache.propertyValues.set(name, computed);
+    return computed;
   }
 
   /** Resolve a custom property, inheriting computed values rather than declarations. */
   // https://drafts.csswg.org/css-variables-1/#defining-variables
   // https://drafts.csswg.org/css-cascade-5/#defaulting
-  #getCustomProperty(
+  #getComputedCustomValue(
     name: CustomPropertyName,
     element: Element,
     scope: TreeScope,
-    declarations: Map<Element, CascadedProperties>,
-    customPropertiesByElement: Map<Element, ComputedCustomProperties>,
-    guards: CustomPropertyGuard[],
-  ): ComputedCustomProperty {
-    let values = customPropertiesByElement.get(element);
-    if (values === undefined) {
-      values = new Map();
-      customPropertiesByElement.set(element, values);
+    cascadedByElement: Map<Element, CascadedProperties>,
+    customValuesByElement: Map<Element, ComputedCustomValues>,
+    dependencyStack: CustomPropertyDependency[],
+    customPropertyRegistry: CustomPropertyRegistry,
+  ): CustomPropertyValue {
+    let computedValues = customValuesByElement.get(element);
+    if (computedValues === undefined) {
+      computedValues = new Map();
+      customValuesByElement.set(element, computedValues);
     }
-    const cached = values.get(name);
+    const cached = computedValues.get(name);
     if (cached !== undefined) return cached;
     // https://drafts.csswg.org/css-values-5/#substitution-context
     // Include the element: inheriting the same name from a parent is not a cycle.
-    const cycle = guards.findIndex((guard) => guard.element === element && guard.name === name);
-    if (cycle !== -1) {
-      for (let i = cycle; i < guards.length; i++) guards[i]!.cyclic = true;
-      return guaranteedInvalidValue;
+    const cycleStart = dependencyStack.findIndex((dependency) => dependency.element === element && dependency.name === name);
+    if (cycleStart !== -1) {
+      for (let i = cycleStart; i < dependencyStack.length; i++) dependencyStack[i]!.cyclic = true;
+      return CustomProperty.initialValue;
     }
-    if (this.getCustomPropertyRegistration(name, scope) !== null) {
-      // TODO: Apply registered syntax, inherits, initial value, and computational independence.
-      throw new InternalError('Registered custom-property computation is not implemented');
-    }
-
-    const guard = { element, name, cyclic: false };
-    guards.push(guard);
+    const dependency = { element, name, cyclic: false };
+    dependencyStack.push(dependency);
     try {
-      const declaration = this.#getDeclarations(element, scope, declarations).get(name)?.declaration;
-      let value: ComputedCustomProperty = declaration?.custom ? declaration.value : guaranteedInvalidValue;
-      if (value instanceof OptionalDeclarationValue && SubstitutionValue.containsFunction(value.value)) {
-        const substituted = new SubstitutionValue(value).substitute((referencedName) =>
-          this.#getCustomProperty(referencedName, element, scope, declarations, customPropertiesByElement, guards),
+      const cascaded = this.#getCascadedDeclarations(element, scope, cascadedByElement).get(name);
+      const declaration = cascaded?.declaration;
+      const property = declaration?.custom ? declaration.property : new CustomProperty(name);
+      const context = this.getPropertyContext(cascaded);
+      context.customPropertyRegistry = customPropertyRegistry;
+      context.getCustomProperty = (referencedName) => {
+        const computed = this.#getComputedCustomValue(
+          referencedName, element, scope, cascadedByElement, customValuesByElement, dependencyStack, customPropertyRegistry,
         );
-        value = substituted instanceof GuaranteedInvalidValue ? substituted :
-          OptionalDeclarationValue.parse(substituted, {}) ?? guaranteedInvalidValue;
-      }
-      if (guard.cyclic) value = guaranteedInvalidValue;
+        if (computed.isOrdinaryValue() || computed.isGuaranteedInvalid()) return computed.inner;
+        throw new InternalError('Custom-property computation left unresolved notation');
+      };
+      let value = property.resolve(declaration?.custom ? declaration.value : property.initialValue, ValueStage.Computed, context);
+      if (dependency.cyclic) value = property.initialValue;
       // https://drafts.csswg.org/css-values-5/#resolve-property
       // Substitution can itself produce a CSS-wide keyword, so default after replacement.
-      const keyword = value instanceof OptionalDeclarationValue ? CssWideValue.parse(value.value, {})?.value : undefined;
+      const keyword = value.cssWideKeyword();
       if (!declaration?.custom || keyword === 'inherit' || keyword === 'unset') {
         const parent = this.#getInheritanceParent(element, scope);
-        value = parent === null ? guaranteedInvalidValue :
-          this.#getCustomProperty(name, parent, scope, declarations, customPropertiesByElement, guards);
+        value = parent === null ? property.initialValue :
+          this.#getComputedCustomValue(
+            name, parent, scope, cascadedByElement, customValuesByElement, dependencyStack, customPropertyRegistry,
+          );
       } else if (keyword === 'initial') {
-        value = guaranteedInvalidValue;
+        value = property.initialValue;
       } else if (keyword === 'revert' || keyword === 'revert-layer') {
         // TODO: Cascade rollback needs the earlier origin/layer candidates, not just this winner.
         throw new InternalError('Custom-property cascade rollback is not implemented');
       }
-      values.set(name, value);
+      computedValues.set(name, value);
       return value;
     } finally {
-      guards.pop();
+      dependencyStack.pop();
     }
   }
 
-  /** Collect inherited names without computing overridden parent values. */
-  #getCustomPropertyNames(
+  /** Retain named records through inheritance without computing overridden parent values. */
+  #getCustomProperties(
     element: Element,
     scope: TreeScope,
-    declarations: Map<Element, CascadedProperties>,
-  ): Set<CustomPropertyName> {
+    cascadedByElement: Map<Element, CascadedProperties>,
+  ): Map<CustomPropertyName, CustomProperty> {
     const parent = this.#getInheritanceParent(element, scope);
-    const names = parent === null ? new Set<CustomPropertyName>() : this.#getCustomPropertyNames(parent, scope, declarations);
-    for (const { declaration } of this.#getDeclarations(element, scope, declarations).values()) {
-      if (declaration.custom) names.add(declaration.name);
+    const properties = parent === null ? new Map<CustomPropertyName, CustomProperty>() :
+      this.#getCustomProperties(parent, scope, cascadedByElement);
+    for (const { declaration } of this.#getCascadedDeclarations(element, scope, cascadedByElement).values()) {
+      if (declaration.custom) properties.set(declaration.name, declaration.property);
     }
-    return names;
+    return properties;
   }
 
   /** Obtain the flat-tree inheritance parent, or null at the root. */
@@ -388,7 +401,7 @@ export class CascadeEngine {
 export type CascadeEngineOptions = {
   /** Last-resort base URL for stylesheet values. */
   environmentBaseUrl?: StyleletURL;
-  /** Document-level custom-property registrations; omitted creates an empty registry. */
+  /** Explicit document registrations; stylesheet registrations are collected for each query. */
   registeredPropertySet?: CustomPropertyRegistry;
   /** Document state and host facilities shared with selector matching. */
   context: StyleletContext;
@@ -405,22 +418,19 @@ export type CascadedProperty = {
 type CascadedProperties = Map<PropertyName, CascadedProperty>;
 
 /** Query-local built-in results, including one expansion per shorthand occurrence and element. */
-type ComputedBuiltInProperties = {
-  properties: Map<BuiltInPropertyName, PropertyValue<BuiltInPropertyName>>;
-  shorthands: Map<
-    PendingShorthand<Value<PropertyContext>>,
-    WholeValue<Value<PropertyContext>>[] | null
+type BuiltInPropertyCache = {
+  propertyValues: Map<BuiltInPropertyName, WholeValue>;
+  shorthandExpansions: Map<
+    PendingShorthand<Value>,
+    WholeValue[] | null
   >;
 };
 
 /** Computed custom-property values belonging to one element in this query. */
-type ComputedCustomProperties = Map<CustomPropertyName, ComputedCustomProperty>;
-
-/** Empty token sequences are valid values; absence and initial defaulting use the distinct sentinel. */
-type ComputedCustomProperty = OptionalDeclarationValue | GuaranteedInvalidValue;
+type ComputedCustomValues = Map<CustomPropertyName, CustomPropertyValue>;
 
 /** One active property dependency; every participant is marked when a name recurs on the same element. */
-type CustomPropertyGuard = {
+type CustomPropertyDependency = {
   element: Element;
   name: CustomPropertyName;
   cyclic: boolean;

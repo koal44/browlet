@@ -15,12 +15,12 @@ import { MathValue, MathExpression, type MathContext } from './math-value';
 
 /** An <angle-percentage>, including calculations that still need a percentage reference. */
 // https://drafts.csswg.org/css-values-4/#typedef-angle-percentage
-export class AnglePercentageValue<Representation extends AnglePercentage = AnglePercentage> implements Value<MathContext> {
+export class AnglePercentageValue<R extends AnglePercentage = AnglePercentage> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse a complete <angle-percentage>. */
@@ -56,10 +56,10 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
 
   /** Resolve angles and, when supplied, their percentage reference at the requested stage. */
   resolve(stage: ValueStage, context: MathContext = {}): AnglePercentageValue {
-    const previous = this.value;
+    const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, anglePercentageMathContext(context));
-      const value = resolved.value instanceof MathExpression ? resolved : resolved.value;
+      const value = resolved.repr instanceof MathExpression ? resolved : resolved.repr;
       return value === previous ? this : new AnglePercentageValue(value);
     }
 
@@ -74,16 +74,16 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
 
   /** Serialize the current literal or calculation without changing its stage. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add directly compatible literals, retaining other combinations as math. */
   add(other: AnglePercentageValue, context: MathContext = {}): AnglePercentageValue {
-    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
-      return new AnglePercentageValue(this.value.add(other.value));
+    if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
+      return new AnglePercentageValue(this.repr.add(other.repr));
     }
-    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
-      return new AnglePercentageValue(this.value.add(other.value));
+    if (this.repr instanceof AngleLiteral && other.repr instanceof AngleLiteral && this.repr.unit === other.repr.unit) {
+      return new AnglePercentageValue(this.repr.add(other.repr));
     }
     const mathContext = anglePercentageMathContext(context);
     return new AnglePercentageValue(this.#asMathValue(mathContext).add(other.#asMathValue(mathContext), mathContext));
@@ -91,11 +91,11 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
 
   /** Interpolate directly compatible literals, retaining other combinations as math. */
   interpolate(other: AnglePercentageValue, progress: number, context: MathContext = {}): AnglePercentageValue {
-    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
-      return new AnglePercentageValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
+      return new AnglePercentageValue(this.repr.interpolate(other.repr, progress));
     }
-    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
-      return new AnglePercentageValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof AngleLiteral && other.repr instanceof AngleLiteral && this.repr.unit === other.repr.unit) {
+      return new AnglePercentageValue(this.repr.interpolate(other.repr, progress));
     }
     const mathContext = anglePercentageMathContext(context);
     return new AnglePercentageValue(
@@ -109,8 +109,8 @@ export class AnglePercentageValue<Representation extends AnglePercentage = Angle
   }
 
   #asMathValue(context: MathContext): MathValue<'angle-percentage'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'angle-percentage', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'angle-percentage', context);
   }
 }
 

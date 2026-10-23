@@ -62,7 +62,7 @@ normative section; a working substitution path does not complete its dependencie
 | Section | Implemented and tested | Remaining work or recorded choice |
 | --- | --- | --- |
 | Variables 1 §2: names, cascade, inheritance | Decoded names retain exact case/code points; `--` is reserved. Inline and matched rules use importance/specificity/order; children inherit computed values. | Full [Cascade](../engine/ROADMAP.md), conditions, pseudo-elements and cross-scope inheritance. The future `all` shorthand must exclude custom properties. |
-| Variables 1 §2: animation | No connected animation producer. | Discrete custom-property animation, keyframe taint, transitive taint, and rejection of tainted substitutions in non-animatable properties belong with [animation](../../animation/ROADMAP.md). |
+| Variables 1 §2: animation | CustomProperty combines unregistered values discretely, retaining their source. No connected animation producer. | Keyframe taint, transitive taint, and rejection of tainted substitutions in non-animatable properties belong with [animation](../../animation/ROADMAP.md). |
 | Variables 1 §2.1: value syntax | Opaque declaration validation, empty values, priority removal, retained casing, and `var()` argument validation. | Unregistered URL tokens stay unresolved; URL-valued consumers must supply the consuming declaration's base. Other substitution functions still need argument validation. |
 | Variables 1 §2.2: guaranteed-invalid | Distinct from a valid empty value; initial/missing values, cycles, and failed substitution use the sentinel. | Registered universal-syntax values need the same invalid-result rule when registration is connected. |
 | Variables 1 §3: `var()` | Dynamic name substitution, exact-name lookup, empty/comma/brace fallbacks, and lazy fallback selection. | Animation taint and registered computed values. The approved draft/browser argument and fallback differences remain recorded in the [engine account](../engine/README.md#substitution-draft-differences). |
@@ -236,6 +236,13 @@ other fields below, but their providers are not connected. Missing facts can
 leave a relative value unresolved or make a helper return null; neither outcome
 proves a complete observable computed value. Preserve intentionally unresolved
 values when the property's stage requires them.
+
+Animation callers currently retain the value family without having to prove its
+resolved representation. `ColorValue.interpolate()` checks for absolute colors
+at runtime and throws when resolution is unfinished. Revisit guarantees tying
+stage and supplied context to result representations once connected stylesheet
+and animation consumers establish their requirements; do not make all context
+fields mandatory merely to promise complete resolution.
 
 | Existing consumer/input | Required fact and owner | Changes that can invalidate the result |
 | --- | --- | --- |

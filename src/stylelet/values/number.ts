@@ -12,12 +12,12 @@ import { MathValue, type MathContext } from './math-value';
 
 /** A <number> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#numbers
-export class NumberValue<Representation extends NumberRepresentation = NumberRepresentation> implements Value<MathContext> {
+export class NumberValue<R extends NumberRepresentation = NumberRepresentation> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <number>. */
@@ -45,7 +45,7 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): NumberValue {
-    const previous = this.value;
+    const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, context);
       return resolved === previous ? this : new NumberValue(resolved);
@@ -55,13 +55,13 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: NumberValue, context: MathContext = {}): NumberValue {
-    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
-      return new NumberValue(this.value.add(other.value));
+    if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
+      return new NumberValue(this.repr.add(other.repr));
     }
     return new NumberValue(
       this.#asMathValue(context).add(other.#asMathValue(context), context),
@@ -70,8 +70,8 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: NumberValue, progress: number, context: MathContext = {}): NumberValue {
-    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
-      return new NumberValue(this.value.interpolate(other.value, progress));
+    if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
+      return new NumberValue(this.repr.interpolate(other.repr, progress));
     }
     return new NumberValue(
       this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
@@ -84,8 +84,8 @@ export class NumberValue<Representation extends NumberRepresentation = NumberRep
   }
 
   #asMathValue(context: MathContext): MathValue<'number'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'number', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'number', context);
   }
 }
 

@@ -11,6 +11,43 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
   grammar, initial value, inheritance, applicability, percentages, computed
   representation, shorthand/logical relationships, and combination behavior.
   A shared grammar is not a complete property definition.
+- [x] Require animation categories and percentage interpretation in the
+  `BuiltInPropertyDefinition` constructor object. Installed margins provide a Used-stage
+  containing-block inline-size reference; opacity and the color properties
+  distinguish number conversion from N/A. This records requirements without
+  claiming animation or layout integration.
+- [x] Record CSSOM's `resolvedValueStage` on every property: Used for colors,
+  Computed for opacity/custom properties, and a conditional selector for margins.
+- [ ] Supply margin applicability and resolved display to its stage selector,
+  which currently throws explicitly. Connect stage selection in CSSOM's query
+  path without advancing the engine's computed-value cache or inherited values.
+- [x] Let `BuiltInProperty.resolve()` supply the percentage reference at the
+  property's resolution stage. Cascade computation and interpreted declarations
+  use it without modifying their input context.
+- [x] Retain named property records in interpreted declarations. Built-in records
+  and `CustomProperty` share parsing, resolution, and value serialization
+  operations. Four distinct margin records share one grammar/definition.
+  Custom records own Variables 1 defaults and substitution; registration is
+  supplied at computation time and registered computation still throws explicitly.
+- [ ] Connect layout to `LayoutContext` and drive Used-stage resolution. Margins
+  need the containing block's logical width; direct tests currently supply it.
+  Preserve percentages at Computed time and distinguish unavailable facts from
+  a valid zero reference. Component-specific references need their value's own context.
+- [x] Accept typed property-specific animation methods alongside standard
+  categories. Each accepts and returns whole property values and receives the
+  property context; interpolation also receives progress. Margin's methods
+  distinguish `auto` from compatible numeric pairs and retain numeric results
+  through `WholeValue.withValue()`.
+- [x] Expose property interpolation, addition, and accumulation over computed values.
+  Apply category rules and incompatible-pair fallback directly in each operation; connect opacity,
+  physical margins, absolute colors, and discrete unregistered custom values.
+  Leave range checking until the final result is resolved, and preserve retained
+  values without string round trips.
+- [ ] Implement repeatable-list expansion and symbolic-color interpolation.
+  Derive registered animation behavior from registered syntax once its computation
+  path exists. Each currently throws explicitly rather than selecting a placeholder.
+- [ ] Connect these operations to effect sampling/composition in the animation
+  subsystem, including keyframes, animation taint, timing, and final range checking.
 - [ ] Connect interpretation, defaulting/computation, CSSOM mutation/query, and
   serialization at the correct stage. The [lifecycle roadmap](../value-processing/ROADMAP.md)
   owns common metadata and failure distinctions; do not duplicate that machinery
@@ -23,7 +60,7 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 
 - [x] Move common declaration, CSS-wide, and pending-substitution handling into
   `Shorthand`, below the built-in families. Each family supplies its longhand
-  names and records and ordinary expansion/compression; property records construct
+  records and ordinary expansion/compression; property records construct
   their complete and pending values, and the registry collects shorthand instances
   separately. `MarginShorthand` now contains only margin-specific behavior.
 - [x] Implement ordinary `marginShorthand.expand()` and `.serialize()` in `built-in/margin.ts`:
@@ -33,7 +70,7 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 - [x] Add a retained pending-substitution representation shared by a shorthand's
   expanded longhands, including partial overwrites and computed-time failure.
   See [Values 5](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands).
-  PendingSubstitutionValue retains each longhand's index into the shared
+  WholeValue's pending state retains each longhand's index into the shared
   original shorthand and delegates substitution before applying its full grammar.
 - [x] Cover ordinary shorthand queries, cssText shortening, mixed importance, removal,
   source-order replacement, and invalid values through projected CSSOM.

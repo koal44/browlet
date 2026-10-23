@@ -10,7 +10,7 @@ describe('url', () => {
     'sets the local URL flag on the fragment-only URL %j',
     (fragment) => {
       expect(UrlValue.parse(`url("${fragment}")`, {}))
-        .toHaveProperty('value.local', true);
+        .toHaveProperty('repr.local', true);
     },
   );
 
@@ -21,7 +21,7 @@ describe('url', () => {
       URL,
       baseUrl: new URL('https://example.com/styles/site.css'),
     })).toEqual(new UrlValue({
-      ...value.value,
+      ...value.repr,
       href: 'https://example.com/image.png',
     }));
   });
@@ -140,12 +140,12 @@ describe('url', () => {
     )!;
     const computed = specified.resolve(ValueStage.Computed, { URL, baseUrl: new URL('https://example.com/') });
 
-    expect(computed.value.modifiers).toBe(specified.value.modifiers);
-    expect(computed.value.modifiers.crossOrigin!.value).toBe('anonymous');
+    expect(computed.repr.modifiers).toBe(specified.repr.modifiers);
+    expect(computed.repr.modifiers.crossOrigin!.value).toBe('anonymous');
     expect(computed.serialize()).toBe(
       'url("https://example.com/image.png" cross-origin(anonymous) integrity("sha256-test") referrer-policy(no-referrer))',
     );
-    expect(specified.value.href).toBe('image.png');
+    expect(specified.repr.href).toBe('image.png');
   });
 
   it('accepts component trivia around and inside functional notation', () => {
@@ -168,7 +168,7 @@ describe('url', () => {
       'unknown',
       'integrity("sha256-test")',
       'cross-origin(use-credentials))',
-    ].join(' '), {})!.value).toEqual({
+    ].join(' '), {})!.repr).toEqual({
       notation: 'url', href: 'image.png', modifiers: {
         crossOrigin: { type: 'cross-origin-modifier', value: 'use-credentials' },
         integrity: { type: 'integrity-modifier', value: 'sha256-test' },

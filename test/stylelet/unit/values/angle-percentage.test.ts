@@ -8,14 +8,14 @@ import { AnglePercentageValue } from '../../../../src/stylelet/values/angle-perc
 describe('angle-percentage values', () => {
   it('parses literal alternatives without promoting them', () => {
     expect(AnglePercentageValue.parse('10deg', {})).toMatchObject({
-      value: {
+      repr: {
         type: 'angle',
         value: 10,
         unit: 'deg',
       },
     });
     expect(AnglePercentageValue.parse('25%', {})).toMatchObject({
-      value: {
+      repr: {
         type: 'percentage',
         value: 25,
       },
@@ -26,8 +26,8 @@ describe('angle-percentage values', () => {
     const value = AnglePercentageValue.parse('calc(10deg + 25%)', {});
 
     expect(value).toMatchObject({
-      value: {
-        value: {
+      repr: {
+        repr: {
           calculation: {
             type: 'sum',
           },
@@ -44,9 +44,9 @@ describe('angle-percentage values', () => {
     expect(mixed.resolve(ValueStage.Computed)).toEqual(mixed);
     expect(mixed.resolve(ValueStage.Computed, {
       percentageReferenceValue: new AngleLiteral(200, 'deg'),
-    })).toMatchObject({ value: { type: 'angle', value: 60, unit: 'deg' } });
+    })).toMatchObject({ repr: { type: 'angle', value: 60, unit: 'deg' } });
     expect(percentage.resolve(ValueStage.Computed))
-      .toMatchObject({ value: { type: 'percentage', value: 25 } });
+      .toMatchObject({ repr: { type: 'percentage', value: 25 } });
   });
 
   it('canonicalizes literal angles at the computed-value stage', () => {
@@ -54,7 +54,7 @@ describe('angle-percentage values', () => {
 
     expect(angle.resolve(ValueStage.Specified)).toBe(angle);
     expect(angle.resolve(ValueStage.Computed))
-      .toMatchObject({ value: { type: 'angle', value: 180, unit: 'deg' } });
+      .toMatchObject({ repr: { type: 'angle', value: 180, unit: 'deg' } });
   });
 
   it('resolves literal percentages only when their basis is available', () => {
@@ -68,7 +68,7 @@ describe('angle-percentage values', () => {
     expect(percentage.resolve(ValueStage.Computed))
       .toBe(percentage);
     expect(percentage.resolve(ValueStage.Computed, context))
-      .toMatchObject({ value: { type: 'angle', value: 50, unit: 'deg' } });
+      .toMatchObject({ repr: { type: 'angle', value: 50, unit: 'deg' } });
   });
 
   it('rejects calculations from another dimensional category', () => {
@@ -100,10 +100,10 @@ describe('angle-percentage values', () => {
     const percentageB = AnglePercentageValue.parse('20%', {})!;
 
     expect(angleA.add(angleB))
-      .toMatchObject({ value: { type: 'angle', value: 30, unit: 'deg' } });
-    expect(percentageA.interpolate(percentageB, 0.5)).toMatchObject({ value: { type: 'percentage', value: 15 } });
+      .toMatchObject({ repr: { type: 'angle', value: 30, unit: 'deg' } });
+    expect(percentageA.interpolate(percentageB, 0.5)).toMatchObject({ repr: { type: 'percentage', value: 15 } });
     expect(percentageA.accumulate(percentageB))
-      .toMatchObject({ value: { type: 'percentage', value: 30 } });
+      .toMatchObject({ repr: { type: 'percentage', value: 30 } });
   });
 
   it('promotes incompatible literal alternatives into math', () => {
@@ -127,7 +127,7 @@ describe('angle-percentage values', () => {
     expect(math.resolve(ValueStage.Computed, {
       range: [0, Infinity],
     })).toMatchObject({
-      value: {
+      repr: {
         type: 'angle',
         value: 0,
         unit: 'deg',

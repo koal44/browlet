@@ -9,7 +9,7 @@ import type { Value } from './value';
 /** The auto keyword; its meaning is determined by the property that uses it. */
 export class AutoValue implements Value {
   /** The retained keyword. */
-  value = 'auto' as const;
+  repr = 'auto' as const;
 
   /** Parse a complete auto keyword. */
   static parse(input: ParserInput, context: unknown): AutoValue | null {
@@ -28,7 +28,22 @@ export class AutoValue implements Value {
 
   /** Serialize the retained keyword. */
   serialize(): string {
-    return this.value;
+    return this.repr;
+  }
+
+  /** The auto keyword combines discretely unless its property specifies another rule. */
+  interpolate(): null {
+    return null;
+  }
+
+  /** Addition also selects a value discretely. */
+  add(): null {
+    return null;
+  }
+
+  /** Accumulation follows addition. */
+  accumulate(): null {
+    return null;
   }
 }
 

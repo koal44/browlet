@@ -28,12 +28,12 @@ import { TimeValue } from './time';
 import { UrlValue } from './url';
 
 /** A registered syntax description, independent of any property or resolution context. */
-export class SyntaxValue<Representation extends Syntax = Syntax> implements Value {
+export class SyntaxValue<R extends Syntax = Syntax> implements Value {
   /** The universal syntax or ordered alternatives, including their multipliers. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse a complete syntax description, including its quoted form. */
@@ -75,8 +75,8 @@ export class SyntaxValue<Representation extends Syntax = Syntax> implements Valu
 
   /** Consume a value matching one complete registered syntax alternative. */
   createConsumer(): TryConsumer<ParsedSyntaxValue, PropertyContext> {
-    if (this.value.type === 'universal-syntax') return OptionalDeclarationValue.consume;
-    const clauses = this.value.components.map((component) =>
+    if (this.repr.type === 'universal-syntax') return OptionalDeclarationValue.consume;
+    const clauses = this.repr.components.map((component) =>
       one(adaptConsumer(
         withTrivia(SyntaxValue.#createComponentConsumer(component)),
         (value) => value,
@@ -87,14 +87,14 @@ export class SyntaxValue<Representation extends Syntax = Syntax> implements Valu
   }
 
   /** A syntax description does not depend on property-resolution context. */
-  resolve(_stage: ValueStage, _context: unknown): SyntaxValue<Representation> {
+  resolve(_stage: ValueStage, _context: unknown): SyntaxValue<R> {
     return this;
   }
 
   /** Serialize the retained alternatives and their multipliers. */
   serialize(): string {
-    if (this.value.type === 'universal-syntax') return '*';
-    return this.value.components.map((component) => {
+    if (this.repr.type === 'universal-syntax') return '*';
+    return this.repr.components.map((component) => {
       const name = component.type === 'syntax-type'
         ? `<${component.name}>`
         : serializeCssIdentifier(component.name);
@@ -117,25 +117,25 @@ type SyntaxTypeName = (typeof syntaxTypeNames)[number];
 type SyntaxMultiplier = '+' | '#';
 
 /** A multiplied registered syntax component with its specified separator. */
-export class SyntaxListValue implements Value<PropertyContext> {
+export class SyntaxListValue implements Value {
   /** Nonempty values and the grammar multiplier that separates them. */
-  value: { multiplier: SyntaxMultiplier; values: [ParsedSyntaxComponent, ...ParsedSyntaxComponent[]]; };
+  repr: { multiplier: SyntaxMultiplier; values: [ParsedSyntaxComponent, ...ParsedSyntaxComponent[]]; };
 
-  constructor(value: SyntaxListValue['value']) {
-    this.value = value;
+  constructor(value: SyntaxListValue['repr']) {
+    this.repr = value;
   }
 
   /** Resolve each item, retaining the list when all items retain their identity. */
   resolve(stage: ValueStage, context: PropertyContext): SyntaxListValue {
-    const previous = this.value.values;
+    const previous = this.repr.values;
     const values = mapTuple(previous, (item) => item.resolve(stage, context));
     return values.every((item, index) => item === previous[index])
-      ? this : new SyntaxListValue({ multiplier: this.value.multiplier, values });
+      ? this : new SyntaxListValue({ multiplier: this.repr.multiplier, values });
   }
 
   /** Serialize each item with the separator selected by its grammar. */
   serialize(): string {
-    return this.value.values.map((item) => item.serialize()).join(this.value.multiplier === '#' ? ', ' : ' ');
+    return this.repr.values.map((item) => item.serialize()).join(this.repr.multiplier === '#' ? ', ' : ' ');
   }
 }
 
@@ -210,7 +210,7 @@ const syntaxSingleComponentConsumer = oneOf(
       CustomIdentValue.consume,
       (ident): SyntaxKeywordComponent => ({
         type: 'syntax-keyword',
-        name: ident.value,
+        name: ident.repr,
       }),
     )),
   ],

@@ -10,10 +10,10 @@ import { GeneralEnclosedValue } from './general-enclosed';
 // https://drafts.csswg.org/css-values-5/#boolean-expr
 export class BooleanExprValue<Test> {
   /** The retained tests, grouping, and boolean operators. */
-  value: BooleanExpr<Test>;
+  repr: BooleanExpr<Test>;
 
   constructor(value: BooleanExpr<Test>) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete expression using the caller's test grammar. */
@@ -120,7 +120,7 @@ export class BooleanExprValue<Test> {
 
   /** Evaluate lazily with three-valued logic; this does not advance a CSS value's lifecycle. */
   evaluate(context: BooleanExprContext<Test>): BooleanExprResult {
-    const result = this.value.evaluate(context);
+    const result = this.repr.evaluate(context);
     return result === 'unknown' && context.preserveUnknown !== true ? false : result;
   }
 }

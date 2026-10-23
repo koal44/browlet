@@ -7,11 +7,11 @@ import { UrlModifierValue } from '../../../../src/stylelet/values/url-modifier';
 
 describe('url-modifier', () => {
   it('parses an identifier modifier through its value grammar', () => {
-    expect(UrlModifierValue.parse('cross-origin', {})?.value).toEqual(new IdentValue('cross-origin'));
+    expect(UrlModifierValue.parse('cross-origin', {})?.repr).toEqual(new IdentValue('cross-origin'));
   });
 
   it('parses unknown functional notation as a function block', () => {
-    const modifier = UrlModifierValue.parse('future-modifier(value)', {})!.value;
+    const modifier = UrlModifierValue.parse('future-modifier(value)', {})!.repr;
 
     expect(modifier).toMatchObject({
       type: TokenKind.FunctionBlock,
@@ -37,7 +37,7 @@ describe('url-modifier', () => {
       { type: 'referrer-policy-modifier', value: 'strict-origin' },
     ],
   ])('parses the recognized request modifier %j', (input, expected) => {
-    expect(UrlModifierValue.parse(input, {})?.value).toEqual(expected);
+    expect(UrlModifierValue.parse(input, {})?.repr).toEqual(expected);
   });
 
   it.each([
@@ -88,7 +88,7 @@ describe('url-modifier', () => {
 
   it('consumes a URL modifier through the component grammar', () => {
     const c = new TokenCursor(parseListOfComponentValues('future-modifier()', {}), {});
-    const modifier = UrlModifierValue.consume(c)!.value;
+    const modifier = UrlModifierValue.consume(c)!.repr;
 
     expect(modifier).toMatchObject({
       type: TokenKind.FunctionBlock,

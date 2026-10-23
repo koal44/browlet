@@ -16,7 +16,7 @@ describe('CSS-wide value', () => {
     const value = CssWideValue.parse(' ReVeRt-LaYeR ', {});
 
     expect(value).toMatchObject({
-      value: 'revert-layer',
+      repr: 'revert-layer',
     });
   });
 
@@ -30,7 +30,7 @@ describe('CSS-wide value', () => {
     const c = new TokenCursor(list, {});
 
     expect(CssWideValue.consume(c)).toMatchObject({
-      value: 'inherit',
+      repr: 'inherit',
     });
     expect(c.pos()).toBe(1);
   });

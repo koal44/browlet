@@ -12,12 +12,12 @@ import { MathValue, MathExpression, type MathContext } from './math-value';
 
 /** A <frequency> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#frequency
-export class FrequencyValue<Representation extends Frequency = Frequency> implements Value<MathContext> {
+export class FrequencyValue<R extends Frequency = Frequency> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <frequency>. */
@@ -46,21 +46,21 @@ export class FrequencyValue<Representation extends Frequency = Frequency> implem
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): FrequencyValue {
-    const resolved = this.value.resolve(stage, context);
-    const value = resolved instanceof MathValue && !(resolved.value instanceof MathExpression)
-      ? resolved.value : resolved;
-    return value === this.value ? this : new FrequencyValue(value);
+    const resolved = this.repr.resolve(stage, context);
+    const value = resolved instanceof MathValue && !(resolved.repr instanceof MathExpression)
+      ? resolved.repr : resolved;
+    return value === this.repr ? this : new FrequencyValue(value);
   }
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: FrequencyValue, context: MathContext = {}): FrequencyValue {
-    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
-      return new FrequencyValue(this.value.add(other.value));
+    if (this.repr instanceof FrequencyLiteral && other.repr instanceof FrequencyLiteral && this.repr.unit === other.repr.unit) {
+      return new FrequencyValue(this.repr.add(other.repr));
     }
     return new FrequencyValue(
       this.#asMathValue(context).add(other.#asMathValue(context), context),
@@ -69,8 +69,8 @@ export class FrequencyValue<Representation extends Frequency = Frequency> implem
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: FrequencyValue, progress: number, context: MathContext = {}): FrequencyValue {
-    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
-      return new FrequencyValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof FrequencyLiteral && other.repr instanceof FrequencyLiteral && this.repr.unit === other.repr.unit) {
+      return new FrequencyValue(this.repr.interpolate(other.repr, progress));
     }
     return new FrequencyValue(
       this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
@@ -83,8 +83,8 @@ export class FrequencyValue<Representation extends Frequency = Frequency> implem
   }
 
   #asMathValue(context: MathContext): MathValue<'frequency'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'frequency', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'frequency', context);
   }
 }
 

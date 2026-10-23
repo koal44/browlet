@@ -9,10 +9,10 @@ import type { Value } from './value';
 /** A CSS-wide keyword awaiting property defaulting and inheritance. */
 export class CssWideValue implements Value {
   /** The canonical keyword; its property-specific meaning is not resolved here. */
-  value: CssWideKeyword;
+  repr: CssWideKeyword;
 
   constructor(value: CssWideKeyword) {
-    this.value = value;
+    this.repr = value;
   }
 
   static parse(input: ParserInput, context: unknown): CssWideValue | null {
@@ -29,7 +29,7 @@ export class CssWideValue implements Value {
   }
 
   serialize(): string {
-    return this.value;
+    return this.repr;
   }
 }
 

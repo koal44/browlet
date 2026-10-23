@@ -13,10 +13,10 @@ import { DeclarationValue, OptionalDeclarationValue } from './declaration-value'
 /** Replace arbitrary substitutions before the consuming property reparses their result. */
 export class SubstitutionValue {
   /** Unsubstituted declaration components, including their source spans. */
-  value: OptionalDeclarationValue;
+  repr: OptionalDeclarationValue;
 
   constructor(value: OptionalDeclarationValue) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Whether a component list contains an arbitrary substitution, including inside blocks. */
@@ -113,20 +113,20 @@ export class SubstitutionValue {
     // dynamic names, and spread expansion. Chromium, Firefox, and WebKit use the older grammar.
     const args = parseAsComponentGrammar(early, SubstitutionValue.#consumeVarArguments, {});
     if (args === null) return guaranteedInvalidValue;
-    const first = SubstitutionValue.#substitute(args.name.value, getCustomProperty);
+    const first = SubstitutionValue.#substitute(args.name.repr, getCustomProperty);
     let result: TokenList<ComponentValue> | GuaranteedInvalidValue = guaranteedInvalidValue;
     if (!(first instanceof GuaranteedInvalidValue)) {
       const ident = parseAsComponentGrammar(first, consumeVarPropertyName, {});
       if (ident !== null && isCustomPropertyName(ident.value)) {
         // TODO: Carry animation taint with computed values when animation declarations participate.
         const value = getCustomProperty(ident.value);
-        result = value instanceof GuaranteedInvalidValue ? value : value.value;
+        result = value instanceof GuaranteedInvalidValue ? value : value.repr;
       }
     }
     // SPEC_CLASH(lazy-var-fallback): Follow the draft and Chromium; Firefox/WebKit still
     // let a cycle in an unused fallback invalidate the containing custom property.
     if (result instanceof GuaranteedInvalidValue && args.fallback !== null) {
-      result = SubstitutionValue.#substitute(args.fallback.value, getCustomProperty);
+      result = SubstitutionValue.#substitute(args.fallback.repr, getCustomProperty);
     }
     return !(result instanceof GuaranteedInvalidValue) && SubstitutionValue.#countTokens(result) > MAX_SUBSTITUTED_TOKENS
       ? guaranteedInvalidValue : result;
@@ -204,7 +204,7 @@ export class SubstitutionValue {
   // SPEC_MISMATCH: substitute arbitrary substitution functions(values, context?) -> values
   // The engine guards property computation; recursive argument substitution shares that lookup.
   substitute(getCustomProperty: CustomPropertyLookup): TokenList<ComponentValue> | GuaranteedInvalidValue {
-    return SubstitutionValue.#substitute(this.value.value, getCustomProperty);
+    return SubstitutionValue.#substitute(this.repr.repr, getCustomProperty);
   }
 
   /** Serialize the original declaration spelling without performing substitutions. */
@@ -212,7 +212,7 @@ export class SubstitutionValue {
   // SPEC_CLASH(deferred-value-source-serialization): Preserve spelling; WebKit drops escapes/comments.
   // SPEC_CLASH(deferred-value-eof-serialization): Preserve missing EOF closers; Firefox/WebKit differ.
   serialize(): string {
-    return this.value.value.sourceText();
+    return this.repr.repr.sourceText();
   }
 }
 

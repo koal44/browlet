@@ -10,12 +10,12 @@ import { MathValue, type MathContext } from './math-value';
 
 /** A <resolution> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#resolution-value
-export class ResolutionValue<Representation extends Resolution = Resolution> implements Value<MathContext> {
+export class ResolutionValue<R extends Resolution = Resolution> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <resolution>. */
@@ -43,20 +43,20 @@ export class ResolutionValue<Representation extends Resolution = Resolution> imp
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): ResolutionValue {
-    const previous = this.value;
+    const previous = this.repr;
     const resolved = previous.resolve(stage, context);
     return resolved === previous ? this : new ResolutionValue(resolved);
   }
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: ResolutionValue, context: MathContext = {}): ResolutionValue {
-    if (this.value instanceof ResolutionLiteral && other.value instanceof ResolutionLiteral && this.value.unit === other.value.unit) {
-      return new ResolutionValue(this.value.add(other.value));
+    if (this.repr instanceof ResolutionLiteral && other.repr instanceof ResolutionLiteral && this.repr.unit === other.repr.unit) {
+      return new ResolutionValue(this.repr.add(other.repr));
     }
     return new ResolutionValue(
       this.#asMathValue(context).add(other.#asMathValue(context), context),
@@ -65,8 +65,8 @@ export class ResolutionValue<Representation extends Resolution = Resolution> imp
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: ResolutionValue, progress: number, context: MathContext = {}): ResolutionValue {
-    if (this.value instanceof ResolutionLiteral && other.value instanceof ResolutionLiteral && this.value.unit === other.value.unit) {
-      return new ResolutionValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof ResolutionLiteral && other.repr instanceof ResolutionLiteral && this.repr.unit === other.repr.unit) {
+      return new ResolutionValue(this.repr.interpolate(other.repr, progress));
     }
     return new ResolutionValue(
       this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
@@ -79,8 +79,8 @@ export class ResolutionValue<Representation extends Resolution = Resolution> imp
   }
 
   #asMathValue(context: MathContext): MathValue<'resolution'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'resolution', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'resolution', context);
   }
 }
 

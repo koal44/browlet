@@ -22,7 +22,7 @@ describe('calc', () => {
     ['calc(96dpi)', 'resolution', ResolutionLiteral, '1dppx'],
     ['calc(2fr)', 'flex', DimensionLiteral, '2fr'],
   ] as const)('resolves %j to a literal with its operations intact', (input, valueType, literal, expected) => {
-    const result = MathValue.parse(input, valueType, {})!.resolve(ValueStage.Computed).value;
+    const result = MathValue.parse(input, valueType, {})!.resolve(ValueStage.Computed).repr;
 
     expect(result).toBeInstanceOf(literal);
     if (result instanceof MathExpression) throw new Error('Expected a resolved literal');
@@ -48,8 +48,8 @@ describe('calc', () => {
     'parses the terminal calculation %j',
     (input, expected, type, expectedType) => {
       const value = MathValue.parse(input, expectedType, {});
-      expect(value?.value).toBeInstanceOf(MathExpression);
-      expect(value).toEqual({ value: { calculation: numericLeaf(expected, type), promoted: false }, valueType: expectedType });
+      expect(value?.repr).toBeInstanceOf(MathExpression);
+      expect(value).toEqual({ repr: { calculation: numericLeaf(expected, type), promoted: false }, valueType: expectedType });
     },
   );
 
@@ -107,7 +107,7 @@ describe('calc', () => {
           ['y', { valueType: 'number', value: new NumberLiteral(2) }],
         ]),
       });
-      expect(result.value).toEqual(new NumberLiteral(expected));
+      expect(result.repr).toEqual(new NumberLiteral(expected));
     }
     expect(deferred.serialize()).toBe(serialized);
     expect(declared.serialize()).toBe(serialized);
@@ -126,8 +126,8 @@ describe('calc', () => {
     }
 
     expect(value.resolve(ValueStage.Declared)).toEqual(value);
-    expect(value.resolve(ValueStage.Computed).value).toEqual(expected);
-    expect(value.resolve(ValueStage.Declared, { unwrapMathAt: ValueStage.Declared }).value).toEqual(expected);
+    expect(value.resolve(ValueStage.Computed).repr).toEqual(expected);
+    expect(value.resolve(ValueStage.Declared, { unwrapMathAt: ValueStage.Declared }).repr).toEqual(expected);
   });
 
   it('coerces percentage math into number math', () => {
@@ -136,7 +136,7 @@ describe('calc', () => {
     const number = percentage.toNumber(1 / 100, 1);
 
     expect(number.serialize()).toBe('calc(1.2)');
-    expect(number.resolve(ValueStage.Computed).value).toEqual({
+    expect(number.resolve(ValueStage.Computed).repr).toEqual({
       type: 'number',
       value: 1.2,
     });
@@ -166,7 +166,7 @@ describe('calc', () => {
     });
 
     expect(value).toMatchObject({
-      value: {
+      repr: {
         calculation: {
           type: 'variable',
           name: 'x',
@@ -191,8 +191,8 @@ describe('calc', () => {
       length: { em: 16 },
     });
 
-    expect(resolved).toMatchObject({ value: { promoted: true } });
-    if (!(resolved.value instanceof MathExpression)) {
+    expect(resolved).toMatchObject({ repr: { promoted: true } });
+    if (!(resolved.repr instanceof MathExpression)) {
       throw new Error('Expected a math value');
     }
     expect(resolved.serialize()).toBe('calc(18px)');
@@ -202,7 +202,7 @@ describe('calc', () => {
     const calculation = expression(MathValue.parse('calc(10px)', 'length', {}))!.calculation;
     const value = new MathValue(new MathExpression(calculation, true), 'length');
 
-    expect(value.add(MathValue.parse('calc(20px)', 'length', {})!)).toMatchObject({ value: { promoted: false } });
+    expect(value.add(MathValue.parse('calc(20px)', 'length', {})!)).toMatchObject({ repr: { promoted: false } });
   });
 
   it('rejects a resolved literal that violates its value type', () => {
@@ -217,7 +217,7 @@ describe('calc', () => {
 
   it('respects operator precedence while simplifying', () => {
     expect(MathValue.parse('calc(1px + 2 * 3px - 4px / 2)', 'length', {})).toEqual({
-      value: {
+      repr: {
         calculation: numericLeaf(
           { type: 'dimension', value: 5, unit: 'px' },
           mathHints([['length', 1]]),
@@ -228,7 +228,7 @@ describe('calc', () => {
 
   it('uses parenthesized calculations for grouping while simplifying', () => {
     expect(MathValue.parse('calc((1 + 2) * 3)', 'number', {})).toEqual({
-      value: {
+      repr: {
         calculation: numericLeaf(
           { type: 'number', value: 9 },
           mathHints(),
@@ -266,7 +266,7 @@ describe('calc', () => {
 
   it('wraps every math function in the same public value shape', () => {
     expect(MathValue.parse('calc(1 + 2)', 'number', {})).toEqual({
-      value: {
+      repr: {
         calculation: numericLeaf(
           { type: 'number', value: 3 },
           mathHints(),
@@ -274,7 +274,7 @@ describe('calc', () => {
       }, valueType: 'number',
     });
     expect(MathValue.parse('min(1em, 2rem)', 'length', {})).toMatchObject({
-      value: {
+      repr: {
         calculation: {
           type: 'min',
           arguments: [
@@ -1060,7 +1060,7 @@ describe('calc', () => {
     (input, valueType, expected) => {
       const value = MathValue.parse(input, valueType, {})!;
 
-      expect(value.resolve(ValueStage.Computed).value).toEqual(expected);
+      expect(value.resolve(ValueStage.Computed).repr).toEqual(expected);
     },
   );
 
@@ -1167,7 +1167,7 @@ describe('calc', () => {
     expect(parsed.resolve(ValueStage.Declared, {
       length: { em: 16 },
     })).toEqual({
-      value: {
+      repr: {
         calculation: {
           type: 'dimension',
           value: 18,
@@ -1187,7 +1187,7 @@ describe('calc', () => {
     const parsed = MathValue.parse('calc(10px + 25%)', 'length-percentage', context);
 
     expect(parsed).toEqual({
-      value: {
+      repr: {
         calculation: {
           type: 'sum',
           hints: mathHints([['length', 1]], 'length'),
@@ -1304,7 +1304,7 @@ describe('calc', () => {
     expect(MathValue.parse('calc(1% / 1%)', 'number', {
       percentHint: 'percent',
     })).toEqual({
-      value: {
+      repr: {
         calculation: numericLeaf(
           { type: 'number', value: 1 },
           mathHints([], 'percent'),
@@ -1354,7 +1354,7 @@ describe('calc', () => {
       percentHint: 'length',
       percentageReferenceValue: new LengthLiteral(200, 'px'),
     })).toEqual({
-      value: {
+      repr: {
         calculation: numericLeaf(
           { type: 'dimension', value: 60, unit: 'px' },
           mathHints([['length', 1]], 'length'),
@@ -1445,11 +1445,11 @@ describe('calc', () => {
   it('negates positive zero using CSS addition semantics', () => {
     const resolved = (MathValue.parse('calc(0 - 0)', 'number', {})!).resolve(ValueStage.Computed);
 
-    if (!(resolved.value instanceof NumberLiteral)) {
+    if (!(resolved.repr instanceof NumberLiteral)) {
       throw new Error('Expected a number');
     }
 
-    expect(Object.is(resolved.value.value, 0)).toBe(true);
+    expect(Object.is(resolved.repr.value, 0)).toBe(true);
   });
 
   it('cancels canonical units in a numeric product', () => {
@@ -1593,7 +1593,7 @@ describe('calc', () => {
     });
 
     expect(value).toEqual({
-      value: {
+      repr: {
         calculation: {
           type: 'product',
           children: [
@@ -1639,7 +1639,7 @@ describe('calc', () => {
 
     expect(value.resolve(ValueStage.Computed, {
       ...context,
-    }).value).toEqual({
+    }).repr).toEqual({
       type: 'number',
       value: 1,
     });
@@ -1697,7 +1697,7 @@ describe('calc', () => {
     context.numericVariables = new Map([['distance', { value: new LengthLiteral(2, 'em'), valueType: 'length' }]]);
     context.length = { em: 16 };
 
-    const result = value.resolve(ValueStage.Computed, context).value;
+    const result = value.resolve(ValueStage.Computed, context).repr;
     expect(result).toBeInstanceOf(LengthLiteral);
     if (result instanceof MathExpression) throw new Error('Expected a resolved literal');
     expect(result.serialize()).toBe('33px');
@@ -1855,6 +1855,6 @@ function mathValueNumber(value: MathValue | undefined): number | undefined {
 
 function expression(value: MathValue | null | undefined): MathExpression | undefined {
   if (value === null || value === undefined) return undefined;
-  if (!(value.value instanceof MathExpression)) throw new Error('Expected an unresolved math expression');
-  return value.value;
+  if (!(value.repr instanceof MathExpression)) throw new Error('Expected an unresolved math expression');
+  return value.repr;
 }

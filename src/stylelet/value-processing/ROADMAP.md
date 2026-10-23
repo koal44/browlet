@@ -25,10 +25,12 @@ Individual algorithms in these sections still need implementation review.
 
 - [x] Connect engine defaulting to the initial values and inherited flags in
   the seven installed [property records](../props/README.md).
-  Add further facts when their consumers are implemented: computed-value rules,
-  applicability, percentage behavior, shorthand relationships, and logical
-  groups. Each record owns WholeValue construction through its `parse` method;
-  parsed value instances own resolution and serialization.
+  Records also require animation and percentage metadata. Contextual percentage
+  references have a stage-aware callback; `BuiltInProperty.resolve()` forwards its
+  result into MathContext. Layout facts have a `LayoutContext` contract, but layout
+  does not yet supply them or drive Used-stage resolution. Computed-value rules and
+  applicability need further review. Each record owns WholeValue construction
+  through its `parse` method and delegates calculations and serialization to values.
 - [ ] Preserve different outcomes: invalid syntax is discarded before cascade;
   an invalid substituted winner follows computed-time fallback, not an earlier
   declaration; a rollback keyword deliberately revisits cascade candidates.

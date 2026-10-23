@@ -15,12 +15,12 @@ import { UrlModifierValue, type RequestUrlModifiers } from './url-modifier';
 
 /** A URL and request modifiers retaining their declaration's local-fragment provenance. */
 // https://drafts.csswg.org/css-values-4/#urls
-export class UrlValue<Representation extends Url = Url> implements Value<UrlContext> {
+export class UrlValue<R extends Url = Url> implements Value<UrlContext> {
   /** The URL text, notation, modifiers, and any captured local tree scope. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse a complete url() or src() value. */
@@ -40,7 +40,7 @@ export class UrlValue<Representation extends Url = Url> implements Value<UrlCont
 
   /** Capture local scope from the specified stage; resolve other URLs from the computed stage. */
   resolve(stage: ValueStage, context: UrlContext = {}): UrlValue {
-    const url = this.value;
+    const url = this.repr;
     if (url.local === true) {
       return stage < ValueStage.Specified || url.treeScope !== undefined || context.treeScope === undefined
         ? this : new UrlValue({ ...url, treeScope: context.treeScope });
@@ -61,7 +61,7 @@ export class UrlValue<Representation extends Url = Url> implements Value<UrlCont
   // https://drafts.csswg.org/cssom/#serialize-a-url
   // CSS Values extends URL notation with src() and request modifiers.
   serialize(): string {
-    const url = this.value;
+    const url = this.repr;
     const { crossOrigin, integrity, referrerPolicy } = url.modifiers;
     let args = serializeCssString(url.href);
     // CSS Values 4 section 9.1 and CSSWG issue #12151 use grammar order.
@@ -113,9 +113,9 @@ const urlArgumentsConsumer = sequenceOf(
   ([[string], values]) => {
     const modifiers: RequestUrlModifiers = {};
     for (const modifier of values) {
-      if (modifier.isRequest() && !modifier.value.applyTo(modifiers)) return null;
+      if (modifier.isRequest() && !modifier.repr.applyTo(modifiers)) return null;
     }
-    return { href: string.value, modifiers };
+    return { href: string.repr, modifiers };
   },
 );
 

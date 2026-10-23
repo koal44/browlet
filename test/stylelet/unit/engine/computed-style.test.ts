@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { Stylelet } from '../../../../src/stylelet/stylelet';
+import { RawWholeValue } from '../../../../src/stylelet/values/whole-value';
+import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { createBrowletDocument } from '../../browlet-document';
 import { createOpaqueDOM } from '../../../support/opaque-dom';
 
@@ -28,7 +30,7 @@ describe('computed custom properties', () => {
     expect(['--a', '--b', '--c', '--d', '--literal'].map((name) => computed.getPropertyValue(name)))
       .toEqual(['child', '', 'parent', 'parent', 'initial extra']);
     expect(computed.getPropertyPriority('--c')).toBe('');
-    expect(computed.getDeclaration('--b')).toBeUndefined();
+    expect(computed.computedStyle!.get('--b')).toBeUndefined();
   });
 
   it('keeps empty inherited values distinct from missing and initial values', () => {
@@ -40,11 +42,14 @@ describe('computed custom properties', () => {
     const computed = document.getStyleEngine().getComputedStyle(child);
 
     expect(computed.getPropertyValue('--empty')).toBe(' ');
-    expect(computed.getDeclaration('--empty')).toBeDefined();
+    expect(computed.computedStyle!.get('--empty')).toBeDefined();
     expect(computed.getPropertyValue('--missing')).toBe('');
-    expect(computed.getDeclaration('--missing')).toBeUndefined();
-    expect(computed.getDeclaration('--reset')).toBeUndefined();
-    expect(computed.getDeclaration('--empty')!.value).toBe(parent.getInlineStyleBlock()!.find('--empty')!.value);
+    expect(computed.computedStyle!.get('--missing')).toBeUndefined();
+    expect(computed.computedStyle!.get('--reset')).toBeUndefined();
+    const declared = parent.getInlineStyleBlock()!.find('--empty')!.value.inner;
+    const inherited = computed.computedStyle!.get('--empty')!.value.ordinaryValue();
+    if (!(declared instanceof RawWholeValue) || !(inherited instanceof OptionalDeclarationValue)) throw new Error('Expected custom values');
+    expect(inherited.repr).toBe(declared.repr.repr);
   });
 
   it('does not compute an overridden parent custom value or an unrelated parent built-in', () => {
@@ -65,7 +70,7 @@ describe('computed custom properties', () => {
 
     for (const name of ['--a', '--b', '--c']) {
       expect(computed.getPropertyValue(name)).toBe('');
-      expect(computed.getDeclaration(name)).toBeUndefined();
+      expect(computed.computedStyle!.get(name)).toBeUndefined();
     }
   });
 
@@ -135,7 +140,7 @@ describe('computed custom properties', () => {
 
     expect(['--b', '--c', '--d', '--e', '--f'].map((name) => computed.getPropertyValue(name)))
       .toEqual(['value', 'one, two', ' ', ' ', '']);
-    expect(computed.getDeclaration('--f')).toBeUndefined();
+    expect(computed.computedStyle!.get('--f')).toBeUndefined();
   });
 
   it('invalidates every cycle participant while allowing an outside fallback', () => {

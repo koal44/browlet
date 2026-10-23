@@ -1,7 +1,8 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import type { CustomPropertyRegistration, PropertyContext } from '../../../../src/stylelet/props/property';
+import type { PropertyContext } from '../../../../src/stylelet/props/base-property';
+import type { CustomPropertyRegistration } from '../../../../src/stylelet/props/registry';
 import type { CustomPropertyName } from '../../../../src/stylelet/syntax/names';
 import type { StyleletURL } from '../../../../src/stylelet/environment';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
@@ -15,7 +16,7 @@ import {
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
-import { WholeValue } from '../../../../src/stylelet/values/whole-value';
+import { WholeValue, RawWholeValue } from '../../../../src/stylelet/values/whole-value';
 import { SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
 import { createBrowletDocument } from '../../browlet-document';
 
@@ -28,7 +29,7 @@ describe('custom property registration', () => {
     });
     addStyleSheet(scope, propertyRules(scope, declared));
 
-    expect(engine.getCustomPropertyRegistration('--accent', scope))
+    expect(engine.collectCustomPropertyRegistry(scope).get('--accent'))
       .toBe(registered);
   });
 
@@ -40,13 +41,34 @@ describe('custom property registration', () => {
     addStyleSheet(scope, propertyRules(scope, first, second));
     addStyleSheet(scope, propertyRules(scope, last));
 
-    expect(engine.getCustomPropertyRegistration('--accent', scope)).toBe(last);
+    expect(engine.collectCustomPropertyRegistry(scope).get('--accent')).toBe(last);
   });
 
-  it('returns null when the custom property is unregistered', () => {
+  it('refreshes the registry after stylesheet and explicit registrations change', () => {
+    const first = registration('--accent', 'red');
+    const last = registration('--accent', 'blue');
+    const other = registration('--other', 'green');
+    const registeredPropertySet = new Map<CustomPropertyName, CustomPropertyRegistration>();
+    const { engine, scope } = createCascade({ registeredPropertySet });
+    addStyleSheet(scope, propertyRules(scope, first, other));
+    const sheet = addStyleSheet(scope, propertyRules(scope, last));
+    const before = engine.collectCustomPropertyRegistry(scope);
+    expect(before.get('--accent')).toBe(last);
+    expect(before.get('--other')).toBe(other);
+
+    sheet.disabled = true;
+    expect(engine.collectCustomPropertyRegistry(scope).get('--accent')).toBe(first);
+    registeredPropertySet.set(last.name, last);
+    expect(engine.collectCustomPropertyRegistry(scope).get('--accent')).toBe(last);
+    registeredPropertySet.delete(last.name);
+    expect(engine.collectCustomPropertyRegistry(scope).get('--accent')).toBe(first);
+    expect(before.get('--accent')).toBe(last);
+  });
+
+  it('omits unregistered custom properties from the registry', () => {
     const { engine, scope } = createCascade();
 
-    expect(engine.getCustomPropertyRegistration('--accent', scope)).toBeNull();
+    expect(engine.collectCustomPropertyRegistry(scope).has('--accent')).toBe(false);
   });
 
   // CSS Properties and Values API 1, 2.2. Parse-Time Behavior
@@ -57,7 +79,7 @@ describe('custom property registration', () => {
     });
     const cssStyleSheet = addStyleSheet(scope, '* { --accent: 10px }');
 
-    expect(engine.getCustomPropertyRegistration('--accent', scope))
+    expect(engine.collectCustomPropertyRegistry(scope).get('--accent'))
       .toBe(registered);
     const accent = engine.getCascadedProperty('--accent', scope)!;
     expect(accent.styleSheet).toBe(cssStyleSheet);
@@ -155,8 +177,8 @@ describe('custom property registration', () => {
       documentProperty,
       engine,
     )).toMatchObject({
-      value: {
-        value: { local: true, treeScope: documentScope },
+      inner: {
+        repr: { local: true, treeScope: documentScope },
       },
     });
     expect(resolveRegisteredCustomProperty(
@@ -164,8 +186,8 @@ describe('custom property registration', () => {
       shadowProperty,
       engine,
     )).toMatchObject({
-      value: {
-        value: { local: true, treeScope: shadowScope },
+      inner: {
+        repr: { local: true, treeScope: shadowScope },
       },
     });
   });
@@ -255,8 +277,9 @@ function resolveRegisteredCustomProperty(
   if (!cascaded.declaration.custom) return null;
 
   const { parse: parseValue } = registration;
-  const declaration = cascaded.declaration.value;
-  const raw = parseValue(declaration.value, {});
+  const declaration = cascaded.declaration.value.inner;
+  if (!(declaration instanceof RawWholeValue)) return null;
+  const raw = parseValue(declaration.repr.repr, {});
   return raw === null ? null : raw.resolve(ValueStage.Computed, engine.getPropertyContext(cascaded));
 }
 
@@ -267,11 +290,11 @@ function resolveCustomProperty(
   inherited: string,
   stage: ValueStage,
 ): string | null {
-  const registration = engine.getCustomPropertyRegistration(name, scope);
+  const registration = engine.collectCustomPropertyRegistry(scope).get(name);
   const cascaded = engine.getCascadedProperty(name, scope);
 
   if (
-    registration === null ||
+    registration === undefined ||
     cascaded === null ||
     !cascaded.declaration.custom
   ) {
@@ -293,8 +316,9 @@ function resolveCustomProperty(
     customProperty: { engine, registration, inheritedValue },
   };
 
-  const declarationValue = declaration.value;
-  const raw = parseValue(declarationValue.value, {});
+  const declarationValue = declaration.value.inner;
+  if (!(declarationValue instanceof RawWholeValue)) return null;
+  const raw = parseValue(declarationValue.repr.repr, {});
   const value = raw === null ? null : raw.resolve(stage, context);
   return value === null ? null : value.serialize();
 }

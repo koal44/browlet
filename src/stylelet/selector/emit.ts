@@ -134,7 +134,7 @@ function emitPseudoClassTest(
         return emitNoMatchPseudoTest();
       }
       return emitNthPseudoTest(
-        { step: argument.formula.value.a, offset: argument.formula.value.b },
+        { step: argument.formula.repr.a, offset: argument.formula.repr.b },
         { ofType: false, last: selector.name === 'nth-last-child' },
         context,
       );
@@ -142,7 +142,7 @@ function emitPseudoClassTest(
     case 'nth-last-of-type':
       return argument?.kind === PseudoArgumentKind.AnPlusB
         ? emitNthPseudoTest(
-          { step: argument.formula.value.a, offset: argument.formula.value.b },
+          { step: argument.formula.repr.a, offset: argument.formula.repr.b },
           { ofType: true, last: selector.name === 'nth-last-of-type' },
           context,
         )

@@ -12,12 +12,12 @@ import { MathValue, type MathContext } from './math-value';
 
 /** A <length> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#lengths
-export class LengthValue<Representation extends Length = Length> implements Value<MathContext> {
+export class LengthValue<R extends Length = Length> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <length>. */
@@ -45,7 +45,7 @@ export class LengthValue<Representation extends Length = Length> implements Valu
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): LengthValue {
-    const previous = this.value;
+    const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, context);
       return resolved === previous ? this : new LengthValue(resolved);
@@ -59,13 +59,13 @@ export class LengthValue<Representation extends Length = Length> implements Valu
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: LengthValue, context: MathContext = {}): LengthValue {
-    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue) && this.value.unit === other.value.unit) {
-      return new LengthValue(this.value.add(other.value));
+    if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue) && this.repr.unit === other.repr.unit) {
+      return new LengthValue(this.repr.add(other.repr));
     }
     return new LengthValue(
       this.#asMathValue(context).add(other.#asMathValue(context), context),
@@ -74,8 +74,8 @@ export class LengthValue<Representation extends Length = Length> implements Valu
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: LengthValue, progress: number, context: MathContext = {}): LengthValue {
-    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue) && this.value.unit === other.value.unit) {
-      return new LengthValue(this.value.interpolate(other.value, progress));
+    if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue) && this.repr.unit === other.repr.unit) {
+      return new LengthValue(this.repr.interpolate(other.repr, progress));
     }
     return new LengthValue(
       this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
@@ -88,8 +88,8 @@ export class LengthValue<Representation extends Length = Length> implements Valu
   }
 
   #asMathValue(context: MathContext): MathValue<'length'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'length', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'length', context);
   }
 }
 

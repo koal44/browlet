@@ -1,25 +1,47 @@
-import type { CustomPropertyName } from '../syntax/index';
-import { backgroundColorProperty, colorProperty, marginSideProperty, opacityProperty } from './built-in/index';
+import type { CustomPropertyName, ParserInput } from '../syntax/index';
+import type { ParsedSyntaxValue, SyntaxValue, WholeValue } from '../values/index';
+import type { PropertyContext } from './base-property';
+import {
+  backgroundColorProperty, colorProperty, marginTopProperty, marginRightProperty,
+  marginBottomProperty, marginLeftProperty, opacityProperty,
+} from './built-in/index';
 
-/** Shared grammars and metadata for supported built-in properties. */
-export const propertyRegistry = {
+// Type parameter: N = built-in property name.
+
+export const builtInRegistry = {
   'background-color': backgroundColorProperty,
   color: colorProperty,
-  'margin-bottom': marginSideProperty,
-  'margin-left': marginSideProperty,
-  'margin-right': marginSideProperty,
-  'margin-top': marginSideProperty,
+  'margin-bottom': marginBottomProperty,
+  'margin-left': marginLeftProperty,
+  'margin-right': marginRightProperty,
+  'margin-top': marginTopProperty,
   opacity: opacityProperty,
 } as const;
 
-/** Names accepted by interpreted declarations: supported longhands or custom properties. */
-export type PropertyName = BuiltInPropertyName | CustomPropertyName;
+/** Installed property records, retaining each entry's concrete type. */
+export type BuiltInRegistry = typeof builtInRegistry;
 
 /** Built-in longhand names installed in the registry. */
-export type BuiltInPropertyName = keyof PropertyRegistry;
+export type BuiltInPropertyName = keyof typeof builtInRegistry;
 
-/** Parsed value type associated with a supported built-in property name. */
-export type PropertyValue<Name extends BuiltInPropertyName> = NonNullable<ReturnType<PropertyRegistry[Name]['parse']>>;
+/** Whole-value family accepted by a supported built-in property. */
+export type BuiltInPropertyValue<N extends BuiltInPropertyName> = BuiltInRegistry[N]['initialValue'];
 
-/** Registry entries retain each property's parser and metadata. */
-type PropertyRegistry = typeof propertyRegistry;
+/** A document-scoped override of the Variables 1 defaults for one custom property. */
+export type CustomPropertyRegistration = {
+  name: CustomPropertyName;
+  syntax: SyntaxValue;
+  parse: (input: ParserInput, context: PropertyContext) => WholeValue<ParsedSyntaxValue> | null;
+  inherits: boolean;
+  initialValue: WholeValue<ParsedSyntaxValue>;
+};
+
+export type CustomPropertyRegistry = Map<CustomPropertyName, CustomPropertyRegistration>;
+
+export type RegistryContext = {
+  /** Effective registrations for this computation; omitted in registration-free contexts. */
+  customPropertyRegistry?: CustomPropertyRegistry;
+};
+
+/** Names accepted by interpreted declarations: supported longhands or custom properties. */
+export type PropertyName = BuiltInPropertyName | CustomPropertyName;

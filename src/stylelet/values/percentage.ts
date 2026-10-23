@@ -12,12 +12,12 @@ import { MathValue, type MathContext } from './math-value';
 
 /** A <percentage> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#percentages
-export class PercentageValue<Representation extends Percentage = Percentage> implements Value<MathContext> {
+export class PercentageValue<R extends Percentage = Percentage> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <percentage>. */
@@ -46,7 +46,7 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): PercentageValue {
-    const previous = this.value;
+    const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, percentageMathContext(context));
       return resolved === previous ? this : new PercentageValue(resolved);
@@ -56,13 +56,13 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: PercentageValue, context: MathContext = {}): PercentageValue {
-    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
-      return new PercentageValue(this.value.add(other.value));
+    if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
+      return new PercentageValue(this.repr.add(other.repr));
     }
     const mathContext = percentageMathContext(context);
     return new PercentageValue(
@@ -72,8 +72,8 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: PercentageValue, progress: number, context: MathContext = {}): PercentageValue {
-    if (!(this.value instanceof MathValue) && !(other.value instanceof MathValue)) {
-      return new PercentageValue(this.value.interpolate(other.value, progress));
+    if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
+      return new PercentageValue(this.repr.interpolate(other.repr, progress));
     }
     const mathContext = percentageMathContext(context);
     return new PercentageValue(
@@ -87,8 +87,8 @@ export class PercentageValue<Representation extends Percentage = Percentage> imp
   }
 
   #asMathValue(context: MathContext): MathValue<'percentage'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'percentage', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'percentage', context);
   }
 }
 

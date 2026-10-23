@@ -6,7 +6,7 @@ export {
   type ColorContext, type ColorValueContext, type AbsoluteColor, type SystemColorName,
 } from './color';
 export { GradientValue, type GradientContext } from './gradient';
-export { MathValue, MathExpression, type MathContext, type MathValueType } from './math-value';
+export { MathValue, MathExpression, type MathContext, type MathValueType, type PercentageReferenceValue } from './math-value';
 export { AnglePercentageValue } from './angle-percentage';
 export { AngleValue } from './angle';
 export { parseDimension, consumeDimension, type DimensionValue } from './dimension';
@@ -24,8 +24,7 @@ export { PositionValue, type PositionContext } from './position';
 export { SyntaxValue, type ParsedSyntaxValue } from './syntax-value';
 export { UrlValue, type UrlContext } from './url';
 export { SupportsConditionValue, type SupportsContext } from './supports-condition';
-export { WholeValue } from './whole-value';
-export { PendingSubstitutionValue, type PendingShorthand } from './pending-substitution';
+export { WholeValue, RawWholeValue, type WholeValueContents, type PendingShorthand } from './whole-value';
 export { CssWideValue } from './css-wide';
 export { GuaranteedInvalidValue, guaranteedInvalidValue } from './guaranteed-invalid';
 export { SubstitutionValue, type SubstitutionContext } from './substitution-value';

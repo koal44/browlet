@@ -48,7 +48,7 @@ describe('<boolean-expr[]>', () => {
     const opaque = queried[0]!;
     expect(opaque).toBeInstanceOf(GeneralEnclosedValue);
     expect(opaque.serialize()).toBe(input);
-    const block = opaque.value;
+    const block = opaque.repr;
     if (input === 'future()') expect(block.value).toBeUndefined();
     else expect(block.value).toBeInstanceOf(AnyValue);
   });
@@ -159,7 +159,7 @@ describe('BooleanExprValue.evaluate', () => {
   it('maps top-level unknown to false by default', () => {
     const value = BooleanExprValue.parse('c', consumeTest, {})!;
 
-    expect(value.value.evaluate({ evaluateTest })).toBe('unknown');
+    expect(value.repr.evaluate({ evaluateTest })).toBe('unknown');
     expect(value.evaluate({ evaluateTest })).toBe(false);
   });
 

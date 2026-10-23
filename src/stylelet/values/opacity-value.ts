@@ -14,12 +14,12 @@ import { PercentageValue } from './percentage';
 
 /** An opacity with percentage conversion and computed-stage clamping. */
 // https://drafts.csswg.org/css-color-4/#transparency
-export class OpacityValue<Representation extends Opacity = Opacity> implements Value<MathContext> {
+export class OpacityValue<R extends Opacity = Opacity> implements Value<MathContext> {
   /** The retained number or percentage, including an unresolved calculation. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse a complete <opacity-value>. */
@@ -34,27 +34,27 @@ export class OpacityValue<Representation extends Opacity = Opacity> implements V
 
   /** Convert resolved percentages to numbers and clamp from the computed stage onward. */
   resolve(stage: ValueStage, context: MathContext = {}): OpacityValue {
-    const resolved = this.value.resolve(stage, {
+    const resolved = this.repr.resolve(stage, {
       ...context,
       unwrapMathAt: context.unwrapMathAt ?? ValueStage.Computed,
     });
-    const numeric = resolved.value;
-    const literal = numeric instanceof MathValue ? numeric.value : numeric;
+    const numeric = resolved.repr;
+    const literal = numeric instanceof MathValue ? numeric.repr : numeric;
     if (literal instanceof MathExpression) {
-      return resolved === this.value ? this : new OpacityValue(resolved);
+      return resolved === this.repr ? this : new OpacityValue(resolved);
     }
 
     const magnitude = literal instanceof PercentageLiteral ? literal.value / 100 : literal.value;
     const number = stage < ValueStage.Computed ? magnitude : clamp(magnitude, 0, 1);
     if (numeric instanceof NumberLiteral && Object.is(number, numeric.value)) {
-      return resolved === this.value ? this : new OpacityValue(resolved);
+      return resolved === this.repr ? this : new OpacityValue(resolved);
     }
     return new OpacityValue(new NumberValue(new NumberLiteral(number)));
   }
 
   /** Serialize the current representation without conversion or clamping. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add opacities in their number scale; resolution applies the stage's limits. */
@@ -73,8 +73,8 @@ export class OpacityValue<Representation extends Opacity = Opacity> implements V
   }
 
   #asNumber(): NumberValue {
-    if (this.value instanceof NumberValue) return this.value;
-    const percentage = this.value.value;
+    if (this.repr instanceof NumberValue) return this.repr;
+    const percentage = this.repr.repr;
     return new NumberValue(percentage instanceof MathValue
       ? percentage.toNumber(1 / 100, 1)
       : new NumberLiteral(percentage.value / 100));

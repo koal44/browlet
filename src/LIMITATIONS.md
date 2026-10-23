@@ -194,6 +194,11 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   must supply their own DOM operations, as Browlet does.
   The [engine inventory](stylelet/engine/README.md) distinguishes these limits
   from passing direct resolver tests.
+- **Property animation:** pure combination operations cover installed opacity,
+  physical margin, absolute-color, and unregistered custom values. Repeatable lists,
+  symbolic-color interpolation, and registered custom animation throw explicitly.
+  Keyframe/effect sampling, taint propagation, composition, and animation-driven
+  cascade updates remain unconnected; these operations alone do not animate a document.
 - **Stylesheet rules:** namespace declarations, selector edits, style-rule text,
   and nested insertion/deletion are implemented. Unknown at-rules are discarded;
   recognized unfinished grammars, including conditional groups and page/margin

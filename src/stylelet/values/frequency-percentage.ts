@@ -15,12 +15,12 @@ import { MathValue, MathExpression, type MathContext } from './math-value';
 
 /** A <frequency-percentage> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#typedef-frequency-percentage
-export class FrequencyPercentageValue<Representation extends FrequencyPercentage = FrequencyPercentage> implements Value<MathContext> {
+export class FrequencyPercentageValue<R extends FrequencyPercentage = FrequencyPercentage> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <frequency-percentage>. */
@@ -51,10 +51,10 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): FrequencyPercentageValue {
-    const previous = this.value;
+    const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, frequencyPercentageMathContext(context));
-      const value = resolved.value instanceof MathExpression ? resolved : resolved.value;
+      const value = resolved.repr instanceof MathExpression ? resolved : resolved.repr;
       return value === previous ? this : new FrequencyPercentageValue(value);
     }
 
@@ -69,16 +69,16 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: FrequencyPercentageValue, context: MathContext = {}): FrequencyPercentageValue {
-    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
-      return new FrequencyPercentageValue(this.value.add(other.value));
+    if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
+      return new FrequencyPercentageValue(this.repr.add(other.repr));
     }
-    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
-      return new FrequencyPercentageValue(this.value.add(other.value));
+    if (this.repr instanceof FrequencyLiteral && other.repr instanceof FrequencyLiteral && this.repr.unit === other.repr.unit) {
+      return new FrequencyPercentageValue(this.repr.add(other.repr));
     }
     const mathContext = frequencyPercentageMathContext(context);
     return new FrequencyPercentageValue(
@@ -88,11 +88,11 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: FrequencyPercentageValue, progress: number, context: MathContext = {}): FrequencyPercentageValue {
-    if (this.value instanceof PercentageLiteral && other.value instanceof PercentageLiteral) {
-      return new FrequencyPercentageValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
+      return new FrequencyPercentageValue(this.repr.interpolate(other.repr, progress));
     }
-    if (this.value instanceof FrequencyLiteral && other.value instanceof FrequencyLiteral && this.value.unit === other.value.unit) {
-      return new FrequencyPercentageValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof FrequencyLiteral && other.repr instanceof FrequencyLiteral && this.repr.unit === other.repr.unit) {
+      return new FrequencyPercentageValue(this.repr.interpolate(other.repr, progress));
     }
     const mathContext = frequencyPercentageMathContext(context);
     return new FrequencyPercentageValue(
@@ -106,8 +106,8 @@ export class FrequencyPercentageValue<Representation extends FrequencyPercentage
   }
 
   #asMathValue(context: MathContext): MathValue<'frequency-percentage'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'frequency-percentage', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'frequency-percentage', context);
   }
 }
 

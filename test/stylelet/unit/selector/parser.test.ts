@@ -822,7 +822,7 @@ describe('pseudo-class selectors', () => {
         parts: [
           pseudoClassPart('nth-child', {
             kind: PseudoArgumentKind.NthChild,
-            formula: { value: { a, b } },
+            formula: { repr: { a, b } },
             of: null,
           }),
         ],
@@ -864,7 +864,7 @@ describe('pseudo-class selectors', () => {
             kind: name.includes('of-type')
               ? PseudoArgumentKind.AnPlusB
               : PseudoArgumentKind.NthChild,
-            formula: { value: { a: 2, b: 1 } },
+            formula: { repr: { a: 2, b: 1 } },
           }),
         ],
       });
@@ -875,7 +875,7 @@ describe('pseudo-class selectors', () => {
         parts: [
           pseudoClassPart('nth-child', {
             kind: PseudoArgumentKind.NthChild,
-            formula: { value: { a: 2, b: 1 } },
+            formula: { repr: { a: 2, b: 1 } },
             of: selectorList([
               {
                 parts: [
@@ -1147,7 +1147,7 @@ describe('pseudo-class selectors', () => {
         parts: [
           pseudoClassPart(name, {
             kind: PseudoArgumentKind.AnPlusB,
-            formula: { value: { a: 2, b: 1 } },
+            formula: { repr: { a: 2, b: 1 } },
           }),
         ],
       });
@@ -1266,7 +1266,7 @@ describe('pseudo-element selectors', () => {
           pseudoElementPart(null, 'highlight', [], {
             kind: PseudoArgumentKind.CustomIdent,
             value: {
-              value: 'foo',
+              repr: 'foo',
             },
           }),
         ],

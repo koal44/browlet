@@ -11,10 +11,10 @@ import type { Value } from './value';
 // https://drafts.csswg.org/css-syntax-3/#any-value
 export class AnyValue implements Value {
   /** Validated components; an existing parsed list is retained without copying its arrays. */
-  value: NonEmptyTokenList<AnyValueComponent>;
+  repr: NonEmptyTokenList<AnyValueComponent>;
 
   private constructor(value: NonEmptyTokenList<AnyValueComponent>) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse the entire input, retaining an existing component list when it matches. */
@@ -46,7 +46,7 @@ export class AnyValue implements Value {
 
   /** Serialize the retained components without interpreting their grammar. */
   serialize(): string {
-    return serializeComponentValues(this.value.tokens);
+    return serializeComponentValues(this.repr.tokens);
   }
 }
 

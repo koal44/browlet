@@ -8,8 +8,8 @@ The APIs and Web IDL are present; incomplete property families still limit them.
 - [ ] Revisit the name/value coupling in [InterpretedDeclaration](interpreted-declaration.ts).
   It rejects mismatched construction and preserves per-property narrowing, but
   current production callers mainly need the built-in/custom distinction and
-  common value operations. Reassess whether those benefits justify the class
-  expression, mapped instance union, and correlation assertions as consumers
+  common value operations. Reassess whether those benefits justify the
+  constructor alias, mapped instance union, and correlation assertions as consumers
   develop. As the property registry grows, measure TypeScript checking and
   editor responsiveness before extending this machinery. The typing adds no
   runtime work; no compiler or editor slowdown has been established.
@@ -18,7 +18,7 @@ The APIs and Web IDL are present; incomplete property families still limit them.
 
 - [x] Implement ordinary shorthand expansion and serialization in the property
   layer, starting with [margin](../../props/built-in/margin.ts). The property record
-  returns ordered values; CSSOM supplies declaration names and importance.
+  returns ordered values; CSSOM retains their named property records and importance.
   One-to-four sides, CSS-wide values, incompatible combinations, and canonical
   shortening now work through inline-style and rule bindings.
 - [x] Retain pending substitution across a shorthand's longhands. A `var()`

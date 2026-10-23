@@ -11,15 +11,24 @@ opacity, position, URL/modifiers, media queries, color, and gradient, together
 with `AnyValue`, `DeclarationValue`, and `OptionalDeclarationValue`, implement
 [Value](value.ts). Instances own `resolve()` and
 `serialize()`; classes own `parse()`, `consume()`, and configured consumer
-factories where needed. The payload field is consistently `value`.
+factories where needed. A value's representation is stored in `repr`, while
+`WholeValue.inner` holds the contained value. Numeric literals keep their scalar
+magnitude in `value`: `whole.inner.repr` can be a literal whose `value` is a number.
+Token fields, declaration fields, and records within a representation keep their
+own names.
+`WholeValue` combines with another `WholeValue`, delegates to the contained value's
+existing operation, and retains the result with `withValue()`, just as resolution
+does. It neither reparses nor resolves an animation result. Concrete operations
+keep their own operand contracts. Properties own animation categories and discrete
+fallback selection; missing operations and unmet computation prerequisites throw.
 `AnglePercentage` privately names its representation. `MathExpression` owns the
 retained calculation tree, its serialization, and promoted-variable spelling.
 `MathValueType` names a numeric result category such as length or angle-percentage.
 
 Classes with alternative or refinable payloads use a defaulted
-`Representation` parameter. Construction retains the supplied representation,
+`R` parameter for the representation. Construction retains the supplied representation,
 so `NumberValue<NumberLiteral>` can express a known literal without intersecting
-the class with another `value` field. Ordinary callers omit the parameter.
+the class with another `repr` field. Ordinary callers omit the parameter.
 Parsing returns the complete grammar's value type; resolution and combination
 also return the broader type when they can change the representation. Operations
 that return the same instance can preserve the refinement. MathValue keeps its
@@ -105,14 +114,32 @@ functions remain opaque syntax and are discarded when assembling a URL;
 ## Whole values and property grammars
 
 [WholeValue](whole-value.ts) owns the lifecycle of a complete property value.
-Its `value` holds either a concrete value class or whole-value notation. It
+Its `inner` uses `WholeValueContents<O>` for the grammar-specific value together
+with raw, substitution, CSS-wide, first-valid, and guaranteed-invalid forms. It
 retains the ordinary parser needed for deferred reparsing, without retaining
-context. `PropertyRecord.parse()` supplies its retained grammar to `WholeValue.parse()`.
+context. `BuiltInProperty.parse()` supplies its retained grammar to `WholeValue.parse()`.
 Standalone callers pass their ordinary parser directly to the same method;
 each parsed instance shares that parser.
-Whole values and property records default to `PropertyContext`, which includes
-substitution lookup. An ordinary parser's narrower context does not narrow the
-whole property's contract; a caller can explicitly select another context type.
+Custom declarations retain their original components in `RawWholeValue` inside
+the same wrapper, so declared spelling survives until computation applies the
+whole-value notation and ordinary grammar. The custom property owns source-preserving
+serialization and selects registration behavior from the current context;
+registered computation in the engine remains unfinished.
+Whole values and property records receive `PropertyContext`, which includes
+substitution lookup, without a separate context type parameter. Concrete value
+parsers and operations retain their narrower context contracts. The shared `Value`
+interface also defaults to `PropertyContext`; explicit contexts such as
+`Value<MathContext>` remain available.
+`O` names the ordinary value, with `Value` as its default. Callers inspect complete
+values with `isGuaranteedInvalid()`, `cssWideKeyword()`, and `isPendingSubstitution()`;
+the latter checks for the retained shorthand occurrence and narrows its longhand position.
+Pending substitution is state on WholeValue, not a subtype or another contained value.
+Computation returns a whole value without that state, leaving the declaration unchanged.
+
+Short type parameter names retain their roles across values and properties:
+`C` is context, `O` the ordinary value accepted by a parser, `I` inner contents,
+`R` a representation, `P` a property, `N` a property name, and `W` a whole value.
+Use `V` for a replacement or other value, rather than reusing `R` for a result.
 
 Parsing returns a value ready to retain in a
 declaration, or null for invalid ordinary property syntax. It reads generic
@@ -130,18 +157,26 @@ parse rejection. Property records retain their parser, inheritance flag, and
 initial value. WholeValue's parser association does not supply defaulting rules.
 The ordinary representation can be retained or replaced by its resolver's
 return type; resolution does not promise to preserve the parser's exact type.
+Animation methods instead retain the return type of the corresponding concrete
+operation. A length-percentage can gain math contents while remaining a
+length-percentage, and color interpolation retains its absolute-color result.
+The wrapper keeps the original grammar alongside any new representation.
 
 The main representations are:
 
 | Representation | Current role |
 | --- | --- |
-| RawWholeValue | Retains registered custom-property components without trying the registered grammar before Computed. |
+| RawWholeValue | Retains custom-property components and source spelling until Computed applies whole-value notation and the ordinary grammar. |
 | Concrete ordinary value | Owns its resolution and serialization; WholeValue delegates directly to it. |
 | CssWideValue | Recognizes `initial`, `inherit`, `unset`, `revert`, and `revert-layer`; resolution currently returns the keyword unchanged. |
 | SubstitutionValue | Retains arbitrary-substitution components; replaces `var()` with a guarded custom-property lookup while preserving token/source data. Other functions stop explicitly. |
 | FirstValidValue | Retains alternatives before Computed; WholeValue selects the first argument accepted by its consuming grammar, then resolves it. Unused alternatives are not substituted; a computed-time failure does not select another argument. |
-| PendingSubstitutionValue | A WholeValue subtype for one deferred longhand, retaining its position and the original shorthand occurrence/grammar. Longhand serialization is empty; a complete compatible set can serialize the original shorthand. |
 | GuaranteedInvalidValue | Represents invalidity distinctly from an ordinary value; serializes as an empty string. It does not perform registration or property fallback. |
+
+Pending longhands share one `PendingShorthand` occurrence and retain their own index
+on WholeValue. Their serialization is empty; a complete compatible set can serialize
+the original shorthand. The engine caches expansion per occurrence and element within
+a query. Direct WholeValue resolution expands without an engine cache.
 
 Resolution receives the requested stage and current context on every call.
 Parsing recognizes CSS-wide keywords, first-valid alternatives, and substitution
@@ -192,12 +227,12 @@ type's resolver merely because their tokens resemble a number, URL, or color.
 | --- | --- |
 | [Numeric literals](numeric-literal/) | Typed numbers/dimensions and unit conversion. Length resolution accepts explicit font, viewport, container, and axis references; it can report that a reference is unavailable. |
 | [Math values](math-value.ts) | Calculation trees, type checks, simplification, numeric operations, stage/range handling, and context-dependent resolution. Serialization walks the retained representation. |
-| [Lengths](length.ts) and [length-percentages](length-percentage.ts) | Combine literals/math and resolve when stage/context permit. Missing references can leave a value unresolved; the caller must supply property-specific percentage timing. |
+| [Lengths](length.ts) and [length-percentages](length-percentage.ts) | Combine literals/math and resolve when stage/context permit. Missing references can leave a value unresolved; `BuiltInProperty.resolve()` supplies property-specific percentage timing. |
 | [Opacity](opacity-value.ts) | Converts percentages to number values during resolution and clamps at Computed or later. This is one connected example from the installed registry. |
 | [URLs](url.ts) | Retains notation/modifiers, captures local-fragment tree scope when supplied from Specified onward, and resolves other nonempty URLs from Computed onward using the host URL constructor/base. It does not fetch resources. |
-| Type-specific combination methods | Number, dimension, math, color, and other values offer operations such as interpolation. There is no generic interpolation dispatcher or connected animation engine. |
+| Type-specific combination methods | `Value` exposes optional `interpolate()`, `add()`, and `accumulate()` methods with their natural arguments. Property records call these methods directly and own category dispatch and discrete fallback. Missing operations throw when requested. There is no connected animation engine. |
 
-The broad [PropertyContext](../props/property.ts) combines value-helper inputs.
+The broad [PropertyContext](../props/base-property.ts) combines value-helper inputs.
 The current engine supplies only URL/base/tree information. Standalone tests
 can supply font or percentage facts that an actual style query does not yet
 provide. Neither those tests nor the Used/Actual enum entries imply a layout

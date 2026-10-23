@@ -9,17 +9,16 @@ import type { StyleletEnvironment } from '../../environment';
 import { isCustomPropertyName } from '../../syntax/index';
 import { getShorthand, propertyRegistry } from '../../props/index';
 import type { CSSRuleImpl } from '../rules/index';
+import type { ComputedStyle } from '../../engine/index';
 
 import { CSSDeclarationBlock } from './declaration-block';
 import { InterpretedDeclaration } from './interpreted-declaration';
 
-/** CSSOM access to a declaration block, with optional rule ownership or element write-back. */
+/** CSSOM access to authored declarations or computed values, with optional rule ownership or element write-back. */
 // https://drafts.csswg.org/cssom/#the-cssstyledeclaration-interface
 export class CSSStyleDeclarationImpl {
-  /** Parsed declarations shared with the owning rule, inline style, or computed result. */
-  #block: CSSDeclarationBlock;
-  /** Whether this object represents a computed result rather than authored declarations. */
-  #computed: boolean;
+  /** Authored declarations or the computed values produced by a style query. */
+  #data: CSSDeclarationBlock | ComputedStyle;
   /** Whether CSSOM mutation operations must reject changes to the block. */
   #readonly: boolean;
   /** Rule whose declarations this object exposes, or null outside a rule. */
@@ -31,50 +30,53 @@ export class CSSStyleDeclarationImpl {
   /** Owning environment used to write the element's style attribute. */
   #env: StyleletEnvironment;
 
-  /** Expose a declaration block; hosts deliver attribute changes explicitly. */
+  /** Expose authored or computed data; hosts deliver attribute changes explicitly. */
   // https://drafts.csswg.org/cssom/#css-declaration-blocks
   constructor({
-    block = new CSSDeclarationBlock(),
-    computed = false,
+    block,
+    computedStyle,
     readonly = false,
     parentRule = null,
     ownerNode = null,
   }: CSSStyleDeclarationOptions, env: StyleletEnvironment) {
     this.#env = env;
-    this.#computed = computed;
     this.#readonly = readonly;
     this.#parentRule = parentRule;
     this.#ownerNode = ownerNode;
-    this.#block = block;
+    this.#data = computedStyle ?? block ?? new CSSDeclarationBlock();
   }
 
   /** Serialized declarations, or empty text for computed results; assignment replaces the block. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-csstext
   get cssText(): string {
-    return this.#computed ? '' : this.#block.cssText;
+    return this.#data instanceof CSSDeclarationBlock ? this.#data.cssText : '';
   }
 
   set cssText(value: string) {
-    this.#assertMutable();
-    this.#block.setText(value, {});
+    this.#mutableBlock().setText(value, {});
     this.#updateStyleAttribute();
   }
 
-  /** Number of property declarations currently retained by the block. */
+  /** Number of retained property names. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-length
   get length(): number {
-    return this.#block.declarations.length;
+    return this.#data instanceof CSSDeclarationBlock ? this.#data.declarations.length : this.#data.size;
   }
 
-  /** Rule owning this declaration object, or null for inline/computed declarations. */
+  /** Rule owning this object, or null for inline styles and computed results. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-parentrule
   get parentRule(): CSSRuleImpl | null {
     return this.#parentRule;
   }
 
-  /** Read the current parsed declarations without serializing or projecting them. */
+  /** Read authored declarations; computed results contain no declaration occurrences. */
   get declarations(): readonly InterpretedDeclaration[] {
-    return this.#block.declarations;
+    return this.#data instanceof CSSDeclarationBlock ? this.#data.declarations : [];
+  }
+
+  /** Computed values backing this object, when it exposes a style-query result. */
+  get computedStyle(): ComputedStyle | undefined {
+    return this.#data instanceof CSSDeclarationBlock ? undefined : this.#data;
   }
 
   /** Whether CSSOM is writing the owner attribute; hosts must bypass their input policy during write-back. */
@@ -82,27 +84,28 @@ export class CSSStyleDeclarationImpl {
     return this.#updating;
   }
 
-  /** Property name at an index, or an empty string outside the block. */
+  /** Property name at an index, or an empty string outside the collection. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-item
   item(index: number): string {
-    return this.#block.declarations[index]?.name ?? '';
+    return this.#data instanceof CSSDeclarationBlock ? this.#data.declarations[index]?.name ?? '' : this.#data.item(index);
   }
 
   /** Find a declaration by its already-normalized property name. */
   getDeclaration(name: string): InterpretedDeclaration | undefined {
-    return this.#block.find(name);
+    return this.#data instanceof CSSDeclarationBlock ? this.#data.find(name) : undefined;
   }
 
   /** Serialize a retained property's value, or return empty text when it is absent. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertyvalue
   getPropertyValue(property: string): string {
     const name = normalizePropertyName(property);
+    if (!(this.#data instanceof CSSDeclarationBlock)) return this.#data.serialize(name);
     const shorthand = getShorthand(name);
     if (shorthand !== undefined) {
-      const longhands = this.#block.getLonghands(shorthand);
+      const longhands = this.#data.getLonghands(shorthand);
       return longhands === null ? '' : shorthand.serialize(longhands.map(({ value }) => value));
     }
-    const declaration = this.#block.find(name);
+    const declaration = this.#data.find(name);
     return declaration === undefined
       ? ''
       : declaration.serializeValue();
@@ -111,12 +114,13 @@ export class CSSStyleDeclarationImpl {
   /** Return `important` for an important declaration, otherwise an empty string. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-getpropertypriority
   getPropertyPriority(property: string): string {
+    if (!(this.#data instanceof CSSDeclarationBlock)) return '';
     const name = normalizePropertyName(property);
     const shorthand = getShorthand(name);
     if (shorthand !== undefined) {
-      return this.#block.getLonghands(shorthand)?.[0]?.important ? 'important' : '';
+      return this.#data.getLonghands(shorthand)?.[0]?.important ? 'important' : '';
     }
-    return this.#block.find(name)?.important
+    return this.#data.find(name)?.important
       ? 'important'
       : '';
   }
@@ -128,7 +132,7 @@ export class CSSStyleDeclarationImpl {
     value: string,
     priority = '',
   ): void {
-    this.#assertMutable();
+    const block = this.#mutableBlock();
 
     const name = normalizePropertyName(property);
     if (!isCustomPropertyName(name) && !isSupportedPropertyName(name) && getShorthand(name) === undefined) return;
@@ -151,7 +155,7 @@ export class CSSStyleDeclarationImpl {
     if (declarations === null) return;
     let updated = false;
     for (const declaration of declarations) {
-      if (this.#block.set(declaration)) updated = true;
+      if (block.set(declaration)) updated = true;
     }
     if (updated) this.#updateStyleAttribute();
   }
@@ -159,7 +163,7 @@ export class CSSStyleDeclarationImpl {
   /** Remove a property and return its previous serialized value. */
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-removeproperty
   removeProperty(property: string): string {
-    this.#assertMutable();
+    const block = this.#mutableBlock();
 
     const name = normalizePropertyName(property);
     // SPEC_CLASH(shorthand-removal-return): Follow CSSOM/Firefox by returning the
@@ -168,19 +172,21 @@ export class CSSStyleDeclarationImpl {
     const shorthand = getShorthand(name);
     let removed = false;
     if (shorthand === undefined) {
-      removed = this.#block.remove(name);
+      removed = block.remove(name);
     } else {
-      for (const [longhand] of shorthand.longhands) {
-        if (this.#block.remove(longhand)) removed = true;
+      for (const { name: longhand } of shorthand.longhands) {
+        if (block.remove(longhand)) removed = true;
       }
     }
     if (removed) this.#updateStyleAttribute();
     return value;
   }
 
-  /** Iterate a snapshot of the block's property names in declaration order. */
+  /** Iterate a snapshot of the retained property names in collection order. */
   [Symbol.iterator](): ArrayIterator<string> {
-    return this.#block.declarations.map(({ name }) => name)[Symbol.iterator]();
+    const names = this.#data instanceof CSSDeclarationBlock
+      ? this.#data.declarations.map(({ name }) => name) : [...this.#data.keys()];
+    return names[Symbol.iterator]();
   }
 
   /** Apply an initial or changed attribute value without writing it back to the owner. */
@@ -189,21 +195,21 @@ export class CSSStyleDeclarationImpl {
     value: string | null,
     namespace: string | null = null,
   ): void {
-    if (this.#computed || this.#updating) return;
+    if (!(this.#data instanceof CSSDeclarationBlock) || this.#updating) return;
     if (localName !== 'style' || namespace !== null) return;
 
-    this.#block.setText(value ?? '', {});
+    this.#data.setText(value ?? '', {});
   }
 
-  /** Read the shared block's current indices; attribute changes need no synchronization. */
-  getSupportedPropertyIndices(): Iterable<number> {
-    return this.#block.declarations.keys();
+  /** Read current indices from either source; changes need no synchronization. */
+  *getSupportedPropertyIndices(): Iterable<number> {
+    for (let index = 0, length = this.length; index < length; index++) yield index;
   }
 
   /** Write declarations to the owner attribute while suppressing the resulting input echo. */
   // https://drafts.csswg.org/cssom/#update-style-attribute-for
   #updateStyleAttribute(): void {
-    if (this.#ownerNode === null || this.#computed) return;
+    if (this.#ownerNode === null || !(this.#data instanceof CSSDeclarationBlock)) return;
 
     this.#updating = true;
     try {
@@ -213,9 +219,9 @@ export class CSSStyleDeclarationImpl {
     }
   }
 
-  /** Reject CSSOM writes when the declaration block is read-only. */
-  #assertMutable(): void {
-    if (!this.#readonly) return;
+  /** Obtain the authored block, rejecting CSSOM writes to computed or read-only data. */
+  #mutableBlock(): CSSDeclarationBlock {
+    if (!this.#readonly && this.#data instanceof CSSDeclarationBlock) return this.#data;
 
     throw new DOMExceptionImpl(
       'The CSS declaration block is read-only.',
@@ -228,8 +234,8 @@ export class CSSStyleDeclarationImpl {
 type CSSStyleDeclarationOptions = {
   /** Existing declaration data to expose; omitted creates an empty block. */
   block?: CSSDeclarationBlock;
-  /** Whether reads use the computed-declaration rules. */
-  computed?: boolean;
+  /** Computed results to expose instead of authored declarations. */
+  computedStyle?: ComputedStyle;
   /** Whether author mutation operations must throw. */
   readonly?: boolean;
   /** Rule whose declarations this object represents, or null when there is no owning rule. */

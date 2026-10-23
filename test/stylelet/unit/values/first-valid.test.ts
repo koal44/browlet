@@ -14,7 +14,7 @@ describe('<first-valid()>', () => {
     const value = FirstValidValue.parse('first-valid(red, 1px, rgb(0, 0, 0))', {});
 
     expect(value).toBeInstanceOf(FirstValidValue);
-    expect(value?.value.map((argument) =>
+    expect(value?.repr.map((argument) =>
       argument.serialize()
     )).toEqual(['red', '1px', 'rgb(0, 0, 0)']);
   });
@@ -26,7 +26,7 @@ describe('<first-valid()>', () => {
   it('uses braces to bound an argument containing top-level commas', () => {
     const value = FirstValidValue.parse('first-valid({Times, serif}, sans-serif)', {});
 
-    expect(value?.value.map((argument) =>
+    expect(value?.repr.map((argument) =>
       argument.serialize()
     )).toEqual(['Times, serif', 'sans-serif']);
   });
@@ -34,7 +34,7 @@ describe('<first-valid()>', () => {
   it('allows braces around an argument that does not require them', () => {
     const value = FirstValidValue.parse('first-valid({red}, blue)', {});
 
-    expect(value?.value.map((argument) =>
+    expect(value?.repr.map((argument) =>
       argument.serialize()
     )).toEqual(['red', 'blue']);
     expect(value!.serialize()).toBe('first-valid(red, blue)');

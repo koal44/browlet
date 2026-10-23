@@ -38,15 +38,15 @@ describe('value lifecycle', () => {
 
     expectTypeOf(number).toEqualTypeOf<NumberValue<NumberLiteral>>();
     expectTypeOf(number.add(number)).toEqualTypeOf<NumberValue>();
-    expectTypeOf(frequency.value.unit).toEqualTypeOf<'khz'>();
+    expectTypeOf(frequency.repr.unit).toEqualTypeOf<'khz'>();
     expectTypeOf(frequency.resolve(ValueStage.Computed)).toEqualTypeOf<FrequencyValue>();
     expectTypeOf(opacity).toEqualTypeOf<OpacityValue<PercentageValue<PercentageLiteral>>>();
     expectTypeOf(opacity.resolve(ValueStage.Computed)).toEqualTypeOf<OpacityValue>();
 
     expect(frequency.resolve(ValueStage.Computed).serialize()).toBe('1000hz');
     expect(opacity.resolve(ValueStage.Computed).serialize()).toBe('0.25');
-    expect(frequency.value.unit).toBe('khz');
-    expect(opacity.value).toBe(percentage);
+    expect(frequency.repr.unit).toBe('khz');
+    expect(opacity.repr).toBe(percentage);
   });
 
   it('keeps a math representation constrained by its numeric category', () => {
@@ -55,14 +55,14 @@ describe('value lifecycle', () => {
 
     expectTypeOf(math).toEqualTypeOf<MathValue<'length', LengthLiteral<'em'>>>();
     expectTypeOf(computed).toEqualTypeOf<MathValue<'length'>>();
-    expectTypeOf<AngleLiteral>().not.toExtend<MathValue<'length'>['value']>();
+    expectTypeOf<AngleLiteral>().not.toExtend<MathValue<'length'>['repr']>();
     expect(computed.serialize()).toBe('32px');
     expect(math.serialize()).toBe('2em');
   });
 
   it('allows a whole value to resolve beyond its original representation', () => {
     const percentage = new PercentageValue(new PercentageLiteral(50));
-    const declared = new WholeValue<OpacityValue<PercentageValue>, MathContext>(
+    const declared = new WholeValue<OpacityValue<PercentageValue>>(
       new OpacityValue(percentage),
       (input, context) => {
         const parsed = PercentageValue.parse(input, context);
@@ -71,10 +71,10 @@ describe('value lifecycle', () => {
     );
     const computed = declared.resolve(ValueStage.Computed, {});
 
-    expectTypeOf(computed).toExtend<WholeValue<OpacityValue, MathContext>>();
-    expect(computed.value).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.5))));
+    expectTypeOf(computed).toExtend<WholeValue<OpacityValue>>();
+    expect(computed.inner).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.5))));
     expect(computed.serialize()).toBe('0.5');
-    expect(declared.value).toEqual(new OpacityValue(percentage));
+    expect(declared.inner).toEqual(new OpacityValue(percentage));
     expect(declared.serialize()).toBe('50%');
   });
 
@@ -83,10 +83,10 @@ describe('value lifecycle', () => {
     const media = new MediaQuery({ type: 'media-type-query', mediaType: 'screen' });
     const url = new UrlValue({ notation: 'url', href: '#target', modifiers: {}, local: true });
 
-    expectTypeOf(enclosed.resolve(ValueStage.Computed, {}).value.name).toEqualTypeOf<string>();
-    expectTypeOf(media.value.mediaType).toEqualTypeOf<string>();
+    expectTypeOf(enclosed.resolve(ValueStage.Computed, {}).repr.name).toEqualTypeOf<string>();
+    expectTypeOf(media.repr.mediaType).toEqualTypeOf<string>();
     expectTypeOf(media.resolve(ValueStage.Computed)).toEqualTypeOf<MediaQuery>();
-    expectTypeOf(url.value.local).toEqualTypeOf<true>();
+    expectTypeOf(url.repr.local).toEqualTypeOf<true>();
     expectTypeOf(url.resolve(ValueStage.Computed)).toEqualTypeOf<UrlValue>();
 
     expect(enclosed.resolve(ValueStage.Computed, {})).toBe(enclosed);
@@ -127,8 +127,8 @@ describe('value lifecycle', () => {
     });
 
     expect(computed).toBeInstanceOf(MathValue);
-    expect(computed.value).toEqual({ type: 'percentage', value: 25 });
-    expect(used.value).toEqual({ type: 'angle', value: 50, unit: 'deg' });
+    expect(computed.repr).toEqual({ type: 'percentage', value: 25 });
+    expect(used.repr).toEqual({ type: 'angle', value: 50, unit: 'deg' });
     expect(used.serialize()).toBe('50deg');
     expect(computed.serialize()).toBe('25%');
     expect(used.resolve(ValueStage.Actual, {})).toBe(used);

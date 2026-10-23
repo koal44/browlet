@@ -13,8 +13,8 @@ describe('local URL tree scopes', () => {
     const documentValue = value.resolve(ValueStage.Specified, { treeScope: documentScope });
     const shadowValue = value.resolve(ValueStage.Specified, { treeScope: shadowScope });
 
-    expect(documentValue).toHaveProperty('value.treeScope', documentScope);
-    expect(shadowValue).toHaveProperty('value.treeScope', shadowScope);
+    expect(documentValue).toHaveProperty('repr.treeScope', documentScope);
+    expect(shadowValue).toHaveProperty('repr.treeScope', shadowScope);
   });
 
   it('retains the captured tree scope through inheritance', () => {
@@ -22,7 +22,7 @@ describe('local URL tree scopes', () => {
     const specified = UrlValue.parse('url("#paint")', {})!.resolve(ValueStage.Specified, { treeScope: documentScope });
     const inherited = specified.resolve(ValueStage.Computed, { treeScope: shadowScope });
 
-    expect(inherited).toHaveProperty('value.treeScope', documentScope);
+    expect(inherited).toHaveProperty('repr.treeScope', documentScope);
   });
 });
 

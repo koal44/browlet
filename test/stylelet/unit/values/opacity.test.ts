@@ -24,7 +24,7 @@ describe('opacity values', () => {
     ['calc(25% + 25%)', 'percentage'],
   ])('parses the calculated opacity value %s', (input, expectedType) => {
     expect(OpacityValue.parse(input, {})).toMatchObject({
-      value: { value: { valueType: expectedType } },
+      repr: { repr: { valueType: expectedType } },
     });
   });
 
@@ -89,11 +89,11 @@ describe('opacity values', () => {
   it('uses the caller math-unwrapping policy', () => {
     const value = OpacityValue.parse('calc(0.25 + 0.25)', {})!;
 
-    const deferred = value.resolve(ValueStage.Computed, { unwrapMathAt: ValueStage.Used }).value;
-    const math = deferred.value;
+    const deferred = value.resolve(ValueStage.Computed, { unwrapMathAt: ValueStage.Used }).repr;
+    const math = deferred.repr;
     expect(math).toBeInstanceOf(MathValue);
     if (!(math instanceof MathValue)) throw new Error('Expected a retained math value');
-    expect(math.value).toBeInstanceOf(MathExpression);
+    expect(math.repr).toBeInstanceOf(MathExpression);
     expect(value.resolve(ValueStage.Computed, {
       unwrapMathAt: ValueStage.Computed,
     })).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.5))));

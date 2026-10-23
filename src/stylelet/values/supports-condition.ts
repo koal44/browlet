@@ -12,10 +12,10 @@ import { BooleanExprValue } from './boolean-expr';
 // https://drafts.csswg.org/css-conditional-3/#supports_condition
 export class SupportsConditionValue {
   /** The parsed expression; no declaration-support callback is retained. */
-  value: BooleanExprValue<SupportsDeclaration>;
+  repr: BooleanExprValue<SupportsDeclaration>;
 
   constructor(value: BooleanExprValue<SupportsDeclaration>) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse one complete supports condition. */
@@ -32,7 +32,7 @@ export class SupportsConditionValue {
   evaluate(context: SupportsContext): boolean {
     const supports = context.supports;
     if (supports === undefined) throw new InternalError('Supports evaluation requires a declaration-support query');
-    return this.value.evaluate({
+    return this.repr.evaluate({
       evaluateTest: (feature) => supports(feature.declaration),
       evaluateGeneralEnclosed: () => false,
     }) === true;

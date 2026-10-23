@@ -294,6 +294,17 @@ describe('position serialization', () => {
 });
 
 describe('position combination', () => {
+  it('requires resolved physical offsets in both operands', () => {
+    const unresolved = PositionValue.parse('block-start inline-end', {})!.resolve(ValueStage.Computed, {});
+    const resolved = offsets(percentage(10), percentage(20));
+    for (const [from, to] of [[unresolved, resolved], [resolved, unresolved]] as const) {
+      expect(() => from.interpolate(to, 0.5)).toThrow('Position combination requires resolved physical offsets');
+      expect(() => from.add(to)).toThrow('Position combination requires resolved physical offsets');
+      expect(() => from.accumulate(to)).toThrow('Position combination requires resolved physical offsets');
+    }
+    expect(unresolved.serialize()).toBe('block-start inline-end');
+  });
+
   it('adds horizontal and vertical offsets independently', () => {
     expect(offsets(percentage(10), percentage(20)).add(offsets(percentage(30), percentage(40)))).toEqual(offsets(percentage(40), percentage(60)));
   });

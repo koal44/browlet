@@ -13,10 +13,10 @@ import { CustomIdentValue, StringValue, type Value } from '../../values/index';
 /** An ordered list of animation names; animation effect lookup is not connected yet. */
 export class AnimationNameValue implements Value {
   /** Keyframe names or the none keyword for each animation. */
-  value: AnimationNameItemValue[];
+  repr: AnimationNameItemValue[];
 
   constructor(value: AnimationNameItemValue[]) {
-    this.value = value;
+    this.repr = value;
   }
 
   static parse(input: ParserInput, context: unknown): AnimationNameValue | null {
@@ -32,7 +32,7 @@ export class AnimationNameValue implements Value {
   }
 
   serialize(): string {
-    return this.value.map((item) => item === 'none' ? item : item.serialize()).join(', ');
+    return this.repr.map((item) => item === 'none' ? item : item.serialize()).join(', ');
   }
 }
 

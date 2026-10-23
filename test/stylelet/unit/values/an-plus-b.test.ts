@@ -25,13 +25,13 @@ describe('An+B grammar and serialization', () => {
     ['separated negative offset', `n - ${overflow}`, { a: 1, b: -Number.MAX_VALUE }],
   ] as const)('limits an overflowing %s during interpretation', (_name, input, expected) => {
     const value = parseAsComponentGrammar(input, AnPlusBValue.consume, {});
-    expect(value?.value).toEqual(expected);
+    expect(value?.repr).toEqual(expected);
     expect(parseAsComponentGrammar(value!.serialize(), AnPlusBValue.consume, {})).toEqual(value);
   });
   it('leaves the following of-clause for the selector grammar', () => {
     const context = {};
     const cursor = new TokenCursor(parseListOfComponentValues('2n + 1 of .item', {}), context);
-    expect(withTrivia(AnPlusBValue.consume)(cursor)?.value).toEqual({ a: 2, b: 1 });
+    expect(withTrivia(AnPlusBValue.consume)(cursor)?.repr).toEqual({ a: 2, b: 1 });
     expect(cursor.next()).toMatchObject({ type: TokenKind.Whitespace });
     expect(cursor.peek()).toMatchObject({ type: TokenKind.Ident, value: 'of' });
     expect(cursor.context).toBe(context);

@@ -10,12 +10,12 @@ import { AnyValue } from './any-value';
 
 /** An opaque function or parentheses block reserved for an unknown condition grammar. */
 // https://drafts.csswg.org/mediaqueries-4/#typedef-general-enclosed
-export class GeneralEnclosedValue<Representation extends GeneralEnclosedBlock = GeneralEnclosedBlock> implements Value {
+export class GeneralEnclosedValue<R extends GeneralEnclosedBlock = GeneralEnclosedBlock> implements Value {
   /** The enclosing block and its optional opaque contents. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse a complete opaque condition block. */
@@ -29,7 +29,7 @@ export class GeneralEnclosedValue<Representation extends GeneralEnclosedBlock = 
   }
 
   /** Unknown grammar has no value resolution; its truth is decided by the enclosing condition. */
-  resolve(_stage: ValueStage, _context: unknown): GeneralEnclosedValue<Representation> {
+  resolve(_stage: ValueStage, _context: unknown): GeneralEnclosedValue<R> {
     return this;
   }
 
@@ -38,7 +38,7 @@ export class GeneralEnclosedValue<Representation extends GeneralEnclosedBlock = 
   // this newer production. Retain token-based formatting, as WebKit does;
   // Chromium/Firefox preserve exact source text. See cssom/ROADMAP.md.
   serialize(): string {
-    const block = this.value;
+    const block = this.repr;
     const contents = block.value === undefined ? '' : block.value.serialize();
     return block.type === TokenKind.FunctionBlock
       ? `${serializeCssIdentifier(block.name)}(${contents})`

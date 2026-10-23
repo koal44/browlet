@@ -18,13 +18,13 @@ describe('<general-enclosed>', () => {
     const parsed = GeneralEnclosedValue.parse(input, {});
     expect(parsed).toBeInstanceOf(GeneralEnclosedValue);
     expect(parsed).toMatchObject({
-      value: { type: block },
+      repr: { type: block },
     });
   });
 
   it('distinguishes an omitted any-value from a present any-value', () => {
-    const empty = GeneralEnclosedValue.parse('future()', {})!.value;
-    const present = GeneralEnclosedValue.parse('future(value)', {})!.value;
+    const empty = GeneralEnclosedValue.parse('future()', {})!.repr;
+    const present = GeneralEnclosedValue.parse('future(value)', {})!.repr;
     expect(empty.value).toBeUndefined();
     expect(present.value).toBeInstanceOf(AnyValue);
   });
@@ -44,7 +44,7 @@ describe('<general-enclosed>', () => {
     const c = new TokenCursor(parseListOfComponentValues('future() other', {}), {});
 
     expect(GeneralEnclosedValue.consume(c)).toMatchObject({
-      value: {
+      repr: {
         type: TokenKind.FunctionBlock,
         name: 'future',
       },

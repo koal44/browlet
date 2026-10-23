@@ -89,8 +89,8 @@ describe('ratio', () => {
     const result = new RatioValue({ numerator: 5, denominator: 1 }).interpolate(new RatioValue({ numerator: 3, denominator: 2 }), 0.5);
 
     expect(result).toBeInstanceOf(RatioValue);
-    expect(result.value.numerator).toBeCloseTo(Math.sqrt(7.5));
-    expect(result.value.denominator).toBe(1);
+    expect(result.repr.numerator).toBeCloseTo(Math.sqrt(7.5));
+    expect(result.repr.denominator).toBe(1);
   });
 
   it.each([

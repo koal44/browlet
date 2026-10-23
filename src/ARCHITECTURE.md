@@ -238,9 +238,11 @@ lazily creates the retained CSSOM object around that same block. The cascade's
 `getInlineStyleBlock()` query reads the block directly. The optional DOM
 `inlineStyleBlock` provider returns null when there is no block; that result is
 authoritative. Only an absent provider permits raw-attribute parsing.
-Computed-style results have their own blocks and remain owned by their callers,
-not by the inline-style mixin. Binding reads supported indices from the current
-declarations, so block changes are visible through the existing Platform object.
+Computed-style results retain a separate Stylelet-owned `ComputedStyle` collection
+of property definitions and whole values, exposed through CSSOM without creating
+authored declarations. Each query creates its own collection; it has no element
+attachment or persistent cache. Binding reads supported indices from the current
+authored or computed collection, so changes are visible through the existing Platform object.
 A standalone host attaching to an existing element explicitly delivers its
 initial attribute through `attributeChanged()`. CSSOM writes the null-namespace `style` attribute through
 DOM operations so another namespace's `style` attribute cannot receive those writes.
@@ -268,13 +270,32 @@ WholeValue retains its consuming parser for deferred reparsing and delegates
 ordinary resolution and serialization to the contained value. AnyValue and the
 declaration-value classes retain component lists; their raw component types and
 validation belong to Syntax.
-Built-in property records own ordinary parsers, complete-value construction,
-inheritance, and typed initial values; their registry keys supply the property
-names. Families supply ordinary initial values, and shorthand expansion supplies
+Named built-in property records own ordinary parsers, complete-value construction,
+inheritance, typed initial values, and percentage-reference selection during
+resolution. Interpreted declarations retain the record identified during parsing
+and delegate value resolution and serialization to it. Families supply ordinary
+initial values, and shorthand expansion supplies
 already-parsed components or pending occurrences. The record constructs each
 complete value with its consuming grammar. Instances live in the property-family
-modules. Custom-property registrations retain their syntax, compiled whole-value
-parser, and metadata.
+modules. CustomProperty owns the Variables 1 defaults, declaration parsing,
+substitution, and source-preserving value serialization. Its name is stable;
+the current registration comes through PropertyContext's RegistryContext at
+computation time. CascadeEngine combines active stylesheet registrations with
+its explicit registeredPropertySet once per query and supplies that map directly.
+Custom-property registrations retain their syntax, compiled whole-value parser,
+and metadata separately from the retained property record.
+BuiltInProperty and CustomProperty extend BaseProperty, which owns shared metadata,
+operation contracts, percentage-context selection, and the animation-category guard.
+Subclasses implement interpolation, addition, and accumulation directly, handling
+their retained representations and contextual requirements without an operation selector.
+The registry module owns built-in registry types and document-scoped custom
+registrations; a registration overrides the unregistered custom-property defaults.
+Ordinary values expose interpolation, addition, and accumulation directly.
+Properties supply family-specific compatibility rules where necessary; otherwise
+WholeValue invokes the contained value's operation. A null result requests discrete
+fallback, while missing implementations throw. Results retain the property's grammar.
+Combination leaves intermediate values unclamped; the future effect composer must
+resolve the final result to apply limits. Timing and effect state belong to Animation.
 Initial values remain shared Declared representations; resolution must not
 mutate them. CascadeEngine owns declaration selection, registration lookup, and
 value computation. Each style query uses local maps for selected declarations,
@@ -286,8 +307,11 @@ retokenizing serialized text. WholeValue and pending longhands receive that look
 through `context.getCustomProperty`, preserving `resolve(stage, context)`.
 Complete property values default to `PropertyContext`; ordinary grammars keep
 their narrower context types. WholeValue reparses the resulting components with
-its retained grammar. PendingSubstitutionValue retains a longhand's index and
-the original shorthand occurrence/grammar, expanded once per element/query.
+its retained grammar. A pending longhand carries its original shorthand occurrence
+and index as state on WholeValue, not as a subtype or contained value. The engine
+caches expansion once per occurrence and element in the query; direct value resolution
+can expand it independently. The resulting whole value has no pending state, and
+the declared value remains unchanged.
 Invalid winners default without reviving earlier declarations. Cascade rollback,
 shadow-scope selection, registered values, and other arbitrary substitution
 functions remain unfinished; full Cascade review follows the bounded
@@ -307,9 +331,11 @@ CSSRuleListImpl. The context module imports only types; the list dispatches to
 concrete rule and property grammars. Rule implementations and `context.ts` live
 under `cssom/rules/`; the coordinating `rule-list.ts` remains one level above.
 Shared property contracts and registries live in `props/`; `props/built-in/`
-supplies the concrete property grammars and metadata. `props/property.ts` and
-`props/shorthand.ts` sit below those families and own value construction and common
-expansion/serialization handling, respectively. Shorthands retain supplied property
+supplies the concrete property grammars and metadata. `props/base-property.ts`
+owns shared property contracts. `props/builtin-property.ts` and
+`props/custom-property.ts` own their respective value handling, independently of
+each other. These modules and `props/shorthand.ts` sit below the concrete families;
+the shorthand class owns common expansion/serialization handling. Shorthands retain supplied property
 records through type-only imports; the separate shorthand registry collects family
 instances without a reverse runtime import.
 Declaration interpretation,
@@ -786,8 +812,8 @@ Dictionary implementation types use their specified names, such as
 `CSSStyleSheetInit` and `GetRootNodeOptions`. Their fields describe converted
 values; a convenience API may accept `Partial<CSSStyleSheetInit>` and supply
 defaults before entering the implementation. A mechanical `Record` suffix adds
-no distinction here. Keep meaningful record names such as `URLRecord` and
-`PropertyRecord`. Shared environment foundations use `Base`, as in
+no distinction here. Keep meaningful record names such as `URLRecord`.
+Shared environment foundations use `Base`, as in
 `BrowletEnvironmentBase` and `FetchEnvironmentBase`.
 
 Keep `index.ts` barrels export-only. A subsystem's `web-idl.ts` collects its

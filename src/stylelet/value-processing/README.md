@@ -1,8 +1,9 @@
 # Value processing
 
-This folder currently defines lifecycle stages. It is not yet a pipeline that
-assigns all properties to an element. The [roadmap](ROADMAP.md) separates that
-missing orchestration from the working [value algorithms](../values/README.md).
+This folder currently defines lifecycle stages and layout facts supplied to value
+processing. It is not yet a pipeline that assigns all properties to an element.
+The [roadmap](ROADMAP.md) separates that missing orchestration from the working
+[value algorithms](../values/README.md).
 
 ## Current contracts
 
@@ -29,8 +30,9 @@ which stages a value has passed through or whether all required facts exist.
 
 Property grammars prepare the Declared representation, including normalization
 appropriate at that stage. The whole-value parser does not call a resolver again
-to finish ordinary parsing. There is no separate definition object dispatching
-resolution or serialization. Initial values and inheritance remain property metadata.
+to finish ordinary parsing. `BuiltInProperty.resolve()` selects the property's
+percentage reference for the stage before delegating to the value. Initial values
+and inheritance remain property metadata.
 
 ## Where the stages are used
 

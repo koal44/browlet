@@ -62,7 +62,7 @@ describe('createFreeFormConsumer', () => {
   ])('parses %j as the same value', (input) => {
     const value = parseAsComponentGrammar(input, consumeFreeFormColor, {});
 
-    expect(value?.value).toMatchObject({
+    expect(value?.repr).toMatchObject({
       kind: ColorKind.Named,
       name: 'red',
     });
@@ -71,7 +71,7 @@ describe('createFreeFormConsumer', () => {
   it('stops an unwrapped value before a top-level comma', () => {
     const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
 
-    expect(consumeFreeFormColor(c)?.value).toMatchObject({
+    expect(consumeFreeFormColor(c)?.repr).toMatchObject({
       kind: ColorKind.Named,
       name: 'red',
     });
@@ -91,7 +91,7 @@ describe('createFreeFormConsumer', () => {
     });
     const c = new TokenCursor(parseListOfComponentValues('red: blue', {}), {});
 
-    expect(consume(c)?.value).toMatchObject({
+    expect(consume(c)?.repr).toMatchObject({
       kind: ColorKind.Named,
       name: 'red',
     });
@@ -135,7 +135,7 @@ describe('createFreeFormConsumer', () => {
     const c = new TokenCursor(parseListOfComponentValues('', {}), {});
 
     expect(consume(c)).toEqual({
-      value: parseListOfComponentValues('', {}),
+      repr: parseListOfComponentValues('', {}),
     });
   });
 });

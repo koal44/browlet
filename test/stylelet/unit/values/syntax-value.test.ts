@@ -13,11 +13,11 @@ const lengthSyntax = new SyntaxValue({
 
 describe('<syntax>', () => {
   it('parses the universal syntax definition', () => {
-    expect(SyntaxValue.parse('*', {})?.value).toEqual({ type: 'universal-syntax' });
+    expect(SyntaxValue.parse('*', {})?.repr).toEqual({ type: 'universal-syntax' });
   });
 
   it('distinguishes syntax types from keyword components', () => {
-    expect(SyntaxValue.parse('<length> | length', {})?.value).toEqual({
+    expect(SyntaxValue.parse('<length> | length', {})?.repr).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length' },
@@ -27,7 +27,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves the specified order of alternatives', () => {
-    expect(SyntaxValue.parse('<percentage> | <number> | auto', {})?.value).toEqual({
+    expect(SyntaxValue.parse('<percentage> | <number> | auto', {})?.repr).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'percentage' },
@@ -38,7 +38,7 @@ describe('<syntax>', () => {
   });
 
   it('parses syntax multipliers without intervening whitespace', () => {
-    expect(SyntaxValue.parse('<length>+ | auto#', {})?.value).toEqual({
+    expect(SyntaxValue.parse('<length>+ | auto#', {})?.repr).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length', multiplier: '+' },
@@ -48,7 +48,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves the pre-multiplied transform-list type', () => {
-    expect(SyntaxValue.parse('<transform-list>', {})?.value).toEqual({
+    expect(SyntaxValue.parse('<transform-list>', {})?.repr).toEqual({
       type: 'syntax-definition',
       components: [{
         type: 'syntax-type',
@@ -58,7 +58,7 @@ describe('<syntax>', () => {
   });
 
   it('preserves syntax keyword case and accepts dashed custom identifiers', () => {
-    expect(SyntaxValue.parse('Foo | --bar', {})?.value).toEqual({
+    expect(SyntaxValue.parse('Foo | --bar', {})?.repr).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-keyword', name: 'Foo' },
@@ -74,7 +74,7 @@ describe('<syntax>', () => {
   });
 
   it('accepts insignificant outer and combinator whitespace', () => {
-    expect(SyntaxValue.parse('  <length>|auto  ', {})?.value).toEqual({
+    expect(SyntaxValue.parse('  <length>|auto  ', {})?.repr).toEqual({
       type: 'syntax-definition',
       components: [
         { type: 'syntax-type', name: 'length' },

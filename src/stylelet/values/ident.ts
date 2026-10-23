@@ -10,10 +10,10 @@ import type { Value } from './value';
 // https://drafts.csswg.org/css-values-4/#typedef-ident
 export class IdentValue implements Value {
   /** The decoded identifier, retaining its case. */
-  value: string;
+  repr: string;
 
   constructor(value: string) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete <ident>. */
@@ -33,7 +33,7 @@ export class IdentValue implements Value {
 
   /** Escape the retained text using CSS identifier syntax. */
   serialize(): string {
-    return serializeCssIdentifier(this.value);
+    return serializeCssIdentifier(this.repr);
   }
 }
 

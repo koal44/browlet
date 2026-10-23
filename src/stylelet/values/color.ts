@@ -24,14 +24,16 @@ import { IdentValue } from './ident';
 import { NumberValue } from './number';
 import { PercentageValue } from './percentage';
 
+// Type parameter: R = representation.
+
 /** A CSS color with parsing, resolution, and serialization at its current stage. */
 // https://drafts.csswg.org/css-color-4/#color-type
-export class ColorValue<Representation extends Color = Color> implements Value<ColorValueContext> {
+export class ColorValue<R extends Color = Color> implements Value<ColorValueContext> {
   /** Color syntax or absolute coordinates retained at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse a complete color, optionally accepting the legacy quirks grammar. */
@@ -50,24 +52,24 @@ export class ColorValue<Representation extends Color = Color> implements Value<C
 
   /** Resolve with current color and numeric context, retaining an unchanged value. */
   resolve(stage: ValueStage, context: ColorValueContext = {}): ColorValue {
-    const resolved = resolveColor(this.value, stage, context);
-    return resolved === this.value ? this : new ColorValue(resolved);
+    const resolved = resolveColor(this.repr, stage, context);
+    return resolved === this.repr ? this : new ColorValue(resolved);
   }
 
   /** Resolve only when the available context produces absolute coordinates. */
   tryResolveAbsolute(stage: ValueStage, context: ColorValueContext = {}): ColorValue<AbsoluteColor> | null {
     const resolved = this.resolve(stage, context);
-    return resolved.value.kind === ColorKind.Absolute ? resolved as ColorValue<AbsoluteColor> : null;
+    return resolved.repr.kind === ColorKind.Absolute ? resolved as ColorValue<AbsoluteColor> : null;
   }
 
   /** Serialize retained syntax or coordinates without resolving the color. */
   serialize(htmlCompatible = false): string {
-    return serializeColor(this.value, htmlCompatible);
+    return serializeColor(this.repr, htmlCompatible);
   }
 
   /** Whether this color belongs to the legacy sRGB interpolation category. */
   isLegacySrgb(): boolean {
-    const color: Color = this.value;
+    const color: Color = this.repr;
     switch (color.kind) {
       case ColorKind.Named:
       case ColorKind.Hex:
@@ -89,7 +91,7 @@ export class ColorValue<Representation extends Color = Color> implements Value<C
     target: ColorSpaceName,
     context: ColorContext = {},
   ): ColorValue<PredefinedAbsoluteColor> {
-    const converted = convertAbsoluteColor(this.value, target, context);
+    const converted = convertAbsoluteColor(this.repr, target, context);
     return new ColorValue(converted);
   }
 
@@ -100,34 +102,48 @@ export class ColorValue<Representation extends Color = Color> implements Value<C
     method: GamutMappingMethod = 'binary-search',
     context: ColorContext = {},
   ): ColorValue<PredefinedAbsoluteColor> {
-    return new ColorValue(gamutMapColor(this.value, destination, method, context));
+    return new ColorValue(gamutMapColor(this.repr, destination, method, context));
   }
 
-  /** Interpolate resolved colors in the requested coordinate space and hue direction. */
+  /** Interpolate in the requested space and hue direction; throw if either color is unresolved. */
   interpolate(
-    this: ColorValue<AbsoluteColor>,
-    other: ColorValue<AbsoluteColor>,
+    this: ColorValue,
+    other: ColorValue,
     progress: number,
+    context: ColorContext = {},
     space?: ColorInterpolationSpaceName,
     hue: HueInterpolationMethod = 'shorter',
-    context: ColorContext = {},
   ): ColorValue<AbsoluteColor> {
-    return new ColorValue(interpolateColors(this.value, other.value, progress, space, hue, context));
+    if (this.repr.kind !== ColorKind.Absolute || other.repr.kind !== ColorKind.Absolute) {
+      throw new InternalError('Color interpolation requires resolved absolute colors');
+    }
+    return new ColorValue(interpolateColors(this.repr, other.repr, progress, space, hue, context));
+  }
+
+  /** Colors are not additive; the second value replaces the first. */
+  // https://drafts.csswg.org/css-values-4/#combine-colors
+  add(other: ColorValue): ColorValue {
+    return other;
+  }
+
+  /** Color accumulation follows addition. */
+  accumulate(other: ColorValue): ColorValue {
+    return this.add(other);
   }
 
   /** Compare resolved colors after accounting for their spaces and powerless components. */
   isEquivalent(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): boolean {
-    return areColorsEquivalent(this.value, other.value, context);
+    return areColorsEquivalent(this.repr, other.repr, context);
   }
 
   /** Measure the CIEDE2000 difference between resolved colors. */
   deltaE2000(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): number {
-    return deltaE2000(this.value, other.value, context);
+    return deltaE2000(this.repr, other.repr, context);
   }
 
   /** Measure the Euclidean difference between resolved colors in Oklab. */
   deltaEOK(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): number {
-    return deltaEOK(this.value, other.value, context);
+    return deltaEOK(this.repr, other.repr, context);
   }
 }
 
@@ -158,13 +174,13 @@ export type AbsoluteColorSpace =
 
 export type CustomColorSpace<
   Keys extends string[] = string[],
-> = ColorSpace<DashedIdentValue['value'], Keys>;
+> = ColorSpace<DashedIdentValue['repr'], Keys>;
 
 export type PredefinedAbsoluteColor = AbsoluteColor<PredefinedColorSpace>;
 
 type ColorFunctionSpace =
   | ColorFnSpace
-  | DashedIdentValue['value'];
+  | DashedIdentValue['repr'];
 
 export type ColorProfileSpace =
   | ColorFunctionSpace
@@ -630,7 +646,7 @@ function consumeNamedColor(
 const namedColorConsumer: TryConsumer<NamedColor, RelativeColorContext> = adaptConsumer(
   IdentValue.consume,
   (ident) => {
-    const name = asciiLower(ident.value);
+    const name = asciiLower(ident.repr);
     const rgba = Object.hasOwn(ColorRgba, name)
       ? ColorRgba[name as keyof typeof ColorRgba]
       : undefined;
@@ -880,7 +896,7 @@ function consumeSystemColor(
 const systemColorConsumer: TryConsumer<SystemColor, RelativeColorContext> = adaptConsumer(
   IdentValue.consume,
   (ident) => {
-    const name = asciiLower(ident.value);
+    const name = asciiLower(ident.repr);
 
     return SystemColorNameSet.has(name)
       ? { kind: ColorKind.System, name: name as SystemColorName }
@@ -926,7 +942,7 @@ function consumeDeprecatedColor(
 const deprecatedColorConsumer: TryConsumer<DeprecatedColor, RelativeColorContext> = adaptConsumer(
   IdentValue.consume,
   (ident) => {
-    const name = asciiLower(ident.value);
+    const name = asciiLower(ident.repr);
 
     return Object.hasOwn(DeprecatedColorSystemName, name)
       ? { kind: ColorKind.Deprecated, name: name as DeprecatedColorName }
@@ -1758,7 +1774,7 @@ function colorProfileFor(
 
 function isCustomColorProfileSpace(
   space: string,
-): space is DashedIdentValue['value'] {
+): space is DashedIdentValue['repr'] {
   return space.startsWith('--');
 }
 
@@ -1836,7 +1852,7 @@ const customParamsConsumer: TryConsumer<ColorFnSpaceParams, RelativeColorContext
   [
     one<DashedIdentValue, RelativeColorContext>(withTrivia(DashedIdentValue.consume), {
       contextAfter: (space, context) =>
-        contextWithColorFnRelativeVariables(space.value, context),
+        contextWithColorFnRelativeVariables(space.repr, context),
     }),
     plus(withTrivia(oneOf(
       [
@@ -1850,7 +1866,7 @@ const customParamsConsumer: TryConsumer<ColorFnSpaceParams, RelativeColorContext
   ],
   ([[space], components]) => ({
     kind: ColorKind.CustomColorFn as const,
-    space: space.value,
+    space: space.repr,
     components,
   }),
 );
@@ -2136,7 +2152,7 @@ const contrastColorFnConsumer: TryConsumer<ContrastColorFn, RelativeColorContext
 export type ColorInterpolationMethod =
   | { space: RectangularColorSpaceName; hue?: never; }
   | { space: PolarColorSpaceName; hue?: HueInterpolationMethod; }
-  | { space: DashedIdentValue['value']; hue?: never; };
+  | { space: DashedIdentValue['repr']; hue?: never; };
 
 type ColorInterpolationSpaceName = ColorInterpolationMethod['space'];
 
@@ -2234,13 +2250,13 @@ const polarColorSpaceConsumer =
 // <custom-color-space> = <dashed-ident>
 function consumeCustomColorSpace(
   c: TokenCursor<ComponentValue, RelativeColorContext>,
-): TryConsumerResult<DashedIdentValue['value']> {
+): TryConsumerResult<DashedIdentValue['repr']> {
   return customColorSpaceConsumer(c);
 }
 
 const customColorSpaceConsumer = adaptConsumer(
   DashedIdentValue.consume,
-  ({ value }, context: RelativeColorContext) => context.colorProfiles?.has(value)
+  ({ repr: value }, context: RelativeColorContext) => context.colorProfiles?.has(value)
     ? value
     : null,
 );
@@ -2334,7 +2350,7 @@ function consumeRelativeColorKeyword(
 const relativeColorKeywordConsumer = adaptConsumer(
   IdentValue.consume,
   (ident, context: RelativeColorContext) => {
-    const name = asciiLower(ident.value);
+    const name = asciiLower(ident.repr);
 
     return context.relativeColorVariables?.has(name) === true
       ? new NumberValue(MathValue.fromVariable(name, 'number', context))
@@ -3278,7 +3294,7 @@ function tryLowerTo8BitAbsoluteColor(
       return null;
     }
 
-    coordinates.push(component.value.value);
+    coordinates.push(component.repr.value);
   }
 
   if (alpha !== undefined && !is8BitColorComponent(alpha)) {
@@ -3289,15 +3305,15 @@ function tryLowerTo8BitAbsoluteColor(
     kind: ColorKind.Absolute,
     space: metadata.space!,
     components: coordinates,
-    alpha: (alpha?.value.value ?? 1) * 0xff,
+    alpha: (alpha?.repr.value ?? 1) * 0xff,
     isLegacySrgb: metadata.space?.name === 'srgb',
     is8Bit: true,
   };
 }
 
 function is8BitColorComponent(component: SyntaxComponent): component is NumberValue<NumberLiteral> {
-  if (!(component instanceof NumberValue) || !(component.value instanceof NumberLiteral)) return false;
-  const number = component.value.value;
+  if (!(component instanceof NumberValue) || !(component.repr instanceof NumberLiteral)) return false;
+  const number = component.repr.value;
   return Number.isInteger(number) && number >= 0 && number <= 0xff;
 }
 
@@ -3487,10 +3503,10 @@ function canonicalizeComponent<Component extends SyntaxComponent>(
 
   if (stage < metadata.canonicalizeAt || metadata.isHue) {
     canonicalized = component;
-  } else if (component instanceof PercentageValue && component.value instanceof MathValue &&
-    component.value.value instanceof MathExpression) {
+  } else if (component instanceof PercentageValue && component.repr instanceof MathValue &&
+    component.repr.repr instanceof MathExpression) {
     if (metadata.canonicalSyntax === 'number') {
-      canonicalized = new NumberValue(component.value.toNumber(metadata.percentageScale, metadata.numberScale)) as Component;
+      canonicalized = new NumberValue(component.repr.toNumber(metadata.percentageScale, metadata.numberScale)) as Component;
     }
   } else {
     canonicalized = (metadata.canonicalSyntax === 'number'
@@ -3780,7 +3796,7 @@ function clampComponent<Component extends SyntaxComponent>(
 }
 
 function colorComponentValue(component: NumberValue | PercentageValue | AngleValue) {
-  return component.value instanceof MathValue ? component.value.value : component.value;
+  return component.repr instanceof MathValue ? component.repr.repr : component.repr;
 }
 
 function componentMetadataAt(
@@ -5737,7 +5753,7 @@ function interpolateCustomColors(
   a: AbsoluteColor,
   b: AbsoluteColor,
   progress: number,
-  space: DashedIdentValue['value'],
+  space: DashedIdentValue['repr'],
   context: ColorContext,
 ): AbsoluteColor<CustomColorSpace> {
   const convertedA = convertAbsoluteColorToCustomSpace(a, space, context);
@@ -5759,7 +5775,7 @@ function interpolateCustomColors(
 
 function convertAbsoluteColorToCustomSpace(
   value: AbsoluteColor,
-  target: DashedIdentValue['value'],
+  target: DashedIdentValue['repr'],
   context: ColorContext,
 ): AbsoluteColor<CustomColorSpace> {
   const normalized = normalizeAbsoluteColorEncoding(value);

@@ -15,10 +15,10 @@ import type { MathContext } from './math-value';
 // https://drafts.csswg.org/css-values-4/#ratios
 export class RatioValue implements Value {
   /** The numerator and denominator as specified. */
-  value: Ratio;
+  repr: Ratio;
 
   constructor(value: Ratio) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete <ratio>. */
@@ -38,13 +38,13 @@ export class RatioValue implements Value {
 
   /** Serialize both retained components without reducing the ratio. */
   serialize(): string {
-    const { numerator, denominator } = this.value;
+    const { numerator, denominator } = this.repr;
     return `${serializeCssNumber(numerator)} / ${serializeCssNumber(denominator)}`;
   }
 
   /** Whether either component is zero or infinite. */
   isDegenerate(): boolean {
-    const { numerator, denominator } = this.value;
+    const { numerator, denominator } = this.repr;
     return isDegenerateRatioComponent(numerator) || isDegenerateRatioComponent(denominator);
   }
 
@@ -54,8 +54,8 @@ export class RatioValue implements Value {
     if (this.isDegenerate() || other.isDegenerate()) {
       throw new InternalError('Degenerate ratios cannot be interpolated');
     }
-    const a = this.value;
-    const b = other.value;
+    const a = this.repr;
+    const b = other.repr;
     const aLog = Math.log(a.numerator / a.denominator);
     const bLog = Math.log(b.numerator / b.denominator);
     return new RatioValue({ numerator: Math.exp((1 - progress) * aLog + progress * bLog), denominator: 1 });

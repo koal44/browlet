@@ -12,12 +12,12 @@ import { IdentValue } from './ident';
 import { StringValue } from './string';
 
 /** A recognized request modifier or an opaque modifier retained during URL parsing. */
-export class UrlModifierValue<Representation extends UrlModifier = UrlModifier> implements Value {
+export class UrlModifierValue<R extends UrlModifier = UrlModifier> implements Value {
   /** The decoded request option or unknown identifier/function syntax. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete URL modifier. */
@@ -31,18 +31,18 @@ export class UrlModifierValue<Representation extends UrlModifier = UrlModifier> 
   }
 
   /** URL request options have no contextual value conversion. */
-  resolve(_stage: ValueStage, _context: unknown): UrlModifierValue<Representation> {
+  resolve(_stage: ValueStage, _context: unknown): UrlModifierValue<R> {
     return this;
   }
 
   /** Whether this modifier contributes a recognized request option. */
-  isRequest(): this is UrlModifierValue<Representation & RequestUrlModifier> {
-    return !(this.value instanceof IdentValue) && this.value.type !== TokenKind.FunctionBlock;
+  isRequest(): this is UrlModifierValue<R & RequestUrlModifier> {
+    return !(this.repr instanceof IdentValue) && this.repr.type !== TokenKind.FunctionBlock;
   }
 
   /** Serialize the retained modifier without applying request behavior. */
   serialize(): string {
-    const modifier = this.value;
+    const modifier = this.repr;
     return !(modifier instanceof IdentValue) && modifier.type === TokenKind.FunctionBlock
       ? serializeComponentValues([modifier])
       : modifier.serialize();
@@ -182,7 +182,7 @@ const crossOriginModifierConsumer = createFunctionalNotationConsumer(
 const integrityModifierConsumer = createFunctionalNotationConsumer(
   'integrity',
   StringValue.consume,
-  (value) => new IntegrityModifier(value.value),
+  (value) => new IntegrityModifier(value.repr),
 );
 
 // <referrer-policy-modifier> = referrer-policy(no-referrer | no-referrer-when-downgrade | same-origin | origin | strict-origin | origin-when-cross-origin | strict-origin-when-cross-origin | unsafe-url)

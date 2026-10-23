@@ -1,4 +1,5 @@
 import { mapTuple } from '../../infra/util';
+import { InternalError } from '../../infra/internal-error';
 
 import {
   createKeywordConsumer, adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia, createComponentParser,
@@ -13,12 +14,12 @@ import { MathValue, type MathContext } from './math-value';
 
 /** A position retaining keywords until its writing-mode inputs can produce offsets. */
 // https://drafts.csswg.org/css-values-4/#position
-export class PositionValue<Representation extends Position = Position> implements Value<PositionValueContext> {
+export class PositionValue<R extends Position = Position> implements Value<PositionValueContext> {
   /** The specified components or resolved physical offsets. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <position>. */
@@ -98,7 +99,7 @@ export class PositionValue<Representation extends Position = Position> implement
 
   /** Resolve components, then map logical edges when the required context is present. */
   resolve(stage: ValueStage, context: PositionValueContext = {}): PositionValue {
-    const previous: Position = this.value;
+    const previous: Position = this.repr;
     if (previous.offsets !== undefined) {
       const [x, y] = previous.offsets;
       const horizontal = x.resolve(stage, context);
@@ -117,12 +118,12 @@ export class PositionValue<Representation extends Position = Position> implement
   /** Return resolved offsets, or null while logical-axis context is unavailable. */
   tryResolveOffsets(stage: ValueStage, context: PositionValueContext = {}): PositionValue<PositionOffsets> | null {
     const resolved = this.resolve(stage, context);
-    return resolved.value.offsets === undefined ? null : resolved as PositionValue<PositionOffsets>;
+    return resolved.repr.offsets === undefined ? null : resolved as PositionValue<PositionOffsets>;
   }
 
   /** Serialize the current components or offsets without resolving them. */
   serialize(): string {
-    const value = this.value;
+    const value = this.repr;
     const components: PositionComponent[] = value.offsets !== undefined
       ? value.offsets
       : value.components;
@@ -144,20 +145,22 @@ export class PositionValue<Representation extends Position = Position> implement
 
   /** Add physical offsets after logical edges have been resolved. */
   add(
-    this: PositionValue<PositionOffsets>, other: PositionValue<PositionOffsets>, context: MathContext = {},
+    other: PositionValue, context: MathContext = {},
   ): PositionValue<PositionOffsets> {
-    const a = this.value.offsets;
-    const b = other.value.offsets;
+    const a = this.repr.offsets;
+    const b = other.repr.offsets;
+    if (a === undefined || b === undefined) throw new InternalError('Position combination requires resolved physical offsets');
     return new PositionValue({ offsets: [a[0].add(b[0], context), a[1].add(b[1], context)] });
   }
 
   /** Interpolate resolved physical offsets. */
   interpolate(
-    this: PositionValue<PositionOffsets>, other: PositionValue<PositionOffsets>, progress: number,
+    other: PositionValue, progress: number,
     context: MathContext = {},
   ): PositionValue<PositionOffsets> {
-    const a = this.value.offsets;
-    const b = other.value.offsets;
+    const a = this.repr.offsets;
+    const b = other.repr.offsets;
+    if (a === undefined || b === undefined) throw new InternalError('Position combination requires resolved physical offsets');
     return new PositionValue({
       offsets: [
         a[0].interpolate(b[0], progress, context),
@@ -168,7 +171,7 @@ export class PositionValue<Representation extends Position = Position> implement
 
   /** Accumulation is addition. */
   accumulate(
-    this: PositionValue<PositionOffsets>, other: PositionValue<PositionOffsets>, context: MathContext = {},
+    other: PositionValue, context: MathContext = {},
   ): PositionValue<PositionOffsets> {
     return this.add(other, context);
   }
@@ -250,7 +253,7 @@ function negateLengthPercentage(
   value: LengthPercentageValue,
   context: PositionValueContext,
 ): LengthPercentageValue {
-  const literal = value.value;
+  const literal = value.repr;
   if (!(literal instanceof MathValue)) {
     return new LengthPercentageValue(literal instanceof PercentageLiteral
       ? new PercentageLiteral(0 - literal.value)

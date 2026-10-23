@@ -10,10 +10,10 @@ import type { Value } from './value';
 // https://drafts.csswg.org/css-values-4/#strings
 export class StringValue implements Value {
   /** The decoded string, retaining its case. */
-  value: string;
+  repr: string;
 
   constructor(value: string) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete <string>. */
@@ -33,7 +33,7 @@ export class StringValue implements Value {
 
   /** Escape the retained text using CSS string syntax. */
   serialize(): string {
-    return serializeCssString(this.value);
+    return serializeCssString(this.repr);
   }
 }
 

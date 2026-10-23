@@ -12,12 +12,12 @@ import { MathValue, MathExpression, type MathContext } from './math-value';
 
 /** An <angle> literal or calculation with its own lifecycle operations. */
 // https://drafts.csswg.org/css-values-4/#angles
-export class AngleValue<Representation extends Angle = Angle> implements Value<MathContext> {
+export class AngleValue<R extends Angle = Angle> implements Value<MathContext> {
   /** The literal or math value at the current lifecycle stage. */
-  value: Representation;
+  repr: R;
 
-  constructor(value: Representation) {
-    this.value = value;
+  constructor(value: R) {
+    this.repr = value;
   }
 
   /** Parse one complete <angle>. */
@@ -46,21 +46,21 @@ export class AngleValue<Representation extends Angle = Angle> implements Value<M
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
   resolve(stage: ValueStage, context: MathContext = {}): AngleValue {
-    const resolved = this.value.resolve(stage, context);
-    const value = resolved instanceof MathValue && !(resolved.value instanceof MathExpression)
-      ? resolved.value : resolved;
-    return value === this.value ? this : new AngleValue(value);
+    const resolved = this.repr.resolve(stage, context);
+    const value = resolved instanceof MathValue && !(resolved.repr instanceof MathExpression)
+      ? resolved.repr : resolved;
+    return value === this.repr ? this : new AngleValue(value);
   }
 
   /** Serialize the current representation without resolving it. */
   serialize(): string {
-    return this.value.serialize();
+    return this.repr.serialize();
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
   add(other: AngleValue, context: MathContext = {}): AngleValue {
-    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
-      return new AngleValue(this.value.add(other.value));
+    if (this.repr instanceof AngleLiteral && other.repr instanceof AngleLiteral && this.repr.unit === other.repr.unit) {
+      return new AngleValue(this.repr.add(other.repr));
     }
     return new AngleValue(
       this.#asMathValue(context).add(other.#asMathValue(context), context),
@@ -69,8 +69,8 @@ export class AngleValue<Representation extends Angle = Angle> implements Value<M
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
   interpolate(other: AngleValue, progress: number, context: MathContext = {}): AngleValue {
-    if (this.value instanceof AngleLiteral && other.value instanceof AngleLiteral && this.value.unit === other.value.unit) {
-      return new AngleValue(this.value.interpolate(other.value, progress));
+    if (this.repr instanceof AngleLiteral && other.repr instanceof AngleLiteral && this.repr.unit === other.repr.unit) {
+      return new AngleValue(this.repr.interpolate(other.repr, progress));
     }
     return new AngleValue(
       this.#asMathValue(context).interpolate(other.#asMathValue(context), progress, context),
@@ -83,8 +83,8 @@ export class AngleValue<Representation extends Angle = Angle> implements Value<M
   }
 
   #asMathValue(context: MathContext): MathValue<'angle'> {
-    return this.value instanceof MathValue
-      ? this.value : MathValue.fromLiteral(this.value, 'angle', context);
+    return this.repr instanceof MathValue
+      ? this.repr : MathValue.fromLiteral(this.repr, 'angle', context);
   }
 }
 

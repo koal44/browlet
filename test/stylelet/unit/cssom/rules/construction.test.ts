@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { defaultStyleletEnvironment as env } from '../../../../../src/stylelet/environment';
-import { propertyRegistry } from '../../../../../src/stylelet/props/registry';
+import { builtInRegistry } from '../../../../../src/stylelet/props/registry';
+import { CustomProperty } from '../../../../../src/stylelet/props/custom-property';
 import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { RuleListContext } from '../../../../../src/stylelet/cssom/rules/context';
 import { CSSRuleListImpl } from '../../../../../src/stylelet/cssom/rule-list';
@@ -19,18 +20,19 @@ const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
 describe('CSS rule construction', () => {
   it('preserves the registry association in a built-in declaration', () => {
-    const declaration = new InterpretedDeclaration('color', propertyRegistry.color.parse('red', {})!);
+    const declaration = new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.color.parse('red', {})!);
     const resolved = declaration.value.resolve(ValueStage.Computed, {});
 
-    expect(resolved.value).toBeInstanceOf(ColorValue);
-    if (resolved.value instanceof ColorValue) {
-      expect(resolved.value.value.kind).toBe(ColorKind.Absolute);
+    expect(resolved.inner).toBeInstanceOf(ColorValue);
+    if (resolved.inner instanceof ColorValue) {
+      expect(resolved.inner.repr.kind).toBe(ColorKind.Absolute);
     }
   });
 
   it('holds built-in and custom declarations in source order', () => {
-    const custom = new InterpretedDeclaration('--accent', OptionalDeclarationValue.parse('red', {})!);
-    const color = new InterpretedDeclaration('color', propertyRegistry.color.parse('var(--accent)', {})!);
+    const property = new CustomProperty('--accent');
+    const custom = new InterpretedDeclaration(property, property.parse('red', {})!);
+    const color = new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.color.parse('var(--accent)', {})!);
     const rule = new CSSStyleRuleImpl(parseSelectorList('*', {})!, [color, custom], {}, new CSSRuleListImpl(), env);
 
     expect(rule.style.declarations.map((declaration) => declaration.name))
@@ -55,8 +57,8 @@ describe('CSS rule construction', () => {
       custom: false,
       name: 'color',
       value: {
-        value: {
-          value: {
+        inner: {
+          repr: {
             kind: ColorKind.Named,
             name: 'blue',
           },
@@ -196,7 +198,7 @@ describe('CSS rule construction', () => {
       name: 'color',
     }]);
     expect((rule as CSSStyleRuleImpl).style.declarations[0])
-      .toHaveProperty('value.value.value', expect.any(OptionalDeclarationValue));
+      .toHaveProperty('value.inner.repr', expect.any(OptionalDeclarationValue));
   });
 
   // CSS Nesting Level 1 defines nested style rules and declaration runs.

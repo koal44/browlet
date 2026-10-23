@@ -9,6 +9,7 @@ this is not a complete cascade or computed-style implementation.
 | Entry or owner | Current behavior |
 | --- | --- |
 | [CascadeEngine](cascade-engine.ts) | Holds the StyleletContext, environment base URL, and registration map; creates sheets, selects declarations, and computes style queries. |
+| [ComputedStyle](computed-style.ts) | Retains existing property definitions with computed whole values, ordered names, and lazy value serialization for a query result. |
 | [TreeScope](tree-scope.ts) | Holds ordered header/tree sheets, adopted sheets, and stylesheet-set selection. `finalStyleSheets()` yields associated sheets followed by adopted sheets. This is not CSS `@scope`. |
 | [createSystemColorPalette()](system-colors.ts) | Creates independent fixed defaults with host-selected overrides; the engine supplies these absolute colors to value resolution. |
 | `getActiveStyleSheets()` | Filters those sheets by `disabled`; it does not evaluate media or grouping-rule conditions. |
@@ -21,8 +22,10 @@ There is no persistent computed-style tree or per-element cache here. Declaratio
 built-in/custom-value and shorthand-expansion maps, plus the active property-dependency stack, are local to
 `getComputedStyle()` and passed to the engine methods that need them. Ancestor
 declarations are selected once per query; their custom values are computed only
-when inherited or referenced. The returned snapshot retains its computed values;
-the intermediate maps are discarded. Reuse across queries needs invalidation for
+when inherited or referenced. The returned CSSOM object retains a separate
+ComputedStyle collection; the intermediate maps are discarded. This collection
+has no DOM owner and creates neither property definitions nor interpreted declarations.
+Reuse across queries needs invalidation for
 DOM, stylesheet, registration, and host-input changes.
 The selector caches belong to [StyleletContext](../context.ts); stylesheet
 collections and registration lookup are different state with different owners.
@@ -75,9 +78,11 @@ contributions are not represented by this selection algorithm. See the
    `unset`, including keywords produced by substitution. Inheritance
    shares the parent's computed token value without serializing or reparsing it.
    A valid empty value remains distinct from guaranteed-invalid.
-6. Returns a new readonly CSSStylePropertiesImpl and declaration block. Computed
-   occurrences do not retain declaration importance; guaranteed-invalid custom
-   values are excluded.
+6. Collects existing property definitions and resulting whole values in ComputedStyle,
+   then exposes that collection through a new readonly CSSStylePropertiesImpl.
+   The results have no declaration importance; guaranteed-invalid custom values
+   are excluded. Property records still own serialization, and shorthands read
+   the retained longhand values.
 
 Both built-in and custom `revert`/`revert-layer`, registered custom computation,
 `first-valid()` margin expansion, and substitution functions other than `var()`
@@ -98,8 +103,9 @@ Inline style does not own computed state.
 
 ### Custom-property substitution
 
-The engine computes each referenced property before passing its tokens to
-`SubstitutionValue`. Guards pair the property name with the element, so inherited
+The engine calls the retained `CustomProperty` with a guarded lookup of
+computed custom values. The record delegates component replacement to `SubstitutionValue`.
+Guards pair the property name with the element, so inherited
 names do not falsely form cycles. Re-entering a guard invalidates every participant;
 fallbacks outside the cycle can still succeed. A failed substitution does not
 revive an earlier declaration. Cycle invalidation precedes CSS-wide defaulting.
@@ -108,7 +114,7 @@ revive an earlier declaration. Cycle invalidation precedes CSS-wide defaulting.
 and [Variables 1](https://drafts.csswg.org/css-variables-1/#using-variables):
 argument validation, early `...` expansion, dynamic names, and lazy fallbacks.
 An argument whose structure depends on spread is checked after that expansion.
-The engine owns property guards; WholeValue receives their guarded lookup through
+The engine owns property guards; WholeValue and CustomProperty receive their guarded lookup through
 `context.getCustomProperty`. The substitution algorithm receives a lookup of computed
 custom properties. Attribute/custom-function guards and animation/attribute taint
 remain explicit dependencies of those unfinished functions and registration.
@@ -122,12 +128,17 @@ subject to that substitution limit.
 
 ## Registration lookup
 
-`CascadeEngine.getCustomPropertyRegistration()` first checks the engine registration
-map, then takes the last matching CSSPropertyRuleImpl in active sheets. Those
+`CascadeEngine.collectCustomPropertyRegistry()` collects the last CSSPropertyRuleImpl
+for each name in active sheets, then overlays the explicit `registeredPropertySet`. Those
 implementations can be constructed directly, but stylesheet parsing does not
 create them. The engine map stands in for document registration state; there is no
 connected `CSS.registerProperty()` API or registered-property computation.
-Unregistered per-element computation is separate from this registration lookup.
+Each style query assembles this registry once and supplies the map through
+PropertyContext's RegistryContext. CustomProperty reads it during computation;
+it does not capture a registration when the declaration is parsed.
+Registered computation remains an explicit error until its lifecycle is implemented.
+The current collection covers the supplied tree scope; gathering registrations
+across all shadow scopes into the document-wide registry remains unfinished.
 
 The [registration tests](../../../test/stylelet/unit/engine/custom-property.test.ts)
 construct registrations and rules directly. Their URL tests manually invoke

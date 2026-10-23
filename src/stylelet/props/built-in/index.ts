@@ -1,3 +1,3 @@
 export { backgroundColorProperty, colorProperty } from './color';
-export { marginSideProperty, marginShorthand } from './margin';
+export { marginTopProperty, marginRightProperty, marginBottomProperty, marginLeftProperty, marginShorthand } from './margin';
 export { opacityProperty } from './opacity';

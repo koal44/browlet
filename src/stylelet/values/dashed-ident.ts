@@ -10,10 +10,10 @@ import type { Value } from './value';
 // https://drafts.csswg.org/css-values-4/#dashed-idents
 export class DashedIdentValue implements Value {
   /** The decoded identifier, including its leading dashes. */
-  value: `--${string}`;
+  repr: `--${string}`;
 
   constructor(value: `--${string}`) {
-    this.value = value;
+    this.repr = value;
   }
 
   /** Parse a complete dashed identifier. */
@@ -33,7 +33,7 @@ export class DashedIdentValue implements Value {
 
   /** Escape the retained identifier without changing its case. */
   serialize(): string {
-    return serializeCssIdentifier(this.value);
+    return serializeCssIdentifier(this.repr);
   }
 }
 

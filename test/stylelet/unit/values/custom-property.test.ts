@@ -10,7 +10,8 @@ import { FirstValidValue } from '../../../../src/stylelet/values/substitution/fi
 import { guaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
 import { describe, expect, it } from 'vitest';
 
-import type { CustomPropertyRegistration, CustomPropertyRegistry, PropertyContext } from '../../../../src/stylelet/props/property';
+import type { PropertyContext } from '../../../../src/stylelet/props/base-property';
+import type { CustomPropertyRegistration, CustomPropertyRegistry } from '../../../../src/stylelet/props/registry';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { ColorKind } from '../../../../src/stylelet/values/color';
 import { CSS_WIDE_KEYWORDS } from '../../../../src/stylelet/values/css-wide';
@@ -57,7 +58,7 @@ describe('custom property', () => {
       const value = raw.resolve(ValueStage.Specified, {});
 
       expect(value).toBe(raw);
-      expect(value.value).toBeInstanceOf(RawWholeValue);
+      expect(value.inner).toBeInstanceOf(RawWholeValue);
       expect(value.serialize()).toBe(input);
       expect(value.resolve(ValueStage.Specified, {})).toBe(value);
     }
@@ -90,7 +91,7 @@ describe('custom property', () => {
     const parseOrdinary = syntax('<color>').createParser();
     const value = WholeValue.parse('var(--color)', {}, parseOrdinary, true)!;
 
-    expect(value).toHaveProperty('value.value', expect.any(OptionalDeclarationValue));
+    expect(value).toHaveProperty('inner.repr', expect.any(OptionalDeclarationValue));
     expect(value.serialize()).toBe('var(--color)');
     expect(value.resolve(ValueStage.Specified, {})).toBe(value);
   });
@@ -100,15 +101,15 @@ describe('custom property', () => {
     const value = WholeValue.parse('', {}, parseOrdinary, true)!;
 
     expect(value).toMatchObject({
-      value: {
-        value: {
-          value: { tokens: [] },
+      inner: {
+        repr: {
+          repr: { tokens: [] },
         },
       },
     });
     expect(value.serialize()).toBe('');
-    expect(value.value).not.toBe(guaranteedInvalidValue);
-    expect(value.resolve(ValueStage.Computed, {}).value).toBeInstanceOf(OptionalDeclarationValue);
+    expect(value.inner).not.toBe(guaranteedInvalidValue);
+    expect(value.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(OptionalDeclarationValue);
     expect(guaranteedInvalidValue.serialize()).toBe('');
   });
 
@@ -125,7 +126,7 @@ describe('custom property', () => {
       const parseOrdinary = syntax('<color>').createParser();
       const value = WholeValue.parse(keyword, {}, parseOrdinary, true)!;
 
-      expect(value).toMatchObject({ value: new CssWideValue(keyword) });
+      expect(value).toMatchObject({ inner: new CssWideValue(keyword) });
     },
   );
 
@@ -135,8 +136,8 @@ describe('custom property', () => {
     const value = WholeValue.parse('red', {}, parseOrdinary, true)!;
 
     expect(value.resolve(ValueStage.Computed, {})).toMatchObject({
-      value: {
-        value: {
+      inner: {
+        repr: {
           kind: ColorKind.Absolute,
         },
       },
@@ -147,7 +148,7 @@ describe('custom property', () => {
     const parseOrdinary = syntax('<color>').createParser();
     const value = WholeValue.parse('first-valid(10px, red)', {}, parseOrdinary, true)!;
 
-    expect(value.value).toBeInstanceOf(FirstValidValue);
+    expect(value.inner).toBeInstanceOf(FirstValidValue);
     expect(value.resolve(ValueStage.Specified, {})).toBe(value);
     const computed = value.resolve(ValueStage.Computed, {});
     expect(computed.serialize()).toBe('rgb(255, 0, 0)');
@@ -286,14 +287,14 @@ describe('custom property', () => {
     const parseOrdinary = syntax('<color>').createParser();
     const value = WholeValue.parse('10px', {}, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {}).value).toBe(guaranteedInvalidValue);
+    expect(value.resolve(ValueStage.Computed, {}).inner).toBe(guaranteedInvalidValue);
   });
 
   it('returns the first syntax alternative that matches the entire value', () => {
     const parseOrdinary = syntax('red | <color>').createParser();
     const value = WholeValue.parse('red', {}, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({ value: new IdentValue('red') });
+    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({ inner: new IdentValue('red') });
   });
 
   it('matches syntax keywords codepoint-wise', () => {
@@ -302,9 +303,9 @@ describe('custom property', () => {
     const lower = WholeValue.parse('red', {}, parseOrdinary, true)!;
 
     expect(exact.resolve(ValueStage.Computed, {})).toMatchObject({
-      value: new IdentValue('Red'),
+      inner: new IdentValue('Red'),
     });
-    expect(lower.resolve(ValueStage.Computed, {}).value).toBeInstanceOf(ColorValue);
+    expect(lower.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(ColorValue);
   });
 
   it('does not commit to an alternative that matches only a prefix', () => {
@@ -312,7 +313,7 @@ describe('custom property', () => {
     const value = WholeValue.parse('auto extra', {}, parseOrdinary, true)!;
 
     expect(value.resolve(ValueStage.Computed, {})).toMatchObject({
-      value: new SyntaxListValue({
+      inner: new SyntaxListValue({
         multiplier: '+', values: [
           new CustomIdentValue('auto'),
           new CustomIdentValue('extra'),
@@ -325,12 +326,12 @@ describe('custom property', () => {
     const parseOrdinary = syntax('<color>#').createParser();
     const value = WholeValue.parse('red, blue', {}, parseOrdinary, true)!;
 
-    const computed = value.resolve(ValueStage.Computed, {}).value;
+    const computed = value.resolve(ValueStage.Computed, {}).inner;
     expect(computed).toBeInstanceOf(SyntaxListValue);
     if (!(computed instanceof SyntaxListValue)) throw new Error('Expected a multiplied syntax value');
-    expect(computed.value.multiplier).toBe('#');
-    expect(computed.value.values).toHaveLength(2);
-    for (const item of computed.value.values) expect(item).toBeInstanceOf(ColorValue);
+    expect(computed.repr.multiplier).toBe('#');
+    expect(computed.repr.values).toHaveLength(2);
+    for (const item of computed.repr.values) expect(item).toBeInstanceOf(ColorValue);
     expect(computed.serialize()).toBe('rgb(255, 0, 0), rgb(0, 0, 255)');
   });
 
@@ -338,6 +339,6 @@ describe('custom property', () => {
     const parseOrdinary = syntax('*').createParser();
     const value = WholeValue.parse('10px / anything', {}, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {}).value).toBeInstanceOf(OptionalDeclarationValue);
+    expect(value.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(OptionalDeclarationValue);
   });
 });

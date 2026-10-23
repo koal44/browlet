@@ -90,7 +90,9 @@ defines document registration state and precedence over stylesheet registration.
   registered syntax at computation, with proper initial/inherited fallback;
   setting up a registration must not discard earlier declaration text.
 - [ ] Determine active stylesheet registrations using conditions and layer
-  rules required by the contributing specifications, then invalidate affected
+  rules required by the contributing specifications. Include all shadow scopes
+  in one document-wide registry rather than restricting collection to the query's
+  scope ([Shadow DOM](https://drafts.css-houdini.org/css-properties-values-api-1/#shadow-dom)), then invalidate affected
   values on registration or stylesheet changes. Registration lookup is not
   per-element variable lookup.
 - [ ] Preserve typed registered values when substituting their equivalent token

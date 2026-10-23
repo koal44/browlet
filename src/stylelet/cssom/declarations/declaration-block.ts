@@ -1,4 +1,3 @@
-import { PendingSubstitutionValue } from '../../values/index';
 import { getShorthands, type PropertyContext, type Shorthand } from '../../props/index';
 
 import { InterpretedDeclaration, type BuiltInDeclaration } from './interpreted-declaration';
@@ -57,7 +56,7 @@ export class CSSDeclarationBlock {
   /** Return complete, equally important shorthand longhands in canonical order, or null. */
   getLonghands(shorthand: Shorthand): BuiltInDeclaration[] | null {
     const longhands: BuiltInDeclaration[] = [];
-    for (const [name] of shorthand.longhands) {
+    for (const { name } of shorthand.longhands) {
       const declaration = this.find(name);
       if (declaration === undefined || declaration.custom) return null;
       if (longhands.length > 0 && declaration.important !== longhands[0]!.important) return null;
@@ -86,7 +85,7 @@ export class CSSDeclarationBlock {
     const previous = this.#declarations[index]!;
     // Empty pending-longhand serialization is not an equality test: a new shorthand
     // occurrence must replace all its sides together, even when their text is equal.
-    if (!(previous.value instanceof PendingSubstitutionValue) && !(declaration.value instanceof PendingSubstitutionValue) &&
+    if (!previous.value.isPendingSubstitution() && !declaration.value.isPendingSubstitution() &&
       previous.important === declaration.important && previous.serializeValue() === declaration.serializeValue()) return false;
 
     this.#declarations[index] = declaration;

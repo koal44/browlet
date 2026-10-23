@@ -14,10 +14,10 @@ import { BooleanExprValue } from '../boolean-expr';
 // https://drafts.csswg.org/css-values-5/#if-notation
 export class IfValue {
   /** Ordered conditions and unevaluated branch contents. */
-  value: [IfBranch<IfCondition>, ...IfBranch<IfCondition>[]];
+  repr: [IfBranch<IfCondition>, ...IfBranch<IfCondition>[]];
 
   constructor(value: [IfBranch<IfCondition>, ...IfBranch<IfCondition>[]]) {
-    this.value = value;
+    this.repr = value;
   }
 
   static parse(input: ParserInput, context: unknown): IfValue | null {
