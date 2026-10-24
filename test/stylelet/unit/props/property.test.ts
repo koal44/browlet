@@ -47,6 +47,31 @@ describe('property records', () => {
       .toEqual(builtInRegistry['background-color'].parse('red', {}));
   });
 
+  it.each(['color', 'background-color', 'opacity'] as const)('records all-element applicability for %s', (name) => {
+    expect(builtInRegistry[name].appliesTo({})).toBe(true);
+  });
+
+  it.each(['margin-top', 'margin-right', 'margin-bottom', 'margin-left'] as const)(
+    'requires box classification to determine %s applicability', (name) => {
+      expect(() => builtInRegistry[name].appliesTo({})).toThrow('Margin applicability requires box classification');
+    },
+  );
+
+  it('keeps a computed value even when the property does not apply', () => {
+    const appliesTo = vi.fn((_context: PropertyContext) => false);
+    const property = new BuiltInProperty({
+      name: 'sample', parse: (input, context) => NumberValue.parse(input, context), initialValue: new NumberValue(new NumberLiteral(0)),
+      inherits: false, appliesTo, percentages: 'not-applicable', animationType: 'by-computed-value',
+      resolvedValueStage: ValueStage.Computed,
+    });
+    const context: PropertyContext = {};
+    const declared = property.parse('2', context)!;
+    expect(property.resolve(declared, ValueStage.Computed, context).serialize()).toBe('2');
+    expect(appliesTo).not.toHaveBeenCalled();
+    expect(property.appliesTo(context)).toBe(false);
+    expect(appliesTo).toHaveBeenCalledWith(context);
+  });
+
   it('retains the property grammar when constructing a deferred value directly', () => {
     const declared = builtInRegistry.opacity.createValue(
       new SubstitutionValue(OptionalDeclarationValue.parse('var(--alpha)', {})!),
@@ -120,6 +145,7 @@ describe('property records', () => {
       parse: (input, context) => NumberValue.parse(input, context),
       initialValue: new NumberValue(new NumberLiteral(0)),
       inherits: false,
+      appliesTo: () => true,
       percentages: 'not-applicable',
       resolvedValueStage: ValueStage.Computed,
       animationType: {

@@ -31,6 +31,10 @@ export abstract class BaseProperty<W extends WholeValue = WholeValue, N extends 
     this.name = name;
   }
 
+  /** Test applicability; unavailable target facts must throw rather than imply false. */
+  // https://drafts.csswg.org/css-cascade-5/#applies-to
+  abstract appliesTo(context: PropertyContext): boolean;
+
   abstract parse(input: ParserInput, context: PropertyContext): W | null;
   abstract resolve(propValue: W, stage: ValueStage, context: PropertyContext): W;
 

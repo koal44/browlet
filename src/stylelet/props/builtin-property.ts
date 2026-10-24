@@ -15,6 +15,7 @@ export class BuiltInProperty<
   custom = false as const;
   inherits: boolean;
   initialValue: BuiltInPropertyValue<O>;
+  appliesTo: (context: PropertyContext) => boolean;
   animationType: AnimationType<BuiltInPropertyValue<O>>;
   percentages: PropertyPercentages;
   resolvedValueStage: ResolvedValueStage;
@@ -26,6 +27,7 @@ export class BuiltInProperty<
     this.#parseValue = definition.parse;
     this.inherits = definition.inherits;
     this.initialValue = this.createValue(definition.initialValue);
+    this.appliesTo = definition.appliesTo;
     this.animationType = definition.animationType;
     this.percentages = definition.percentages;
     this.resolvedValueStage = definition.resolvedValueStage;
@@ -117,6 +119,7 @@ export type BuiltInPropertyDefinition<
   parse: (input: ParserInput, context: PropertyContext) => O | null;
   inherits: boolean;
   initialValue: O;
+  appliesTo: (context: PropertyContext) => boolean;
   animationType: AnimationType<BuiltInPropertyValue<O>>;
   percentages: PropertyPercentages;
   resolvedValueStage: ResolvedValueStage;

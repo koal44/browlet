@@ -22,6 +22,11 @@ export class CustomProperty<N extends CustomPropertyName = CustomPropertyName> e
   percentages = 'not-applicable' as const;
   resolvedValueStage = ValueStage.Computed as const;
 
+  /** Custom properties apply to every element and pseudo-element, including restricted pseudos. */
+  appliesTo(_context: PropertyContext): boolean {
+    return true;
+  }
+
   /** Registered and unregistered custom properties accept the same declaration-time grammar. */
   // https://drafts.css-houdini.org/css-properties-values-api-1/#parse-time-behavior
   parse(input: ParserInput, context: PropertyContext): CustomPropertyValue | null {

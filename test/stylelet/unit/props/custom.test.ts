@@ -31,6 +31,7 @@ describe('custom property records', () => {
       name: '--Gap', custom: true, inherits: true, initialValue: { inner: guaranteedInvalidValue },
       animationType: 'discrete', percentages: 'not-applicable',
     });
+    expect(property.appliesTo({})).toBe(true);
     expect(property.parse('arbitrary tokens 10px', {})).not.toBeNull();
     expect(property.parse('!important', {})).toBeNull();
     expect(property.parse('var()', {})).toBeNull();

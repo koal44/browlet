@@ -55,7 +55,7 @@ property exists without a registration. `CustomPropertyRegistration` overrides
 the Variables 1 defaults; it is not a second built-in definition table.
 
 Each `BuiltInProperty` takes one `BuiltInPropertyDefinition` object containing its `name` and ordinary
-parser, `inherits`, typed `initialValue`, `animationType`, `percentages`, and `resolvedValueStage`.
+parser, `inherits`, typed `initialValue`, `appliesTo`, `animationType`, `percentages`, and `resolvedValueStage`.
 These fields are required; the registry retains the named record. The family
 modules create these records once, supplying an ordinary initial value. The record
 retains that value in a `WholeValue` with its grammar, as it does for already-parsed
@@ -75,12 +75,20 @@ all describe work performed by the same subsystem:
 | --- | --- |
 | Value | The ordinary `parse` function supplies the grammar; `WholeValue` adds CSS-wide and deferred notation. |
 | Initial | Required ordinary `initialValue`, retained with the property's parser. Engine defaulting consumes it. |
-| Applies to | Not represented yet. This controls applicability/rendering, not whether the declaration parses or the element has a computed value. Box and pseudo-element facts are still needed. |
+| Applies to | Required `appliesTo(context): boolean`. Colors and opacity have all-element rules; custom properties also apply to every pseudo-element. Margin throws until box classification is available. |
 | Inherited | Required `inherits`; the full Cascade review still owns the remaining inheritance/defaulting rules. |
 | Percentages | Required `percentages`: `not-applicable` for N/A, `number` (100% maps to 1 in the value grammar), or a contextual reference callback with its earliest resolution stage. |
 | Computed value | Value instances own `resolve()`. Property-specific rules and complete computation still need review; supplying a generic value resolver does not establish conformance. |
 | Canonical order | Grammar and serializers own value ordering; shorthand longhands have explicit canonical order. No additional metadata field yet. |
 | Animation type | Required `animationType`: not animatable, discrete, by computed value, repeatable list, or typed property-specific interpolation/addition/accumulation methods. Property operations dispatch these rules; repeatable lists and effect sampling/composition remain unfinished. |
+
+`appliesTo` records the [property-definition applicability rule](https://drafts.csswg.org/css-cascade-5/#applies-to).
+A false result does not prevent parsing, cascading, or computing a value; that value
+can still be inherited. Missing target facts must throw rather than imply false.
+The context does not yet supply box classification or pseudo-element identity, and
+the engine does not consume this rule. Built-in all-element rules do not establish
+pseudo-element support: the pseudo's permitted-property rules still need integration.
+Custom properties explicitly apply even to pseudos with restricted property lists.
 
 `resolvedValueStage` separately records [CSSOM's resolved-value rule](https://drafts.csswg.org/cssom/#resolved-values)
 for `getComputedStyle()`. It is Computed or Used, or a selector receiving the computed

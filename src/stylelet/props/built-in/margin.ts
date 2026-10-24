@@ -69,6 +69,10 @@ const marginSideDefinition: Omit<BuiltInPropertyDefinition<MarginSideValue>, 'na
   parse: parseMarginSideValue,
   inherits: false,
   initialValue: new LengthPercentageValue(new LengthLiteral(0, 'px')),
+  appliesTo() {
+    // TODO: Exclude internal table elements and ruby base/annotation containers using box classification.
+    throw new InternalError('Margin applicability requires box classification');
+  },
   animationType: {
     // The auto branch requests discrete fallback; numeric pairs use their existing operations.
     interpolate(from, to, progress, context) {

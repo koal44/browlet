@@ -16,6 +16,11 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
   containing-block inline-size reference; opacity and the color properties
   distinguish number conversion from N/A. This records requirements without
   claiming animation or layout integration.
+- [x] Require `appliesTo(context): boolean` on properties and built-in definitions.
+  Record all-element rules and custom properties' universal pseudo-element support.
+- [ ] Supply box classification for margin applicability, which currently throws.
+  Integrate pseudo-element property restrictions and applicability at used-value
+  processing, while retaining computed values for non-applicable properties.
 - [x] Record CSSOM's `resolvedValueStage` on every property: Used for colors,
   Computed for opacity/custom properties, and a conditional selector for margins.
 - [ ] Supply margin applicability and resolved display to its stage selector,

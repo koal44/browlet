@@ -147,6 +147,7 @@ describe('property animation operations', () => {
     const property = new BuiltInProperty({
       name: 'sample', parse, initialValue: new NumberValue(new NumberLiteral(0)),
       inherits: false, percentages: 'not-applicable', animationType: { interpolate, add, accumulate },
+      appliesTo: () => true,
       resolvedValueStage: ValueStage.Computed,
     });
     const from = property.resolve(property.parse('2', {})!, ValueStage.Computed, {});
@@ -179,6 +180,7 @@ describe('property animation operations', () => {
     const property = new BuiltInProperty({
       name: 'sample', parse: (input, context) => NumberValue.parse(input, context), initialValue: new NumberValue(new NumberLiteral(0)),
       inherits: false, percentages: 'not-applicable', animationType: 'by-computed-value',
+      appliesTo: () => true,
       resolvedValueStage: ValueStage.Computed,
     });
     const from = property.parse('2', {})!;
@@ -192,6 +194,7 @@ describe('property animation operations', () => {
     const property = new BuiltInProperty({
       name: 'sample', parse: (input, context) => NumberValue.parse(input, context), initialValue: new NumberValue(new NumberLiteral(0)),
       inherits: false, percentages: 'not-applicable', animationType: 'discrete',
+      appliesTo: () => true,
       resolvedValueStage: ValueStage.Computed,
     });
     const from = property.resolve(property.parse('2', {})!, ValueStage.Computed, {});
@@ -217,6 +220,7 @@ describe('property animation operations', () => {
     const property = new BuiltInProperty({
       name: 'sample', parse: () => value, initialValue: value,
       inherits: false, percentages: 'not-applicable', animationType: 'by-computed-value',
+      appliesTo: () => true,
       resolvedValueStage: ValueStage.Computed,
     });
     expect(() => property.interpolate(property.initialValue, property.initialValue, 0.5, {}))

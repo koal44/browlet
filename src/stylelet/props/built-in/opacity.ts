@@ -9,6 +9,7 @@ export const opacityProperty = new BuiltInProperty({
   parse: OpacityValue.parse,
   inherits: false,
   initialValue: new OpacityValue(new NumberValue(new NumberLiteral(1))),
+  appliesTo: () => true,
   animationType: 'by-computed-value',
   percentages: 'number',
   resolvedValueStage: ValueStage.Computed,
