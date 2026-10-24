@@ -5,10 +5,10 @@ import {
   isCustomPropertyName, parseDeclarationList, parseListOfComponentValues, serializeCssIdentifier,
   type SyntaxDeclaration, type ParserInput,
 } from '../../syntax/index';
-import type { WholeValue } from '../../values/index';
+import type { WholeValue, Value } from '../../values/index';
 import {
-  getShorthand, propertyRegistry, CustomProperty, type BuiltInPropertyName, type CustomPropertyName,
-  type BaseProperty, type PropertyContext, type PropertyName,
+  getBuiltInProperty, CustomProperty, type PropertyRegistry, type BuiltInPropertyName, type CustomPropertyName,
+  type BaseProperty, type BuiltInProperty, type PropertyContext, type PropertyName,
 } from '../../props/index';
 
 // Type parameters: P = property record, W = accepted whole value, N/K = property name.
@@ -47,16 +47,18 @@ class Declaration<P extends BaseProperty<W, PropertyName>, W extends WholeValue>
     }
 
     const normalizedName = asciiLower(name);
-    const shorthand = getShorthand(normalizedName);
-    if (shorthand !== undefined) {
-      const values = shorthand.expand(declaration.value, context);
+    const property = getBuiltInProperty(normalizedName);
+    if (property === undefined) return null;
+    if (property.shorthand !== undefined) {
+      const shorthand = property.shorthand;
+      // A registered shorthand's members are registered longhands; the reusable pattern accepts any property name.
+      const longhands = shorthand.longhands as BuiltInProperty<Value, BuiltInPropertyName>[];
+      const values = shorthand.parse(declaration.value, context, property.name);
       return values === null ? null : values.map((value, index) =>
-        new InterpretedDeclaration(shorthand.longhands[index]!, value, important) as BuiltInDeclaration,
+        new InterpretedDeclaration(longhands[index]!, value, important) as BuiltInDeclaration,
       );
     }
-    if (!isBuiltInPropertyName(normalizedName)) return null;
 
-    const property = propertyRegistry[normalizedName];
     const value = property.parse(declaration.value, context);
     // Property and value came from the same registry entry; preserve their correlation in the instance union.
     return value === null ? null : [new InterpretedDeclaration(property, value, important) as BuiltInDeclaration];
@@ -137,10 +139,6 @@ export type InterpretedDeclaration<N extends PropertyName = PropertyName> = {
 export type BuiltInDeclaration<N extends BuiltInPropertyName = BuiltInPropertyName> = InterpretedDeclaration<N>;
 export type CustomDeclaration = InterpretedDeclaration<CustomPropertyName>;
 
-type DeclarationProperties = typeof propertyRegistry & {
+type DeclarationProperties = PropertyRegistry & {
   [N in CustomPropertyName]: CustomProperty<N>;
 };
-
-function isBuiltInPropertyName(name: string): name is BuiltInPropertyName {
-  return Object.hasOwn(propertyRegistry, name);
-}

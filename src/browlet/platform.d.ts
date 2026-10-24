@@ -2533,6 +2533,7 @@ export interface CSSStyleProperties extends CSSStyleDeclaration {
   backgroundColor: string;
   "background-color": string;
   color: string;
+  margin: string;
   marginBottom: string;
   "margin-bottom": string;
   marginLeft: string;
@@ -2542,7 +2543,6 @@ export interface CSSStyleProperties extends CSSStyleDeclaration {
   marginTop: string;
   "margin-top": string;
   opacity: string;
-  margin: string;
   readonly [index: number]: string | undefined;
   [Symbol.iterator](): IterableIterator<string>;
 }

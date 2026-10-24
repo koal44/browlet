@@ -1,4 +1,4 @@
-import { getShorthands, type PropertyContext, type Shorthand } from '../../props/index';
+import type { PropertyContext, Shorthand } from '../../props/index';
 
 import { InterpretedDeclaration, type BuiltInDeclaration } from './interpreted-declaration';
 
@@ -104,14 +104,14 @@ export class CSSDeclarationBlock {
   // https://drafts.csswg.org/cssom/#serialize-into-a-shorthand-form
   #serializeShorthand(declaration: InterpretedDeclaration, alreadySerialized: Set<string>): string | null {
     if (declaration.custom) return null;
-    for (const shorthand of getShorthands(declaration.name)) {
-      const longhands = this.getLonghands(shorthand);
+    for (const property of declaration.property.containingShorthands) {
+      const longhands = this.getLonghands(property.shorthand!);
       if (longhands === null || longhands.some(({ name }) => alreadySerialized.has(name))) continue;
       if (this.#hasInterleavedLogicalGroup(longhands)) continue;
-      const value = shorthand.serialize(longhands.map(({ value }) => value));
+      const value = property.serialize(longhands.map(({ value }) => value));
       if (value === '') continue;
       for (const longhand of longhands) alreadySerialized.add(longhand.name);
-      return InterpretedDeclaration.serializeText(shorthand.name, value, declaration.important);
+      return InterpretedDeclaration.serializeText(property.name, value, declaration.important);
     }
     return null;
   }

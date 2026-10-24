@@ -93,6 +93,7 @@ export class CascadeEngine {
     const dependencyStack: CustomPropertyDependency[] = [];
     const computedStyle = new ComputedStyle();
     for (const property of Object.values(propertyRegistry)) {
+      if (property.shorthand !== undefined) continue;
       const value = this.#getComputedBuiltInValue(
         property, element, scope, cascadedByElement, builtInCacheByElement,
         customValuesByElement, dependencyStack, customPropertyRegistry,

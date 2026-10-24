@@ -33,6 +33,18 @@ describe('interpreted declarations', () => {
     expect(declarations[1]!.serializeValue()).toBe('');
   });
 
+  it('reparses a pending shorthand with the computation context', () => {
+    const context = {
+      numericVariables: new Map([['step', { valueType: 'number' as const, value: new NumberLiteral(1) }]]),
+    };
+    const [declaration] = InterpretedDeclaration.parseBlock('margin: var(--gap)', context);
+    const computed = declaration!.value.resolve(ValueStage.Computed, {
+      numericVariables: new Map([['step', { valueType: 'number' as const, value: new NumberLiteral(3) }]]),
+      getCustomProperty: () => OptionalDeclarationValue.parse('calc(step * 1px)', {})!,
+    });
+    expect(computed.serialize()).toBe('3px');
+  });
+
   it('caches declared text without changing it when the whole value resolves', () => {
     const [declared] = InterpretedDeclaration.parseBlock('margin-left: 2em', {});
     const serialize = vi.spyOn(declared!.value, 'serialize');

@@ -59,7 +59,7 @@ tester.run('dependency-direction', direction, {
   ],
   invalid: [
     {
-      filename: sourceFile('stylelet/props/shorthand'), code: "import { marginShorthand } from './built-in/index';",
+      filename: sourceFile('stylelet/props/shorthand'), code: "import { marginProperty } from './built-in/index';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/shorthand', target: 'stylelet/props/built-in' } }],
     },
     {

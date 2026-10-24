@@ -7,7 +7,7 @@ import {
 
 import type { StyleletEnvironment } from '../../environment';
 import { isCustomPropertyName } from '../../syntax/index';
-import { getShorthand, propertyRegistry } from '../../props/index';
+import { getBuiltInProperty, propertyRegistry } from '../../props/index';
 import type { CSSRuleImpl } from '../rules/index';
 import type { ComputedStyle } from '../../engine/index';
 
@@ -100,10 +100,10 @@ export class CSSStyleDeclarationImpl {
   getPropertyValue(property: string): string {
     const name = normalizePropertyName(property);
     if (!(this.#data instanceof CSSDeclarationBlock)) return this.#data.serialize(name);
-    const shorthand = getShorthand(name);
-    if (shorthand !== undefined) {
-      const longhands = this.#data.getLonghands(shorthand);
-      return longhands === null ? '' : shorthand.serialize(longhands.map(({ value }) => value));
+    const definition = getBuiltInProperty(name);
+    if (definition?.shorthand !== undefined) {
+      const longhands = this.#data.getLonghands(definition.shorthand);
+      return longhands === null ? '' : definition.serialize(longhands.map(({ value }) => value));
     }
     const declaration = this.#data.find(name);
     return declaration === undefined
@@ -116,9 +116,9 @@ export class CSSStyleDeclarationImpl {
   getPropertyPriority(property: string): string {
     if (!(this.#data instanceof CSSDeclarationBlock)) return '';
     const name = normalizePropertyName(property);
-    const shorthand = getShorthand(name);
-    if (shorthand !== undefined) {
-      return this.#data.getLonghands(shorthand)?.[0]?.important ? 'important' : '';
+    const definition = getBuiltInProperty(name);
+    if (definition?.shorthand !== undefined) {
+      return this.#data.getLonghands(definition.shorthand)?.[0]?.important ? 'important' : '';
     }
     return this.#data.find(name)?.important
       ? 'important'
@@ -135,7 +135,7 @@ export class CSSStyleDeclarationImpl {
     const block = this.#mutableBlock();
 
     const name = normalizePropertyName(property);
-    if (!isCustomPropertyName(name) && !isSupportedPropertyName(name) && getShorthand(name) === undefined) return;
+    if (!isCustomPropertyName(name) && !isSupportedPropertyName(name)) return;
 
     // SPEC_CLASH(empty-value-priority-order): Follow CSSOM/Firefox by removing
     // an empty value before checking priority; Chromium/WebKit check priority first.
@@ -169,14 +169,14 @@ export class CSSStyleDeclarationImpl {
     // SPEC_CLASH(shorthand-removal-return): Follow CSSOM/Firefox by returning the
     // former shorthand value; Chromium/WebKit return empty text for shorthands.
     const value = this.getPropertyValue(name);
-    const shorthand = getShorthand(name);
+    const definition = getBuiltInProperty(name);
     let removed = false;
-    if (shorthand === undefined) {
-      removed = block.remove(name);
-    } else {
-      for (const { name: longhand } of shorthand.longhands) {
+    if (definition?.shorthand !== undefined) {
+      for (const { name: longhand } of definition.shorthand.longhands) {
         if (block.remove(longhand)) removed = true;
       }
+    } else {
+      removed = block.remove(name);
     }
     if (removed) this.#updateStyleAttribute();
     return value;

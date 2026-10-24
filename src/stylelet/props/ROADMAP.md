@@ -63,15 +63,17 @@ in the [Stylelet roadmap](../ROADMAP.md#specification-families).
 
 ## Shorthand and logical-property dependencies
 
-- [x] Move common declaration, CSS-wide, and pending-substitution handling into
-  `Shorthand`, below the built-in families. Each family supplies its longhand
-  records and ordinary expansion/compression; property records construct
-  their complete and pending values, and the registry collects shorthand instances
-  separately. `MarginShorthand` now contains only margin-specific behavior.
-- [x] Implement ordinary `marginShorthand.expand()` and `.serialize()` in `built-in/margin.ts`:
+- [x] Let `BuiltInProperty` own serialization and an optional `Shorthand` helper.
+  The helper parses shorthand input for both interpretation and deferred substitution,
+  expands the parsed result, and supplies the shortening pattern. Each shorthand property's
+  constructor calls the helper's `attach()` to insert its longhand links in preferred order.
+- [x] Implement margin expansion and property serialization with the reusable
+  `FourSidesShorthand` pattern supplied in `built-in/margin.ts`:
   validate the 1–4-value grammar, expand in top/right/bottom/left order, preserve
   importance and CSS-wide values, and shorten compatible longhands without
-  resolving them. The shorthand returns values; CSSOM constructs their occurrences.
+  resolving them. The helper returns values; CSSOM constructs their occurrences.
+- [ ] Review shorthand definition metadata when adding a family whose longhands
+  have different initial values or computation rules; margin shares its sides' definition.
 - [x] Add a retained pending-substitution representation shared by a shorthand's
   expanded longhands, including partial overwrites and computed-time failure.
   See [Values 5](https://drafts.csswg.org/css-values-5/#substitution-in-shorthands).

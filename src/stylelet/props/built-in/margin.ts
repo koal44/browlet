@@ -1,44 +1,13 @@
 import { InternalError } from '../../../infra/internal-error';
 
-import { one, oneOf, repeat, withTrivia, createComponentParser, type ParserInput, type TryConsumer } from '../../syntax/index';
+import { one, oneOf, withTrivia, createComponentParser, type TryConsumer } from '../../syntax/index';
 import { ValueStage } from '../../value-processing/index';
 import { LengthLiteral } from '../../values/numeric-literal/index';
 import {
-  AutoValue, LengthPercentageValue, type WholeValueContents, type MathContext, type Value,
+  AutoValue, LengthPercentageValue, type MathContext,
 } from '../../values/index';
-import type { PropertyContext } from '../base-property';
-import { Shorthand } from '../shorthand';
+import { FourSidesShorthand } from '../shorthand';
 import { BuiltInProperty, type BuiltInPropertyDefinition } from '../builtin-property';
-
-/** The physical margin shorthand, expanding values in top/right/bottom/left order. */
-// https://drafts.csswg.org/css-box-4/#margin-shorthand
-export class MarginShorthand extends Shorthand<MarginSideValue> {
-  constructor() {
-    super('margin', [
-      marginTopProperty, marginRightProperty, marginBottomProperty, marginLeftProperty,
-    ]);
-  }
-
-  protected override parseValues(input: ParserInput, context: PropertyContext): MarginSideValue[] | null {
-    const values = parseMarginValues(input, context);
-    if (values === null) return null;
-    const [top, right = top, bottom = top, left = right] = values;
-    return [top, right, bottom, left];
-  }
-
-  protected override serializeValues(values: WholeValueContents<Value>[]): string {
-    if (!values.every((value) => value instanceof LengthPercentageValue || value instanceof AutoValue)) return '';
-    const text = values.map((value) => value.serialize());
-    if (text[3] === text[1]) {
-      text.pop();
-      if (text[2] === text[0]) {
-        text.pop();
-        if (text[1] === text[0]) text.pop();
-      }
-    }
-    return text.join(' ');
-  }
-}
 
 type MarginSideValue = LengthPercentageValue | AutoValue;
 
@@ -61,7 +30,6 @@ const marginSideValueConsumer: TryConsumer<MarginSideValue, MathContext> = oneOf
   },
 );
 const parseMarginSideValue = createComponentParser(withTrivia(marginSideValueConsumer));
-const parseMarginValues = createComponentParser(repeat(withTrivia(marginSideValueConsumer), 1, 4));
 
 /** Shared grammar and metadata for the four physical margin longhands. */
 // https://drafts.csswg.org/css-box-4/#margin-physical
@@ -112,4 +80,13 @@ export const marginRightProperty = new BuiltInProperty({ name: 'margin-right', .
 export const marginBottomProperty = new BuiltInProperty({ name: 'margin-bottom', ...marginSideDefinition });
 export const marginLeftProperty = new BuiltInProperty({ name: 'margin-left', ...marginSideDefinition });
 
-export const marginShorthand = new MarginShorthand();
+/** The margin property owns its four-side grammar and serialization. */
+// https://drafts.csswg.org/css-box-4/#margin-shorthand
+export const marginProperty = new BuiltInProperty({
+  ...marginSideDefinition,
+  name: 'margin',
+  shorthand: new FourSidesShorthand(
+    [marginTopProperty, marginRightProperty, marginBottomProperty, marginLeftProperty],
+    marginSideValueConsumer,
+  ),
+});

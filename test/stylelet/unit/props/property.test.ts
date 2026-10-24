@@ -6,7 +6,8 @@ import { FirstValidValue } from '../../../../src/stylelet/values/substitution/fi
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 import { colorProperty } from '../../../../src/stylelet/props/built-in/color';
 import type { BaseProperty, PropertyContext } from '../../../../src/stylelet/props/base-property';
-import { BuiltInProperty } from '../../../../src/stylelet/props/builtin-property';
+import { BuiltInProperty, type BuiltInPropertyDefinition } from '../../../../src/stylelet/props/builtin-property';
+import { Shorthand } from '../../../../src/stylelet/props/shorthand';
 import { builtInRegistry, type BuiltInPropertyName } from '../../../../src/stylelet/props/registry';
 import { InterpretedDeclaration } from '../../../../src/stylelet/cssom/declarations/interpreted-declaration';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
@@ -45,6 +46,42 @@ describe('property records', () => {
     expect(builtInRegistry.color).not.toBe(builtInRegistry['background-color']);
     expect(builtInRegistry.color.parse('red', {}))
       .toEqual(builtInRegistry['background-color'].parse('red', {}));
+  });
+
+  it('serializes one whole value or the complete longhand values of a shorthand', () => {
+    const side = builtInRegistry['margin-top'].parse('2em', {})!;
+    expect(builtInRegistry['margin-top'].serialize(side)).toBe('2em');
+
+    const margin = builtInRegistry.margin;
+    const sides = margin.shorthand!.parse('1em 2em', {}, margin.name)!;
+    expect(margin.serialize(sides)).toBe('1em 2em');
+    expect(margin.serialize(sides.slice(0, 3))).toBe('');
+    expect(builtInRegistry['margin-top'].serialize(sides)).toBe('');
+  });
+
+  it('links constructed shorthand properties in preferred order without registry setup', () => {
+    class TestShorthand extends Shorthand<NumberValue> {
+      serialize(text: string[]): string { return text.join(' '); }
+      protected parseLonghands(): null { return null; }
+    }
+    const definition: Omit<BuiltInPropertyDefinition<NumberValue>, 'name'> = {
+      parse: (input, context) => NumberValue.parse(input, context), initialValue: new NumberValue(new NumberLiteral(0)),
+      inherits: false, appliesTo: () => true, percentages: 'not-applicable', animationType: 'by-computed-value',
+      resolvedValueStage: ValueStage.Computed,
+    };
+    const first = new BuiltInProperty({ ...definition, name: 'first' });
+    const second = new BuiltInProperty({ ...definition, name: 'second' });
+    for (const name of ['-other-z', '-webkit-z', 'beta', 'alpha', '-webkit-a', '-other-a']) {
+      new BuiltInProperty({ ...definition, name, shorthand: new TestShorthand([first]) });
+    }
+    const broad = new BuiltInProperty({
+      ...definition, name: '-other-broad', shorthand: new TestShorthand([first, second]),
+    });
+
+    expect(first.containingShorthands.map(({ name }) => name)).toEqual([
+      '-other-broad', 'alpha', 'beta', '-webkit-a', '-webkit-z', '-other-a', '-other-z',
+    ]);
+    expect(second.containingShorthands).toEqual([broad]);
   });
 
   it.each(['color', 'background-color', 'opacity'] as const)('records all-element applicability for %s', (name) => {

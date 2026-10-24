@@ -1,75 +1,99 @@
 import { InternalError } from '../../infra/internal-error';
 
-import type { ParserInput } from '../syntax/index';
+import { createComponentParser, repeat, withTrivia, type ParserInput, type TryConsumer } from '../syntax/index';
 import {
-  CssWideValue, OptionalDeclarationValue, SubstitutionValue,
-  FirstValidValue, type WholeValue, type WholeValueContents, type Value, type PendingShorthand,
+  CssWideValue, FirstValidValue, OptionalDeclarationValue, SubstitutionValue,
+  type PendingShorthand, type Value, type WholeValue,
 } from '../values/index';
 import type { PropertyContext } from './base-property';
 import type { BuiltInProperty } from './builtin-property';
-import type { BuiltInPropertyName } from './registry';
 
 // Type parameter: O = ordinary longhand value.
 
-/** Shared shorthand handling around a family's ordinary grammar and serialization. */
+/** Parsing, expansion, and shortening shared by properties with the same shorthand pattern. */
 export abstract class Shorthand<O extends Value = Value> {
-  /** Normalized CSS name, retained by pending occurrences. */
-  name: string;
   /** Longhands in canonical order, including reset-only properties. */
-  longhands: BuiltInProperty<O, BuiltInPropertyName>[];
+  longhands: BuiltInProperty<O>[];
 
-  constructor(
-    name: string,
-    longhands: Shorthand<O>['longhands'],
-  ) {
-    this.name = name;
+  constructor(longhands: BuiltInProperty<O>[]) {
     this.longhands = longhands;
   }
 
-  /** Parse into longhand order; the declaration owner supplies names and importance. */
+  /** Link the owning property to these longhands in CSSOM's preferred shorthand order. */
+  // https://drafts.csswg.org/cssom/#concept-shorthands-preferred-order
+  attach(property: BuiltInProperty): void {
+    const rank = property.name.startsWith('-webkit-') ? 1 : property.name.startsWith('-') ? 2 : 0;
+    const follows = (other: BuiltInProperty): boolean => {
+      const otherRank = other.name.startsWith('-webkit-') ? 1 : other.name.startsWith('-') ? 2 : 0;
+      const order = other.shorthand!.longhands.length - this.longhands.length || rank - otherRank;
+      return order < 0 || (order === 0 && property.name < other.name);
+    };
+    for (const longhand of this.longhands) {
+      const containing = longhand.containingShorthands;
+      const index = containing.findIndex(follows);
+      containing.splice(index < 0 ? containing.length : index, 0, property);
+    }
+  }
+
+  /** Parse shorthand syntax for interpretation or deferred reparsing with the current context. */
   // https://drafts.csswg.org/css-cascade-5/#shorthand
-  expand(input: ParserInput, context: PropertyContext): WholeValue<O>[] | null {
+  parse(input: ParserInput, context: PropertyContext, name: string): WholeValue<O>[] | null {
     const declValue = OptionalDeclarationValue.parse(input, context);
     if (declValue === null || !SubstitutionValue.hasValidVarArguments(declValue.repr)) return null;
     if (FirstValidValue.parse(declValue.repr, context) !== null) {
       // TODO: Select a first-valid() argument against the complete shorthand grammar.
       // https://drafts.csswg.org/css-values-5/#first-valid
-      throw new InternalError(`First-valid ${this.name} shorthand selection is not implemented`);
+      throw new InternalError(`First-valid ${name} shorthand selection is not implemented`);
     }
     if (SubstitutionValue.containsFunction(declValue.repr)) {
       // https://drafts.csswg.org/css-values-5/#substitution-in-shorthands
-      const shorthand: PendingShorthand<O> = {
-        name: this.name,
-        value: new SubstitutionValue(declValue),
-        expand: (input, context) => this.expand(input, context),
+      const pending: PendingShorthand<O> = {
+        name, value: new SubstitutionValue(declValue),
+        expand: (input, context) => this.parse(input, context, name),
       };
-      return this.longhands.map((property, shorthandIndex) => property.createPendingValue(shorthand, shorthandIndex));
+      return this.longhands.map((property, shorthandIndex) => property.createPendingValue(pending, shorthandIndex));
     }
-
     const cssWide = CssWideValue.parse(declValue.repr, context);
     if (cssWide !== null) return this.longhands.map((property) => property.createValue(cssWide));
-    const values = this.parseValues(declValue.repr, context);
+    const values = this.parseLonghands(declValue.repr, context);
     return values === null ? null : this.longhands.map((property, index) => property.createValue(values[index]!));
   }
 
-  /** Serialize complete, equally important longhands, or empty text if incompatible. */
-  // https://drafts.csswg.org/cssom/#serialize-into-a-shorthand-form
-  serialize(propValues: WholeValue[]): string {
-    const pending = propValues[0];
-    if (pending?.isPendingSubstitution()) {
-      return pending.shorthand.name === this.name &&
-        propValues.every((propValue) => propValue.isPendingSubstitution() && propValue.shorthand === pending.shorthand)
-        ? pending.shorthand.value.serialize()
-        : '';
-    }
-    const keyword = propValues[0]?.cssWideKeyword();
-    if (keyword !== undefined) return propValues.every((propValue) => propValue.cssWideKeyword() === keyword) ? keyword : '';
-    return this.serializeValues(propValues.map(({ inner }) => inner));
-  }
+  /** Shorten ordinary longhand text already serialized by the owning properties. */
+  abstract serialize(text: string[]): string;
 
   /** Parse ordinary shorthand syntax into exactly one value per canonical longhand. */
-  protected abstract parseValues(input: ParserInput, context: PropertyContext): O[] | null;
+  protected abstract parseLonghands(input: ParserInput, context: PropertyContext): O[] | null;
+}
 
-  /** Shorten compatible ordinary values; reject deferred notation or incompatible value families. */
-  protected abstract serializeValues(values: WholeValueContents<Value>[]): string;
+/** One through four values in top/right/bottom/left order, omitting repeated sides. */
+export class FourSidesShorthand<O extends Value> extends Shorthand<O> {
+  #parseValues: (input: ParserInput, context: PropertyContext) => [O, ...O[]] | null;
+
+  constructor(
+    longhands: [BuiltInProperty<O>, BuiltInProperty<O>, BuiltInProperty<O>, BuiltInProperty<O>],
+    consume: TryConsumer<O, PropertyContext>,
+  ) {
+    super(longhands);
+    this.#parseValues = createComponentParser(repeat(withTrivia(consume), 1, 4));
+  }
+
+  serialize(text: string[]): string {
+    let count = 4;
+    if (text[3] === text[1]) {
+      count = 3;
+      if (text[2] === text[0]) {
+        count = 2;
+        if (text[1] === text[0]) count = 1;
+      }
+    }
+    return text.slice(0, count).join(' ');
+  }
+
+  protected parseLonghands(input: ParserInput, context: PropertyContext): O[] | null {
+    const values = this.#parseValues(input, context);
+    if (values === null) return null;
+    const [top, right = top, bottom = top, left = right] = values;
+    return [top, right, bottom, left];
+  }
 }

@@ -4,7 +4,7 @@ import {
   type AttributeMember,
 } from '../../../web-idl/core/index';
 
-import { propertyRegistry, shorthandRegistry } from '../../props/index';
+import { propertyRegistry } from '../../props/index';
 
 import { CSSStyleDeclarationImpl } from './style-declaration';
 
@@ -45,7 +45,7 @@ export const cssStylePropertiesIDL = defineInterface({
 // https://drafts.csswg.org/cssom/#dom-cssstyleproperties-dashed-attribute
 function createPropertyAttributes(): AttributeMember[] {
   const attributes: [attribute: string, property: string][] = [['cssFloat', 'float']];
-  for (const property of [...Object.keys(propertyRegistry), ...Object.keys(shorthandRegistry)]) {
+  for (const property of Object.keys(propertyRegistry)) {
     const attribute = cssPropertyToIDLAttribute(property);
     attributes.push([attribute, property]);
     if (property.startsWith('-webkit-')) attributes.push([cssPropertyToIDLAttribute(property, true), property]);

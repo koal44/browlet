@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { marginShorthand } from '../../../../src/stylelet/props/built-in/margin';
+import { marginProperty } from '../../../../src/stylelet/props/built-in/margin';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 import { WholeValue } from '../../../../src/stylelet/values/whole-value';
 import { createBrowletDocument } from '../../browlet-document';
@@ -90,13 +90,13 @@ describe('computed ordinary properties', () => {
     const element = document.querySelector('main')!;
     // Parse the declared block before observing the computed-time expansion.
     element.getInlineStyleBlock();
-    const expand = vi.spyOn(marginShorthand, 'expand');
+    const parseShorthand = vi.spyOn(marginProperty.shorthand!, 'parse');
     try {
       const computed = document.getStyleEngine().getComputedStyle(element);
       expect(computed.getPropertyValue('margin')).toBe('2px 4px 2px 9px');
-      expect(expand).toHaveBeenCalledTimes(1);
+      expect(parseShorthand).toHaveBeenCalledTimes(1);
       expect(element.getInlineStyleBlock()!.find('margin-top')!.serializeValue()).toBe('');
-    } finally { expand.mockRestore(); }
+    } finally { parseShorthand.mockRestore(); }
   });
 
   it.each([
@@ -150,11 +150,11 @@ describe('computed ordinary properties', () => {
     inline.remove('margin-top');
     inline.remove('margin-bottom');
 
-    const expand = vi.spyOn(marginShorthand, 'expand');
+    const parseShorthand = vi.spyOn(marginProperty.shorthand!, 'parse');
     try {
       expect(styles.getComputedStyle(element).getPropertyValue('margin')).toBe('1px 4px');
-      expect(expand).toHaveBeenCalledTimes(2);
-    } finally { expand.mockRestore(); }
+      expect(parseShorthand).toHaveBeenCalledTimes(2);
+    } finally { parseShorthand.mockRestore(); }
   });
 
   it('computes ordinary substitutions without requesting serialized source text', () => {

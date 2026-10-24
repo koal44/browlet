@@ -2,7 +2,7 @@ import type { CustomPropertyName, ParserInput } from '../syntax/index';
 import type { ParsedSyntaxValue, SyntaxValue, WholeValue } from '../values/index';
 import type { PropertyContext } from './base-property';
 import {
-  backgroundColorProperty, colorProperty, marginTopProperty, marginRightProperty,
+  backgroundColorProperty, colorProperty, marginProperty, marginTopProperty, marginRightProperty,
   marginBottomProperty, marginLeftProperty, opacityProperty,
 } from './built-in/index';
 
@@ -11,6 +11,7 @@ import {
 export const builtInRegistry = {
   'background-color': backgroundColorProperty,
   color: colorProperty,
+  margin: marginProperty,
   'margin-bottom': marginBottomProperty,
   'margin-left': marginLeftProperty,
   'margin-right': marginRightProperty,
@@ -21,11 +22,16 @@ export const builtInRegistry = {
 /** Installed property records, retaining each entry's concrete type. */
 export type BuiltInRegistry = typeof builtInRegistry;
 
-/** Built-in longhand names installed in the registry. */
+/** Built-in property names installed in the registry, including shorthands. */
 export type BuiltInPropertyName = keyof typeof builtInRegistry;
 
 /** Whole-value family accepted by a supported built-in property. */
 export type BuiltInPropertyValue<N extends BuiltInPropertyName> = BuiltInRegistry[N]['initialValue'];
+
+/** Find either kind of built-in property using its normalized CSS name. */
+export function getBuiltInProperty(name: string): BuiltInRegistry[BuiltInPropertyName] | undefined {
+  return Object.hasOwn(builtInRegistry, name) ? builtInRegistry[name as BuiltInPropertyName] : undefined;
+}
 
 /** A document-scoped override of the Variables 1 defaults for one custom property. */
 export type CustomPropertyRegistration = {
@@ -43,5 +49,5 @@ export type RegistryContext = {
   customPropertyRegistry?: CustomPropertyRegistry;
 };
 
-/** Names accepted by interpreted declarations: supported longhands or custom properties. */
+/** Supported property names; interpretation expands shorthands before retaining declarations. */
 export type PropertyName = BuiltInPropertyName | CustomPropertyName;

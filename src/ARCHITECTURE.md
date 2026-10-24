@@ -262,7 +262,7 @@ their children. Binding projects these implementations rather than creating a
 second representation of their state.
 
 Stylelet value classes implement `Value<Context>`: static parsing/consumption,
-instance resolution and serialization, and a `value` payload. Numeric literals
+instance resolution and serialization, and a `repr` payload. Numeric literals
 keep their magnitude directly on the instance, with a unit for dimensions.
 Dimension and image grammars return concrete values through unions. Contexts
 remain invocation inputs.
@@ -273,7 +273,8 @@ validation belong to Syntax.
 Named built-in property records own ordinary parsers, complete-value construction,
 inheritance, typed initial values, and percentage-reference selection during
 resolution. Interpreted declarations retain the record identified during parsing
-and delegate value resolution and serialization to it. Families supply ordinary
+and delegate value serialization to it. The engine resolves selected values through
+their properties. Families supply ordinary
 initial values, and shorthand expansion supplies
 already-parsed components or pending occurrences. The record constructs each
 complete value with its consuming grammar. Instances live in the property-family
@@ -323,8 +324,8 @@ their syntax. Registered-property grammar validation waits until Computed.
 Resolution receives stage and context at invocation. Serialization describes
 the retained representation without resolving it or selecting a later stage.
 Interpreted declarations lazily cache their serialized value. Retained values and
-their nested payloads must stay unchanged; CSSOM edits replace occurrences and
-resolution creates a separate declaration with a fresh cache.
+their nested payloads must stay unchanged; CSSOM edits replace occurrences, while
+resolution retains separate whole values in the computed-style collection.
 
 Stylelet's RuleListContext forwards Syntax's interpretation requests to a supplied
 CSSRuleListImpl. The context module imports only types; the list dispatches to
@@ -334,10 +335,20 @@ Shared property contracts and registries live in `props/`; `props/built-in/`
 supplies the concrete property grammars and metadata. `props/base-property.ts`
 owns shared property contracts. `props/builtin-property.ts` and
 `props/custom-property.ts` own their respective value handling, independently of
-each other. These modules and `props/shorthand.ts` sit below the concrete families;
-the shorthand class owns common expansion/serialization handling. Shorthands retain supplied property
-records through type-only imports; the separate shorthand registry collects family
-instances without a reverse runtime import.
+each other. A built-in property can own a `Shorthand` helper from
+`props/shorthand.ts`; `FourSidesShorthand` supplies the top/right/bottom/left pattern.
+The helper parses shorthand input and expands the parsed result into longhand values.
+Deferred occurrences reuse its parser with the computation's context; declaration
+interpretation constructs the corresponding declaration occurrences.
+`BuiltInProperty` owns serialization, accepting one whole value or the helper's
+ordered longhand values. Shorthands have no separate computed value.
+These classes sit below the concrete families. Constructing a shorthand property
+calls its helper's `attach()` to link it to its longhands in CSSOM's preferred order.
+A single property registry supplies name lookup for longhands and shorthands.
+The engine computes only longhands; CSSOM and computed-style shorthand reads
+call the shorthand property's serializer.
+The helpers retain supplied longhands through type-only imports and do not load
+the registry.
 Declaration interpretation,
 the resulting `InterpretedDeclaration` instances, the ordered collection, and its
 CSSOM implementations live together in `cssom/declarations/`. Syntax keeps the

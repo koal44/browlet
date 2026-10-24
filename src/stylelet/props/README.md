@@ -8,12 +8,13 @@ families and their dependencies.
 
 ## Installed properties
 
-The [longhand registry](registry.ts) installs seven built-in names:
+The [property registry](registry.ts) installs seven built-in longhands and the
+`margin` shorthand:
 
 | Module | Registered names | Current behavior |
 | --- | --- | --- |
 | [color.ts](built-in/color.ts) | `color`, `background-color` | Shared color parser. Color inherits and starts at symbolic CanvasText; background-color does not inherit and starts at transparent. Property-specific currentColor rules remain unfinished. |
-| [margin.ts](built-in/margin.ts) | `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | Each starts at zero, does not inherit, and accepts length-percentage or auto. Resolution preserves auto and delegates numeric values to the shared resolver. All belong to the physical margin group; logical longhands remain absent. |
+| [margin.ts](built-in/margin.ts) | `margin`, `margin-top`, `margin-right`, `margin-bottom`, `margin-left` | The four longhands start at zero, do not inherit, and accept length-percentage or auto. Resolution preserves auto and delegates numeric values to the shared resolver. The shorthand expands and serializes these sides. All belong to the physical margin group; logical longhands remain absent. |
 | [opacity.ts](built-in/opacity.ts) | `opacity` | Starts at one and does not inherit. OpacityValue handles percentage conversion and computed-stage clamping. |
 
 [animation-name.ts](built-in/animation-name.ts) separately parses and serializes lists
@@ -23,7 +24,7 @@ the general value suite.
 
 ## How a property participates
 
-`BuiltInProperty.parse()` applies the record's ordinary grammar through
+For longhands, `BuiltInProperty.parse()` applies the record's ordinary grammar through
 `WholeValue.parse()`, including the whole-value forms described in the
 [value inventory](../values/README.md). Parsing does not install the property or
 provide defaulting, inheritance, shorthand expansion, applicability, or a layout effect.
@@ -56,7 +57,8 @@ the Variables 1 defaults; it is not a second built-in definition table.
 
 Each `BuiltInProperty` takes one `BuiltInPropertyDefinition` object containing its `name` and ordinary
 parser, `inherits`, typed `initialValue`, `appliesTo`, `animationType`, `percentages`, and `resolvedValueStage`.
-These fields are required; the registry retains the named record. The family
+An optional `shorthand` supplies the expansion and serialization pattern.
+The registry retains the named record. The family
 modules create these records once, supplying an ordinary initial value. The record
 retains that value in a `WholeValue` with its grammar, as it does for already-parsed
 shorthand components. It also constructs pending shorthand longhands.
@@ -176,15 +178,28 @@ that does not prevent percentages inside a color function such as `rgb()`.
 
 ## Shorthands and consumers
 
-[Shorthand](shorthand.ts) owns declaration validation, CSS-wide expansion,
-pending substitution, and shared serialization checks. Families supply ordinary
-parsing and shortening, plus named longhand records in canonical order.
-[MarginShorthand](built-in/margin.ts) expands one through four values into
-top/right/bottom/left values and shortens compatible sides.
-The separate [registry](shorthand-registry.ts) derives the reverse longhand
-lookup once, in CSSOM's preferred shorthand order. The property and shorthand
-classes sit below the built-in families; `Shorthand` imports the supplied record's
-type, and neither class loads the registry. Families never load their collector.
+[BuiltInProperty](builtin-property.ts) owns serialization, accepting one whole value
+or the ordered longhand values. Its optional [Shorthand](shorthand.ts) helper
+supplies parsing, expansion, and the shortening pattern. Its `parse()` validates
+the input and constructs whole values for each longhand. Ordinary syntax goes
+through `parseLonghands()`, which returns one ordinary value per canonical longhand;
+CSS-wide keywords and pending occurrences are handled directly. Declaration
+interpretation and pending substitution supply the context for their stage.
+The block supplies a
+complete equally important set and checks ordering before grouping declarations.
+[marginProperty](built-in/margin.ts) uses `FourSidesShorthand`: it supplies its four
+longhand records and side consumer, and shares their zero initial value and other
+metadata. It has no separate computed value. Shorthands whose metadata differs
+between longhands will need that definition contract reviewed when introduced.
+The property serializes each ordinary longhand through that longhand's property
+before asking the helper to shorten the resulting text.
+Constructing a shorthand property calls its helper's `attach()`, which inserts it into each
+longhand's `containingShorthands` in CSSOM's preferred order, independently of registry inclusion.
+The single [registry](registry.ts) supplies name lookup for both kinds of property;
+there is no separate shorthand registry or reverse-lookup map. The property and helper classes
+sit below the built-in families and do not load the registry. Families never load
+their collector. Names and ordinary value families retain their concrete types;
+longhand-only membership is a runtime invariant, not a separate name type.
 CSSOM creates declaration
 occurrences retaining those records and the original importance; the property layer
 does not construct declarations. Compatible longhands serialize to the shortest
@@ -200,8 +215,9 @@ value's resolution and serialization methods. Custom properties keep opaque
 components inside the same whole-value lifecycle. The engine unwraps computed
 custom values only when supplying the component lookup used by substitution;
 the lookup still distinguishes valid empty components from guaranteed-invalid values.
-The [computed-style query](../engine/cascade-engine.ts) also iterates the
-registry; adding a generic value parser alone does not extend this inventory.
+The [computed-style query](../engine/cascade-engine.ts) iterates only the registry's
+longhands; shorthand queries serialize the retained longhand results. Adding a
+generic value parser alone does not extend this inventory.
 Engine defaulting and inheritance consume this metadata for the installed names; see
 the [remaining lifecycle work](../engine/ROADMAP.md#defaulting-and-per-element-values).
 

@@ -1,5 +1,5 @@
 import type { WholeValue } from '../values/index';
-import { getShorthand, type BaseProperty, type PropertyName } from '../props/index';
+import { getBuiltInProperty, type BaseProperty, type PropertyName } from '../props/index';
 
 // Type parameter: W = whole property value.
 
@@ -37,15 +37,15 @@ export class ComputedStyle {
 
   /** Serialize the retained value or a complete shorthand without resolving anything. */
   serialize(name: string): string {
-    const shorthand = getShorthand(name);
-    if (shorthand !== undefined) {
+    const property = getBuiltInProperty(name);
+    if (property?.shorthand !== undefined) {
       const propValues: WholeValue[] = [];
-      for (const property of shorthand.longhands) {
-        const entry = this.#properties.get(property.name);
+      for (const longhand of property.shorthand.longhands) {
+        const entry = this.#properties.get(longhand.name);
         if (entry === undefined) return '';
         propValues.push(entry.value);
       }
-      return shorthand.serialize(propValues);
+      return property.serialize(propValues);
     }
 
     const cached = this.#serializedValues.get(name);

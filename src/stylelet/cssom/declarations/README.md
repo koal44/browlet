@@ -94,10 +94,13 @@ already-retained Platform object.
 
 ## Shorthand boundary
 
-[Property metadata](../../props/shorthand.ts) supplies canonical longhands and
-their expansion/serialization operations. The block handles preferred shorthand
-selection, complete/equal-priority checks, and logical-group ordering. Properties
-identify their logical group and physical/logical mapping in their own records;
+[Built-in properties](../../props/builtin-property.ts) own serialization and an
+optional shorthand helper. The helper parses and expands input; interpretation
+constructs declaration occurrences from its results. Pending occurrences reuse the
+helper's parser for computation with fresh context. Each shorthand property's
+constructor calls the helper's `attach()` to link its longhands in preferred order.
+The block handles shorthand selection, complete/equal-priority checks, and
+logical-group ordering. Properties identify their logical group and physical/logical mapping in their own records;
 only physical margins are currently registered.
 
 The block's shorthand method follows the current CSSOM
@@ -108,7 +111,7 @@ entry point and non-ASCII identifier serialization rule already matched our
 implementation; the shorthand loop now follows the extracted algorithm.
 
 Ordinary margin assignment expands one through four values or a CSS-wide keyword.
-The property record returns values in canonical longhand order; interpreted
+The shorthand helper returns values in canonical longhand order; interpreted
 declarations supply their names and importance. Complete compatible sets shorten
 to one through four components. Incomplete, mixed-priority, mixed CSS-wide, or
 independently deferred longhands return an empty shorthand query and remain

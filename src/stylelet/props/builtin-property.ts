@@ -5,6 +5,7 @@ import {
   BaseProperty, type AnimationType, type PropertyContext, type PropertyPercentages,
   type ResolvedValueStage, type LogicalPropertyGroup,
 } from './base-property';
+import type { Shorthand } from './shorthand';
 
 // Type parameters: O = ordinary parser result, N = property name, W = whole property value.
 
@@ -19,11 +20,16 @@ export class BuiltInProperty<
   animationType: AnimationType<BuiltInPropertyValue<O>>;
   percentages: PropertyPercentages;
   resolvedValueStage: ResolvedValueStage;
+  /** Expansion and serialization pattern; undefined for a longhand. */
+  shorthand?: Shorthand;
+  /** Containing shorthand properties in CSSOM's preferred order, linked during construction. */
+  containingShorthands: BuiltInProperty[] = [];
   /** Parsed grammar retained by every complete value constructed for this property. */
   #parseValue: (input: ParserInput, context: PropertyContext) => O | null;
 
   constructor(definition: BuiltInPropertyDefinition<O, N>) {
     super(definition.name);
+    this.shorthand = definition.shorthand;
     this.#parseValue = definition.parse;
     this.inherits = definition.inherits;
     this.initialValue = this.createValue(definition.initialValue);
@@ -32,9 +38,11 @@ export class BuiltInProperty<
     this.percentages = definition.percentages;
     this.resolvedValueStage = definition.resolvedValueStage;
     this.logicalGroup = definition.logicalGroup;
+
+    this.shorthand?.attach(this);
   }
 
-  /** Parse this property's ordinary grammar and whole-value notation. */
+  /** Parse a longhand's ordinary grammar and whole-value notation. */
   parse(input: ParserInput, context: PropertyContext): WholeValue<O> | null {
     return WholeValue.parse<O>(input, context, this.#parseValue);
   }
@@ -53,6 +61,27 @@ export class BuiltInProperty<
   resolve<W extends BuiltInPropertyValue<O>>(propValue: W, stage: ValueStage, context: PropertyContext): ReturnType<W['resolve']>;
   resolve(propValue: BuiltInPropertyValue<O>, stage: ValueStage, context: PropertyContext): WholeValue {
     return propValue.resolve(stage, this.withPercentageReference(stage, context));
+  }
+
+  /** Serialize one value or complete longhand values supplied in the shorthand's canonical order. */
+  // https://drafts.csswg.org/cssom/#serialize-a-css-value
+  serialize(propValue: BuiltInPropertyValue<O>): string;
+  serialize(propValues: WholeValue[]): string;
+  serialize(propValue: BuiltInPropertyValue<O> | WholeValue[]): string {
+    if (!Array.isArray(propValue)) return propValue.serialize();
+    const shorthand = this.shorthand;
+    if (shorthand === undefined || propValue.length !== shorthand.longhands.length) return '';
+    const pending = propValue[0];
+    if (pending?.isPendingSubstitution()) {
+      return pending.shorthand.name === this.name &&
+        propValue.every((value) => value.isPendingSubstitution() && value.shorthand === pending.shorthand)
+        ? pending.shorthand.value.serialize()
+        : '';
+    }
+    const keyword = propValue[0]?.cssWideKeyword();
+    if (keyword !== undefined) return propValue.every((value) => value.cssWideKeyword() === keyword) ? keyword : '';
+    if (!propValue.every((value) => value.isOrdinaryValue())) return '';
+    return shorthand.serialize(propValue.map((value, index) => shorthand.longhands[index]!.serialize(value)));
   }
 
   interpolate(
@@ -112,10 +141,9 @@ export class BuiltInProperty<
 type BuiltInPropertyValue<O extends Value> = WholeValue<O | ReturnType<O['resolve']>>;
 
 /** Required property facts, supplied together; initial values are already parsed ordinary values. */
-export type BuiltInPropertyDefinition<
-  O extends Value, N extends string = string,
-> = {
+export type BuiltInPropertyDefinition<O extends Value, N extends string = string> = {
   name: N;
+  shorthand?: Shorthand;
   parse: (input: ParserInput, context: PropertyContext) => O | null;
   inherits: boolean;
   initialValue: O;
