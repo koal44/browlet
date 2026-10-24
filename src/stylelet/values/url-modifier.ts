@@ -1,4 +1,5 @@
 import { asciiLower } from '../../infra/ascii';
+import { referrerPolicyValues, type ReferrerPolicy } from '../../fetch/core/index';
 
 import {
   createKeywordConsumer, createFunctionalNotationConsumer, consumeFunctionBlock, one, oneOf, withTrivia, createComponentParser,
@@ -110,9 +111,9 @@ class ReferrerPolicyModifier {
   /** The recognized referrer-policy modifier kind. */
   type = 'referrer-policy-modifier' as const;
   /** The policy keyword controlling the request's referrer. */
-  value: ReferrerPolicy;
+  value: Exclude<ReferrerPolicy, ''>;
 
-  constructor(value: ReferrerPolicy) {
+  constructor(value: Exclude<ReferrerPolicy, ''>) {
     this.value = value;
   }
 
@@ -127,16 +128,6 @@ class ReferrerPolicyModifier {
     return `referrer-policy(${this.value})`;
   }
 }
-
-export type ReferrerPolicy =
-  | 'no-referrer'
-  | 'no-referrer-when-downgrade'
-  | 'same-origin'
-  | 'origin'
-  | 'strict-origin'
-  | 'origin-when-cross-origin'
-  | 'strict-origin-when-cross-origin'
-  | 'unsafe-url';
 
 /*
  * NOTE: The URL modifier grammar is a provisional synthesis, not a verbatim
@@ -186,18 +177,10 @@ const integrityModifierConsumer = createFunctionalNotationConsumer(
 );
 
 // <referrer-policy-modifier> = referrer-policy(no-referrer | no-referrer-when-downgrade | same-origin | origin | strict-origin | origin-when-cross-origin | strict-origin-when-cross-origin | unsafe-url)
+const [, ...referrerPolicyKeywords] = referrerPolicyValues;
 const referrerPolicyModifierConsumer = createFunctionalNotationConsumer(
   'referrer-policy',
-  createKeywordConsumer(
-    'no-referrer',
-    'no-referrer-when-downgrade',
-    'same-origin',
-    'origin',
-    'strict-origin',
-    'origin-when-cross-origin',
-    'strict-origin-when-cross-origin',
-    'unsafe-url',
-  ),
+  createKeywordConsumer(...referrerPolicyKeywords),
   (value) => new ReferrerPolicyModifier(value),
 );
 

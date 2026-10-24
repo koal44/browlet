@@ -10,7 +10,7 @@ custom-property source text is retained where its representation needs it.
 
 CSSOM and loading callers create RuleListContext with their existing rule list, enclosing selectors,
 the constructed-sheet flag, and the environment. The same class handles both sheet kinds:
-ordinary imports retain their URL/media prelude but cannot attach without the loader; constructed-sheet
+ordinary imports retain their URL/media prelude and attach without fetching; constructed-sheet
 insertion rejects imports and replacement discards them. Parsing helpers receive
 the context, extracting its environment when allocating retained CSSOM objects.
 Selector/property grammars receive the same context object directly.
@@ -56,14 +56,15 @@ context's selector parser, so the enclosing-rule walk happens only once.
 | Ordinary style rule | CSSStyleRuleImpl with parsed selectors and a declaration object |
 | Nested style rule | Child CSSStyleRuleImpl with parent-bound selectors and specificity; engine matching of nested style rules remains unfinished |
 | Declarations after a retained child rule | Separate CSSNestedDeclarationsImpl children, in order; the cascade reads them with the parent's matching result |
-| Namespace/import statements | Namespaces are interpreted; plain import preludes are retained, with loading and modern import conditions explicit dependencies |
+| Namespace/import statements | Namespaces are interpreted; imports retain their `UrlValue` and request modifiers, with loading and modern import conditions explicit dependencies |
 | Other at-rules | Unknown rules are discarded; recognized unfinished grammars stop with InternalError. Page parsing has its own named boundary; conditional, font, animation, and other grammars retain their owners |
 | `@charset` in parsed text | Intentionally discarded; encoding detection uses its initial byte pattern, not a live rule |
 
 Invalid selector lists discard the rule. Invalid/unsupported declarations do
 not discard its valid siblings. Constructed sheets reject inserted imports;
-ordinary imports retain their parsed prelude and stop at the explicit loading
-boundary when attached to a sheet. Nested insertion/deletion preserve rule-list
+ordinary imports retain their parsed prelude and load through an explicit
+`CSSStyleSheetImpl.loadImports()` call. Once connected, sheet insertion/deletion and
+rule replacement notify the retained loader. Nested insertion/deletion preserve rule-list
 identity and update parent links; insertion also accepts nested declaration runs.
 
 The export-only [barrel](index.ts) exposes the rule implementations and context.

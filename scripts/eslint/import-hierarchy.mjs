@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 export const layers = [
   ['infra'],
   ['js-engine', 'web-idl/core', 'encoding/core'],
+  ['fetch/core'],
   ['web-idl/environment', 'web-idl/compiler'],
   ['web-idl/assembly'],
   ['web-idl/binding/platform'],
@@ -112,6 +113,6 @@ export function importPosition(filename, node) {
   if (!target) return { group: 0, order: 0 };
   if (target === owner) return { group: 3, order: 0 };
   const sibling = target.id.split('/')[0] === owner?.id.split('/')[0];
-  const foundation = ['infra', 'js-engine', 'web-idl/core', 'encoding/core'].includes(target.id);
+  const foundation = ['infra', 'js-engine', 'web-idl/core', 'encoding/core', 'fetch/core'].includes(target.id);
   return { group: sibling && !foundation ? 2 : 1, order: components.indexOf(target) };
 }

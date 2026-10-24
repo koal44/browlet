@@ -51,7 +51,7 @@ export function processStyleSheetLinkHeaders(document: DocumentImpl, response: F
         // fetching and release it after critical resources complete. Document's
         // addScriptBlockingStyleSheet()/removeScriptBlockingStyleSheet() hold
         // elements; header loads need ownership in that resource-lifecycle review.
-        // Ordinary @import currently stops at its explicit unfinished grammar.
+        // Start loadStyleSheetImports() here when this owner tracks load completion.
       });
     }
   }

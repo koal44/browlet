@@ -261,6 +261,32 @@ provenance, and rule attachment/removal updates parent-sheet associations throug
 their children. Binding projects these implementations rather than creating a
 second representation of their state.
 
+`CSSStyleSheetImpl.loadImports()` connects a loading root and starts one cancellable
+`StyleSheetLoad`. Successful CSSOM insertion, deletion, and internal rule replacement
+notify that connection synchronously. Added imports join an active attempt or start
+a fresh one after completion; removed branches withdraw pending descendant requests.
+The root retains the last attempt's fetching and notification callbacks. An optional
+start callback receives each new attempt before requests begin; completion remains
+once per attempt. Cancellation disconnects the current connection, even after normal
+completion; sheet removal invokes it before clearing associations. Cancelling an old
+handle does not disconnect or cancel a later attempt.
+Stylelet owns recursive import association and completion; its supplied fetch step
+reports a fresh parsed sheet separately from success, allowing failed loads to retain
+empty sheets. Browlet's `loadStyleSheetImports()` connects that step to the existing
+Fetch consumer, supplying request settings per request.
+Fetched sheets retain their actual encoding, final base URL, and response-derived
+referrer policy for child imports. Inline sheets use the document URL and current
+document referrer policy; the document's other request policies remain with Fetch.
+Fetch Core owns the complete referrer-policy list, type, and Web IDL enumeration.
+It depends on Web IDL Core; Stylelet uses this entry without loading Fetch's runtime.
+Cores may depend on Infra and lower cores, with their order recorded in the import hierarchy.
+Browser policy code owns header parsing and request behavior. An unspecified sheet
+policy remains empty until import request construction selects the external-sheet default.
+HTML owners must establish loading connections, manage document blocking,
+and consume start/completion notifications. Parsing and parent assignment do not
+initiate requests. Automatic HTML integration and imported-rule cascade traversal
+remain unfinished.
+
 Stylelet value classes implement `Value<Context>`: static parsing/consumption,
 instance resolution and serialization, and a `repr` payload. Numeric literals
 keep their magnitude directly on the instance, with a unit for dimensions.

@@ -16,7 +16,7 @@ import type { BlobImpl } from '../file/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
-  type Destination, type RequestInternalPriority, type ServiceWorkerTimingInfo,
+  type Destination, type ReferrerPolicy, type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
 
 import { unsafeSharedCurrentTime } from './timing/index';
@@ -24,7 +24,7 @@ import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import { EventLoop, WindowAgent } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import {
-  PolicyContainer, HSTSStore, determineRequestReferrer, setRequestReferrerPolicyOnRedirect,
+  PolicyContainer, HSTSStore, determineRequestReferrer, parseReferrerPolicyFromHeader, setRequestReferrerPolicyOnRedirect,
 } from './browsing/policy/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
@@ -208,6 +208,11 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Apply the browser-owned Referrer Policy algorithm for Fetch. */
   determineRequestReferrer(request: FetchRequest): URLRecord | null {
     return determineRequestReferrer(request);
+  }
+
+  /** Read the response policy without substituting a document's policy for a missing header. */
+  parseReferrerPolicyFromHeader(response: FetchResponse): ReferrerPolicy {
+    return parseReferrerPolicyFromHeader(response);
   }
 
   /** Update Fetch's referrer policy using the browser-owned header parser. */

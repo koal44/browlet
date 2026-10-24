@@ -32,10 +32,15 @@ and Body declarations accompany their implementations. Binding machinery owns
 author conversion, platform identity, realm selection, and promise projection.
 Import across subsystem boundaries through [index.ts](index.ts).
 
+[Core](core/index.ts) exposes the complete referrer-policy values, type, and Web IDL
+enumeration together. It depends only on Web IDL Core and its Infra foundation,
+so consumers such as Stylelet can share the definition without loading Fetch's runtime.
+
 ## Module guide
 
 | Module | Responsibility |
 | --- | --- |
+| [core/referrer-policy.ts](core/referrer-policy.ts) | Shared policy definition, including the empty unspecified policy and its Web IDL enumeration |
 | [fetch.ts](fetch.ts) | Fetch entry, main/scheme/HTTP/redirect/preflight algorithms, cache transactions, response completion, and private network stream machinery |
 | [fetch-global.ts](fetch-global.ts) | Author-facing fetch operation and abort handling |
 | [request.ts](request.ts), [response.ts](response.ts), [headers.ts](headers.ts), [body.ts](body.ts) | Fetch records, public implementations, header algorithms, and body extraction/consumption |

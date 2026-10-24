@@ -27,8 +27,7 @@ export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
 } from './integrity';
-export {
-  referrerPolicyIDL, referrerPolicyValues, type ReferrerPolicy, type FetchIntegrityPolicy, type IntegrityViolationReportBody,
-} from './policy';
+export { referrerPolicyIDL, referrerPolicyValues, type ReferrerPolicy } from './core/index';
+export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
 export { isLocalScheme, isLocalURL } from './url';
 export { fetchIDLDefinitions } from './web-idl';

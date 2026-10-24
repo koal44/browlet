@@ -8,7 +8,9 @@
     "tsBuildInfoFile": "../../dist/.typecheck/fetch.tsbuildinfo"
   },
   "include": ["./**/*.ts"],
+  "exclude": ["./core"],
   "references": [
+    { "path": "./core" },
     { "path": "../encoding" },
     { "path": "../file" },
     { "path": "../http" },

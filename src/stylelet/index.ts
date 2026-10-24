@@ -12,10 +12,12 @@ export { TreeScope, createSystemColorPalette, type SystemColorPalette } from './
 export {
   CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, RuleListContext,
   MediaListImpl, StyleSheetListImpl, CSSStylePropertiesImpl,
-  type CSSStyleSheetInit,
+  type CSSStyleSheetInit, type StyleSheetLoad, type FetchImportedStyleSheet,
 } from './cssom/index';
 export { CSSDeclarationBlock } from './cssom/declarations/index';
-export { decodeStylesheetBytes, parseStylesheetContents, isCustomPropertyName, type CustomPropertyName } from './syntax/index';
+export {
+  decodeStylesheetBytes, getStylesheetEncoding, parseStylesheetContents, isCustomPropertyName, type CustomPropertyName,
+} from './syntax/index';
 export { styleletIDLDefinitions } from './web-idl';
 export { ColorRgba, absoluteColorFromRgba, type BoxSides, type AbsoluteColor, type SystemColorName } from './values/index';
 export {

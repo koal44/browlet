@@ -12,6 +12,7 @@ const options = [{
   unrestrictedSubsystems: ['infra'],
   entryPoints: {
     'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
+    fetch: ['index', 'core/index'],
     stylelet: ['index', 'environment', 'context'],
     'stylelet/syntax': ['index'], 'stylelet/values': ['index', 'value'],
     'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
@@ -37,6 +38,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import type { ReferrerPolicy } from '../fetch/index.js';" },
     { filename, options, code: "export { defineInterface } from '../web-idl/core/index';" },
     { filename, options, code: "import { getEncoding } from '../encoding/core/index';" },
+    { filename, options, code: "import { referrerPolicyValues } from '../fetch/core/index';" },
     { filename, options, code: "import { parseURL } from '../url/index';" },
     { filename, options, code: "import { InternalPromise } from '../infra/promises';" },
     { filename, options, code: "import type { InternalPromise } from '../infra/promises';" },

@@ -13,6 +13,8 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 
 tester.run('dependency-direction', direction, {
   valid: [
+    { filename: sourceFile('fetch/core/referrer-policy'), code: "import { defineEnumeration } from '../../web-idl/core/index';" },
+    { filename: sourceFile('stylelet/values/url-modifier'), code: "import { referrerPolicyValues } from '../../fetch/core/index';" },
     { filename: sourceFile('stylelet/props/registry'), code: "import { colorProperty } from './built-in/index';" },
     { filename: sourceFile('stylelet/props/built-in/color'), code: "import { BuiltInProperty } from '../builtin-property';" },
     { filename: sourceFile('stylelet/props/builtin-property'), code: "import { BaseProperty } from './base-property';" },
@@ -58,6 +60,10 @@ tester.run('dependency-direction', direction, {
     { filename, code: "import type { Helper } from '../../../new-subsystem/index';" },
   ],
   invalid: [
+    {
+      filename: sourceFile('fetch/core/referrer-policy'), code: "import { FetchRequest } from '../request';",
+      errors: [{ messageId: 'upward', data: { owner: 'fetch/core', target: 'fetch' } }],
+    },
     {
       filename: sourceFile('stylelet/props/shorthand'), code: "import { marginProperty } from './built-in/index';",
       errors: [{ messageId: 'upward', data: { owner: 'stylelet/props/shorthand', target: 'stylelet/props/built-in' } }],

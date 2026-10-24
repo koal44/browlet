@@ -202,8 +202,9 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
 - **Stylesheet rules:** namespace declarations, selector edits, style-rule text,
   and nested insertion/deletion are implemented. Unknown at-rules are discarded;
   recognized unfinished grammars, including conditional groups and page/margin
-  descriptors, stop explicitly. Plain import preludes are retained, but attachment
-  requires the unfinished import loader; layer/supports clauses also stop explicitly.
+  descriptors, stop explicitly. Plain imports can be attached and explicitly loaded;
+  automatic loading and imported-rule cascade traversal remain unconnected.
+  Import layer/supports clauses still stop explicitly.
   Nested style rules are retained
   in projected CSSOM lists, but their cascade participation remains unfinished. Direct nested
   selector tests therefore do not establish nested stylesheet support. See the
@@ -429,9 +430,11 @@ script readiness, HTML preload processing, load-event ordering, or public timing
 entries. Fragment and `javascript:` navigation still need their specified paths.
 
 CSSOM stylesheet Link headers and DOM-created `xml-stylesheet` instructions now
-use Fetch and CSS decoding. HTML `<link>` processing, imports, media applicability,
-and script/load/render blocker ownership remain unfinished; ordinary imports fail
-explicitly. The [style roadmap](browlet/style/ROADMAP.md#external-stylesheet-loading)
+use Fetch and CSS decoding. An explicit import-loading operation now supports nested
+completion, failure, cancellation, and subsequent CSSOM edits through the same fetcher.
+HTML `<link>` processing,
+automatic import startup, media applicability, and script/load/render blocker ownership
+remain unfinished. The [style roadmap](browlet/style/ROADMAP.md#external-stylesheet-loading)
 records those boundaries and browser disagreements. This does not supply an XML parser.
 
 Document readiness changes and `readystatechange` now run through the shared

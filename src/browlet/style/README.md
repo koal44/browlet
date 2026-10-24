@@ -75,6 +75,27 @@ body consumption. Accepted bytes use CSS Syntax's decoder with transport,
 the final response URL supplies the parse base. Cross-origin opaque responses
 produce non-origin-clean sheets whose rules cannot be read through CSSOM.
 
+`loadStyleSheetImports(sheet, document, parameters, complete, started?)` explicitly connects
+Stylelet's import-tree loading to this fetcher. `parameters(parent)` supplies current
+request settings, including the owner's render-blocking flag. Completion reports
+whether all required attempts succeeded, after nested imports finish; cancellation
+stops pending requests and suppresses late association/completion. Fetched sheets
+retain their decoded encoding, including BOM precedence, for child imports. CSSOM
+mutations reuse the connection: insertion joins the current attempt or creates a
+new one after completion; deletion/replacement withdraw pending branches.
+`started(load)` receives each new cancellable attempt before fetching begins.
+Cancellation disconnects the current connection, including after completion;
+removing an associated sheet invokes cancellation before clearing its associations.
+HTML/PI/header owners do not yet start this operation automatically or consume its
+notifications for events and blockers.
+
+Import rules retain `UrlValue`, including request modifiers, while `href` remains
+the decoded author URL. The import fetch adapter applies those modifiers after
+the owner's request parameters. The temporary [url-processing.ts](url-processing.ts)
+collects CSS Values §4.5.4's base selection, URL resolution, and resource-fetch
+algorithms for ownership review. Its full fetch path is tested separately; imports
+still use the CSSOM fetcher's established response policy and failure handling.
+
 [processing-instruction.ts](processing-instruction.ts) owns PI association,
 replacement, cancellation, and prolog membership. Document child mutations and
 the PI's move hook keep membership current. Moving within the prolog retains and

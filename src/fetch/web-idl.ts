@@ -1,4 +1,5 @@
 import type { Definition } from '../web-idl/core/index';
+import { referrerPolicyIDL } from './core/index';
 
 import type { FetchEnvironment } from './environment';
 import { headersIDL, headersInitIDL } from './headers';
@@ -8,7 +9,6 @@ import {
   requestCredentialsIDL, requestDestinationIDL, requestDuplexIDL, requestModeIDL,
   requestPriorityIDL, requestRedirectIDL,
 } from './request';
-import { referrerPolicyIDL } from './policy';
 import { responseIDL, responseIncludesBodyIDL, responseInitIDL, responseTypeIDL } from './response';
 import { fetchGlobalScopeIDL } from './fetch-global';
 

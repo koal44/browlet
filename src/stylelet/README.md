@@ -149,7 +149,8 @@ Unknown at-rules are discarded; recognized unfinished grammars stop at explicit
 context methods. The cascade visits only top-level style
 rules; nested-selector tests do not establish nested-rule participation.
 CSSOM supports style declaration/selector edits, nested-rule insertion/deletion,
-style-rule serialization, and namespace rules. Import loading, modern import
+style-rule serialization, and namespace rules. Explicit import loading tracks recursive
+completion and cancellation through a supplied fetcher. Automatic import startup, modern import
 conditions, and page/margin descriptor grammars remain explicit dependencies;
 their interface declarations do not imply working consumers.
 

@@ -1,6 +1,6 @@
 import type { TextCursor } from '../../infra/text-cursor';
 import { asciiLower } from '../../infra/ascii';
-import { getEncoding, type Encoding } from '../../encoding/core/index';
+import { detectBOM, getEncoding, type Encoding } from '../../encoding/core/index';
 
 import type { StyleletEnvironment } from '../environment';
 
@@ -321,8 +321,13 @@ export function decodeStylesheetBytes(
   options: DecodeStylesheetOptions = {},
   env: StyleletEnvironment,
 ): string {
-  const fallback = determineFallbackEncoding(bytes, options);
-  return env.userAgent.decodeText(bytes, fallback);
+  return env.userAgent.decodeText(bytes, getStylesheetEncoding(bytes, options));
+}
+
+/** Return the effective encoding so a loading owner can retain it for imported sheets. */
+// https://drafts.csswg.org/css-syntax-3/#input-byte-stream
+export function getStylesheetEncoding(bytes: Uint8Array, options: DecodeStylesheetOptions = {}): Encoding {
+  return detectBOM(bytes) ?? determineFallbackEncoding(bytes, options);
 }
 
 /** Select the fallback from transport metadata, the byte signature, then the referrer. */

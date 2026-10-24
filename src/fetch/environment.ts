@@ -2,6 +2,7 @@ import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
+import type { ReferrerPolicy } from './core/index';
 import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
 import type { CookieStore } from '../http/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
@@ -16,7 +17,7 @@ import type { CORSPreflightCache } from './cache-cors';
 import type {
   ConnectionPool, HTTPContentDecoder, HTTPContentDecoderListener, HTTPTransport, NetworkPartitionKey,
 } from './transport';
-import type { FetchIntegrityPolicy, ReferrerPolicy } from './policy';
+import type { FetchIntegrityPolicy } from './policy';
 import type { FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
 import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';

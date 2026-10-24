@@ -14,7 +14,7 @@ observable behavior, rather than private storage choices, constrains its replace
 | [CSSRuleImpl](rules/rule.ts), [CSSGroupingRuleImpl](rules/grouping.ts) | Rule identity/constants, parent associations, live child lists, and nested insertion/deletion with declaration fallback |
 | [CSSStyleRuleImpl](rules/style.ts), [CSSNestedDeclarationsImpl](rules/nested-declarations.ts) | Parsed selectors, selector mutation and child rebinding, leading/later declaration runs, and rule serialization |
 | [CSSNamespaceRuleImpl](rules/namespace.ts) | Namespace grammar, literal URI/prefix, serialization, sheet scope, and mutation constraints |
-| [CSSImportRuleImpl](rules/import.ts) | URL/media prelude, serialization, and bindings; attachment explicitly requires the unfinished import loader; layer/supports clauses stop at their missing grammar |
+| [CSSImportRuleImpl](rules/import.ts) | URL/media prelude, serialization, and bindings; sheets explicitly load imports with recursive completion/cancellation; layer/supports clauses stop at their missing grammar |
 | [CSSPageRuleImpl](rules/page.ts), [CSSMarginRuleImpl](rules/margin.ts) | Bound rule and descriptor interfaces; construction/parsing stop explicitly until page-specific grammars exist; margin-descriptor subtype is provisional |
 | [CSSPropertyRuleImpl](rules/property.ts) | Registration data used by existing fixtures; `@property` parsing and syntax/initialValue/serialization members remain unfinished |
 | [CSSStyleDeclarationImpl](declarations/style-declaration.ts), [CSSStylePropertiesImpl](declarations/style-properties.ts) | Shared declaration operations and the property-facing subtype; Binding supplies numeric and supported-property attributes |
@@ -155,7 +155,7 @@ expected failures; Browlet assertions pass before those annotations apply.
 Full lint/typecheck, the Stylelet build, and global-artifact smoke test passed.
 The subsequent ownership cleanup removed the parser/rule module cycle;
 fresh-process rule-module regressions now pass.
-Import loading, modern import clauses, and page/margin grammars
+Automatic import loading, modern import clauses, and page/margin grammars
 remain explicit unfinished boundaries, not passing conformance claims.
 
 The 2026-10-21 §6.5–6.6 re-audit passed **3,347 tests across 62 files**, with

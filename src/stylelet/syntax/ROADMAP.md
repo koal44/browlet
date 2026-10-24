@@ -20,12 +20,10 @@ rule-specific grammars, loading, and the consuming value/API specifications.
 - [ ] Preserve declaration-run boundaries when adding group/descriptor rules.
   The style-rule interpreter now waits for a surviving child before ending a
   run; retain that behavior when supporting additional rule grammars.
-- [ ] Retain the actual BOM-selected encoding for imports: the current `DecodeText`
-  capability returns text only. Coordinate that contract with Encoding when
-  implementing imports. The [PI/header loader](../../browlet/style/stylesheet-loading.ts)
-  now calls `decodeStylesheetBytes()` with transport and environment encodings
-  and retains the final response URL as the stylesheet base. HTML `<link>` and
-  imported-sheet consumers remain separate loading work; do not add another decoder.
+- [ ] Supply document encoding when HTML starts inline-sheet imports. Fetched sheets
+  now retain `getStylesheetEncoding()`'s effective encoding, using Encoding Core's
+  BOM detection and the existing decoder. The [resource loader](../../browlet/style/stylesheet-loading.ts)
+  also preserves the final response URL for child imports; automatic HTML startup remains separate.
 - [ ] Validate `unicode-range` in its owning descriptor grammar. The Syntax
   [entry algorithm](https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-value)
   already retokenizes retained source, including prebuilt component blocks

@@ -63,6 +63,8 @@ describe('url-modifier', () => {
     'integrity(unknown)',
     'integrity("sha256-test" extra)',
     'referrer-policy(unknown)',
+    'referrer-policy()',
+    'referrer-policy("")',
   ])('rejects the malformed recognized request modifier %j', (input) => {
     expect(UrlModifierValue.parse(input, {})).toBeNull();
   });

@@ -6,6 +6,7 @@ export {
   type CSSStyleSheetInit,
 } from './css-stylesheet';
 export { styleSheetIDL } from './stylesheet';
+export type { StyleSheetLoad, FetchImportedStyleSheet } from './stylesheet-load';
 export { StyleSheetListImpl, styleSheetListIDL } from './stylesheet-list';
 export {
   CSSRuleImpl, cssRuleIDL, cssAnimationsRuleIDL, cssCounterStylesRuleIDL, cssConditionalRuleIDL, cssFontsRuleIDL,

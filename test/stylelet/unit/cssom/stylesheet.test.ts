@@ -61,12 +61,10 @@ describe('CSSStyleSheetImpl', () => {
     expect(() => sheet.replaceSync('body {}')).toThrowError(
       expect.objectContaining({ name: 'NotAllowedError' }),
     );
-    // Import syntax is retained, but ordinary sheets still need the resource owner.
-    // A failed attachment must not insert a silently unloaded rule.
-    expect(() => sheet.insertRule('@import "theme.css";')).toThrowError(
-      'Imported stylesheet loading and completion are not implemented',
-    );
-    expect(sheet.cssRules.length).toBe(0);
+    // Association is synchronous; the loading owner starts imports explicitly.
+    expect(sheet.insertRule('@import "theme.css";')).toBe(0);
+    expect(sheet.cssRules.item(0)!.parentStyleSheet).toBe(sheet);
+    expect(sheet.cssRules.length).toBe(1);
   });
 
   it('resolves a relative constructor base through the standalone URL provider', () => {

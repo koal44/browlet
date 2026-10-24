@@ -6,7 +6,7 @@ import {
   setRequestReferrerPolicyOnRedirect, stripURLForReferrer,
 } from '../../../../src/browlet/browsing/policy/referrer-policy';
 import { FetchRequest } from '../../../../src/fetch/request';
-import type { ReferrerPolicy } from '../../../../src/fetch/policy';
+import type { ReferrerPolicy } from '../../../../src/fetch/core/index';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { obtainURLOrigin, parseURL, serializeURL } from '../../../../src/url/url';
 import { createClientEnvironment, createFetchUserAgent } from '../../../fetch/client-fixture';

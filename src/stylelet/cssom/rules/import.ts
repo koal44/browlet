@@ -18,7 +18,7 @@ import { CSSRuleImpl } from './rule';
 export class CSSImportRuleImpl extends CSSRuleImpl {
   /** Decoded URL spelling, independent of the imported sheet's resolved location. */
   href: string;
-  /** Conditions shared with the associated sheet when import loading is connected. */
+  /** Conditions shared with the associated sheet. */
   media: MediaListImpl;
   /** Imported sheet, or null before association or when a supports condition is false. */
   styleSheet: CSSStyleSheetImpl | null = null;
@@ -87,22 +87,6 @@ export class CSSImportRuleImpl extends CSSRuleImpl {
 
   /** Historical IMPORT_RULE code. */
   get type(): number { return 3; }
-
-  /** Associate an import with its sheet only when the resource lifecycle can be started. */
-  override setParentStyleSheet(sheet: CSSStyleSheetImpl | null): void {
-    if (sheet !== null) this.#loadStyleSheet(sheet);
-    super.setParentStyleSheet(sheet);
-  }
-
-  /** Resolve against the containing sheet and load with its fetch/encoding/policy provenance. */
-  // https://drafts.csswg.org/cssom/#fetch-a-css-style-sheet
-  // https://drafts.csswg.org/css-cascade-5/#at-import
-  #loadStyleSheet(_parent: CSSStyleSheetImpl): never {
-    // TODO: Supply the resource owner, fetch, supports matching, recursive completion,
-    // cancellation, and shared media/ownerRule association. The environment currently
-    // has no import-loader contract; do not accept an import as a silently inert rule.
-    throw new InternalError('Imported stylesheet loading and completion are not implemented');
-  }
 }
 
 /*

@@ -30,8 +30,8 @@ declaration-state review.
 - [ ] Supply CSSOM add-a-sheet step 2 from HTML's resource lifecycle. Document's
   `addScriptBlockingStyleSheet()`/`removeScriptBlockingStyleSheet()` and parser
   wait exist. The producer still needs parser-created state, media applicability,
-  and critical-resource completion. Current inline sheets finish synchronously;
-  ordinary `@import` reaches an explicit unfinished grammar. The missing
+  and critical-resource completion. Current inline sheets are associated synchronously;
+  explicit import loading still needs its HTML caller. The missing
   connection is recorded beside `LinkStyleMixin` association.
 
 ## Stylesheet collection disagreements
@@ -71,13 +71,124 @@ exercise Stylelet and retain CSSOM expectations with separate browser failures.
 [2010 XML stylesheet Recommendation](https://www.w3.org/TR/2010/REC-xml-stylesheet-20101028/),
 and [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288.html) supply the contracts.
 PI and header loading are connected; HTML `<link>` remains HTML §4.2.4 work.
-Ordinary `@import` reaches an explicit missing-grammar error; its future loader
-must retain the actual decoded encoding and await child loads. Script/load/render
-blocking remains a separate resource-lifecycle review. CSSOM creates header sheets
+`CSSStyleSheetImpl.loadImports()` connects an import tree and starts its first attempt.
+`loadStyleSheetImports()` connects it to the existing Fetch helper and accepts
+per-request settings from its caller. Actual decoded encodings survive BOM override;
+child URLs use the final response base. The callback reports aggregate success only
+after all nested attempts finish. Cancelling suppresses old callbacks and associations.
+HTTP failures associate empty imported sheets while still reporting failure; rejected
+response CSS is discarded. Other rejection paths retain their existing null association.
+The Fetch helper reports `success`, `http-error`, or `failure`; the import adapter
+uses that outcome without repeating the HTTP-status check.
+
+CSS Values §4.5.4 is translated in the temporary
+[URL-processing module](url-processing.ts), pending ownership and integration review.
+Import parsing now retains `UrlValue` and applies its recognized request modifiers.
+The generic fetch algorithm remains separate from the CSSOM import adapter: it
+starts with a client referrer for no-CORS requests, while the existing adapter uses
+the parent stylesheet's referrer and response policy. Reconcile those contracts
+before replacing the existing fetch path; preserve its outcome and cancellation behavior.
+
+`SPEC_GAP(css-style-resource-sheet)`: [fetch a style resource](https://drafts.csswg.org/css-values-4/#fetch-a-style-resource)
+uses `sheet` without defining it, then tests its origin-clean flag without a null
+case. The temporary translation derives the containing stylesheet exactly as the
+base-URL algorithm does. With no sheet, it leaves the initiator type unset. This is
+an explicit reading of the incomplete algorithm, not a browser-compatibility choice.
+The declaration-block input is `CSSStyleDeclarationImpl`, which carries the parent
+rule; the underlying `CSSDeclarationBlock` collection does not retain that ownership.
+
+CSSOM mutations use the retained connection; automatic startup from HTML/PI/header
+owners and imported-rule cascade traversal remain unconnected. Script/load/render blocking remains a separate
+resource-lifecycle review. CSSOM creates header sheets
 after fetching; Firefox registers pending loads before fetching. HTML's current
 Document blocker set holds elements. Connect pending loads, media applicability,
 and critical-resource completion there; a top-level fetch does not finish imports.
 Document abortion also still reaches FetchGroup.cancel's provisional no-op.
+
+`SPEC_GAP(stylesheet-import-loading)`: HTML's
+[style completion steps](https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block)
+leave critical-subresource fetching undefined. [Issue 968](https://github.com/whatwg/html/issues/968)
+remains open; its discussion favors shared HTML request setup. Our explicit operation
+keeps CSS dependency tracking in Stylelet and Fetch/request policy in Browlet. HTML
+retains task delivery, events, blockers, and superseded-load cancellation. This is
+implementation coordination, not a newly specified algorithm. The current
+[critical-subresource definition](https://html.spec.whatwg.org/multipage/infrastructure.html#critical-subresources)
+includes recursive imports; the broader image/font question remains
+[issue 1088](https://github.com/w3c/csswg-drafts/issues/1088).
+
+Keep coordination centralized in `StyleSheetLoad`. Each sheet is fully parsed before
+its imports start; supplied fetch callbacks may nevertheless complete immediately.
+The `#visiting` guard prevents that completion from overtaking unvisited siblings.
+Encoding Core remains a direct dependency for label/BOM algorithms; byte decoding
+remains supplied by the user agent.
+
+`SPEC_CLASH(stylesheet-referrer-policy)`: retain each external sheet's response
+policy, including the empty unspecified policy. Import request construction uses
+`strict-origin-when-cross-origin` when that policy is empty.
+Eric selected that fallback on 2026-10-24. The
+[Referrer Policy CSS integration](https://w3c.github.io/webappsec-referrer-policy/#integration-with-css)
+distinguishes external-sheet policy from the inline owner's live document policy,
+but leaves stylesheet header processing as a specification issue. In the local
+probe, Chromium 149.0.7827.55 and Firefox 151.0 honored explicit stylesheet headers;
+WebKit 26.5 used the document policy and URL instead. Without a header, Firefox used
+the default, while Chromium/WebKit used the document policy. Follow Firefox here.
+Blink's `StyleRuleImport::RequestStyleSheet` and Gecko's `Loader::LoadChildSheet`
+consume retained response-derived referrer information; WebKit's
+`CachedResourceLoader` supplies the document policy. Read headers from the internal
+response even when Fetch filters author-visible headers. Inline imports use the
+document URL, independently of their CSS base URL. The request-settings callback
+can explicitly override the default request policy; it does not replace the
+document's CSP policy container.
+
+CSSOM's [insert](https://drafts.csswg.org/cssom/#insert-a-css-rule) and
+[remove](https://drafts.csswg.org/cssom/#remove-a-css-rule) algorithms specify rule
+mutation and parent associations, but no import-loading notification. This belongs
+to `SPEC_GAP(stylesheet-import-loading)`. Blink/WebKit start imports from their
+stylesheet-contents insertion paths; WebKit explicitly calls `cancelLoad()` on
+removal. Our hooks run after successful insertion/removal and internal rule replacement.
+Removal withdraws pending requests throughout the removed import branch, cancels them,
+and ignores late responses. Replacement withdraws old branches and adds new ones
+before checking completion. Existing associated sheets are retained.
+
+The loading root retains its last `StyleSheetLoad` and that attempt's callbacks.
+Insertions join a running attempt; after completion they create a new finite attempt
+for the added imports, without refetching existing siblings. Descendant mutations
+find the connection through attached import rules. Each attempt is published before
+its optional `started(load)` notification, which runs before fetching. Completion is
+once per attempt; cancelled attempts suppress completion. Normal completion retains
+the connection; cancellation disconnects it if the attempt is still current, even
+when already finished. Sheet removal cancels its connection before clearing owner
+associations. Cancelling an old handle cannot disconnect a newer attempt. Automatic
+HTML startup, blocker/event handling, and inline-sheet encodings remain separate. The synchronous-callback guard
+also covers mutations during a fetch and prevents starting further requests in a
+branch removed during traversal.
+
+`SPEC_CLASH(stylesheet-import-descendant-failure)`: preserve aggregate failure at
+any import depth, matching Gecko's `Loader::MarkLoadTreeFailed`. In the 2026-10-24
+probe, Chromium 149, Firefox 151, and WebKit 26.5 all waited for a delayed sibling.
+Firefox reported a failed grandchild to the root; Chromium/WebKit reported success.
+All three associated empty sheets with failed HTTP imports. Their differing root
+results do not change our aggregate-failure contract.
+
+`SPEC_GAP(stylesheet-import-cycles)`: Cascade §2 does not specify cycle handling.
+Follow Blink's `StyleRuleImport::RequestStyleSheet`, WebKit's
+`StyleRuleImport::requestStyleSheet`, and Gecko's `Loader::LoadChildSheet`: skip
+imports of ancestor resources without treating them as request failures. Like
+Blink/WebKit, compare original and final URLs without fragments. Repeated sibling
+imports remain separate occurrences; this is not a global resource deduplication set.
+
+Import association combines the parent's origin-clean flag with the child's
+response-derived flag before loading descendants, as required by
+[Cascade's import processing](https://drafts.csswg.org/css-cascade-4/#fetch-an-import).
+An unclean child does not clear its parent's flag or make the load fail.
+
+The request-settings callback must eventually supply current owner state; it does
+not manufacture HTML policy or infer blockers. URL request modifiers still need
+review; referrer policy alone does not finish
+response-policy propagation. Imported
+conditions/layers and automatic stylesheet loading remain prerequisites for full
+browser import behavior. Focused tests cover explicit completion and cancellation
+in Stylelet, plus real Fetch/decoding through Browlet's adapter.
 `SPEC_GAP(http-link-quirks-mode)`: header MIME checks use the document mode at
 response completion. CSSOM leaves early-header/undetermined-mode timing open;
 revisit with HTML loading.

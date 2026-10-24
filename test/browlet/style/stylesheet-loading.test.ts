@@ -1,12 +1,15 @@
 import { createServer, type ServerResponse } from 'node:http';
+import { createHash } from 'node:crypto';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
-import { createFetchedStyleSheet, fetchCSSStyleSheet } from '../../../src/browlet/style/stylesheet-loading';
+import { createFetchedStyleSheet, fetchCSSStyleSheet, loadStyleSheetImports } from '../../../src/browlet/style/stylesheet-loading';
 import { processStyleSheetLinkHeaders } from '../../../src/browlet/style/header-stylesheets';
 import { FetchResponse } from '../../../src/fetch/response';
+import { CSSStyleSheetImpl } from '../../../src/stylelet/cssom/css-stylesheet';
 import { CSSStyleRuleImpl } from '../../../src/stylelet/cssom/rules/style';
+import type { CSSImportRuleImpl } from '../../../src/stylelet/cssom/rules/import';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { closeServer, listen } from '../loader/http-fixture';
 
@@ -33,7 +36,8 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${cross ? origin.replace('127.0.0.1', 'localhost') : origin}/sheet.css`).url!;
     const result = await new Promise<{ accepted: boolean; clean: boolean; }>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (response, bytes) => {
+      fetchCSSStyleSheet(url, document.url, document, {}, (response, bytes, outcome) => {
+        expect(outcome).toBe(accept ? 'success' : 'failure');
         if (bytes === null) { resolve({ accepted: false, clean: false }); return; }
         const sheet = createFetchedStyleSheet(url, response, bytes, {
           ownerNode: null, media: '', title: '', alternate: false,
@@ -125,7 +129,10 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${origin}/sheet.css`).url!;
     const accepted = await new Promise<boolean>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes) => resolve(bytes !== null));
+      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes, outcome) => {
+        expect(outcome).toBe('http-error');
+        resolve(bytes !== null);
+      });
     });
     expect(accepted).toBe(false);
   });
@@ -142,21 +149,258 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${origin}/sheet.css`).url!;
     const accepted = await new Promise<boolean>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes) => resolve(bytes !== null));
+      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes, outcome) => {
+        expect(outcome).toBe('failure');
+        resolve(bytes !== null);
+      });
     });
     expect(accepted).toBe(false);
   });
 
-  it('reaches the explicit missing import consumer instead of silently finishing the sheet', async () => {
+  it('creates an imported-sheet relationship only when loading is explicitly started', async () => {
     const browser = await createBrowser('https://example.test');
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL('/sheet.css', document.url).url!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
-    expect(() => createFetchedStyleSheet(url, response, Buffer.from('@import "other.css";'), {
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "other.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document)).toThrow('Imported stylesheet loading and completion are not implemented');
+    }, document);
+    const rule = sheet.ruleList.item(0) as CSSImportRuleImpl;
+    expect(rule.parentStyleSheet).toBe(sheet);
+    expect(rule.styleSheet).toBeNull();
+    expect(sheet.encoding).toBe('UTF-8');
+  });
+
+  it.each([
+    { credentials: 'anonymous', allow: true, integrity: true, success: true },
+    { credentials: 'use-credentials', allow: true, integrity: true, success: true },
+    { credentials: 'anonymous', allow: false, integrity: true, success: false },
+    { credentials: 'anonymous', allow: true, integrity: false, success: false },
+  ])('applies import URL modifiers ($credentials, CORS=$allow, integrity=$integrity)', async ({ credentials, allow, integrity, success }) => {
+    const source = 'p { opacity: .5 }';
+    const digest = createHash('sha256').update(integrity ? source : 'different contents').digest('base64');
+    const referrers: (string | undefined)[] = [];
+    const server = createServer((request, response) => {
+      referrers.push(request.headers.referer);
+      response.setHeader('Content-Type', 'text/css');
+      if (allow) {
+        response.setHeader('Access-Control-Allow-Origin', origin);
+        response.setHeader('Access-Control-Allow-Credentials', 'true');
+      }
+      response.end(source);
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    response.headerList.append('Content-Type', 'text/css');
+    const importedURL = `${origin.replace('127.0.0.1', 'localhost')}/child.css`;
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from(
+      `@import url("${importedURL}" cross-origin(${credentials}) integrity("sha256-${digest}") referrer-policy(no-referrer));`,
+    ), { ownerNode: null, media: '', title: '', alternate: false }, document);
+    const completed = await new Promise<boolean>((resolve) => {
+      loadStyleSheetImports(sheet, document, () => ({ referrerPolicy: 'unsafe-url' }), resolve);
+    });
+    expect(completed).toBe(success);
+    expect(referrers).toEqual([undefined]);
+    const imported = (sheet.ruleList.item(0) as CSSImportRuleImpl).styleSheet;
+    if (success) {
+      expect(imported!.cssRules.length).toBe(1);
+      expect(imported!.originClean).toBe(true);
+    } else {
+      expect(imported).toBeNull();
+    }
+  });
+
+  it('loads nested imports using the final base URL and actual parent encoding before reporting completion', async () => {
+    let leafResponse: ServerResponse | undefined;
+    const referrers: (string | undefined)[] = [];
+    const server = createServer((request, response) => {
+      referrers.push(request.headers.referer);
+      if (request.url === '/child.css') { response.writeHead(302, { Location: '/nested/child.css' }).end(); }
+      else if (request.url === '/nested/child.css') {
+        response.writeHead(200, { 'Content-Type': 'text/css' }).end(Buffer.from('@import "leaf.css"; .caf\xe9 { opacity: .5 }', 'latin1'));
+      } else { leafResponse = response; }
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    response.headerList.append('Content-Type', 'text/css; charset=windows-1252');
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "child.css";'), {
+      ownerNode: null, media: '', title: '', alternate: false,
+    }, document);
+    let completed: boolean | undefined;
+    loadStyleSheetImports(sheet, document, () => ({ renderBlocking: false }), (success) => { completed = success; });
+    await expect.poll(() => leafResponse !== undefined).toBe(true);
+    expect(completed).toBeUndefined();
+    const child = (sheet.ruleList.item(0) as CSSImportRuleImpl).styleSheet!;
+    expect(child.href).toBe(`${origin}/child.css`);
+    expect(child.baseURL!.href).toBe(`${origin}/nested/child.css`);
+    expect(child.encoding).toBe('windows-1252');
+    expect((child.ruleList.item(1) as CSSStyleRuleImpl).selectorText).toBe('.café');
+    expect(referrers.at(-1)).toBe(`${origin}/nested/child.css`);
+    leafResponse!.writeHead(200, { 'Content-Type': 'text/css; charset=windows-1252' }).end(Buffer.from('\uFEFF.café { opacity: .7 }'));
+    await expect.poll(() => completed).toBe(true);
+    const leaf = (child.ruleList.item(0) as CSSImportRuleImpl).styleSheet!;
+    expect(leaf.encoding).toBe('UTF-8');
+    expect((leaf.ruleList.item(0) as CSSStyleRuleImpl).selectorText).toBe('.café');
+  });
+
+  it('fetches a later CSSOM import through the retained connection with its parent response policy', async () => {
+    const requests: { url: string | undefined; referrer: string | undefined; }[] = [];
+    const server = createServer((request, response) => {
+      requests.push({ url: request.url, referrer: request.headers.referer });
+      response.writeHead(200, { 'Content-Type': 'text/css', 'Referrer-Policy': 'origin' }).end('');
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    response.headerList.append('Content-Type', 'text/css');
+    response.headerList.append('Referrer-Policy', 'no-referrer');
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "nested/child.css";'), {
+      ownerNode: null, media: '', title: '', alternate: false,
+    }, document);
+    const events: string[] = [];
+    const parents: (string | null)[] = [];
+    loadStyleSheetImports(sheet, document, (parent) => {
+      parents.push(parent.href);
+      return {};
+    }, (success) => events.push(`complete:${success}`), () => events.push('start'));
+    await expect.poll(() => events.length).toBe(2);
+    const child = (sheet.ruleList.item(0) as CSSImportRuleImpl).styleSheet!;
+    child.insertRule('@import "later.css";');
+    expect(events).toEqual(['start', 'complete:true', 'start']);
+    await expect.poll(() => events.length).toBe(4);
+    expect(events).toEqual(['start', 'complete:true', 'start', 'complete:true']);
+    expect(requests).toEqual([
+      { url: '/nested/child.css', referrer: undefined },
+      { url: '/nested/later.css', referrer: `${origin}/` },
+    ]);
+    expect(parents).toEqual([`${origin}/root.css`, `${origin}/nested/child.css`]);
+    expect((child.ruleList.item(0) as CSSImportRuleImpl).styleSheet!.href).toBe(`${origin}/nested/later.css`);
+  });
+
+  it.each([false, true])('uses each stylesheet response policy for its imports (cross-origin child: %s)', async (cross) => {
+    const referrers: (string | undefined)[] = [];
+    const server = createServer((request, response) => {
+      referrers.push(request.headers.referer);
+      response.writeHead(200, { 'Content-Type': 'text/css', 'Referrer-Policy': 'origin' })
+        .end(request.url === '/child.css' ? '@import "leaf.css";' : '');
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    document.policyContainer.referrerPolicy = 'unsafe-url';
+    const childOrigin = cross ? origin.replace('127.0.0.1', 'localhost') : origin;
+    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    response.headerList.append('Content-Type', 'text/css');
+    response.headerList.append('Referrer-Policy', 'no-referrer');
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from(`@import "${childOrigin}/child.css";`), {
+      ownerNode: null, media: '', title: '', alternate: false,
+    }, document);
+    const success = await new Promise<boolean>((resolve) => loadStyleSheetImports(sheet, document, () => ({}), resolve));
+    expect(success).toBe(true);
+    expect(referrers).toEqual([undefined, `${childOrigin}/`]);
+    expect(document.policyContainer.referrerPolicy).toBe('unsafe-url');
+  });
+
+  it.each(['', 'unknown-policy'])('uses an external stylesheet default when its policy header is %j', async (header) => {
+    let referrer: string | undefined;
+    const server = createServer((request, response) => {
+      referrer = request.headers.referer;
+      response.writeHead(200, { 'Content-Type': 'text/css' }).end('');
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    document.policyContainer.referrerPolicy = 'no-referrer';
+    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    response.headerList.append('Content-Type', 'text/css');
+    if (header !== '') response.headerList.append('Referrer-Policy', header);
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "child.css";'), {
+      ownerNode: null, media: '', title: '', alternate: false,
+    }, document);
+    expect(sheet.referrerPolicy).toBe('');
+    const success = await new Promise<boolean>((resolve) => loadStyleSheetImports(sheet, document, () => ({}), resolve));
+    expect(success).toBe(true);
+    expect(referrer).toBe(`${origin}/root.css`);
+  });
+
+  it('uses the document URL and current policy for an inline stylesheet import', async () => {
+    let referrer: string | undefined;
+    let path: string | undefined;
+    const server = createServer((request, response) => {
+      referrer = request.headers.referer;
+      path = request.url;
+      response.writeHead(200, { 'Content-Type': 'text/css' }).end('');
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    document.policyContainer.referrerPolicy = 'no-referrer';
+    const sheet = new CSSStyleSheetImpl({
+      location: null, baseURL: new URL(`${origin}/assets/`), encoding: 'UTF-8',
+      ownerNode: document.createElement('style'), parentStyleSheet: null, ownerRule: null,
+      media: '', title: '', alternate: false, originClean: true,
+    }, document.env);
+    expect(sheet.referrerPolicy).toBe('');
+    sheet.insertRule('@import "child.css";');
+    document.policyContainer.referrerPolicy = 'unsafe-url';
+    const success = await new Promise<boolean>((resolve) => loadStyleSheetImports(sheet, document, () => ({}), resolve));
+    expect(success).toBe(true);
+    expect(path).toBe('/assets/child.css');
+    expect(referrer).toBe(`${origin}/page`);
+  });
+
+  it.each([404, 500])('associates an empty sheet for HTTP %i and waits for the other imports', async (status) => {
+    let slow: ServerResponse | undefined;
+    const server = createServer((request, response) => {
+      if (request.url === '/slow.css') slow = response;
+      else response.writeHead(status, { 'Content-Type': 'text/css' }).end('p { opacity: .5 }');
+    });
+    const origin = await listen(server);
+    cleanup.push(() => closeServer(server));
+    const browser = await createBrowser(origin);
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const response = new FetchResponse();
+    response.urlList.push(url);
+    response.headerList.append('Content-Type', 'text/css');
+    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "missing.css"; @import "slow.css";'), {
+      ownerNode: null, media: '', title: '', alternate: false,
+    }, document);
+    let completed: boolean | undefined;
+    loadStyleSheetImports(sheet, document, () => ({ renderBlocking: false }), (success) => { completed = success; });
+    await expect.poll(() => slow !== undefined).toBe(true);
+    expect(completed).toBeUndefined();
+    slow!.writeHead(200, { 'Content-Type': 'text/css' }).end('');
+    await expect.poll(() => completed).toBe(false);
+    const failedImport = sheet.ruleList.item(0) as CSSImportRuleImpl;
+    expect(failedImport.styleSheet).not.toBeNull();
+    expect(failedImport.styleSheet!.ruleList.length).toBe(0);
+    expect(failedImport.styleSheet!.parentStyleSheet).toBe(sheet);
+    expect(failedImport.styleSheet!.ownerRule).toBe(failedImport);
+    expect((sheet.ruleList.item(1) as CSSImportRuleImpl).styleSheet).not.toBeNull();
   });
 
   it('keeps header order ahead of tree sheets when responses finish out of order', async () => {

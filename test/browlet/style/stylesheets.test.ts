@@ -182,6 +182,29 @@ describe('stylesheet integration', () => {
     expect(document.styleSheets).toHaveLength(0);
   });
 
+  it.each([false, true])('disconnects import loading on owner removal (completed: %s)', (completed) => {
+    const document = createTestDocument({
+      source: `<style id="style">${completed ? '' : '@import "https://example.test/a.css";'}</style>`,
+    });
+    const style = getStyleElement(document, 'style');
+    const sheet = style.sheet!;
+    const cancel = vi.fn();
+    const fetchImport = vi.fn(() => cancel);
+    const complete = vi.fn();
+    sheet.loadImports(fetchImport, complete);
+    const requests = completed ? 0 : 1;
+    expect(fetchImport).toHaveBeenCalledTimes(requests);
+
+    style.remove();
+    sheet.insertRule('@import "https://example.test/later.css";');
+
+    expect(style.sheet).toBeNull();
+    expect(sheet.ownerNode).toBeNull();
+    expect(fetchImport).toHaveBeenCalledTimes(requests);
+    expect(cancel).toHaveBeenCalledTimes(requests);
+    expect(complete).toHaveBeenCalledTimes(completed ? 1 : 0);
+  });
+
   it('replaces an associated sheet when its text changes', () => {
     const document = createTestDocument({
       source: '<style id="style">main { color: green }</style>',

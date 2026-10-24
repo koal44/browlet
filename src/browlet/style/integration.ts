@@ -153,8 +153,8 @@ export class LinkStyleMixin {
     // contributing owners with Document.addScriptBlockingStyleSheet(), then load
     // completion must call removeScriptBlockingStyleSheet(). The predicate needs
     // parser creation, media applicability, and pending critical resources.
-    // Current inline sheets finish synchronously; ordinary @import stops at its
-    // explicit unfinished grammar. Connect this with the external-sheet lifecycle.
+    // Inline association is synchronous; start loadStyleSheetImports() explicitly
+    // and consume completion as part of the external-sheet lifecycle.
     // https://drafts.csswg.org/cssom/#add-a-css-style-sheet
     // https://html.spec.whatwg.org/#contributes-a-script-blocking-style-sheet
     const sheet = scope.createStyleElementStyleSheet(

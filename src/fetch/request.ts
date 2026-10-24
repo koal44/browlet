@@ -8,6 +8,7 @@ import {
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/core/index';
+import type { ReferrerPolicy } from './core/index';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
   areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
@@ -33,7 +34,6 @@ import {
   appendCookieHeader, appendMetadataHeadersIfTrustworthy, appendOriginHeader,
   crossOriginEmbedderPolicyAllowsCredentials, isBlockedByIntegrityPolicy,
   isRequestBlockedByMixedContent, upgradeForHSTS, upgradeInsecureRequest, upgradeMixedContent,
-  type ReferrerPolicy,
 } from './policy';
 
 /** Request state initialized with a URL, nullable client, and shared networking owner. */

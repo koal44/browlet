@@ -4,15 +4,18 @@ import {
   arg, ctor, defineDictionary, defineInterface, definePartialInterface, dictMember, DOMExceptionImpl,
   emptyDictionary, idlType, impl, implementationType, integer, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../../web-idl/core/index';
+import type { Encoding } from '../../encoding/core/index';
+import type { ReferrerPolicy } from '../../fetch/core/index';
 
 import type { StyleletEnvironment, StyleletURL } from '../environment';
 import { parseStylesheetContents } from '../syntax/index';
 import type { StyleletContext } from '../context';
 import { MediaListImpl } from './media/index';
-import { RuleListContext, type CSSRuleImpl } from './rules/index';
+import { RuleListContext, type CSSImportRuleImpl, type CSSRuleImpl } from './rules/index';
 
 import { CSSRuleListImpl } from './rule-list';
 import { StyleSheetImpl } from './stylesheet';
+import { StyleSheetLoad, type FetchImportedStyleSheet } from './stylesheet-load';
 
 /** A CSS stylesheet's rule tree, resource associations, and author-mutation state. */
 // https://drafts.csswg.org/cssom/#the-cssstylesheet-interface
@@ -23,6 +26,12 @@ export class CSSStyleSheetImpl
   ruleList = new CSSRuleListImpl();
   /** Parse-time base URL, independent of the public stylesheet location. */
   baseURL?: StyleletURL;
+  /** Decoded resource encoding, supplied by the loading owner for subsequent imports. */
+  encoding?: Encoding;
+  /** Response policy, or empty when unspecified; inline sheets use their document's current policy. */
+  referrerPolicy: ReferrerPolicy;
+  /** Last import attempt on this loading root; retained so later mutations can start another. */
+  importLoad?: StyleSheetLoad;
 
   /** Import rule that owns the sheet, or null for a sheet that was not imported. */
   ownerRule: CSSRuleImpl | null;
@@ -44,6 +53,8 @@ export class CSSStyleSheetImpl
     super(typeof properties.media === 'string' ? properties.media : properties.media.mediaText, env);
     this.location = properties.location;
     this.baseURL = properties.baseURL;
+    this.encoding = properties.encoding;
+    this.referrerPolicy = properties.referrerPolicy ?? '';
     this.parentStyleSheet = properties.parentStyleSheet;
     this.ownerNode = properties.ownerNode;
     this.ownerRule = properties.ownerRule;
@@ -102,6 +113,9 @@ export class CSSStyleSheetImpl
     return sheet;
   }
 
+  /** Whether resource requests may identify this sheet as their CSS initiator. */
+  get originClean(): boolean { return this.#originClean; }
+
   /** Retained rule list, exposed only when the sheet is origin-clean. */
   // https://drafts.csswg.org/cssom/#dom-cssstylesheet-cssrules
   get cssRules(): CSSRuleListImpl {
@@ -128,6 +142,7 @@ export class CSSStyleSheetImpl
     const child = this.ruleList.parseRuleForInsertion(rule, index, false, context);
     child.setParentStyleSheet(this);
     this.ruleList.insert(index, child);
+    this.getImportLoad()?.updateImports([child], []);
     return index;
   }
 
@@ -137,7 +152,9 @@ export class CSSStyleSheetImpl
     this.#assertOriginClean();
     this.#assertModificationAllowed();
 
+    const removed = this.ruleList.item(index);
     this.ruleList.remove(index);
+    this.getImportLoad()?.updateImports([], [removed!]);
   }
 
   /** Replace a constructed sheet asynchronously, locking mutations until completion. */
@@ -195,9 +212,23 @@ export class CSSStyleSheetImpl
 
   /** Install parsed rules without applying the author API's access and construction checks. */
   replaceRules(rules: CSSRuleImpl[]): void {
-    for (const rule of this.ruleList) rule.setParentStyleSheet(null);
+    const removed = [...this.ruleList];
+    for (const rule of removed) rule.setParentStyleSheet(null);
     for (const rule of rules) rule.setParentStyleSheet(this);
     this.ruleList.replace(rules);
+    this.getImportLoad()?.updateImports(rules, removed);
+  }
+
+  /** Connect import loading, notifying the caller before each finite attempt and when it completes. */
+  loadImports(
+    fetchImport: FetchImportedStyleSheet, complete: (success: boolean) => void, started?: (load: StyleSheetLoad) => void,
+  ): StyleSheetLoad {
+    return StyleSheetLoad.start(this, fetchImport, complete, started, this.env);
+  }
+
+  /** Find the retained loading connection through currently attached import rules. */
+  getImportLoad(): StyleSheetLoad | undefined {
+    return this.importLoad ?? this.ownerRule?.parentStyleSheet?.getImportLoad();
   }
 
   /** Whether stylesheet-set selection should treat this sheet as an alternate. */
@@ -210,8 +241,20 @@ export class CSSStyleSheetImpl
     return this.#constructed && this.#constructorDocument === document;
   }
 
-  /** Detach the sheet from its importing sheet, owner node, and owner rule. */
+  /** Associate a freshly fetched sheet with an attached import, retaining the parent's access restrictions. */
+  // https://drafts.csswg.org/css-cascade-4/#fetch-an-import
+  associateWithImport(rule: CSSImportRuleImpl): void {
+    const parent = rule.parentStyleSheet!;
+    this.#originClean &&= parent.#originClean;
+    this.parentStyleSheet = parent;
+    this.ownerRule = rule;
+    this.media = rule.media;
+    rule.styleSheet = this;
+  }
+
+  /** Cancel this sheet's loading connection and clear its parent and owner associations. */
   clearAssociation(): void {
+    this.importLoad?.cancel();
     this.parentStyleSheet = null;
     this.ownerNode = null;
     this.ownerRule = null;
@@ -283,6 +326,10 @@ type CSSStyleSheetProperties = {
   location: StyleletURL | null;
   /** Base URL retained for relative references in the sheet's contents. */
   baseURL?: StyleletURL;
+  /** Encoding inherited by imports; byte-loading owners retain the actual decoded encoding. */
+  encoding?: Encoding;
+  /** External response policy; omitted means unspecified. */
+  referrerPolicy?: ReferrerPolicy;
   /** Sheet containing the import that created this sheet, or null. */
   parentStyleSheet: CSSStyleSheetImpl | null;
   /** Element or processing instruction responsible for the sheet, or null. */

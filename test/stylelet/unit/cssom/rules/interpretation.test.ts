@@ -66,6 +66,18 @@ describe('CSSOM rule interpretation and editing', () => {
     expect([rule.styleSheet, rule.layerName, rule.supportsText]).toEqual([null, null, null]);
   });
 
+  it.each(['url', 'src'])('retains request modifiers on an import %s()', (notation) => {
+    const input = `@import ${notation}("theme.css" cross-origin(anonymous) integrity("sha256-test") referrer-policy(no-referrer)) screen;`;
+    const rule = parseRule(input, new RuleListContext(new CSSRuleListImpl(), null, false, env)) as CSSImportRuleImpl;
+    expect(rule).toBeInstanceOf(CSSImportRuleImpl);
+    expect(rule.href).toBe('theme.css');
+    expect(rule.cssText).toBe(input);
+  });
+
+  it.each(['@import var(--sheet);', '@import src(var(--sheet));'])('rejects custom-property substitution in %s', (input) => {
+    expect(parseRule(input, new RuleListContext(new CSSRuleListImpl(), null, false, env))).toBeNull();
+  });
+
   it('checks import syntax before rejecting a valid nested import for placement', () => {
     const rule = parseRule('.a {}', new RuleListContext(new CSSRuleListImpl(), null, false, env)) as CSSStyleRuleImpl;
     expect(() => rule.insertRule('@import invalid;')).toThrow(expect.objectContaining({ name: 'SyntaxError' }));

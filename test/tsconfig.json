@@ -29,6 +29,7 @@
     { "path": "../src/encoding" },
     { "path": "../src/file" },
     { "path": "../src/xhr" },
+    { "path": "../src/fetch/core" },
     { "path": "../src/fetch" },
     { "path": "../src/selectlet" },
     { "path": "../src/stylelet" },
