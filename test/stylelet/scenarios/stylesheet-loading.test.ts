@@ -10,8 +10,8 @@ import { closeServer, listen } from '../../browlet/loader/http-fixture';
 import { runScenarios } from '../../scenario/dispatch';
 import { BROWSER_NAMES, type BrowserName } from '../../scenario/harness';
 
-// Playwright's Babel transform rejects Browlet's declare fields. Use the same
-// scoped TypeScript loader as declaration generation, without altering production classes.
+// Playwright 1.62.1 emits abstract fields as runtime assignments. Use the same
+// scoped TypeScript loader as declaration generation to preserve the class contracts.
 const { Browlet } = tsRequire('../../../src/browlet/browlet.ts', __filename) as typeof BrowletModule;
 const { processStyleSheetLinkHeaders } = tsRequire('../../../src/browlet/style/header-stylesheets.ts', __filename) as typeof HeaderModule;
 const { FetchResponse } = tsRequire('../../../src/fetch/response.ts', __filename) as typeof ResponseModule;

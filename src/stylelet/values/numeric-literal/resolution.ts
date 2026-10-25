@@ -12,11 +12,10 @@ import { DimensionLiteral } from './dimension';
 /** A literal <resolution> in a recognized unit. */
 // https://drafts.csswg.org/css-values-4/#resolutions
 export class ResolutionLiteral<Unit extends ResolutionUnit = ResolutionUnit> extends DimensionLiteral<Unit> {
-  declare type: 'resolution';
+  override type = 'resolution' as const;
 
   constructor(value: number, unit: Unit) {
     super(value, unit);
-    this.type = 'resolution';
   }
 
   /** Parse a complete literal. */

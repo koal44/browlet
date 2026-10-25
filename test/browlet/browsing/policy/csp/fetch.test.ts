@@ -11,7 +11,7 @@ import { createClientEnvironment } from '../../../../fetch/client-fixture';
 describe('Fetch CSP integration', () => {
   it('requires populated request policies while allowing an absent or empty CSP list', () => {
     const env = getRelevantRealm(new Browlet({ route: () => '' }).window).env;
-    const request = new FetchRequest(parseURL('https://resource.test/').url!, null, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/').url!, env);
     expect(() => request.isBlockedByCSP()).toThrow('policy container has not been resolved');
     expect(() => request.reportCSPViolations()).toThrow('policy container has not been resolved');
     expect(() => responseAt('https://resource.test/').isBlockedByCSP(request)).toThrow('policy container has not been resolved');
@@ -20,7 +20,8 @@ describe('Fetch CSP integration', () => {
     expect(request.isBlockedByCSP()).toBe(false);
     expect(() => request.reportCSPViolations()).not.toThrow();
     expect(responseAt('https://resource.test/').isBlockedByCSP(request)).toBe(false);
-    const clientRequest = new FetchRequest(request.url, env, env.userAgent);
+    const clientRequest = new FetchRequest(request.url, env);
+    clientRequest.client = env;
     clientRequest.populateFromClient();
     expect(env.policyContainer.cspList!.selfOrigin).toBe(env.origin);
     expect(clientRequest.isBlockedByCSP()).toBe(false);
@@ -44,7 +45,8 @@ describe('Fetch CSP integration', () => {
       response.headerList.append(header, "img-src 'none'");
       const list = CSPList.parse(response);
       env.policyContainer.cspList = list;
-      const request = new FetchRequest(parseURL('https://resource.test/image').url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL('https://resource.test/image').url!, env);
+      request.client = env;
       request.destination = 'image';
       request.populateFromClient();
 
@@ -90,7 +92,8 @@ function requestWithPolicy(serialized: string, reportOnly = false) {
   response.headerList.append(reportOnly ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy', serialized);
   const list = CSPList.parse(response);
   env.policyContainer.cspList = list;
-  const request = new FetchRequest(parseURL('https://resource.test/image').url!, env, env.userAgent);
+  const request = new FetchRequest(parseURL('https://resource.test/image').url!, env);
+  request.client = env;
   request.destination = 'image';
   request.populateFromClient();
   return { env, request, list };

@@ -12,11 +12,10 @@ import { DimensionLiteral } from './dimension';
 /** A literal <time> in a recognized unit. */
 // https://drafts.csswg.org/css-values-4/#times
 export class TimeLiteral<Unit extends TimeUnit = TimeUnit> extends DimensionLiteral<Unit> {
-  declare type: 'time';
+  override type = 'time' as const;
 
   constructor(value: number, unit: Unit) {
     super(value, unit);
-    this.type = 'time';
   }
 
   /** Parse a complete literal. */

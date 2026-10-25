@@ -1,11 +1,13 @@
 import type { DOMDocument as Document, DOMElement as Element } from '../infra/index';
+import { TypeError } from '../infra/exceptions';
+import { parseURL } from '../url/index';
 
-import { createStyleletEnvironment, type StyleletOptions } from './environment';
+import type { StyleletOptions } from './environment';
 import { StyleletContext } from './context';
 import type { CSSStyleDeclarationImpl, CSSStyleSheetImpl, CSSStyleSheetInit } from './cssom/index';
 import { CascadeEngine, TreeScope } from './engine/index';
 
-/** Standalone entry point for one document's stylesheets and current style-query implementation. */
+/** Host-supplied entry point for one document's stylesheets and current style-query implementation. */
 export class Stylelet {
   /** Build version substituted when the Stylelet package is bundled. */
   version = 'stylelet-__VERSION__' as const;
@@ -17,12 +19,13 @@ export class Stylelet {
   /** Declaration selection and style-query engine used by this instance. */
   #cascade: CascadeEngine;
 
-  /** Compose the host environment, matching context, and document stylesheet scope. */
-  constructor(document: Document, options: StyleletOptions = {}) {
-    const env = createStyleletEnvironment(options);
+  /** Retain the host environment and establish this document's matching and stylesheet state. */
+  constructor(document: Document, { env }: StyleletOptions) {
     this.context = new StyleletContext(document, env);
+    const environmentBaseUrl = parseURL(this.context.dom.baseURI(document), null, 'UTF-8', env.userAgent).url;
+    if (environmentBaseUrl === null) throw new TypeError('The document base URL is invalid.');
     this.#cascade = new CascadeEngine({
-      environmentBaseUrl: new env.userAgent.URL(this.context.dom.baseURI(document)),
+      environmentBaseUrl,
       context: this.context,
     });
     this.documentScope = new TreeScope(document, this.#cascade);

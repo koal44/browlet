@@ -30,7 +30,7 @@ describe('Browlet Fetch Metadata integration', () => {
 
   it.each(['http://127.0.0.1/', 'http://[::1]/', 'http://localhost/', 'http://sub.localhost/'])(
     'uses browser trust policy for %s', (url) => {
-      const request = new FetchRequest(parseURL(url).url!, null, new UserAgent());
+      const request = new FetchRequest(parseURL(url).url!, new UserAgent().sandbox);
       request.origin = createOpaqueOrigin();
       request.appendMetadataHeadersIfTrustworthy();
       expect(request.headerList.get('Sec-Fetch-Dest')).toBe('empty');
@@ -44,9 +44,9 @@ describe('Browlet Fetch Metadata integration', () => {
     if (origin.kind !== 'tuple') throw new Error('Expected tuple origin');
     const userAgent = new UserAgent();
     userAgent.trustworthyOrigins.push(origin);
-    const trusted = new FetchRequest(url, null, userAgent);
+    const trusted = new FetchRequest(url, userAgent.sandbox);
     trusted.origin = origin;
-    const ordinary = new FetchRequest(url, null, new UserAgent());
+    const ordinary = new FetchRequest(url, new UserAgent().sandbox);
     ordinary.origin = origin;
 
     trusted.appendMetadataHeadersIfTrustworthy();

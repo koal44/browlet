@@ -2,10 +2,12 @@ import { expect, type Page } from '@playwright/test';
 import { require as tsRequire } from 'tsx/cjs/api';
 
 import type * as MediaListModule from '../../../src/stylelet/cssom/media/media-list';
+import type * as EnvironmentFixture from '../environment-fixture';
 import { runScenarios } from '../../scenario/dispatch';
 import { BROWSER_NAMES } from '../../scenario/harness';
 
 const { MediaListImpl } = tsRequire('../../../src/stylelet/cssom/media/media-list.ts', __filename) as typeof MediaListModule;
+const { styleletEnv } = tsRequire('../environment-fixture.ts', __filename) as typeof EnvironmentFixture;
 
 const mediaQueries: [string, string][] = [
   ['', ''],
@@ -45,7 +47,7 @@ runScenarios('MediaList parsing and mutation', 'normal', [
     markup: '',
     setupPage: async (page) => {
       for (const [input, expected] of mediaQueries) {
-        expect(new MediaListImpl(input).mediaText, input).toBe(expected);
+        expect(new MediaListImpl(input, styleletEnv).mediaText, input).toBe(expected);
       }
       const native = await page.evaluate((inputs) => {
         const sheet = new CSSStyleSheet();
@@ -67,7 +69,7 @@ runScenarios('MediaList parsing and mutation', 'normal', [
     markup: '',
     setupPage: async (page: Page) => {
       for (const [input, expected] of generalEnclosedQueries) {
-        expect(new MediaListImpl(input).mediaText, input).toBe(expected);
+        expect(new MediaListImpl(input, styleletEnv).mediaText, input).toBe(expected);
       }
       const native = await page.evaluate((inputs) => {
         const sheet = new CSSStyleSheet();
@@ -84,11 +86,11 @@ runScenarios('MediaList parsing and mutation', 'normal', [
     browsers: [browser],
     engines: ['native' as const],
     // SPEC_CLASH(media-list-mutation-comparison): Firefox moves the existing
-    // orientation query to the end. WebKit appends it and deletes just one screen.
-    ...(browser === 'chromium' ? {} : { status: 'fail' as const }),
+    // orientation query to the end; Chromium/WebKit leave it in place.
+    ...(browser === 'firefox' ? { status: 'fail' as const } : {}),
     markup: '',
     setupPage: async (page: Page) => {
-      const list = new MediaListImpl('(orientation: LANDSCAPE), screen, SCREEN');
+      const list = new MediaListImpl('(orientation: LANDSCAPE), screen, SCREEN', styleletEnv);
       list.appendMedium('(ORIENTATION: landscape)');
       const afterAppend = list.mediaText;
       list.deleteMedium('screen');
@@ -114,12 +116,12 @@ runScenarios('MediaList parsing and mutation', 'normal', [
     browsers: [browser],
     engines: ['native' as const],
     // SPEC_CLASH(media-list-mutation-input): Firefox rejects empty/invalid input
-    // and deletes screen for a multiple-query input. WebKit appends whole lists
-    // and throws on all four deletes. Exact observed results are in the roadmap.
-    ...(browser === 'chromium' ? {} : { status: 'fail' as const }),
+    // and deletes screen for a multiple-query input. WebKit agrees for invalid
+    // single queries but differs on empty/multiple input; see the roadmap.
+    ...(browser === 'chromium' || browser === 'webkit' && input === '&' ? {} : { status: 'fail' as const }),
     markup: '',
     setupPage: async (page: Page) => {
-      const list = new MediaListImpl('screen');
+      const list = new MediaListImpl('screen', styleletEnv);
       list.appendMedium(input);
       const afterAppend = list.mediaText;
       list.deleteMedium(input);

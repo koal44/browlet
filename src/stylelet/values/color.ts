@@ -8,7 +8,7 @@ import {
   plus, adaptConsumer, repeat, sequenceOf, withTrivia, createComponentParser, NumberTokenFlag,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
+import { ValueStage, type ValueContext } from '../value-processing/index';
 import {
   NumberLiteral, PercentageLiteral, AngleLiteral, serializeCssNumber,
 } from './numeric-literal/index';
@@ -51,13 +51,13 @@ export class ColorValue<R extends Color = Color> implements Value<ColorValueCont
   }
 
   /** Resolve with current color and numeric context, retaining an unchanged value. */
-  resolve(stage: ValueStage, context: ColorValueContext = {}): ColorValue {
+  resolve(stage: ValueStage, context: ColorValueContext): ColorValue {
     const resolved = resolveColor(this.repr, stage, context);
     return resolved === this.repr ? this : new ColorValue(resolved);
   }
 
   /** Resolve only when the available context produces absolute coordinates. */
-  tryResolveAbsolute(stage: ValueStage, context: ColorValueContext = {}): ColorValue<AbsoluteColor> | null {
+  tryResolveAbsolute(stage: ValueStage, context: ColorValueContext): ColorValue<AbsoluteColor> | null {
     const resolved = this.resolve(stage, context);
     return resolved.repr.kind === ColorKind.Absolute ? resolved as ColorValue<AbsoluteColor> : null;
   }
@@ -89,7 +89,7 @@ export class ColorValue<R extends Color = Color> implements Value<ColorValueCont
   convert(
     this: ColorValue<AbsoluteColor>,
     target: ColorSpaceName,
-    context: ColorContext = {},
+    context: ColorContext,
   ): ColorValue<PredefinedAbsoluteColor> {
     const converted = convertAbsoluteColor(this.repr, target, context);
     return new ColorValue(converted);
@@ -100,7 +100,7 @@ export class ColorValue<R extends Color = Color> implements Value<ColorValueCont
     this: ColorValue<AbsoluteColor>,
     destination: ColorSpaceName,
     method: GamutMappingMethod = 'binary-search',
-    context: ColorContext = {},
+    context: ColorContext,
   ): ColorValue<PredefinedAbsoluteColor> {
     return new ColorValue(gamutMapColor(this.repr, destination, method, context));
   }
@@ -110,7 +110,7 @@ export class ColorValue<R extends Color = Color> implements Value<ColorValueCont
     this: ColorValue,
     other: ColorValue,
     progress: number,
-    context: ColorContext = {},
+    context: ColorContext,
     space?: ColorInterpolationSpaceName,
     hue: HueInterpolationMethod = 'shorter',
   ): ColorValue<AbsoluteColor> {
@@ -132,17 +132,17 @@ export class ColorValue<R extends Color = Color> implements Value<ColorValueCont
   }
 
   /** Compare resolved colors after accounting for their spaces and powerless components. */
-  isEquivalent(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): boolean {
+  isEquivalent(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext): boolean {
     return areColorsEquivalent(this.repr, other.repr, context);
   }
 
   /** Measure the CIEDE2000 difference between resolved colors. */
-  deltaE2000(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): number {
+  deltaE2000(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext): number {
     return deltaE2000(this.repr, other.repr, context);
   }
 
   /** Measure the Euclidean difference between resolved colors in Oklab. */
-  deltaEOK(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext = {}): number {
+  deltaEOK(this: ColorValue<AbsoluteColor>, other: ColorValue<AbsoluteColor>, context: ColorContext): number {
     return deltaEOK(this.repr, other.repr, context);
   }
 }
@@ -2788,12 +2788,12 @@ function colorMetadataAsRelative(
 // ██     ██ ████████  ██████   ███████  ████████    ███    ████████
 
 
-export type ColorContext = {
+export interface ColorContext extends ValueContext {
   currentColor?: AbsoluteColor;
   systemColors?: Map<SystemColorName, AbsoluteColor>;
   colorScheme?: ColorScheme;
   colorProfiles?: Map<ColorProfileSpace, ColorProfile>;
-};
+}
 
 export type ColorValueContext = ColorContext & MathContext;
 
@@ -3017,7 +3017,7 @@ function resolveColorFunction(
   let components = componentResolution.components;
   components = clampComponents(components, metadata, stage);
   components = normalizeComponents(components, metadata, stage);
-  components = canonicalizeComponents(components, metadata, stage);
+  components = canonicalizeComponents(components, metadata, stage, context);
   const resolvedValue = {
     ...value,
     components,
@@ -3478,7 +3478,8 @@ function canonicalizeComponents<
 >(
   components: Components,
   metadata: ColorMetadata,
-  stage: ValueStage = ValueStage.Declared,
+  stage: ValueStage,
+  context: MathContext,
 ): Components {
   return mapTuple(
     components,
@@ -3486,6 +3487,7 @@ function canonicalizeComponents<
       component,
       componentMetadataAt(metadata, index, components.length),
       stage,
+      context,
     ),
   ) as Components;
 }
@@ -3494,6 +3496,7 @@ function canonicalizeComponent<Component extends SyntaxComponent>(
   component: Component,
   metadata: ColorComponentMetadata,
   stage: ValueStage,
+  context: MathContext,
 ): Component {
   if (component === undefined) {
     return component;
@@ -3506,7 +3509,7 @@ function canonicalizeComponent<Component extends SyntaxComponent>(
   } else if (component instanceof PercentageValue && component.repr instanceof MathValue &&
     component.repr.repr instanceof MathExpression) {
     if (metadata.canonicalSyntax === 'number') {
-      canonicalized = new NumberValue(component.repr.toNumber(metadata.percentageScale, metadata.numberScale)) as Component;
+      canonicalized = new NumberValue(component.repr.toNumber(metadata.percentageScale, metadata.numberScale, context)) as Component;
     }
   } else {
     canonicalized = (metadata.canonicalSyntax === 'number'
@@ -3861,6 +3864,7 @@ function resolveDeviceCmykFn(
     components,
     metadata,
     stage,
+    context,
   );
   const resolved = components.every(
     (component, index) => component === value.components[index],
@@ -4290,7 +4294,7 @@ type ColorMatrix = [
 function convertAbsoluteColor(
   value: AbsoluteColor,
   target: ColorSpaceName,
-  context: ColorContext = {},
+  context: ColorContext,
 ): PredefinedAbsoluteColor {
   return convertPredefinedAbsoluteColor(
     coercePredefinedAbsoluteColor(value, context),
@@ -5337,7 +5341,7 @@ function gamutMapColor(
   origin: AbsoluteColor,
   destination: ColorSpaceName,
   method: GamutMappingMethod = 'binary-search',
-  context: ColorContext = {},
+  context: ColorContext,
 ): PredefinedAbsoluteColor {
   if (!hasGamutLimits(destination)) {
     return convertAbsoluteColor(origin, destination, context);
@@ -5501,7 +5505,7 @@ function clipColorToGamut(
 function deltaE2000(
   reference: AbsoluteColor,
   sample: AbsoluteColor,
-  context: ColorContext = {},
+  context: ColorContext,
 ): number {
   const [lightness1, a1, b1] = componentsForConversion(
     convertAbsoluteColor(reference, 'lab', context),
@@ -5601,7 +5605,7 @@ function deltaE2000(
 function deltaEOK(
   one: AbsoluteColor,
   two: AbsoluteColor,
-  context: ColorContext = {},
+  context: ColorContext,
 ): number {
   const [lightness1, a1, b1] = componentsForConversion(
     convertAbsoluteColor(one, 'oklab', context),
@@ -5632,7 +5636,7 @@ function labHueInDegrees(a: number, b: number): number {
 function areColorsEquivalent(
   a: AbsoluteColor,
   b: AbsoluteColor,
-  context: ColorContext = {},
+  context: ColorContext,
 ): boolean {
   const preparedA = prepareAbsoluteColorForComparison(a);
   const preparedB = prepareAbsoluteColorForComparison(b);
@@ -5700,9 +5704,9 @@ function interpolateColors(
   a: AbsoluteColor,
   b: AbsoluteColor,
   progress: number,
-  space?: ColorInterpolationSpaceName,
+  space: ColorInterpolationSpaceName | undefined,
   hue: HueInterpolationMethod = 'shorter',
-  context: ColorContext = {},
+  context: ColorContext,
 ): AbsoluteColor {
   space ??= a.isLegacySrgb && b.isLegacySrgb
     ? 'srgb'
@@ -6150,7 +6154,7 @@ type ResolvedColorMixItem = {
 function calculateColorMix(
   items: ResolvedColorMixItem[],
   method: ColorInterpolationMethod = { space: 'oklab' },
-  context: ColorContext = {},
+  context: ColorContext,
 ): AbsoluteColor {
   if (items.length === 0) {
     throw new InternalError('A color mix requires at least one item');

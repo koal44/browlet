@@ -23,7 +23,7 @@ Missing resource/layout consumers remain explicit at their owners.
 | Selector context and support | Parsing covers more than runtime matching. Preserve namespace/nesting context, stylesheet tree scope, pseudo-element subjects, and dynamic host facts; review overlap with Selectlet through existing DOMOperations. See the [selector roadmap](selector/ROADMAP.md). |
 | Full computed and resolved values | The [engine roadmap](engine/ROADMAP.md) owns complete selection/defaulting/inheritance; the [lifecycle roadmap](value-processing/ROADMAP.md) records property metadata and stage inputs. Connectedness, flat-tree/pseudo-element identity, and rendering facts come from their owners. Live views and caches require explicit freshness/invalidation contracts. |
 | Substitution and registration | The [value roadmap](values/ROADMAP.md) records connected unregistered-variable replacement, cycles, fallback, ordinary-property reparsing, and pending margins. Registration lookup and direct value tests exist; document/API registration and registered per-element computation are not connected. |
-| Resource/base-URL provenance | Preserve declaration parse-time bases before enabling URL-valued properties. Sheet fetching, response policy, MIME/encoding, origin-clean state, imports, and load completion cross into [Browlet's loader](../browlet/loader/ROADMAP.md) and [style integration](../browlet/style/ROADMAP.md). |
+| Resource/base-URL provenance | Preserve declaration parse-time bases before enabling URL-valued properties. Stylelet owns generic CSS resource fetching, CSS decoding algorithms, sheet state, and recursive import coordination. [Browlet's style integration](../browlet/style/ROADMAP.md) owns document-dependent stylesheet fetching and response policy; HTML startup, association, events, and blockers remain there and in [Browlet's loader](../browlet/loader/ROADMAP.md). |
 | Sheet applicability and scopes | `TreeScope` already orders sheets, but media matching, shadow-root scopes, and complete mutation invalidation remain incomplete. The [condition roadmap](conditional/ROADMAP.md) separates support, media, and container evaluation and their different reference styles. |
 | Property families and contextual facts | The [family roadmap](props/ROADMAP.md) groups missing definitions; [value inputs](values/ROADMAP.md#context-inputs-and-freshness) identify existing fields, missing delivery, and update triggers. Parser breadth is not property support. |
 | Typed OM and descriptor interfaces | [Typed OM](cssom/typed/ROADMAP.md) owns public values/maps, reification, shared declaration views, and live computed maps. Descriptor interfaces retain their family-specific inventories. |
@@ -32,6 +32,9 @@ Missing resource/layout consumers remain explicit at their owners.
 
 ## Decisions still open
 
+- Automatic loading-owner integration remains HTML work. Stylelet's explicit
+  stylesheet loader accepts the actual document and owning environment; HTML
+  must connect its start/completion/cancellation to events and blockers.
 - The standalone author's CSSOM binding surface versus direct, post-conversion
   implementation APIs. Keep host-specific Platform objects out of Stylelet.
 - Live computed-style queries and any engine-owned cached value state. Neither

@@ -1,7 +1,7 @@
 import { asciiLower } from '../../infra/ascii';
-import type { CSSStyleSheetImpl } from '../../stylelet/index';
 import { parseLinkHeader } from '../../http/index';
 import type { FetchResponse } from '../../fetch/index';
+import type { CSSStyleSheetImpl } from '../../stylelet/index';
 
 import type { DocumentImpl } from '../dom/nodes/index';
 
@@ -33,7 +33,7 @@ export function processStyleSheetLinkHeaders(document: DocumentImpl, response: F
       const title = parameters.get('title') ?? '';
       const alternate = relations.includes('alternate');
       if (alternate && title === '') continue;
-      const url = document.env.parseURL(href, document.getBaseURL()).url;
+      const url = document.env.parseURL(href, document.getBaseURL());
       if (url === null) continue;
       const index = sheets.length;
       sheets.push(null);

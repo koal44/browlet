@@ -45,7 +45,7 @@ export class PercentageValue<R extends Percentage = Percentage> implements Value
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): PercentageValue {
+  resolve(stage: ValueStage, context: MathContext): PercentageValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, percentageMathContext(context));
@@ -60,7 +60,7 @@ export class PercentageValue<R extends Percentage = Percentage> implements Value
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: PercentageValue, context: MathContext = {}): PercentageValue {
+  add(other: PercentageValue, context: MathContext): PercentageValue {
     if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
       return new PercentageValue(this.repr.add(other.repr));
     }
@@ -71,7 +71,7 @@ export class PercentageValue<R extends Percentage = Percentage> implements Value
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: PercentageValue, progress: number, context: MathContext = {}): PercentageValue {
+  interpolate(other: PercentageValue, progress: number, context: MathContext): PercentageValue {
     if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
       return new PercentageValue(this.repr.interpolate(other.repr, progress));
     }
@@ -82,7 +82,7 @@ export class PercentageValue<R extends Percentage = Percentage> implements Value
   }
 
   /** Accumulation is addition. */
-  accumulate(other: PercentageValue, context: MathContext = {}): PercentageValue {
+  accumulate(other: PercentageValue, context: MathContext): PercentageValue {
     return this.add(other, context);
   }
 

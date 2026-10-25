@@ -63,6 +63,7 @@ export interface DOMOperations<
   documentElement(document: D): E | null;
   body(document: D): E | null;
   URL(document: D): string;
+  /** Current document encoding, read when the consuming algorithm needs it. */
   baseURI(node: N): string;
 
   getId(element: E): string;

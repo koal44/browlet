@@ -42,7 +42,7 @@ export class BlobURLStore {
   /** Revoke an author-supplied URL when its registration belongs to the caller's storage partition. */
   // https://w3c.github.io/FileAPI/#dfn-revokeObjectURL
   revoke(url: string, env: StorageEnvironment): void {
-    const record = this.#userAgent.parseURL(url).url;
+    const record = this.#userAgent.parseURL(url);
     if (record === null || record.scheme !== 'blob') return;
     const entry = record.blobURLEntry;
     if (!(entry instanceof BlobURLEntry) || !entry.isSamePartition(env)) return;

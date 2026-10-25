@@ -8,7 +8,8 @@ import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
 import { WindowRealm } from '../../../../src/browlet/scripting/realm';
 import { UserAgent } from '../../../../src/browlet/user-agent';
-import { createOpaqueOrigin, type Origin, type TupleOrigin } from '../../../../src/url/origin';
+import { createOpaqueOrigin } from '../../../../src/url/origin';
+import type { Origin, TupleOrigin } from '../../../../src/url/core/index';
 import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
 import { BindingWorld, defineInterface, idlType, roAttr, xattr } from '../../../../src/web-idl/index';
 

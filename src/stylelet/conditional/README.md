@@ -22,8 +22,8 @@ conditional at-rules, and
 matching. CSSOM rule declarations/types therefore do not establish engine
 participation.
 
-`StyleletEnvironment` currently supplies execution, DOM operations, URL
-construction and text decoding. It does not supply device preferences,
+`StyleletEnvironment` currently supplies execution, DOM operations, Blob URL
+registrations and system colors. It does not supply device preferences,
 viewport measurements or container-layout facts. Those future inputs are
 listed in the [condition roadmap](ROADMAP.md#media-matching).
 

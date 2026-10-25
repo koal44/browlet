@@ -44,7 +44,7 @@ export class LengthValue<R extends Length = Length> implements Value<MathContext
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): LengthValue {
+  resolve(stage: ValueStage, context: MathContext): LengthValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, context);
@@ -63,7 +63,7 @@ export class LengthValue<R extends Length = Length> implements Value<MathContext
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: LengthValue, context: MathContext = {}): LengthValue {
+  add(other: LengthValue, context: MathContext): LengthValue {
     if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue) && this.repr.unit === other.repr.unit) {
       return new LengthValue(this.repr.add(other.repr));
     }
@@ -73,7 +73,7 @@ export class LengthValue<R extends Length = Length> implements Value<MathContext
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: LengthValue, progress: number, context: MathContext = {}): LengthValue {
+  interpolate(other: LengthValue, progress: number, context: MathContext): LengthValue {
     if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue) && this.repr.unit === other.repr.unit) {
       return new LengthValue(this.repr.interpolate(other.repr, progress));
     }
@@ -83,7 +83,7 @@ export class LengthValue<R extends Length = Length> implements Value<MathContext
   }
 
   /** Accumulation of lengths is addition. */
-  accumulate(other: LengthValue, context: MathContext = {}): LengthValue {
+  accumulate(other: LengthValue, context: MathContext): LengthValue {
     return this.add(other, context);
   }
 

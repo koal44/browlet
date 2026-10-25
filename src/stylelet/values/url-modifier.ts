@@ -1,5 +1,5 @@
 import { asciiLower } from '../../infra/ascii';
-import { referrerPolicyValues, type ReferrerPolicy } from '../../fetch/core/index';
+import { referrerPolicyValues, type ReferrerPolicy } from '../../fetch/index';
 
 import {
   createKeywordConsumer, createFunctionalNotationConsumer, consumeFunctionBlock, one, oneOf, withTrivia, createComponentParser,

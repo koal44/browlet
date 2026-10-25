@@ -1,11 +1,10 @@
+import { styleletEnv, createStyleletTestEnvironment } from '../environment-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 import { DOMExceptionImpl } from '../../../src/web-idl/core/index';
-import {
-  CSSStyleDeclarationImpl, defaultStyleletExecution, Stylelet, type InternalPromise, type StyleletExecution,
-} from '../../../src/stylelet/index';
+import { CSSStyleDeclarationImpl, Stylelet, type InternalPromise, type StyleletExecution } from '../../../src/stylelet/index';
 import {
   standardDOM, XML_NAMESPACE, type DOMOperations, type DOMNode, type DOMDocument, type DOMElement, type DOMDocumentFragment,
 } from '../../../src/infra/index';
@@ -27,7 +26,7 @@ describe('Stylelet DOM hosts', () => {
   it('selects the last equally important inline declaration in the raw-attribute fallback', () => {
     const host = createOpaqueDOM('<main style="opacity: .25; opacity: .5 !important; opacity: .75 !important; opacity: 1"></main>');
     try {
-      const styles = new Stylelet(host.document, { dom: host.dom });
+      const styles = new Stylelet(host.document, { env: createStyleletTestEnvironment({ dom: host.dom }) });
       const element = host.opaque(host.window.document.querySelector('main')!);
       expect(styles.getComputedStyle(element).getPropertyValue('opacity')).toBe('0.75');
     } finally { host.close(); }
@@ -38,9 +37,10 @@ describe('Stylelet DOM hosts', () => {
     try {
       const { document, dom, opaque, window } = host;
       const element = opaque(window.document.querySelector('main')!);
-      const styles = new Stylelet(document, {
+      const env = createStyleletTestEnvironment({
         dom: hasProvider ? { ...dom, inlineStyleBlock: () => null } : dom,
       });
+      const styles = new Stylelet(document, { env });
 
       expect(styles.getComputedStyle(element).getPropertyValue('opacity')).toBe(hasProvider ? '1' : '0.25');
       expect(dom.getAttributeNS(element, null, 'style')).toBe('opacity: .25');
@@ -52,7 +52,7 @@ describe('Stylelet DOM hosts', () => {
     try {
       const { document, dom, opaque, window } = host;
       const element = opaque(window.document.querySelector('main')!);
-      const styles = new Stylelet(document, { dom });
+      const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
       const declaration = new CSSStyleDeclarationImpl({ ownerNode: element }, styles.context.env);
 
       expect(declaration.cssText).toBe('');
@@ -76,10 +76,10 @@ describe('Stylelet DOM hosts', () => {
     try {
       const { document, dom, opaque, window } = host;
       const element = opaque(window.document.querySelector('main')!);
-      const styles = new Stylelet(document, { dom });
+      const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
       const declaration = new CSSStyleDeclarationImpl({ ownerNode: element }, styles.context.env);
       const failure = new Error('Host write failed');
-      const setAttributeNS = vi.spyOn(dom, 'setAttributeNS').mockImplementation(() => {
+      const setAttributeNS = vi.spyOn(styles.context.env.userAgent.dom, 'setAttributeNS').mockImplementation(() => {
         expect(declaration.updating).toBe(true);
         declaration.attributeChanged('style', 'color: blue');
         expect(declaration.getPropertyValue('color')).toBe('red');
@@ -103,7 +103,7 @@ describe('Stylelet DOM hosts', () => {
     const host = createOpaqueDOM('<style id="first"></style><style id="second"></style><main id="target" data-state="chosen"><span></span></main>');
     try {
       const { document, dom, opaque, window } = host;
-      const stylelet = new Stylelet(document, { dom });
+      const stylelet = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
       const first = opaque(window.document.getElementById('first')!);
       const second = opaque(window.document.getElementById('second')!);
       const target = opaque(window.document.getElementById('target')!);
@@ -144,7 +144,7 @@ describe('Stylelet DOM hosts', () => {
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
         const child = dom.firstElementChild(main)!;
-        const styles = new Stylelet(document, { dom });
+        const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
         const sheet = styles.documentScope.createStyleElementStyleSheet(main, `
           main.target { opacity: 0.25 }
           main.target > span:first-child { opacity: 0.5 }
@@ -165,7 +165,7 @@ describe('Stylelet DOM hosts', () => {
       const { document, dom, close } = host.create('<main dir="auto" style="opacity: 0.25">שלום</main>');
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
-        const styles = new Stylelet(document, { dom });
+        const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
 
         expect(matchSelectorList(parseSelectorList(':dir(rtl)', {})!, main, styles.context)).not.toBeNull();
         expect(styles.getComputedStyle(main).getPropertyValue('opacity')).toBe('0.25');
@@ -181,7 +181,7 @@ describe('Stylelet DOM hosts', () => {
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
         const child = dom.firstElementChild(main)!;
-        const styles = new Stylelet(document, { dom });
+        const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
         dom.setAttributeNS(main, XML_NAMESPACE, 'xml:lang', 'fr');
         expect(matchSelectorList(parseSelectorList(':lang(fr)', {})!, child, styles.context)).not.toBeNull();
         expect(matchSelectorList(parseSelectorList(':lang(en)', {})!, child, styles.context)).toBeNull();
@@ -195,7 +195,7 @@ describe('Stylelet DOM hosts', () => {
       const { document, dom, close } = host.create('<main lang="ko"></main>');
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
-        const styles = new Stylelet(document, { dom });
+        const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
         expect(matchSelectorList(parseSelectorList(':lang(KO)', {})!, main, styles.context)).not.toBeNull();
         expect(matchSelectorList(parseSelectorList(':lang(Ko)', {})!, main, styles.context)).toBeNull();
         dom.setAttribute(main, 'lang', 'Ko');
@@ -207,7 +207,7 @@ describe('Stylelet DOM hosts', () => {
       const { document, dom, close } = host.create('<main></main>');
       try {
         const main = dom.firstElementChild(dom.body(document)!)!;
-        const styles = new Stylelet(document, { dom });
+        const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
         dom.setAttributeNS(main, 'urn:other', 'style', 'opacity: .25');
         const declaration = new CSSStyleDeclarationImpl({ ownerNode: main }, styles.context.env);
 
@@ -263,7 +263,7 @@ describe('Stylelet DOM hosts', () => {
     const first = new JSDOM('<main></main><svg><circle></circle></svg>');
     const second = new JSDOM('<main></main>');
     try {
-      const context = new Stylelet(implForWrapper(first.window.document)).context;
+      const context = new Stylelet(implForWrapper(first.window.document), { env: createStyleletTestEnvironment() }).context;
       const firstMain = implForWrapper(first.window.document.querySelector('main')!);
       const secondMain = implForWrapper(second.window.document.querySelector('main')!);
       const circle = implForWrapper(first.window.document.querySelector<Element>('circle')!);
@@ -284,7 +284,7 @@ describe('Stylelet DOM hosts', () => {
       const dom: DOMOperations = standardDOM;
       const input = window.document.querySelector('input')!;
       const implementation = implForWrapper(input);
-      const styles = new Stylelet(document, { dom });
+      const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
       const checked = parseSelectorList(':checked', {})!;
 
       expect(matchSelectorList(checked, implementation, styles.context)).not.toBeNull();
@@ -304,7 +304,7 @@ describe('Stylelet DOM hosts', () => {
       const document = implForWrapper(window.document);
       const dom: DOMOperations = standardDOM;
       const main = dom.firstElementChild(dom.body(document)!)!;
-      const styles = new Stylelet(document, { dom });
+      const styles = new Stylelet(document, { env: createStyleletTestEnvironment({ dom }) });
 
       Object.defineProperty(document, 'location', { get() { throw new Error('Unexpected Location access'); } });
       expect(matchSelectorList(parseSelectorList(':target', {})!, main, styles.context)).not.toBeNull();
@@ -318,7 +318,7 @@ describe('Stylelet DOM hosts', () => {
   it('uses supplied focus and custom-element state with the original implementations', () => {
     const document = createBrowletDocument('<x-example></x-example>');
     const element = document.body!.firstElementChild!;
-    const styles = new Stylelet(document, {
+    const env = createStyleletTestEnvironment({
       dom: {
         ...browletDOM,
         hasFocus: (owner) => owner === document,
@@ -326,6 +326,7 @@ describe('Stylelet DOM hosts', () => {
         isDefined: (owner, name) => owner === document && name === 'x-example',
       },
     });
+    const styles = new Stylelet(document, { env });
 
     expect(matchSelectorList(parseSelectorList(':focus:defined', {})!, element, styles.context)).not.toBeNull();
     expect(matchSelectorList(parseSelectorList(':focus-within', {})!, document.body!, styles.context)).not.toBeNull();
@@ -333,9 +334,9 @@ describe('Stylelet DOM hosts', () => {
 });
 
 describe('Stylelet execution', () => {
-  it('completes replacement with standalone execution', async () => {
+  it('completes replacement with host-supplied execution', async () => {
     const { document } = new JSDOM('<main></main>', { url: 'https://example.test/' }).window;
-    const styles = new Stylelet(document);
+    const styles = new Stylelet(document, { env: createStyleletTestEnvironment() });
     const sheet = styles.createStyleSheet();
     const replacement = observe(sheet.replace('main { opacity: 0.25 }'));
 
@@ -352,7 +353,7 @@ describe('Stylelet execution', () => {
     const work: (() => void)[] = [];
     const tasks: (() => void)[] = [];
     const exec: StyleletExecution = {
-      ...defaultStyleletExecution,
+      ...styleletEnv.exec,
       runInParallel: (steps) => { work.push(steps); },
       queueTask(source, steps) {
         expect(source).toBe('dom-manipulation');
@@ -360,7 +361,7 @@ describe('Stylelet execution', () => {
         return { remove: () => { tasks.splice(tasks.indexOf(steps), 1); } };
       },
     };
-    const sheet = new Stylelet(document, { exec }).createStyleSheet();
+    const sheet = new Stylelet(document, { env: createStyleletTestEnvironment({ exec }) }).createStyleSheet();
     const completed = observe(sheet.replace('.first {} .second {}'));
     const rejected = expect(observe(sheet.replace('.wrong {}')))
       .rejects.toMatchObject({ name: 'NotAllowedError' });
@@ -381,13 +382,13 @@ describe('Stylelet execution', () => {
 
   it('keeps sheet, declaration, and adoption failures neutral before projection', async () => {
     const { document } = new JSDOM('<main></main>').window;
-    const styles = new Stylelet(document);
+    const styles = new Stylelet(document, { env: createStyleletTestEnvironment() });
     const sheet = styles.createStyleSheet();
 
     expect(() => sheet.deleteRule(0)).toThrow(DOMExceptionImpl);
     const declaration = styles.getComputedStyle(document.querySelector('main')!);
     expect(() => declaration.setProperty('color', 'red')).toThrow(DOMExceptionImpl);
-    const foreign = new Stylelet(new JSDOM().window.document).createStyleSheet();
+    const foreign = new Stylelet(new JSDOM().window.document, { env: createStyleletTestEnvironment() }).createStyleSheet();
     expect(() => styles.documentScope.checkAdoptedStyleSheet(foreign)).toThrow(DOMExceptionImpl);
 
     const embedded = styles.documentScope.createStyleElementStyleSheet(

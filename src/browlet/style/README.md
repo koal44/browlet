@@ -75,8 +75,8 @@ body consumption. Accepted bytes use CSS Syntax's decoder with transport,
 the final response URL supplies the parse base. Cross-origin opaque responses
 produce non-origin-clean sheets whose rules cannot be read through CSSOM.
 
-`loadStyleSheetImports(sheet, document, parameters, complete, started?)` explicitly connects
-Stylelet's import-tree loading to this fetcher. `parameters(parent)` supplies current
+`loadStyleSheetImports(sheet, document, parameters, complete, started?)` explicitly
+connects Stylelet's import-tree loading to this fetcher. `parameters(parent)` supplies current
 request settings, including the owner's render-blocking flag. Completion reports
 whether all required attempts succeeded, after nested imports finish; cancellation
 stops pending requests and suppresses late association/completion. Fetched sheets
@@ -91,9 +91,9 @@ notifications for events and blockers.
 
 Import rules retain `UrlValue`, including request modifiers, while `href` remains
 the decoded author URL. The import fetch adapter applies those modifiers after
-the owner's request parameters. The temporary [url-processing.ts](url-processing.ts)
-collects CSS Values §4.5.4's base selection, URL resolution, and resource-fetch
-algorithms for ownership review. Its full fetch path is tested separately; imports
+the owner's request parameters through `UrlValue.applyRequestModifiers()`.
+Stylelet's [resource fetcher](../../stylelet/resource.ts) owns CSS Values §4.5.4's
+base selection, URL resolution, and fetching. Its path is tested separately; imports
 still use the CSSOM fetcher's established response policy and failure handling.
 
 [processing-instruction.ts](processing-instruction.ts) owns PI association,
@@ -116,8 +116,12 @@ from HTML's still-provisional preload/header phases. See the
 [remaining resource work and disagreements](ROADMAP.md#external-stylesheet-loading).
 
 Documents and CSSOM implementations use their existing environment through
-`StyleletEnvironment`. UserAgent provides DOM operations, URL construction, and
-decoding. `env.exec` supplies promises, background work, and owner task delivery.
+`StyleletEnvironment`. UserAgent provides DOM operations and the Blob URL store;
+Stylelet imports URL parsing and Encoding directly. `StyleletEnvironment` extends
+`FetchEnvironment`; Browlet supplies its existing Fetch state and execution.
+The stylesheet loader reads the supplied `DocumentImpl`'s URL, origin, policy container,
+live encoding, and quirks mode directly and uses `document.env`.
+`env.exec` supplies promises, background work, and owner task delivery.
 There is no separate document execution adapter. Sheet, declaration, and adoption
 failures use DOMException implementations and Binding realization.
 

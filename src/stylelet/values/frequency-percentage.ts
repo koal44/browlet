@@ -50,7 +50,7 @@ export class FrequencyPercentageValue<R extends FrequencyPercentage = FrequencyP
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): FrequencyPercentageValue {
+  resolve(stage: ValueStage, context: MathContext): FrequencyPercentageValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, frequencyPercentageMathContext(context));
@@ -73,7 +73,7 @@ export class FrequencyPercentageValue<R extends FrequencyPercentage = FrequencyP
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: FrequencyPercentageValue, context: MathContext = {}): FrequencyPercentageValue {
+  add(other: FrequencyPercentageValue, context: MathContext): FrequencyPercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new FrequencyPercentageValue(this.repr.add(other.repr));
     }
@@ -87,7 +87,7 @@ export class FrequencyPercentageValue<R extends FrequencyPercentage = FrequencyP
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: FrequencyPercentageValue, progress: number, context: MathContext = {}): FrequencyPercentageValue {
+  interpolate(other: FrequencyPercentageValue, progress: number, context: MathContext): FrequencyPercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new FrequencyPercentageValue(this.repr.interpolate(other.repr, progress));
     }
@@ -101,7 +101,7 @@ export class FrequencyPercentageValue<R extends FrequencyPercentage = FrequencyP
   }
 
   /** Accumulation of frequency-percentages is addition. */
-  accumulate(other: FrequencyPercentageValue, context: MathContext = {}): FrequencyPercentageValue {
+  accumulate(other: FrequencyPercentageValue, context: MathContext): FrequencyPercentageValue {
     return this.add(other, context);
   }
 

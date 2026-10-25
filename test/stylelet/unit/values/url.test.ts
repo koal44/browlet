@@ -1,3 +1,5 @@
+import { styleletEnv } from '../../environment-fixture';
+import { parseURL } from '../../url-fixture';
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
@@ -18,8 +20,8 @@ describe('url', () => {
     const value = UrlValue.parse('url("../image.png")', {})!;
 
     expect(value.resolve(ValueStage.Computed, {
-      URL,
-      baseUrl: new URL('https://example.com/styles/site.css'),
+      env: styleletEnv,
+      baseUrl: parseURL('https://example.com/styles/site.css')!,
     })).toEqual(new UrlValue({
       ...value.repr,
       href: 'https://example.com/image.png',
@@ -30,7 +32,8 @@ describe('url', () => {
     const value = UrlValue.parse('url("image.png")', {})!;
 
     expect(value.resolve(ValueStage.Specified, {
-      baseUrl: new URL('https://example.com/styles/site.css'),
+      env: styleletEnv,
+      baseUrl: parseURL('https://example.com/styles/site.css')!,
     })).toBe(value);
   });
 
@@ -40,7 +43,8 @@ describe('url', () => {
       const value = UrlValue.parse(input, {})!;
 
       expect(value.resolve(ValueStage.Computed, {
-        baseUrl: new URL('https://example.com/styles/site.css'),
+        env: styleletEnv,
+        baseUrl: parseURL('https://example.com/styles/site.css')!,
       })).toBe(value);
     },
   );
@@ -48,14 +52,13 @@ describe('url', () => {
   it('retains a relative URL when no base URL is available', () => {
     const value = UrlValue.parse('url("image.png")', {})!;
 
-    expect(value.resolve(ValueStage.Computed, { URL })).toBe(value);
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv })).toBe(value);
   });
 
-  it('requires a selected provider when computing a resource URL', () => {
-    const value = UrlValue.parse('url("https://example.com/image.png")', {})!;
+  it('retains an invalid URL when parsing fails', () => {
+    const value = UrlValue.parse('url("http://[")', {})!;
 
-    expect(() => value.resolve(ValueStage.Computed))
-      .toThrow('URL resolution requires a host URL constructor');
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv })).toBe(value);
   });
 
   it('preserves substitution in src() but not in url()', () => {
@@ -138,7 +141,7 @@ describe('url', () => {
     const specified = UrlValue.parse(
       'url("image.png" integrity("sha256-test") cross-origin(anonymous) referrer-policy(no-referrer))', {},
     )!;
-    const computed = specified.resolve(ValueStage.Computed, { URL, baseUrl: new URL('https://example.com/') });
+    const computed = specified.resolve(ValueStage.Computed, { env: styleletEnv, baseUrl: parseURL('https://example.com/')! });
 
     expect(computed.repr.modifiers).toBe(specified.repr.modifiers);
     expect(computed.repr.modifiers.crossOrigin!.value).toBe('anonymous');

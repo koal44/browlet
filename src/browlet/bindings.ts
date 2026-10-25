@@ -8,12 +8,12 @@ import {
   type BindingContext, type ImplementationClass, type StampedPlatformObject,
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
-import { styleletIDLDefinitions } from '../stylelet/index';
 import { encodingIDLDefinitions } from '../encoding/index';
 import { urlIDLDefinitions, originIDL, serializeURL } from '../url/index';
 import { fileIDLDefinitions } from '../file/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
+import { styleletIDLDefinitions } from '../stylelet/index';
 
 import type { Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';

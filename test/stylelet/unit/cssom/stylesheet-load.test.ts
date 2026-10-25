@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { defaultStyleletEnvironment as env } from '../../../../src/stylelet/environment';
+import { styleletEnv as env } from '../../environment-fixture';
+import { parseURL } from '../../url-fixture';
+import { serializeURL } from '../../../../src/url/core/index';
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
 import { CSSImportRuleImpl } from '../../../../src/stylelet/cssom/rules/import';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
@@ -80,7 +82,7 @@ describe('explicit stylesheet import loading', () => {
     const leaf = createSheet('p { opacity: .5 }', 'https://example.test/leaf.css');
     const complete = vi.fn();
     sheet.loadImports((url, _rule, loaded) => {
-      loaded(url.href.endsWith('/child.css') ? imported : leaf, true);
+      loaded(serializeURL(url).endsWith('/child.css') ? imported : leaf, true);
       return vi.fn();
     }, complete);
     expect(getImport(sheet).styleSheet).toBe(imported);
@@ -123,8 +125,8 @@ describe('explicit stylesheet import loading', () => {
     const urls: string[] = [];
     const complete = vi.fn(() => expect(urls).toHaveLength(2));
     sheet.loadImports((url, _rule, loaded) => {
-      urls.push(url.href);
-      loaded(createSheet('', url.href), true);
+      urls.push(serializeURL(url));
+      loaded(createSheet('', serializeURL(url)), true);
       return vi.fn();
     }, complete);
     expect(complete).toHaveBeenCalledExactlyOnceWith(true);
@@ -266,8 +268,8 @@ describe('explicit stylesheet import loading', () => {
     const events: string[] = [];
     let inserted = false;
     sheet.loadImports((url, _rule, loaded) => {
-      events.push(url.href);
-      loaded(createSheet('', url.href), true);
+      events.push(serializeURL(url));
+      loaded(createSheet('', serializeURL(url)), true);
       return vi.fn();
     }, () => {
       events.push('complete');
@@ -286,9 +288,9 @@ describe('explicit stylesheet import loading', () => {
     const cancel = vi.fn();
     const complete = vi.fn();
     sheet.loadImports((url, rule, loaded) => {
-      urls.push(url.href);
+      urls.push(serializeURL(url));
       if (rule.parentStyleSheet === sheet) loaded(imported, true);
-      else if (url.href.endsWith('/first.css')) sheet.deleteRule(0);
+      else if (serializeURL(url).endsWith('/first.css')) sheet.deleteRule(0);
       return cancel;
     }, complete);
     expect(urls).toEqual(['https://example.test/a.css', 'https://example.test/first.css']);
@@ -337,7 +339,7 @@ describe('explicit stylesheet import loading', () => {
 });
 
 function createSheet(source: string, href = 'https://example.test/root.css', originClean = true): CSSStyleSheetImpl {
-  const location = new URL(href);
+  const location = parseURL(href)!;
   const sheet = new CSSStyleSheetImpl({
     location, baseURL: location, encoding: 'UTF-8', parentStyleSheet: null, ownerRule: null,
     ownerNode: null, media: '', title: '', alternate: false, originClean,
@@ -356,7 +358,7 @@ function createFetcher(): { fetchImport: FetchImportedStyleSheet; requests: Impo
   const requests: ImportRequest[] = [];
   const fetchImport: FetchImportedStyleSheet = (url, rule, complete) => {
     const cancel = vi.fn();
-    requests.push({ url: url.href, parent: rule.parentStyleSheet!, complete, cancel });
+    requests.push({ url: serializeURL(url), parent: rule.parentStyleSheet!, complete, cancel });
     return cancel;
   };
   return { fetchImport, requests };

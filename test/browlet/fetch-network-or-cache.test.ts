@@ -26,7 +26,7 @@ describe('HTTP network-or-cache request preparation', () => {
     const mark = vi.spyOn(f.env, 'markResourceTiming');
     f.request.method = 'POST';
     f.request.initiator = 'prefetch';
-    f.request.referrer = f.env.parseURL(f.origin + '/referrer').url!;
+    f.request.referrer = f.env.parseURL(f.origin + '/referrer')!;
     f.request.body = FetchBody.fromBytes(Uint8Array.of(1, 2, 3), f.env);
     const progress: number[] = [];
     const end = Promise.withResolvers<void>();
@@ -75,7 +75,8 @@ describe('HTTP network-or-cache request preparation', () => {
     f.request.keepalive = true;
     f.request.body = FetchBody.fromBytes(new Uint8Array(40 * 1024), f.env);
     expect((await f.operation.start()).status).toBe(200);
-    const second = new FetchRequest(f.request.currentURL, f.env, f.env.userAgent);
+    const second = new FetchRequest(f.request.currentURL, f.env);
+    second.client = f.env;
     second.populateFromClient();
     second.referrer = null;
     second.method = 'POST';
@@ -192,7 +193,7 @@ describe('HTTP response metadata', () => {
     });
     const f = await fixture(server, 'https');
     f.env.userAgent.httpTransport = new NodeHTTPTransport(f.env.userAgent, cert);
-    f.request.urlList = [f.env.parseURL(f.origin.replace('127.0.0.1', 'localhost')).url!];
+    f.request.urlList = [f.env.parseURL(f.origin.replace('127.0.0.1', 'localhost'))!];
     f.request.mode = 'navigate';
     f.request.redirectMode = 'manual';
     const response = await f.operation.start();
@@ -216,7 +217,8 @@ async function fixture(server: Server = createServer((request, response) => {
   cleanup.push(() => env.userAgent.httpTransport.close());
   const authentication = env.userAgent.httpAuthentication;
   authentication.onPrompt = vi.fn(() => null);
-  const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
+  const request = new FetchRequest(env.parseURL(origin + '/resource')!, env);
+  request.client = env;
   request.populateFromClient();
   request.referrer = null;
   const operation = createFetchOperation(request, env);

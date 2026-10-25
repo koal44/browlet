@@ -90,8 +90,8 @@ class Declaration<P extends BaseProperty<W, PropertyName>, W extends WholeValue>
   /** Format a property name, an already serialized value, and its priority, including shorthand output. */
   // https://drafts.csswg.org/cssom/#serialize-a-css-declaration
   static serializeText(name: string, value: string, important: boolean): string {
-    // SPEC_CLASH(custom-property-name-serialization): Follow Chromium/Firefox by
-    // escaping decoded custom names; CSSOM's literal steps and WebKit emit them raw.
+    // SPEC_CLASH(custom-property-name-serialization): Follow all three browsers by
+    // escaping decoded custom names; CSSOM's literal steps emit them raw.
     const property = name.startsWith('--') ? serializeCssIdentifier(name) : name;
     const text = nonASCIIWhitespacePattern.test(value) ? value : '';
     return `${property}: ${text}${important ? ' !important' : ''};`;

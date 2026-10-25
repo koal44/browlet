@@ -1,6 +1,7 @@
 import {
   attr, constant, defineInterface, definePartialInterface, idlType, impl, integer, nullable, reference, roAttr,
 } from '../../../web-idl/core/index';
+import type { URLRecord } from '../../../url/core/index';
 
 import type { StyleletEnvironment } from '../../environment';
 import type { SelectorList } from '../../selector/index';
@@ -28,6 +29,12 @@ export abstract class CSSRuleImpl {
   // https://drafts.csswg.org/cssom/#dom-cssrule-csstext
   abstract get cssText(): string;
   abstract set cssText(value: string);
+
+  /** Containing stylesheet's base URL or location; null when neither is available. */
+  get baseURL(): URLRecord | null {
+    const sheet = this.parentStyleSheet;
+    return sheet?.baseURL ?? sheet?.location ?? null;
+  }
 
   /** Associate this rule with its containing sheet, or detach it from that sheet. */
   setParentStyleSheet(sheet: CSSStyleSheetImpl | null): void {

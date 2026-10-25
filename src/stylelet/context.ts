@@ -3,7 +3,7 @@ import type {
   DOMOperations, DOMDocument as Document, DOMElement as Element, DOMNode as Node,
 } from '../infra/index';
 
-import { defaultStyleletEnvironment, type StyleletEnvironment } from './environment';
+import type { StyleletEnvironment } from './environment';
 import { RuntimeCache } from './selector/index';
 
 /** Document-specific selector state, host DOM access, and reusable matching caches. */
@@ -44,7 +44,7 @@ export class StyleletContext {
   #caseInsensitiveTokenRegexes = new Map<string, RegExp>();
 
   /** Establish the document's selector modes and the host operations that inspect it. */
-  constructor(document: Document, env: StyleletEnvironment = defaultStyleletEnvironment) {
+  constructor(document: Document, env: StyleletEnvironment) {
     this.env = env;
     this.dom = env.userAgent.dom;
     this.document = document;

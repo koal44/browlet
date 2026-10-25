@@ -9,9 +9,5 @@ export {
   IntegrityPolicy, IntegrityViolationReportBodyImpl, integrityViolationReportBodyIDL,
 } from './integrity-policy';
 export { PermissionsPolicy } from './permissions';
-export {
-  parseReferrerPolicyFromHeader, setRequestReferrerPolicyOnRedirect, determineRequestReferrer,
-  stripURLForReferrer,
-} from './referrer-policy';
 export { SandboxingFlagSet, type SandboxingFlag } from './sandbox';
 export { InsecureRequestsPolicy } from './upgrade-insecure-requests';

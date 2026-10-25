@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { aboutBlankURL, copyURL, parseURL, serializeURL } from '../../src/url/url';
+import { aboutBlankURL, parseURL } from '../../src/url/url';
+import { copyURL, serializeURL } from '../../src/url/core/index';
 
 describe('URL records', () => {
   it('provides a frozen about:blank template matching the parser and independent mutable copies', () => {

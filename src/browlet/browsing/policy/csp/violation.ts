@@ -58,7 +58,7 @@ export class CSPViolation {
     this.url = copyURL(document.url);
     this.status = document.httpStatus;
     this.resource = typeof resource === 'string' ? resource : copyURL(resource);
-    this.referrer = document.referrer === '' ? null : env.parseURL(document.referrer).url;
+    this.referrer = document.referrer === '' ? null : env.parseURL(document.referrer);
     this.policy = policy;
     this.effectiveDirective = effectiveDirective;
     // CSP permits omitting script locations when the engine cannot supply them.
@@ -127,9 +127,10 @@ export class CSPViolation {
     const { env } = this;
     if (!env.userAgent.reportDeliveryEnabled) return;
     for (const token of this.policy.directives.get('report-uri')?.tokens ?? []) {
-      const endpoint = env.parseURL(token, this.url).url;
+      const endpoint = env.parseURL(token, this.url);
       if (endpoint === null) continue;
-      const request = new FetchRequest(endpoint, env, env.userAgent);
+      const request = new FetchRequest(endpoint, env);
+      request.client = env;
       request.method = 'POST';
       request.origin = env.origin;
       request.traversableForUserPrompts = null;

@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { GuaranteedInvalidValue } from '../../../../src/stylelet/values/guaranteed-invalid';
 import { CssWideValue } from '../../../../src/stylelet/values/css-wide';
@@ -32,7 +33,7 @@ describe('property records', () => {
     const property = builtInRegistry[name];
     expect(property.inherits).toBe(inherits);
     expect(property.name).toBe(name);
-    const declarations = InterpretedDeclaration.parseBlock(`${name}: ${text}`, {});
+    const declarations = InterpretedDeclaration.parseBlock(`${name}: ${text}`, { env: styleletEnv });
     expect(declarations[0]!.property).toBe(property);
     expect(declarations).toMatchObject([{
       custom: false,
@@ -44,16 +45,16 @@ describe('property records', () => {
 
   it('shares color value behavior between distinct property records', () => {
     expect(builtInRegistry.color).not.toBe(builtInRegistry['background-color']);
-    expect(builtInRegistry.color.parse('red', {}))
-      .toEqual(builtInRegistry['background-color'].parse('red', {}));
+    expect(builtInRegistry.color.parse('red', { env: styleletEnv }))
+      .toEqual(builtInRegistry['background-color'].parse('red', { env: styleletEnv }));
   });
 
   it('serializes one whole value or the complete longhand values of a shorthand', () => {
-    const side = builtInRegistry['margin-top'].parse('2em', {})!;
+    const side = builtInRegistry['margin-top'].parse('2em', { env: styleletEnv })!;
     expect(builtInRegistry['margin-top'].serialize(side)).toBe('2em');
 
     const margin = builtInRegistry.margin;
-    const sides = margin.shorthand!.parse('1em 2em', {}, margin.name)!;
+    const sides = margin.shorthand!.parse('1em 2em', { env: styleletEnv }, margin.name)!;
     expect(margin.serialize(sides)).toBe('1em 2em');
     expect(margin.serialize(sides.slice(0, 3))).toBe('');
     expect(builtInRegistry['margin-top'].serialize(sides)).toBe('');
@@ -85,12 +86,12 @@ describe('property records', () => {
   });
 
   it.each(['color', 'background-color', 'opacity'] as const)('records all-element applicability for %s', (name) => {
-    expect(builtInRegistry[name].appliesTo({})).toBe(true);
+    expect(builtInRegistry[name].appliesTo({ env: styleletEnv })).toBe(true);
   });
 
   it.each(['margin-top', 'margin-right', 'margin-bottom', 'margin-left'] as const)(
     'requires box classification to determine %s applicability', (name) => {
-      expect(() => builtInRegistry[name].appliesTo({})).toThrow('Margin applicability requires box classification');
+      expect(() => builtInRegistry[name].appliesTo({ env: styleletEnv })).toThrow('Margin applicability requires box classification');
     },
   );
 
@@ -101,7 +102,7 @@ describe('property records', () => {
       inherits: false, appliesTo, percentages: 'not-applicable', animationType: 'by-computed-value',
       resolvedValueStage: ValueStage.Computed,
     });
-    const context: PropertyContext = {};
+    const context: PropertyContext = { env: styleletEnv };
     const declared = property.parse('2', context)!;
     expect(property.resolve(declared, ValueStage.Computed, context).serialize()).toBe('2');
     expect(appliesTo).not.toHaveBeenCalled();
@@ -115,9 +116,11 @@ describe('property records', () => {
     );
 
     expect(builtInRegistry.opacity.resolve(declared, ValueStage.Computed, {
+      env: styleletEnv,
       getCustomProperty: () => OptionalDeclarationValue.parse('150%', {})!,
     }).serialize()).toBe('1');
     expect(builtInRegistry.opacity.resolve(declared, ValueStage.Computed, {
+      env: styleletEnv,
       getCustomProperty: () => OptionalDeclarationValue.parse('red', {})!,
     }).inner).toBeInstanceOf(GuaranteedInvalidValue);
     expect(declared.serialize()).toBe('var(--alpha)');
@@ -130,9 +133,11 @@ describe('property records', () => {
 
     expect(initialValue.serialize()).toBe('canvastext');
     expect(builtInRegistry.color.resolve(initialValue, ValueStage.Computed, {
+      env: styleletEnv,
       systemColors: new Map([['canvastext', light]]),
     })).toMatchObject({ inner: { repr: light } });
     expect(builtInRegistry.color.resolve(initialValue, ValueStage.Computed, {
+      env: styleletEnv,
       systemColors: new Map([['canvastext', dark]]),
     })).toMatchObject({ inner: { repr: dark } });
     expect(initialValue).toMatchObject({ inner: { repr: { kind: ColorKind.System, name: 'canvastext' } } });
@@ -141,15 +146,16 @@ describe('property records', () => {
   it.each(['margin-top', 'margin-right', 'margin-bottom', 'margin-left'] as const)(
     'uses the containing block inline size for %s percentages only at used time', (name) => {
       const property = builtInRegistry[name];
-      const declared = property.parse('calc(10% + 2px)', {})!;
+      const declared = property.parse('calc(10% + 2px)', { env: styleletEnv })!;
       const unrelatedReference = new LengthLiteral(50, 'px');
-      const context = { containingBlockInlineSize: 200, percentageReferenceValue: unrelatedReference };
+      const context = { env: styleletEnv, containingBlockInlineSize: 200, percentageReferenceValue: unrelatedReference };
 
       const computed = property.resolve(declared, ValueStage.Computed, context);
       expect(computed.serialize()).toContain('10%');
 
       expect(property.resolve(computed, ValueStage.Used, context).serialize()).toBe('22px');
       expect(property.resolve(computed, ValueStage.Used, {
+        env: styleletEnv,
         containingBlockInlineSize: 400,
       }).serialize()).toBe('42px');
       expect(computed.serialize()).toContain('10%');
@@ -159,18 +165,19 @@ describe('property records', () => {
 
   it('leaves a margin percentage unresolved while its containing block size is unavailable', () => {
     const property = builtInRegistry['margin-left'];
-    const declared = property.parse('25%', {})!;
+    const declared = property.parse('25%', { env: styleletEnv })!;
 
-    expect(property.resolve(declared, ValueStage.Used, {}).serialize()).toBe('25%');
+    expect(property.resolve(declared, ValueStage.Used, { env: styleletEnv }).serialize()).toBe('25%');
     expect(property.resolve(declared, ValueStage.Used, {
+      env: styleletEnv,
       containingBlockInlineSize: 0,
     }).serialize()).toBe('0px');
   });
 
   it('uses the property percentage rule on a selected declaration\'s value', () => {
-    const [declaration] = InterpretedDeclaration.parseBlock('margin-left: 25%', {});
+    const [declaration] = InterpretedDeclaration.parseBlock('margin-left: 25%', { env: styleletEnv });
     if (declaration?.name !== 'margin-left') throw new Error('Expected a margin-left declaration');
-    const resolved = declaration.property.resolve(declaration.value, ValueStage.Used, { containingBlockInlineSize: 200 });
+    const resolved = declaration.property.resolve(declaration.value, ValueStage.Used, { env: styleletEnv, containingBlockInlineSize: 200 });
 
     expect(resolved.serialize()).toBe('50px');
     expect(declaration.serializeValue()).toBe('25%');
@@ -208,17 +215,17 @@ describe('property records', () => {
     });
     const from = property.createValue(new NumberValue(new NumberLiteral(2)));
     const to = property.createValue(new NumberValue(new NumberLiteral(6)));
-    expect(property.interpolate(from, to, 0.25, {})!.serialize()).toBe('3');
-    expect(property.add(from, to, {})).toBe(to);
-    expect(property.accumulate(from, to, {})).toBe(to);
+    expect(property.interpolate(from, to, 0.25, { env: styleletEnv })!.serialize()).toBe('3');
+    expect(property.add(from, to, { env: styleletEnv })).toBe(to);
+    expect(property.accumulate(from, to, { env: styleletEnv })).toBe(to);
   });
 });
 
 describe('property value', () => {
   it('resolves whole values through the engine\'s built-in property contract', () => {
     const property: BuiltInProperty<Value, BuiltInPropertyName> = builtInRegistry.opacity;
-    const declared = property.parse('150%', {})!;
-    const computed = property.resolve(declared, ValueStage.Computed, {});
+    const declared = property.parse('150%', { env: styleletEnv })!;
+    const computed = property.resolve(declared, ValueStage.Computed, { env: styleletEnv });
 
     expectTypeOf(property.name).toEqualTypeOf<BuiltInPropertyName>();
     expectTypeOf(computed).toEqualTypeOf<WholeValue>();
@@ -232,21 +239,21 @@ describe('property value', () => {
     expectTypeOf<typeof builtInRegistry.color.initialValue>().not.toExtend<OpacityInput>();
     expectTypeOf(() => {
       // @ts-expect-error A color property cannot resolve an opacity whole value.
-      builtInRegistry.color.resolve(builtInRegistry.opacity.initialValue, ValueStage.Computed, {});
+      builtInRegistry.color.resolve(builtInRegistry.opacity.initialValue, ValueStage.Computed, { env: styleletEnv });
     }).toBeFunction();
   });
 
   it('preserves the whole-value family through the base property contract', () => {
     const property: BaseProperty<WholeValue<ColorValue>, 'color'> = builtInRegistry.color;
-    const declared = property.parse('red', {})!;
-    const computed = property.resolve(declared, ValueStage.Computed, {});
+    const declared = property.parse('red', { env: styleletEnv })!;
+    const computed = property.resolve(declared, ValueStage.Computed, { env: styleletEnv });
     expectTypeOf(computed).toEqualTypeOf<WholeValue<ColorValue>>();
     expect(computed.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it('preserves an exact value type through the property registry', () => {
-    const declared = builtInRegistry.color.parse('red', {})!;
-    const computed = builtInRegistry.color.resolve(declared, ValueStage.Computed, {});
+    const declared = builtInRegistry.color.parse('red', { env: styleletEnv })!;
+    const computed = builtInRegistry.color.resolve(declared, ValueStage.Computed, { env: styleletEnv });
 
     expectTypeOf(declared).toEqualTypeOf<WholeValue<ColorValue>>();
     expectTypeOf(computed).toEqualTypeOf<ReturnType<typeof declared.resolve>>();
@@ -260,14 +267,14 @@ describe('property value', () => {
 
   describe('ordinary value', () => {
     it('prepares unitless margin zero as a length before serialization', () => {
-      const declared = builtInRegistry['margin-top'].parse('0', {})!;
+      const declared = builtInRegistry['margin-top'].parse('0', { env: styleletEnv })!;
 
       expect(declared.inner).toMatchObject({ repr: { value: 0, unit: 'px' } });
       expect(declared.serialize()).toBe('0px');
     });
 
     it('returns a parsed color ready to retain in a declaration', () => {
-      const declared = colorProperty.parse('red', {})!;
+      const declared = colorProperty.parse('red', { env: styleletEnv })!;
 
       expect(declared).toMatchObject({
         inner: {
@@ -278,7 +285,7 @@ describe('property value', () => {
         },
       });
       expect(declared.serialize()).toBe('red');
-      expect(declared.resolve(ValueStage.Computed, {})).toMatchObject({
+      expect(declared.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({
         inner: {
           repr: {
             kind: ColorKind.Absolute,
@@ -288,20 +295,20 @@ describe('property value', () => {
     });
 
     it('rejects a free-form brace wrapper while parsing the property', () => {
-      expect(colorProperty.parse('{red}', {})).toBeNull();
+      expect(colorProperty.parse('{red}', { env: styleletEnv })).toBeNull();
     });
 
     it('retains contextual color dependencies after parsing', () => {
-      const declared = colorProperty.parse('currentcolor', {})!;
+      const declared = colorProperty.parse('currentcolor', { env: styleletEnv })!;
 
       expect(declared.inner).toBeInstanceOf(ColorValue);
       expect(declared.serialize()).toBe('currentcolor');
-      expect(declared.resolve(ValueStage.Specified, {}).serialize())
+      expect(declared.resolve(ValueStage.Specified, { env: styleletEnv }).serialize())
         .toBe('currentcolor');
     });
 
     it('applies the supplied declared-stage math options while parsing', () => {
-      const context = { unwrapMathAt: ValueStage.Declared };
+      const context = { env: styleletEnv, unwrapMathAt: ValueStage.Declared };
       const opacity = builtInRegistry.opacity.parse('calc(150%)', context)!;
       const margin = builtInRegistry['margin-left'].parse('calc(1px + 2px)', context)!;
 
@@ -316,10 +323,10 @@ describe('property value', () => {
 
     it('retains the specified value when resolving it in different contexts', () => {
       const property = builtInRegistry['margin-top'];
-      const declared = property.parse('2em', {})!;
-      const specified = declared.resolve(ValueStage.Specified, {});
-      const small = specified.resolve(ValueStage.Computed, { length: { em: 16 } });
-      const large = specified.resolve(ValueStage.Computed, { length: { em: 24 } });
+      const declared = property.parse('2em', { env: styleletEnv })!;
+      const specified = declared.resolve(ValueStage.Specified, { env: styleletEnv });
+      const small = specified.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 16 } });
+      const large = specified.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 24 } });
 
       expect(small.serialize()).toBe('32px');
       expect(large.serialize()).toBe('48px');
@@ -329,16 +336,16 @@ describe('property value', () => {
 
     it('keeps serialization at the current stage through the whole-value lifecycle', () => {
       const property = builtInRegistry.opacity;
-      const declared = property.parse('150%', {})!;
+      const declared = property.parse('150%', { env: styleletEnv })!;
       let value = declared;
 
       expect(value.serialize()).toBe('1.5');
       for (const stage of [ValueStage.Cascaded, ValueStage.Specified]) {
-        value = value.resolve(stage, {});
+        value = value.resolve(stage, { env: styleletEnv });
         expect(value.serialize()).toBe('1.5');
       }
       for (const stage of [ValueStage.Computed, ValueStage.Used, ValueStage.Actual]) {
-        value = value.resolve(stage, {});
+        value = value.resolve(stage, { env: styleletEnv });
         expect(value.serialize()).toBe('1');
       }
       expect(declared.serialize()).toBe('1.5');
@@ -348,23 +355,23 @@ describe('property value', () => {
   describe('whole-value notation', () => {
     it('retains only the consuming parser and stops before unused alternatives', () => {
       const parseOrdinary = vi.fn(ColorValue.parse);
-      const declared = WholeValue.parse('first-valid(10px, red, blue)', {}, parseOrdinary)!;
+      const declared = WholeValue.parse('first-valid(10px, red, blue)', { env: styleletEnv }, parseOrdinary)!;
 
       expect(parseOrdinary).not.toHaveBeenCalled();
-      expect(declared.resolve(ValueStage.Specified, {})).toBe(declared);
+      expect(declared.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(declared);
       expect(declared.serialize()).toBe('first-valid(10px, red, blue)');
       expect(parseOrdinary).not.toHaveBeenCalled();
 
-      const computed = declared.resolve(ValueStage.Computed, {});
+      const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv });
       expect(computed.serialize()).toBe('rgb(255, 0, 0)');
       expect(parseOrdinary).toHaveBeenCalledTimes(2);
       expect(declared.serialize()).toBe('first-valid(10px, red, blue)');
     });
 
     it('adds whole-value notation to a reusable value parser', () => {
-      const parsed = WholeValue.parse('first-valid(10px, red)', {}, ColorValue.parse)!;
+      const parsed = WholeValue.parse('first-valid(10px, red)', { env: styleletEnv }, ColorValue.parse)!;
 
-      expect(parsed.resolve(ValueStage.Computed, {})).toMatchObject({
+      expect(parsed.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({
         inner: {
           repr: {
             kind: ColorKind.Absolute,
@@ -374,15 +381,15 @@ describe('property value', () => {
     });
 
     it('selects the first argument valid for the property', () => {
-      const input = colorProperty.parse('first-valid(10px, red)', {})!;
-      const specified = input.resolve(ValueStage.Specified, {});
+      const input = colorProperty.parse('first-valid(10px, red)', { env: styleletEnv })!;
+      const specified = input.resolve(ValueStage.Specified, { env: styleletEnv });
 
       expect(input.inner).toBeInstanceOf(FirstValidValue);
       expect(specified).toBe(input);
       expect(specified.inner).toBeInstanceOf(FirstValidValue);
       expect(specified.serialize()).toBe('first-valid(10px, red)');
-      expect(specified.resolve(ValueStage.Specified, {})).toBe(specified);
-      expect(input.resolve(ValueStage.Computed, {})).toMatchObject({
+      expect(specified.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(specified);
+      expect(input.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({
         inner: {
           repr: {
             kind: ColorKind.Absolute,
@@ -392,73 +399,73 @@ describe('property value', () => {
     });
 
     it('becomes guaranteed-invalid when no argument is valid', () => {
-      const input = colorProperty.parse('first-valid(10px, 20px)', {})!;
+      const input = colorProperty.parse('first-valid(10px, 20px)', { env: styleletEnv })!;
 
       expect(input).not.toBeNull();
-      expect(input.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(GuaranteedInvalidValue);
+      expect(input.resolve(ValueStage.Computed, { env: styleletEnv }).inner).toBeInstanceOf(GuaranteedInvalidValue);
     });
 
     it('resolves each argument through the complete property pipeline', () => {
-      const input = colorProperty.parse('first-valid(inherit, red)', {})!;
+      const input = colorProperty.parse('first-valid(inherit, red)', { env: styleletEnv })!;
 
-      expect(input.resolve(ValueStage.Computed, {})).toMatchObject({ inner: new CssWideValue('inherit') });
+      expect(input.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({ inner: new CssWideValue('inherit') });
     });
   });
 
   describe('CSS-wide value', () => {
     it('recognizes a CSS-wide keyword as the entire property value', () => {
-      const declared = colorProperty.parse(' InHeRiT ', {})!;
+      const declared = colorProperty.parse(' InHeRiT ', { env: styleletEnv })!;
 
       expect(declared).toMatchObject({ inner: new CssWideValue('inherit') });
       expect(declared.serialize()).toBe('inherit');
       // The cascade owns defaulting; the value alone retains the keyword.
-      expect(declared.resolve(ValueStage.Computed, {})).toBe(declared);
+      expect(declared.resolve(ValueStage.Computed, { env: styleletEnv })).toBe(declared);
     });
 
     it('does not recognize a CSS-wide keyword as part of another value', () => {
-      expect(colorProperty.parse('inherit red', {})).toBeNull();
-      expect(colorProperty.parse('red inherit', {})).toBeNull();
+      expect(colorProperty.parse('inherit red', { env: styleletEnv })).toBeNull();
+      expect(colorProperty.parse('red inherit', { env: styleletEnv })).toBeNull();
     });
   });
 
   describe('substitution value', () => {
     it('preserves a top-level arbitrary substitution function', () => {
-      const value = colorProperty.parse('var(--color)', {})!;
+      const value = colorProperty.parse('var(--color)', { env: styleletEnv })!;
 
       expect(value).toHaveProperty('inner.repr', expect.any(OptionalDeclarationValue));
       expect(value.serialize()).toBe('var(--color)');
-      expect(value.resolve(ValueStage.Specified, {})).toBe(value);
-      expect(() => value.resolve(ValueStage.Computed, {}))
+      expect(value.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(value);
+      expect(() => value.resolve(ValueStage.Computed, { env: styleletEnv }))
         .toThrow('Property substitution requires computed custom properties');
-      expect(value.resolve(ValueStage.Computed, { getCustomProperty: () => OptionalDeclarationValue.parse('red', {})! }).serialize())
+      expect(value.resolve(ValueStage.Computed, { env: styleletEnv, getCustomProperty: () => OptionalDeclarationValue.parse('red', {})! }).serialize())
         .toBe('rgb(255, 0, 0)');
     });
 
     it('preserves arbitrary substitution nested inside property syntax', () => {
-      const value = colorProperty.parse('rgb(var(--channels))', {})!;
+      const value = colorProperty.parse('rgb(var(--channels))', { env: styleletEnv })!;
 
       expect(value).toHaveProperty('inner.repr', expect.any(OptionalDeclarationValue));
       expect(value.serialize()).toBe('rgb(var(--channels))');
     });
 
     it('defers a potentially invalid value containing substitution', () => {
-      expect(colorProperty.parse('red var(--extra)', {})?.inner).toBeInstanceOf(SubstitutionValue);
+      expect(colorProperty.parse('red var(--extra)', { env: styleletEnv })?.inner).toBeInstanceOf(SubstitutionValue);
     });
   });
 
   describe('invalid value', () => {
     it('rejects an empty ordinary property value while parsing', () => {
-      expect(colorProperty.parse('', {})).toBeNull();
+      expect(colorProperty.parse('', { env: styleletEnv })).toBeNull();
     });
 
     it('rejects invalid property syntax while parsing', () => {
-      expect(colorProperty.parse('definitely-not-a-color', {})).toBeNull();
-      expect(colorProperty.parse('10px', {})).toBeNull();
-      expect(colorProperty.parse('red blue', {})).toBeNull();
+      expect(colorProperty.parse('definitely-not-a-color', { env: styleletEnv })).toBeNull();
+      expect(colorProperty.parse('10px', { env: styleletEnv })).toBeNull();
+      expect(colorProperty.parse('red blue', { env: styleletEnv })).toBeNull();
     });
 
     it('rejects an invalid declaration value during input parsing', () => {
-      expect(colorProperty.parse('red ! blue', {})).toBeNull();
+      expect(colorProperty.parse('red ! blue', { env: styleletEnv })).toBeNull();
     });
   });
 });

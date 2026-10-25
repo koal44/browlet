@@ -4,11 +4,13 @@ import {
   annotated, arg, attr, defineInterface, DOMExceptionImpl, idlType, impl, indexedGetter, nullable, op,
   reference, roAttr, xattr,
 } from '../../../web-idl/core/index';
+import type { URLRecord } from '../../../url/core/index';
 
 import type { StyleletEnvironment } from '../../environment';
 import { isCustomPropertyName } from '../../syntax/index';
 import { getBuiltInProperty, propertyRegistry } from '../../props/index';
 import type { CSSRuleImpl } from '../rules/index';
+import type { CSSStyleSheetImpl } from '../css-stylesheet';
 import type { ComputedStyle } from '../../engine/index';
 
 import { CSSDeclarationBlock } from './declaration-block';
@@ -53,7 +55,7 @@ export class CSSStyleDeclarationImpl {
   }
 
   set cssText(value: string) {
-    this.#mutableBlock().setText(value, {});
+    this.#mutableBlock().setText(value, { env: this.#env });
     this.#updateStyleAttribute();
   }
 
@@ -67,6 +69,16 @@ export class CSSStyleDeclarationImpl {
   // https://drafts.csswg.org/cssom/#dom-cssstyledeclaration-parentrule
   get parentRule(): CSSRuleImpl | null {
     return this.#parentRule;
+  }
+
+  /** Containing stylesheet, or null when the parent rule has no sheet or is absent. */
+  get parentStyleSheet(): CSSStyleSheetImpl | null {
+    return this.#parentRule?.parentStyleSheet ?? null;
+  }
+
+  /** Parent rule's stylesheet base URL or location; null without either source. */
+  get baseURL(): URLRecord | null {
+    return this.#parentRule?.baseURL ?? null;
   }
 
   /** Read authored declarations; computed results contain no declaration occurrences. */
@@ -150,7 +162,7 @@ export class CSSStyleDeclarationImpl {
       name,
       value,
       priority !== '',
-      {},
+      { env: this.#env },
     );
     if (declarations === null) return;
     let updated = false;
@@ -198,7 +210,7 @@ export class CSSStyleDeclarationImpl {
     if (!(this.#data instanceof CSSDeclarationBlock) || this.#updating) return;
     if (localName !== 'style' || namespace !== null) return;
 
-    this.#data.setText(value ?? '', {});
+    this.#data.setText(value ?? '', { env: this.#env });
   }
 
   /** Read current indices from either source; changes need no synchronization. */

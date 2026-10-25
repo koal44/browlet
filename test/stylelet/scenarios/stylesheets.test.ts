@@ -1,8 +1,12 @@
 import { expect } from '@playwright/test';
+import { require as tsRequire } from 'tsx/cjs/api';
+
+import type * as BrowletModule from '../../../src/browlet/browlet';
 import { runScenarios } from '../../scenario/dispatch';
 
-// Exercise Stylelet's implementation as well as native CSSOM. Browlet's binding
-// tests cover conversion/projection; these retain the approved browser choices.
+const { Browlet } = tsRequire('../../../src/browlet/browlet.ts', __filename) as typeof BrowletModule;
+
+// Exercise Stylelet through Browlet's bindings in Node and native CSSOM in Playwright.
 runScenarios('constructed stylesheet contracts', 'normal', [
   {
     name: 'Stylelet and native sheets agree on metadata, media, and insertion failures',
@@ -15,16 +19,15 @@ runScenarios('constructed stylesheet contracts', 'normal', [
         media: 'print', retained: true,
         failures: ['IndexSizeError', 'IndexSizeError', 'SyntaxError'],
       };
-      expect(await page.evaluate(inspectSheet, 'stylelet' as const)).toEqual(expected);
-      expect(await page.evaluate(inspectSheet, 'native' as const)).toEqual(expected);
+      const browlet = new Browlet({ route: () => '' });
+      expect(await browlet.evaluate(inspectSheet)).toEqual(expected);
+      expect(await page.evaluate(inspectSheet)).toEqual(expected);
     },
   },
 ]);
 
-/** Compare Stylelet's browser bundle with the browser's native sheet implementation. */
-function inspectSheet(engine: 'stylelet' | 'native') {
-  const options = { media: 'screen', disabled: true };
-  const sheet = engine === 'native' ? new CSSStyleSheet(options) : window.stylelet!.createStyleSheet(options);
+function inspectSheet() {
+  const sheet = new CSSStyleSheet({ media: 'screen', disabled: true });
   const media = sheet.media;
   media.mediaText = 'print';
   const failures: string[] = [];

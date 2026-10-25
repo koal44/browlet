@@ -45,7 +45,7 @@ export class FrequencyValue<R extends Frequency = Frequency> implements Value<Ma
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): FrequencyValue {
+  resolve(stage: ValueStage, context: MathContext): FrequencyValue {
     const resolved = this.repr.resolve(stage, context);
     const value = resolved instanceof MathValue && !(resolved.repr instanceof MathExpression)
       ? resolved.repr : resolved;
@@ -58,7 +58,7 @@ export class FrequencyValue<R extends Frequency = Frequency> implements Value<Ma
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: FrequencyValue, context: MathContext = {}): FrequencyValue {
+  add(other: FrequencyValue, context: MathContext): FrequencyValue {
     if (this.repr instanceof FrequencyLiteral && other.repr instanceof FrequencyLiteral && this.repr.unit === other.repr.unit) {
       return new FrequencyValue(this.repr.add(other.repr));
     }
@@ -68,7 +68,7 @@ export class FrequencyValue<R extends Frequency = Frequency> implements Value<Ma
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: FrequencyValue, progress: number, context: MathContext = {}): FrequencyValue {
+  interpolate(other: FrequencyValue, progress: number, context: MathContext): FrequencyValue {
     if (this.repr instanceof FrequencyLiteral && other.repr instanceof FrequencyLiteral && this.repr.unit === other.repr.unit) {
       return new FrequencyValue(this.repr.interpolate(other.repr, progress));
     }
@@ -78,7 +78,7 @@ export class FrequencyValue<R extends Frequency = Frequency> implements Value<Ma
   }
 
   /** Accumulation of frequencies is addition. */
-  accumulate(other: FrequencyValue, context: MathContext = {}): FrequencyValue {
+  accumulate(other: FrequencyValue, context: MathContext): FrequencyValue {
     return this.add(other, context);
   }
 

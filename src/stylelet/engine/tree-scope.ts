@@ -1,7 +1,9 @@
 import type {
   DOMOperations, DOMDocument as Document, DOMShadowRoot as ShadowRoot, DOMElement as Element, DOMNode as Node,
 } from '../../infra/index';
+import { TypeError } from '../../infra/exceptions';
 import { DOMExceptionImpl } from '../../web-idl/core/index';
+import { parseURL } from '../../url/index';
 
 import { parseStylesheetContents } from '../syntax/index';
 import { CSSStyleSheetImpl, StyleSheetListImpl, RuleListContext } from '../cssom/index';
@@ -88,12 +90,16 @@ export class TreeScope {
     }: StyleElementStyleSheetOptions = {},
   ): CSSStyleSheetImpl {
     const context = this.cascade.context;
+    const baseURL = parseURL(
+      context.dom.baseURI(context.dom.ownerDocument(this.root) ?? this.root), null, 'UTF-8', context.env.userAgent,
+    ).url;
+    if (baseURL === null) throw new TypeError('The document base URL is invalid.');
 
     const styleSheet = CSSStyleSheetImpl.create(
       context,
       {
         location: null,
-        baseURL: new context.env.userAgent.URL(context.dom.baseURI(context.dom.ownerDocument(this.root) ?? this.root)),
+        baseURL,
         parentStyleSheet: null,
         ownerNode,
         ownerRule: null,

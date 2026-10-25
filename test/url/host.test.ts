@@ -1,10 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  domainToUnicode, hostsEqual, isValidDomain, obtainPublicSuffix,
-  obtainRegistrableDomain, parseDomain, serializeHost,
-  type Domain,
-} from '../../src/url/host';
+import { domainToUnicode, hostsEqual, isValidDomain, obtainPublicSuffix, obtainRegistrableDomain, parseDomain } from '../../src/url/host';
+import { serializeHost, type Domain } from '../../src/url/core/index';
 import { urlAlgorithms } from './contract';
 
 type HostCase = {

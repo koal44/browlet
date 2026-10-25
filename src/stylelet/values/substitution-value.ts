@@ -6,6 +6,7 @@ import {
   parseAsComponentGrammar, TokenKind, TokenList, withTrivia, isCustomPropertyName,
   type ComponentValue, type CustomPropertyName, type FunctionBlock, type TokenCursor,
 } from '../syntax/index';
+import type { ValueContext } from '../value-processing/index';
 
 import { GuaranteedInvalidValue, guaranteedInvalidValue } from './guaranteed-invalid';
 import { DeclarationValue, OptionalDeclarationValue } from './declaration-value';
@@ -123,8 +124,8 @@ export class SubstitutionValue {
         result = value instanceof GuaranteedInvalidValue ? value : value.repr;
       }
     }
-    // SPEC_CLASH(lazy-var-fallback): Follow the draft and Chromium; Firefox/WebKit still
-    // let a cycle in an unused fallback invalidate the containing custom property.
+    // SPEC_CLASH(lazy-var-fallback): Follow the draft and Chromium/WebKit; Firefox still
+    // lets a cycle in an unused fallback invalidate the containing custom property.
     if (result instanceof GuaranteedInvalidValue && args.fallback !== null) {
       result = SubstitutionValue.#substitute(args.fallback.repr, getCustomProperty);
     }
@@ -217,10 +218,10 @@ export class SubstitutionValue {
 }
 
 /** Computation inputs supplied by the caller, bound to the element being resolved. */
-export type SubstitutionContext = {
+export interface SubstitutionContext extends ValueContext {
   /** Guarded lookup; required when a value containing var() reaches computed time. */
   getCustomProperty?: CustomPropertyLookup;
-};
+}
 
 /** Computed, unregistered custom values for the element being styled; missing names return the sentinel. */
 export type CustomPropertyLookup = (name: CustomPropertyName) => OptionalDeclarationValue | GuaranteedInvalidValue;

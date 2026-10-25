@@ -67,12 +67,13 @@ describe('CSP style attributes', () => {
     expect(runTask()).toBe(true);
     expect(runTask()).toBe(false);
 
-    expect(window.getComputedStyle(element).getPropertyValue('opacity')).toBe('');
+    // Blocking the declaration leaves opacity at its initial value.
+    expect(window.getComputedStyle(element).getPropertyValue('opacity')).toBe('1');
     expect(implementation.getInlineStyleBlock()).toBeNull();
     expect(runTask()).toBe(false);
 
     document.policyContainer.cspList!.policies.length = 0;
-    expect(window.getComputedStyle(element).getPropertyValue('opacity')).toBe('');
+    expect(window.getComputedStyle(element).getPropertyValue('opacity')).toBe('1');
     expect(implementation.getInlineStyleBlock()).toBeNull();
     expect(element.getAttribute('style')).toBe('opacity: .2');
     expect(runTask()).toBe(false);

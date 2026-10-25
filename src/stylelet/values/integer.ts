@@ -44,7 +44,7 @@ export class IntegerValue<R extends Integer = Integer> implements Value<MathCont
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): IntegerValue {
+  resolve(stage: ValueStage, context: MathContext): IntegerValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, context);
@@ -59,7 +59,7 @@ export class IntegerValue<R extends Integer = Integer> implements Value<MathCont
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: IntegerValue, context: MathContext = {}): IntegerValue {
+  add(other: IntegerValue, context: MathContext): IntegerValue {
     if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
       return new IntegerValue(this.repr.add(other.repr));
     }
@@ -69,7 +69,7 @@ export class IntegerValue<R extends Integer = Integer> implements Value<MathCont
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: IntegerValue, progress: number, context: MathContext = {}): IntegerValue {
+  interpolate(other: IntegerValue, progress: number, context: MathContext): IntegerValue {
     if (!(this.repr instanceof MathValue) && !(other.repr instanceof MathValue)) {
       return new IntegerValue(this.repr.interpolate(other.repr, progress));
     }
@@ -79,7 +79,7 @@ export class IntegerValue<R extends Integer = Integer> implements Value<MathCont
   }
 
   /** Accumulation of integers is addition. */
-  accumulate(other: IntegerValue, context: MathContext = {}): IntegerValue {
+  accumulate(other: IntegerValue, context: MathContext): IntegerValue {
     return this.add(other, context);
   }
 

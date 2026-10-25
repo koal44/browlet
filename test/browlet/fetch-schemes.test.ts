@@ -14,7 +14,8 @@ import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { BlobImpl } from '../../src/file/blob';
 import { InternalError } from '../../src/infra/internal-error';
-import { copyURL, parseURL } from '../../src/url/url';
+import { parseURL } from '../../src/url/url';
+import { copyURL } from '../../src/url/core/index';
 import { readBodyBytes } from '../fetch/body-fixture';
 import { createPolicyEnvironment } from './browsing/policy/environment-fixture';
 import { createFetchOperation, nextFetchTaskError } from './fetch-fixture';
@@ -48,7 +49,7 @@ describe('Fetch §4.3: scheme dispatch', () => {
     const pending = operation.start();
     if (state === 'aborted') operation.controller.abort(operation.env);
     else operation.controller.terminate();
-    const http = vi.spyOn(operation.request.userAgent, 'handleFetch');
+    const http = vi.spyOn(operation.request.env.userAgent, 'handleFetch');
     const response = await pending;
     expect(response.type).toBe('error');
     expect(response.aborted).toBe(state === 'aborted');
@@ -58,9 +59,9 @@ describe('Fetch §4.3: scheme dispatch', () => {
   it.each(['http', 'https'])('consults the override once before delegating %s to HTTP fetch', async (scheme) => {
     const operation = createOperation(`${scheme}://example.test/resource`);
     operation.request.mode = 'navigate';
-    const pending = operation.request.userAgent.HostPromise.withResolvers(internalType<FetchResponse>());
-    const http = vi.spyOn(operation.request.userAgent, 'handleFetch').mockReturnValue(pending.promise);
-    const override = vi.spyOn(operation.request.userAgent, 'potentiallyOverrideResponse');
+    const pending = operation.request.env.userAgent.HostPromise.withResolvers(internalType<FetchResponse>());
+    const http = vi.spyOn(operation.request.env.userAgent, 'handleFetch').mockReturnValue(pending.promise);
+    const override = vi.spyOn(operation.request.env.userAgent, 'potentiallyOverrideResponse');
     const result = operation.start();
     await vi.waitFor(() => expect(http).toHaveBeenCalledOnce());
     expect(http.mock.calls[0]!.slice(0, 3)).toEqual([operation.request, operation.controller, false]);
@@ -74,7 +75,7 @@ describe('Fetch §4.3: scheme dispatch', () => {
     const operation = createOperation('https://example.test/start');
     operation.request.mode = 'navigate';
     operation.request.urlList.push(parseURL('about:blank').url!);
-    const http = vi.spyOn(operation.request.userAgent, 'handleFetch');
+    const http = vi.spyOn(operation.request.env.userAgent, 'handleFetch');
     expect((await operation.start()).statusMessage).toBe('OK');
     expect(http).not.toHaveBeenCalled();
   });
@@ -268,7 +269,8 @@ describe('Scheme responses through main Fetch', () => {
     const window = browlet.window as Window & typeof globalThis;
     const env = getRelevantRealm(window).env;
     const url = window.URL.createObjectURL(new window.Blob(['0123456789'], { type: 'text/plain' }));
-    const request = new FetchRequest(env.parseURL(url).url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL(url)!, env);
+    request.client = env;
     request.addRangeHeader(2, 5);
     const { response, body } = await consume(request, env);
     expect(response.type).toBe('basic');
@@ -285,7 +287,8 @@ describe('Scheme responses through main Fetch', () => {
     const realm = getRelevantRealm(window);
     const env = realm.env;
     const url = window.URL.createObjectURL(new window.Blob(['survives destruction']));
-    const request = new FetchRequest(env.parseURL(url).url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL(url)!, env);
+    request.client = env;
     const sandbox = env.userAgent.sandbox;
     const destroyed = Promise.withResolvers<void>();
     realm.queueGlobalTask(navigationAndTraversalTaskSource, () => {
@@ -293,7 +296,7 @@ describe('Scheme responses through main Fetch', () => {
       destroyed.resolve();
     });
     await destroyed.promise;
-    expect(env.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(env.parseURL(url)!.blobURLEntry).toBeNull();
     const { response, body } = await consume(request, sandbox);
     expect(response.status).toBe(200);
     expect(utf8Decode(body as Uint8Array)).toBe('survives destruction');
@@ -303,7 +306,8 @@ describe('Scheme responses through main Fetch', () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
     await browlet.navigate('https://example.test/');
     const env = getRelevantRealm(browlet.window).env;
-    const request = new FetchRequest(env.parseURL('data:;charset=UTF-8,hello%20world#fragment').url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL('data:;charset=UTF-8,hello%20world#fragment')!, env);
+    request.client = env;
     request.mode = mode;
     request.localURLsOnly = true;
     const http = vi.spyOn(env.userAgent.httpTransport, 'dispatch');
@@ -365,7 +369,8 @@ describe('Scheme responses through main Fetch', () => {
 });
 
 function createOperation(url: string, client: WindowEnvironment | null = createPolicyEnvironment('http://example.test/'), userAgent = client?.userAgent ?? new UserAgent()) {
-  const request = new FetchRequest(userAgent.parseURL(url).url!, client, userAgent);
+  const request = new FetchRequest(userAgent.parseURL(url)!, client ?? userAgent.sandbox);
+  request.client = client;
   request.populateFromClient();
   request.referrer = null;
   if (request.currentURL.scheme === 'about') request.mode = 'navigate';

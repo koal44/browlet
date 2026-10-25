@@ -210,6 +210,12 @@ Implementation: [runtime observation](js-engine/runtime.ts) and [Web IDL promise
   selector tests therefore do not establish nested stylesheet support. See the
   [rule inventory](stylelet/cssom/rules/README.md#parsing-and-ownership)
   and [remaining contracts](stylelet/cssom/rules/ROADMAP.md).
+- **Hosted Stylelet:** The package targets Node and directly uses the URL,
+  Encoding, and Fetch subsystems; it no longer provides a browser-global bundle.
+  Every Stylelet instance requires a host-supplied environment extending Fetch's
+  contract; there is no default runtime. Hosts supply DOM operations, request/security
+  state, execution, transport, and their Blob URL store through the environment.
+  Native Node Blob URL registrations are not recovered automatically.
 - **Inline CSS values:** style attributes are parsed and checked against CSP on
   mutation, but URL-valued CSS properties are not registered yet. Capturing and
   retaining their parse-time base URLs, including through CSSOM edits and
@@ -432,6 +438,10 @@ entries. Fragment and `javascript:` navigation still need their specified paths.
 CSSOM stylesheet Link headers and DOM-created `xml-stylesheet` instructions now
 use Fetch and CSS decoding. An explicit import-loading operation now supports nested
 completion, failure, cancellation, and subsequent CSSOM edits through the same fetcher.
+Browlet owns the document-dependent fetch and fetched-sheet creation steps,
+reading `DocumentImpl` state directly. Stylelet owns recursive import coordination
+and the CSS decoding algorithms. Its required host environment still extends
+Fetch's contract for generic CSS resource fetching.
 HTML `<link>` processing,
 automatic import startup, media applicability, and script/load/render blocker ownership
 remain unfinished. The [style roadmap](browlet/style/ROADMAP.md#external-stylesheet-loading)

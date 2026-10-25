@@ -28,9 +28,9 @@ import { FetchResponse } from '../../../../src/fetch/response';
 import { FetchTimingInfo } from '../../../../src/fetch/timing';
 import { ReadableStreamImpl } from '../../../../src/streams/readable-stream';
 import { createOpaqueOrigin } from '../../../../src/url/origin';
-import {
-  obtainURLOrigin, parseURL, serializeURL, type URLRecord,
-} from '../../../../src/url/url';
+import type { URLRecord } from '../../../../src/url/core/index';
+import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
+import { serializeURL } from '../../../../src/url/core/index';
 import type { StampedPlatformObject } from '../../../../src/web-idl/index';
 import { itPassesWith } from '../../../test-runtime';
 
@@ -509,7 +509,8 @@ describe('navigation response inputs', () => {
       const traversable = TopLevelTraversable.create(new UserAgent(), null, '');
       const env = getRelevantRealm(traversable.activeWindow!).env;
       const url = requireURL('https://example.test/page');
-      const request = new FetchRequest(url, env, env.userAgent);
+      const request = new FetchRequest(url, env);
+      request.client = env;
       request.referrer = requireURL('https://referrer.test/');
       const response = new FetchResponse();
       response.urlList.push(url);

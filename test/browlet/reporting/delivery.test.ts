@@ -11,7 +11,8 @@ import { FetchRequest } from '../../../src/fetch/request';
 import { FetchController } from '../../../src/fetch/controller';
 import { FetchResponse } from '../../../src/fetch/response';
 import { createOpaqueOrigin, serializeOrigin } from '../../../src/url/origin';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../../src/url/url';
+import { serializeURL } from '../../../src/url/core/index';
 import { isStampedImplInstance } from '../../../src/web-idl/index';
 import { InternalPromise } from '../../../src/infra/promises';
 
@@ -77,7 +78,8 @@ describe('Reporting delivery', () => {
     const [request, options] = fetchRequest.mock.calls[0]!;
     expect(request).toBeInstanceOf(FetchRequest);
     expect(serializeURL(request.url)).toBe('https://collector.test/reports');
-    expect(request.userAgent).toBe(userAgent);
+    expect(request.env.userAgent).toBe(userAgent);
+    expect(request.env).toBe(userAgent.sandbox);
     expect(request).toMatchObject({
       method: 'POST', client: null, traversableForUserPrompts: null,
       allowServiceWorkerInterception: false, initiator: '', destination: 'report',

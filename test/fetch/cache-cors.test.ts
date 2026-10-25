@@ -176,7 +176,8 @@ describe('CORS preflight permission cache', () => {
 
 function fixture() {
   const env = createClientEnvironment();
-  const request = new FetchRequest(parseURL('https://target.test/resource').url!, env, env.userAgent);
+  const request = new FetchRequest(parseURL('https://target.test/resource').url!, env);
+  request.client = env;
   request.populateFromClient();
   const clock = vi.spyOn(env.userAgent, 'unsafeSharedCurrentTime').mockReturnValue(0);
   return { env, request, cache: env.userAgent.corsPreflightCache, clock };

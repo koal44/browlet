@@ -62,7 +62,7 @@ export class MediaQuery<R extends MediaQuerySyntax = MediaQuerySyntax> implement
   }
 
   /** Resolve feature values without deciding whether this query matches a device. */
-  resolve(stage: ValueStage, context: MathContext = {}): MediaQuery {
+  resolve(stage: ValueStage, context: MathContext): MediaQuery {
     const query = this.repr;
     if (query.type === 'media-condition-query') {
       return new MediaQuery({

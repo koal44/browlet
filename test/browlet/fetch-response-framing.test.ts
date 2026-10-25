@@ -77,7 +77,8 @@ async function fixture(protocol: 'http/1.1' | 'h2', respond: (response: ServerRe
   const env = realm.env;
   env.userAgent.httpTransport = new NodeHTTPTransport(env.userAgent, tls.cert);
   cleanup.push(() => env.userAgent.httpTransport.close());
-  const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
+  const request = new FetchRequest(env.parseURL(origin + '/resource')!, env);
+  request.client = env;
   request.populateFromClient();
   request.referrer = null;
   const operation = createFetchOperation(request, env);

@@ -5,9 +5,10 @@ import {
   emptyDictionary, idlType, impl, implementationType, integer, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../../web-idl/core/index';
 import type { Encoding } from '../../encoding/core/index';
-import type { ReferrerPolicy } from '../../fetch/core/index';
+import { parseURL, type URLRecord } from '../../url/index';
+import type { ReferrerPolicy } from '../../fetch/index';
 
-import type { StyleletEnvironment, StyleletURL } from '../environment';
+import type { StyleletEnvironment } from '../environment';
 import { parseStylesheetContents } from '../syntax/index';
 import type { StyleletContext } from '../context';
 import { MediaListImpl } from './media/index';
@@ -25,7 +26,7 @@ export class CSSStyleSheetImpl
   /** Authoritative rules, also available internally for non-origin-clean sheets. */
   ruleList = new CSSRuleListImpl();
   /** Parse-time base URL, independent of the public stylesheet location. */
-  baseURL?: StyleletURL;
+  baseURL?: URLRecord;
   /** Decoded resource encoding, supplied by the loading owner for subsequent imports. */
   encoding?: Encoding;
   /** Response policy, or empty when unspecified; inline sheets use their document's current policy. */
@@ -75,11 +76,10 @@ export class CSSStyleSheetImpl
     document: Document,
     env: StyleletEnvironment,
   ): CSSStyleSheetImpl {
-    const documentBaseURL = env.userAgent.dom.baseURI(document);
-    let baseURL: StyleletURL;
-    try {
-      baseURL = new env.userAgent.URL(options.baseURL ?? documentBaseURL, documentBaseURL);
-    } catch {
+    const documentBaseURL = parseURL(env.userAgent.dom.baseURI(document), null, 'UTF-8', env.userAgent).url;
+    const baseURL = options.baseURL === null ? documentBaseURL
+      : parseURL(options.baseURL, documentBaseURL, 'UTF-8', env.userAgent).url;
+    if (baseURL === null) {
       // SPEC_GAP(constructed-sheet-invalid-base-url): CSSOM omits validation.
       // Follow Firefox/WebKit and Chromium's gated implementation with NotAllowedError.
       throw new DOMExceptionImpl('The stylesheet base URL is invalid.', 'NotAllowedError');
@@ -323,9 +323,9 @@ export type CSSStyleSheetInit = {
 /** Initial metadata for either a constructed sheet or a sheet supplied by a resource owner. */
 type CSSStyleSheetProperties = {
   /** Resource URL exposed by href, or null when no location is assigned. */
-  location: StyleletURL | null;
+  location: URLRecord | null;
   /** Base URL retained for relative references in the sheet's contents. */
-  baseURL?: StyleletURL;
+  baseURL?: URLRecord;
   /** Encoding inherited by imports; byte-loading owners retain the actual decoded encoding. */
   encoding?: Encoding;
   /** External response policy; omitted means unspecified. */

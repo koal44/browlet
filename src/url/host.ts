@@ -1,43 +1,12 @@
 import { getDomain, getPublicSuffix } from 'tldts';
 import { toASCII, toUnicode } from 'tr46';
 
+import type { Domain, Host, IPv4Address, IPv6Address, IPv6Pieces, OpaqueHost, EmptyHost } from './core/index';
 import { utf8Decode } from '../encoding/index';
 
 import { CodePointCursor, isURLCodePoint } from './cp-cursor';
 import { percentDecodeString, utf8PercentEncode } from './percent-encoding';
 import type { URLValidationError } from './validation-error';
-
-export type Host = Domain | IPAddress | OpaqueHost | EmptyHost;
-
-export type IPAddress = IPv4Address | IPv6Address;
-
-export type Domain = {
-  kind: 'domain';
-  value: string;
-};
-
-type IPv4Address = {
-  kind: 'ipv4';
-  value: number;
-};
-
-type IPv6Address = {
-  kind: 'ipv6';
-  pieces: IPv6Pieces;
-};
-
-type IPv6Pieces = [
-  number, number, number, number, number, number, number, number,
-];
-
-type OpaqueHost = {
-  kind: 'opaque';
-  value: string;
-};
-
-type EmptyHost = {
-  kind: 'empty';
-};
 
 type HostParseResult = {
   host: Host | null;
@@ -148,19 +117,6 @@ export function obtainRegistrableDomain(host: Host): Domain | null {
   );
 
   return value === null ? null : { kind: 'domain', value };
-}
-
-export function serializeHost(host: Host): string {
-  switch (host.kind) {
-    case 'ipv4':
-      return serializeIPv4(host);
-    case 'ipv6':
-      return `[${serializeIPv6(host)}]`;
-    case 'empty':
-      return '';
-    default:
-      return host.value;
-  }
 }
 
 export function hostsEqual(a: Host, b: Host): boolean {
@@ -460,66 +416,6 @@ function recordOnce(
   error: URLValidationError,
 ): void {
   if (!validationErrors.includes(error)) validationErrors.push(error);
-}
-
-function serializeIPv4(address: IPv4Address): string {
-  let output = '';
-  let n = address.value;
-
-  for (let i = 1; i <= 4; i++) {
-    output = `${n % 256}${output}`;
-    if (i !== 4) output = `.${output}`;
-    n = Math.floor(n / 256);
-  }
-
-  return output;
-}
-
-function serializeIPv6(address: IPv6Address): string {
-  let output = '';
-  const compress = findIPv6CompressedPieceIndex(address);
-  let ignore0 = false;
-
-  for (let pieceIndex = 0; pieceIndex < address.pieces.length; pieceIndex++) {
-    const piece = address.pieces[pieceIndex]!;
-
-    if (ignore0 && piece === 0) continue;
-    if (ignore0) ignore0 = false;
-
-    if (compress === pieceIndex) {
-      output += pieceIndex === 0 ? '::' : ':';
-      ignore0 = true;
-      continue;
-    }
-
-    output += piece.toString(16);
-    if (pieceIndex !== 7) output += ':';
-  }
-
-  return output;
-}
-
-function findIPv6CompressedPieceIndex(address: IPv6Address): number | null {
-  let longestIndex: number | null = null;
-  let longestSize = 1;
-  let foundIndex: number | null = null;
-  let foundSize = 0;
-
-  for (let pieceIndex = 0; pieceIndex < address.pieces.length; pieceIndex++) {
-    if (address.pieces[pieceIndex] !== 0) {
-      if (foundSize > longestSize) {
-        longestIndex = foundIndex;
-        longestSize = foundSize;
-      }
-      foundIndex = null;
-      foundSize = 0;
-    } else {
-      foundIndex ??= pieceIndex;
-      foundSize++;
-    }
-  }
-
-  return foundSize > longestSize ? foundIndex : longestIndex;
 }
 
 function preserveTrailingDot(

@@ -1,8 +1,8 @@
-import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 
-import type { StyleletURL } from '../../../../src/stylelet/environment';
+import { serializeURL, type URLRecord } from '../../../../src/url/core/index';
+import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import type { CSSStyleRuleImpl } from '../../../../src/stylelet/cssom/rules/style';
@@ -14,6 +14,8 @@ import {
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { createBrowletDocument } from '../../browlet-document';
+import { styleletEnv } from '../../environment-fixture';
+import { parseURL } from '../../url-fixture';
 
 describe('cascade engine', () => {
   it('retains property records in computed values, including inherited custom properties', () => {
@@ -82,9 +84,9 @@ describe('cascade engine', () => {
   });
 
   it('derives URL context from stylesheet provenance and the environment', () => {
-    const environmentBaseUrl = new URL('https://example.com/document/');
-    const location = new URL('https://example.com/styles/site.css');
-    const explicitBaseUrl = new URL('https://cdn.example.com/assets/');
+    const environmentBaseUrl = parseURL('https://example.com/document/')!;
+    const location = parseURL('https://example.com/styles/site.css')!;
+    const explicitBaseUrl = parseURL('https://cdn.example.com/assets/')!;
     const context = (options: StyleSheetOptions = {}) => {
       const { engine, scope } = createCascade({ environmentBaseUrl });
       addStyleSheet(scope, '* { color: red }', options);
@@ -107,10 +109,10 @@ describe('cascade engine', () => {
 
   it('captures a constructed stylesheet location at creation', () => {
     const document = createBrowletDocument();
-    const location = new URL('https://example.com/constructed/');
-    Object.defineProperty(document, 'baseURI', { value: location.href });
+    const location = parseURL('https://example.com/constructed/')!;
+    Object.defineProperty(document, 'baseURI', { value: serializeURL(location) });
     const { engine, scope } = createCascade({
-      environmentBaseUrl: new URL('https://example.com/environment/'),
+      environmentBaseUrl: parseURL('https://example.com/environment/')!,
       context: new StyleletContext(document, document.env),
     });
     const styleSheet = engine.createStyleSheet();
@@ -119,15 +121,15 @@ describe('cascade engine', () => {
 
     const property = engine.getCascadedProperty('color', scope)!;
 
-    expect(engine.getPropertyContext(property).baseUrl?.href).toBe(location.href);
+    expect(serializeURL(engine.getPropertyContext(property).baseUrl!)).toBe(serializeURL(location));
   });
 
   it('captures an embedded stylesheet base when its source is parsed', () => {
     const document = createBrowletDocument();
-    const baseUrl = new URL('https://example.com/embedded/');
-    Object.defineProperty(document, 'baseURI', { value: baseUrl.href });
+    const baseUrl = parseURL('https://example.com/embedded/')!;
+    Object.defineProperty(document, 'baseURI', { value: serializeURL(baseUrl) });
     const { engine, scope } = createCascade({
-      environmentBaseUrl: new URL('https://example.com/environment/'),
+      environmentBaseUrl: parseURL('https://example.com/environment/')!,
       context: new StyleletContext(document, document.env),
     });
     const ownerNode = document.createElement('style');
@@ -135,7 +137,7 @@ describe('cascade engine', () => {
 
     const property = engine.getCascadedProperty('color', scope)!;
 
-    expect(engine.getPropertyContext(property).baseUrl?.href).toBe(baseUrl.href);
+    expect(serializeURL(engine.getPropertyContext(property).baseUrl!)).toBe(serializeURL(baseUrl));
   });
 
   it('distinguishes separate tree-scope uses of an adopted stylesheet', () => {
@@ -144,7 +146,7 @@ describe('cascade engine', () => {
     }).window.document;
     const shadowRoot = document.querySelector('main')!
       .attachShadow({ mode: 'open' });
-    const { engine } = createCascade({ context: new StyleletContext(document) });
+    const { engine } = createCascade({ context: new StyleletContext(document, styleletEnv) });
     const documentScope = new TreeScope(document, engine);
     const shadowScope = new TreeScope(shadowRoot, engine);
     const styleSheet = engine.createStyleSheet();
@@ -289,7 +291,7 @@ function addStyleSheet(
 }
 
 type StyleSheetOptions = {
-  location?: StyleletURL;
-  baseUrl?: StyleletURL;
+  location?: URLRecord;
+  baseUrl?: URLRecord;
   originClean?: boolean;
 };

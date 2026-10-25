@@ -13,13 +13,12 @@ import { DimensionLiteral } from './dimension';
 /** A length in its specified unit, including the unitless-zero spelling. */
 // https://drafts.csswg.org/css-values-4/#lengths
 export class LengthLiteral<Unit extends LengthUnit | '' = LengthUnit | ''> extends DimensionLiteral<Unit> {
-  declare type: 'length';
+  override type = 'length' as const;
 
   constructor(value: number, unit: Unit & LengthUnit);
   constructor(value: 0, unit: Unit & '');
   constructor(value: number, unit: Unit) {
     super(value, unit);
-    this.type = 'length';
   }
 
   /** Parse a complete length literal. */

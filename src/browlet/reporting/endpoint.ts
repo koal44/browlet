@@ -33,7 +33,7 @@ export class ReportingEndpoint {
     const endpoints: ReportingEndpoint[] = [];
     for (const [name, member] of dictionary.members) {
       if (member.type !== 'item' || member.bareItem.type !== 'string') continue;
-      const { url } = env.parseURL(member.bareItem.value, baseURL);
+      const url = env.parseURL(member.bareItem.value, baseURL);
       if (url === null || !userAgent.isOriginPotentiallyTrustworthy(obtainURLOrigin(url))) continue;
       endpoints.push(new ReportingEndpoint(name, url));
     }

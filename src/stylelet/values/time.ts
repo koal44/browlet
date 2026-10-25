@@ -44,7 +44,7 @@ export class TimeValue<R extends Time = Time> implements Value<MathContext> {
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): TimeValue {
+  resolve(stage: ValueStage, context: MathContext): TimeValue {
     const previous = this.repr;
     const resolved = previous.resolve(stage, context);
     return resolved === previous ? this : new TimeValue(resolved);
@@ -56,7 +56,7 @@ export class TimeValue<R extends Time = Time> implements Value<MathContext> {
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: TimeValue, context: MathContext = {}): TimeValue {
+  add(other: TimeValue, context: MathContext): TimeValue {
     if (this.repr instanceof TimeLiteral && other.repr instanceof TimeLiteral && this.repr.unit === other.repr.unit) {
       return new TimeValue(this.repr.add(other.repr));
     }
@@ -66,7 +66,7 @@ export class TimeValue<R extends Time = Time> implements Value<MathContext> {
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: TimeValue, progress: number, context: MathContext = {}): TimeValue {
+  interpolate(other: TimeValue, progress: number, context: MathContext): TimeValue {
     if (this.repr instanceof TimeLiteral && other.repr instanceof TimeLiteral && this.repr.unit === other.repr.unit) {
       return new TimeValue(this.repr.interpolate(other.repr, progress));
     }
@@ -76,7 +76,7 @@ export class TimeValue<R extends Time = Time> implements Value<MathContext> {
   }
 
   /** Accumulation is addition. */
-  accumulate(other: TimeValue, context: MathContext = {}): TimeValue {
+  accumulate(other: TimeValue, context: MathContext): TimeValue {
     return this.add(other, context);
   }
 

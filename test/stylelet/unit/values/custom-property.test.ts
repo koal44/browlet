@@ -1,3 +1,5 @@
+import { styleletEnv } from '../../environment-fixture';
+import { parseURL } from '../../url-fixture';
 import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { RawWholeValue } from '../../../../src/stylelet/values/whole-value';
 import { CssWideValue } from '../../../../src/stylelet/values/css-wide';
@@ -26,9 +28,9 @@ function syntax(input: string): SyntaxValue {
 
 describe('custom property', () => {
   it('retains a multiplied syntax value when its items do not change', () => {
-    const parsed = syntax('<number>+').createParser()('1 2', {})!;
+    const parsed = syntax('<number>+').createParser()('1 2', { env: styleletEnv })!;
 
-    expect(parsed.resolve(ValueStage.Computed, {})).toBe(parsed);
+    expect(parsed.resolve(ValueStage.Computed, { env: styleletEnv })).toBe(parsed);
     expect(parsed.serialize()).toBe('1 2');
   });
 
@@ -40,7 +42,7 @@ describe('custom property', () => {
       syntax: syntaxValue,
       parse: (input, context) => WholeValue.parse(input, context, parseOrdinary, true),
       inherits: false,
-      initialValue: WholeValue.parse('red', {}, parseOrdinary, true)!,
+      initialValue: WholeValue.parse('red', { env: styleletEnv }, parseOrdinary, true)!,
     };
     const registry: CustomPropertyRegistry = new Map([
       [registration.name, registration],
@@ -54,19 +56,20 @@ describe('custom property', () => {
     const parseOrdinary = syntax('<color>').createParser();
 
     for (const input of ['red', '10px']) {
-      const raw = WholeValue.parse(input, {}, parseOrdinary, true)!;
-      const value = raw.resolve(ValueStage.Specified, {});
+      const raw = WholeValue.parse(input, { env: styleletEnv }, parseOrdinary, true)!;
+      const value = raw.resolve(ValueStage.Specified, { env: styleletEnv });
 
       expect(value).toBe(raw);
       expect(value.inner).toBeInstanceOf(RawWholeValue);
       expect(value.serialize()).toBe(input);
-      expect(value.resolve(ValueStage.Specified, {})).toBe(value);
+      expect(value.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(value);
     }
   });
 
   it('does not consult registered grammar dependencies before the computed stage', () => {
     const parseOrdinary = syntax('<number>').createParser();
     const unavailable: PropertyContext = {
+      env: styleletEnv,
       get numericVariables(): never {
         throw new Error('Numeric bindings are not available before Computed');
       },
@@ -79,6 +82,7 @@ describe('custom property', () => {
     expect(declared.serialize()).toBe('calc(progress)');
 
     const computed = declared.resolve(ValueStage.Computed, {
+      env: styleletEnv,
       numericVariables: new Map([['progress', {
         valueType: 'number',
         value: new NumberLiteral(0.5),
@@ -89,16 +93,16 @@ describe('custom property', () => {
 
   it('represents a custom property requiring substitution as a substitution value', () => {
     const parseOrdinary = syntax('<color>').createParser();
-    const value = WholeValue.parse('var(--color)', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('var(--color)', { env: styleletEnv }, parseOrdinary, true)!;
 
     expect(value).toHaveProperty('inner.repr', expect.any(OptionalDeclarationValue));
     expect(value.serialize()).toBe('var(--color)');
-    expect(value.resolve(ValueStage.Specified, {})).toBe(value);
+    expect(value.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(value);
   });
 
   it('distinguishes an empty custom property from the guaranteed-invalid value', () => {
     const parseOrdinary = syntax('*').createParser();
-    const value = WholeValue.parse('', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('', { env: styleletEnv }, parseOrdinary, true)!;
 
     expect(value).toMatchObject({
       inner: {
@@ -109,14 +113,14 @@ describe('custom property', () => {
     });
     expect(value.serialize()).toBe('');
     expect(value.inner).not.toBe(guaranteedInvalidValue);
-    expect(value.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(OptionalDeclarationValue);
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv }).inner).toBeInstanceOf(OptionalDeclarationValue);
     expect(guaranteedInvalidValue.serialize()).toBe('');
   });
 
   it('rejects an invalid nonempty declaration value', () => {
     const parseOrdinary = syntax('*').createParser();
 
-    expect(WholeValue.parse('red ! blue', {}, parseOrdinary, true)).toBeNull();
+    expect(WholeValue.parse('red ! blue', { env: styleletEnv }, parseOrdinary, true)).toBeNull();
   });
 
   // CSS Properties and Values API 1, 2.3. Specified Value-Time Behavior
@@ -124,7 +128,7 @@ describe('custom property', () => {
     'accepts the CSS-wide keyword %s independently of registered syntax',
     (keyword) => {
       const parseOrdinary = syntax('<color>').createParser();
-      const value = WholeValue.parse(keyword, {}, parseOrdinary, true)!;
+      const value = WholeValue.parse(keyword, { env: styleletEnv }, parseOrdinary, true)!;
 
       expect(value).toMatchObject({ inner: new CssWideValue(keyword) });
     },
@@ -133,9 +137,9 @@ describe('custom property', () => {
   // CSS Properties and Values API 1, 2.4. Computed Value-Time Behavior
   it('parses a valid registered value at the computed stage', () => {
     const parseOrdinary = syntax('<color>').createParser();
-    const value = WholeValue.parse('red', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('red', { env: styleletEnv }, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({
       inner: {
         repr: {
           kind: ColorKind.Absolute,
@@ -146,11 +150,11 @@ describe('custom property', () => {
 
   it('tries deferred alternatives against registered syntax at the computed stage', () => {
     const parseOrdinary = syntax('<color>').createParser();
-    const value = WholeValue.parse('first-valid(10px, red)', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('first-valid(10px, red)', { env: styleletEnv }, parseOrdinary, true)!;
 
     expect(value.inner).toBeInstanceOf(FirstValidValue);
-    expect(value.resolve(ValueStage.Specified, {})).toBe(value);
-    const computed = value.resolve(ValueStage.Computed, {});
+    expect(value.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(value);
+    const computed = value.resolve(ValueStage.Computed, { env: styleletEnv });
     expect(computed.serialize()).toBe('rgb(255, 0, 0)');
   });
 
@@ -167,8 +171,8 @@ describe('custom property', () => {
     'parses, resolves, and serializes calculated %s value %s',
     (syntaxText, input, context, serialized) => {
       const parseOrdinary = syntax(syntaxText).createParser();
-      const declared = WholeValue.parse(input, context, parseOrdinary, true)!;
-      const computed = declared.resolve(ValueStage.Computed, context);
+      const declared = WholeValue.parse(input, { env: styleletEnv, ...context }, parseOrdinary, true)!;
+      const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv, ...context });
 
       expect(declared.serialize()).toBe(input);
       expect(computed.serialize()).toBe(serialized);
@@ -185,8 +189,8 @@ describe('custom property', () => {
       `resolves and serializes literal ${syntaxText} value ${input}`,
       () => {
         const parseOrdinary = syntax(syntaxText).createParser();
-        const declared = WholeValue.parse(input, {}, parseOrdinary, true)!;
-        const computed = declared.resolve(ValueStage.Computed, context);
+        const declared = WholeValue.parse(input, { env: styleletEnv }, parseOrdinary, true)!;
+        const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv, ...context });
 
         expect(declared.serialize()).toBe(input);
         expect(computed.serialize()).toBe(serialized);
@@ -196,16 +200,16 @@ describe('custom property', () => {
 
   it('resolves and serializes a registered color with property context', () => {
     const parseOrdinary = syntax('<color>').createParser();
-    const declared = WholeValue.parse('light-dark(white, black)', {}, parseOrdinary, true)!;
-    const computed = declared.resolve(ValueStage.Computed, { colorScheme: 'dark' });
+    const declared = WholeValue.parse('light-dark(white, black)', { env: styleletEnv }, parseOrdinary, true)!;
+    const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv, colorScheme: 'dark' });
 
     expect(computed.serialize()).toBe('rgb(0, 0, 0)');
   });
 
   it('resolves and serializes every item in a multiplied syntax value', () => {
     const parseOrdinary = syntax('<color>#').createParser();
-    const declared = WholeValue.parse('light-dark(white, black), light-dark(red, blue)', {}, parseOrdinary, true)!;
-    const computed = declared.resolve(ValueStage.Computed, { colorScheme: 'dark' });
+    const declared = WholeValue.parse('light-dark(white, black), light-dark(red, blue)', { env: styleletEnv }, parseOrdinary, true)!;
+    const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv, colorScheme: 'dark' });
 
     expect(computed.serialize())
       .toBe('rgb(0, 0, 0), rgb(0, 0, 255)');
@@ -223,8 +227,8 @@ describe('custom property', () => {
     'computes the registered %s literal %s as specified',
     (syntaxText, input, serialized) => {
       const parseOrdinary = syntax(syntaxText).createParser();
-      const raw = WholeValue.parse(input, {}, parseOrdinary, true)!;
-      const computed = raw.resolve(ValueStage.Computed, { URL });
+      const raw = WholeValue.parse(input, { env: styleletEnv }, parseOrdinary, true)!;
+      const computed = raw.resolve(ValueStage.Computed, { env: styleletEnv });
 
       expect(computed.serialize()).toBe(serialized);
     },
@@ -232,8 +236,8 @@ describe('custom property', () => {
 
   it('computes a registered image value', () => {
     const parseOrdinary = syntax('<image>').createParser();
-    const raw = WholeValue.parse('linear-gradient(red, blue)', {}, parseOrdinary, true)!;
-    const computed = raw.resolve(ValueStage.Computed, {});
+    const raw = WholeValue.parse('linear-gradient(red, blue)', { env: styleletEnv }, parseOrdinary, true)!;
+    const computed = raw.resolve(ValueStage.Computed, { env: styleletEnv });
 
     expect(computed.serialize())
       .toBe('linear-gradient(rgb(255, 0, 0), rgb(0, 0, 255))');
@@ -242,10 +246,10 @@ describe('custom property', () => {
   it('resolves a relative registered URL against its stylesheet', () => {
     const parseOrdinary = syntax('<url>').createParser();
     const context: PropertyContext = {
-      URL,
-      baseUrl: new URL('https://example.com/styles/site.css'),
+      env: styleletEnv,
+      baseUrl: parseURL('https://example.com/styles/site.css')!,
     };
-    const raw = WholeValue.parse('url("image.png")', {}, parseOrdinary, true)!;
+    const raw = WholeValue.parse('url("image.png")', { env: styleletEnv }, parseOrdinary, true)!;
     const computed = raw.resolve(ValueStage.Computed, context);
 
     expect(computed.serialize())
@@ -259,8 +263,9 @@ describe('custom property', () => {
     'computes lengths in a registered %s value',
     (syntaxText, input, serialized) => {
       const parseOrdinary = syntax(syntaxText).createParser();
-      const raw = WholeValue.parse(input, {}, parseOrdinary, true)!;
+      const raw = WholeValue.parse(input, { env: styleletEnv }, parseOrdinary, true)!;
       const computed = raw.resolve(ValueStage.Computed, {
+        env: styleletEnv,
         length: { em: 16 },
       });
 
@@ -276,8 +281,8 @@ describe('custom property', () => {
     'serializes %s value %s after computed-stage parsing',
     (syntaxText, input, serialized) => {
       const parseOrdinary = syntax(syntaxText).createParser();
-      const raw = WholeValue.parse(input, {}, parseOrdinary, true)!;
-      const computed = raw.resolve(ValueStage.Computed, {});
+      const raw = WholeValue.parse(input, { env: styleletEnv }, parseOrdinary, true)!;
+      const computed = raw.resolve(ValueStage.Computed, { env: styleletEnv });
 
       expect(computed.serialize()).toBe(serialized);
     },
@@ -285,34 +290,34 @@ describe('custom property', () => {
 
   it('makes a registered value with invalid syntax guaranteed-invalid at computation', () => {
     const parseOrdinary = syntax('<color>').createParser();
-    const value = WholeValue.parse('10px', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('10px', { env: styleletEnv }, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {}).inner).toBe(guaranteedInvalidValue);
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv }).inner).toBe(guaranteedInvalidValue);
   });
 
   it('returns the first syntax alternative that matches the entire value', () => {
     const parseOrdinary = syntax('red | <color>').createParser();
-    const value = WholeValue.parse('red', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('red', { env: styleletEnv }, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({ inner: new IdentValue('red') });
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({ inner: new IdentValue('red') });
   });
 
   it('matches syntax keywords codepoint-wise', () => {
     const parseOrdinary = syntax('Red | <color>').createParser();
-    const exact = WholeValue.parse('Red', {}, parseOrdinary, true)!;
-    const lower = WholeValue.parse('red', {}, parseOrdinary, true)!;
+    const exact = WholeValue.parse('Red', { env: styleletEnv }, parseOrdinary, true)!;
+    const lower = WholeValue.parse('red', { env: styleletEnv }, parseOrdinary, true)!;
 
-    expect(exact.resolve(ValueStage.Computed, {})).toMatchObject({
+    expect(exact.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({
       inner: new IdentValue('Red'),
     });
-    expect(lower.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(ColorValue);
+    expect(lower.resolve(ValueStage.Computed, { env: styleletEnv }).inner).toBeInstanceOf(ColorValue);
   });
 
   it('does not commit to an alternative that matches only a prefix', () => {
     const parseOrdinary = syntax('auto | <custom-ident>+').createParser();
-    const value = WholeValue.parse('auto extra', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('auto extra', { env: styleletEnv }, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {})).toMatchObject({
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv })).toMatchObject({
       inner: new SyntaxListValue({
         multiplier: '+', values: [
           new CustomIdentValue('auto'),
@@ -324,9 +329,9 @@ describe('custom property', () => {
 
   it('preserves the separator and values of a multiplied syntax component', () => {
     const parseOrdinary = syntax('<color>#').createParser();
-    const value = WholeValue.parse('red, blue', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('red, blue', { env: styleletEnv }, parseOrdinary, true)!;
 
-    const computed = value.resolve(ValueStage.Computed, {}).inner;
+    const computed = value.resolve(ValueStage.Computed, { env: styleletEnv }).inner;
     expect(computed).toBeInstanceOf(SyntaxListValue);
     if (!(computed instanceof SyntaxListValue)) throw new Error('Expected a multiplied syntax value');
     expect(computed.repr.multiplier).toBe('#');
@@ -337,8 +342,8 @@ describe('custom property', () => {
 
   it('preserves a value parsed with the universal syntax', () => {
     const parseOrdinary = syntax('*').createParser();
-    const value = WholeValue.parse('10px / anything', {}, parseOrdinary, true)!;
+    const value = WholeValue.parse('10px / anything', { env: styleletEnv }, parseOrdinary, true)!;
 
-    expect(value.resolve(ValueStage.Computed, {}).inner).toBeInstanceOf(OptionalDeclarationValue);
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv }).inner).toBeInstanceOf(OptionalDeclarationValue);
   });
 });

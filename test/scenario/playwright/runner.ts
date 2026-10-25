@@ -363,15 +363,11 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
   const state = await page.evaluate(() => ({
     hasHelpers: !!window.__pwHelpers,
     hasCreateSelectlet: typeof window.createSelectlet === 'function',
-    hasStylelet: typeof window.Stylelet === 'function',
     hasSxlt: !!window.selectlet && typeof window.selectlet.select === 'function',
-    hasStlt: !!window.stylelet && typeof window.stylelet.createStyleSheet === 'function',
   })).catch(() => ({
     hasHelpers: false,
     hasCreateSelectlet: false,
-    hasStylelet: false,
     hasSxlt: false,
-    hasStlt: false,
   }));
 
   if (!state.hasHelpers) {
@@ -382,14 +378,9 @@ async function ensureHarnessInstalled(page: Page): Promise<void> {
     await installScript(page, 'packages/selectlet/dist/selectlet.js');
   }
 
-  if (!state.hasStylelet) {
-    await installScript(page, 'packages/stylelet/dist/stylelet.js');
-  }
-
-  if (!state.hasSxlt || !state.hasStlt) {
+  if (!state.hasSxlt) {
     await page.evaluate(() => {
       window.selectlet = window.createSelectlet(document);
-      window.stylelet = new window.Stylelet(document);
     });
   }
 }

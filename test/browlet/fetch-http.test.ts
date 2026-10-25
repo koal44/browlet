@@ -13,7 +13,8 @@ import { BlobData, BlobImpl, FileImpl } from '../../src/file/index';
 import { toScalarValueString } from '../../src/infra/strings';
 import { coarsenTime } from '../../src/infra/time';
 import { ReadableStreamImpl } from '../../src/streams/index';
-import { copyURL, parseURL, serializeURL } from '../../src/url/url';
+import { parseURL } from '../../src/url/url';
+import { copyURL, serializeURL } from '../../src/url/core/index';
 import { FormDataImpl } from '../../src/xhr/form-data';
 import { readBodyBytes } from '../fetch/body-fixture';
 import { mockHTTPTransport } from '../fetch/transport-fixture';
@@ -584,7 +585,8 @@ describe('HTTP redirects through main fetch', () => {
     const browlet = new Browlet({ route: () => '', reporting: false });
     await browlet.navigate('https://example.test/page');
     const env = getRelevantRealm(browlet.window).env;
-    const request = new FetchRequest(env.parseURL('https://example.test/start').url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL('https://example.test/start')!, env);
+    request.client = env;
     request.allowServiceWorkerInterception = false;
     const started = vi.spyOn(env.userAgent, 'webDriverBiDiResponseCompleted');
     const reportCSP = vi.spyOn(request, 'reportCSPViolations');
@@ -624,7 +626,8 @@ function createFixture(url = 'https://example.test/resource') {
     webDriverBiDiResponseStarted: vi.spyOn(client.userAgent, 'webDriverBiDiResponseStarted'),
   });
   const env = userAgent.sandbox;
-  const request = new FetchRequest(userAgent.parseURL(url).url!, client, userAgent);
+  const request = new FetchRequest(userAgent.parseURL(url)!, client);
+  request.client = client;
   request.populateFromClient();
   request.mode = 'cors';
   const response = responseAt(url);

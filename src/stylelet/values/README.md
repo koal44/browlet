@@ -229,7 +229,7 @@ type's resolver merely because their tokens resemble a number, URL, or color.
 | [Math values](math-value.ts) | Calculation trees, type checks, simplification, numeric operations, stage/range handling, and context-dependent resolution. Serialization walks the retained representation. |
 | [Lengths](length.ts) and [length-percentages](length-percentage.ts) | Combine literals/math and resolve when stage/context permit. Missing references can leave a value unresolved; `BuiltInProperty.resolve()` supplies property-specific percentage timing. |
 | [Opacity](opacity-value.ts) | Converts percentages to number values during resolution and clamps at Computed or later. This is one connected example from the installed registry. |
-| [URLs](url.ts) | Retains notation/modifiers, captures local-fragment tree scope when supplied from Specified onward, and resolves other nonempty URLs from Computed onward using the host URL constructor/base. It does not fetch resources. |
+| [URLs](url.ts) | Retains notation/modifiers, captures local-fragment tree scope when supplied from Specified onward, and resolves other nonempty URLs from Computed onward using the URL subsystem and contextual base. It does not fetch resources. |
 | Type-specific combination methods | `Value` exposes optional `interpolate()`, `add()`, and `accumulate()` methods with their natural arguments. Property records call these methods directly and own category dispatch and discrete fallback. Missing operations throw when requested. There is no connected animation engine. |
 
 The broad [PropertyContext](../props/base-property.ts) combines value-helper inputs.

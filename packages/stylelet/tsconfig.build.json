@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
     "target": "ES2022",
+    "types": ["node"],
     "noEmit": false,
     "emitDeclarationOnly": false,
     "rootDir": "../..",
@@ -15,7 +16,6 @@
     "moduleResolution": "Bundler"
   },
   "files": [
-    "./index.ts",
-    "./browser.ts"
+    "./index.ts"
   ]
 }

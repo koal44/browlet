@@ -34,9 +34,9 @@ export class PlatformRecord<T extends object = object> {
   binding: RealmBinding;
   platformObject?: StampedPlatformObject;
   // Lazily allocated storage for maplike, setlike, and observable-array members.
-  declare mapEntries?: Map<unknown, unknown>;
-  declare observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
-  declare setEntries?: Set<unknown>;
+  mapEntries?: Map<unknown, unknown>;
+  observableArrays?: Map<IDLAttribute, ObservableArrayHandle<unknown, unknown>>;
+  setEntries?: Set<unknown>;
 
   constructor(
     implInst: T,

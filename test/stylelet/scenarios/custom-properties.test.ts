@@ -28,9 +28,9 @@ runScenarios('custom-property computation', 'normal', BROWSER_NAMES.flatMap((bro
     // WebKit inserts comment separators within the unchanged UUID after substitution.
     test.fail(kind === 'serialization-stages' && browser === 'webkit',
       'Approved WebKit custom-value UUID serialization difference');
-    // SPEC_CLASH(lazy-var-fallback): Chromium follows the draft; Firefox/WebKit
-    // invalidate --b because its unused fallback references itself.
-    test.fail(kind === 'var-lazy-fallback' && browser !== 'chromium', 'Approved native eager fallback cycle detection');
+    // SPEC_CLASH(lazy-var-fallback): Chromium/WebKit follow the draft; Firefox
+    // invalidates --b because its unused fallback references itself.
+    test.fail(kind === 'var-lazy-fallback' && browser === 'firefox', 'Approved native eager fallback cycle detection');
     // SPEC_CLASH(var-argument-grammar): All three browsers reject dynamic names/spread,
     // preserve fallback braces, and validate literal names before computation.
     test.fail(

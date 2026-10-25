@@ -312,7 +312,7 @@ async function fixture(listener: RequestListener) {
 function createRelatedWindow(first: Window): WindowProxy {
   // Same-origin related Windows share an agent and its microtask queue.
   const { agent, env } = getRelevantRealm(first);
-  const creationURL = env.parseURL('/method/page', env.apiBaseURL).url!;
+  const creationURL = env.parseURL('/method/page', env.apiBaseURL)!;
   const { window, realm } = createWindowEnvironment({
     agent, userAgent: env.userAgent, creationURL, origin: env.origin, parent: null,
     topLevelCreationURL: creationURL, topLevelOrigin: env.origin,

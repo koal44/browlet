@@ -1,6 +1,7 @@
+import { serializeURL } from '../../../src/url/core/index';
 import { createServer, type ServerResponse } from 'node:http';
 import { createHash } from 'node:crypto';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
@@ -19,6 +20,30 @@ afterEach(async () => {
 });
 
 describe('CSSOM stylesheet fetching', () => {
+  it('captures fetched URL records without reparsing their strings', async () => {
+    const browser = await createBrowser('https://example.test');
+    const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
+    const url = document.env.parseURL('https://example.test/start.css')!;
+    const finalURL = document.env.parseURL('https://example.test/final/sheet.css')!;
+    const response = new FetchResponse();
+    response.urlList.push(finalURL);
+    const parser = vi.spyOn(document.env.userAgent, 'parseURL');
+    try {
+      const sheet = createFetchedStyleSheet(url, response, new Uint8Array(), {
+        ownerNode: null, media: '', title: '', alternate: false,
+      }, document);
+      expect(parser).not.toHaveBeenCalled();
+      expect(sheet.location).toEqual(url);
+      expect(sheet.baseURL).toEqual(finalURL);
+      url.path = ['changed.css'];
+      finalURL.path = ['changed.css'];
+      expect(sheet.href).toBe('https://example.test/start.css');
+      expect(serializeURL(sheet.baseURL!)).toBe('https://example.test/final/sheet.css');
+    } finally {
+      parser.mockRestore();
+    }
+  });
+
   it.each([
     { type: 'text/css', quirks: false, cross: false, accept: true },
     { type: 'TEXT/CSS; charset=utf-8', quirks: false, cross: false, accept: true },
@@ -34,7 +59,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin, quirks);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${cross ? origin.replace('127.0.0.1', 'localhost') : origin}/sheet.css`).url!;
+    const url = document.env.parseURL(`${cross ? origin.replace('127.0.0.1', 'localhost') : origin}/sheet.css`)!;
     const result = await new Promise<{ accepted: boolean; clean: boolean; }>((resolve) => {
       fetchCSSStyleSheet(url, document.url, document, {}, (response, bytes, outcome) => {
         expect(outcome).toBe(accept ? 'success' : 'failure');
@@ -85,7 +110,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin, true);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/sheet.css`).url!;
+    const url = document.env.parseURL(`${origin}/sheet.css`)!;
     const rejected = await new Promise<boolean>((resolve) => {
       fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes) => resolve(bytes === null));
     });
@@ -115,7 +140,7 @@ describe('CSSOM stylesheet fetching', () => {
     document.insertBefore(pi, document.documentElement);
     await expect.poll(() => pi.sheet).not.toBeNull();
     expect(pi.sheet!.href).toBe(`${origin}/start.css`);
-    expect(pi.sheet!.baseURL?.href).toBe(`${origin}/final/sheet.css`);
+    expect(serializeURL(pi.sheet!.baseURL!)).toBe(`${origin}/final/sheet.css`);
     expect(pi.sheet!.ownerNode).toBe(pi);
   });
 
@@ -127,7 +152,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/sheet.css`).url!;
+    const url = document.env.parseURL(`${origin}/sheet.css`)!;
     const accepted = await new Promise<boolean>((resolve) => {
       fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes, outcome) => {
         expect(outcome).toBe('http-error');
@@ -147,7 +172,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/sheet.css`).url!;
+    const url = document.env.parseURL(`${origin}/sheet.css`)!;
     const accepted = await new Promise<boolean>((resolve) => {
       fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes, outcome) => {
         expect(outcome).toBe('failure');
@@ -160,7 +185,7 @@ describe('CSSOM stylesheet fetching', () => {
   it('creates an imported-sheet relationship only when loading is explicitly started', async () => {
     const browser = await createBrowser('https://example.test');
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL('/sheet.css', document.url).url!;
+    const url = document.env.parseURL('/sheet.css', document.url)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
@@ -195,7 +220,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const url = document.env.parseURL(`${origin}/root.css`)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
@@ -231,7 +256,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const url = document.env.parseURL(`${origin}/root.css`)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css; charset=windows-1252');
@@ -244,7 +269,7 @@ describe('CSSOM stylesheet fetching', () => {
     expect(completed).toBeUndefined();
     const child = (sheet.ruleList.item(0) as CSSImportRuleImpl).styleSheet!;
     expect(child.href).toBe(`${origin}/child.css`);
-    expect(child.baseURL!.href).toBe(`${origin}/nested/child.css`);
+    expect(serializeURL(child.baseURL!)).toBe(`${origin}/nested/child.css`);
     expect(child.encoding).toBe('windows-1252');
     expect((child.ruleList.item(1) as CSSStyleRuleImpl).selectorText).toBe('.café');
     expect(referrers.at(-1)).toBe(`${origin}/nested/child.css`);
@@ -265,7 +290,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const url = document.env.parseURL(`${origin}/root.css`)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
@@ -306,7 +331,7 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     document.policyContainer.referrerPolicy = 'unsafe-url';
     const childOrigin = cross ? origin.replace('127.0.0.1', 'localhost') : origin;
-    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const url = document.env.parseURL(`${origin}/root.css`)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
@@ -331,7 +356,7 @@ describe('CSSOM stylesheet fetching', () => {
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     document.policyContainer.referrerPolicy = 'no-referrer';
-    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const url = document.env.parseURL(`${origin}/root.css`)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
@@ -359,7 +384,7 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     document.policyContainer.referrerPolicy = 'no-referrer';
     const sheet = new CSSStyleSheetImpl({
-      location: null, baseURL: new URL(`${origin}/assets/`), encoding: 'UTF-8',
+      location: null, baseURL: document.env.parseURL(`${origin}/assets/`)!, encoding: 'UTF-8',
       ownerNode: document.createElement('style'), parentStyleSheet: null, ownerRule: null,
       media: '', title: '', alternate: false, originClean: true,
     }, document.env);
@@ -382,7 +407,7 @@ describe('CSSOM stylesheet fetching', () => {
     cleanup.push(() => closeServer(server));
     const browser = await createBrowser(origin);
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
-    const url = document.env.parseURL(`${origin}/root.css`).url!;
+    const url = document.env.parseURL(`${origin}/root.css`)!;
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');

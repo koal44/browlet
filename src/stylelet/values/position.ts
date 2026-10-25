@@ -5,7 +5,7 @@ import {
   createKeywordConsumer, adaptConsumer, allOf, one, oneOf, repeat, sequenceOf, withTrivia, createComponentParser,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
+import { ValueStage, type ValueContext } from '../value-processing/index';
 import { LengthLiteral, PercentageLiteral } from './numeric-literal/index';
 
 import type { Value } from './value';
@@ -98,7 +98,7 @@ export class PositionValue<R extends Position = Position> implements Value<Posit
   }
 
   /** Resolve components, then map logical edges when the required context is present. */
-  resolve(stage: ValueStage, context: PositionValueContext = {}): PositionValue {
+  resolve(stage: ValueStage, context: PositionValueContext): PositionValue {
     const previous: Position = this.repr;
     if (previous.offsets !== undefined) {
       const [x, y] = previous.offsets;
@@ -116,7 +116,7 @@ export class PositionValue<R extends Position = Position> implements Value<Posit
   }
 
   /** Return resolved offsets, or null while logical-axis context is unavailable. */
-  tryResolveOffsets(stage: ValueStage, context: PositionValueContext = {}): PositionValue<PositionOffsets> | null {
+  tryResolveOffsets(stage: ValueStage, context: PositionValueContext): PositionValue<PositionOffsets> | null {
     const resolved = this.resolve(stage, context);
     return resolved.repr.offsets === undefined ? null : resolved as PositionValue<PositionOffsets>;
   }
@@ -145,7 +145,7 @@ export class PositionValue<R extends Position = Position> implements Value<Posit
 
   /** Add physical offsets after logical edges have been resolved. */
   add(
-    other: PositionValue, context: MathContext = {},
+    other: PositionValue, context: MathContext,
   ): PositionValue<PositionOffsets> {
     const a = this.repr.offsets;
     const b = other.repr.offsets;
@@ -156,7 +156,7 @@ export class PositionValue<R extends Position = Position> implements Value<Posit
   /** Interpolate resolved physical offsets. */
   interpolate(
     other: PositionValue, progress: number,
-    context: MathContext = {},
+    context: MathContext,
   ): PositionValue<PositionOffsets> {
     const a = this.repr.offsets;
     const b = other.repr.offsets;
@@ -171,7 +171,7 @@ export class PositionValue<R extends Position = Position> implements Value<Posit
 
   /** Accumulation is addition. */
   accumulate(
-    other: PositionValue, context: MathContext = {},
+    other: PositionValue, context: MathContext,
   ): PositionValue<PositionOffsets> {
     return this.add(other, context);
   }
@@ -207,10 +207,10 @@ export type PositionFour = {
   components: PositionFourComponents;
 };
 
-export type PositionContext = {
+export interface PositionContext extends ValueContext {
   writingMode?: PositionWritingMode;
   direction?: PositionDirection;
-};
+}
 
 export type PositionValueContext = PositionContext & MathContext;
 

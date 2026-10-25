@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
@@ -34,8 +35,8 @@ describe('arbitrary substitution', () => {
 
   it.each(['var()', 'var(, red)', 'var({})', 'var(--x, {red} extra)', 'fn(var())'])(
     'rejects malformed var arguments in custom and ordinary declarations: %s', (input) => {
-      expect(InterpretedDeclaration.parse('--x', input, false, {})).toBeNull();
-      expect(WholeValue.parse(input, {}, ColorValue.parse)).toBeNull();
+      expect(InterpretedDeclaration.parse('--x', input, false, { env: styleletEnv })).toBeNull();
+      expect(WholeValue.parse(input, { env: styleletEnv }, ColorValue.parse)).toBeNull();
     },
   );
 
@@ -150,9 +151,10 @@ describe('arbitrary substitution', () => {
     ['--absent,/**/var(--value)/**/', 'green', '/**/green/**/'],
     ['--absent, /*only*/ var(--value)', '', '/*only*/'],
   ])('retains comments when a spread fallback comes from computed %s', (input, value, expected) => {
-    const original = InterpretedDeclaration.parseBlock(`--args: ${input};`, {})[0]!;
+    const original = InterpretedDeclaration.parseBlock(`--args: ${input};`, { env: styleletEnv })[0]!;
     if (!original.custom) throw new Error('Expected a custom declaration');
     const computed = original.value.resolve(ValueStage.Computed, {
+      env: styleletEnv,
       getCustomProperty: () => OptionalDeclarationValue.parse(value, {})!,
     }).ordinaryValue();
     const result = new SubstitutionValue(OptionalDeclarationValue.parse('var(...var(--args))', {})!)
@@ -177,22 +179,22 @@ describe('arbitrary substitution', () => {
     if (result instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
 
     expect(result.sourceText()).toBe(text);
-    expect(LengthValue.parse(result, {}) !== null).toBe(valid);
-    expect(LengthValue.parse(result.sourceText(), {}) !== null).toBe(valid);
+    expect(LengthValue.parse(result, { env: styleletEnv }) !== null).toBe(valid);
+    expect(LengthValue.parse(result.sourceText(), { env: styleletEnv }) !== null).toBe(valid);
   });
 
   it('preserves declared spelling without restoring trimmed whitespace in its replacement', () => {
-    const declaration = InterpretedDeclaration.parseBlock('--term: /*before*/ + 2px;', {})[0]!;
+    const declaration = InterpretedDeclaration.parseBlock('--term: /*before*/ + 2px;', { env: styleletEnv })[0]!;
     if (!declaration.custom) throw new Error('Expected a custom declaration');
-    const value = declaration.value.resolve(ValueStage.Computed, {}).ordinaryValue();
+    const value = declaration.value.resolve(ValueStage.Computed, { env: styleletEnv }).ordinaryValue();
     const result = new SubstitutionValue(OptionalDeclarationValue.parse('calc(1px/**/var(--term))', {})!)
       .substitute(() => value);
     if (result instanceof GuaranteedInvalidValue) throw new Error('Expected substitution');
 
     expect(declaration.serializeValue()).toBe('/*before*/ + 2px');
     expect(result.sourceText()).toBe('calc(1px/**//*before*/+ 2px)');
-    expect(LengthValue.parse(result, {})).toBeNull();
-    expect(LengthValue.parse(result.sourceText(), {})).toBeNull();
+    expect(LengthValue.parse(result, { env: styleletEnv })).toBeNull();
+    expect(LengthValue.parse(result.sourceText(), { env: styleletEnv })).toBeNull();
   });
 
   it('invalidates computed source text when a derived list changes', () => {

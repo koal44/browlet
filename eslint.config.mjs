@@ -267,7 +267,7 @@ export default defineConfig(
         unrestrictedSubsystems: ['infra'],
         entryPoints: {
           'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
-          fetch: ['index', 'core/index'],
+          fetch: ['index', 'core/index'], url: ['index', 'core/index'],
           stylelet: ['index', 'environment', 'context'],
           'stylelet/syntax': ['index'], 'stylelet/value-processing': ['index'],
           'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],

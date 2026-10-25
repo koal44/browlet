@@ -4,7 +4,8 @@ import type { FetchEnvironment } from '../../../src/fetch/environment';
 import type { Destination } from '../../../src/fetch/destination';
 import { FetchRequest, type FetchMode } from '../../../src/fetch/request';
 import { FetchResponse } from '../../../src/fetch/response';
-import { parseURL, serializeURL } from '../../../src/url/url';
+import { parseURL } from '../../../src/url/url';
+import { serializeURL } from '../../../src/url/core/index';
 import { createClientEnvironment } from '../client-fixture';
 
 describe('Integrity Policy request blocking', () => {
@@ -195,7 +196,8 @@ function createRequest(enforced = '', reportOnly = '', url = 'https://resource.t
     ...createClientEnvironment('https://document.test/page#fragment'), policyContainer: container,
     queueReport: vi.fn<FetchEnvironment['queueReport']>(),
   };
-  const request = new FetchRequest(parseURL(url).url!, client, client.userAgent);
+  const request = new FetchRequest(parseURL(url).url!, client);
+  request.client = client;
   request.mode = 'cors';
   request.destination = 'script';
   request.populateFromClient();

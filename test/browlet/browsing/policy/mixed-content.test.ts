@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { Destination } from '../../../../src/fetch/destination';
 import { FetchRequest } from '../../../../src/fetch/request';
 import { FetchResponse } from '../../../../src/fetch/response';
-import { parseURL, serializeURL } from '../../../../src/url/url';
+import { parseURL } from '../../../../src/url/url';
+import { serializeURL } from '../../../../src/url/core/index';
 import { createPolicyEnvironment } from './environment-fixture';
 
 describe('Mixed Content: environment classification', () => {
@@ -39,7 +40,8 @@ describe('Mixed Content: request upgrading', () => {
   const env = createPolicyEnvironment('https://page.test/');
 
   it.each<Destination>(['image', 'audio', 'video'])('upgrades ordinary %s content before blocking', (destination) => {
-    const request = new FetchRequest(parseURL('http://resource.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/').url!, env);
+    request.client = env;
     request.destination = destination;
     request.upgradeMixedContent();
     expect(serializeURL(request.currentURL)).toBe('https://resource.test/');
@@ -47,7 +49,8 @@ describe('Mixed Content: request upgrading', () => {
   });
 
   it('also upgrades CORS-enabled images', () => {
-    const request = new FetchRequest(parseURL('http://resource.test/image.png').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/image.png').url!, env);
+    request.client = env;
     request.destination = 'image';
     request.mode = 'cors';
     request.upgradeMixedContent();
@@ -57,7 +60,8 @@ describe('Mixed Content: request upgrading', () => {
 
   it.each<Destination>(['', 'script', 'style', 'iframe', 'document'])(
     'does not automatically upgrade destination %s', (destination) => {
-      const request = new FetchRequest(parseURL('http://resource.test/').url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL('http://resource.test/').url!, env);
+      request.client = env;
       request.destination = destination;
       request.upgradeMixedContent();
       expect(request.currentURL.scheme).toBe('http');
@@ -66,7 +70,8 @@ describe('Mixed Content: request upgrading', () => {
 
   it('blocks imageset requests unless an explicit UIR policy upgrades them first', () => {
     const client = createPolicyEnvironment('https://page.test/');
-    const request = new FetchRequest(parseURL('http://resource.test/image.png').url!, client, client.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/image.png').url!, client);
+    request.client = client;
     request.destination = 'image';
     request.initiator = 'imageset';
     request.upgradeMixedContent();
@@ -81,7 +86,8 @@ describe('Mixed Content: request upgrading', () => {
 
   it.each(['http://192.0.2.1/', 'http://[2001:db8::1]/'])(
     'blocks IP-host images without automatic upgrading: %s', (input) => {
-      const request = new FetchRequest(parseURL(input).url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL(input).url!, env);
+      request.client = env;
       request.destination = 'image';
       request.upgradeMixedContent();
       expect(serializeURL(request.currentURL)).toBe(input);
@@ -91,7 +97,8 @@ describe('Mixed Content: request upgrading', () => {
 
   it('leaves requests without a restricting client unchanged', () => {
     const client = createPolicyEnvironment('http://page.test/');
-    const request = new FetchRequest(parseURL('http://resource.test/').url!, client, client.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/').url!, client);
+    request.client = client;
     request.destination = 'image';
     request.upgradeMixedContent();
     expect(request.currentURL.scheme).toBe('http');
@@ -102,7 +109,8 @@ describe('Mixed Content: request upgrading', () => {
 
   it.each(['http://localhost/', 'http://127.0.0.1/', 'http://[::1]/', 'https://resource.test/'])(
     'preserves potentially trustworthy targets: %s', (input) => {
-      const request = new FetchRequest(parseURL(input).url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL(input).url!, env);
+      request.client = env;
       request.destination = 'image';
       request.upgradeMixedContent();
       expect(serializeURL(request.currentURL)).toBe(input);
@@ -114,14 +122,16 @@ describe('Mixed Content: request upgrading', () => {
     ['http://resource.test:443/', 'https://resource.test/'],
     ['http://resource.test:8080/', 'https://resource.test:8080/'],
   ])('preserves explicit ports and canonicalizes default ports: %s', (input, expected) => {
-    const request = new FetchRequest(parseURL(input).url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL(input).url!, env);
+    request.client = env;
     request.destination = 'image';
     request.upgradeMixedContent();
     expect(serializeURL(request.currentURL)).toBe(expected);
   });
 
   it('upgrades the current redirect target while retaining earlier hops', () => {
-    const request = new FetchRequest(parseURL('http://resource.test/first').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/first').url!, env);
+    request.client = env;
     request.urlList.push(parseURL('http://redirect.test/image.png').url!);
     request.destination = 'image';
     request.upgradeMixedContent();
@@ -136,7 +146,8 @@ describe('Mixed Content: request blocking', () => {
 
   it.each<Destination>(['', 'script', 'style', 'image', 'audio', 'video', 'iframe', 'frame', 'object', 'embed'])(
     'blocks unupgraded HTTP for destination %s', (destination) => {
-      const request = new FetchRequest(parseURL('http://resource.test/').url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL('http://resource.test/').url!, env);
+      request.client = env;
       request.destination = destination;
       expect(request.isBlockedByMixedContent()).toBe(true);
     },
@@ -144,13 +155,15 @@ describe('Mixed Content: request blocking', () => {
 
   it.each(['https://resource.test/', 'http://localhost/', 'http://127.0.0.1/', 'http://[::1]/', 'data:,hello'])(
     'allows a potentially trustworthy target: %s', (url) => {
-      const request = new FetchRequest(parseURL(url).url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL(url).url!, env);
+      request.client = env;
       expect(request.isBlockedByMixedContent()).toBe(false);
     },
   );
 
   it('allows top-level navigation, a non-restricting client, and a clientless request', () => {
-    const request = new FetchRequest(parseURL('http://resource.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/').url!, env);
+    request.client = env;
     request.destination = 'document';
     expect(request.isBlockedByMixedContent()).toBe(false);
     request.destination = '';
@@ -161,7 +174,8 @@ describe('Mixed Content: request blocking', () => {
   });
 
   it('checks the current redirect target rather than the original URL', () => {
-    const request = new FetchRequest(parseURL('https://resource.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/').url!, env);
+    request.client = env;
     request.urlList.push(parseURL('http://redirect.test/').url!);
     expect(request.isBlockedByMixedContent()).toBe(true);
   });
@@ -171,7 +185,8 @@ describe('Mixed Content: response and download checks', () => {
   const env = createPolicyEnvironment('https://page.test/');
 
   it('checks the final internal response URL even when the request URL was trustworthy', () => {
-    const request = new FetchRequest(parseURL('https://resource.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/').url!, env);
+    request.client = env;
     const response = new FetchResponse();
     response.urlList = [parseURL('http://resource.test/').url!];
     expect(response.isBlockedByMixedContent(request)).toBe(true);
@@ -180,7 +195,8 @@ describe('Mixed Content: response and download checks', () => {
   });
 
   it('preserves the request-side exemptions when checking a response', () => {
-    const request = new FetchRequest(parseURL('http://resource.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/').url!, env);
+    request.client = env;
     const response = new FetchResponse();
     response.urlList = [...request.urlList];
     request.destination = 'document';
@@ -193,7 +209,8 @@ describe('Mixed Content: response and download checks', () => {
   });
 
   it('requires Fetch to populate the response URL list before checking it', () => {
-    const request = new FetchRequest(parseURL('https://resource.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/').url!, env);
+    request.client = env;
     expect(() => new FetchResponse().isBlockedByMixedContent(request)).toThrow('requires a response URL');
   });
 

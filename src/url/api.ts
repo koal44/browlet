@@ -3,16 +3,13 @@ import {
   arg, attr, ctor, defineInterface, idlType, impl, iter, nullable, op, record, reference, roAttr,
   sequence, staticOp, stringifier, union, xattr,
 } from '../web-idl/core/index';
+import { serializeHost, serializeURL, serializeURLPath, type Origin, type URLRecord } from './core/index';
 
-import { serializeHost } from './host';
-import { serializeOrigin, type Origin } from './origin';
+import { serializeOrigin } from './origin';
 import {
   parseFormUrlEncodedString, serializeFormUrlEncoded, type FormTuple,
 } from './form-url-encoded';
-import {
-  parseBasicURL, obtainURLOrigin, serializeURL, serializeURLPath,
-  setURLPassword, setURLUsername, type URLRecord,
-} from './url';
+import { parseBasicURL, obtainURLOrigin, setURLPassword, setURLUsername } from './url';
 
 /*
  * Native URL delegation was evaluated against Node 22, 24, and 26. Keep this

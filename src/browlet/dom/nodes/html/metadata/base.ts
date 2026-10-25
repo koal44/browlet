@@ -31,7 +31,7 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     const document = this.nodeDocument;
     const href = this.getAttributeNS(null, 'href') ?? '';
     const { env } = document;
-    const url = env.parseURL(href, document.getFallbackBaseURL(), document.characterSet).url;
+    const url = env.parseURL(href, document.getFallbackBaseURL(), document.characterSet);
     return url === null ? href : serializeURL(url);
   }
 
@@ -40,7 +40,7 @@ export class HTMLBaseElementImpl extends HTMLElementImpl {
     const document = this.nodeDocument;
     const fallback = document.getFallbackBaseURL();
     const { env } = document;
-    const url = env.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet).url;
+    const url = env.parseURL(this.getAttributeNS(null, 'href')!, fallback, document.characterSet);
     if (url === null || url.scheme === 'data' || url.scheme === 'javascript' ||
       document.policyContainer.cspList?.isBaseBlocked(url, document)) {
       this.frozenBaseURL = fallback;

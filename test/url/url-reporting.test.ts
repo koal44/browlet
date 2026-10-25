@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { parseURL, serializeURL, stripURLForReporting } from '../../src/url/url';
+import { parseURL, stripURLForReporting } from '../../src/url/url';
+import { serializeURL } from '../../src/url/core/index';
 
 describe('URL stripping for reports', () => {
   it.each(['http', 'https'])('preserves the %s host, port, path, and query without credentials or fragments', (scheme) => {

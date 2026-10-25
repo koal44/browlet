@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
 import { FetchRequest } from '../../../src/fetch/request';
-import { parseURL, serializeURL } from '../../../src/url/url';
+import { parseURL } from '../../../src/url/url';
+import { serializeURL } from '../../../src/url/core/index';
 
 describe('HTML potential-CORS requests', () => {
   it.each([
@@ -22,7 +23,7 @@ describe('HTML potential-CORS requests', () => {
     expect(request.mode).toBe(mode);
     expect(request.credentialsMode).toBe(credentials);
     expect(request.useURLCredentials).toBe(true);
-    expect(request.userAgent).toBe(userAgent);
+    expect(request.env.userAgent).toBe(userAgent);
     expect(request.client).toBeNull();
   });
 

@@ -8,7 +8,8 @@ import { InsecureRequestsPolicy } from '../../../../src/browlet/browsing/policy/
 import type { Destination } from '../../../../src/fetch/destination';
 import { FetchRequest } from '../../../../src/fetch/request';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
-import { parseURL, serializeURL } from '../../../../src/url/url';
+import { parseURL } from '../../../../src/url/url';
+import { serializeURL } from '../../../../src/url/core/index';
 import { createPolicyEnvironment } from './environment-fixture';
 
 describe('Upgrade Insecure Requests: policy state', () => {
@@ -61,7 +62,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
     ['http://192.0.2.1/', 'https://192.0.2.1/'],
     ['http://[2001:db8::1]/', 'https://[2001:db8::1]/'],
   ])('upgrades an opted-in subresource from %s to %s', (input, expected) => {
-    const request = new FetchRequest(parseURL(input).url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL(input).url!, env);
+    request.client = env;
     request.destination = 'script';
     request.upgradeInsecureRequest();
     expect(serializeURL(request.currentURL)).toBe(expected);
@@ -70,7 +72,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
 
   it('requires an enabled policy and an initiating client', () => {
     const client = createPolicyEnvironment('https://page.test/');
-    const request = new FetchRequest(parseURL('http://page.test/').url!, client, client.userAgent);
+    const request = new FetchRequest(parseURL('http://page.test/').url!, client);
+    request.client = client;
     request.destination = 'document';
     request.upgradeInsecureRequest();
     expect(request.currentURL.scheme).toBe('http');
@@ -85,7 +88,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
   it('also applies an explicit policy set by an HTTP document', () => {
     const client = createPolicyEnvironment('http://page.test/');
     client.insecureRequestsPolicy.enableFor(client.creationURL);
-    const request = new FetchRequest(parseURL('http://resource.test/').url!, client, client.userAgent);
+    const request = new FetchRequest(parseURL('http://resource.test/').url!, client);
+    request.client = client;
     request.upgradeInsecureRequest();
     expect(request.currentURL.scheme).toBe('https');
   });
@@ -94,7 +98,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
     'http://localhost/', 'http://service.localhost:8000/', 'http://127.3.2.1/', 'http://[::1]/',
     'https://resource.test/', 'data:,hello', 'ftp://resource.test/',
   ])('preserves trustworthy HTTP and non-HTTP URLs: %s', (input) => {
-    const request = new FetchRequest(parseURL(input).url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL(input).url!, env);
+    request.client = env;
     request.upgradeInsecureRequest();
     expect(serializeURL(request.currentURL)).toBe(input);
   });
@@ -104,7 +109,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
     ['http://page.test:8080/next', 'http://page.test:8080/next'],
     ['http://other.test/next', 'http://other.test/next'],
   ])('only upgrades an opted-in top-level navigation target: %s', (input, expected) => {
-    const request = new FetchRequest(parseURL(input).url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL(input).url!, env);
+    request.client = env;
     request.destination = 'document';
     request.upgradeInsecureRequest();
     expect(serializeURL(request.currentURL)).toBe(expected);
@@ -113,7 +119,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
 
   it.each<Destination>(['iframe', 'frame', 'object', 'embed'])(
     'upgrades cross-origin nested navigation with destination %s', (destination) => {
-      const request = new FetchRequest(parseURL('http://other.test/').url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL('http://other.test/').url!, env);
+      request.client = env;
       request.destination = destination;
       request.upgradeInsecureRequest();
       expect(request.currentURL.scheme).toBe('https');
@@ -122,7 +129,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
   );
 
   it.each(['GET', 'POST'])('upgrades cross-origin top-level %s forms', (method) => {
-    const request = new FetchRequest(parseURL('http://other.test/submit').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://other.test/submit').url!, env);
+    request.client = env;
     request.destination = 'document';
     request.method = method;
     request.isFormSubmission = true;
@@ -132,7 +140,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
   });
 
   it('advertises support on HTTPS navigations without duplicating the header on redirects', () => {
-    const request = new FetchRequest(parseURL('https://page.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://page.test/').url!, env);
+    request.client = env;
     request.destination = 'document';
     request.upgradeInsecureRequest();
     request.urlList.push(parseURL('http://page.test/redirected').url!);
@@ -144,7 +153,8 @@ describe('Upgrade Insecure Requests: request upgrading', () => {
   });
 
   it('rechecks redirect targets without rewriting earlier hops', () => {
-    const request = new FetchRequest(parseURL('http://page.test/first').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('http://page.test/first').url!, env);
+    request.client = env;
     request.urlList.push(parseURL('http://other.test/redirected').url!);
     request.destination = 'document';
     request.upgradeInsecureRequest();

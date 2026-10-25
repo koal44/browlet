@@ -34,7 +34,7 @@ describe('Fetch Request construction', () => {
     expect(request.signal.aborted).toBe(false);
     const record = implementation(window, request).getRequest();
     expect(record.client).toBe(getRelevantRealm(window).env);
-    expect(record.userAgent).toBe(getRelevantRealm(window).env.userAgent);
+    expect(record.env.userAgent).toBe(getRelevantRealm(window).env.userAgent);
     expect(record.unsafeRequest).toBe(true);
     expect(record.initiatorType).toBe('fetch');
   });
@@ -303,11 +303,11 @@ describe('Fetch Request signals and realm ownership', () => {
     expect(copy.body).toBeInstanceOf(other.ReadableStream);
     const inputRecord = implementation(owner, input).getRequest();
     expect(inputRecord.client).toBe(ownerEnv);
-    expect(inputRecord.userAgent).toBe(ownerEnv.userAgent);
+    expect(inputRecord.env.userAgent).toBe(ownerEnv.userAgent);
     expect((inputRecord.body as FetchBody).stream.env).toBe(ownerEnv);
     const copyRecord = implementation(other, copy).getRequest();
     expect(copyRecord.client).toBe(otherEnv);
-    expect(copyRecord.userAgent).toBe(otherEnv.userAgent);
+    expect(copyRecord.env.userAgent).toBe(otherEnv.userAgent);
     const copyBody = copyRecord.body as FetchBody;
     expect(copyBody.stream.env).toBe(otherEnv);
     const plain = new owner.Request(url);
@@ -317,7 +317,7 @@ describe('Fetch Request signals and realm ownership', () => {
     expect(clone.signal).toBeInstanceOf(owner.AbortSignal);
     const cloneRecord = implementation(owner, clone).getRequest();
     expect(cloneRecord.client).toBe(ownerEnv);
-    expect(cloneRecord.userAgent).toBe(ownerEnv.userAgent);
+    expect(cloneRecord.env.userAgent).toBe(ownerEnv.userAgent);
     expect(() => other.Request.prototype.clone.call({} as Request)).toThrow(other.TypeError);
   });
 
@@ -446,7 +446,7 @@ describe('Fetch client population with HTML settings', () => {
   it('creates a default policy container for a clientless request', () => {
     const window = createWindow();
     const env = getRelevantRealm(window).env;
-    const request = new FetchRequest(parseURL(url).url!, null, env.userAgent);
+    const request = new FetchRequest(parseURL(url).url!, env);
     request.origin = env.origin;
     request.populateFromClient();
     expect(request.traversableForUserPrompts).toBeNull();
@@ -460,8 +460,10 @@ describe('Fetch client settings ownership', () => {
     const userAgent = new UserAgent();
     const first = createFetchWindow(userAgent).realm.env;
     const second = createFetchWindow(userAgent).realm.env;
-    const firstRequest = new FetchRequest(first.creationURL, first, first.userAgent);
-    const secondRequest = new FetchRequest(second.creationURL, second, second.userAgent);
+    const firstRequest = new FetchRequest(first.creationURL, first);
+    firstRequest.client = first;
+    const secondRequest = new FetchRequest(second.creationURL, second);
+    secondRequest.client = second;
     const partitions = userAgent.httpCache;
     const firstPartition = partitions.determine(firstRequest);
 
@@ -480,13 +482,14 @@ describe('Fetch client settings ownership', () => {
     const userAgent = new UserAgent();
     const first = createFetchWindow(userAgent).realm.env;
     const second = createFetchWindow(userAgent).realm.env;
-    const request = new FetchRequest(first.creationURL, first, first.userAgent);
+    const request = new FetchRequest(first.creationURL, first);
+    request.client = first;
     const controller = new FetchController();
 
     expect(first.fetchGroup).toBeInstanceOf(FetchGroup);
     expect(first.fetchGroup).not.toBe(second.fetchGroup);
-    expect(request.client!.fetchGroup).toBe(first.fetchGroup);
-    request.client!.fetchGroup.fetchRecords.push({ request, controller });
+    expect(request.client.fetchGroup).toBe(first.fetchGroup);
+    request.client.fetchGroup.fetchRecords.push({ request, controller });
     expect(second.fetchGroup.fetchRecords).toEqual([]);
     expect(first.fetchGroup.deferredFetchRecords).not.toBe(second.fetchGroup.deferredFetchRecords);
 
@@ -499,11 +502,12 @@ describe('Fetch client settings ownership', () => {
   it('reads the Document\'s current embedder policy through the actual client settings', () => {
     const { realm, document } = createFetchWindow();
     const env = realm.env;
-    const request = new FetchRequest(parseURL('https://example.test/').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://example.test/').url!, env);
+    request.client = env;
     request.origin = env.origin;
     const container = document!.policyContainer;
 
-    expect(request.client!.policyContainer).toBe(container);
+    expect(request.client.policyContainer).toBe(container);
     expect(container.embedderPolicy).toEqual({
       value: 'unsafe-none', reportingEndpoint: '',
       reportOnlyValue: 'unsafe-none', reportOnlyReportingEndpoint: '',
@@ -525,15 +529,16 @@ describe('Fetch client settings ownership', () => {
     const second = createFetchWindow();
     const env = first.realm.env;
     const otherEnv = second.realm.env;
-    const request = new FetchRequest(env.creationURL, env, env.userAgent);
+    const request = new FetchRequest(env.creationURL, env);
+    request.client = env;
 
     expect(request.client).toBe(env);
     expect(env.userAgent).not.toBe(otherEnv.userAgent);
     expect(env.userAgent.webDriverBiDiNetworkIsOffline(env)).toBe(false);
-    expect(isOffline(request.client!)).toBe(false);
+    expect(isOffline(request.client)).toBe(false);
 
     env.userAgent.assumeNoInternetConnectivity = true;
-    expect(isOffline(request.client!)).toBe(true);
+    expect(isOffline(request.client)).toBe(true);
     expect(isOffline(otherEnv)).toBe(false);
 
     const context = first.document!.browsingContext!;

@@ -5,7 +5,8 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { createFetchWindow } from '../fetch-fixture';
 import { FetchResponse } from '../../../src/fetch/response';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../../src/url/url';
+import { serializeURL } from '../../../src/url/core/index';
 
 describe('Reporting endpoint configuration', () => {
   it('reads named endpoints and initializes their failure counts', () => {

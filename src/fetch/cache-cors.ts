@@ -19,7 +19,7 @@ export class CORSPreflightCache {
     const key = request.determineNetworkPartitionKey();
     // Like HTTP caching, clientless requests without a partition cannot retain permissions.
     if (key === null) return;
-    const now = request.userAgent.unsafeSharedCurrentTime();
+    const now = request.env.userAgent.unsafeSharedCurrentTime();
     this.#entries = this.#entries.filter((entry) => entry.expiresAt > now);
     const expiresAt = now + Math.min(maxAge, this.maxAge) * 1000;
     const credentials = request.credentialsMode === 'include';
@@ -68,7 +68,7 @@ export class CORSPreflightCache {
     if (key === null) return undefined;
     const origin = request.serializeOrigin();
     const url = serializeURL(request.currentURL);
-    const now = request.userAgent.unsafeSharedCurrentTime();
+    const now = request.env.userAgent.unsafeSharedCurrentTime();
     return this.#entries.find((entry) => entry.expiresAt > now &&
       networkPartitionKeysEqual(entry.key, key) && entry.origin === origin && entry.url === url &&
       (entry.credentials || request.credentialsMode !== 'include') && matches(entry));

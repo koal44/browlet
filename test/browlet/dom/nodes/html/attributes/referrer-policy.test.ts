@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../../../../src/browlet/browlet';
-import { parseReferrerPolicyFromHeader } from '../../../../../../src/browlet/browsing/policy/referrer-policy';
+import { parseReferrerPolicyFromHeader } from '../../../../../../src/fetch/referrer-policy';
 import { referrerPolicyAttribute } from '../../../../../../src/browlet/dom/nodes/html/attributes/referrer-policy';
 import { FetchHeaders } from '../../../../../../src/fetch/headers';
 import { FetchRequest } from '../../../../../../src/fetch/request';
@@ -54,7 +54,8 @@ describe('HTML referrer policy attributes', () => {
     await browser.navigate('https://example.test/page?q=1#fragment');
     const env = getRelevantRealm(browser.window).env;
     env.policyContainer.referrerPolicy = 'origin';
-    const request = new FetchRequest(env.parseURL('https://example.test/resource').url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL('https://example.test/resource')!, env);
+    request.client = env;
     request.allowServiceWorkerInterception = false;
     request.referrerPolicy = referrerPolicyAttribute.getState(value)!;
     const sent: (string | null)[] = [];

@@ -11,7 +11,8 @@ import { BrowsingContext } from '../../../../src/browlet/browsing/navigation/bro
 import type { WindowImpl } from '../../../../src/browlet/browsing/window/window';
 import { unwrap } from '../../../support/browlet-binding';
 import { HTML_NAMESPACE } from '../../../../src/infra/index';
-import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../../../src/url/url';
+import type { URLRecord } from '../../../../src/url/core/index';
 import { CSPList } from '../../../../src/browlet/browsing/policy/csp/list';
 import { PermissionsPolicy } from '../../../../src/browlet/browsing/policy/permissions';
 

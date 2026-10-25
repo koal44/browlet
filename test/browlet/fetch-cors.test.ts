@@ -293,7 +293,8 @@ async function fixture(respond: RequestListener) {
   const env = realm.env;
   cleanup.push(() => env.userAgent.httpTransport.close());
   const operation = (method = 'PUT') => {
-    const request = new FetchRequest(env.parseURL(origin + '/resource').url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL(origin + '/resource')!, env);
+    request.client = env;
     request.populateFromClient();
     request.method = method;
     request.mode = 'cors';

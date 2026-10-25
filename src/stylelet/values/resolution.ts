@@ -42,7 +42,7 @@ export class ResolutionValue<R extends Resolution = Resolution> implements Value
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): ResolutionValue {
+  resolve(stage: ValueStage, context: MathContext): ResolutionValue {
     const previous = this.repr;
     const resolved = previous.resolve(stage, context);
     return resolved === previous ? this : new ResolutionValue(resolved);
@@ -54,7 +54,7 @@ export class ResolutionValue<R extends Resolution = Resolution> implements Value
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: ResolutionValue, context: MathContext = {}): ResolutionValue {
+  add(other: ResolutionValue, context: MathContext): ResolutionValue {
     if (this.repr instanceof ResolutionLiteral && other.repr instanceof ResolutionLiteral && this.repr.unit === other.repr.unit) {
       return new ResolutionValue(this.repr.add(other.repr));
     }
@@ -64,7 +64,7 @@ export class ResolutionValue<R extends Resolution = Resolution> implements Value
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: ResolutionValue, progress: number, context: MathContext = {}): ResolutionValue {
+  interpolate(other: ResolutionValue, progress: number, context: MathContext): ResolutionValue {
     if (this.repr instanceof ResolutionLiteral && other.repr instanceof ResolutionLiteral && this.repr.unit === other.repr.unit) {
       return new ResolutionValue(this.repr.interpolate(other.repr, progress));
     }
@@ -74,7 +74,7 @@ export class ResolutionValue<R extends Resolution = Resolution> implements Value
   }
 
   /** Accumulation is addition. */
-  accumulate(other: ResolutionValue, context: MathContext = {}): ResolutionValue {
+  accumulate(other: ResolutionValue, context: MathContext): ResolutionValue {
     return this.add(other, context);
   }
 

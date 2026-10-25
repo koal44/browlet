@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { parseURL, renderURL, serializeURL } from '../../src/url/url';
+import { parseURL, renderURL } from '../../src/url/url';
+import { serializeURL } from '../../src/url/core/index';
 
 function parse(input: string) {
   const result = parseURL(input);

@@ -1,13 +1,14 @@
+import { createStyleletTestEnvironment } from '../environment-fixture';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { createAsyncExecution, type TimerHost } from '../../../src/infra/execution';
-import { createStyleletEnvironment, Stylelet } from '../../../src/stylelet/index';
+import { Stylelet } from '../../../src/stylelet/index';
 import { ValueStage } from '../../../src/stylelet/value-processing/stage';
 import { SyntaxValue } from '../../../src/stylelet/values/syntax-value';
 import { WholeValue } from '../../../src/stylelet/values/whole-value';
-import { decodeStylesheetBytes } from '../../../src/stylelet/syntax/tokens';
+import { serializeURL } from '../../../src/url/index';
 
-describe('Stylelet standalone scheduling', () => {
+describe('Stylelet host scheduling', () => {
   it('uses supplied execution for deferred stylesheet delivery', async () => {
     const pending = new Set<() => void>();
     const timerHost: TimerHost = {
@@ -17,9 +18,9 @@ describe('Stylelet standalone scheduling', () => {
         return { remove: () => { pending.delete(steps); } };
       },
     };
-    const exec = { ...createAsyncExecution(timerHost), DOMException };
+    const exec = createAsyncExecution(timerHost);
     const document = new JSDOM().window.document;
-    const sheet = new Stylelet(document, { exec }).createStyleSheet();
+    const sheet = new Stylelet(document, { env: createStyleletTestEnvironment({ exec }) }).createStyleSheet();
     const completed = new Promise<typeof sheet>((resolve, reject) => {
       sheet.replace('main { color: red }').observe(resolve, reject);
     });
@@ -41,51 +42,23 @@ describe('Stylelet standalone scheduling', () => {
   });
 });
 
-describe('Stylelet decoding integration', () => {
-  it.each(['option', 'environment'] as const)('uses the %s decoder with a canonical fallback encoding', (source) => {
-    const bytes = Uint8Array.of(0xE9);
-    const decodeText = vi.fn(() => 'decoded stylesheet');
-    const env = createStyleletEnvironment({ decodeText });
-    const document = new JSDOM().window.document;
-    const styles = new Stylelet(document, source === 'option' ? { decodeText } : {
-      env,
-      decodeText: () => { throw new Error('The supplied environment must take precedence'); },
-    });
-
-    expect(decodeStylesheetBytes(bytes, { transportEncoding: ' LATIN1 ' }, styles.context.env))
-      .toBe('decoded stylesheet');
-    expect(decodeText).toHaveBeenCalledExactlyOnceWith(bytes, 'windows-1252');
-  });
-});
-
 describe('Stylelet URL integration', () => {
-  it('uses the native URL constructor for standalone sheets', () => {
+  it('parses stylesheet bases directly and rejects invalid URLs', () => {
     const document = new JSDOM('', { url: 'https://example.test/document/' }).window.document;
-    const styles = new Stylelet(document);
+    const styles = new Stylelet(document, { env: createStyleletTestEnvironment() });
     const sheet = styles.createStyleSheet({ baseURL: '../assets/' });
 
-    expect(styles.context.env.userAgent.URL).toBe(URL);
+    expect(serializeURL(sheet.baseURL!)).toBe('https://example.test/assets/');
     expect(sheet.location).toBeNull();
-    expect(sheet.baseURL?.href).toBe('https://example.test/assets/');
     expect(sheet.href).toBeNull();
+    expect(() => styles.createStyleSheet({ baseURL: 'http://[' }))
+      .toThrow('The stylesheet base URL is invalid.');
   });
 
-  it.each(['option', 'environment'] as const)('uses the %s provider for sheet and computed resource URLs', (source) => {
-    const calls: Array<[string, string | undefined]> = [];
-    class HostURL {
-      href: string;
-
-      constructor(input: string, base?: string) {
-        calls.push([input, base]);
-        this.href = new URL(input, base).href;
-      }
-    }
-
+  it('retains the supplied environment when resolving computed resource URLs', () => {
     const document = new JSDOM('<style></style>', { url: 'https://example.test/document/' }).window.document;
-    const env = createStyleletEnvironment({ URL: HostURL });
-    const styles = new Stylelet(document, source === 'option'
-      ? { URL: HostURL }
-      : { env, URL });
+    const env = createStyleletTestEnvironment();
+    const styles = new Stylelet(document, { env });
     const sheet = styles.createStyleSheet({ baseURL: '../assets/' });
     sheet.replaceSync('* { --image: url("icon.svg") }');
     styles.documentScope.adoptedStyleSheets.push(sheet);
@@ -93,17 +66,14 @@ describe('Stylelet URL integration', () => {
     const cascaded = engine.getCascadedProperty('--image', styles.documentScope)!;
     const context = engine.getPropertyContext(cascaded);
     const parseOrdinary = SyntaxValue.parse('<url>', {})!.createParser();
-    const raw = WholeValue.parse('url("icon.svg")', {}, parseOrdinary, true)!;
+    const raw = WholeValue.parse('url("icon.svg")', context, parseOrdinary, true)!;
     const value = raw.resolve(ValueStage.Computed, context);
 
-    expect(styles.context.env.userAgent.URL).toBe(HostURL);
-    if (source === 'environment') expect(styles.context.env).toBe(env);
-    expect(sheet.location).toBeNull();
-    expect(sheet.baseURL).toBeInstanceOf(HostURL);
+    expect(styles.context.env).toBe(env);
+    expect(context.baseUrl).toBe(sheet.baseURL);
     expect(value.serialize()).toBe('url("https://example.test/assets/icon.svg")');
-    expect(calls).toContainEqual(['icon.svg', 'https://example.test/assets/']);
 
     const embedded = styles.documentScope.createStyleElementStyleSheet(document.querySelector('style')!, '');
-    expect(embedded.baseURL).toBeInstanceOf(HostURL);
+    expect(serializeURL(embedded.baseURL!)).toBe('https://example.test/document/');
   });
 });

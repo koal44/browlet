@@ -22,17 +22,17 @@ import { createOverloadResolver } from './overload';
 /** Registered implementation steps and platform functions for one member in one realm. */
 export class MemberBinding<Assembled extends BoundConstruct = BoundConstruct> {
   /** Registered steps consume converted values and resolved implementation receivers. */
-  declare attributeSteps?: AttributeSteps;
-  declare constructorBehavior?: ConstructorBehavior;
-  declare operationSteps?: OperationSteps;
+  attributeSteps?: AttributeSteps;
+  constructorBehavior?: ConstructorBehavior;
+  operationSteps?: OperationSteps;
   /** Result converter for calls whose receiver belongs to the method's binding. */
-  declare convertResult?: ConversionSteps;
-  declare isDefaultOperation?: boolean;
-  declare stringificationBehavior?: StringificationBehavior;
-  declare indexedPropertySteps?: IndexedPropertySteps;
-  declare namedPropertySteps?: NamedPropertySteps;
-  declare asyncIteratorSteps?: AsyncIteratorSteps;
-  declare valuePairsSteps?: ValuePairsSteps;
+  convertResult?: ConversionSteps;
+  isDefaultOperation?: boolean;
+  stringificationBehavior?: StringificationBehavior;
+  indexedPropertySteps?: IndexedPropertySteps;
+  namedPropertySteps?: NamedPropertySteps;
+  asyncIteratorSteps?: AsyncIteratorSteps;
+  valuePairsSteps?: ValuePairsSteps;
 
   /** Platform functions retain their identities after their first installation. */
   #attributeFunction: JSFunction | undefined;

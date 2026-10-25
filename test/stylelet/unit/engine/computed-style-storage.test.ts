@@ -1,8 +1,9 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { ComputedStyle } from '../../../../src/stylelet/engine/computed-style';
 import { CSSStylePropertiesImpl } from '../../../../src/stylelet/cssom/declarations/style-properties';
-import { defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
+
 import { propertyRegistry, CustomProperty } from '../../../../src/stylelet/props/index';
 import { ValueStage } from '../../../../src/stylelet/value-processing/index';
 
@@ -10,15 +11,15 @@ describe('computed-style storage', () => {
   it('retains existing properties and values, replacing results without changing their order', () => {
     const computed = new ComputedStyle();
     const opacity = propertyRegistry.opacity;
-    const before = opacity.parse('0.25', {})!;
-    const after = opacity.parse('0.75', {})!;
+    const before = opacity.parse('0.25', { env: styleletEnv })!;
+    const after = opacity.parse('0.75', { env: styleletEnv })!;
     computed.set(opacity, before);
     expect(computed.get('opacity')!.property).toBe(opacity);
     expect(computed.get('opacity')!.value).toBe(before);
     expect(computed.serialize('opacity')).toBe('0.25');
     expect(computed.item(0)).toBe('opacity');
 
-    computed.set(propertyRegistry.color, propertyRegistry.color.parse('red', {})!);
+    computed.set(propertyRegistry.color, propertyRegistry.color.parse('red', { env: styleletEnv })!);
     computed.set(opacity, after);
     expect(computed.serialize('opacity')).toBe('0.75');
     expect(computed.get('opacity')!.value).toBe(after);
@@ -32,12 +33,12 @@ describe('computed-style storage', () => {
     const computed = new ComputedStyle();
     const property = new CustomProperty('--Token');
     const text = String.raw`01.00e+0EM/**/\72 ed`;
-    const value = property.resolve(property.parse(text, {})!, ValueStage.Computed, {});
+    const value = property.resolve(property.parse(text, { env: styleletEnv })!, ValueStage.Computed, { env: styleletEnv });
     computed.set(property, value);
     expect(computed.serialize('--Token')).toBe(text);
     expect(computed.serialize('--token')).toBe('');
 
-    computed.set(property, property.resolve(property.parse('', {})!, ValueStage.Computed, {}));
+    computed.set(property, property.resolve(property.parse('', { env: styleletEnv })!, ValueStage.Computed, { env: styleletEnv }));
     expect(computed.serialize('--Token')).toBe(' ');
     expect(computed.serialize('--missing')).toBe('');
     expect(property.serialize(value)).toBe(text);
@@ -47,12 +48,12 @@ describe('computed-style storage', () => {
     const computed = new ComputedStyle();
     for (const side of ['top', 'right', 'bottom', 'left'] as const) {
       const property = propertyRegistry[`margin-${side}`];
-      computed.set(property, property.parse('2px', {})!);
+      computed.set(property, property.parse('2px', { env: styleletEnv })!);
       if (side !== 'left') expect(computed.serialize('margin')).toBe('');
     }
     expect(computed.serialize('margin')).toBe('2px');
     const left = propertyRegistry['margin-left'];
-    computed.set(left, left.parse('4px', {})!);
+    computed.set(left, left.parse('4px', { env: styleletEnv })!);
     expect(computed.serialize('margin')).toBe('2px 2px 2px 4px');
     expect(computed.serialize('margin-left')).toBe('4px');
   });
@@ -60,8 +61,8 @@ describe('computed-style storage', () => {
   it('exposes computed CSSOM reads and rejects writes without an authored block', () => {
     const computedStyle = new ComputedStyle();
     const opacity = propertyRegistry.opacity;
-    computedStyle.set(opacity, opacity.parse('0.5', {})!);
-    const style = new CSSStylePropertiesImpl({ computedStyle }, defaultStyleletEnvironment);
+    computedStyle.set(opacity, opacity.parse('0.5', { env: styleletEnv })!);
+    const style = new CSSStylePropertiesImpl({ computedStyle }, styleletEnv);
 
     expect(style.computedStyle).toBe(computedStyle);
     expect(style.getPropertyValue('OPACITY')).toBe('0.5');

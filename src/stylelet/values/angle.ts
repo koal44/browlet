@@ -45,7 +45,7 @@ export class AngleValue<R extends Angle = Angle> implements Value<MathContext> {
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): AngleValue {
+  resolve(stage: ValueStage, context: MathContext): AngleValue {
     const resolved = this.repr.resolve(stage, context);
     const value = resolved instanceof MathValue && !(resolved.repr instanceof MathExpression)
       ? resolved.repr : resolved;
@@ -58,7 +58,7 @@ export class AngleValue<R extends Angle = Angle> implements Value<MathContext> {
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: AngleValue, context: MathContext = {}): AngleValue {
+  add(other: AngleValue, context: MathContext): AngleValue {
     if (this.repr instanceof AngleLiteral && other.repr instanceof AngleLiteral && this.repr.unit === other.repr.unit) {
       return new AngleValue(this.repr.add(other.repr));
     }
@@ -68,7 +68,7 @@ export class AngleValue<R extends Angle = Angle> implements Value<MathContext> {
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: AngleValue, progress: number, context: MathContext = {}): AngleValue {
+  interpolate(other: AngleValue, progress: number, context: MathContext): AngleValue {
     if (this.repr instanceof AngleLiteral && other.repr instanceof AngleLiteral && this.repr.unit === other.repr.unit) {
       return new AngleValue(this.repr.interpolate(other.repr, progress));
     }
@@ -78,7 +78,7 @@ export class AngleValue<R extends Angle = Angle> implements Value<MathContext> {
   }
 
   /** Accumulation of angles is addition. */
-  accumulate(other: AngleValue, context: MathContext = {}): AngleValue {
+  accumulate(other: AngleValue, context: MathContext): AngleValue {
     return this.add(other, context);
   }
 

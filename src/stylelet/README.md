@@ -37,16 +37,16 @@ barrel, while collaborating modules inside it import each other directly.
 The public [index](index.ts) also exports Infra's `InternalPromise` for standalone
 hosts supplying `exec.Promise`. Implementation modules import it directly from Infra.
 
-Hosts can supply `systemColors` through Stylelet options or the existing
-`env.userAgent`; Browlet accepts the same map in `BrowletConfig`. It is a complete
+Hosts can supply `systemColors` through `env.userAgent`; Browlet accepts the same
+map in `BrowletConfig`. It is a complete
 palette keyed by lowercase CSS system-color names. The factory supplies fixed
 light defaults and accepts overrides as absolute colors:
 
 ```ts
-const systemColors = createSystemColorPalette({
+env.userAgent.systemColors = createSystemColorPalette({
   canvastext: absoluteColorFromRgba(0x123456ff),
 });
-const styles = new Stylelet(document, { systemColors });
+const styles = new Stylelet(document, { env });
 ```
 
 Palette entries can be replaced between queries; earlier computed snapshots
@@ -58,6 +58,7 @@ The provisional [component order](../../scripts/eslint/import-hierarchy.mjs) put
 syntax, the Value contract, and lifecycle stages below numeric literals, collections, values, conditions,
 property definitions/selectors, declaration data, CSSOM, and the engine. Streams
 and Selectlet precede Stylelet; this does not add dependencies on either one.
+Encoding, URL, and Fetch precede Stylelet and supply their algorithms directly.
 Selector parsing consumes generic syntax and value grammars from this higher
 layer. Supports conditions stay with reusable value grammars; `conditional/`
 owns future evaluation and applicability work. `npm run lint:imports` checks
@@ -113,10 +114,29 @@ it as implemented.
 ## Host boundary and state ownership
 
 Stylelet reads nodes through Infra's `DOMOperations`, preserving host node
-identity. The existing `StyleletEnvironment` supplies URL construction, decoding,
-promises and background/task delivery. Binding realizes implementation exceptions. Standalone defaults do not
-load Browlet's runtime. Browlet passes its existing owning environment through
+identity. The existing `StyleletEnvironment` supplies host state, promises and
+background/task delivery. Binding realizes implementation exceptions. Browlet
+passes its existing owning environment through
 this contract; see [project architecture](../ARCHITECTURE.md).
+
+Stylelet imports URL parsing and Encoding's decoder directly. URL parsing uses
+UTF-8 and the owning UserAgent's Blob URL store, supplied by the host through
+[environment.ts](environment.ts).
+Stylesheet location and base URL retain records; CSSOM serializes them to strings.
+`StyleletOptions` requires a host-supplied environment. `StyleletEnvironment`
+extends `FetchEnvironment`; Stylelet supplies no default runtime or environment factory.
+The standalone package targets Node; it no longer builds a browser-global bundle.
+
+[CSS resource fetching](resource.ts) calls Fetch directly with the host's existing
+`StyleletEnvironment`. The host supplies the Fetch client state, transport, and
+execution facilities. Fetch retains task delivery and cancellation;
+`UrlValue.applyRequestModifiers()` supplies the CSS URL request fields.
+[Browlet's stylesheet loader](../browlet/style/stylesheet-loading.ts) owns the
+document-dependent CSSOM fetch and fetched-sheet creation steps. It reads
+`DocumentImpl` state directly and uses `document.env`. Stylelet's `StyleSheetLoad`
+retains recursive import coordination through a supplied fetch callback;
+Browlet's loader supplies that callback. HTML association, events, and blockers
+remain in [Browlet's style integration](../browlet/style/ROADMAP.md#external-stylesheet-loading).
 
 `TreeScope` retains ordered stylesheet collections and adopted stylesheets. It
 does not retain a computed-style tree. `StyleletContext` caches selectors,
@@ -180,7 +200,11 @@ work and existing browser-conflict evidence remain in
 
 Implementation suites live under `test/stylelet/unit/`; Browlet integration
 suites live under `test/browlet/style/` and CSP's tests. Browser scenarios that
-exercise Stylelet are separate from browser-only probes. The CSSOM README
+exercise Stylelet run the project in Node, through Browlet's CSSOM bindings or
+direct implementation calls, and compare against native Playwright pages.
+The CSSOM declaration scenarios share their inspection helpers across both hosts.
+Browser disagreements retain their existing expectations, and browser-only
+probes remain separate. The CSSOM README
 records the focused baseline and distinguishes behavior coverage from tests
 that deliberately pin today's storage arrangement.
 

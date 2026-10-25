@@ -1,9 +1,10 @@
+import { createStyleletTestEnvironment } from '../environment-fixture';
 import { browletDOM } from '../../../src/browlet/integration/dom';
 import { describe, expect, it, vi } from 'vitest';
 
 import { Stylelet } from '../../../src/stylelet/stylelet';
 import { StyleletContext } from '../../../src/stylelet/context';
-import { createStyleletEnvironment } from '../../../src/stylelet/environment';
+
 import { createBrowletDocument } from '../browlet-document';
 import { HTML_NAMESPACE } from '../../../src/infra/index';
 
@@ -14,7 +15,7 @@ describe('style context', () => {
     );
     const target = document.getElementById('target')!;
     const getId = vi.fn(() => 'adapted-id');
-    const context = new StyleletContext(document, createStyleletEnvironment({ dom: { ...browletDOM, getId } }));
+    const context = new StyleletContext(document, createStyleletTestEnvironment({ dom: { ...browletDOM, getId } }));
 
     expect(context.document).toBe(document);
     expect(context.root).toBe(document.documentElement);
@@ -44,7 +45,7 @@ describe('style context', () => {
     const document = createBrowletDocument('<main></main>');
     const element = document.body!.firstElementChild!;
     const getNamespaceURI = vi.fn((_element: object): string | null => null);
-    const env = createStyleletEnvironment({
+    const env = createStyleletTestEnvironment({
       dom: { ...browletDOM, getNamespaceURI, isHTMLElement: (element) => getNamespaceURI(element) === HTML_NAMESPACE },
     });
     const context = new StyleletContext(document, env);

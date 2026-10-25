@@ -71,7 +71,8 @@ describe('Fetch timing permission', () => {
 
 function fixture() {
   const env = createClientEnvironment();
-  const request = new FetchRequest(parseURL('https://other.test/resource').url!, env, env.userAgent);
+  const request = new FetchRequest(parseURL('https://other.test/resource').url!, env);
+  request.client = env;
   request.populateFromClient();
   return { request, response: new FetchResponse() };
 }

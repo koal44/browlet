@@ -7,7 +7,8 @@ import type { BlobURLEnvironment } from '../../src/browlet/integration/file/blob
 import { InternalError } from '../../src/infra/internal-error';
 import type { StorageEnvironment, StorageUserAgent } from '../../src/storage/environment';
 import { createOpaqueOrigin } from '../../src/url/origin';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../src/url/url';
+import { serializeURL } from '../../src/url/core/index';
 import { createEnvironment } from '../js-engine/execution-fixture';
 
 const firstUUID = '550e8400-e29b-41d4-a716-446655440000';

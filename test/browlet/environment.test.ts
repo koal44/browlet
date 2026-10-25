@@ -13,11 +13,12 @@ import { UserAgent } from '../../src/browlet/user-agent';
 import { BrowletEnvironmentBase } from '../../src/browlet/environment';
 import { StorageKey } from '../../src/storage/keys';
 import { createOpaqueOrigin } from '../../src/url/origin';
-import { determineRequestReferrer } from '../../src/browlet/browsing/policy/referrer-policy';
+import { determineRequestReferrer } from '../../src/fetch/index';
 import { FetchRequest, RequestImpl } from '../../src/fetch/request';
 import { FetchResponse } from '../../src/fetch/response';
 import { networkPartitionKeysEqual } from '../../src/fetch/transport';
-import { copyURL, obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../src/url/url';
+import { copyURL, serializeURL } from '../../src/url/core/index';
 
 describe('Window environment cross-site ancestry', () => {
   it('has no cross-site ancestor in a top-level window', () => {
@@ -70,21 +71,25 @@ describe('Fetch cookies through Window settings', () => {
     const middle = createEnvironment('https://other.test/', top.navigable);
     const crossSite = createEnvironment('https://b.example.com/', middle.navigable);
     const url = parseURL('https://a.example.com/').url!;
-    const userAgent = top.env.userAgent;
     const response = new FetchResponse();
     response.headerList.append('Set-Cookie', 'strict=1; SameSite=Strict; Secure');
     response.headerList.append('Set-Cookie', 'none=2; SameSite=None; Secure');
-    response.parseAndStoreCookies(new FetchRequest(url, top.env, userAgent));
+    const cookieRequest = new FetchRequest(url, top.env);
+    cookieRequest.client = top.env;
+    response.parseAndStoreCookies(cookieRequest);
 
-    const allowed = new FetchRequest(url, sameSite.env, sameSite.env.userAgent);
-    const restricted = new FetchRequest(url, crossSite.env, crossSite.env.userAgent);
+    const allowed = new FetchRequest(url, sameSite.env);
+    allowed.client = sameSite.env;
+    const restricted = new FetchRequest(url, crossSite.env);
+    restricted.client = crossSite.env;
     allowed.appendCookieHeader();
     restricted.appendCookieHeader();
     expect(allowed.headerList.get('Cookie')).toBe('strict=1; none=2');
     expect(restricted.headerList.get('Cookie')).toBe('none=2');
 
     const other = createEnvironment('https://a.example.com/');
-    const isolated = new FetchRequest(url, other.env, other.env.userAgent);
+    const isolated = new FetchRequest(url, other.env);
+    isolated.client = other.env;
     isolated.appendCookieHeader();
     expect(isolated.headerList.get('Cookie')).toBeNull();
   });
@@ -127,7 +132,8 @@ describe('Window environment referrer sources', () => {
     expect(serializeURL(env.apiBaseURL)).toBe('https://different.test/base/');
     expect(env.getReferrerSource()).toBe(url);
 
-    const request = new FetchRequest(parseURL('https://example.test/target').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://example.test/target').url!, env);
+    request.client = env;
     request.referrerPolicy = 'same-origin';
     const referrer = determineRequestReferrer(request);
     expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/current?q=1');
@@ -155,7 +161,8 @@ describe('Window environment referrer sources', () => {
     const document = Reflect.get(iframe, 'contentDocument') as Document | null;
     expect(document).toBeTruthy();
     const env = getRelevantRealm(document!).env;
-    const request = new FetchRequest(parseURL('https://example.test/target').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://example.test/target').url!, env);
+    request.client = env;
     request.referrerPolicy = 'unsafe-url';
     const referrer = determineRequestReferrer(request);
     expect(referrer === null ? null : serializeURL(referrer)).toBe('https://example.test/parent');
@@ -254,7 +261,7 @@ describe('network partition keys from browser environments', () => {
       userAgent, creationURL, topLevelCreationURL: creationURL, topLevelOrigin: null,
       targetBrowsingContext: null, isSecureContext: true,
     });
-    const request = new FetchRequest(creationURL, null, userAgent);
+    const request = new FetchRequest(creationURL, userAgent.sandbox);
     request.reservedClient = reservedEnv;
     const key = request.determineNetworkPartitionKey();
     expect(key).toEqual([['https', { kind: 'domain', value: 'example.com' }], null]);

@@ -89,7 +89,7 @@ describe('MediaList binding', () => {
 function projectList(text: string): { browser: Browlet; platform: MediaList; implementation: MediaListImpl; } {
   const browser = new Browlet({ route: () => '' });
   const context = getBindingContext(getRelevantRealm(browser.window));
-  const implementation = new MediaListImpl(text);
+  const implementation = new MediaListImpl(text, getRelevantRealm(browser.window).env);
   const platform = context.implToJS(implementation, reference(MediaListImpl)) as MediaList;
   return { browser, platform, implementation };
 }

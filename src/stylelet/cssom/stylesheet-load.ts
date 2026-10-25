@@ -1,4 +1,6 @@
-import type { StyleletEnvironment, StyleletURL } from '../environment';
+import { parseURL, urlsEqual, type URLRecord } from '../../url/index';
+
+import type { StyleletEnvironment } from '../environment';
 import { CSSImportRuleImpl, type CSSRuleImpl } from './rules/index';
 
 import type { CSSStyleSheetImpl } from './css-stylesheet';
@@ -93,10 +95,8 @@ export class StyleSheetLoad {
       this.#update([...rule.styleSheet.ruleList], []);
       return;
     }
-    let url: StyleletURL;
-    try {
-      url = new this.#env.userAgent.URL(rule.href, (sheet.baseURL ?? sheet.location)?.href);
-    } catch {
+    const url = parseURL(rule.href, sheet.baseURL ?? sheet.location, 'UTF-8', this.#env.userAgent).url;
+    if (url === null) {
       this.#success = false;
       return;
     }
@@ -105,7 +105,7 @@ export class StyleSheetLoad {
 
     const pending: PendingImport = { cancelled: false };
     this.#pending.set(rule, pending);
-    pending.cancel = this.#fetch(url, sheet, (imported, success) => {
+    pending.cancel = this.#fetch(url, rule, (imported, success) => {
       if (!this.#pending.delete(rule)) return;
       // SPEC_CLASH(stylesheet-import-descendant-failure): Like Gecko, report descendant failures; Blink/WebKit can report success.
       if (!success) this.#success = false;
@@ -136,19 +136,20 @@ export class StyleSheetLoad {
 
 /**
  * Fetch and parse one resource, report its sheet and success once, and return its cancellation step.
+ * The rule retains URL modifiers and its parent sheet; url is resolved for cycle detection.
  * A non-null sheet must be fresh and unassociated; a failed load may still supply an empty sheet.
  * Its origin-clean flag describes its response; association also applies the parent's flag.
  */
 export type FetchImportedStyleSheet = (
-  url: StyleletURL, parent: CSSStyleSheetImpl, complete: (sheet: CSSStyleSheetImpl | null, success: boolean) => void,
+  url: URLRecord, rule: CSSImportRuleImpl, complete: (sheet: CSSStyleSheetImpl | null, success: boolean) => void,
 ) => () => void;
 
 type PendingImport = { cancel?: () => void; cancelled: boolean; };
 
-function hasAncestorURL(sheet: CSSStyleSheetImpl | null, url: StyleletURL): boolean {
-  const href = url.href.replace(/#.*$/, '');
+function hasAncestorURL(sheet: CSSStyleSheetImpl | null, url: URLRecord): boolean {
   for (; sheet !== null; sheet = sheet.parentStyleSheet) {
-    if (sheet.location?.href.replace(/#.*$/, '') === href || sheet.baseURL?.href.replace(/#.*$/, '') === href) return true;
+    if (sheet.location !== null && urlsEqual(sheet.location, url, true) ||
+      sheet.baseURL !== undefined && urlsEqual(sheet.baseURL, url, true)) return true;
   }
   return false;
 }

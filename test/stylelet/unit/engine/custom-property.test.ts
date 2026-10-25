@@ -1,10 +1,12 @@
+import { styleletEnv } from '../../environment-fixture';
+import { parseURL } from '../../url-fixture';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it } from 'vitest';
+import { assert, describe, expect, it } from 'vitest';
 
 import type { PropertyContext } from '../../../../src/stylelet/props/base-property';
 import type { CustomPropertyRegistration } from '../../../../src/stylelet/props/registry';
 import type { CustomPropertyName } from '../../../../src/stylelet/syntax/names';
-import type { StyleletURL } from '../../../../src/stylelet/environment';
+import type { URLRecord } from '../../../../src/url/core/index';
 import { RuleListContext } from '../../../../src/stylelet/cssom/rules/context';
 import { parseStylesheetContents } from '../../../../src/stylelet/syntax/parser';
 import type { CSSRuleImpl } from '../../../../src/stylelet/cssom/rules/rule';
@@ -18,6 +20,7 @@ import { StyleletContext } from '../../../../src/stylelet/context';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { WholeValue, RawWholeValue } from '../../../../src/stylelet/values/whole-value';
 import { SyntaxValue } from '../../../../src/stylelet/values/syntax-value';
+import { UrlValue } from '../../../../src/stylelet/values/url';
 import { createBrowletDocument } from '../../browlet-document';
 
 describe('custom property registration', () => {
@@ -127,9 +130,9 @@ describe('custom property registration', () => {
       false,
       '<url>',
     );
-    const location = new URL('https://example.com/styles/site.css');
+    const location = parseURL('https://example.com/styles/site.css')!;
     const { engine, scope } = createCascade({
-      environmentBaseUrl: new URL('https://example.com/document/'),
+      environmentBaseUrl: parseURL('https://example.com/document/')!,
       registeredPropertySet: new Map([[registered.name, registered]]),
     });
     addStyleSheet(scope,
@@ -155,7 +158,7 @@ describe('custom property registration', () => {
       .attachShadow({ mode: 'open' });
     const { engine } = createCascade({
       registeredPropertySet: new Map([[registered.name, registered]]),
-      context: new StyleletContext(document),
+      context: new StyleletContext(document, styleletEnv),
     });
     const documentScope = new TreeScope(document, engine);
     const shadowScope = new TreeScope(shadowRoot, engine);
@@ -172,24 +175,20 @@ describe('custom property registration', () => {
       shadowScope,
     )!;
 
-    expect(resolveRegisteredCustomProperty(
+    const resolvedDocument = resolveRegisteredCustomProperty(
       registered,
       documentProperty,
       engine,
-    )).toMatchObject({
-      inner: {
-        repr: { local: true, treeScope: documentScope },
-      },
-    });
-    expect(resolveRegisteredCustomProperty(
-      registered,
-      shadowProperty,
-      engine,
-    )).toMatchObject({
-      inner: {
-        repr: { local: true, treeScope: shadowScope },
-      },
-    });
+    );
+    const resolvedShadow = resolveRegisteredCustomProperty(registered, shadowProperty, engine);
+    const documentUrl = resolvedDocument?.inner;
+    const shadowUrl = resolvedShadow?.inner;
+    assert(documentUrl instanceof UrlValue);
+    assert(shadowUrl instanceof UrlValue);
+    expect(documentUrl.repr.local).toBe(true);
+    expect(documentUrl.repr.treeScope).toBe(documentScope);
+    expect(shadowUrl.repr.local).toBe(true);
+    expect(shadowUrl.repr.treeScope).toBe(shadowScope);
   });
 
   it.skip.each([
@@ -250,7 +249,7 @@ function registration(
     syntax,
     parse: (input, context) => WholeValue.parse(input, context, parseOrdinary, true),
     inherits,
-    initialValue: WholeValue.parse(initial, {}, parseOrdinary, true)!,
+    initialValue: WholeValue.parse(initial, { env: styleletEnv }, parseOrdinary, true)!,
   };
 }
 
@@ -279,7 +278,7 @@ function resolveRegisteredCustomProperty(
   const { parse: parseValue } = registration;
   const declaration = cascaded.declaration.value.inner;
   if (!(declaration instanceof RawWholeValue)) return null;
-  const raw = parseValue(declaration.repr.repr, {});
+  const raw = parseValue(declaration.repr.repr, { env: styleletEnv });
   return raw === null ? null : raw.resolve(ValueStage.Computed, engine.getPropertyContext(cascaded));
 }
 
@@ -303,8 +302,8 @@ function resolveCustomProperty(
 
   const declaration = cascaded.declaration;
   const { parse: parseValue } = registration;
-  const inheritedRaw = parseValue(inherited, {});
-  const inheritedValue = inheritedRaw === null ? null : inheritedRaw.resolve(ValueStage.Computed, { URL: engine.context.env.userAgent.URL });
+  const inheritedRaw = parseValue(inherited, { env: styleletEnv });
+  const inheritedValue = inheritedRaw === null ? null : inheritedRaw.resolve(ValueStage.Computed, { env: styleletEnv });
   const context: PropertyContext & {
     customProperty: {
       engine: CascadeEngine;
@@ -318,7 +317,7 @@ function resolveCustomProperty(
 
   const declarationValue = declaration.value.inner;
   if (!(declarationValue instanceof RawWholeValue)) return null;
-  const raw = parseValue(declarationValue.repr.repr, {});
+  const raw = parseValue(declarationValue.repr.repr, { env: styleletEnv });
   const value = raw === null ? null : raw.resolve(stage, context);
   return value === null ? null : value.serialize();
 }
@@ -349,7 +348,7 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 function addStyleSheet(
   scope: TreeScope,
   source: string | CSSRuleImpl[],
-  location?: StyleletURL,
+  location?: URLRecord,
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.create(
     scope.cascade.context,

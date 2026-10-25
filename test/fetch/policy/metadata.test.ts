@@ -4,7 +4,7 @@ import type { Destination } from '../../../src/fetch/destination';
 import { FetchRequest, type FetchMode } from '../../../src/fetch/request';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
-import { createClientEnvironment, createFetchUserAgent } from '../client-fixture';
+import { createClientEnvironment } from '../client-fixture';
 
 describe('Fetch Metadata headers', () => {
   it('sets the three ordinary headers in specification order', () => {
@@ -144,7 +144,7 @@ describe('Fetch Metadata navigation and activation', () => {
   });
 
   it('retains browser-UI initiation and activation across redirects and cloning', () => {
-    const request = new FetchRequest(parseURL('https://example.test/').url!, null, createFetchUserAgent());
+    const request = new FetchRequest(parseURL('https://example.test/').url!, createClientEnvironment());
     request.origin = createOpaqueOrigin();
     request.destination = 'document';
     request.mode = 'navigate';
@@ -179,7 +179,7 @@ describe('Fetch Metadata navigation and activation', () => {
   });
 
   it('does not infer navigation or activation from a missing client', () => {
-    const request = new FetchRequest(parseURL('https://example.test/').url!, null, createFetchUserAgent());
+    const request = new FetchRequest(parseURL('https://example.test/').url!, createClientEnvironment());
     request.origin = createOpaqueOrigin();
     request.userActivation = true;
     request.appendMetadataHeadersIfTrustworthy();
@@ -211,7 +211,8 @@ describe('Fetch Metadata target trustworthiness', () => {
 
 function createRequest(target = 'https://example.test/', origin = 'https://example.test/'): FetchRequest {
   const client = createClientEnvironment(origin);
-  const request = new FetchRequest(parseURL(target).url!, client, client.userAgent);
+  const request = new FetchRequest(parseURL(target).url!, client);
+  request.client = client;
   request.populateFromClient();
   return request;
 }

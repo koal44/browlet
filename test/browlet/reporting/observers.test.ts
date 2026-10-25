@@ -321,7 +321,8 @@ describe('Reporting policy integration and user control', () => {
     env.policyContainer.parseIntegrityPolicyHeaders(response);
     const observer = new window.ReportingObserver(() => {});
     observer.observe();
-    const request = new FetchRequest(parseURL('https://resource.test/script.js').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/script.js').url!, env);
+    request.client = env;
     request.destination = 'script';
     request.mode = 'cors';
     request.populateFromClient();

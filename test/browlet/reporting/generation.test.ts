@@ -4,7 +4,7 @@ import { getRelevantRealm } from '../../support/browlet-binding';
 import { ReportImpl } from '../../../src/browlet/reporting/report';
 import { TestReportBodyImpl } from '../../../src/browlet/reporting/test-report';
 import { FetchRequest } from '../../../src/fetch/request';
-import { serializeURL } from '../../../src/url/url';
+import { serializeURL } from '../../../src/url/core/index';
 import { serializeOrigin } from '../../../src/url/origin';
 
 describe('Report generation', () => {
@@ -44,7 +44,8 @@ describe('Report generation', () => {
     const browlet = new Browlet({ route: () => '', userAgent: 'Configured/1.0' });
     const env = getRelevantRealm(browlet.window).env;
     const override = vi.spyOn(env.userAgent, 'webDriverBiDiEmulatedUserAgent').mockReturnValue('Emulated/1.0');
-    const request = new FetchRequest(env.creationURL, env, env.userAgent);
+    const request = new FetchRequest(env.creationURL, env);
+    request.client = env;
     request.appendUserAgentHeader();
     const report = env.generateReport(null, 'test', 'endpoint');
     expect(report.userAgent).toBe('Emulated/1.0');
@@ -60,7 +61,8 @@ describe('Report generation', () => {
   it('keeps a per-request header override separate from the report\'s environment identity', () => {
     const browlet = new Browlet({ route: () => '', userAgent: 'Environment/1.0' });
     const env = getRelevantRealm(browlet.window).env;
-    const request = new FetchRequest(env.creationURL, env, env.userAgent);
+    const request = new FetchRequest(env.creationURL, env);
+    request.client = env;
     request.headerList.append('User-Agent', 'RequestOnly/1.0');
     request.appendUserAgentHeader();
     expect(request.headerList.get('User-Agent')).toBe('RequestOnly/1.0');

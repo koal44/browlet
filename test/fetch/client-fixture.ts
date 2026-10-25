@@ -71,8 +71,6 @@ export function createFetchUserAgent(): FetchUserAgent {
     createContentDecoder() { throw new Error('This fixture has no HTTP codecs'); },
     runInParallel: queueNodeTask,
     unsafeSharedCurrentTime: () => performance.now(),
-    determineRequestReferrer: () => null,
-    setRequestReferrerPolicyOnRedirect() {},
     potentiallyOverrideResponse: () => null,
     handleFetch: () => NodePromise.try(() => null, internalType<null>()),
     determineFetchPriority: () => ({ update() {} }),
@@ -106,7 +104,7 @@ export function createFetchUserAgent(): FetchUserAgent {
     reportDeliveryEnabled: true,
     storageEnabled: true,
     generateUUID: () => crypto.randomUUID(),
-    parseURL,
+    parseURL(input, base, encoding) { return parseURL(input, base, encoding).url; },
     // Blob URL tests use Browlet's actual store and acquisition boundary.
     obtainBlobObject: () => null,
     hstsStore: { requiresHTTPS: () => false, processResponse() {} },

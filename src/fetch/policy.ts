@@ -67,10 +67,10 @@ export function isBlockedByNosniff(response: FetchResponse, request: FetchReques
 /** Append cookies selected for the request from the owning user agent's store. */
 // https://fetch.spec.whatwg.org/#append-a-request-cookie-header
 export function appendCookieHeader(request: FetchRequest): void {
-  if (!request.userAgent.cookiesEnabled) return;
+  if (!request.env.userAgent.cookiesEnabled) return;
   const { scheme, host, path } = request.currentURL;
   if (host === null || host.kind === 'empty' || host.kind === 'opaque') return;
-  const cookies = request.userAgent.cookieStore.retrieveCookies(
+  const cookies = request.env.userAgent.cookieStore.retrieveCookies(
     scheme === 'https', host, path, true, determineSameSiteMode(request), laxAllowingUnsafeMaxAge,
   );
   if (cookies.length !== 0) request.headerList.append('Cookie', HTTPCookie.serialize(cookies));
@@ -79,7 +79,7 @@ export function appendCookieHeader(request: FetchRequest): void {
 /** Process each Set-Cookie field independently using the request's URL and cookie policy. */
 // https://fetch.spec.whatwg.org/#parse-and-store-response-set-cookie-headers
 export function parseAndStoreCookies(response: FetchResponse, request: FetchRequest): void {
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   if (!userAgent.cookiesEnabled) return;
   const { scheme, host, path } = request.currentURL;
   if (host === null || host.kind === 'empty' || host.kind === 'opaque' || typeof path === 'string') return;
@@ -255,7 +255,7 @@ function queueCORPViolationReport(
 /** Set the outgoing request's Fetch Metadata headers when its current URL is trustworthy. */
 // https://w3c.github.io/webappsec-fetch-metadata/#fetch-integration
 export function appendMetadataHeadersIfTrustworthy(request: FetchRequest): void {
-  if (!request.userAgent.isURLPotentiallyTrustworthy(request.currentURL)) return;
+  if (!request.env.userAgent.isURLPotentiallyTrustworthy(request.currentURL)) return;
   setFetchDestHeader(request);
   setFetchModeHeader(request);
   setFetchSiteHeader(request);
@@ -397,7 +397,7 @@ export type IntegrityViolationReportBody = {
 // https://w3c.github.io/webappsec-mixed-content/#upgrade-algorithm
 export function upgradeMixedContent(request: FetchRequest): void {
   const url = request.currentURL;
-  if (url.scheme !== 'http' || request.userAgent.isURLPotentiallyTrustworthy(url) ||
+  if (url.scheme !== 'http' || request.env.userAgent.isURLPotentiallyTrustworthy(url) ||
     url.host?.kind === 'ipv4' || url.host?.kind === 'ipv6' ||
     request.client === null || !request.client.prohibitsMixedSecurityContexts()) return;
   if (request.destination !== 'image' && request.destination !== 'audio' && request.destination !== 'video') return;
@@ -414,7 +414,7 @@ export function isRequestBlockedByMixedContent(request: FetchRequest): boolean {
   // for nested navigation. A browser-initiated request has no client to protect.
   return request.client !== null && request.destination !== 'document' &&
     request.client.prohibitsMixedSecurityContexts() &&
-    !request.userAgent.isURLPotentiallyTrustworthy(request.currentURL);
+    !request.env.userAgent.isURLPotentiallyTrustworthy(request.currentURL);
 }
 
 /** Whether the internal response would expose mixed content to the request's client. */
@@ -425,7 +425,7 @@ export function isResponseBlockedByMixedContent(response: FetchResponse, request
   // Main Fetch fills an empty URL list before running its response checks.
   const url = response.url;
   if (url === null) throw new InternalError('Mixed-content response checking requires a response URL');
-  return !request.userAgent.isURLPotentiallyTrustworthy(url);
+  return !request.env.userAgent.isURLPotentiallyTrustworthy(url);
 }
 
 /** Whether a trustworthy source initiated a download with any untrustworthy response hop. */
@@ -455,7 +455,7 @@ export function upgradeInsecureRequest(request: FetchRequest): void {
   const url = request.currentURL;
   // Follow Chromium's trustworthy-URL exemption. Gecko also leaves loopback
   // HTTP services alone, even under an explicit upgrade policy.
-  if (url.scheme !== 'http' || request.userAgent.isURLPotentiallyTrustworthy(url)) return;
+  if (url.scheme !== 'http' || request.env.userAgent.isURLPotentiallyTrustworthy(url)) return;
   if (request.destination === 'document' && !request.isFormSubmission &&
     !client.insecureRequestsPolicy.shouldUpgradeNavigation(url)) return;
 
@@ -476,7 +476,7 @@ export function upgradeForHSTS(request: FetchRequest): void {
   if (url.scheme !== 'http' || url.host?.kind !== 'domain') return;
   const suffix = obtainPublicSuffix(url.host)?.value;
   if (suffix === 'localhost' || suffix === 'localhost.') return;
-  if (!request.userAgent.hstsStore.requiresHTTPS(url.host)) return;
+  if (!request.env.userAgent.hstsStore.requiresHTTPS(url.host)) return;
 
   url.scheme = 'https';
   // URL parsing already represents HTTP's port 80 as null. Keep HTTPS's

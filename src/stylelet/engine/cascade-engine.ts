@@ -1,7 +1,7 @@
 import type { DOMElement as Element } from '../../infra/index';
 import { InternalError } from '../../infra/internal-error';
+import type { URLRecord } from '../../url/core/index';
 
-import type { StyleletURL } from '../environment';
 import { ValueStage } from '../value-processing/index';
 import type { PendingShorthand, WholeValue, Value } from '../values/index';
 import {
@@ -31,7 +31,7 @@ export class CascadeEngine {
   registeredPropertySet: CustomPropertyRegistry;
 
   /** Document API base URL used when a declaration's stylesheet supplies neither a base nor a location. */
-  environmentBaseUrl: StyleletURL | undefined;
+  environmentBaseUrl: URLRecord | undefined;
 
   /** Owning document's matching state and host facilities. */
   context: StyleletContext;
@@ -135,14 +135,15 @@ export class CascadeEngine {
 
   /** Supply host color inputs and, when present, the selected declaration's URL base and scope. */
   getPropertyContext(cascaded?: CascadedProperty): PropertyContext {
+    const { userAgent } = this.context.env;
     const styleSheet = cascaded?.styleSheet;
     const baseUrl = styleSheet?.baseURL ??
       styleSheet?.location ??
       this.environmentBaseUrl;
 
     return {
-      URL: this.context.env.userAgent.URL,
-      systemColors: this.context.env.userAgent.systemColors ?? (this.#defaultSystemColors ??= createSystemColorPalette()),
+      env: this.context.env,
+      systemColors: userAgent.systemColors ?? (this.#defaultSystemColors ??= createSystemColorPalette()),
       treeScope: cascaded?.scope,
       ...(baseUrl === undefined ? {} : { baseUrl }),
     };
@@ -223,7 +224,9 @@ export class CascadeEngine {
     const block = dom.inlineStyleBlock?.(element);
     // An absent provider permits text fallback; a provider's empty result is authoritative.
     const inline = block === undefined
-      ? new CSSDeclarationBlock(InterpretedDeclaration.parseBlock(dom.getAttributeNS(element, null, 'style') ?? '', {}))
+      ? new CSSDeclarationBlock(InterpretedDeclaration.parseBlock(
+        dom.getAttributeNS(element, null, 'style') ?? '', { env: this.context.env },
+      ))
       : block instanceof CSSDeclarationBlock ? block : null;
     const selected = this.#getCascadedSheetDeclarations(scope, element);
     for (const declaration of inline?.declarations ?? []) {
@@ -401,7 +404,7 @@ export class CascadeEngine {
 /** Existing document state used when constructing a cascade engine. */
 export type CascadeEngineOptions = {
   /** Last-resort base URL for stylesheet values. */
-  environmentBaseUrl?: StyleletURL;
+  environmentBaseUrl?: URLRecord;
   /** Explicit document registrations; stylesheet registrations are collected for each query. */
   registeredPropertySet?: CustomPropertyRegistry;
   /** Document state and host facilities shared with selector matching. */

@@ -1,7 +1,7 @@
 # Value processing
 
-This folder currently defines lifecycle stages and layout facts supplied to value
-processing. It is not yet a pipeline that assigns all properties to an element.
+This folder defines lifecycle stages, the shared value context, and layout facts
+supplied to value processing. It is not yet a pipeline that assigns all properties to an element.
 The [roadmap](ROADMAP.md) separates that missing orchestration from the working
 [value algorithms](../values/README.md).
 
@@ -11,13 +11,20 @@ The [roadmap](ROADMAP.md) separates that missing orchestration from the working
 `resolve(stage, context)` returns a value and `serialize()` describes its current
 representation. Each class keeps its own context type; contexts are supplied per
 invocation, not stored in the value. Parsing and consuming are static factories.
+Value-processing contexts extend [ValueContext](value-context.ts), whose required
+`env` retains the caller's Stylelet environment. Property parsing, CSSOM mutation,
+and computed-value processing carry that same owner. URL resolution uses
+the URL subsystem directly, supplying `context.env.userAgent` for Blob URL lookup. Other
+resolution inputs remain optional; an environment alone does not supply layout
+facts or guarantee a fully resolved value.
 Configured grammars can additionally provide `createConsumer(options)`.
 Static signatures differ where a grammar needs configuration, such as MathValue's
 expected numeric type; they are not forced into the instance interface.
 
 Numeric literals, ordinary values, WholeValue, and the opaque component-list values
-implement this contract. Their public `value` field holds the magnitude or
-representation. Dimension literals also retain their unit directly. Resolution
+implement this contract. Numeric literals retain their magnitude in `value`,
+ordinary values their representation in `repr`, and WholeValue its contents in `inner`.
+Dimension literals also retain their unit directly. Resolution
 can replace a representation or return a different value type; the contract does
 not require the parser's exact result type to survive every stage. Opaque values
 and identifiers retain their identity when there is no contextual work to perform.

@@ -32,7 +32,8 @@ describe('HTML fetch-priority attributes', () => {
     const browser = new Browlet({ route: () => '', reporting: false });
     await browser.navigate('https://priority.test/');
     const env = getRelevantRealm(browser.window).env;
-    const request = new FetchRequest(env.parseURL('https://priority.test/resource').url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL('https://priority.test/resource')!, env);
+    request.client = env;
     request.allowServiceWorkerInterception = false;
     request.destination = destination;
     request.priority = fetchPriorityAttribute.getState(value)!;

@@ -13,7 +13,6 @@
     // Public package entries belong here for typechecking and type-aware linting.
     "packages/browlet/index.ts",
     "packages/stylelet/index.ts",
-    "packages/stylelet/browser.ts",
     "packages/selectlet/index.ts",
     "packages/selectlet/browser.ts"
   ],
@@ -22,6 +21,7 @@
     { "path": "./src/js-engine" },
     { "path": "./src/http" },
     { "path": "./src/mime" },
+    { "path": "./src/url/core" },
     { "path": "./src/url" },
     { "path": "./src/storage" },
     { "path": "./src/web-idl/core" },
@@ -31,7 +31,6 @@
     { "path": "./src/encoding" },
     { "path": "./src/file" },
     { "path": "./src/xhr" },
-    { "path": "./src/fetch/core" },
     { "path": "./src/fetch" },
     { "path": "./src/selectlet" },
     { "path": "./src/stylelet" },

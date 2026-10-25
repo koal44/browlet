@@ -12,7 +12,8 @@ import { FetchRequest } from '../../src/fetch/request';
 import { FetchResponse, isFilteredResponse } from '../../src/fetch/response';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { ReadableStreamImpl } from '../../src/streams/index';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../src/url/url';
+import { serializeURL } from '../../src/url/core/index';
 import { mockHTTPTransport } from '../fetch/transport-fixture';
 
 import { createFetchOperation } from './fetch-fixture';
@@ -69,7 +70,8 @@ describe('Fetch entry', () => {
     await browlet.navigate('https://example.test/page');
     const env = getRelevantRealm(browlet.window).env;
     env.userAgent.defaultAcceptLanguage = language;
-    const request = new FetchRequest(parseURL('https://example.test/resource').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://example.test/resource').url!, env);
+    request.client = env;
     request.localURLsOnly = true;
     request.initiatorType = 'fetch';
     const response = Promise.withResolvers<FetchResponse>();
@@ -193,12 +195,10 @@ describe('Main fetch policy and dispatch', () => {
     request.mode = 'navigate';
     operation.options.useParallelQueue = true;
     request.referrer = parseURL('https://example.test/page').url!;
-    const referrer = vi.spyOn(agent, 'determineRequestReferrer');
     // Supply an already-known policy rather than a transport response in this orchestration test.
     vi.spyOn(agent.hstsStore, 'requiresHTTPS').mockReturnValue(true);
     request.populateFromClient();
     await complete(operation);
-    expect(referrer).toHaveBeenCalledOnce();
     expect(request.referrer).toBeNull();
     expect(request.currentURL.scheme).toBe('https');
   });
@@ -460,7 +460,8 @@ async function createFixture(url = 'https://example.test/resource') {
     credentials: FetchRequest['credentialsMode'], integrity: string, available: (response: FetchResponse) => void,
   ) => boolean>(() => false);
   Object.assign(env, { consumePreloadedResource: preload });
-  const request = new FetchRequest(parseURL(url).url!, env, agent);
+  const request = new FetchRequest(parseURL(url).url!, env);
+  request.client = env;
   const operation = createFetchOperation(request, env);
   const reply = { response: new FetchResponse() };
   const override = vi.spyOn(agent, 'potentiallyOverrideResponse').mockImplementation(() => reply.response);

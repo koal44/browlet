@@ -1,10 +1,11 @@
+import { styleletEnv } from '../../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { MediaListImpl } from '../../../../../src/stylelet/cssom/media/media-list';
 import { DOMExceptionImpl } from '../../../../../src/web-idl/core/index';
 
 describe('MediaListImpl', () => {
   it('parses and serializes mediaText', () => {
-    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ');
+    const list = new MediaListImpl(' SCREEN , (WIDTH >= 10PX) ', styleletEnv);
 
     expect(list.mediaText).toBe('screen, (width >= 10px)');
     expect(list.length).toBe(2);
@@ -15,7 +16,7 @@ describe('MediaListImpl', () => {
   });
 
   it('replaces and clears the collection', () => {
-    const list = new MediaListImpl('screen, print');
+    const list = new MediaListImpl('screen, print', styleletEnv);
 
     list.mediaText = 'speech';
     expect(list.mediaText).toBe('speech');
@@ -28,12 +29,12 @@ describe('MediaListImpl', () => {
   });
 
   it('preserves source order and duplicates, including recovered invalid entries', () => {
-    const list = new MediaListImpl('screen, &, print, SCREEN');
+    const list = new MediaListImpl('screen, &, print, SCREEN', styleletEnv);
     expect(list.mediaText).toBe('screen, not all, print, screen');
   });
 
   it('appends one query and ignores an equivalent query', () => {
-    const list = new MediaListImpl('screen');
+    const list = new MediaListImpl('screen', styleletEnv);
 
     list.appendMedium('PRINT');
     list.appendMedium('print');
@@ -44,7 +45,7 @@ describe('MediaListImpl', () => {
   });
 
   it('compares canonical media feature values', () => {
-    const list = new MediaListImpl('(orientation: LANDSCAPE)');
+    const list = new MediaListImpl('(orientation: LANDSCAPE)', styleletEnv);
     list.appendMedium('(ORIENTATION: landscape)');
     expect(list.length).toBe(1);
     list.deleteMedium('(orientation: LANDSCAPE)');
@@ -52,7 +53,7 @@ describe('MediaListImpl', () => {
   });
 
   it('ignores multiple queries, including two empty entries around a comma', () => {
-    const list = new MediaListImpl('screen');
+    const list = new MediaListImpl('screen', styleletEnv);
 
     list.appendMedium(',');
     expect(list.mediaText).toBe('screen');
@@ -63,13 +64,13 @@ describe('MediaListImpl', () => {
   });
 
   it('deletes every equivalent query', () => {
-    const list = new MediaListImpl('screen, SCREEN, print');
+    const list = new MediaListImpl('screen, SCREEN, print', styleletEnv);
     list.deleteMedium('screen');
     expect(list.mediaText).toBe('print');
   });
 
   it('reports NotFoundError without changing the list', () => {
-    const list = new MediaListImpl('screen');
+    const list = new MediaListImpl('screen', styleletEnv);
     let error: unknown;
     try {
       list.deleteMedium('print');

@@ -151,7 +151,8 @@ function createFixture(url = 'https://example.test/resource') {
   const userAgent = new UserAgent();
   const env = userAgent.sandbox;
   const client = createPolicyEnvironment('https://example.test/', undefined, userAgent);
-  const request = new FetchRequest(parseURL(url).url!, client, userAgent);
+  const request = new FetchRequest(parseURL(url).url!, client);
+  request.client = client;
   if (request.currentURL.scheme === 'about') request.mode = 'navigate';
   request.referrer = null;
   request.populateFromClient();
@@ -163,7 +164,8 @@ async function createWindowFixture() {
   await browlet.navigate('https://example.test/page');
   const env = getRelevantRealm(browlet.window).env;
   const { userAgent } = env;
-  const request = new FetchRequest(parseURL('https://example.test/resource').url!, env, userAgent);
+  const request = new FetchRequest(parseURL('https://example.test/resource').url!, env);
+  request.client = env;
   return { env, userAgent, request };
 }
 

@@ -4,33 +4,32 @@ import { Browlet } from '../../../src/browlet/browlet';
 import { unwrap, getRelevantRealm } from '../../support/browlet-binding';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import { domManipulationTaskSource } from '../../../src/browlet/scripting/tasks';
-import { URLImpl } from '../../../src/url/index';
-import { decode } from '../../../src/encoding/index';
-import { decodeStylesheetBytes } from '../../../src/stylelet/syntax/tokens';
+import { serializeURL } from '../../../src/url/core/index';
+import { BlobImpl } from '../../../src/file/index';
 
 describe('Stylelet execution integration', () => {
-  it('uses Encoding to decode stylesheet bytes through the owning UserAgent', () => {
-    const browlet = new Browlet({ route: () => '' });
-    const document = unwrap<DocumentImpl>(browlet.document);
-    const styles = document.getStyleEngine();
-
-    expect(styles.context.env.userAgent).toHaveProperty('decodeText', decode);
-    expect(decodeStylesheetBytes(Uint8Array.of(0xE9), {
-      transportEncoding: 'windows-1252',
-    }, styles.context.env)).toBe('é');
-  });
-
-  it('uses Browlet URL implementations for stylesheet state', () => {
+  it('retains the owning environment while parsing stylesheet URLs directly', () => {
     const browlet = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browlet.document);
     const styles = document.getStyleEngine();
     const sheet = styles.createStyleSheet({ baseURL: 'https://example.test/assets/' });
 
-    expect(styles.context.env.userAgent.URL).toBe(URLImpl);
+    expect(styles.context.env.userAgent).toBe(document.env.userAgent);
     expect(sheet.location).toBeNull();
-    expect(sheet.baseURL).toBeInstanceOf(URLImpl);
-    expect(sheet.baseURL?.href).toBe('https://example.test/assets/');
+    expect(serializeURL(sheet.baseURL!)).toBe('https://example.test/assets/');
     expect(sheet.href).toBeNull();
+  });
+
+  it('captures the owning UserAgent Blob URL registration in a stylesheet base', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browlet.document);
+    const env = document.env;
+    const url = env.userAgent.blobURLStore.add(new BlobImpl([], {}, env), env);
+    const entry = env.parseURL(url)!.blobURLEntry;
+    const sheet = document.getStyleEngine().createStyleSheet({ baseURL: url });
+
+    expect(entry).not.toBeNull();
+    expect(sheet.baseURL!.blobURLEntry).toBe(entry);
   });
 
   it('exposes computed-style failures in the owning realm through the provisional CSSOM API', async () => {

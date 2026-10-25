@@ -180,7 +180,7 @@ describe('Reporting through Fetch', () => {
       expect(request.client).toBeNull();
       expect(request.origin).toBeDefined();
       expect(serializeOrigin(request.origin!)).toBe('https://source.test');
-      expect(request.userAgent).toBe(userAgent);
+      expect(request.env.userAgent).toBe(userAgent);
       expect(request.body).toBeInstanceOf(FetchBody);
       expect(JSON.parse(utf8Decode(bytes))).toMatchObject([{
         type: 'test', url: 'https://source.test/page', body: { message: 'survives destruction' },

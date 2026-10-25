@@ -48,7 +48,7 @@ export class TimePercentageValue<R extends TimePercentage = TimePercentage> impl
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): TimePercentageValue {
+  resolve(stage: ValueStage, context: MathContext): TimePercentageValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, timePercentageMathContext(context));
@@ -70,7 +70,7 @@ export class TimePercentageValue<R extends TimePercentage = TimePercentage> impl
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: TimePercentageValue, context: MathContext = {}): TimePercentageValue {
+  add(other: TimePercentageValue, context: MathContext): TimePercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new TimePercentageValue(this.repr.add(other.repr));
     }
@@ -84,7 +84,7 @@ export class TimePercentageValue<R extends TimePercentage = TimePercentage> impl
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: TimePercentageValue, progress: number, context: MathContext = {}): TimePercentageValue {
+  interpolate(other: TimePercentageValue, progress: number, context: MathContext): TimePercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new TimePercentageValue(this.repr.interpolate(other.repr, progress));
     }
@@ -98,7 +98,7 @@ export class TimePercentageValue<R extends TimePercentage = TimePercentage> impl
   }
 
   /** Accumulation is addition. */
-  accumulate(other: TimePercentageValue, context: MathContext = {}): TimePercentageValue {
+  accumulate(other: TimePercentageValue, context: MathContext): TimePercentageValue {
     return this.add(other, context);
   }
 

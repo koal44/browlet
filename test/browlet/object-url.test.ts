@@ -22,7 +22,7 @@ describe('File API §8.4: URL object URL methods', () => {
     for (const object of [blob, file]) {
       const url = window.URL.createObjectURL(object);
       expect(url).toMatch(/^blob:https:\/\/example\.test\/[0-9a-f-]+$/u);
-      const entry = env.userAgent.parseURL(url).url!.blobURLEntry;
+      const entry = env.userAgent.parseURL(url)!.blobURLEntry;
       expect(entry!.env).toBe(env);
       expect(env.userAgent.obtainBlobObject(entry, env)).toBe(context.unwrap(object, BlobImpl));
       expect(window.URL.createObjectURL(object)).not.toBe(url);
@@ -46,13 +46,13 @@ describe('File API §8.4: URL object URL methods', () => {
     const other = createWindow(new UserAgent(), 'https://other.test/');
     const blob = new other.window.Blob(['cross-realm']);
     const url = creator.window.URL.createObjectURL.call(other.window.URL, blob);
-    const entry = creator.env.userAgent.parseURL(url).url!.blobURLEntry;
+    const entry = creator.env.userAgent.parseURL(url)!.blobURLEntry;
 
     expect(url).toMatch(/^blob:https:\/\/example\.test\//u);
     expect(entry!.env).toBe(creator.env);
     expect(creator.env.userAgent.obtainBlobObject(entry, creator.env))
       .toBe(other.context.unwrap(blob, BlobImpl));
-    expect(other.env.userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(other.env.userAgent.parseURL(url)!.blobURLEntry).toBeNull();
   });
 
   it('converts a revocation argument once and parses it before removing the registration', () => {
@@ -63,20 +63,20 @@ describe('File API §8.4: URL object URL methods', () => {
 
     expect(window.URL.revokeObjectURL.call(undefined, argument as unknown as string)).toBeUndefined();
     expect(conversions).toBe(1);
-    expect(env.userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(env.userAgent.parseURL(url)!.blobURLEntry).toBeNull();
     expect(() => window.URL.revokeObjectURL(url)).not.toThrow();
   });
 
   it('leaves invalid, non-Blob, unknown, and fragment-suffixed revocations harmless', () => {
     const { window, env } = createWindow();
     const url = window.URL.createObjectURL(new window.Blob([]));
-    const entry = env.userAgent.parseURL(url).url!.blobURLEntry;
+    const entry = env.userAgent.parseURL(url)!.blobURLEntry;
     for (const input of ['https://[', 'not a URL', 'https://example.test/', 'blob:null/unknown', `${url}#fragment`]) {
       expect(() => window.URL.revokeObjectURL(input)).not.toThrow();
-      expect(env.userAgent.parseURL(url).url!.blobURLEntry).toBe(entry);
+      expect(env.userAgent.parseURL(url)!.blobURLEntry).toBe(entry);
     }
     window.URL.revokeObjectURL(url);
-    expect(env.userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(env.userAgent.parseURL(url)!.blobURLEntry).toBeNull();
   });
 
   it('allows another same-partition Window to revoke but denies other partitions and user agents', () => {
@@ -86,13 +86,13 @@ describe('File API §8.4: URL object URL methods', () => {
     const otherPartition = createWindow(userAgent, 'https://other.test/');
     const otherAgent = createWindow();
     const url = creator.window.URL.createObjectURL(new creator.window.Blob([]));
-    const entry = userAgent.parseURL(url).url!.blobURLEntry;
+    const entry = userAgent.parseURL(url)!.blobURLEntry;
 
     otherPartition.window.URL.revokeObjectURL(url);
     otherAgent.window.URL.revokeObjectURL(url);
-    expect(userAgent.parseURL(url).url!.blobURLEntry).toBe(entry);
+    expect(userAgent.parseURL(url)!.blobURLEntry).toBe(entry);
     samePartition.window.URL.revokeObjectURL(url);
-    expect(userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(userAgent.parseURL(url)!.blobURLEntry).toBeNull();
   });
 
   it('uses the revocation method realm even when called with another Window URL as receiver', () => {
@@ -102,18 +102,18 @@ describe('File API §8.4: URL object URL methods', () => {
     const url = creator.window.URL.createObjectURL(new creator.window.Blob([]));
 
     other.window.URL.revokeObjectURL.call(creator.window.URL, url);
-    expect(userAgent.parseURL(url).url!.blobURLEntry).not.toBeNull();
+    expect(userAgent.parseURL(url)!.blobURLEntry).not.toBeNull();
     creator.window.URL.revokeObjectURL.call(other.window.URL, url);
-    expect(userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(userAgent.parseURL(url)!.blobURLEntry).toBeNull();
   });
 
   it('keeps registration and authorized revocation available when storage APIs are disabled', () => {
     const { window, env } = createWindow();
     env.userAgent.storageEnabled = false;
     const url = window.URL.createObjectURL(new window.Blob([]));
-    expect(env.userAgent.parseURL(url).url!.blobURLEntry).not.toBeNull();
+    expect(env.userAgent.parseURL(url)!.blobURLEntry).not.toBeNull();
     window.URL.revokeObjectURL(url);
-    expect(env.userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(env.userAgent.parseURL(url)!.blobURLEntry).toBeNull();
   });
 });
 
@@ -121,7 +121,7 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
   it('retains opaque origin identity in browser URL parsing, including with a fragment', () => {
     const { window, env } = createWindow(new UserAgent(), null);
     const url = window.URL.createObjectURL(new window.Blob([]));
-    const record = env.userAgent.parseURL(`${url}#fragment`).url!;
+    const record = env.userAgent.parseURL(`${url}#fragment`)!;
 
     expect(url).toMatch(/^blob:null\//u);
     expect(record.fragment).toBe('fragment');
@@ -129,7 +129,7 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
     expect(obtainURLOrigin(record)).toBe(env.origin);
     window.URL.revokeObjectURL(url);
     expect(obtainURLOrigin(record)).toBe(env.origin);
-    expect(env.userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(env.userAgent.parseURL(url)!.blobURLEntry).toBeNull();
   });
 
   it('keeps the URL author API on the basic parser without capturing store entries', () => {
@@ -154,7 +154,7 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
     const request = new window.Request(`${url}#fragment`);
     const record = context.unwrap(request, RequestImpl)!.getRequest();
     const entry = record.currentURL.blobURLEntry;
-    const userAgent: FetchUserAgent = record.userAgent;
+    const userAgent: FetchUserAgent = record.env.userAgent;
 
     expect(entry).not.toBeNull();
     window.URL.revokeObjectURL(url);
@@ -178,8 +178,8 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
     const entry = request.currentURL.blobURLEntry;
 
     expect(entry).not.toBeNull();
-    expect(request.userAgent.obtainBlobObject(entry, other.env)).toBeNull();
-    expect(request.userAgent.obtainBlobObject(entry, 'top-level-navigation'))
+    expect(request.env.userAgent.obtainBlobObject(entry, other.env)).toBeNull();
+    expect(request.env.userAgent.obtainBlobObject(entry, 'top-level-navigation'))
       .toBe(creator.context.unwrap(blob, BlobImpl));
   });
 
@@ -232,11 +232,11 @@ describe('Blob URLs at the URL and Fetch boundaries', () => {
     const { window, context, env, document, queueTask, runTask } = createWindow();
     const blob = new window.Blob([]);
     const url = window.URL.createObjectURL(blob);
-    const entry = env.userAgent.parseURL(url).url!.blobURLEntry;
+    const entry = env.userAgent.parseURL(url)!.blobURLEntry;
 
     queueTask(() => { document.destroy(); });
     runTask();
-    expect(env.userAgent.parseURL(url).url!.blobURLEntry).toBeNull();
+    expect(env.userAgent.parseURL(url)!.blobURLEntry).toBeNull();
     expect(env.userAgent.obtainBlobObject(entry, env)).toBe(context.unwrap(blob, BlobImpl));
   });
 });
@@ -245,7 +245,7 @@ function createWindow(userAgent = new UserAgent(), url: string | null = 'https:/
   const fixture = createFetchWindow(userAgent);
   const { realm, context, document } = fixture;
   if (url !== null) {
-    document!.url = userAgent.parseURL(url).url!;
+    document!.url = userAgent.parseURL(url)!;
     document!.origin = obtainURLOrigin(document!.url);
   }
   return {

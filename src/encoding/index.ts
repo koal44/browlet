@@ -1,5 +1,5 @@
 export {
-  getEncoding, getOutputEncoding, type Encoding, type OutputEncoding, type DecodeText,
+  detectBOM, getEncoding, getOutputEncoding, type Encoding, type OutputEncoding,
 } from './core/index';
 export {
   bomSniff, decode, decodeQueue, encode, encodeQueue, encodeOrFail, encodeOrFailSync,

@@ -2,11 +2,10 @@ import { TypeError } from '../infra/exceptions';
 import {
   arg, ctor, defineInterface, idlType, impl, op, reference, unwrapArg, roAttr, staticOp,
 } from '../web-idl/core/index';
+import type { Origin } from './core/index';
 
 import { URLImpl } from './api';
-import {
-  areSameOrigin, areSameSite, createOpaqueOrigin, type Origin,
-} from './origin';
+import { areSameOrigin, areSameSite, createOpaqueOrigin } from './origin';
 import { parseBasicURL, obtainURLOrigin } from './url';
 
 /*

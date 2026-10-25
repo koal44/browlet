@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { ColorValue } from '../../../../src/stylelet/values/color';
 import {
@@ -30,7 +31,7 @@ function stop(
 ): LinearColorStop {
   return {
     type: 'color-stop',
-    color: ColorValue.parse(color, {})!,
+    color: ColorValue.parse(color, { env: styleletEnv })!,
     ...(offsets.length === 0 ? {} : { offsets }),
   };
 }
@@ -49,7 +50,7 @@ function angularStop(
 ): AngularColorStop {
   return {
     type: 'color-stop',
-    color: ColorValue.parse(color, {})!,
+    color: ColorValue.parse(color, { env: styleletEnv })!,
     ...(offsets.length === 0 ? {} : { offsets }),
   };
 }
@@ -75,7 +76,7 @@ function radialGradient(
 ): RadialGradient {
   return Object.assign(new RadialGradient(
     'ellipse', { type: 'radial-extent', extents: ['farthest-corner'] },
-    PositionValue.parse('center', {})!, { space: 'srgb' }, items,
+    PositionValue.parse('center', { env: styleletEnv })!, { space: 'srgb' }, items,
   ), overrides);
 }
 
@@ -84,23 +85,23 @@ function conicGradient(
   overrides: Partial<ConicGradient> = {},
 ): ConicGradient {
   return Object.assign(new ConicGradient(
-    new AngleValue(new AngleLiteral(0, 'deg')), PositionValue.parse('center', {})!, { space: 'srgb' }, items,
+    new AngleValue(new AngleLiteral(0, 'deg')), PositionValue.parse('center', { env: styleletEnv })!, { space: 'srgb' }, items,
   ), overrides);
 }
 
 describe('gradient values', () => {
   describe('<linear-gradient()>', () => {
     it('parses omitted and explicit directions', () => {
-      expect(GradientValue.parse('linear-gradient(red, blue)', {})?.repr ?? null).toEqual(
+      expect(GradientValue.parse('linear-gradient(red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(
         linearGradient(stops(stop('red'), stop('blue'))),
       );
-      expect(GradientValue.parse('linear-gradient(45deg, red, blue)', {})?.repr ?? null).toEqual(linearGradient(
+      expect(GradientValue.parse('linear-gradient(45deg, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(linearGradient(
         stops(stop('red'), stop('blue')),
         {
           direction: new AngleValue(new AngleLiteral(45, 'deg')),
         },
       ));
-      expect(GradientValue.parse('linear-gradient(0, red, blue)', {})?.repr ?? null).toEqual(linearGradient(
+      expect(GradientValue.parse('linear-gradient(0, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(linearGradient(
         stops(stop('red'), stop('blue')),
         {
           direction: new ZeroLiteral(),
@@ -114,7 +115,7 @@ describe('gradient values', () => {
       ['to right top', { horizontal: 'right', vertical: 'top' }],
       ['to top right', { horizontal: 'right', vertical: 'top' }],
     ] as const)('parses the %s direction', (input, direction) => {
-      expect(GradientValue.parse(`linear-gradient(${input}, red, blue)`, {})?.repr ?? null).toEqual(linearGradient(
+      expect(GradientValue.parse(`linear-gradient(${input}, red, blue)`, { env: styleletEnv })?.repr ?? null).toEqual(linearGradient(
         stops(stop('red'), stop('blue')),
         {
           direction: { type: 'side-or-corner', ...direction },
@@ -123,7 +124,7 @@ describe('gradient values', () => {
     });
 
     it('parses color stops and transition hints', () => {
-      expect(GradientValue.parse('linear-gradient(red 10px, 25%, blue 80%, green)', {})?.repr ?? null).toEqual(linearGradient(stops(
+      expect(GradientValue.parse('linear-gradient(red 10px, 25%, blue 80%, green)', { env: styleletEnv })?.repr ?? null).toEqual(linearGradient(stops(
         stop('red', length(10)),
         hint(percentage(25)),
         stop('blue', percentage(80)),
@@ -132,7 +133,7 @@ describe('gradient values', () => {
     });
 
     it('parses dual-position color stops', () => {
-      expect(GradientValue.parse('linear-gradient(red 10% 30%, 50%, blue 70% 90%)', {})?.repr ?? null).toEqual(linearGradient(stops(
+      expect(GradientValue.parse('linear-gradient(red 10% 30%, 50%, blue 70% 90%)', { env: styleletEnv })?.repr ?? null).toEqual(linearGradient(stops(
         stop('red', percentage(10), percentage(30)),
         hint(percentage(50)),
         stop('blue', percentage(70), percentage(90)),
@@ -148,12 +149,12 @@ describe('gradient values', () => {
         method: { space: 'oklch' as const, hue: 'longer' as const },
       });
 
-      expect(GradientValue.parse('linear-gradient(to right in oklch longer hue, red, blue)', {})?.repr ?? null).toEqual(expected);
-      expect(GradientValue.parse('linear-gradient(in oklch longer hue to right, red, blue)', {})?.repr ?? null).toEqual(expected);
+      expect(GradientValue.parse('linear-gradient(to right in oklch longer hue, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(expected);
+      expect(GradientValue.parse('linear-gradient(in oklch longer hue to right, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(expected);
     });
 
     it('accepts a single color stop', () => {
-      expect(GradientValue.parse('linear-gradient(red)', {})?.repr ?? null).toEqual(
+      expect(GradientValue.parse('linear-gradient(red)', { env: styleletEnv })?.repr ?? null).toEqual(
         linearGradient(stops(stop('red'))),
       );
     });
@@ -162,26 +163,26 @@ describe('gradient values', () => {
       const colors = Array.from({ length: 2_048 }, (_, index) =>
         index % 2 === 0 ? 'red' : 'blue');
 
-      expect((GradientValue.parse(`linear-gradient(${colors.join(', ')})`, {})?.repr ?? null)?.stops)
+      expect((GradientValue.parse(`linear-gradient(${colors.join(', ')})`, { env: styleletEnv })?.repr ?? null)?.stops)
         .toHaveLength(colors.length);
-      expect(GradientValue.parse(`linear-gradient(${[...colors, 'red'].join(', ')})`, {}))
+      expect(GradientValue.parse(`linear-gradient(${[...colors, 'red'].join(', ')})`, { env: styleletEnv }))
         .toBeNull();
     });
   });
 
   describe('<radial-gradient()>', () => {
     it('parses an omitted prelude and a position-only prelude', () => {
-      expect(GradientValue.parse('radial-gradient(red, blue)', {})?.repr ?? null).toEqual(
+      expect(GradientValue.parse('radial-gradient(red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(
         radialGradient(stops(stop('red'), stop('blue'))),
       );
-      expect(GradientValue.parse('radial-gradient(at left top, red, blue)', {})?.repr ?? null).toEqual(radialGradient(
+      expect(GradientValue.parse('radial-gradient(at left top, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(radialGradient(
         stops(stop('red'), stop('blue')),
         {
-          position: PositionValue.parse('left top', {})!,
+          position: PositionValue.parse('left top', { env: styleletEnv })!,
         },
       ));
-      expect(GradientValue.parse('radial-gradient(at right 30% top 60px, red, blue)', {})?.repr ?? null).toEqual(radialGradient(stops(stop('red'), stop('blue')), {
-        position: PositionValue.parse('right 30% top 60px', {})!,
+      expect(GradientValue.parse('radial-gradient(at right 30% top 60px, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(radialGradient(stops(stop('red'), stop('blue')), {
+        position: PositionValue.parse('right 30% top 60px', { env: styleletEnv })!,
       }));
     });
 
@@ -200,7 +201,7 @@ describe('gradient values', () => {
         { type: 'radial-radii', radii: [length(10), percentage(20)] },
       ],
     ])('parses the %s radial size', (input, size) => {
-      expect(GradientValue.parse(`radial-gradient(${input}, red, blue)`, {})?.repr ?? null).toEqual(radialGradient(
+      expect(GradientValue.parse(`radial-gradient(${input}, red, blue)`, { env: styleletEnv })?.repr ?? null).toEqual(radialGradient(
         stops(stop('red'), stop('blue')),
         {
           shape: size.type === 'radial-radii' &&
@@ -235,25 +236,25 @@ describe('gradient values', () => {
         { type: 'radial-extent', extents: ['farthest-corner'] },
       ],
     ] as const)('parses the %s radial prelude', (input, shape, size) => {
-      expect(GradientValue.parse(`radial-gradient(${input}, red, blue)`, {})?.repr ?? null).toEqual(radialGradient(
+      expect(GradientValue.parse(`radial-gradient(${input}, red, blue)`, { env: styleletEnv })?.repr ?? null).toEqual(radialGradient(
         stops(stop('red'), stop('blue')),
         {
           shape,
           size: size as RadialSize,
-          position: PositionValue.parse('left top', {})!,
+          position: PositionValue.parse('left top', { env: styleletEnv })!,
         },
       ));
     });
 
     it('accepts the Images 4 one-radius ellipse and percentage circle sizes', () => {
-      expect(GradientValue.parse('radial-gradient(ellipse 10px, red, blue)', {})?.repr ?? null).toEqual(radialGradient(
+      expect(GradientValue.parse('radial-gradient(ellipse 10px, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(radialGradient(
         stops(stop('red'), stop('blue')),
         {
           shape: 'ellipse',
           size: { type: 'radial-radii', radii: [length(10)] },
         },
       ));
-      expect(GradientValue.parse('radial-gradient(circle 10%, red, blue)', {})?.repr ?? null).toEqual(radialGradient(
+      expect(GradientValue.parse('radial-gradient(circle 10%, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(radialGradient(
         stops(stop('red'), stop('blue')),
         {
           shape: 'circle',
@@ -265,31 +266,31 @@ describe('gradient values', () => {
     it('parses interpolation methods on either side of radial geometry', () => {
       const expected = radialGradient(stops(stop('red'), stop('blue')), {
         shape: 'circle' as const,
-        position: PositionValue.parse('left top', {})!,
+        position: PositionValue.parse('left top', { env: styleletEnv })!,
         method: { space: 'srgb-linear' as const },
       });
 
-      expect(GradientValue.parse('radial-gradient(circle at left top in srgb-linear, red, blue)', {})?.repr ?? null).toEqual(expected);
-      expect(GradientValue.parse('radial-gradient(in srgb-linear circle at left top, red, blue)', {})?.repr ?? null).toEqual(expected);
+      expect(GradientValue.parse('radial-gradient(circle at left top in srgb-linear, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(expected);
+      expect(GradientValue.parse('radial-gradient(in srgb-linear circle at left top, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(expected);
     });
   });
 
   describe('<conic-gradient()>', () => {
     it('parses omitted and explicit geometry', () => {
-      expect(GradientValue.parse('conic-gradient(red, blue)', {})?.repr ?? null).toEqual(
+      expect(GradientValue.parse('conic-gradient(red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(
         conicGradient(angularStops(angularStop('red'), angularStop('blue'))),
       );
-      expect(GradientValue.parse('conic-gradient(from 45deg at left top, red, blue)', {})?.repr ?? null).toEqual(conicGradient(
+      expect(GradientValue.parse('conic-gradient(from 45deg at left top, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(conicGradient(
         angularStops(angularStop('red'), angularStop('blue')),
         {
           angle: new AngleValue(new AngleLiteral(45, 'deg')),
-          position: PositionValue.parse('left top', {})!,
+          position: PositionValue.parse('left top', { env: styleletEnv })!,
         },
       ));
     });
 
     it('parses angular stops, hints, and dual offsets', () => {
-      expect(GradientValue.parse('conic-gradient(red 0 90deg, 25%, blue 75% 1turn)', {})?.repr ?? null).toEqual(conicGradient(angularStops(
+      expect(GradientValue.parse('conic-gradient(red 0 90deg, 25%, blue 75% 1turn)', { env: styleletEnv })?.repr ?? null).toEqual(conicGradient(angularStops(
         angularStop(
           'red',
           new ZeroLiteral(),
@@ -305,7 +306,7 @@ describe('gradient values', () => {
     });
 
     it('accepts angle-percentage calculations in angular stops', () => {
-      const gradient = GradientValue.parse('conic-gradient(red calc(90deg + 50%), blue)', {})?.repr ?? null;
+      const gradient = GradientValue.parse('conic-gradient(red calc(90deg + 50%), blue)', { env: styleletEnv })?.repr ?? null;
 
       expect(gradient).not.toBeNull();
       expect(gradient?.gradientType).toBe('conic');
@@ -322,8 +323,8 @@ describe('gradient values', () => {
         },
       );
 
-      expect(GradientValue.parse('conic-gradient(from 30deg in hsl increasing hue, red, blue)', {})?.repr ?? null).toEqual(expected);
-      expect(GradientValue.parse('conic-gradient(in hsl increasing hue from 30deg, red, blue)', {})?.repr ?? null).toEqual(expected);
+      expect(GradientValue.parse('conic-gradient(from 30deg in hsl increasing hue, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(expected);
+      expect(GradientValue.parse('conic-gradient(in hsl increasing hue from 30deg, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(expected);
     });
   });
 
@@ -332,7 +333,7 @@ describe('gradient values', () => {
     ['radial-gradient', 'radial'],
     ['conic-gradient', 'conic'],
   ] as const)('parses an interpolation-only %s prelude', (notation, gradientType) => {
-    expect(GradientValue.parse(`${notation}(in lab, red, blue)`, {})?.repr ?? null).toMatchObject({
+    expect(GradientValue.parse(`${notation}(in lab, red, blue)`, { env: styleletEnv })?.repr ?? null).toMatchObject({
       gradientType,
       repeating: false,
       method: { space: 'lab' },
@@ -340,16 +341,16 @@ describe('gradient values', () => {
   });
 
   it('represents repeating gradients with the same structural types', () => {
-    expect(GradientValue.parse('repeating-linear-gradient(red, blue)', {})?.repr ?? null).toEqual(
+    expect(GradientValue.parse('repeating-linear-gradient(red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(
       linearGradient(stops(stop('red'), stop('blue')), { repeating: true }),
     );
-    expect(GradientValue.parse('repeating-radial-gradient(circle, red, blue)', {})?.repr ?? null).toEqual(
+    expect(GradientValue.parse('repeating-radial-gradient(circle, red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(
       radialGradient(stops(stop('red'), stop('blue')), {
         repeating: true,
         shape: 'circle',
       }),
     );
-    expect(GradientValue.parse('repeating-conic-gradient(red, blue)', {})?.repr ?? null).toEqual(
+    expect(GradientValue.parse('repeating-conic-gradient(red, blue)', { env: styleletEnv })?.repr ?? null).toEqual(
       conicGradient(
         angularStops(angularStop('red'), angularStop('blue')),
         { repeating: true },
@@ -386,7 +387,7 @@ describe('gradient values', () => {
     'conic-gradient(red, 10deg)',
     'conic-gradient(10deg, red)',
   ])('rejects %j', (input) => {
-    expect(GradientValue.parse(input, {})).toBeNull();
+    expect(GradientValue.parse(input, { env: styleletEnv })).toBeNull();
   });
 });
 
@@ -408,44 +409,46 @@ describe('gradient resolution', () => {
       'conic-gradient(from 90deg at 20px 60px, rgb(255, 0, 0), rgb(0, 0, 255))',
     ],
   ])('resolves %s with each supplied context without changing the specified value', (input, firstText, secondText) => {
-    const specified = GradientValue.parse(input, {})!;
+    const specified = GradientValue.parse(input, { env: styleletEnv })!;
     const specifiedText = specified.serialize();
-    const first = specified.resolve(ValueStage.Computed, { length: { em: 10 } });
-    const second = specified.resolve(ValueStage.Computed, { length: { em: 20 } });
+    const first = specified.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 10 } });
+    const second = specified.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 20 } });
 
     expect(first.serialize()).toBe(firstText);
     expect(second.serialize()).toBe(secondText);
     expect(specified.serialize()).toBe(specifiedText);
-    const explicit = first.tryResolveExplicit(ValueStage.Used, { gradientBoxSize: { width: 100, height: 100 } })!;
+    const explicit = first.tryResolveExplicit(ValueStage.Used, { env: styleletEnv, gradientBoxSize: { width: 100, height: 100 } })!;
     expect(explicit.isExplicit()).toBe(true);
-    expect(explicit.interpolate(explicit, 0.5, { gradientBoxSize: { width: 100, height: 100 } }).serialize())
+    expect(explicit.interpolate(explicit, 0.5, { env: styleletEnv, gradientBoxSize: { width: 100, height: 100 } }).serialize())
       .toBe(explicit.serialize());
   });
 
   it('retains the angular grammar for default explicit conic stops', () => {
-    const gradient = GradientValue.parse('conic-gradient(red, blue)', {})!
-      .tryResolveExplicit(ValueStage.Used, { gradientBoxSize: { width: 100, height: 100 } })!;
+    const gradient = GradientValue.parse('conic-gradient(red, blue)', { env: styleletEnv })!
+      .tryResolveExplicit(ValueStage.Used, { env: styleletEnv, gradientBoxSize: { width: 100, height: 100 } })!;
     const offsets = gradient.repr.stops.flatMap((stop) =>
       stop.type === 'color-stop' ? stop.offsets : [stop.offset]);
 
     expect(offsets.map((offset) => offset.resolve(ValueStage.Used, {
+      env: styleletEnv,
       percentageReferenceValue: new AngleLiteral(360, 'deg'),
     }).serialize())).toEqual(['0deg', '360deg']);
   });
 
   const squareGradientContext = {
+    env: styleletEnv,
     gradientBoxSize: { width: 100, height: 100 },
   };
-  const computed = (input: string) => GradientValue.parse(input, {})!.resolve(ValueStage.Computed).serialize();
+  const computed = (input: string) => GradientValue.parse(input, { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).serialize();
   const usedStopOffsets = (
     input: string,
-    context: GradientValueContext = {},
+    context: GradientValueContext = { env: styleletEnv },
   ) => GradientValue.parse(input, context)!.resolve(ValueStage.Used, context).repr.stops.map((stop) => stop.type === 'color-hint'
     ? stop.offset
     : stop.offsets);
 
   it('narrows gradients only after explicit stop fixup is complete', () => {
-    const value = GradientValue.parse('linear-gradient(red, white, blue)', {})!.repr;
+    const value = GradientValue.parse('linear-gradient(red, white, blue)', { env: styleletEnv })!.repr;
 
     expect(new GradientValue(value).tryResolveExplicit(ValueStage.Computed, squareGradientContext)).toBeNull();
     const explicit = new GradientValue(value).tryResolveExplicit(ValueStage.Used, squareGradientContext)?.repr ?? null;
@@ -463,9 +466,9 @@ describe('gradient resolution', () => {
 
   it('makes the complete gradient geometry explicit', () => {
     const gradientBoxSize = { width: 200, height: 100 };
-    const linear = GradientValue.parse('linear-gradient(to top right, red, blue)', {})!.tryResolveExplicit(ValueStage.Used, { gradientBoxSize })!.repr;
-    const radial = GradientValue.parse('radial-gradient(circle farthest-side at 25% 25%, red, blue)', {})!.tryResolveExplicit(ValueStage.Used, { gradientBoxSize })!.repr;
-    const conic = GradientValue.parse('conic-gradient(from .25turn at 25% 75%, red, blue)', {})!.tryResolveExplicit(ValueStage.Used, { gradientBoxSize })!.repr;
+    const linear = GradientValue.parse('linear-gradient(to top right, red, blue)', { env: styleletEnv })!.tryResolveExplicit(ValueStage.Used, { env: styleletEnv, gradientBoxSize })!.repr;
+    const radial = GradientValue.parse('radial-gradient(circle farthest-side at 25% 25%, red, blue)', { env: styleletEnv })!.tryResolveExplicit(ValueStage.Used, { env: styleletEnv, gradientBoxSize })!.repr;
+    const conic = GradientValue.parse('conic-gradient(from .25turn at 25% 75%, red, blue)', { env: styleletEnv })!.tryResolveExplicit(ValueStage.Used, { env: styleletEnv, gradientBoxSize })!.repr;
 
     expect(linear).toMatchObject({
       gradientType: 'linear',
@@ -490,27 +493,27 @@ describe('gradient resolution', () => {
   });
 
   it('does not mistake double-position stops for explicit stops', () => {
-    expect(GradientValue.parse('linear-gradient(red 0px 20px, blue 100px)', {})!.isExplicit()).toBe(false);
+    expect(GradientValue.parse('linear-gradient(red 0px 20px, blue 100px)', { env: styleletEnv })!.isExplicit()).toBe(false);
   });
 
   it('retains explicitly authored defaults in the resolved value', () => {
-    expect(GradientValue.parse('linear-gradient(to bottom in srgb, red, blue)', {})!.resolve(ValueStage.Computed).repr).toMatchObject({
+    expect(GradientValue.parse('linear-gradient(to bottom in srgb, red, blue)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr).toMatchObject({
       direction: { type: 'side-or-corner', vertical: 'bottom' },
       method: { space: 'srgb' },
     });
-    expect(GradientValue.parse('radial-gradient(ellipse farthest-corner at center, red, blue)', {})!.resolve(ValueStage.Computed).repr).toMatchObject({
+    expect(GradientValue.parse('radial-gradient(ellipse farthest-corner at center, red, blue)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr).toMatchObject({
       shape: 'ellipse',
       size: { type: 'radial-extent', extents: ['farthest-corner'] },
       position: { repr: { offsets: [percentage(50), percentage(50)] } },
     });
-    expect(GradientValue.parse('conic-gradient(from 0deg at center, red, blue)', {})!.resolve(ValueStage.Computed).repr).toMatchObject({
+    expect(GradientValue.parse('conic-gradient(from 0deg at center, red, blue)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr).toMatchObject({
       angle: new AngleValue(new AngleLiteral(0, 'deg')),
       position: { repr: { offsets: [percentage(50), percentage(50)] } },
     });
   });
 
   it('retains omitted endpoint stop offsets at the computed stage', () => {
-    const resolved = GradientValue.parse('linear-gradient(red, 25%, blue)', {})!.resolve(ValueStage.Computed).repr;
+    const resolved = GradientValue.parse('linear-gradient(red, 25%, blue)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr;
     const first = resolved.stops[0];
     const last = resolved.stops.at(-1)!;
 
@@ -528,13 +531,13 @@ describe('gradient resolution', () => {
   });
 
   it('computes authored stop offsets before used-value fixup', () => {
-    const [first] = GradientValue.parse('linear-gradient(red 1in, blue)', {})!.resolve(ValueStage.Computed).repr.stops;
+    const [first] = GradientValue.parse('linear-gradient(red 1in, blue)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr.stops;
 
     expect(first.offsets).toEqual([length(96)]);
   });
 
   it('materializes omitted endpoint stop offsets after the computed stage', () => {
-    const resolved = GradientValue.parse('linear-gradient(red, 25%, blue)', {})!.resolve(ValueStage.Used, squareGradientContext).repr;
+    const resolved = GradientValue.parse('linear-gradient(red, 25%, blue)', { env: styleletEnv })!.resolve(ValueStage.Used, squareGradientContext).repr;
     const first = resolved.stops[0];
     const last = resolved.stops.at(-1)!;
 
@@ -544,7 +547,7 @@ describe('gradient resolution', () => {
   });
 
   it('only applies the first endpoint default to a single-stop gradient', () => {
-    const [only] = GradientValue.parse('linear-gradient(red)', {})!.resolve(ValueStage.Used).repr.stops;
+    const [only] = GradientValue.parse('linear-gradient(red)', { env: styleletEnv })!.resolve(ValueStage.Used, { env: styleletEnv }).repr.stops;
 
     expect(only.offsets).toEqual([length(0)]);
   });
@@ -563,7 +566,7 @@ describe('gradient resolution', () => {
 
   it('moves decreasing stop offsets forward', () => {
     expect(usedStopOffsets(
-      'linear-gradient(red 20px, white 0px, blue 40px)',
+      'linear-gradient(red 20px, white 0px, blue 40px)', { env: styleletEnv },
     )).toEqual([
       [length(20)],
       [length(20)],
@@ -582,7 +585,7 @@ describe('gradient resolution', () => {
       [length(150)],
     ]);
     expect(usedStopOffsets(
-      'linear-gradient(red 80px, white 0px, black, blue 100px)',
+      'linear-gradient(red 80px, white 0px, black, blue 100px)', { env: styleletEnv },
     )).toEqual([
       [length(80)],
       [length(80)],
@@ -593,7 +596,7 @@ describe('gradient resolution', () => {
 
   it('includes hints and both offsets of a color stop in fixup', () => {
     expect(usedStopOffsets(
-      'linear-gradient(red 80px 20px, 10px, white, blue 100px)',
+      'linear-gradient(red 80px 20px, 10px, white, blue 100px)', { env: styleletEnv },
     )).toEqual([
       [length(80)],
       [length(80)],
@@ -607,12 +610,14 @@ describe('gradient resolution', () => {
     const input = 'linear-gradient(yellow 100px, blue 50%)';
 
     expect(usedStopOffsets(input, {
+      env: styleletEnv,
       gradientBoxSize: { width: 200, height: 300 },
     })).toEqual([
       [length(100)],
       [length(150)],
     ]);
     expect(usedStopOffsets(input, {
+      env: styleletEnv,
       gradientBoxSize: { width: 200, height: 150 },
     })).toEqual([
       [length(100)],
@@ -621,7 +626,7 @@ describe('gradient resolution', () => {
 
     expect(usedStopOffsets(
       'linear-gradient(90deg, yellow 100px, blue 50%)',
-      { gradientBoxSize: { width: 300, height: 150 } },
+      { env: styleletEnv, gradientBoxSize: { width: 300, height: 150 } },
     )).toEqual([
       [length(100)],
       [length(150)],
@@ -629,7 +634,7 @@ describe('gradient resolution', () => {
 
     expect(usedStopOffsets(
       'linear-gradient(to top right, yellow 100px, blue 50%)',
-      { gradientBoxSize: { width: 400, height: 300 } },
+      { env: styleletEnv, gradientBoxSize: { width: 400, height: 300 } },
     )).toEqual([
       [length(100)],
       [length(240)],
@@ -639,21 +644,21 @@ describe('gradient resolution', () => {
   it('derives radial gradient-line lengths from explicit radii', () => {
     expect(usedStopOffsets(
       'radial-gradient(circle 200px, red 50%, blue)',
-      { gradientBoxSize: { width: 300, height: 400 } },
+      { env: styleletEnv, gradientBoxSize: { width: 300, height: 400 } },
     )).toEqual([
       [length(100)],
       [length(200)],
     ]);
     expect(usedStopOffsets(
       'radial-gradient(circle 200px, red 100px, blue 25%)',
-      { gradientBoxSize: { width: 300, height: 400 } },
+      { env: styleletEnv, gradientBoxSize: { width: 300, height: 400 } },
     )).toEqual([
       [length(100)],
       [length(100)],
     ]);
     expect(usedStopOffsets(
       'radial-gradient(ellipse 50% 25%, red 50%, blue)',
-      { gradientBoxSize: { width: 200, height: 100 } },
+      { env: styleletEnv, gradientBoxSize: { width: 200, height: 100 } },
     )).toEqual([
       [length(50)],
       [length(100)],
@@ -661,7 +666,7 @@ describe('gradient resolution', () => {
 
     const circle = usedStopOffsets(
       'radial-gradient(circle 50%, red, blue)',
-      { gradientBoxSize: { width: 300, height: 400 } },
+      { env: styleletEnv, gradientBoxSize: { width: 300, height: 400 } },
     );
 
     expect(circle[1]).toEqual([new LengthPercentageValue(new LengthLiteral(Math.hypot(300, 400) / Math.SQRT2 / 2, 'px'))]);
@@ -672,21 +677,21 @@ describe('gradient resolution', () => {
 
     expect(usedStopOffsets(
       'radial-gradient(ellipse closest-side at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )).toEqual([
       [length(0)],
       [length(50)],
     ]);
     expect(usedStopOffsets(
       'radial-gradient(circle closest-side at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )).toEqual([
       [length(0)],
       [length(25)],
     ]);
     expect(usedStopOffsets(
       'radial-gradient(ellipse farthest-side closest-side at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )).toEqual([
       [length(0)],
       [length(150)],
@@ -697,35 +702,35 @@ describe('gradient resolution', () => {
     const gradientBoxSize = { width: 200, height: 100 };
     const closest = usedStopOffsets(
       'radial-gradient(ellipse closest-corner at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     );
 
     expect(closest[1]).toEqual([length(50 * Math.SQRT2)]);
     expect(usedStopOffsets(
       'radial-gradient(ellipse farthest-corner at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )[1]).toEqual([length(150 * Math.SQRT2)]);
     expect(usedStopOffsets(
       'radial-gradient(red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )[1]).toEqual([length(100 * Math.SQRT2)]);
     expect(usedStopOffsets(
       'radial-gradient(circle closest-corner at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )[1]).toEqual([length(Math.hypot(50, 25))]);
     expect(usedStopOffsets(
       'radial-gradient(circle farthest-corner at 50px 25px, red, blue)',
-      { gradientBoxSize },
+      { env: styleletEnv, gradientBoxSize },
     )[1]).toEqual([length(Math.hypot(150, 75))]);
   });
 
   it('does not manufacture a numeric line length for degenerate radials', () => {
-    expect(GradientValue.parse('radial-gradient(closest-side at left center, red, blue)', {})!.tryResolveExplicit(ValueStage.Used, { gradientBoxSize: { width: 200, height: 100 } })).toBeNull();
+    expect(GradientValue.parse('radial-gradient(closest-side at left center, red, blue)', { env: styleletEnv })!.tryResolveExplicit(ValueStage.Used, { env: styleletEnv, gradientBoxSize: { width: 200, height: 100 } })).toBeNull();
   });
 
   it('uses one turn as the intrinsic basis for conic stop offsets', () => {
     expect(usedStopOffsets(
-      'conic-gradient(red 180deg, white, blue 25%)',
+      'conic-gradient(red 180deg, white, blue 25%)', { env: styleletEnv },
     )).toEqual([
       [new AnglePercentageValue(new AngleLiteral(180, 'deg'))],
       [new AnglePercentageValue(new AngleLiteral(180, 'deg'))],
@@ -738,7 +743,7 @@ describe('gradient resolution', () => {
     'linear-gradient(red 0px, blue 100%)',
     'conic-gradient(red 0deg, blue 100%)',
   ])('retains but does not serialize explicit endpoint defaults in %s', (input) => {
-    const resolved = GradientValue.parse(input, {})!.resolve(ValueStage.Computed).repr;
+    const resolved = GradientValue.parse(input, { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr;
     const first = resolved.stops[0];
     const last = resolved.stops.at(-1)!;
 
@@ -748,7 +753,7 @@ describe('gradient resolution', () => {
   });
 
   it('retains both offsets of endpoint double-position stops', () => {
-    const resolved = GradientValue.parse('linear-gradient(red 0% 20%, blue 80% 100%)', {})!.resolve(ValueStage.Computed).repr.stops;
+    const resolved = GradientValue.parse('linear-gradient(red 0% 20%, blue 80% 100%)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).repr.stops;
     const first = resolved[0];
     const last = resolved.at(-1)!;
 
@@ -848,14 +853,14 @@ describe('gradient serialization', () => {
       'repeating-conic-gradient(at center top in oklch decreasing hue, red, blue)',
     ],
   ])('serializes %s as %s', (input, expected) => {
-    expect(GradientValue.parse(input, {})!.serialize()).toBe(expected);
+    expect(GradientValue.parse(input, { env: styleletEnv })!.serialize()).toBe(expected);
   });
 });
 
 describe('gradient interpolation', () => {
   const gradientBoxSize = { width: 200, height: 100 };
   const interpolate = (a: string, b: string, progress: number) =>
-    GradientValue.parse(a, {})!.interpolate(GradientValue.parse(b, {})!, progress, { gradientBoxSize }).repr;
+    GradientValue.parse(a, { env: styleletEnv })!.interpolate(GradientValue.parse(b, { env: styleletEnv })!, progress, { env: styleletEnv, gradientBoxSize }).repr;
 
   it('interpolates linear direction, line length, and percentage stops independently', () => {
     const result = interpolate(

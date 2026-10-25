@@ -11,7 +11,7 @@ UTF-8; legacy output encodings are available through the internal operations.
 | --- | --- |
 | `index.ts` | Entry point for other subsystems. |
 | `web-idl.ts` | Collects interface, dictionary, and mixin declarations for the host binding. |
-| `core/index.ts` | Portable labels, canonical encoding types, BOM detection, and the host decoding contract/native adapter. |
+| `core/index.ts` | Portable labels, canonical encoding types, and BOM detection. |
 | `encodings.ts` | Codec factories and complete-input/queue operations. |
 | `codecs/` | Encoder and decoder algorithms, including state retained across input chunks. |
 | `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through the owning environment. |
@@ -27,11 +27,9 @@ and UTF-16 names to UTF-8 where the caller's specification requires it;
 replacement and UTF-16 deliberately have no encoders.
 
 Core is independently compiled without Node or Web IDL dependencies. Stylelet
-uses its label lookup directly and consumes the `DecodeText` function
-through `userAgent.decodeText`. Browlet supplies `decode`; standalone hosts
-default to `decodeNative`, which captures TextDecoder without requiring it during
-import. Both providers apply BOM override and replacement decoding. The full
-codec implementation retains its existing Node fast paths.
+imports label lookup and `decode` from the full subsystem. CSS selects the fallback
+encoding; Encoding applies BOM override and replacement decoding. The codec
+implementation retains its existing Node fast paths.
 
 `decode` and `encode` accept complete inputs and return complete results.
 Their `*Queue` counterparts retain supplied output and return `InternalPromise`

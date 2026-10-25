@@ -1,5 +1,6 @@
+import { createStyleletTestEnvironment } from '../../environment-fixture';
 import { browletDOM } from '../../../../src/browlet/integration/dom';
-import { createStyleletEnvironment } from '../../../../src/stylelet/environment';
+
 import { describe, expect, it, vi } from 'vitest';
 
 import { StyleletContext } from '../../../../src/stylelet/context';
@@ -217,7 +218,7 @@ describe('selector matching', () => {
     const document = createBrowletDocument('<main id="target"></main>');
     const target = document.getElementById('target')!;
     const version = vi.fn(() => 1);
-    const context = new StyleletContext(document, createStyleletEnvironment({ dom: { ...browletDOM, treeVersion: version } }));
+    const context = new StyleletContext(document, createStyleletTestEnvironment({ dom: { ...browletDOM, treeVersion: version } }));
     const simpleSelectors = parseSelectorList('#target', {})!;
     const structuralSelectors = parseSelectorList(':nth-child(1)', {})!;
     const simple = compileSelectorList(simpleSelectors, context);

@@ -1,3 +1,6 @@
+import { styleletEnv, createStyleletTestEnvironment } from '../../environment-fixture';
+import { serializeURL } from '../../../../src/url/core/index';
+import { parseURL } from '../../url-fixture';
 import { browletDOM } from '../../../../src/browlet/integration/dom';
 import { describe, expect, it } from 'vitest';
 
@@ -11,7 +14,7 @@ import { createBrowletDocument } from '../../browlet-document';
 
 describe('CSSStyleSheetImpl', () => {
   it('initializes the StyleSheet state from its constructor options', () => {
-    const media = new MediaListImpl('screen');
+    const media = new MediaListImpl('screen', styleletEnv);
     const sheet = createStyleSheet({
       baseURL: 'https://example.com/css/',
       media,
@@ -22,7 +25,7 @@ describe('CSSStyleSheetImpl', () => {
     expect(sheet).toBeInstanceOf(CSSStyleSheetImpl);
     expect(sheet).toBeInstanceOf(StyleSheetImpl);
     expect(sheet.href).toBeNull();
-    expect(sheet.baseURL?.href).toBe('https://example.com/css/');
+    expect(serializeURL(sheet.baseURL!)).toBe('https://example.com/css/');
     expect(sheet.ownerNode).toBeNull();
     expect(sheet.parentStyleSheet).toBeNull();
     expect(sheet.title).toBeNull();
@@ -40,9 +43,9 @@ describe('CSSStyleSheetImpl', () => {
 
   it('creates a stylesheet from specified properties', () => {
     const document = createBrowletDocument();
-    const stylelet = new Stylelet(document, { dom: browletDOM });
+    const stylelet = new Stylelet(document, { env: createStyleletTestEnvironment({ dom: browletDOM }) });
     const sheet = CSSStyleSheetImpl.create(stylelet.context, {
-      location: new URL('https://example.com/style.css'),
+      location: parseURL('https://example.com/style.css')!,
       parentStyleSheet: null,
       ownerNode: null,
       ownerRule: null,
@@ -71,8 +74,7 @@ describe('CSSStyleSheetImpl', () => {
     const sheet = createStyleSheet({ baseURL: '../css/' });
 
     expect(sheet.location).toBeNull();
-    expect(sheet.baseURL).toBeInstanceOf(URL);
-    expect(sheet.baseURL?.href).toBe('https://example.com/css/');
+    expect(serializeURL(sheet.baseURL!)).toBe('https://example.com/css/');
   });
 
   it('constructs style rules with parsed declarations', () => {
@@ -305,7 +307,7 @@ function createStyleSheet(
     value: 'https://example.com/document/',
   });
 
-  return new Stylelet(document, { dom: browletDOM }).createStyleSheet(options);
+  return new Stylelet(document, { env: createStyleletTestEnvironment({ dom: browletDOM }) }).createStyleSheet(options);
 }
 
 function observe<T>(value: InternalPromise<T>): Promise<T> {

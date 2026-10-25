@@ -67,7 +67,7 @@ describe.each(['Document', 'Window settings'] as const)('HTML URL parsing agains
     const { env, owner } = createOwner();
     const blob = new BlobImpl([], {}, env);
     const url = env.userAgent.blobURLStore.add(blob, env);
-    const entry = env.parseURL(url).url!.blobURLEntry;
+    const entry = env.parseURL(url)!.blobURLEntry;
     expect(entry).not.toBeNull();
     expect(owner.parseHTMLURL(`${url}#part`)!.blobURLEntry).toBe(entry);
     expect(owner.encodingParseURL(url)!.blobURLEntry).toBe(entry);
@@ -115,9 +115,9 @@ describe('HTML URL parsing ownership', () => {
 
   it('keeps explicit-base parsing separate, including parsing without a base', () => {
     const { env } = createWindowDocument();
-    expect(env.parseURL('target').url).toBeNull();
+    expect(env.parseURL('target')).toBeNull();
     const base = parseURL('https://explicit.test/').url!;
-    expect(serializeURL(env.parseURL('target?q=é', base, 'windows-1252').url!))
+    expect(serializeURL(env.parseURL('target?q=é', base, 'windows-1252')!))
       .toBe('https://explicit.test/target?q=%E9');
   });
 });

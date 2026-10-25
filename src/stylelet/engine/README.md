@@ -204,8 +204,8 @@ before any expected-failure annotation.
 
 - `SPEC_CLASH(lazy-var-fallback)`: the current
   [var replacement algorithm](https://drafts.csswg.org/css-variables-1/#using-variables)
-  substitutes a fallback only when needed. Chromium agrees. Firefox/WebKit
-  invalidate `--b: var(--a, var(--b))` even when `--a` has a valid value.
+  substitutes a fallback only when needed. Chromium/WebKit agree. Firefox
+  invalidates `--b: var(--a, var(--b))` even when `--a` has a valid value.
 - `SPEC_CLASH(var-argument-grammar)`: follow the current
   [argument grammar and spread rules](https://drafts.csswg.org/css-values-5/#early-resolution).
   All three browsers reject dynamic names (`var(var(--name))`), early spread

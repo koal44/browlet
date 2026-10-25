@@ -15,6 +15,11 @@ and [HTTP](../http/README.md). The [roadmap](ROADMAP.md) records remaining Fetch
 
 ## Entry points
 
+`new FetchRequest(url, env)` retains the owning environment and derives its
+UserAgent from that owner. The request's `client` starts as null; initiating
+algorithms assign it separately. Reporting requests keep it null even though
+they have a sandbox environment. Cloning and preflights retain the owner and client.
+
 `fetch(request, options, env) -> FetchController` starts an internal fetch.
 The caller supplies a `FetchRequest`, response-processing steps, and the owning
 execution environment. Options select header delivery, body consumption,
@@ -32,15 +37,15 @@ and Body declarations accompany their implementations. Binding machinery owns
 author conversion, platform identity, realm selection, and promise projection.
 Import across subsystem boundaries through [index.ts](index.ts).
 
-[Core](core/index.ts) exposes the complete referrer-policy values, type, and Web IDL
-enumeration together. It depends only on Web IDL Core and its Infra foundation,
-so consumers such as Stylelet can share the definition without loading Fetch's runtime.
+[referrer-policy.ts](referrer-policy.ts) keeps the complete policy values, type,
+and Web IDL enumeration with their algorithms. Consumers such as Stylelet use
+Fetch's index to share this definition.
 
 ## Module guide
 
 | Module | Responsibility |
 | --- | --- |
-| [core/referrer-policy.ts](core/referrer-policy.ts) | Shared policy definition, including the empty unspecified policy and its Web IDL enumeration |
+| [referrer-policy.ts](referrer-policy.ts) | Policy values, type, Web IDL enumeration, header parsing, redirect updates, request referrer selection, and URL stripping; the host supplies source and trust queries |
 | [fetch.ts](fetch.ts) | Fetch entry, main/scheme/HTTP/redirect/preflight algorithms, cache transactions, response completion, and private network stream machinery |
 | [fetch-global.ts](fetch-global.ts) | Author-facing fetch operation and abort handling |
 | [request.ts](request.ts), [response.ts](response.ts), [headers.ts](headers.ts), [body.ts](body.ts) | Fetch records, public implementations, header algorithms, and body extraction/consumption |

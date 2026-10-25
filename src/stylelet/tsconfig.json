@@ -11,7 +11,11 @@
   "references": [
     { "path": "../infra" },
     { "path": "../encoding/core" },
-    { "path": "../fetch/core" },
+    { "path": "../encoding" },
+    { "path": "../url/core" },
+    { "path": "../url" },
+    { "path": "../fetch" },
+    { "path": "../mime" },
     { "path": "../web-idl/core" }
   ]
 }

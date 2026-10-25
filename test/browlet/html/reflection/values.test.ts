@@ -21,7 +21,7 @@ describe('HTML reflected values through Web IDL', () => {
 
   it('converts scalar strings, resolves URLs against the node document, and preserves a custom getter', () => {
     const { platform: element, document, env } = createReflectionFixture();
-    document.setURL(env.parseURL('https://example.test/dir/page').url!);
+    document.setURL(env.parseURL('https://example.test/dir/page')!);
     expect(element.url).toBe('');
     element.setAttribute('scalar', '\uD800');
     expect(element.scalar).toBe('\uFFFD');

@@ -50,7 +50,7 @@ export class LengthPercentageValue<R extends LengthPercentage = LengthPercentage
   }
 
   /** Resolve with the current context, preserving identity when the representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): LengthPercentageValue {
+  resolve(stage: ValueStage, context: MathContext): LengthPercentageValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, lengthPercentageMathContext(context));
@@ -73,7 +73,7 @@ export class LengthPercentageValue<R extends LengthPercentage = LengthPercentage
   }
 
   /** Add compatible literals directly, retaining other combinations as math. */
-  add(other: LengthPercentageValue, context: MathContext = {}): LengthPercentageValue {
+  add(other: LengthPercentageValue, context: MathContext): LengthPercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new LengthPercentageValue(this.repr.add(other.repr));
     }
@@ -87,7 +87,7 @@ export class LengthPercentageValue<R extends LengthPercentage = LengthPercentage
   }
 
   /** Interpolate compatible literals directly, retaining other combinations as math. */
-  interpolate(other: LengthPercentageValue, progress: number, context: MathContext = {}): LengthPercentageValue {
+  interpolate(other: LengthPercentageValue, progress: number, context: MathContext): LengthPercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new LengthPercentageValue(this.repr.interpolate(other.repr, progress));
     }
@@ -101,7 +101,7 @@ export class LengthPercentageValue<R extends LengthPercentage = LengthPercentage
   }
 
   /** Accumulation of length-percentages is addition. */
-  accumulate(other: LengthPercentageValue, context: MathContext = {}): LengthPercentageValue {
+  accumulate(other: LengthPercentageValue, context: MathContext): LengthPercentageValue {
     return this.add(other, context);
   }
 

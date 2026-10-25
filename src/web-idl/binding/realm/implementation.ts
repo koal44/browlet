@@ -19,28 +19,28 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   /** The declaration assembled independently of any realm. */
   assembled: Assembled;
   /** Allocate an implementation for internal platform-object creation. */
-  declare createImplementation?: ImplementationCreationSteps;
+  createImplementation?: ImplementationCreationSteps;
   /** Initialize implementation state before establishing its platform identity. */
-  declare initializeImplementation?: ImplementationInitializationSteps;
+  initializeImplementation?: ImplementationInitializationSteps;
   /** Replace ordinary constructor invocation when the declaration supplies custom steps. */
-  declare overriddenConstructor?: OverriddenConstructorSteps;
+  overriddenConstructor?: OverriddenConstructorSteps;
   /** Registered steps and generated functions, keyed by compiled members. */
-  declare members?: Map<IDLMember, MemberBinding>;
+  members?: Map<IDLMember, MemberBinding>;
 
   /** Retained platform objects preserve their identities for this construct and realm. */
-  declare interfaceObject?: InterfaceObject;
-  declare interfacePrototypeObject?: object;
-  declare namespaceObject?: object;
-  declare legacyCallbackInterfaceObject?: JSFunction;
-  declare legacyFactoryFunctions?: Map<string, JSFunction>;
-  declare iteratorPrototype?: object;
-  declare asyncIteratorPrototype?: object;
-  declare namedPropertiesObject?: object;
+  interfaceObject?: InterfaceObject;
+  interfacePrototypeObject?: object;
+  namespaceObject?: object;
+  legacyCallbackInterfaceObject?: JSFunction;
+  legacyFactoryFunctions?: Map<string, JSFunction>;
+  iteratorPrototype?: object;
+  asyncIteratorPrototype?: object;
+  namedPropertiesObject?: object;
   /** Own unforgeable descriptors shared by instances; null when this interface has none. */
-  declare unforgeableDescriptors?: PropertyDescriptorMap | null;
-  declare legacyPropertyMetadata?: LegacyPropertyMetadata | null;
+  unforgeableDescriptors?: PropertyDescriptorMap | null;
+  legacyPropertyMetadata?: LegacyPropertyMetadata | null;
   /** Exposed attribute declarations, without retaining their changing values. */
-  declare defaultToJSONAttributes?: DefaultToJSONAttribute[];
+  defaultToJSONAttributes?: DefaultToJSONAttribute[];
 
   constructor(binding: RealmBinding, assembled: Assembled) {
     this.binding = binding;

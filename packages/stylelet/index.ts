@@ -1,14 +1,16 @@
+export type { URLRecord } from '../../src/url/core/index';
 export {
   CSSStyleDeclarationImpl, CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, MediaListImpl, StylePropertyMapImpl,
-  createStyleletEnvironment, defaultStyleletEnvironment, defaultStyleletExecution,
   InternalPromise, Stylelet, StyleletContext, styleletIDLDefinitions, TreeScope,
   ColorRgba, absoluteColorFromRgba,
+  fetchStyleResource, UrlValue,
 } from '../../src/stylelet/index';
+export type { FetchEnvironment, FetchController, FetchResponse } from '../../src/fetch/index';
 export type {
-  CSSStyleSheetInit, DOMException, DOMExceptionConstructor, DOMExceptionName, Encoding, DecodeText,
+  CSSStyleSheetInit, DOMException, DOMExceptionConstructor, DOMExceptionName, Encoding,
   StyleletEnvironment, StyleletExecution, StyleletOptions, StyleletUserAgent,
-  StyleletURL, StyleletURLConstructor,
-  AbsoluteColor,
+  AbsoluteColor, ValueContext,
+  StyleSheetLoad,
 } from '../../src/stylelet/index';
 
 export { standardDOM } from '../../src/infra/index';

@@ -1,29 +1,15 @@
 import { InternalError } from '../infra/internal-error';
+import { serializeURL, serializeURLPath, hasOpaquePath, includesCredentials } from './core/url';
+import { serializeHost } from './core/host';
+import type { BlobURLEntry, Host, Origin, URLRecord } from './core/index';
 
 import {
-  domainToUnicode, obtainRegistrableDomain, parseHost, serializeHost, type Host,
+  domainToUnicode, obtainRegistrableDomain, parseHost,
 } from './host';
 import { utf8PercentEncode, percentEncodeAfterEncoding } from './percent-encoding';
 import { CodePointCursor, isURLCodePoint } from './cp-cursor';
-import { createOpaqueOrigin, type Origin } from './origin';
+import { createOpaqueOrigin } from './origin';
 import type { URLValidationError } from './validation-error';
-
-/*
- * A URL record.
- *
- * https://url.spec.whatwg.org/#concept-url
- */
-export type URLRecord = {
-  scheme: string;
-  username: string;
-  password: string;
-  host: Host | null;
-  port: number | null;
-  path: URLPath;
-  query: string | null;
-  fragment: string | null;
-  blobURLEntry: BlobURLEntry | null;
-};
 
 /** Frozen about:blank template; use copyURL() when retaining mutable URL state. */
 export const aboutBlankURL: Readonly<URLRecord> = Object.freeze({
@@ -48,16 +34,6 @@ export type URLRenderOptions = {
   omitScheme?: boolean;
   simplifyHost?: boolean;
   maxLength?: number;
-};
-
-/** Opaque paths are strings; hierarchical paths are segment lists. https://url.spec.whatwg.org/#url-path */
-export type URLPath = string | string[];
-
-/** The part of a File API registration needed by URL's origin algorithm. */
-export type BlobURLEntry = {
-  env: {
-    origin: Origin;
-  };
 };
 
 /** The browser owner supplying File API's Blob URL registrations to the URL parser. */
@@ -637,42 +613,6 @@ export function setURLPassword(url: URLRecord, password: string): void {
   url.password = utf8PercentEncode(password, 'userinfo');
 }
 
-/*
- * URL serializer.
- *
- * https://url.spec.whatwg.org/#concept-url-serializer
- */
-export function serializeURL(
-  url: URLRecord,
-  excludeFragment = false,
-): string {
-  let output = `${url.scheme}:`;
-
-  if (url.host !== null) {
-    output += '//';
-    if (includesCredentials(url)) {
-      output += url.username;
-      if (url.password !== '') output += `:${url.password}`;
-      output += '@';
-    }
-    output += serializeHost(url.host);
-    if (url.port !== null) output += `:${url.port}`;
-  }
-
-  if (
-    url.host === null && !hasOpaquePath(url) && url.path.length > 1 &&
-    url.path[0] === ''
-  ) {
-    output += '/.';
-  }
-
-  output += serializeURLPath(url);
-  if (url.query !== null) output += `?${url.query}`;
-  if (!excludeFragment && url.fragment !== null) output += `#${url.fragment}`;
-
-  return output;
-}
-
 /** Remove credentials and fragments from HTTP(S) URLs; disclose only the scheme for other URLs. */
 // https://w3c.github.io/reporting/#strip-url-for-use-in-reports-heading
 // https://w3c.github.io/webappsec-csp/#strip-url-for-use-in-reports
@@ -681,32 +621,6 @@ export function stripURLForReporting(url: URLRecord): string {
   // SPEC_CLASH(report-url-stripping): Preserve the source and omit the fragment;
   // both drafts mutate the URL and set an empty fragment, which would leave '#'.
   return serializeURL({ ...url, username: '', password: '', fragment: null });
-}
-
-/**
- * Copy mutable components while retaining the cached blob URL entry.
- */
-export function copyURL(url: URLRecord): URLRecord {
-  return {
-    ...url,
-    path: typeof url.path === 'string' ? url.path : [...url.path],
-    host: url.host === null ? null : url.host.kind === 'ipv6'
-      ? { ...url.host, pieces: [...url.host.pieces] } : { ...url.host },
-  };
-}
-
-/*
- * URL equivalence.
- *
- * https://url.spec.whatwg.org/#url-equivalence
- */
-export function urlsEqual(
-  a: URLRecord,
-  b: URLRecord,
-  excludeFragments = false,
-): boolean {
-  return serializeURL(a, excludeFragments) ===
-    serializeURL(b, excludeFragments);
 }
 
 /*
@@ -981,14 +895,6 @@ function isSpecialURL(url: URLRecord): boolean {
   return isSpecialScheme(url.scheme);
 }
 
-function includesCredentials(url: URLRecord): boolean {
-  return url.username !== '' || url.password !== '';
-}
-
-function hasOpaquePath(url: URLRecord): url is URLRecord & { path: string; } {
-  return typeof url.path === 'string';
-}
-
 function isSingleDotPathSegment(segment: string): boolean {
   return segment === '.' || segment.toLowerCase() === '%2e';
 }
@@ -1031,11 +937,6 @@ function shortenURLPath(url: URLRecord): void {
   }
 
   path.pop();
-}
-
-export function serializeURLPath(url: URLRecord): string {
-  if (hasOpaquePath(url)) return url.path;
-  return (url.path as string[]).map((segment) => `/${segment}`).join('');
 }
 
 const specialSchemes = new Map<string, number | null>([

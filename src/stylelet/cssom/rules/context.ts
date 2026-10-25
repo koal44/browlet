@@ -25,9 +25,6 @@ export class RuleListContext implements SelectorNamespaces, PropertyContext {
   /** Namespace applied to unprefixed type selectors, when declared. */
   defaultNamespace?: string;
 
-  /** No sheet-level numeric bindings; individual value grammars introduce their own. */
-  declare numericVariables: undefined;
-
   /** Enclosing style rule's selectors, or null outside a style-rule block. */
   parentSelectors: SelectorList | null;
   /** Whether the sheet was constructed, which excludes @import from its grammar. */

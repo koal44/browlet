@@ -1,7 +1,8 @@
 import type { DOMElement, DOMProcessingInstruction } from '../../infra/index';
 import { attr, defineInterface, idlType, impl, nullable, reference, roAttr, union, xattr } from '../../web-idl/core/index';
+import { serializeURL, type URLRecord } from '../../url/core/index';
 
-import type { StyleletEnvironment, StyleletURL } from '../environment';
+import type { StyleletEnvironment } from '../environment';
 import { MediaListImpl } from './media/index';
 
 import type { CSSStyleSheetImpl } from './css-stylesheet';
@@ -12,7 +13,7 @@ export abstract class StyleSheetImpl {
   /** MIME type of the sheet's styling language; Stylelet supports CSS. */
   type = 'text/css';
   /** Parsed location retained for internal URL resolution; href exposes its string. */
-  location: StyleletURL | null = null;
+  location: URLRecord | null = null;
   /** Element or processing instruction that owns the sheet, or null when unattached. */
   ownerNode: DOMElement | DOMProcessingInstruction | null = null;
   /** Sheet containing the importing rule, or null for a sheet that was not imported. */
@@ -30,13 +31,13 @@ export abstract class StyleSheetImpl {
   /** Create the sheet's media list in its owning environment. */
   constructor(media: string, env: StyleletEnvironment) {
     this.env = env;
-    this.media = new MediaListImpl(media);
+    this.media = new MediaListImpl(media, env);
   }
 
   /** Serialized sheet location, or null when the sheet has no location. */
   // https://drafts.csswg.org/cssom/#dom-stylesheet-href
   get href(): string | null {
-    return this.location?.href ?? null;
+    return this.location === null ? null : serializeURL(this.location);
   }
 
   /** Stylesheet-set title exposed to authors, or null when no title is assigned. */

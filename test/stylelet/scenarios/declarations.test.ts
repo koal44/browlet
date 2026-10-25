@@ -18,8 +18,6 @@ runScenarios('CSSOM declaration operations', 'normal', BROWSER_NAMES.flatMap((br
     const browlet = new Browlet({ route: () => '' });
     expect(await browlet.evaluate(exerciseDeclarations, kind)).toEqual(declarationExpectations[kind]);
     const native = await page.evaluate(exerciseDeclarations, kind);
-    // SPEC_CLASH(custom-property-name-serialization): WebKit does not escape names.
-    test.fail(browser === 'webkit' && kind === 'name-serialization', 'Approved native name-escaping disagreement');
     // SPEC_CLASH(custom-property-value-escapes): WebKit serializes decoded tokens instead of preserving escapes.
     test.fail(browser === 'webkit' && kind === 'custom-spelling', 'Approved native custom-value escape disagreement');
     // SPEC_CLASH(css-custom-property-boundary-comments): Browsers discard leading/comment-only comments; Firefox retains trailing ones.

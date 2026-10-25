@@ -1,6 +1,7 @@
+import { styleletEnv as env } from '../../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 
-import { defaultStyleletEnvironment as env } from '../../../../../src/stylelet/environment';
+
 import { RuleListContext } from '../../../../../src/stylelet/cssom/rules/context';
 import { CSSRuleListImpl } from '../../../../../src/stylelet/cssom/rule-list';
 import type { CSSStyleRuleImpl } from '../../../../../src/stylelet/cssom/rules/style';

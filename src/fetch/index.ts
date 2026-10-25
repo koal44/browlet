@@ -27,7 +27,10 @@ export { ConnectionTimingInfo, type FetchTimingInfo, type ResponseBodyInfo, type
 export {
   parseIntegrityMetadata, applyIntegrityAlgorithm, type IntegrityMetadata, type IntegrityAlgorithm,
 } from './integrity';
-export { referrerPolicyIDL, referrerPolicyValues, type ReferrerPolicy } from './core/index';
+export {
+  referrerPolicyIDL, referrerPolicyValues, type ReferrerPolicy,
+  parseReferrerPolicyFromHeader, setRequestReferrerPolicyOnRedirect, determineRequestReferrer, stripURLForReferrer,
+} from './referrer-policy';
 export type { FetchIntegrityPolicy, IntegrityViolationReportBody } from './policy';
 export { isLocalScheme, isLocalURL } from './url';
 export { fetchIDLDefinitions } from './web-idl';

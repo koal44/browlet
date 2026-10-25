@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { parseListOfComponentValues } from '../../../../src/stylelet/syntax/parser';
@@ -40,16 +41,16 @@ describe('position values', () => {
       'inline-start',
       'inline-end',
     ] as const)('parses the %s keyword', (keyword) => {
-      expect(PositionValue.parse(keyword, {})).toEqual(position([keyword]));
+      expect(PositionValue.parse(keyword, { env: styleletEnv })).toEqual(position([keyword]));
     });
 
     it('parses a length-percentage', () => {
-      expect(PositionValue.parse('25%', {})).toEqual(position([percentage(25)]));
-      expect(PositionValue.parse('10px', {})).toEqual(position([length(10)]));
+      expect(PositionValue.parse('25%', { env: styleletEnv })).toEqual(position([percentage(25)]));
+      expect(PositionValue.parse('10px', { env: styleletEnv })).toEqual(position([length(10)]));
     });
 
     it('parses keywords case-insensitively', () => {
-      expect(PositionValue.parse('InLiNe-EnD', {})).toEqual(position(['inline-end']));
+      expect(PositionValue.parse('InLiNe-EnD', { env: styleletEnv })).toEqual(position(['inline-end']));
     });
   });
 
@@ -64,7 +65,7 @@ describe('position values', () => {
       ['x-end y-start', ['x-end', 'y-start']],
       ['y-start x-end', ['x-end', 'y-start']],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, { env: styleletEnv })).toEqual(position([...components]));
     });
 
     it.each([
@@ -75,7 +76,7 @@ describe('position values', () => {
       ['x-start 10px', ['x-start', length(10)]],
       ['10px y-start', [length(10), 'y-start']],
     ] as const)('parses the ordered form %s', (input, components) => {
-      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, { env: styleletEnv })).toEqual(position([...components]));
     });
 
     it.each([
@@ -86,7 +87,7 @@ describe('position values', () => {
       ['start end', ['start', 'end']],
       ['end start', ['end', 'start']],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, { env: styleletEnv })).toEqual(position([...components]));
     });
   });
 
@@ -117,7 +118,7 @@ describe('position values', () => {
         ['start', length(1), 'end', percentage(25)],
       ],
     ] as const)('parses and axis-orders %s', (input, components) => {
-      expect(PositionValue.parse(input, {})).toEqual(position([...components]));
+      expect(PositionValue.parse(input, { env: styleletEnv })).toEqual(position([...components]));
     });
   });
 
@@ -140,15 +141,15 @@ describe('position values', () => {
     'start inline-end',
     'start 10px end',
   ])('rejects %j as a complete position', (input) => {
-    expect(PositionValue.parse(input, {})).toBeNull();
+    expect(PositionValue.parse(input, { env: styleletEnv })).toBeNull();
   });
 
   it('prefers the longest viable position production', () => {
-    expect(PositionValue.parse('left 10px', {})).toEqual(position([
+    expect(PositionValue.parse('left 10px', { env: styleletEnv })).toEqual(position([
       'left',
       length(10),
     ]));
-    expect(PositionValue.parse('left 10px top 20px', {})).toEqual(position([
+    expect(PositionValue.parse('left 10px top 20px', { env: styleletEnv })).toEqual(position([
       'left',
       length(10),
       'top',
@@ -159,8 +160,8 @@ describe('position values', () => {
   it('greedily consumes a position while leaving following components', () => {
     const four = new TokenCursor(parseListOfComponentValues(
       'left 10px top 20px red', {},
-    ), {});
-    const one = new TokenCursor(parseListOfComponentValues('top 50px', {}), {});
+    ), { env: styleletEnv });
+    const one = new TokenCursor(parseListOfComponentValues('top 50px', {}), { env: styleletEnv });
 
     expect(PositionValue.consume(four))
       .toEqual(position(['left', length(10), 'top', length(20)]));
@@ -173,7 +174,7 @@ describe('position values', () => {
 
 describe('position resolution', () => {
   it('represents normalized positions as offsets rather than syntax components', () => {
-    expect(PositionValue.parse('center', {})!.resolve(ValueStage.Computed)).toEqual(offsets(percentage(50), percentage(50)));
+    expect(PositionValue.parse('center', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv })).toEqual(offsets(percentage(50), percentage(50)));
   });
 
   it.each([
@@ -186,7 +187,7 @@ describe('position resolution', () => {
     ['center', '50% 50%'],
     ['right 20px bottom 10px', 'calc(100% - 20px) calc(100% - 10px)'],
   ])('resolves %s to top-left offsets', (input, expected) => {
-    expect(PositionValue.parse(input, {})!.resolve(ValueStage.Computed).serialize()).toBe(expected);
+    expect(PositionValue.parse(input, { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe(expected);
   });
 
   it.each<[
@@ -197,43 +198,43 @@ describe('position resolution', () => {
     string,
   ]>([
     [
-      { writingMode: 'horizontal-tb', direction: 'ltr' },
+      { env: styleletEnv, writingMode: 'horizontal-tb', direction: 'ltr' },
       '0% 50%', '100% 50%', '50% 0%', '50% 100%',
     ],
     [
-      { writingMode: 'horizontal-tb', direction: 'rtl' },
+      { env: styleletEnv, writingMode: 'horizontal-tb', direction: 'rtl' },
       '100% 50%', '0% 50%', '50% 0%', '50% 100%',
     ],
     [
-      { writingMode: 'vertical-rl', direction: 'ltr' },
+      { env: styleletEnv, writingMode: 'vertical-rl', direction: 'ltr' },
       '100% 50%', '0% 50%', '50% 0%', '50% 100%',
     ],
     [
-      { writingMode: 'vertical-rl', direction: 'rtl' },
+      { env: styleletEnv, writingMode: 'vertical-rl', direction: 'rtl' },
       '100% 50%', '0% 50%', '50% 100%', '50% 0%',
     ],
     [
-      { writingMode: 'vertical-lr', direction: 'ltr' },
+      { env: styleletEnv, writingMode: 'vertical-lr', direction: 'ltr' },
       '0% 50%', '100% 50%', '50% 0%', '50% 100%',
     ],
     [
-      { writingMode: 'vertical-lr', direction: 'rtl' },
+      { env: styleletEnv, writingMode: 'vertical-lr', direction: 'rtl' },
       '0% 50%', '100% 50%', '50% 100%', '50% 0%',
     ],
     [
-      { writingMode: 'sideways-rl', direction: 'ltr' },
+      { env: styleletEnv, writingMode: 'sideways-rl', direction: 'ltr' },
       '100% 50%', '0% 50%', '50% 0%', '50% 100%',
     ],
     [
-      { writingMode: 'sideways-rl', direction: 'rtl' },
+      { env: styleletEnv, writingMode: 'sideways-rl', direction: 'rtl' },
       '100% 50%', '0% 50%', '50% 100%', '50% 0%',
     ],
     [
-      { writingMode: 'sideways-lr', direction: 'ltr' },
+      { env: styleletEnv, writingMode: 'sideways-lr', direction: 'ltr' },
       '0% 50%', '100% 50%', '50% 100%', '50% 0%',
     ],
     [
-      { writingMode: 'sideways-lr', direction: 'rtl' },
+      { env: styleletEnv, writingMode: 'sideways-lr', direction: 'rtl' },
       '0% 50%', '100% 50%', '50% 0%', '50% 100%',
     ],
   ])('resolves axis-relative keywords in %o', (
@@ -256,24 +257,25 @@ describe('position resolution', () => {
     ['x-end 10px top 20px', 'calc(100% - 10px) 20px'],
     ['left 10px y-end 20%', '10px 80%'],
   ])('resolves %s with the default horizontal writing context', (input, expected) => {
-    expect(PositionValue.parse(input, {})!.resolve(ValueStage.Computed, { writingMode: 'horizontal-tb', direction: 'ltr' }).serialize()).toBe(expected);
+    expect(PositionValue.parse(input, { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv, writingMode: 'horizontal-tb', direction: 'ltr' }).serialize()).toBe(expected);
   });
 
   it('resolves block and inline positions into physical axis order', () => {
     const context: PositionContext = {
+      env: styleletEnv,
       writingMode: 'vertical-rl',
       direction: 'ltr',
     };
 
-    expect(PositionValue.parse('block-start inline-end', {})!.resolve(ValueStage.Computed, context).serialize()).toBe('100% 100%');
-    expect(PositionValue.parse('start end', {})!.resolve(ValueStage.Computed, context).serialize()).toBe('100% 100%');
+    expect(PositionValue.parse('block-start inline-end', { env: styleletEnv })!.resolve(ValueStage.Computed, context).serialize()).toBe('100% 100%');
+    expect(PositionValue.parse('start end', { env: styleletEnv })!.resolve(ValueStage.Computed, context).serialize()).toBe('100% 100%');
   });
 
   it('does not claim offsets when logical context is unavailable', () => {
-    const value = PositionValue.parse('block-start inline-end', {})!;
+    const value = PositionValue.parse('block-start inline-end', { env: styleletEnv })!;
 
-    expect(value.resolve(ValueStage.Computed)).toEqual(value);
-    expect(value.tryResolveOffsets(ValueStage.Computed)).toBeNull();
+    expect(value.resolve(ValueStage.Computed, { env: styleletEnv })).toEqual(value);
+    expect(value.tryResolveOffsets(ValueStage.Computed, { env: styleletEnv })).toBeNull();
   });
 });
 
@@ -289,34 +291,34 @@ describe('position serialization', () => {
     ['bottom right', 'right bottom'],
     ['bottom 10% right 20%', 'right 20% bottom 10%'],
   ])('serializes %s as %s', (input, expected) => {
-    expect(PositionValue.parse(input, {})!.serialize()).toBe(expected);
+    expect(PositionValue.parse(input, { env: styleletEnv })!.serialize()).toBe(expected);
   });
 });
 
 describe('position combination', () => {
   it('requires resolved physical offsets in both operands', () => {
-    const unresolved = PositionValue.parse('block-start inline-end', {})!.resolve(ValueStage.Computed, {});
+    const unresolved = PositionValue.parse('block-start inline-end', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv });
     const resolved = offsets(percentage(10), percentage(20));
     for (const [from, to] of [[unresolved, resolved], [resolved, unresolved]] as const) {
-      expect(() => from.interpolate(to, 0.5)).toThrow('Position combination requires resolved physical offsets');
-      expect(() => from.add(to)).toThrow('Position combination requires resolved physical offsets');
-      expect(() => from.accumulate(to)).toThrow('Position combination requires resolved physical offsets');
+      expect(() => from.interpolate(to, 0.5, { env: styleletEnv })).toThrow('Position combination requires resolved physical offsets');
+      expect(() => from.add(to, { env: styleletEnv })).toThrow('Position combination requires resolved physical offsets');
+      expect(() => from.accumulate(to, { env: styleletEnv })).toThrow('Position combination requires resolved physical offsets');
     }
     expect(unresolved.serialize()).toBe('block-start inline-end');
   });
 
   it('adds horizontal and vertical offsets independently', () => {
-    expect(offsets(percentage(10), percentage(20)).add(offsets(percentage(30), percentage(40)))).toEqual(offsets(percentage(40), percentage(60)));
+    expect(offsets(percentage(10), percentage(20)).add(offsets(percentage(30), percentage(40)), { env: styleletEnv })).toEqual(offsets(percentage(40), percentage(60)));
   });
 
   it('interpolates horizontal and vertical offsets independently', () => {
-    expect(offsets(percentage(10), percentage(20)).interpolate(offsets(percentage(30), percentage(60)), 0.25)).toEqual(offsets(percentage(15), percentage(30)));
+    expect(offsets(percentage(10), percentage(20)).interpolate(offsets(percentage(30), percentage(60)), 0.25, { env: styleletEnv })).toEqual(offsets(percentage(15), percentage(30)));
   });
 
   it('accumulates offsets by addition', () => {
     const a = offsets(percentage(10), percentage(20));
     const b = offsets(percentage(30), percentage(40));
 
-    expect(a.accumulate(b)).toEqual(a.add(b));
+    expect(a.accumulate(b, { env: styleletEnv })).toEqual(a.add(b, { env: styleletEnv }));
   });
 });

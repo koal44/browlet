@@ -9,7 +9,8 @@ import { ReportImpl } from '../../../../../src/browlet/reporting/report';
 import * as fetchModule from '../../../../../src/fetch/index';
 import { FetchRequest } from '../../../../../src/fetch/request';
 import { FetchController } from '../../../../../src/fetch/controller';
-import { parseURL, serializeURL } from '../../../../../src/url/url';
+import { parseURL } from '../../../../../src/url/url';
+import { serializeURL } from '../../../../../src/url/core/index';
 import { createCSPWindow } from './fixture';
 
 afterEach(() => vi.restoreAllMocks());
@@ -165,7 +166,8 @@ describe('CSP violation delivery', () => {
     env.policyContainer.cspList = new CSPList(env.origin);
     env.policyContainer.cspList.policies.push(policy);
     await browlet.exposeFunction('violate', () => {
-      const request = new FetchRequest(parseURL('https://blocked.test/image').url!, env, env.userAgent);
+      const request = new FetchRequest(parseURL('https://blocked.test/image').url!, env);
+      request.client = env;
       request.destination = 'image';
       request.populateFromClient();
       request.isBlockedByCSP();

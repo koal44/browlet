@@ -1,7 +1,7 @@
 import type { Definition } from '../web-idl/core/index';
-import { referrerPolicyIDL } from './core/index';
 
 import type { FetchEnvironment } from './environment';
+import { referrerPolicyIDL } from './referrer-policy';
 import { headersIDL, headersInitIDL } from './headers';
 import { bodyIDL, bodyInitIDL, xmlHttpRequestBodyInitIDL } from './body';
 import {

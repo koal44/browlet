@@ -11,7 +11,7 @@ import {
   consumePercentageToken, TokenKind,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
+import { ValueStage, type ValueContext } from '../value-processing/index';
 import {
   AngleLiteral, DimensionLiteral, FrequencyLiteral, IntegerLiteral, LengthLiteral, NumberLiteral,
   PercentageLiteral, ResolutionLiteral, TimeLiteral, serializeCssNumber,
@@ -72,7 +72,7 @@ export class MathValue<
   static fromLiteral<Type extends MathValueType>(
     literal: MathLiteralByType[Type],
     valueType: Type,
-    context: MathContext = {},
+    context: MathContext,
   ): MathValue<Type> {
     return new MathValue(new MathExpression(createNumericLeafFromLiteral(literal, context)), valueType);
   }
@@ -95,7 +95,7 @@ export class MathValue<
   }
 
   /** Resolve with current inputs, retaining the value object when its representation is unchanged. */
-  resolve(stage: ValueStage, context: MathContext = {}): MathValue<Type> {
+  resolve(stage: ValueStage, context: MathContext): MathValue<Type> {
     const previous = this.repr;
     const calculation = simplifyCalculationTree(this.#calculation(context), stage, context, this.valueType);
     const unwrapMathAt = context.unwrapMathAt ?? ValueStage.Computed;
@@ -120,12 +120,12 @@ export class MathValue<
 
   /** Add calculations of the same numeric grammar. */
   // https://drafts.csswg.org/css-values-4/#combine-math
-  add(other: MathValue<Type>, context: MathContext = {}): MathValue<Type> {
+  add(other: MathValue<Type>, context: MathContext): MathValue<Type> {
     return this.#combine(other, this.#calculation(context), other.#calculation(context), context);
   }
 
   /** Interpolate calculations while retaining terms that require later context. */
-  interpolate(other: MathValue<Type>, progress: number, context: MathContext = {}): MathValue<Type> {
+  interpolate(other: MathValue<Type>, progress: number, context: MathContext): MathValue<Type> {
     return this.#combine(
       other,
       scaleCalculationTree(this.#calculation(context), 1 - progress),
@@ -135,16 +135,19 @@ export class MathValue<
   }
 
   /** Accumulation of math functions is addition. */
-  accumulate(other: MathValue<Type>, context: MathContext = {}): MathValue<Type> {
+  accumulate(other: MathValue<Type>, context: MathContext): MathValue<Type> {
     return this.add(other, context);
   }
 
   /** Convert percentage math to a number in the caller's component scales. */
-  toNumber(this: MathValue<'percentage'>, percentageScale: number, numberScale: number): MathValue<'number'> {
-    const calculation = this.#calculation({ percentHint: 'percent' });
+  toNumber(
+    this: MathValue<'percentage'>, percentageScale: number, numberScale: number, context: MathContext,
+  ): MathValue<'number'> {
+    const conversionContext: MathContext = { env: context.env, percentHint: 'percent' };
+    const calculation = this.#calculation(conversionContext);
     const percentageBasis = createNumericLeaf(
       { type: 'percentage', value: 100 },
-      percentageMathHints({ percentHint: 'percent' }),
+      percentageMathHints(conversionContext),
     );
     const invertedPercentageBasis = new CalcInvertNode(percentageBasis, invertMathHints(percentageBasis.hints));
     const multiplier = createNumericLeaf({
@@ -159,7 +162,7 @@ export class MathValue<
     if (hints === null) throw new InternalError('Cannot coerce inconsistent percentage math');
 
     const product = new CalcProductNode([calculation, multiplier, invertedPercentageBasis], hints);
-    const simplified = simplifyCalculationTree(product, ValueStage.Declared, { percentHint: 'percent' }, 'number');
+    const simplified = simplifyCalculationTree(product, ValueStage.Declared, conversionContext, 'number');
     return new MathValue(new MathExpression(simplified), 'number');
   }
 
@@ -239,7 +242,7 @@ export type PercentageReferenceValue =
   | CanonicalAngleLiteral
   | CanonicalTimeLiteral;
 
-export type MathContext = {
+export interface MathContext extends ValueContext {
   /** Value-processing stage at which math values should become literals. */
   unwrapMathAt?: ValueStage;
 
@@ -266,7 +269,7 @@ export type MathContext = {
    * An undefined value represents a variable that has not resolved yet.
    */
   numericVariables?: ReadonlyMap<string, NumericVariable>;
-};
+}
 
 type InternalMathContext = {
   expectedType?: MathValueType;
@@ -2574,7 +2577,7 @@ function enterCalculationContext(
 function simplifyCalculationTree(
   root: CalculationTree,
   stage: ValueStage,
-  context: InternalMathContext = {},
+  context: InternalMathContext,
   valueType?: MathValueType,
 ): CalculationTree {
   const simplified = simplifyCalculationNode(root, context);

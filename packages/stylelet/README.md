@@ -18,54 +18,61 @@ npm run build -- stylelet
 
 ## Usage
 
-Supply a document from a browser or DOM implementation:
+Supply a document and its host environment from a DOM implementation running in Node:
 
 ```js
 import { Stylelet } from 'stylelet';
 
-const styles = new Stylelet(document);
+const styles = new Stylelet(document, { env });
 const sheet = styles.createStyleSheet();
 sheet.replaceSync('.item { color: green; }');
 
-styles.documentScope.setAdoptedStyleSheets([sheet]);
+styles.documentScope.adoptedStyleSheets.push(sheet);
 ```
 
 Use `styles.getComputedStyle(element)` to read the resulting declaration.
 Asynchronous `sheet.replace(text)` returns an `InternalPromise<CSSStyleSheetImpl>`;
 consume it with `.observe(fulfilled, rejected)`.
 
-The package builds TypeScript declarations, ESM and CommonJS exports, and
-`dist/stylelet.js`, which exposes `Stylelet` as a browser global.
+The package targets Node 22.19 or newer and builds TypeScript declarations,
+ESM and CommonJS exports. It does not provide a browser-global bundle.
 
 ## Host integration
 
-Pass host options as the second argument to `new Stylelet(document, options)`:
+`StyleletOptions` requires `{ env }`. `StyleletEnvironment` extends
+`FetchEnvironment`: the consumer supplies execution, request/security state,
+transport, and shared networking services. Stylelet does not construct a default
+runtime. Browlet supplies its existing environment directly.
 
-| Option | Contract and default |
-| --- | --- |
-| `dom` | `DOMOperations`, shared with Selectlet. Defaults to `standardDOM` for browser and jsdom nodes. |
-| `URL` | `StyleletURLConstructor`: accepts input and an optional base string, returns an object with `href`, and throws on invalid input. Defaults to the native URL constructor. |
-| `decodeText` | Complete-input `(bytes, fallbackEncoding) => string` decoding with BOM override and replacement handling. Defaults to the native TextDecoder adapter. |
-| `exec` | `StyleletExecution`: Promise allocation, background work, task delivery, and DOM exceptions. Defaults to native Promises, timers, and DOMException. |
-
-Alternatively, pass `{ env }` with an existing `StyleletEnvironment`; it takes
-precedence over the other options. The environment contains `userAgent.dom`,
-`userAgent.URL`, `userAgent.decodeText`, and `exec`. Browlet supplies this directly.
-For direct implementation construction, use `createStyleletEnvironment(options)`
-or `defaultStyleletEnvironment`.
+The Stylelet additions are `userAgent.dom`, `userAgent.blobURLStore`, optional
+`userAgent.systemColors`, and `getAssociatedDocument()`. Configure these on the
+supplied environment. Direct CSSOM implementation construction and
+`StyleletContext` also require that environment.
 
 DOM operations preserve host node identities. Hosts using Stylelet's declaration
-implementation can supply `dom.inlineStyle` to reuse that state. URL providers
-resolve stylesheet bases and computed resource URLs; CSSOM exposes serialized
-strings. Native timers and TextDecoder are required only when their default
-providers are used.
+implementation can supply `dom.inlineStyleBlock` to reuse that state. Stylelet imports
+its URL parser and Encoding decoder directly. Sheets retain `URLRecord`s;
+CSSOM exposes serialized strings. URL parsing consults the owning UserAgent's
+Blob URL store supplied by the host.
+
+`fetchStyleResource(url, ruleOrDeclaration, destination, corsMode, env, processResponse)`
+uses the included Fetch implementation and the owning `StyleletEnvironment`.
+The result is a cancellable
+`FetchController`, or `null` for an invalid URL. `UrlValue` retains and applies CSS
+request modifiers. This operation does not start automatic stylesheet imports
+or manage HTML events and blockers.
+
+`CSSStyleSheetImpl.loadImports()` coordinates recursive imports through a supplied
+fetch callback. The host supplies document-dependent request setup and parsed
+sheet results, and handles completion, cancellation, events, and blockers.
+Browlet provides that integration in its style subsystem using `DocumentImpl`.
 
 Custom execution providers distinguish `exec.runInParallel()` from result delivery
 through `exec.queueTask('dom-manipulation', steps)`. Cancellation uses
 `TaskHandle.remove()`. To choose the Promise continuation queue, subclass the
 exported `InternalPromise`, override `observeNative()`, and supply it as `exec.Promise`.
-`defaultStyleletExecution` supplies the standalone implementation. The package also
-exports `DOMOperations`, `TimerHost`, `TaskHandle`, `Encoding`, `DecodeText`,
+`StyleletExecution` uses Fetch's full execution contract. The package also
+exports `DOMOperations`, `TimerHost`, `TaskHandle`, `Encoding`,
 and the `DOMException`/`DOMExceptionConstructor` contracts for host providers.
 
 `ColorRgba` maps lowercase CSS color names, including `transparent`, to packed

@@ -6,9 +6,9 @@ import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 import { createBrowletExecution, browletBindingWorld } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
 
-import { createOpaqueOrigin, type Origin } from
-  '../../../src/url/origin';
-import { parseURL, type URLRecord } from '../../../src/url/url';
+import { createOpaqueOrigin } from '../../../src/url/origin';
+import { parseURL } from '../../../src/url/url';
+import type { Origin, URLRecord } from '../../../src/url/core/index';
 import { DefinitionAssembly } from '../../../src/web-idl/assembly/index';
 import { RealmBinding } from '../../../src/web-idl/binding/realm';
 import { IDLCallbackFunction } from '../../../src/web-idl/values/callback';

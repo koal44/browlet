@@ -297,7 +297,7 @@ describe('ResourceReader', () => {
 
   it('does not apply the HTTP Apache workaround to non-HTTP metadata', async () => {
     const { response, stream, userAgent } = createResource();
-    response.urlList = [userAgent.parseURL('data:text/plain,hello').url!];
+    response.urlList = [userAgent.parseURL('data:text/plain,hello')!];
     response.headerList.append('Content-Type', 'text/plain');
     const reader = new ResourceReader(response, userAgent);
     stream.enqueueChunk(Uint8Array.of(0));
@@ -384,7 +384,7 @@ function createResource() {
   const cancelled = vi.fn();
   const stream = ReadableStreamImpl.createDefault(undefined, cancelled, 0, () => 1, userAgent.sandbox);
   const response = new FetchResponse();
-  response.urlList = [userAgent.parseURL('https://example.test/resource').url!];
+  response.urlList = [userAgent.parseURL('https://example.test/resource')!];
   response.body = new FetchBody(stream, userAgent.sandbox);
   return { userAgent, response, stream, cancelled, reader: new ResourceReader(response, userAgent) };
 }

@@ -33,7 +33,7 @@ export class OpacityValue<R extends Opacity = Opacity> implements Value<MathCont
   }
 
   /** Convert resolved percentages to numbers and clamp from the computed stage onward. */
-  resolve(stage: ValueStage, context: MathContext = {}): OpacityValue {
+  resolve(stage: ValueStage, context: MathContext): OpacityValue {
     const resolved = this.repr.resolve(stage, {
       ...context,
       unwrapMathAt: context.unwrapMathAt ?? ValueStage.Computed,
@@ -58,25 +58,25 @@ export class OpacityValue<R extends Opacity = Opacity> implements Value<MathCont
   }
 
   /** Add opacities in their number scale; resolution applies the stage's limits. */
-  add(other: OpacityValue, context: MathContext = {}): OpacityValue {
-    return new OpacityValue(this.#asNumber().add(other.#asNumber(), context));
+  add(other: OpacityValue, context: MathContext): OpacityValue {
+    return new OpacityValue(this.#asNumber(context).add(other.#asNumber(context), context));
   }
 
   /** Interpolate opacities in their number scale. */
-  interpolate(other: OpacityValue, progress: number, context: MathContext = {}): OpacityValue {
-    return new OpacityValue(this.#asNumber().interpolate(other.#asNumber(), progress, context));
+  interpolate(other: OpacityValue, progress: number, context: MathContext): OpacityValue {
+    return new OpacityValue(this.#asNumber(context).interpolate(other.#asNumber(context), progress, context));
   }
 
   /** Accumulation is addition. */
-  accumulate(other: OpacityValue, context: MathContext = {}): OpacityValue {
+  accumulate(other: OpacityValue, context: MathContext): OpacityValue {
     return this.add(other, context);
   }
 
-  #asNumber(): NumberValue {
+  #asNumber(context: MathContext): NumberValue {
     if (this.repr instanceof NumberValue) return this.repr;
     const percentage = this.repr.repr;
     return new NumberValue(percentage instanceof MathValue
-      ? percentage.toNumber(1 / 100, 1)
+      ? percentage.toNumber(1 / 100, 1, context)
       : new NumberLiteral(percentage.value / 100));
   }
 }

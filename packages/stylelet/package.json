@@ -6,13 +6,11 @@
   "main": "./dist/index.cjs",
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
-  "browser": "./dist/stylelet.js",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.cjs",
-      "browser": "./dist/stylelet.js",
       "default": "./dist/index.mjs"
     }
   },
@@ -47,5 +45,12 @@
   "scripts": {
     "build": "node ../../scripts/build.mjs stylelet",
     "prepack": "node --run build"
+  },
+  "engines": {
+    "node": ">=22.19.0"
+  },
+  "dependencies": {
+    "tldts": "^7.4.10",
+    "tr46": "^6.0.0"
   }
 }

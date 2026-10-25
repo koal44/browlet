@@ -2,16 +2,16 @@ import { InternalError } from '../infra/internal-error';
 import { randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
 import type { SelectletEnvironment } from '../selectlet/index';
-import type { StyleletEnvironment, StyleletExecution } from '../stylelet/index';
 import {
   obtainSite, obtainURLOrigin, serializeURL,
-  type Origin, type URLParseResult, type URLRecord,
+  type Origin, type URLRecord,
 } from '../url/index';
 import {
   FetchGroup, type FetchEnvironment, type FetchEnvironmentBase, type FetchExecution,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../fetch/index';
+import type { StyleletEnvironment, StyleletExecution } from '../stylelet/index';
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
 import type { EventLoop, BrowletRealm, WindowRealm, WindowAgent } from './scripting/index';
@@ -207,21 +207,21 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   }
 
   /** Parse with this browser's Blob URL store; the caller selects any base URL. */
-  parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLParseResult {
+  parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLRecord | null {
     return this.userAgent.parseURL(input, base, encoding);
   }
 
   /** Parse against this environment's API base URL using UTF-8; return null on failure. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#parse-a-url
   parseHTMLURL(input: string): URLRecord | null {
-    return this.parseURL(input, this.apiBaseURL).url;
+    return this.parseURL(input, this.apiBaseURL);
   }
 
   /** Parse against the API base using the current Window Document's encoding, or UTF-8 otherwise. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#encoding-parsing-a-url
   encodingParseURL(input: string): URLRecord | null {
     const encoding = this.realm.getAssociatedDocument()?.encoding ?? 'UTF-8';
-    return this.parseURL(input, this.apiBaseURL, encoding).url;
+    return this.parseURL(input, this.apiBaseURL, encoding);
   }
 
   /** Encoding-parse and serialize a URL, preserving parse failure as null. */

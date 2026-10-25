@@ -429,7 +429,8 @@ async function fixture(server: Server) {
   const env = getRelevantRealm(browlet.window).env;
   cleanup.push(async () => { env.fetchGroup.terminate(); await env.userAgent.httpTransport.close(); });
   const request = (client = env) => {
-    const request = new FetchRequest(client.parseURL(origin + '/resource').url!, client, client.userAgent);
+    const request = new FetchRequest(client.parseURL(origin + '/resource')!, client);
+    request.client = client;
     request.populateFromClient();
     request.referrer = null;
     return createFetchOperation(request, client);

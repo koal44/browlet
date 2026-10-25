@@ -120,7 +120,8 @@ async function fixture(bytes: Buffer, coding?: string) {
     const control = dispatch(request, listener);
     return { ...control, pause() { control.pause(); paused.resolve(); } };
   });
-  const request = new FetchRequest(env.parseURL(origin).url!, env, env.userAgent);
+  const request = new FetchRequest(env.parseURL(origin)!, env);
+  request.client = env;
   request.populateFromClient();
   request.cacheMode = 'no-store';
   const operation = createFetchOperation(request, env);

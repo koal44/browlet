@@ -2,12 +2,10 @@
 import type {
   Engine, EquivalentCase, QuerySourceRef, QuerySourceHome, CssomProbe,
 } from '../harness';
-import type {
-  CSSRuleImpl, CSSStyleDeclarationImpl, CSSStyleRuleImpl, CSSStyleSheetImpl,
-} from '../../../src/stylelet/index';
 
 export type PwHelpers = {
   resolveQuerySource(doc: Document, ref?: QuerySourceRef): QuerySource | null;
+  readCssom(cssom: CssomProbe, source: QuerySource | null): unknown;
   runQuery(query: () => QueryOutput): QueryResult;
   compareQueryResults(a: NamedQueryResult, b: NamedQueryResult): string | undefined;
   toEngineResult(res: QueryResult): EngineResult;
@@ -90,7 +88,7 @@ export function installBrowserHelpers(): void {
     return isHtmlElement(x) && x.localName === 'style';
   }
 
-  function isCssStyleDeclaration(x: unknown): x is CssomDeclaration {
+  function isCssStyleDeclaration(x: unknown): x is CSSStyleDeclaration {
     return typeof x === 'object' &&
       x !== null &&
       'length' in x &&
@@ -100,7 +98,7 @@ export function installBrowserHelpers(): void {
       hasFn(x, 'getPropertyPriority');
   }
 
-  function isCssRuleList(x: unknown): x is CssomSheet['cssRules'] {
+  function isCssRuleList(x: unknown): x is CSSStyleSheet['cssRules'] {
     return typeof x === 'object' &&
       x !== null &&
       'length' in x &&
@@ -465,13 +463,7 @@ export function installBrowserHelpers(): void {
           };
         }
         if (ng === 'selectlet') {
-          const stlt = stylelet;
-          if (!stlt) throw new Error('stylelet is not available');
-          return (query, source) => () => {
-            if (!isElement(source)) throw new Error(`Query source for 'computedStyle' case must be an Element`);
-            if (c.pseudo) throw new Error('Stylelet pseudo-element computed styles are not implemented');
-            return stlt.getComputedStyle(source).getPropertyValue(query).trim();
-          };
+          throw new Error('Stylelet computed-style comparisons run in Node; use a paired Browlet evaluation.');
         }
         return assertNever(ng);
       }
@@ -480,27 +472,12 @@ export function installBrowserHelpers(): void {
         if (ng === 'native') {
           return (_query, source) => () => ({
             kind: 'cssom',
-            cssom: readCssom(c.cssom, source, { kind: 'sheet' }),
+            cssom: readCssom(c.cssom, source),
           });
         }
 
         if (ng === 'selectlet') {
-          return (_query, source) => () => {
-            const stlt = stylelet;
-            if (!stlt) throw new Error('stylelet is not available');
-
-            return {
-              kind: 'cssom',
-              cssom: readCssom(c.cssom, source, {
-                kind: 'styleText',
-                createSheet(source) {
-                  const sheet = stlt.createStyleSheet();
-                  sheet.replaceSync(source);
-                  return sheet;
-                },
-              }),
-            };
-          };
+          throw new Error('Stylelet CSSOM comparisons run in Node; use a paired Browlet evaluation.');
         }
 
         return assertNever(ng);
@@ -628,25 +605,8 @@ export function installBrowserHelpers(): void {
     }
   }
 
-  // The harness inspects native platform objects and Stylelet implementations.
-  type CssomSheet = Pick<CSSStyleSheet | CSSStyleSheetImpl, 'cssRules'>;
-  type CssomRule = CSSRule | CSSRuleImpl;
-  type CssomStyleRule = CSSStyleRule | CSSStyleRuleImpl;
-  type CssomDeclaration = CSSStyleDeclaration | CSSStyleDeclarationImpl;
-
-  type CssomReadFrom =
-    | { kind: 'sheet'; }
-    | { kind: 'styleText'; createSheet: (source: string) => CssomSheet; };
-
-  function readCssom(cssom: CssomProbe, source: QuerySource, from: CssomReadFrom): unknown {
-    const sheet = from.kind === 'sheet'
-      ? resolveCssomSheet(source, cssom.sheet ?? 0)
-      : createCssomSheetFromStyleText(cssom, source, from);
-
-    return readCssomSheet(cssom, sheet);
-  }
-
-  function readCssomSheet(cssom: CssomProbe, sheet: CssomSheet): unknown {
+  function readCssom(cssom: CssomProbe, source: QuerySource | null): unknown {
+    const sheet = resolveCssomSheet(source, cssom.sheet ?? 0);
     switch (cssom.target) {
       case 'sheet.cssRules':
         return ruleListToArray(sheet.cssRules).map((rule) => inspectObject(rule));
@@ -669,7 +629,7 @@ export function installBrowserHelpers(): void {
           for (const rule of rules) {
             if (rule.type !== CSSRule.STYLE_RULE) continue;
 
-            const style = (rule as CssomStyleRule).style;
+            const style = (rule as CSSStyleRule).style;
             matches.push(...getActiveDeclarations(style).filter((decl) => decl.name === cssom.name));
           }
         }
@@ -690,8 +650,8 @@ export function installBrowserHelpers(): void {
     }
   }
 
-  function ruleListToArray(list: CssomSheet['cssRules']): CssomRule[] {
-    const rules: CssomRule[] = [];
+  function ruleListToArray(list: CSSRuleList): CSSRule[] {
+    const rules: CSSRule[] = [];
 
     for (let i = 0; i < list.length; i++) {
       const rule = list.item(i);
@@ -701,7 +661,7 @@ export function installBrowserHelpers(): void {
     return rules;
   }
 
-  function resolveCssomSheet(source: QuerySource, index = 0): CssomSheet {
+  function resolveCssomSheet(source: QuerySource | null, index = 0): CSSStyleSheet {
     if (isDocument(source)) {
       const sheet = source.styleSheets[index];
       if (!sheet) throw new Error(`No stylesheet at index ${index}`);
@@ -715,33 +675,6 @@ export function installBrowserHelpers(): void {
     }
 
     throw new Error(`Query source for 'cssom' sheet read must be a Document, <style>, or <link>`);
-  }
-
-  function createCssomSheetFromStyleText(cssom: CssomProbe, source: QuerySource, from: Extract<CssomReadFrom, { kind: 'styleText'; }>): CssomSheet {
-    const styleText = resolveCssomStyleText(source, cssom.sheet ?? 0);
-    return from.createSheet(styleText);
-  }
-
-  function resolveCssomStyleText(source: QuerySource, index = 0): string {
-    if (isHtmlStyle(source)) {
-      if (index !== 0) throw new Error(`No <style> element at index ${index}`);
-      return source.textContent ?? '';
-    }
-
-    if (isHtmlLink(source)) {
-      throw new Error(`Cannot read selectlet cssom source from <link>; use inline <style> for now`);
-    }
-
-    if (isDocument(source) || isDocFrag(source) || isElement(source)) {
-      const styles = [...source.querySelectorAll('style')].filter(isHtmlStyle);
-      const style = styles[index];
-
-      if (!style) throw new Error(`No <style> element at index ${index}`);
-
-      return style.textContent ?? '';
-    }
-
-    throw new Error(`Query source for 'cssom' styleText read must be a Document, DocumentFragment, Element, or <style>`);
   }
 
   type JsonRecord = Record<string, unknown>;
@@ -771,7 +704,7 @@ export function installBrowserHelpers(): void {
     }
 
     if (isCssRuleList(value)) {
-      return Array.from<CssomRule>(value).map((rule) =>
+      return Array.from<CSSRule>(value).map((rule) =>
         inspectObjectInner(rule, depth - 1, opts, seen)
       );
     }
@@ -819,7 +752,7 @@ export function installBrowserHelpers(): void {
     return out;
   }
 
-  function inspectStyleDeclaration(style: CssomDeclaration, depth: number, opts: InspectOptions, seen: WeakSet<object>): JsonRecord {
+  function inspectStyleDeclaration(style: CSSStyleDeclaration, depth: number, opts: InspectOptions, seen: WeakSet<object>): JsonRecord {
     const out = inspectHostObject(style, Math.max(depth, 0), opts, seen);
 
     out.kind = 'styleDeclaration';
@@ -846,22 +779,22 @@ export function installBrowserHelpers(): void {
     return out;
   }
 
-  function getStyleRule(sheet: CssomSheet, index: number): CssomStyleRule {
+  function getStyleRule(sheet: CSSStyleSheet, index: number): CSSStyleRule {
     const rule = getRule(sheet, index);
     if (rule.type !== CSSRule.STYLE_RULE) {
       throw new Error(`CSS rule at index ${index} is not a style rule`);
     }
 
-    return rule as CssomStyleRule;
+    return rule as CSSStyleRule;
   }
 
-  function getRule(sheet: CssomSheet, index: number): CssomRule {
+  function getRule(sheet: CSSStyleSheet, index: number): CSSRule {
     const rule = sheet.cssRules.item(index);
     if (!rule) throw new Error(`No CSS rule at index ${index}`);
     return rule;
   }
 
-  function getActiveDeclarations(style: CssomDeclaration): JsonRecord[] {
+  function getActiveDeclarations(style: CSSStyleDeclaration): JsonRecord[] {
     const decls: JsonRecord[] = [];
 
     for (let i = 0; i < style.length; i++) {
@@ -883,6 +816,7 @@ export function installBrowserHelpers(): void {
 
   window.__pwHelpers = {
     resolveQuerySource,
+    readCssom,
     runQuery,
     compareQueryResults,
     toEngineResult,

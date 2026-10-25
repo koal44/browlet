@@ -19,7 +19,7 @@ describe('Navigable HTML response loading', () => {
     const browlet = new Browlet({ route: () => '' });
     const env = getRelevantRealm(browlet.window).env;
     const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
-    const params = navigable.createNavigationParamsFromSource(env.parseURL('about:blank').url!);
+    const params = navigable.createNavigationParamsFromSource(env.parseURL('about:blank')!);
     const resource = new ResourceReader(params.response, env.userAgent);
     // about:blank is populated directly and never consumes response bytes.
     const document = navigable.loadHTMLDocument(params, () => {}, resource);
@@ -47,7 +47,8 @@ describe('Navigable HTML response loading', () => {
     const env = getRelevantRealm(browlet.window).env;
     cleanup.push(() => env.userAgent.httpTransport.close());
     const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
-    const request = new FetchRequest(env.parseURL(`${origin}/page`).url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL(`${origin}/page`)!, env);
+    request.client = env;
     request.mode = 'navigate';
     request.destination = 'document';
     request.redirectMode = 'manual';
@@ -102,7 +103,8 @@ describe('Navigable HTML response loading', () => {
     const env = getRelevantRealm(browlet.window).env;
     cleanup.push(() => env.userAgent.httpTransport.close());
     const navigable = env.realm.getAssociatedDocument().getNodeNavigable()!;
-    const request = new FetchRequest(env.parseURL(`${origin}/page`).url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL(`${origin}/page`)!, env);
+    request.client = env;
     request.mode = 'navigate';
     request.destination = 'document';
     request.redirectMode = 'manual';

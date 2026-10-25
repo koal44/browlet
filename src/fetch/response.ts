@@ -182,7 +182,7 @@ export class FetchResponse {
     if (!isRedirectStatus(this.status)) return undefined;
     const values = this.headerList.extractValues('Location', (value) => [value], false);
     if (values === undefined || values === null) return values;
-    const url = env.parseURL(values[0]!, this.url).url;
+    const url = env.parseURL(values[0]!, this.url);
     if (url !== null && url.fragment === null) url.fragment = requestFragment;
     return url;
   }
@@ -327,7 +327,7 @@ export class ResponseImpl {
   static redirect(
     url: string, status: number, env: FetchEnvironment,
   ): ResponseImpl {
-    const parsedURL = env.parseURL(url, env.apiBaseURL).url;
+    const parsedURL = env.parseURL(url, env.apiBaseURL);
     if (parsedURL === null) throw new TypeError('Invalid redirect URL');
     if (!isRedirectStatus(status)) throw new RangeError('Invalid redirect status');
     const response = new FetchResponse();

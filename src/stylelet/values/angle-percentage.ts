@@ -55,7 +55,7 @@ export class AnglePercentageValue<R extends AnglePercentage = AnglePercentage> i
   }
 
   /** Resolve angles and, when supplied, their percentage reference at the requested stage. */
-  resolve(stage: ValueStage, context: MathContext = {}): AnglePercentageValue {
+  resolve(stage: ValueStage, context: MathContext): AnglePercentageValue {
     const previous = this.repr;
     if (previous instanceof MathValue) {
       const resolved = previous.resolve(stage, anglePercentageMathContext(context));
@@ -78,7 +78,7 @@ export class AnglePercentageValue<R extends AnglePercentage = AnglePercentage> i
   }
 
   /** Add directly compatible literals, retaining other combinations as math. */
-  add(other: AnglePercentageValue, context: MathContext = {}): AnglePercentageValue {
+  add(other: AnglePercentageValue, context: MathContext): AnglePercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new AnglePercentageValue(this.repr.add(other.repr));
     }
@@ -90,7 +90,7 @@ export class AnglePercentageValue<R extends AnglePercentage = AnglePercentage> i
   }
 
   /** Interpolate directly compatible literals, retaining other combinations as math. */
-  interpolate(other: AnglePercentageValue, progress: number, context: MathContext = {}): AnglePercentageValue {
+  interpolate(other: AnglePercentageValue, progress: number, context: MathContext): AnglePercentageValue {
     if (this.repr instanceof PercentageLiteral && other.repr instanceof PercentageLiteral) {
       return new AnglePercentageValue(this.repr.interpolate(other.repr, progress));
     }
@@ -104,7 +104,7 @@ export class AnglePercentageValue<R extends AnglePercentage = AnglePercentage> i
   }
 
   /** Accumulation of angle-percentages is addition. */
-  accumulate(other: AnglePercentageValue, context: MathContext = {}): AnglePercentageValue {
+  accumulate(other: AnglePercentageValue, context: MathContext): AnglePercentageValue {
     return this.add(other, context);
   }
 

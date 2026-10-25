@@ -38,7 +38,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import type { ReferrerPolicy } from '../fetch/index.js';" },
     { filename, options, code: "export { defineInterface } from '../web-idl/core/index';" },
     { filename, options, code: "import { getEncoding } from '../encoding/core/index';" },
-    { filename, options, code: "import { referrerPolicyValues } from '../fetch/core/index';" },
+    { filename, options, code: "import { referrerPolicyValues } from '../fetch/index';" },
     { filename, options, code: "import { parseURL } from '../url/index';" },
     { filename, options, code: "import { InternalPromise } from '../infra/promises';" },
     { filename, options, code: "import type { InternalPromise } from '../infra/promises';" },
@@ -92,7 +92,7 @@ tester.run('subsystem-imports', rule, {
     { filename, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { FetchRequest } from '../fetch/request';", errors: [{ messageId: 'entryPoint' }] },
-    { filename, options, code: "import { decodeNative } from '../encoding/core/decoding';", errors: [{ messageId: 'entryPoint' }] },
+    { filename, options, code: "import { detectBOM } from '../encoding/core/decoding';", errors: [{ messageId: 'entryPoint' }] },
     {
       filename, options, code: "import type { FetchPolicyContainer } from '../fetch/environment';",
       errors: [{ messageId: 'entryPoint' }],

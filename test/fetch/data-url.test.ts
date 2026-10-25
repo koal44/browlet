@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { processDataURL } from '../../src/fetch/data-url';
 import { InternalError } from '../../src/infra/internal-error';
 import { serializeMIMEType } from '../../src/mime/index';
-import { copyURL, parseURL } from '../../src/url/url';
+import { parseURL } from '../../src/url/url';
+import { copyURL } from '../../src/url/core/index';
 
 describe('Fetch §6: data URL processing', () => {
   it('decodes a plain body with the default MIME type', () => {

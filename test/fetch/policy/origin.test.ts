@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import { FetchRequest } from '../../../src/fetch/request';
-import type { ReferrerPolicy } from '../../../src/fetch/core/index';
+import type { ReferrerPolicy } from '../../../src/fetch/index';
 import { createOpaqueOrigin } from '../../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../../src/url/url';
-import { createFetchUserAgent } from '../client-fixture';
+import { createClientEnvironment } from '../client-fixture';
 
 describe('Fetch Origin request headers', () => {
   it('appends the serialized origin for a POST without exposing URL credentials, path, or fragment', () => {
@@ -132,7 +132,7 @@ describe('Fetch Origin request headers', () => {
 });
 
 function createRequest(target = 'https://example.test/'): FetchRequest {
-  const request = new FetchRequest(parseURL(target).url!, null, createFetchUserAgent());
+  const request = new FetchRequest(parseURL(target).url!, createClientEnvironment());
   request.origin = obtainURLOrigin(parseURL('https://example.test/').url!);
   request.method = 'POST';
   return request;

@@ -19,7 +19,8 @@ export function createCSPWindow(serialized = '', disposition: CSPDisposition = '
   document.policyContainer.cspList = new CSPList(document.origin);
   const policy = ContentSecurityPolicy.parse(serialized, 'header', disposition);
   document.policyContainer.cspList.policies.push(policy);
-  const request = new FetchRequest(parseURL('https://resource.test/file').url!, env, env.userAgent);
+  const request = new FetchRequest(parseURL('https://resource.test/file').url!, env);
+  request.client = env;
   request.destination = 'image';
   request.populateFromClient();
   const loop = realm.agent.eventLoop;

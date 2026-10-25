@@ -1,9 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { decode } from '../../../../src/encoding/index';
-import { createStyleletEnvironment, defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
 import {
-  decodeStylesheetBytes as decodeBytes, filterCodePoints, HashTokenFlag, identToken,
-  NumericSign, NumberTokenFlag, TokenKind, WhitespaceToken, type DecodeStylesheetOptions,
+  decodeStylesheetBytes, filterCodePoints, HashTokenFlag, identToken,
+  NumericSign, NumberTokenFlag, TokenKind, WhitespaceToken,
 } from '../../../../src/stylelet/syntax/tokens';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
 
@@ -528,13 +526,8 @@ describe('style tokenizer consumers', () => {
 
 });
 
-describe.each([
-  ['native', defaultStyleletEnvironment],
-  ['Encoding', createStyleletEnvironment({ decodeText: decode })],
-] as const)('3.2. The input byte stream (%s)', (_host, env) => {
+describe('3.2. The input byte stream', () => {
   const textEncoder = new TextEncoder();
-  const decodeStylesheetBytes = (bytes: Uint8Array, options: DecodeStylesheetOptions = {}) =>
-    decodeBytes(bytes, options, env);
 
   it('defaults to UTF-8 and replaces malformed input', () => {
     expect(decodeStylesheetBytes(textEncoder.encode('a { color: é; }')))

@@ -48,7 +48,7 @@ export class ElementCSSInlineStyleMixin {
       // raw attribute and prior accepted declarations; Firefox clears both.
       if (this.#element.nodeDocument.env.policyContainer.cspList!
         .isStyleAttributeBlocked(this.#element, value)) return;
-      (this.#block ??= new CSSDeclarationBlock()).setText(value, {});
+      (this.#block ??= new CSSDeclarationBlock()).setText(value, { env: this.#env });
     }
   }
 }

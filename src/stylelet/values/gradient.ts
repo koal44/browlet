@@ -6,7 +6,7 @@ import {
   requiredSequenceOf, requiredSomeOf, sequenceOf, withTrivia, createComponentParser,
   type ComponentValue, type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
+import { ValueStage, type ValueContext } from '../value-processing/index';
 import {
   AngleLiteral, LengthLiteral, PercentageLiteral, ZeroLiteral,
   type CanonicalAngleLiteral, type CanonicalLengthLiteral,
@@ -44,12 +44,12 @@ export class GradientValue<R extends Gradient = Gradient> implements Value<Gradi
   }
 
   /** Resolve child values with the available color and geometry context. */
-  resolve(stage: ValueStage, context: GradientValueContext = {}): GradientValue {
+  resolve(stage: ValueStage, context: GradientValueContext): GradientValue {
     return new GradientValue(this.repr.resolve(stage, context));
   }
 
   /** Resolve the geometry and stops required for interpolation, when enough context exists. */
-  tryResolveExplicit(stage: ValueStage, context: GradientValueContext = {}): GradientValue<ExplicitGradient> | null {
+  tryResolveExplicit(stage: ValueStage, context: GradientValueContext): GradientValue<ExplicitGradient> | null {
     const explicit = this.repr.tryResolveExplicit(stage, context);
     return explicit === null ? null : new GradientValue(explicit);
   }
@@ -68,7 +68,7 @@ export class GradientValue<R extends Gradient = Gradient> implements Value<Gradi
   interpolate(
     other: GradientValue,
     progress: number,
-    context: GradientValueContext = {},
+    context: GradientValueContext,
   ): GradientValue<ExplicitGradient> {
     const a: Gradient = this.repr;
     const b = other.repr;
@@ -208,7 +208,7 @@ abstract class GradientBase<
     const computed = this.resolve(ValueStage.Computed, context);
     // Keep comparable percentages when possible; geometry is only the fallback.
     computed.stops[0].offsets ??= [computed.#defaultStopOffset(0)];
-    let stops = computed.#fixupStops(computed.stops, ValueStage.Used, {});
+    let stops = computed.#fixupStops(computed.stops, ValueStage.Used, { env: context.env });
     if (!computed.hasExplicitStops(stops)) {
       stops = this.resolve(stage, context).stops;
       if (!computed.hasExplicitStops(stops)) return null;
@@ -477,10 +477,10 @@ abstract class GradientBase<
   }
 }
 
-export type GradientContext = {
+export interface GradientContext extends ValueContext {
   /** Concrete dimensions into which the gradient is drawn, in CSS pixels. */
   gradientBoxSize?: GradientBoxSize;
-};
+}
 
 export type GradientValueContext =
   & GradientContext

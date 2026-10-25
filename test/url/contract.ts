@@ -1,6 +1,7 @@
-import { parseHost, serializeHost } from '../../src/url/host';
+import { parseHost } from '../../src/url/host';
 import { URLImpl, URLSearchParamsImpl } from '../../src/url/api';
-import { serializeOrigin, type Origin } from '../../src/url/origin';
+import { serializeOrigin } from '../../src/url/origin';
+import { serializeHost, serializeURL, urlsEqual, type Origin, type URLRecord } from '../../src/url/core/index';
 import {
   percentDecodeBytes,
   percentDecodeString,
@@ -9,9 +10,7 @@ import {
   type PercentEncodeSet,
   utf8PercentEncode,
 } from '../../src/url/percent-encoding';
-import {
-  obtainURLOrigin, parseURL, serializeURL, urlsEqual, type URLRecord,
-} from '../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import {
   parseFormUrlEncoded, parseFormUrlEncodedString, serializeFormUrlEncoded,
 } from '../../src/url/form-url-encoded';

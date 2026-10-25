@@ -1,7 +1,8 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { CSSStyleDeclarationImpl } from '../../../../src/stylelet/cssom/declarations/style-declaration';
-import { defaultStyleletEnvironment } from '../../../../src/stylelet/environment';
+
 import { parseDeclaration, parseDeclarationList } from '../../../../src/stylelet/syntax/parser';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
 import { TokenList } from '../../../../src/stylelet/syntax/token-list';
@@ -19,7 +20,7 @@ describe('retained comment boundaries', () => {
     ['--x: /*unfinished ', '/*unfinished '],
     ['--x: \\  ;', '\\ '],
   ])('preserves the value in %s', (input, expected) => {
-    const style = new CSSStyleDeclarationImpl({}, defaultStyleletEnvironment);
+    const style = new CSSStyleDeclarationImpl({}, styleletEnv);
     style.cssText = input;
     expect(style.getPropertyValue('--x')).toBe(expected);
   });

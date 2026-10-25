@@ -4,9 +4,10 @@ import { defineInterface, idlType, impl, nullable, reference, roAttr, xattr } fr
 
 import type { StyleletEnvironment } from '../../environment';
 import {
-  consumeStringToken, consumeUrlToken, isFunctionBlock, isWhitespaceToken,
-  parseAsComponentGrammar, serializeCssString, TokenCursor, TokenKind, type BlockContents, type ComponentValue, type TokenList,
+  consumeStringToken, isFunctionBlock, isWhitespaceToken, TokenCursor, TokenKind,
+  type BlockContents, type ComponentValue, type TokenList,
 } from '../../syntax/index';
+import { UrlValue } from '../../values/index';
 import { MediaListImpl } from '../media/index';
 import type { RuleListContext } from './context';
 import type { CSSStyleSheetImpl } from '../css-stylesheet';
@@ -16,8 +17,8 @@ import { CSSRuleImpl } from './rule';
 /** An import's authored URL and conditions; fetching requires its containing sheet. */
 // https://drafts.csswg.org/cssom/#the-cssimportrule-interface
 export class CSSImportRuleImpl extends CSSRuleImpl {
-  /** Decoded URL spelling, independent of the imported sheet's resolved location. */
-  href: string;
+  /** Authored URL and request modifiers, independent of the imported sheet's resolved location. */
+  url: UrlValue;
   /** Conditions shared with the associated sheet. */
   media: MediaListImpl;
   /** Imported sheet, or null before association or when a supports condition is false. */
@@ -28,9 +29,9 @@ export class CSSImportRuleImpl extends CSSRuleImpl {
   supportsText: string | null = null;
 
   /** Retain the validated import prelude without starting a fetch during parsing. */
-  constructor(href: string, media: MediaListImpl, env: StyleletEnvironment) {
+  constructor(url: UrlValue, media: MediaListImpl, env: StyleletEnvironment) {
     super(env);
-    this.href = href;
+    this.url = url;
     this.media = media;
   }
 
@@ -50,27 +51,21 @@ export class CSSImportRuleImpl extends CSSRuleImpl {
 
     const c = new TokenCursor(prelude, context);
     c.consumeWhile(isWhitespaceToken);
-    let href = (consumeStringToken(c) ?? consumeUrlToken(c))?.value;
-    if (href === undefined) {
-      const component = c.peek();
-      if (!isFunctionBlock(component) || asciiLower(component.name) !== 'url') return null;
-      c.next();
-      const token = parseAsComponentGrammar(component.value, (inner) => {
-        inner.consumeWhile(isWhitespaceToken);
-        return consumeStringToken(inner);
-      }, context);
-      if (token === null) return null;
-      href = token.value;
-    }
+    const string = consumeStringToken(c);
+    const url = string === null ? UrlValue.consume(c) : UrlValue.fromString('url', string.value, {});
+    if (url === null) return null;
     c.consumeWhile(isWhitespaceToken);
     const next = c.peek();
     if ((next.type === TokenKind.Ident && asciiLower(next.value) === 'layer') ||
       (isFunctionBlock(next) && ['layer', 'supports'].includes(asciiLower(next.name)))) {
       throw new InternalError('Import layer/supports grammar and applicability are not implemented');
     }
-    const media = new MediaListImpl(prelude.sourceText(c.pos(), prelude.tokens.length));
-    return new CSSImportRuleImpl(href, media, context.env);
+    const media = new MediaListImpl(prelude.sourceText(c.pos(), prelude.tokens.length), context.env);
+    return new CSSImportRuleImpl(url, media, context.env);
   }
+
+  /** Decoded URL spelling, without request modifiers or base-URL resolution. */
+  get href(): string { return this.url.repr.href; }
 
   /** Canonical import text; assignment has no effect. */
   // https://drafts.csswg.org/cssom/#serialize-a-css-rule
@@ -80,7 +75,7 @@ export class CSSImportRuleImpl extends CSSRuleImpl {
       throw new InternalError('Import layer/supports serialization is not implemented');
     }
     const media = this.media.mediaText;
-    return `@import url(${serializeCssString(this.href)})${media === '' ? '' : ` ${media}`};`;
+    return `@import ${this.url.serialize()}${media === '' ? '' : ` ${media}`};`;
   }
 
   set cssText(_value: string) {}

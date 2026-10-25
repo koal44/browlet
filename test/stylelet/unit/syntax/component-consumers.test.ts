@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import {
   describe, expect,
   it,
@@ -60,7 +61,7 @@ describe('createFreeFormConsumer', () => {
     '{ red }',
     ' { red } ',
   ])('parses %j as the same value', (input) => {
-    const value = parseAsComponentGrammar(input, consumeFreeFormColor, {});
+    const value = parseAsComponentGrammar(input, consumeFreeFormColor, { env: styleletEnv });
 
     expect(value?.repr).toMatchObject({
       kind: ColorKind.Named,
@@ -69,7 +70,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('stops an unwrapped value before a top-level comma', () => {
-    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
+    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), { env: styleletEnv });
 
     expect(consumeFreeFormColor(c)?.repr).toMatchObject({
       kind: ColorKind.Named,
@@ -79,7 +80,7 @@ describe('createFreeFormConsumer', () => {
   });
 
   it('requires the unwrapped partition to match the complete value grammar', () => {
-    const c = new TokenCursor(parseListOfComponentValues('red blue', {}), {});
+    const c = new TokenCursor(parseListOfComponentValues('red blue', {}), { env: styleletEnv });
 
     expect(consumeFreeFormColor(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -89,7 +90,7 @@ describe('createFreeFormConsumer', () => {
     const consume = createFreeFormConsumer(ColorValue.consume, {
       stopBefore: (component) => isTokenKind(component, TokenKind.Colon),
     });
-    const c = new TokenCursor(parseListOfComponentValues('red: blue', {}), {});
+    const c = new TokenCursor(parseListOfComponentValues('red: blue', {}), { env: styleletEnv });
 
     expect(consume(c)?.repr).toMatchObject({
       kind: ColorKind.Named,
@@ -116,7 +117,7 @@ describe('createFreeFormConsumer', () => {
 
   it('includes a top-level comma in a non-strict partition', () => {
     const consume = createFreeFormConsumer(ColorValue.consume, { strict: false });
-    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), {});
+    const c = new TokenCursor(parseListOfComponentValues('red, blue', {}), { env: styleletEnv });
 
     expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);
@@ -124,7 +125,7 @@ describe('createFreeFormConsumer', () => {
 
   it('includes a brace block in a non-strict partition', () => {
     const consume = createFreeFormConsumer(ColorValue.consume, { strict: false });
-    const c = new TokenCursor(parseListOfComponentValues('red {blue}', {}), {});
+    const c = new TokenCursor(parseListOfComponentValues('red {blue}', {}), { env: styleletEnv });
 
     expect(consume(c)).toBeNull();
     expect(c.pos()).toBe(0);

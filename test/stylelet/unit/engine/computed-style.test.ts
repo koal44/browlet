@@ -1,3 +1,4 @@
+import { createStyleletTestEnvironment } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 
 import { Stylelet } from '../../../../src/stylelet/stylelet';
@@ -109,7 +110,7 @@ describe('computed custom properties', () => {
   it('respects an authoritative empty inline provider while inheriting through opaque nodes', () => {
     const host = createOpaqueDOM('<main style="--a: blocked"><span style="--a: blocked"></span></main>');
     try {
-      const styles = new Stylelet(host.document, { dom: { ...host.dom, inlineStyleBlock: () => null } });
+      const styles = new Stylelet(host.document, { env: createStyleletTestEnvironment({ dom: { ...host.dom, inlineStyleBlock: () => null } }) });
       const sheet = styles.createStyleSheet();
       sheet.replaceSync('main { --a: accepted }');
       styles.documentScope.adoptedStyleSheets.push(sheet);

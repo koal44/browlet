@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
@@ -49,17 +50,17 @@ describe('ratio', () => {
   });
 
   it('distinguishes number syntax from a ratio with an explicit slash', () => {
-    expect(parseNumberOrRatio('3', {})).toEqual(new NumberValue(new NumberLiteral(3)));
-    expect(parseNumberOrRatio('3 / 1', {})).toEqual(new RatioValue({ numerator: 3, denominator: 1 }));
-    expect(parseNumberOrRatio('-3', {})).toEqual(new NumberValue(new NumberLiteral(-3)));
-    expect(parseNumberOrRatio('calc(1 + 2)', {})!.serialize())
+    expect(parseNumberOrRatio('3', { env: styleletEnv })).toEqual(new NumberValue(new NumberLiteral(3)));
+    expect(parseNumberOrRatio('3 / 1', { env: styleletEnv })).toEqual(new RatioValue({ numerator: 3, denominator: 1 }));
+    expect(parseNumberOrRatio('-3', { env: styleletEnv })).toEqual(new NumberValue(new NumberLiteral(-3)));
+    expect(parseNumberOrRatio('calc(1 + 2)', { env: styleletEnv })!.serialize())
       .toBe('calc(3)');
-    expect(parseNumberOrRatio('calc(1 + 2)', {})!.resolve(ValueStage.Computed, {}).serialize()).toBe('3');
+    expect(parseNumberOrRatio('calc(1 + 2)', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('3');
   });
 
   it('consumes the reusable number-or-ratio union', () => {
-    const numberCursor = new TokenCursor(parseListOfComponentValues('3 4', {}), {});
-    const ratioCursor = new TokenCursor(parseListOfComponentValues('3 / 1 4', {}), {});
+    const numberCursor = new TokenCursor(parseListOfComponentValues('3 4', {}), { env: styleletEnv });
+    const ratioCursor = new TokenCursor(parseListOfComponentValues('3 / 1 4', {}), { env: styleletEnv });
 
     expect(consumeNumberOrRatio(numberCursor)).toEqual(new NumberValue(new NumberLiteral(3)));
     expect(numberCursor.pos()).toBe(1);

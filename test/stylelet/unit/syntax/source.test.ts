@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFreeFormConsumer } from '../../../../src/stylelet/syntax/component-consumers';
@@ -61,7 +62,7 @@ describe('source spelling through component parsing', () => {
     try {
       const declaration = parseDeclaration(cursor, {});
       if (declaration === null) throw new Error('Expected a declaration');
-      const interpreted = InterpretedDeclaration.interpret(declaration, {})![0]!;
+      const interpreted = InterpretedDeclaration.interpret(declaration, { env: styleletEnv })![0]!;
 
       expect(read).not.toHaveBeenCalled();
       expect(interpreted.serializeValue()).toBe('fn(a) /**/ foo\\62 ar');

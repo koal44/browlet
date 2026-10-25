@@ -7,8 +7,7 @@ import { fileURLToPath } from 'node:url';
 // own modules are treated as mutually cooperating peers.
 export const layers = [
   ['infra'],
-  ['js-engine', 'web-idl/core', 'encoding/core'],
-  ['fetch/core'],
+  ['js-engine', 'web-idl/core', 'encoding/core', 'url/core'],
   ['web-idl/environment', 'web-idl/compiler'],
   ['web-idl/assembly'],
   ['web-idl/binding/platform'],
@@ -18,6 +17,13 @@ export const layers = [
   ['web-idl/generate'],
   ['web-idl'],
   ['streams', 'selectlet'],
+  ['encoding'],
+  ['url'],
+  ['http', 'storage'],
+  ['mime'],
+  ['file'],
+  ['xhr'],
+  ['fetch'],
   ['stylelet/environment', 'stylelet/syntax'],
   ['stylelet/value-processing'],
   ['stylelet/values/numeric-literal', 'stylelet/values/collections'],
@@ -34,13 +40,6 @@ export const layers = [
   ['stylelet/cssom'],
   ['stylelet/engine'],
   ['stylelet'],
-  ['encoding'],
-  ['url'],
-  ['http', 'storage'],
-  ['mime'],
-  ['file'],
-  ['xhr'],
-  ['fetch'],
   ['browlet/platform', 'browlet/timing', 'browlet/dom/infra', 'browlet/dom/nodes/element-definitions', 'browlet/style'],
   ['browlet/html/microsyntaxes', 'browlet/dom/string-list'],
   ['browlet/dom/nodes/html/attributes'],
@@ -113,6 +112,6 @@ export function importPosition(filename, node) {
   if (!target) return { group: 0, order: 0 };
   if (target === owner) return { group: 3, order: 0 };
   const sibling = target.id.split('/')[0] === owner?.id.split('/')[0];
-  const foundation = ['infra', 'js-engine', 'web-idl/core', 'encoding/core', 'fetch/core'].includes(target.id);
+  const foundation = ['infra', 'js-engine', 'web-idl/core', 'encoding/core', 'url/core'].includes(target.id);
   return { group: sibling && !foundation ? 2 : 1, order: components.indexOf(target) };
 }

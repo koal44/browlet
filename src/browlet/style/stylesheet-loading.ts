@@ -1,9 +1,14 @@
 import { InternalError } from '../../infra/internal-error';
-import { CSSStyleSheetImpl, RuleListContext, getStylesheetEncoding, parseStylesheetContents, type StyleSheetLoad } from '../../stylelet/index';
-import { getEncoding, type Encoding } from '../../encoding/index';
-import { serializeURL, type URLRecord } from '../../url/index';
+import { decode, getEncoding, type Encoding } from '../../encoding/index';
+import { copyURL, type URLRecord } from '../../url/index';
 import { getMIMETypeEssence } from '../../mime/index';
-import { fetch, FetchRequest, isFilteredResponse, isOkStatus, type FetchController, type FetchResponse } from '../../fetch/index';
+import {
+  fetch, FetchRequest, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
+  type FetchController, type FetchResponse,
+} from '../../fetch/index';
+import {
+  CSSStyleSheetImpl, getStylesheetEncoding, parseStylesheetContents, RuleListContext, type StyleSheetLoad,
+} from '../../stylelet/index';
 
 import type { DocumentImpl, ElementImpl, ProcessingInstructionImpl } from '../dom/nodes/index';
 
@@ -18,7 +23,8 @@ export function fetchCSSStyleSheet(
   processTheResponse: (response: FetchResponse, bytes: Uint8Array | null, outcome: StyleSheetFetchOutcome) => void,
 ): FetchController {
   const env = document.env;
-  const request = new FetchRequest(url, env, env.userAgent);
+  const request = new FetchRequest(url, env);
+  request.client = env;
   request.origin = document.origin;
   request.referrer = referrer;
   request.destination = 'style';
@@ -38,7 +44,7 @@ export function fetchCSSStyleSheet(
       }
       let mimeType = internalResponse.headerList.extractMIMEType();
       const supported = mimeType !== null && getMIMETypeEssence(mimeType) === 'text/css';
-      if (!supported && document.compatMode === 'BackCompat' && response.type !== 'opaque') {
+      if (!supported && document.compatMode !== 'CSS1Compat' && response.type !== 'opaque') {
         internalResponse.headerList.set('Content-Type', 'text/css');
         mimeType = internalResponse.headerList.extractMIMEType();
       }
@@ -66,13 +72,12 @@ export function createFetchedStyleSheet(
     transportEncoding: mimeType?.parameters.get('charset'),
     environmentEncoding: options.encoding ?? getEncoding(document.encoding) ?? 'UTF-8',
   });
-  const source = env.userAgent.decodeText(bytes, encoding);
-  const location = new env.userAgent.URL(serializeURL(url));
+  const source = decode(bytes, encoding);
   const sheet = new CSSStyleSheetImpl({
-    location,
-    baseURL: new env.userAgent.URL(serializeURL(internalResponse.url ?? url)),
+    location: copyURL(url),
+    baseURL: copyURL(internalResponse.url ?? url),
     encoding,
-    referrerPolicy: env.userAgent.parseReferrerPolicyFromHeader(internalResponse),
+    referrerPolicy: parseReferrerPolicyFromHeader(internalResponse),
     ownerNode: options.ownerNode,
     parentStyleSheet: null,
     ownerRule: null,
@@ -93,20 +98,22 @@ export function loadStyleSheetImports(
   parameters: (parent: CSSStyleSheetImpl) => Partial<FetchRequest>, complete: (success: boolean) => void,
   started?: (load: StyleSheetLoad) => void,
 ): StyleSheetLoad {
-  return sheet.loadImports((url, parent, loaded) => {
+  return sheet.loadImports((url, rule, loaded) => {
+    const parent = rule.parentStyleSheet!;
     if (parent.encoding === undefined) throw new InternalError('Import loading requires the parent stylesheet encoding');
-    const parsedURL = document.env.parseURL(url.href).url!;
     // https://w3c.github.io/webappsec-referrer-policy/#integration-with-css
     const referrer = parent.location === null
-      ? document.url : document.env.parseURL((parent.baseURL ?? parent.location).href).url!;
-    const controller = fetchCSSStyleSheet(parsedURL, referrer, document, {
+      ? document.url : parent.baseURL ?? parent.location;
+    const requestParameters: Partial<FetchRequest> = {
       // SPEC_CLASH(stylesheet-referrer-policy): Like Firefox, use the external sheet's own default when no valid header exists.
       referrerPolicy: parent.location === null
         ? document.policyContainer.referrerPolicy : parent.referrerPolicy || 'strict-origin-when-cross-origin',
       ...parameters(parent), initiatorType: 'css',
-    }, (response, bytes, outcome) => {
+    };
+    rule.url.applyRequestModifiers(requestParameters);
+    const controller = fetchCSSStyleSheet(url, referrer, document, requestParameters, (response, bytes, outcome) => {
       // Failed HTTP imports retain an empty sheet; their response CSS must not be applied.
-      loaded(outcome === 'failure' ? null : createFetchedStyleSheet(parsedURL, response, bytes ?? new Uint8Array(), {
+      loaded(outcome === 'failure' ? null : createFetchedStyleSheet(url, response, bytes ?? new Uint8Array(), {
         ownerNode: null, media: '', title: '', alternate: false, encoding: parent.encoding,
       }, document), outcome === 'success');
     });

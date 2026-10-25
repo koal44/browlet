@@ -10,7 +10,6 @@ const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const packageNames = ['selectlet', 'stylelet', 'browlet'];
 const browserGlobalNames = {
   selectlet: 'createSelectlet',
-  stylelet: 'Stylelet',
 };
 
 // Pass package names to build a subset; selected packages retain dependency order.

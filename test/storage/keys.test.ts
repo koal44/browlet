@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { StorageKey } from '../../src/storage/keys';
 import type { StorageUserAgent } from '../../src/storage/environment';
-import { createOpaqueOrigin, type TupleOrigin } from '../../src/url/origin';
+import { createOpaqueOrigin } from '../../src/url/origin';
+import type { TupleOrigin } from '../../src/url/core/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 
 describe('obtaining storage keys', () => {

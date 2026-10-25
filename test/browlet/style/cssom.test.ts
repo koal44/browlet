@@ -1,3 +1,4 @@
+import { serializeURL } from '../../../src/url/core/index';
 import { describe, expect, it } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
@@ -184,7 +185,7 @@ describe('CSSOM sheet bindings', () => {
     const browser = new Browlet({ route: () => '' });
     const sheet = new browser.window.CSSStyleSheet({ baseURL: 'https://example.test/styles/' });
     const implementation = unwrap<CSSStyleSheetImpl>(sheet);
-    expect(implementation.baseURL?.href).toBe('https://example.test/styles/');
+    expect(serializeURL(implementation.baseURL!)).toBe('https://example.test/styles/');
     expect(implementation.isConstructedFor(getRelevantRealm(browser.window).getAssociatedDocument())).toBe(true);
     expect(Reflect.get(sheet, 'baseURL')).toBeUndefined();
     expect(Reflect.get(sheet, 'ruleList')).toBeUndefined();

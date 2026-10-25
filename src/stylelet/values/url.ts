@@ -1,12 +1,12 @@
-import { InternalError } from '../../infra/internal-error';
+import { parseURL, serializeURL, type URLRecord } from '../../url/index';
+import type { FetchRequest } from '../../fetch/index';
 
-import type { StyleletURL, StyleletURLConstructor } from '../environment';
 import {
   createFunctionalNotationConsumer, consumeUrlToken, any, one, oneOf, adaptConsumer, sequenceOf, withTrivia,
   createComponentParser, serializeCssString, serializeCssFunction,
   type TokenCursor, type TryConsumer, type TryConsumerResult, type ParserInput,
 } from '../syntax/index';
-import { ValueStage } from '../value-processing/index';
+import { ValueStage, type ValueContext } from '../value-processing/index';
 import type { TreeScope } from '../engine/index';
 
 import type { Value } from './value';
@@ -39,22 +39,30 @@ export class UrlValue<R extends Url = Url> implements Value<UrlContext> {
   }
 
   /** Capture local scope from the specified stage; resolve other URLs from the computed stage. */
-  resolve(stage: ValueStage, context: UrlContext = {}): UrlValue {
+  resolve(stage: ValueStage, context: UrlContext): UrlValue {
     const url = this.repr;
     if (url.local === true) {
       return stage < ValueStage.Specified || url.treeScope !== undefined || context.treeScope === undefined
         ? this : new UrlValue({ ...url, treeScope: context.treeScope });
     }
     if (stage < ValueStage.Computed || url.href === '') return this;
-    const URL = context.URL;
-    if (URL === undefined) throw new InternalError('URL resolution requires a host URL constructor');
-    try {
-      const href = new URL(url.href, context.baseUrl?.href).href;
-      return href === url.href ? this : new UrlValue({ ...url, href });
-    } catch {
-      // A URL that cannot be made absolute retains its specified value.
-      return this;
+    const parsed = parseURL(url.href, context.baseUrl ?? null, 'UTF-8', context.env.userAgent).url;
+    // A URL that cannot be made absolute retains its specified value.
+    if (parsed === null) return this;
+    const href = serializeURL(parsed);
+    return href === url.href ? this : new UrlValue({ ...url, href });
+  }
+
+  /** Apply recognized modifiers to a request or the parameters used to construct it. */
+  // https://drafts.csswg.org/css-values-5/#apply-request-modifiers-from-url-value
+  applyRequestModifiers(request: Partial<FetchRequest>): void {
+    const { crossOrigin, integrity, referrerPolicy } = this.repr.modifiers;
+    if (crossOrigin !== undefined) {
+      request.mode = 'cors';
+      request.credentialsMode = crossOrigin.value === 'use-credentials' ? 'include' : 'same-origin';
     }
+    if (integrity !== undefined) request.integrityMetadata = integrity.value;
+    if (referrerPolicy !== undefined) request.referrerPolicy = referrerPolicy.value;
   }
 
   /** Serialize the retained URL and modifiers without resolving against a new base. */
@@ -84,12 +92,10 @@ type Url = {
 
 export type UrlNotation = 'url' | 'src';
 
-export type UrlContext = {
-  /** Required when computing a nonempty URL without the local fragment flag. */
-  URL?: StyleletURLConstructor;
-  baseUrl?: StyleletURL;
+export interface UrlContext extends ValueContext {
+  baseUrl?: URLRecord;
   treeScope?: TreeScope;
-};
+}
 
 /*
  * NOTE: src() provides an escape from url()'s legacy unquoted URL

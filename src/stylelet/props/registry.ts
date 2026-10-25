@@ -1,4 +1,5 @@
 import type { CustomPropertyName, ParserInput } from '../syntax/index';
+import type { ValueContext } from '../value-processing/index';
 import type { ParsedSyntaxValue, SyntaxValue, WholeValue } from '../values/index';
 import type { PropertyContext } from './base-property';
 import {
@@ -44,10 +45,10 @@ export type CustomPropertyRegistration = {
 
 export type CustomPropertyRegistry = Map<CustomPropertyName, CustomPropertyRegistration>;
 
-export type RegistryContext = {
+export interface RegistryContext extends ValueContext {
   /** Effective registrations for this computation; omitted in registration-free contexts. */
   customPropertyRegistry?: CustomPropertyRegistry;
-};
+}
 
 /** Supported property names; interpretation expands shorthands before retaining declarations. */
 export type PropertyName = BuiltInPropertyName | CustomPropertyName;

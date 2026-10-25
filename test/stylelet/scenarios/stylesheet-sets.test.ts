@@ -1,8 +1,14 @@
 import { createServer } from 'node:http';
 import { expect, test, type Page } from '@playwright/test';
+import { require as tsRequire } from 'tsx/cjs/api';
 
+import type * as DocumentFixtureModule from '../browlet-document';
+import type * as StyleletModule from '../../../src/stylelet/index';
 import { runScenarios } from '../../scenario/dispatch';
 import { BROWSER_NAMES } from '../../scenario/harness';
+
+const { createBrowletDocument } = tsRequire('../browlet-document.ts', __filename) as typeof DocumentFixtureModule;
+const { Stylelet } = tsRequire('../../../src/stylelet/index.ts', __filename) as typeof StyleletModule;
 
 const titles = ['alpha', 'beta', 'alpha,beta', 'Beta', ''];
 const selections = [
@@ -20,16 +26,15 @@ runScenarios('stylesheet-set selection', 'normal', BROWSER_NAMES.flatMap((browse
   markup: '',
   setupPage: async (page: Page) => {
     const expected = titles.map((title) => title !== '' && title !== selection.selected);
-    const actual = await page.evaluate(({ headers, titles }) => {
-      const scope = window.stylelet!.documentScope;
-      for (const name of headers) scope.changePreferredStyleSheetSetName(name);
-      for (const title of titles) {
-        const owner = document.createElement('style');
-        document.head.append(owner);
-        scope.createStyleElementStyleSheet(owner, '', { title });
-      }
-      return [...scope.styleSheets].map((sheet) => sheet.disabled);
-    }, { headers: selection.headers, titles });
+    const document = createBrowletDocument();
+    const scope = new Stylelet(document, { env: document.env }).documentScope;
+    for (const name of selection.headers) scope.changePreferredStyleSheetSetName(name);
+    for (const title of titles) {
+      const owner = document.createElement('style');
+      document.head!.appendChild(owner);
+      scope.createStyleElementStyleSheet(owner, '', { title });
+    }
+    const actual = [...scope.styleSheets].map((sheet) => sheet.disabled);
     expect(actual).toEqual(expected);
 
     const server = createServer((_request, response) => {

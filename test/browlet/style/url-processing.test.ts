@@ -1,9 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
-import { fetchStyleResource, resolveStyleResourceURL, styleResourceBaseURL } from '../../../src/browlet/style/url-processing';
+import { fetchStyleResource } from '../../../src/stylelet/resource';
 import type { WindowEnvironment } from '../../../src/browlet/environment';
 import * as fetching from '../../../src/fetch/index';
+import * as urls from '../../../src/url/index';
 import { serializeURL } from '../../../src/url/index';
 import { CSSStyleSheetImpl } from '../../../src/stylelet/cssom/css-stylesheet';
 import { CSSStyleDeclarationImpl } from '../../../src/stylelet/cssom/declarations/style-declaration';
@@ -25,33 +26,50 @@ afterEach(async () => {
 
 describe('CSS URL processing', () => {
   it('selects the stylesheet base, then location, then the relevant environment base', () => {
+    const fetch = vi.spyOn(fetching, 'fetch').mockReturnValue(new fetching.FetchController());
     const rule = createRule();
     const declaration = new CSSStyleDeclarationImpl({ parentRule: rule }, env);
     const sheet = rule.parentStyleSheet!;
+    function requestedURL(owner: typeof rule | typeof declaration): string {
+      fetchStyleResource(UrlValue.fromString('url', '', {}), owner, 'style', 'no-cors', env, vi.fn());
+      return serializeURL(fetch.mock.lastCall![0].url);
+    }
     for (const owner of [rule, declaration]) {
-      expect(serializeURL(styleResourceBaseURL(owner, env))).toBe('https://example.test/sheet-base/');
+      expect(requestedURL(owner)).toBe('https://example.test/sheet-base/');
       sheet.baseURL = undefined;
-      expect(serializeURL(styleResourceBaseURL(owner, env))).toBe('https://example.test/sheet.css');
+      expect(requestedURL(owner)).toBe('https://example.test/sheet.css');
       sheet.location = null;
-      expect(serializeURL(styleResourceBaseURL(owner, env))).toBe('https://example.test/document-base/');
-      sheet.baseURL = new env.userAgent.URL('https://example.test/sheet-base/');
-      sheet.location = new env.userAgent.URL('https://example.test/sheet.css');
+      expect(requestedURL(owner)).toBe('https://example.test/document-base/');
+      sheet.baseURL = env.userAgent.parseURL('https://example.test/sheet-base/')!;
+      sheet.location = env.userAgent.parseURL('https://example.test/sheet.css')!;
     }
     rule.setParentStyleSheet(null);
-    expect(serializeURL(styleResourceBaseURL(rule, env))).toBe('https://example.test/document-base/');
-    expect(serializeURL(styleResourceBaseURL(new CSSStyleDeclarationImpl({}, env), env)))
-      .toBe('https://example.test/document-base/');
+    expect(requestedURL(rule)).toBe('https://example.test/document-base/');
+    expect(requestedURL(new CSSStyleDeclarationImpl({}, env))).toBe('https://example.test/document-base/');
   });
 
-  it('resolves URL values and URL records, using UTF-8 regardless of the sheet encoding', () => {
+  it('resolves URL values using UTF-8 regardless of the sheet encoding', () => {
     const rule = createRule();
     rule.parentStyleSheet!.encoding = 'windows-1252';
     const value = UrlValue.fromString('url', 'café.css', {});
-    expect(serializeURL(resolveStyleResourceURL(value, rule, env)!)).toBe('https://example.test/sheet-base/caf%C3%A9.css');
+    const fetch = vi.spyOn(fetching, 'fetch').mockReturnValue(new fetching.FetchController());
+
+    fetchStyleResource(value, rule, 'style', 'no-cors', env, vi.fn());
+
+    expect(serializeURL(fetch.mock.calls[0]![0].url)).toBe('https://example.test/sheet-base/caf%C3%A9.css');
     expect(value.repr.href).toBe('café.css');
-    const absolute = env.parseURL('https://other.test/style.css').url!;
-    expect(serializeURL(resolveStyleResourceURL(absolute, rule, env)!)).toBe('https://other.test/style.css');
-    expect(resolveStyleResourceURL(UrlValue.fromString('url', 'http://[', {}), rule, env)).toBeNull();
+  });
+
+  it('reuses an existing URL record without parsing it again', () => {
+    const rule = createRule();
+    const record = env.parseURL('https://other.test/style.css')!;
+    const parseURL = vi.spyOn(urls, 'parseURL');
+    const fetch = vi.spyOn(fetching, 'fetch').mockReturnValue(new fetching.FetchController());
+
+    fetchStyleResource(record, rule, 'style', 'no-cors', env, vi.fn());
+
+    expect(fetch.mock.calls[0]![0].url).toEqual(record);
+    expect(parseURL).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -71,7 +89,7 @@ describe('CSS URL processing', () => {
       return originalFetch(request, options, requestEnv);
     });
     const body = await new Promise<Uint8Array | null | 'failure'>((resolve) => {
-      const controller = fetchStyleResource(value, rule, 'style', mode, (_response, bytes) => resolve(bytes), env);
+      const controller = fetchStyleResource(value, rule, 'style', mode, env, (_response, bytes) => resolve(bytes));
       expect(controller).not.toBeNull();
     });
     expect(body).toEqual(new TextEncoder().encode('resource'));
@@ -88,7 +106,7 @@ describe('CSS URL processing', () => {
   it('does not fetch or invoke the response callback when URL parsing fails', () => {
     const fetch = vi.spyOn(fetching, 'fetch');
     const response = vi.fn();
-    expect(fetchStyleResource(UrlValue.fromString('url', 'http://[', {}), createRule(), 'style', 'no-cors', response, env))
+    expect(fetchStyleResource(UrlValue.fromString('url', 'http://[', {}), createRule(), 'style', 'no-cors', env, response))
       .toBeNull();
     expect(fetch).not.toHaveBeenCalled();
     expect(response).not.toHaveBeenCalled();
@@ -97,11 +115,11 @@ describe('CSS URL processing', () => {
 
 function createRule(originClean = true): CSSImportRuleImpl {
   const sheet = new CSSStyleSheetImpl({
-    location: new env.userAgent.URL('https://example.test/sheet.css'),
-    baseURL: new env.userAgent.URL('https://example.test/sheet-base/'),
+    location: env.userAgent.parseURL('https://example.test/sheet.css')!,
+    baseURL: env.userAgent.parseURL('https://example.test/sheet-base/')!,
     ownerNode: null, parentStyleSheet: null, ownerRule: null, media: '', title: '', alternate: false, originClean,
   }, env);
-  const rule = new CSSImportRuleImpl(UrlValue.fromString('url', 'theme.css', {}), new MediaListImpl(''), env);
+  const rule = new CSSImportRuleImpl(UrlValue.fromString('url', 'theme.css', {}), new MediaListImpl('', env), env);
   rule.setParentStyleSheet(sheet);
   return rule;
 }

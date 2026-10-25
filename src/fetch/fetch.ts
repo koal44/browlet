@@ -18,6 +18,7 @@ import {
 import { minimizeSupportedMIMEType, serializeMIMEType } from '../mime/index';
 
 import { FetchBody } from './body';
+import { determineRequestReferrer, setRequestReferrerPolicyOnRedirect } from './referrer-policy';
 import type { HTTPCacheEntry, HTTPCachePartition } from './cache-http';
 import { deserializeAbortReason, type FetchController } from './controller';
 import { processDataURL } from './data-url';
@@ -46,7 +47,8 @@ export function fetch(
   }
 
   request.populateFromClient();
-  const { client, userAgent } = request;
+  const { client } = request;
+  const { userAgent } = request.env;
   const isolated = client?.crossOriginIsolatedCapability ?? false;
   const timing = new FetchTimingInfo();
   timing.startTime = timing.postRedirectStartTime = coarsenTime(userAgent.unsafeSharedCurrentTime(), isolated);
@@ -138,7 +140,7 @@ function mainFetch(params: FetchParams, recursive?: false): void;
 function mainFetch(params: FetchParams, recursive: true): InternalPromise<FetchResponse>;
 function mainFetch(params: FetchParams, recursive = false): InternalPromise<FetchResponse> | void {
   const { request } = params;
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   let response: FetchResponse | null = null;
   if (request.localURLsOnly && !isLocalURL(request.currentURL)) response = FetchResponse.networkError();
 
@@ -151,7 +153,7 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
   }
   if (request.policyContainer === undefined) throw new InternalError('Main fetch requires populated request policies');
   if (request.referrerPolicy === '') request.referrerPolicy = request.policyContainer.referrerPolicy;
-  if (request.referrer !== null) request.referrer = userAgent.determineRequestReferrer(request);
+  if (request.referrer !== null) request.referrer = determineRequestReferrer(request);
   request.upgradeForHSTS();
   // Fetch permits HTTPS DNS-record upgrading during connection establishment.
   // TODO: consume HTTPS RR results in the transport; an upgrade must never retry HTTP.
@@ -172,8 +174,8 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
 // The internal Promise carries the response produced by downstream dispatch.
 function overrideFetch(params: FetchParams, type: 'scheme-fetch' | 'http-fetch', makeCORSPreflight = false): InternalPromise<FetchResponse> {
   const { request, env } = params;
-  return request.userAgent.HostPromise.try(() => {
-    const response = request.userAgent.potentiallyOverrideResponse(request, env);
+  return request.env.userAgent.HostPromise.try(() => {
+    const response = request.env.userAgent.potentiallyOverrideResponse(request, env);
     if (response !== null) return response;
 
     switch (type) {
@@ -186,7 +188,7 @@ function overrideFetch(params: FetchParams, type: 'scheme-fetch' | 'http-fetch',
 /** Obtain a response from the request's current URL scheme. */
 // https://fetch.spec.whatwg.org/#concept-scheme-fetch
 function schemeFetch(params: FetchParams): InternalPromise<FetchResponse> {
-  return params.request.userAgent.HostPromise.try(() => {
+  return params.request.env.userAgent.HostPromise.try(() => {
     if (params.canceled) return FetchResponse.appropriateNetworkError(params);
     const url = params.request.currentURL;
     switch (url.scheme) {
@@ -220,7 +222,7 @@ function schemeFetch(params: FetchParams): InternalPromise<FetchResponse> {
 // https://fetch.spec.whatwg.org/#concept-http-fetch
 function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalPromise<FetchResponse> {
   const { request } = params;
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   return userAgent.HostPromise.try(() => request.allowServiceWorkerInterception
     ? fetchFromServiceWorker(params) : null, optionalResponseType).then((response) => {
     return response ?? fetchFromNetwork(params, makeCORSPreflight);
@@ -275,7 +277,7 @@ function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalProm
 // Undefined denotes a manual navigation whose nonrecursive main fetch now owns delivery.
 function httpRedirectFetch(params: FetchParams, response: FetchResponse): InternalPromise<FetchResponse | undefined> {
   const { request, timingInfo, env } = params;
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   return userAgent.HostPromise.try(() => {
     const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
     const location = internalResponse.getLocationURL(request.currentURL.fragment, userAgent);
@@ -311,7 +313,7 @@ function httpRedirectFetch(params: FetchParams, response: FetchResponse): Intern
       timingInfo.redirectEndTime = timingInfo.postRedirectStartTime = now;
       if (timingInfo.redirectStartTime === 0) timingInfo.redirectStartTime = timingInfo.startTime;
       request.urlList.push(location);
-      userAgent.setRequestReferrerPolicyOnRedirect(request, internalResponse);
+      setRequestReferrerPolicyOnRedirect(request, internalResponse);
       if (request.redirectMode === 'manual') {
         if (request.mode !== 'navigate') throw new InternalError('Manual redirect continuation requires a navigation');
         mainFetch(params);
@@ -334,7 +336,7 @@ function httpNetworkOrCacheFetch(
   params: FetchParams, isAuthenticationFetch = false, isNewConnectionFetch = false,
 ): InternalPromise<FetchResponse> {
   const { request, env } = params;
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   const authentication = userAgent.httpAuthentication;
   const generation = authentication.generation;
   const rejectedCredentials = new Map<string, Set<string>>();
@@ -514,12 +516,12 @@ function httpNetworkFetch(
 ): InternalPromise<FetchResponse> {
   const { request, env, controller, timingInfo } = params;
   const generation = cache?.generation;
-  const result = request.userAgent.HostPromise.withResolvers(responseType);
+  const result = request.env.userAgent.HostPromise.withResolvers(responseType);
   if (params.canceled) {
     result.resolve(FetchResponse.appropriateNetworkError(params));
     return result.promise;
   }
-  if (request.userAgent.assumeNoInternetConnectivity || (request.client !== null && isOffline(request.client))) {
+  if (request.env.userAgent.assumeNoInternetConnectivity || (request.client !== null && isOffline(request.client))) {
     result.resolve(FetchResponse.networkError());
     return result.promise;
   }
@@ -580,7 +582,7 @@ function httpNetworkFetch(
     removeCancellation = controller.addCancellationSteps(cancel);
     const requestTime = Date.now();
     try {
-      control = request.userAgent.httpTransport.dispatch({
+      control = request.env.userAgent.httpTransport.dispatch({
         url: request.currentURL,
         method: request.method,
         headers: request.headerList,
@@ -616,7 +618,7 @@ function httpNetworkFetch(
             const interim = new FetchResponse();
             interim.status = status;
             interim.headerList = headers;
-            request.userAgent.webDriverBiDiResponseStarted(request, interim);
+            request.env.userAgent.webDriverBiDiResponseStarted(request, interim);
             if (status === 103 && params.processEarlyHintsResponse !== null) {
               queueCallback(() => params.processEarlyHintsResponse?.(interim));
             }
@@ -625,10 +627,10 @@ function httpNetworkFetch(
           response.status = status;
           response.statusMessage = statusMessage;
           response.headerList = headers;
-          request.userAgent.webDriverBiDiResponseStarted(request, response);
-          request.userAgent.hstsStore.processResponse(response, hasValidTLS);
+          request.env.userAgent.webDriverBiDiResponseStarted(request, response);
+          request.env.userAgent.hstsStore.processResponse(response, hasValidTLS);
           if (includeCredentials) response.parseAndStoreCookies(request);
-          request.userAgent.webDriverBiDiCloneNetworkResponseBody(request, response);
+          request.env.userAgent.webDriverBiDiCloneNetworkResponseBody(request, response);
           if (request.method !== 'HEAD' && !isNullBodyStatus(status)) {
             // https://fetch.spec.whatwg.org/#handle-content-codings
             const codings = headers.getDecodeAndSplit('Content-Encoding')?.filter((coding) => coding !== '');
@@ -640,10 +642,10 @@ function httpNetworkFetch(
                 const name = coding.toLowerCase();
                 return name === 'x-gzip' ? 'gzip' : name;
               });
-              const supported = normalized.every((coding) => request.userAgent.supportedContentCodings.has(coding));
+              const supported = normalized.every((coding) => request.env.userAgent.supportedContentCodings.has(coding));
               response.bodyInfo.contentEncoding = normalized.length > 1 ? 'multiple' : supported ? codings[0]!.toLowerCase() : '@unknown';
               if (supported) {
-                decoder = request.userAgent.createContentDecoder(normalized, {
+                decoder = request.env.userAgent.createContentDecoder(normalized, {
                   onData: receiveDecoded,
                   onEnd: endResponse,
                   onError() { if (!discarded && !params.canceled) controller.terminate(); },
@@ -698,7 +700,7 @@ function httpNetworkFetch(
       else if (decoderBlocked || outputPaused) control!.pause();
     }
     function now(): number {
-      return coarsenTime(request.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
+      return coarsenTime(request.env.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
     }
     function queueCallback(steps: () => void): void {
       queueFetchTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.exec.global, env);
@@ -716,7 +718,8 @@ function httpNetworkFetch(
 // https://fetch.spec.whatwg.org/#cors-preflight-fetch-0
 function corsPreflightFetch(params: FetchParams): InternalPromise<FetchResponse> {
   const { request, env } = params;
-  const preflight = new FetchRequest(request.url, request.client, request.userAgent);
+  const preflight = new FetchRequest(request.url, request.env);
+  preflight.client = request.client;
   preflight.method = 'OPTIONS';
   preflight.urlList = [copyURL(request.url), ...request.urlList.slice(1).map(copyURL)];
   preflight.initiator = request.initiator;
@@ -772,7 +775,7 @@ function corsPreflightFetch(params: FetchParams): InternalPromise<FetchResponse>
       return seconds === null ? null : [seconds];
     }, false);
     const maxAge = ages?.[0] ?? 5;
-    const cache = request.userAgent.corsPreflightCache;
+    const cache = request.env.userAgent.corsPreflightCache;
     for (const method of allowedMethods) cache.store(request, maxAge, method, null);
     for (const name of allowedHeaders) cache.store(request, maxAge, null, name);
     return response;
@@ -793,8 +796,8 @@ function fetchFinale(params: FetchParams, response: FetchResponse): void {
     const processResponse = params.processResponse;
     queueTask(params, () => processResponse(response));
   }
-  if (response.type === 'error') request.userAgent.webDriverBiDiFetchError(request);
-  else request.userAgent.webDriverBiDiResponseCompleted(request, response);
+  if (response.type === 'error') request.env.userAgent.webDriverBiDiFetchError(request);
+  else request.env.userAgent.webDriverBiDiResponseCompleted(request, response);
 
   if (internalResponse.body === null) {
     endOfBody();
@@ -833,7 +836,7 @@ function blobFetch(params: FetchParams): FetchResponse {
   // Unlike CORP's retained policy, a request origin is not a retained storage-partition context.
   // A future browser-owned Blob consumer must supply that authorization explicitly.
   if (access === null) throw new InternalError('Blob fetch requires an access context');
-  const blob = request.userAgent.obtainBlobObject(entry, access);
+  const blob = request.env.userAgent.obtainBlobObject(entry, access);
   if (blob === null) return FetchResponse.networkError();
 
   const response = new FetchResponse();
@@ -875,7 +878,7 @@ function blobFetch(params: FetchParams): FetchResponse {
 // https://fetch.spec.whatwg.org/#concept-http-fetch
 function fetchFromServiceWorker(params: FetchParams): InternalPromise<FetchResponse | null> {
   const { request, env, timingInfo, controller } = params;
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   // SPEC_GAP(service-worker-unused-body): Fetch clones before Handle Fetch,
   // whose no-worker returns omit cleanup of that unused body branch.
   // Let the worker owner select interception before requesting its copy.
@@ -933,7 +936,7 @@ function fetchFromServiceWorker(params: FetchParams): InternalPromise<FetchRespo
 // https://fetch.spec.whatwg.org/#concept-http-fetch
 function fetchFromNetwork(params: FetchParams, makeCORSPreflight: boolean): InternalPromise<FetchResponse> {
   const { request } = params;
-  const { HostPromise, corsPreflightCache } = request.userAgent;
+  const { HostPromise, corsPreflightCache } = request.env.userAgent;
   const needsPreflight = makeCORSPreflight &&
     ((!corsPreflightCache.matchesMethod(request.method, request) &&
       (!isCORSSafelistedMethod(request.method) || request.useCORSPreflight)) ||
@@ -978,7 +981,7 @@ function dispatchFetch(params: FetchParams): FetchResponse | InternalPromise<Fet
   if (request.useCORSPreflight || (request.unsafeRequest &&
     (!isCORSSafelistedMethod(request.method) || request.headerList.getCORSUnsafeRequestHeaderNames().length > 0))) {
     return overrideFetch(params, 'http-fetch', true).then((response: FetchResponse) => {
-      if (response.type === 'error') request.userAgent.corsPreflightCache.clearEntries(request);
+      if (response.type === 'error') request.env.userAgent.corsPreflightCache.clearEntries(request);
       return response;
     });
   }
@@ -1041,7 +1044,7 @@ function processFetchResponse(params: FetchParams, response: FetchResponse): voi
 // https://fetch.spec.whatwg.org/#fetch-finale
 function endResponseBody(params: FetchParams, response: FetchResponse): void {
   const { request } = params;
-  const unsafeEndTime = request.userAgent.unsafeSharedCurrentTime();
+  const unsafeEndTime = request.env.userAgent.unsafeSharedCurrentTime();
   params.controller.reportTimingSteps = (env) => {
     if (!isHTTPScheme(request.url.scheme)) return;
     let timingInfo = params.timingInfo;
@@ -1057,7 +1060,7 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
       status = response.status;
       const mimeType = response.headerList.extractMIMEType();
       if (mimeType !== null) {
-        bodyInfo.contentType = minimizeSupportedMIMEType(mimeType, (type) => request.userAgent.supportsMIMEType(type));
+        bodyInfo.contentType = minimizeSupportedMIMEType(mimeType, (type) => request.env.userAgent.supportsMIMEType(type));
       }
     }
     if (request.initiatorType !== null) {
@@ -1076,7 +1079,7 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
 
 // Stream operations enter the body's task/checkpoint owner.
 function runBodySteps<T>(params: FetchParams, steps: () => NoInfer<T>, type: PromiseResultType<T>): InternalPromise<T> {
-  const result = params.request.userAgent.HostPromise.withResolvers(type);
+  const result = params.request.env.userAgent.HostPromise.withResolvers(type);
   params.env.exec.queueTask('network', () => {
     try { result.resolve(steps()); }
     catch (error) { result.reject(error); }
@@ -1097,7 +1100,7 @@ function fetchWithCache(
   params: FetchParams, includeCredentials: boolean, forceNewConnection: boolean, sourceRequest: FetchRequest,
 ): InternalPromise<FetchResponse> {
   const { request, env } = params;
-  const { userAgent } = request;
+  const { userAgent } = request.env;
   const result = userAgent.HostPromise.withResolvers(responseType);
   const cache = userAgent.httpCache.determine(request);
   const generation = cache?.generation;
@@ -1226,7 +1229,7 @@ class NetworkUpload implements HTTPUploadSource {
   read(): InternalPromise<Uint8Array | null> {
     if (this.#pending) throw new InternalError('HTTP transport requested concurrent upload reads');
     const { env, request } = this.#params;
-    const result = request.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>());
+    const result = request.env.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>());
     this.#pending = result;
     env.exec.queueTask('network', () => {
       if (this.#finished || this.#params.canceled) { this.#settle(null); return; }

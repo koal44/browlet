@@ -81,7 +81,7 @@ describe('Browlet', () => {
     await expect(browlet.navigate('not a URL')).rejects.toThrow(TypeError);
 
     const parseURL = vi.spyOn(getRelevantRealm(browlet.window).env, 'parseURL')
-      .mockReturnValueOnce({ url: null, validationErrors: [] });
+      .mockReturnValueOnce(null);
     try {
       await expect(browlet.navigate('https://example.test/')).rejects.toThrow(InternalError);
     } finally {

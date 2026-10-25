@@ -8,7 +8,6 @@ import {
   defineTypedef, dictMember, emptyDictionary, idlType, impl, nullable,
   op, reference, roAttr, union, xattr,
 } from '../web-idl/core/index';
-import type { ReferrerPolicy } from './core/index';
 import { createReadableStreamProxy, type ReadableStreamImpl } from '../streams/index';
 import {
   areSameOrigin, areSameSite, serializeOrigin, type Origin, copyURL, obtainURLOrigin,
@@ -18,6 +17,7 @@ import type { BlobImpl } from '../file/index';
 import type { FormDataImpl } from '../xhr/index';
 
 import { BodyMixin, FetchBody, type BodyInitValue } from './body';
+import type { ReferrerPolicy } from './referrer-policy';
 import {
   isNavigationDestination, isNonSubresourceDestination, isSubresourceDestination, type Destination,
 } from './destination';
@@ -26,7 +26,7 @@ import {
   isCORSSafelistedMethod, isForbiddenMethod, isValidMethod, normalizeMethod, serializeInteger,
 } from './headers';
 import type {
-  FetchEnvironment, FetchEnvironmentBase, FetchUserAgent,
+  FetchEnvironment, FetchEnvironmentBase,
   FetchPolicyContainer, FetchPromptTarget,
 } from './environment';
 import type { NetworkPartitionKey } from './transport';
@@ -36,7 +36,7 @@ import {
   isRequestBlockedByMixedContent, upgradeForHSTS, upgradeInsecureRequest, upgradeMixedContent,
 } from './policy';
 
-/** Request state initialized with a URL, nullable client, and shared networking owner. */
+/** Request state owned by an environment; the initiating client is assigned separately. */
 // https://fetch.spec.whatwg.org/#concept-request
 export class FetchRequest {
   /** HTTP method as a byte string; only the six legacy method names are normalized. */
@@ -50,9 +50,9 @@ export class FetchRequest {
   /** Extracted body, bytes awaiting extraction, or null when no body is present. */
   body: Uint8Array | FetchBody | null = null;
   /** Initiating environment settings, or null for a request without an environment client. */
-  client: FetchEnvironment | null;
-  /** The shared networking owner, including for requests without a client. */
-  userAgent: FetchUserAgent;
+  client: FetchEnvironment | null = null;
+  /** Owning environment, retained independently of the request's client. */
+  env: FetchEnvironment;
   /** Destination environment reserved for a navigation or worker, before it becomes active. */
   // https://fetch.spec.whatwg.org/#concept-request-reserved-client
   // Navigation uses the base environment; worker requests use a full environment.
@@ -136,10 +136,9 @@ export class FetchRequest {
   /** Unique request identifier for WebDriver; cloning generates a fresh identifier. */
   webDriverId: string = randomUUID();
 
-  constructor(url: URLRecord, client: FetchEnvironment | null, userAgent: FetchUserAgent) {
+  constructor(url: URLRecord, env: FetchEnvironment) {
     this.urlList = [copyURL(url)];
-    this.client = client;
-    this.userAgent = userAgent;
+    this.env = env;
   }
 
   get url(): URLRecord {
@@ -211,7 +210,7 @@ export class FetchRequest {
       else if (this.body !== null) body = new Uint8Array(this.body);
       else body = null;
     }
-    const request = new FetchRequest(this.url, this.client, this.userAgent);
+    const request = new FetchRequest(this.url, this.env);
     for (let i = 1; i < this.urlList.length; i++) request.urlList.push(copyURL(this.urlList[i]!));
     return Object.assign(request, this, {
       webDriverId: request.webDriverId,
@@ -299,7 +298,7 @@ export class FetchRequest {
   appendUserAgentHeader(): void {
     if (this.headerList.has('User-Agent')) return;
     const value = this.client === null
-      ? this.userAgent.defaultUserAgentValue
+      ? this.env.userAgent.defaultUserAgentValue
       : getEnvironmentDefaultUserAgent(this.client);
     this.headerList.append('User-Agent', value);
   }
@@ -328,7 +327,7 @@ export class FetchRequest {
     }
     if (this.policyContainer === undefined) {
       this.policyContainer = this.client === null
-        ? this.userAgent.createPolicyContainer()
+        ? this.env.userAgent.createPolicyContainer()
         : this.client.policyContainer.clone();
     }
   }
@@ -434,10 +433,11 @@ export class RequestImpl {
     let fallbackMode: RequestMode | null = null;
     let signal: AbortSignal | null = null;
     if (typeof input === 'string') {
-      const url = env.parseURL(input, baseURL).url;
+      const url = env.parseURL(input, baseURL);
       if (url === null) throw new TypeError('Invalid Request URL');
       if (url.username !== '' || url.password !== '') throw new TypeError('Request URLs cannot include credentials');
-      source = new FetchRequest(url, env, env.userAgent);
+      source = new FetchRequest(url, env);
+      source.client = env;
       fallbackMode = 'cors';
     } else {
       source = input.#request;
@@ -455,7 +455,8 @@ export class RequestImpl {
       traversable = null;
     }
 
-    const request = new FetchRequest(source.url, env, env.userAgent);
+    const request = new FetchRequest(source.url, env);
+    request.client = env;
     request.method = source.method;
     request.headerList = source.headerList.clone();
     request.unsafeRequest = true;
@@ -489,7 +490,7 @@ export class RequestImpl {
       if (init.referrer === '') {
         request.referrer = null;
       } else {
-        const referrer = env.parseURL(init.referrer, baseURL).url;
+        const referrer = env.parseURL(init.referrer, baseURL);
         if (referrer === null) throw new TypeError('Invalid Request referrer');
         request.referrer = (referrer.scheme === 'about' && referrer.path === 'client') ||
           !areSameOrigin(obtainURLOrigin(referrer), origin) ? undefined : referrer;

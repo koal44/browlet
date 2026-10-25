@@ -1,5 +1,4 @@
-import type { DOMOperations } from '../../infra/index';
-import { InternalError } from '../../infra/index';
+import { InternalError, type DOMOperations } from '../../infra/index';
 
 import {
   findElementById, NodeImpl, type ElementImpl, type AttrImpl, type DocumentImpl, type DocumentFragmentImpl,

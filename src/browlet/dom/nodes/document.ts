@@ -10,9 +10,6 @@ import {
   DOMExceptionNames, DOMExceptionImpl, xattr,
 } from '../../../web-idl/core/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
-import {
-  Stylelet, LengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
-} from '../../../stylelet/index';
 import { utf8DecodeWithoutBOM, utf8Encode } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
@@ -20,6 +17,9 @@ import {
 } from '../../../url/index';
 import { HTTPCookie, parseHTTPDate, type CookieHost } from '../../../http/index';
 import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
+import {
+  Stylelet, LengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
+} from '../../../stylelet/index';
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
@@ -1214,13 +1214,13 @@ export class DocumentImpl extends NodeImpl {
   /** Parse against this Document's base URL using UTF-8; return null on failure. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#parse-a-url
   parseHTMLURL(input: string): URLRecord | null {
-    return this.env.parseURL(input, this.getBaseURL()).url;
+    return this.env.parseURL(input, this.getBaseURL());
   }
 
   /** Parse against this Document's base URL and encoding, including when it is detached. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#encoding-parsing-a-url
   encodingParseURL(input: string): URLRecord | null {
-    return this.env.parseURL(input, this.getBaseURL(), this.encoding).url;
+    return this.env.parseURL(input, this.getBaseURL(), this.encoding);
   }
 
   /** Encoding-parse and serialize a URL, preserving parse failure as null. */

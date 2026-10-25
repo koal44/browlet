@@ -3,6 +3,7 @@ import {
   nullable, op, reference, roAttr, xattr,
 } from '../../../web-idl/core/index';
 
+import type { StyleletEnvironment } from '../../environment';
 import { MediaQuery, type MathContext } from '../../values/index';
 
 /** Retain and edit a media query list; device matching belongs to Conditional Rules. */
@@ -10,10 +11,12 @@ import { MediaQuery, type MathContext } from '../../values/index';
 export class MediaListImpl {
   /** Parsed queries in list order, including invalid queries recovered as `not all`. */
   #queries: MediaQuery[] = [];
+  #env: StyleletEnvironment;
 
   /** Parse the initial media-query text into this list. */
   // https://drafts.csswg.org/cssom/#create-a-medialist-object
-  constructor(text: string) {
+  constructor(text: string, env: StyleletEnvironment) {
+    this.#env = env;
     this.mediaText = text;
   }
 
@@ -24,7 +27,7 @@ export class MediaListImpl {
   }
 
   set mediaText(value: string) {
-    this.#queries = MediaQuery.parseList(value, {});
+    this.#queries = MediaQuery.parseList(value, { env: this.#env });
   }
 
   /** Current number of media queries, including duplicates retained from parsed input. */
@@ -42,10 +45,10 @@ export class MediaListImpl {
 
   /** Append one query unless its serialization is already present. */
   // https://drafts.csswg.org/cssom/#dom-medialist-appendmedium
-  // SPEC_CLASH(media-list-mutation-comparison): Follow CSSOM/Chromium's no-op
-  // for duplicates; Firefox moves the query to the end and WebKit appends it.
+  // SPEC_CLASH(media-list-mutation-comparison): Follow CSSOM/Chromium/WebKit's no-op
+  // for duplicates; Firefox moves the query to the end.
   appendMedium(medium: string): void {
-    const query = parseSingleMediaQuery(medium, {});
+    const query = parseSingleMediaQuery(medium, { env: this.#env });
     if (query === null) return;
 
     const serialized = query.serialize();
@@ -56,10 +59,10 @@ export class MediaListImpl {
 
   /** Remove every equivalent query, throwing NotFoundError if none matches. */
   // https://drafts.csswg.org/cssom/#dom-medialist-deletemedium
-  // SPEC_CLASH(media-list-mutation-comparison): Remove all matches, following
-  // CSSOM/Chromium/Firefox; WebKit removes only one. See this folder's roadmap.
+  // Remove all matches, following CSSOM and all three browsers. The remaining
+  // append disagreement is recorded in this folder's roadmap.
   deleteMedium(medium: string): void {
-    const query = parseSingleMediaQuery(medium, {});
+    const query = parseSingleMediaQuery(medium, { env: this.#env });
     if (query === null) return;
 
     const serialized = query.serialize();

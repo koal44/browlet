@@ -556,7 +556,8 @@ async function fixture(handle: (request: IncomingMessage | Http2ServerRequest, r
   if (http2) env.userAgent.httpTransport = new NodeHTTPTransport(env.userAgent, cert);
   cleanup.push(() => env.userAgent.httpTransport.close());
   const operation = (path = '/private/item') => {
-    const request = new FetchRequest(env.parseURL(origin + path).url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL(origin + path)!, env);
+    request.client = env;
     request.populateFromClient();
     request.referrer = null;
     return createFetchOperation(request, env);

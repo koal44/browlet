@@ -1,8 +1,8 @@
 import { internalType, type InternalPromise } from '../infra/promises';
 import { InternalError } from '../infra/internal-error';
 import type { StampedPlatformObject } from '../web-idl/index';
-import type { SystemColorPalette } from '../stylelet/index';
 import { isHeaderValue } from '../fetch/index';
+import type { SystemColorPalette } from '../stylelet/index';
 
 import type { Document, WindowProxy } from './platform';
 import { type BrowletRealm, installHostHooks } from './scripting/index';
@@ -115,7 +115,7 @@ export class Browlet {
   #navigateDocument(url: string | URL): InternalPromise<WindowProxy> {
     const documentURL = new URL(url);
     const source = this.#getRouteSource(documentURL);
-    const documentURLRecord = this.#traversable.activeWindow!.env.parseURL(documentURL.href).url;
+    const documentURLRecord = this.#traversable.activeWindow!.env.parseURL(documentURL.href);
     if (documentURLRecord === null) {
       throw new InternalError(`Could not parse validated navigation URL ${documentURL.href}`);
     }

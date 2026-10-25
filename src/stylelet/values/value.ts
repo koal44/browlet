@@ -1,10 +1,10 @@
-import type { ValueStage } from '../value-processing/index';
+import type { ValueStage, ValueContext } from '../value-processing/index';
 import type { PropertyContext } from '../props/index';
 
 // Type parameter: C = context.
 
 /** A CSS value that resolves with the caller's context and serializes its current state. */
-export interface Value<C = PropertyContext> {
+export interface Value<C extends ValueContext = PropertyContext> {
   /** Produce the value at the requested stage, retaining identity when nothing changes. */
   resolve(stage: ValueStage, context: C): Value<C>;
   /** Describe the current value without advancing its lifecycle or applying context. */

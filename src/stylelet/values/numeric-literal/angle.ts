@@ -12,11 +12,10 @@ import { DimensionLiteral } from './dimension';
 /** A literal <angle> in a recognized unit. Legacy grammars accepting bare zero must include <zero>. */
 // https://drafts.csswg.org/css-values-4/#angles
 export class AngleLiteral<Unit extends AngleUnit = AngleUnit> extends DimensionLiteral<Unit> {
-  declare type: 'angle';
+  override type = 'angle' as const;
 
   constructor(value: number, unit: Unit) {
     super(value, unit);
-    this.type = 'angle';
   }
 
   /** Parse a complete literal. */

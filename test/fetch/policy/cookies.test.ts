@@ -95,7 +95,7 @@ describe('Fetch Cookie request headers', () => {
   it('distinguishes a browser-initiated navigation from a clientless subresource', () => {
     const { request, userAgent } = createCookieRequest();
     request.client = null;
-    expect(request.clone().userAgent).toBe(userAgent);
+    expect(request.clone().env.userAgent).toBe(userAgent);
     request.appendCookieHeader();
     expect(request.headerList.get('Cookie')).toBe('none=N');
     request.headerList.delete('Cookie');
@@ -229,8 +229,9 @@ describe('Fetch serialized cookie default paths', () => {
 function createCookieRequest(clientURL = 'https://shop.example.test/') {
   const client = createClientEnvironment(clientURL);
   const userAgent = client.userAgent;
-  const request = new FetchRequest(parseURL('https://shop.example.test/account/page').url!, client, userAgent);
-  const seed = new FetchRequest(request.url, null, userAgent);
+  const request = new FetchRequest(parseURL('https://shop.example.test/account/page').url!, client);
+  request.client = client;
+  const seed = new FetchRequest(request.url, Object.assign(createClientEnvironment(), { userAgent: userAgent }));
   seed.destination = 'document';
   seed.topLevelNavigationInitiatorOrigin = obtainURLOrigin(seed.url);
   sameSiteResponse().parseAndStoreCookies(seed);

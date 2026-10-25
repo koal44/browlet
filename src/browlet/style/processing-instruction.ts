@@ -1,7 +1,7 @@
-import type { CSSStyleSheetImpl, TreeScope } from '../../stylelet/index';
 import { getEncoding } from '../../encoding/index';
 import { getMIMETypeEssence, parseMIMEType } from '../../mime/index';
 import type { FetchController } from '../../fetch/index';
+import type { CSSStyleSheetImpl, TreeScope } from '../../stylelet/index';
 
 import type { ProcessingInstructionImpl } from '../dom/nodes/index';
 
@@ -60,7 +60,7 @@ export class ProcessingInstructionLinkStyleMixin {
       if (mimeType === null || getMIMETypeEssence(mimeType) !== 'text/css') return;
     }
     const document = owner.nodeDocument;
-    const url = document.env.parseURL(href, document.getBaseURL()).url;
+    const url = document.env.parseURL(href, document.getBaseURL());
     if (url === null) return;
     const options = {
       ownerNode: owner, title, alternate, media: owner.getAttribute('media') ?? '',

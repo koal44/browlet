@@ -12,11 +12,10 @@ import { DimensionLiteral } from './dimension';
 /** A literal <frequency> in a recognized unit. */
 // https://drafts.csswg.org/css-values-4/#frequency
 export class FrequencyLiteral<Unit extends FrequencyUnit = FrequencyUnit> extends DimensionLiteral<Unit> {
-  declare type: 'frequency';
+  override type = 'frequency' as const;
 
   constructor(value: number, unit: Unit) {
     super(value, unit);
-    this.type = 'frequency';
   }
 
   /** Parse a complete literal. */

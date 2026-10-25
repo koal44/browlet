@@ -1,6 +1,7 @@
+import { styleletEnv, styleletEnv as env } from '../../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 
-import { defaultStyleletEnvironment as env } from '../../../../../src/stylelet/environment';
+
 import { builtInRegistry } from '../../../../../src/stylelet/props/registry';
 import { CustomProperty } from '../../../../../src/stylelet/props/custom-property';
 import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
@@ -20,8 +21,8 @@ const context = new RuleListContext(new CSSRuleListImpl(), null, false, env);
 
 describe('CSS rule construction', () => {
   it('preserves the registry association in a built-in declaration', () => {
-    const declaration = new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.color.parse('red', {})!);
-    const resolved = declaration.value.resolve(ValueStage.Computed, {});
+    const declaration = new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.color.parse('red', { env: styleletEnv })!);
+    const resolved = declaration.value.resolve(ValueStage.Computed, { env: styleletEnv });
 
     expect(resolved.inner).toBeInstanceOf(ColorValue);
     if (resolved.inner instanceof ColorValue) {
@@ -31,8 +32,8 @@ describe('CSS rule construction', () => {
 
   it('holds built-in and custom declarations in source order', () => {
     const property = new CustomProperty('--accent');
-    const custom = new InterpretedDeclaration(property, property.parse('red', {})!);
-    const color = new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.color.parse('var(--accent)', {})!);
+    const custom = new InterpretedDeclaration(property, property.parse('red', { env: styleletEnv })!);
+    const color = new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.color.parse('var(--accent)', { env: styleletEnv })!);
     const rule = new CSSStyleRuleImpl(parseSelectorList('*', {})!, [color, custom], {}, new CSSRuleListImpl(), env);
 
     expect(rule.style.declarations.map((declaration) => declaration.name))

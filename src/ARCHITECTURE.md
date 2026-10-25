@@ -84,6 +84,8 @@ The current convention passes the owning **environment**, named `env`, to an
 implementation. It replaces the old practice of passing RuntimeContext or
 Binding Context through implementation algorithms. The contracts are structural
 views of existing owners, not a new environment object for each subsystem.
+Stylelet resource operations put `env` before callbacks so inline response
+handling can remain at the end of the call.
 
 | Contract or class | What it supplies |
 | --- | --- |
@@ -172,37 +174,59 @@ An environment may forward a useful operation such as `parseURL()` to its
 UserAgent. Do not put ordinary imports behind environment properties or copy
 another owner's complete API into a facade. Stylelet consumes the existing
 `StyleletEnvironment` view: `userAgent.dom` supplies host DOM operations,
-`userAgent.URL` supplies URL construction, and `exec` supplies execution.
+`userAgent.blobURLStore` supplies existing Blob URL registrations, and `exec`
+supplies execution. URL parsing and text decoding are direct subsystem imports.
 `getAssociatedDocument()` supplies the owning global's Document as Infra's
 `DOMDocument`, or null for unbound and non-Window environments. Browlet forwards
-the query to its realm; standalone engines already retain their explicit Document.
+the query to its realm; other hosts supply their own document association.
 The host may supply `userAgent.systemColors`, a complete palette of absolute colors.
-Browlet's configuration accepts this palette; standalone Stylelet options forward
-it to their existing UserAgent. `createSystemColorPalette()` creates independent
+Browlet's configuration accepts this palette; other hosts set it on their
+UserAgent. `createSystemColorPalette()` creates independent
 fixed light defaults with optional entry overrides. An engine without a supplied
 palette lazily retains its own defaults. No operating-system query is involved.
 Palette entries are replaced, not mutated, so earlier computed snapshots retain
 their colors. Per-element scheme selection and forced-color policy remain separate work.
-Browlet supplies `URLImpl`; standalone composition captures the native constructor
-or accepts a supplied provider. Stylelet retains only the `StyleletURL` contract
-(`href`) and passes the selected constructor through CSS value contexts. Resource
-URLs resolve at the computed stage; serialization formats the resulting value.
+Browlet's UserAgent and environment `parseURL()` return `URLRecord | null`, with
+null as the default base. The lower-level URL parser retains validation diagnostics.
+Stylelet retains records for stylesheet location and base URL. Its direct calls
+to URL's parser use UTF-8 and supply the owning UserAgent for Blob URL lookup.
+Hosts supply their existing Blob URL store.
+Resource URLs resolve at the computed stage;
+serialization formats the resulting value, retaining CSS URL modifiers separately.
 CSSOM URL attributes expose strings, so these internal URLs require no platform
-projection. Stylelet does not import the URL implementation or its runtime graph.
-Stylelet also uses Encoding Core's portable label lookup and canonical encoding
-type. Its existing UserAgent supplies `decodeText(bytes, fallback)`, typed as `DecodeText`:
-Browlet forwards to Encoding's `decode`, while standalone composition supplies
-the native decoder adapter. CSS retains fallback-encoding selection; Encoding
-owns BOM override, byte decoding, and replacement handling. Encoding Core depends
-only on Infra; Stylelet does not load the full codecs or their Node dependencies.
-`RealmExecution` and `StyleletExecution` both extend
+projection. Stylelet imports the full URL subsystem.
+
+Stylelet's `fetchStyleResource()` imports Fetch directly and accepts the existing
+owner as `StyleletEnvironment`, which extends `FetchEnvironment`.
+`StyleletOptions` requires that environment; Stylelet does not construct a default
+runtime or supply transport, security state, or execution on behalf of its consumer.
+Fetch owns request execution, response delivery, and cancellation through its
+controller. `UrlValue.applyRequestModifiers()` applies CSS request modifiers.
+Browlet's [stylesheet loader](browlet/style/stylesheet-loading.ts) owns the
+document-dependent CSSOM fetching and fetched-sheet creation steps. It reads
+the supplied `DocumentImpl`'s URL, origin, policies, live encoding, and quirks mode
+directly and uses `document.env` for execution. These facts are not inferred from
+the environment's currently associated document. Stylelet retains recursive
+import coordination; Browlet connects its fetch callback to the document.
+HTML retains events, blockers, and owner lifetime.
+
+URL Core owns `URLRecord` and its supporting host, origin, site, and blob-entry
+types, together with record serialization, copying, and equality. Its independent
+entry point has no subsystem dependencies; the full URL index re-exports it.
+Parsing and platform implementations remain in the full URL subsystem.
+
+Stylelet also imports Encoding's label lookup and complete-input `decode`
+algorithm. CSS retains fallback-encoding selection; Encoding owns BOM override,
+byte decoding, and replacement handling. Encoding Core remains independently
+usable, but Stylelet now includes the full codecs and their Node dependencies.
+`RealmExecution`, inherited through `FetchExecution` by `StyleletExecution`, extends
 Infra's [`AsyncExecution`](infra/execution.ts) for Promise creation, background
 work, and `queueTask(source, steps, options?)` delivery. The source keyword selects
 a shared task source; `env.exec` selects the owning destination. Browlet's
 [`scripting/tasks.ts`](browlet/scripting/tasks.ts) maps these keys to shared source
 identities; HTML retains task queues and scheduling policy. Optional task metadata
 carries timer nesting levels without moving timer initialization into Infra.
-`StyleletExecution` uses Infra's `AsyncExecution` contract. CSSOM implementations
+`StyleletExecution` uses Fetch's complete execution contract. CSSOM implementations
 report Core `DOMExceptionImpl` failures; the active host binding realizes those
 failures as Platform exceptions in the appropriate realm. MediaList needs no
 environment solely for exception reporting.
@@ -216,13 +240,14 @@ Infra's `createAsyncExecution(timerHost)` composes standalone Promise observatio
 background work, and task delivery around a supplied provider. Its `nativeTimerHost`
 captures scheduling and cancellation together, retaining their original receiver;
 it requires native timers only when scheduling work, not during module import.
-Stylelet combines this shared execution with its host's DOM, URL, and decoding facilities.
-Standalone Stylelet composes native facilities without requiring HTML settings
-or loading the engine runtime. `SelectletEnvironment` uses the same `userAgent.dom`
+Stylelet requires the consumer's complete environment, including execution.
+The independently built package targets Node and does not require a Browlet
+instance. It imports lower subsystem algorithms and engine helpers;
+there is no browser-global bundle. `SelectletEnvironment` uses the same `userAgent.dom`
 owner and currently needs no execution facilities. `SelectletContext` retains
 that environment alongside its query state and caches. Stylelet and Selectlet share Infra's
-[`DOMOperations`](infra/dom-operations.ts); standalone engines accept a `dom`
-option and Browlet supplies its UserAgent's provider. Engines retain the host's
+[`DOMOperations`](infra/dom-operations.ts). Selectlet accepts a `dom` option, and Stylelet
+uses the required environment's provider. Browlet supplies its UserAgent's adapter. Engines retain the host's
 node identities and access their trees,
 attributes, and live HTML state only through those operations. The standard
 provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts)
@@ -272,16 +297,17 @@ completion; sheet removal invokes it before clearing associations. Cancelling an
 handle does not disconnect or cancel a later attempt.
 Stylelet owns recursive import association and completion; its supplied fetch step
 reports a fresh parsed sheet separately from success, allowing failed loads to retain
-empty sheets. Browlet's `loadStyleSheetImports()` connects that step to the existing
-Fetch consumer, supplying request settings per request.
+empty sheets. Browlet's `loadStyleSheetImports()` connects that step to its
+document-dependent CSSOM fetcher, with request settings supplied by the owner for each request.
 Fetched sheets retain their actual encoding, final base URL, and response-derived
 referrer policy for child imports. Inline sheets use the document URL and current
 document referrer policy; the document's other request policies remain with Fetch.
-Fetch Core owns the complete referrer-policy list, type, and Web IDL enumeration.
-It depends on Web IDL Core; Stylelet uses this entry without loading Fetch's runtime.
-Cores may depend on Infra and lower cores, with their order recorded in the import hierarchy.
-Browser policy code owns header parsing and request behavior. An unspecified sheet
-policy remains empty until import request construction selects the external-sheet default.
+Fetch's referrer-policy module owns the complete policy list, type, and Web IDL
+enumeration alongside header parsing, redirect updates, request referrer
+selection, and URL stripping. Consumers import these through Fetch's index.
+The client supplies its referrer source and the
+UserAgent supplies trust decisions. An unspecified sheet policy remains empty
+until import request construction selects the external-sheet default.
 HTML owners must establish loading connections, manage document blocking,
 and consume start/completion notifications. Parsing and parent assignment do not
 initiate requests. Automatic HTML integration and imported-rule cascade traversal
@@ -397,8 +423,10 @@ Rule entry points and their consumers use RuleListContext through a
 type-only import and return CSSOM rules and interpreted property declarations.
 Selector and value grammars declare their own context requirements; generic
 consumer adapters and combinators preserve those requirements.
-All parser entry points require an explicit context; root callers with no
-settings pass `{}`. Consumers read and forward their context from TokenCursor.
+All parser entry points require an explicit context; generic syntax callers with no
+settings pass `{}`. Value-processing contexts share `ValueContext` and require
+the owning Stylelet environment as `env`, including during property parsing.
+Consumers read and forward their context from TokenCursor.
 An explicit parser argument takes precedence over the input cursor's context;
 withContext restores the caller's context on return or failure. Declaration syntax
 readers preserve that context without injecting an identity interpreter.
@@ -510,7 +538,10 @@ construction still requires a complete BrowletEnvironmentBase.
 Fetch makes three separate choices: the request's client supplies policy and
 lifetime state; `FetchParams.env` supplies execution; the callback destination
 selects a global or parallel queue. A null client does not imply missing
-execution. Reserved clients, full settings, and sandbox environments must not be
+execution. `FetchRequest(url, env)` retains its owner independently and starts
+with a null client. Initiating algorithms assign the client explicitly when
+they have one; reporting can retain the sandbox owner with no client. Cloning
+and preflights preserve both choices. Reserved clients, full settings, and sandbox environments must not be
 substituted for one another just because an algorithm can reach a UserAgent.
 
 The [global-scope mixin](browlet/global-scope.ts) composes each global's timers,

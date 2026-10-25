@@ -12,7 +12,8 @@ import { FetchRequest } from '../../../../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../../../../src/fetch/response';
 import { utf8Encode } from '../../../../../src/encoding/index';
 import { ReadableStreamImpl } from '../../../../../src/streams/readable-stream';
-import { obtainURLOrigin, parseURL, serializeURL } from '../../../../../src/url/url';
+import { obtainURLOrigin, parseURL } from '../../../../../src/url/url';
+import { serializeURL } from '../../../../../src/url/core/index';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -78,7 +79,8 @@ describe('CSP hash reports', () => {
     const reported = new Promise<void>((resolve) => {
       env.queueReport = queueReport.mockImplementation(() => resolve());
     });
-    const request = new FetchRequest(parseURL('https://resource.test/file').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/file').url!, env);
+    request.client = env;
     request.destination = 'script';
     request.populateFromClient();
     const response = new FetchResponse();
@@ -246,7 +248,8 @@ describe('CSP hash reporting through the running browser', () => {
     env.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse(
       "script-src https: 'report-sha256'; report-to hashes", 'header', 'enforce',
     ));
-    const request = new FetchRequest(parseURL('https://resource.test/script').url!, env, env.userAgent);
+    const request = new FetchRequest(parseURL('https://resource.test/script').url!, env);
+    request.client = env;
     request.destination = 'script';
     request.populateFromClient();
     const response = new FetchResponse();
@@ -281,7 +284,8 @@ function createHashResponse(
   env.creationURL = document.url;
   document.policyContainer.cspList = new CSPList(document.origin);
   document.policyContainer.cspList.policies.push(ContentSecurityPolicy.parse(serialized, 'header', disposition));
-  const request = new FetchRequest(parseURL('https://resource.test/file').url!, env, env.userAgent);
+  const request = new FetchRequest(parseURL('https://resource.test/file').url!, env);
+  request.client = env;
   request.destination = 'script';
   request.populateFromClient();
   const response = new FetchResponse();

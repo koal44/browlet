@@ -14,7 +14,8 @@ mutation paths have regression coverage; condition evaluation remains separate.
 ## Media-query disagreements
 
 Three-engine probes and the retained media-list browser regressions establish
-the following choices. Revisit the markers when the specifications or engines converge.
+the following choices, rechecked with Playwright 1.62.1. Revisit the markers
+when the specifications or engines converge.
 
 - `SPEC_CLASH(media-query-only-serialization)`: CSSOM's
   [serializer](https://drafts.csswg.org/cssom/#serialize-a-media-query) only emits
@@ -35,9 +36,9 @@ the following choices. Revisit the markers when the specifications or engines co
 - `SPEC_CLASH(media-list-mutation-comparison)`: Keep CSSOM's
   [append](https://drafts.csswg.org/cssom/#dom-medialist-appendmedium) and
   [delete](https://drafts.csswg.org/cssom/#dom-medialist-deletemedium) behavior,
-  matching Chromium: an equivalent append leaves order unchanged; deletion
+  matching Chromium/WebKit: an equivalent append leaves order unchanged; deletion
   removes all matching entries. Firefox moves an existing query to the end on
-  append; WebKit appends a duplicate and deletes only one match.
+  append. All three browsers now delete every matching entry.
 - `SPEC_CLASH(media-list-mutation-input)`: Keep CSSOM's
   [single-query parsing](https://drafts.csswg.org/cssom/#parse-a-media-query)
   and Chromium's mutations: empty or multiple-query inputs are no-ops; invalid
@@ -51,5 +52,5 @@ Starting from `screen`, append and then delete the same input:
 | Empty string | Both operations throw NotFoundError; unchanged. | Append does nothing; delete throws NotFoundError. |
 | `,` | Append does nothing; delete throws NotFoundError. | Appends two `not all` entries; delete throws NotFoundError, retaining them. |
 | `screen, print` | Append does nothing; delete removes `screen`. | Appends both entries, including duplicate `screen`; delete throws NotFoundError. |
-| `&` | Append does nothing; delete throws NotFoundError. | Appends `not all`; delete throws NotFoundError, retaining it. |
+| `&` | Append does nothing; delete throws NotFoundError. | Appends `not all`; delete removes it. |
 

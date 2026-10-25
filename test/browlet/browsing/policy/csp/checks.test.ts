@@ -188,7 +188,7 @@ function parse(serialized: string): ContentSecurityPolicy {
 }
 
 function requestFor(destination: Destination, target = 'https://resource.test/file'): FetchRequest {
-  const request = new FetchRequest(parseURL(target).url!, null, userAgent);
+  const request = new FetchRequest(parseURL(target).url!, userAgent.sandbox);
   request.destination = destination;
   return request;
 }

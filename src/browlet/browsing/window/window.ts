@@ -6,8 +6,8 @@ import {
   defineIncludes, defineInterface, definePartialInterface, idlType,
   impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/core/index';
-import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
+import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
 import type { SpeculationRulesParseResult, TimerAction } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';

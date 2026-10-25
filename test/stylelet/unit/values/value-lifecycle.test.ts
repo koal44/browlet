@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import { AnyValue } from '../../../../src/stylelet/values/any-value';
 import { TokenCursor } from '../../../../src/stylelet/syntax/token-cursor';
@@ -37,21 +38,21 @@ describe('value lifecycle', () => {
     const opacity = new OpacityValue(percentage);
 
     expectTypeOf(number).toEqualTypeOf<NumberValue<NumberLiteral>>();
-    expectTypeOf(number.add(number)).toEqualTypeOf<NumberValue>();
+    expectTypeOf(number.add(number, { env: styleletEnv })).toEqualTypeOf<NumberValue>();
     expectTypeOf(frequency.repr.unit).toEqualTypeOf<'khz'>();
-    expectTypeOf(frequency.resolve(ValueStage.Computed)).toEqualTypeOf<FrequencyValue>();
+    expectTypeOf(frequency.resolve(ValueStage.Computed, { env: styleletEnv })).toEqualTypeOf<FrequencyValue>();
     expectTypeOf(opacity).toEqualTypeOf<OpacityValue<PercentageValue<PercentageLiteral>>>();
-    expectTypeOf(opacity.resolve(ValueStage.Computed)).toEqualTypeOf<OpacityValue>();
+    expectTypeOf(opacity.resolve(ValueStage.Computed, { env: styleletEnv })).toEqualTypeOf<OpacityValue>();
 
-    expect(frequency.resolve(ValueStage.Computed).serialize()).toBe('1000hz');
-    expect(opacity.resolve(ValueStage.Computed).serialize()).toBe('0.25');
+    expect(frequency.resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('1000hz');
+    expect(opacity.resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('0.25');
     expect(frequency.repr.unit).toBe('khz');
     expect(opacity.repr).toBe(percentage);
   });
 
   it('keeps a math representation constrained by its numeric category', () => {
     const math = new MathValue(new LengthLiteral(2, 'em'), 'length');
-    const computed = math.resolve(ValueStage.Computed, { length: { em: 16 } });
+    const computed = math.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 16 } });
 
     expectTypeOf(math).toEqualTypeOf<MathValue<'length', LengthLiteral<'em'>>>();
     expectTypeOf(computed).toEqualTypeOf<MathValue<'length'>>();
@@ -69,7 +70,7 @@ describe('value lifecycle', () => {
         return parsed === null ? null : new OpacityValue(parsed);
       },
     );
-    const computed = declared.resolve(ValueStage.Computed, {});
+    const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv });
 
     expectTypeOf(computed).toExtend<WholeValue<OpacityValue>>();
     expect(computed.inner).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.5))));
@@ -85,9 +86,9 @@ describe('value lifecycle', () => {
 
     expectTypeOf(enclosed.resolve(ValueStage.Computed, {}).repr.name).toEqualTypeOf<string>();
     expectTypeOf(media.repr.mediaType).toEqualTypeOf<string>();
-    expectTypeOf(media.resolve(ValueStage.Computed)).toEqualTypeOf<MediaQuery>();
+    expectTypeOf(media.resolve(ValueStage.Computed, { env: styleletEnv })).toEqualTypeOf<MediaQuery>();
     expectTypeOf(url.repr.local).toEqualTypeOf<true>();
-    expectTypeOf(url.resolve(ValueStage.Computed)).toEqualTypeOf<UrlValue>();
+    expectTypeOf(url.resolve(ValueStage.Computed, { env: styleletEnv })).toEqualTypeOf<UrlValue>();
 
     expect(enclosed.resolve(ValueStage.Computed, {})).toBe(enclosed);
     expect(media.serialize()).toBe('screen');
@@ -95,7 +96,7 @@ describe('value lifecycle', () => {
   });
 
   it('uses the same instance contract without retaining the invocation context', () => {
-    const context: MathContext = {};
+    const context: MathContext = { env: styleletEnv };
     const values = [
       AnyValue.parse('calc(1em + 2px)', context)!,
       MathValue.parse('calc(1em + 2px)', 'length', context)!,
@@ -110,18 +111,20 @@ describe('value lifecycle', () => {
 
     const pipeline: Value<MathContext>[] = values;
     expect(pipeline.map((value) => value.resolve(ValueStage.Computed, {
+      env: styleletEnv,
       length: { em: 16 },
       percentageReferenceValue: new AngleLiteral(360, 'deg'),
     }).serialize())).toEqual(['calc(1em + 2px)', '18px', '100deg', '32px', '"opaque"', '16 / 9', '1', '0% 32px', '(width >= 32px)']);
     expect(pipeline.map((value) => value.serialize()))
       .toEqual(['calc(1em + 2px)', 'calc(1em + 2px)', 'calc(25% + 10deg)', '2em', '"opaque"', '16 / 9', '1.5', 'left 2em', '(width >= 2em)']);
-    expect(context).toEqual({});
+    expect(context).toEqual({ env: styleletEnv });
   });
 
   it('continues resolving a math value after its expression becomes a literal', () => {
-    const declared = MathValue.parse('calc(25%)', 'angle-percentage', { percentHint: 'angle' })!;
-    const computed = declared.resolve(ValueStage.Computed, { percentHint: 'angle' });
+    const declared = MathValue.parse('calc(25%)', 'angle-percentage', { env: styleletEnv, percentHint: 'angle' })!;
+    const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv, percentHint: 'angle' });
     const used = computed.resolve(ValueStage.Used, {
+      env: styleletEnv,
       percentHint: 'angle',
       percentageReferenceValue: new AngleLiteral(200, 'deg'),
     });
@@ -131,20 +134,21 @@ describe('value lifecycle', () => {
     expect(used.repr).toEqual({ type: 'angle', value: 50, unit: 'deg' });
     expect(used.serialize()).toBe('50deg');
     expect(computed.serialize()).toBe('25%');
-    expect(used.resolve(ValueStage.Actual, {})).toBe(used);
+    expect(used.resolve(ValueStage.Actual, { env: styleletEnv })).toBe(used);
   });
 
   it('resolves a retained relative literal when its later context supplies a font size', () => {
-    const computed = MathValue.parse('calc(2em)', 'length', {})!.resolve(ValueStage.Computed);
+    const computed = MathValue.parse('calc(2em)', 'length', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv });
     expect(computed.serialize()).toBe('2em');
-    expect(computed.resolve(ValueStage.Used, { length: { em: 12 } }).serialize()).toBe('24px');
+    expect(computed.resolve(ValueStage.Used, { env: styleletEnv, length: { em: 12 } }).serialize()).toBe('24px');
     expect(computed.serialize()).toBe('2em');
   });
 
   it('keeps a numeric family usable after its calculation becomes a percentage', () => {
-    const declared = LengthPercentageValue.parse('calc(25%)', {})!;
-    const computed = declared.resolve(ValueStage.Computed);
+    const declared = LengthPercentageValue.parse('calc(25%)', { env: styleletEnv })!;
+    const computed = declared.resolve(ValueStage.Computed, { env: styleletEnv });
     const used = computed.resolve(ValueStage.Used, {
+      env: styleletEnv,
       percentageReferenceValue: new LengthLiteral(200, 'px'),
     });
 
@@ -154,16 +158,16 @@ describe('value lifecycle', () => {
     expect(used.serialize()).toBe('50px');
     expect(declared.serialize()).toBe('calc(25%)');
     expect(computed.serialize()).toBe('25%');
-    expect(used.resolve(ValueStage.Actual)).toBe(used);
+    expect(used.resolve(ValueStage.Actual, { env: styleletEnv })).toBe(used);
     expectTypeOf(used).toEqualTypeOf<LengthPercentageValue>();
   });
 
   it('combines resolved math values through the same methods', () => {
-    const a = MathValue.parse('calc(10deg)', 'angle', {})!.resolve(ValueStage.Computed);
-    const b = MathValue.parse('calc(20deg)', 'angle', {})!.resolve(ValueStage.Computed);
-    expect(a.add(b).resolve(ValueStage.Computed).serialize()).toBe('30deg');
-    expect(a.interpolate(b, 0.5).resolve(ValueStage.Computed).serialize()).toBe('15deg');
-    expect(a.accumulate(b).resolve(ValueStage.Computed).serialize()).toBe('30deg');
+    const a = MathValue.parse('calc(10deg)', 'angle', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv });
+    const b = MathValue.parse('calc(20deg)', 'angle', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv });
+    expect(a.add(b, { env: styleletEnv }).resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('30deg');
+    expect(a.interpolate(b, 0.5, { env: styleletEnv }).resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('15deg');
+    expect(a.accumulate(b, { env: styleletEnv }).resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('30deg');
   });
 
   it.each([
@@ -177,23 +181,23 @@ describe('value lifecycle', () => {
     [TimeValue, '1s'],
     [TimePercentageValue, '1s'],
   ])('retains %s identity for canonical %s across lifecycle stages', (factory, input) => {
-    const numeric = factory.parse(input, {})!;
-    expect(numeric.resolve(ValueStage.Computed)).toBe(numeric);
-    expect(numeric.resolve(ValueStage.Actual)).toBe(numeric);
+    const numeric = factory.parse(input, { env: styleletEnv })!;
+    expect(numeric.resolve(ValueStage.Computed, { env: styleletEnv })).toBe(numeric);
+    expect(numeric.resolve(ValueStage.Actual, { env: styleletEnv })).toBe(numeric);
     expect(numeric.serialize()).toBe(input);
   });
 
   it('keeps the numeric grammar and concrete class in factory and resolution results', () => {
-    const c = new TokenCursor(parseListOfComponentValues('calc(1px) trailing', {}), {});
+    const c = new TokenCursor(parseListOfComponentValues('calc(1px) trailing', {}), { env: styleletEnv });
     const value = MathValue.consume(c, { expectedType: 'length' })!;
 
     expectTypeOf(value).toEqualTypeOf<MathValue<'length'>>();
-    expectTypeOf(value.resolve(ValueStage.Computed)).toEqualTypeOf<MathValue<'length'>>();
-    expectTypeOf(AnglePercentageValue.parse('1deg', {})!.resolve(ValueStage.Computed))
+    expectTypeOf(value.resolve(ValueStage.Computed, { env: styleletEnv })).toEqualTypeOf<MathValue<'length'>>();
+    expectTypeOf(AnglePercentageValue.parse('1deg', { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv }))
       .toEqualTypeOf<AnglePercentageValue>();
     expectTypeOf(AnyValue.parse('a', {})!.resolve(ValueStage.Computed, {})).toEqualTypeOf<AnyValue>();
     expect(value.serialize()).toBe('calc(1px)');
     expect(c.pos()).toBe(1);
-    expect(c.context).toEqual({});
+    expect(c.context).toEqual({ env: styleletEnv });
   });
 });

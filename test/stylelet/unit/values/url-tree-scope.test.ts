@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { JSDOM } from 'jsdom';
@@ -10,8 +11,8 @@ describe('local URL tree scopes', () => {
   it('captures the active tree scope independently for each use', () => {
     const value = UrlValue.parse('url("#paint")', {})!;
     const { documentScope, shadowScope } = createUrlTreeScopes();
-    const documentValue = value.resolve(ValueStage.Specified, { treeScope: documentScope });
-    const shadowValue = value.resolve(ValueStage.Specified, { treeScope: shadowScope });
+    const documentValue = value.resolve(ValueStage.Specified, { env: styleletEnv, treeScope: documentScope });
+    const shadowValue = value.resolve(ValueStage.Specified, { env: styleletEnv, treeScope: shadowScope });
 
     expect(documentValue).toHaveProperty('repr.treeScope', documentScope);
     expect(shadowValue).toHaveProperty('repr.treeScope', shadowScope);
@@ -19,8 +20,8 @@ describe('local URL tree scopes', () => {
 
   it('retains the captured tree scope through inheritance', () => {
     const { documentScope, shadowScope } = createUrlTreeScopes();
-    const specified = UrlValue.parse('url("#paint")', {})!.resolve(ValueStage.Specified, { treeScope: documentScope });
-    const inherited = specified.resolve(ValueStage.Computed, { treeScope: shadowScope });
+    const specified = UrlValue.parse('url("#paint")', {})!.resolve(ValueStage.Specified, { env: styleletEnv, treeScope: documentScope });
+    const inherited = specified.resolve(ValueStage.Computed, { env: styleletEnv, treeScope: shadowScope });
 
     expect(inherited).toHaveProperty('repr.treeScope', documentScope);
   });
@@ -33,7 +34,7 @@ function createUrlTreeScopes(): {
   const document = new JSDOM('<main></main>', {
     url: 'https://example.com/',
   }).window.document;
-  const context = new StyleletContext(document);
+  const context = new StyleletContext(document, styleletEnv);
   const cascade = new CascadeEngine({ context });
   const shadowRoot = document.querySelector('main')!
     .attachShadow({ mode: 'open' });

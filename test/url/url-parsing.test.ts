@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import {
-  parseURL, serializeURL, setURLPassword, setURLUsername,
-} from '../../src/url/url';
+import { parseURL, setURLPassword, setURLUsername } from '../../src/url/url';
+import { serializeURL } from '../../src/url/core/index';
 import { urlAlgorithms, type URLSnapshot } from './contract';
 
 type ParseCase = {

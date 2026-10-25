@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { hostsEqual, type Domain, type Host } from '../../src/url/host';
+import { hostsEqual } from '../../src/url/host';
+import type { Domain, Host, TupleOrigin } from '../../src/url/core/index';
 import { OriginImpl } from '../../src/url/origin-api';
 import {
   areSameOrigin, areSameOriginDomain, areSameSite,
   areSchemelesslySameSite, createOpaqueOrigin, effectiveDomain,
   isRegistrableDomainSuffixOfOrEqualTo, obtainSite, serializeOrigin, serializeSite,
-  sitesAreSameSite, type TupleOrigin,
+  sitesAreSameSite,
 } from '../../src/url/origin';
 
 describe('origin comparisons', () => {

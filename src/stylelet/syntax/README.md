@@ -12,7 +12,7 @@ conformance.
 
 | Stage | Existing implementation | Result / boundary |
 | --- | --- | --- |
-| Bytes | [tokens.ts](tokens.ts), `decodeStylesheetBytes()` | Chooses a fallback from transport metadata, the initial `@charset` byte sequence, environment encoding, then UTF-8; the supplied decoder handles decoding, including BOM precedence. Callers decode before using the string parser. |
+| Bytes | [tokens.ts](tokens.ts), `decodeStylesheetBytes()` | Chooses a fallback from transport metadata, the initial `@charset` byte sequence, environment encoding, then UTF-8; Encoding handles decoding, including BOM precedence. Callers decode before using the string parser. |
 | Code points and tokens | `filterCodePoints()`, [TokenList.tokenize()](token-list.ts) | CSS newline/replacement preprocessing and tokens, with the preprocessed text and parallel source ranges. |
 | Components | [parser.ts](parser.ts), [component-value.ts](component-value.ts) | Preserved tokens, nested blocks, and functions. These are syntax, not resolved CSS values. |
 | Stylesheet contents | `parseStylesheetContents()` | Rules interpreted by the required caller-supplied grammar context. |
@@ -31,8 +31,7 @@ not an owning environment or a guarantee of rule validity.
 `DecodeStylesheetOptions.transportEncoding` is an unprocessed charset label;
 `environmentEncoding` is an already determined Encoding value from the referring
 document or importing sheet. This CSS term is separate from `StyleletEnvironment`:
-the latter supplies `userAgent.decodeText`. Browlet uses Encoding's decoder;
-standalone hosts default to native decoding. Both paths honor leading BOMs.
+decoding imports Encoding directly and needs no owning environment.
 The initial `@charset` bytes select an encoding; they are not a live CSS rule.
 
 Token lists omit EOF; `TokenCursor` supplies it at exhaustion. Source ranges

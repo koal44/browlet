@@ -3,11 +3,9 @@ import { internalType, type InternalPromise } from '../infra/promises';
 import type { TimerHost } from '../infra/execution';
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
-import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } from '../stylelet/index';
-import { decode } from '../encoding/index';
 import {
-  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL, URLImpl,
-  type BlobURLEntry as URLBlobURLEntry, type URLParseResult, type URLRecord, type URLUserAgent,
+  areSameOrigin, type Origin, type TupleOrigin, obtainURLOrigin, parseURL,
+  type BlobURLEntry as URLBlobURLEntry, type URLRecord, type URLUserAgent,
 } from '../url/index';
 import { CookieStore } from '../http/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
@@ -16,15 +14,16 @@ import type { BlobImpl } from '../file/index';
 import {
   ConnectionPool, HTTPCacheStore, CORSPreflightCache, fetch, FetchRequest, isFilteredResponse, isOkStatus,
   type FetchEnvironment, type FetchController, type FetchResponse, type FetchUserAgent, type HTTPTransport,
-  type Destination, type ReferrerPolicy, type RequestInternalPriority, type ServiceWorkerTimingInfo,
+  type Destination, type RequestInternalPriority, type ServiceWorkerTimingInfo,
 } from '../fetch/index';
+import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } from '../stylelet/index';
 
 import { unsafeSharedCurrentTime } from './timing/index';
 import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import { EventLoop, WindowAgent } from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import {
-  PolicyContainer, HSTSStore, determineRequestReferrer, parseReferrerPolicyFromHeader, setRequestReferrerPolicyOnRedirect,
+  PolicyContainer, HSTSStore,
 } from './browsing/policy/index';
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
@@ -42,10 +41,6 @@ import { createSandboxEnvironment, createWindowEnvironment } from './bindings';
 export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
   /** Implementation access shared by selector and style engines. */
   dom = browletDOM;
-  /** Implementation used for Stylelet's internal stylesheet and resource URLs. */
-  URL = URLImpl;
-  /** Encoding's complete-input decoder used by stylesheet byte processing. */
-  decodeText = decode;
   /** Configurable CSS system colors, independent of the machine running Browlet. */
   systemColors = createSystemColorPalette();
   /** Related-context groups currently retained by this browser. */
@@ -163,8 +158,8 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   }
 
   /** Parse a browser URL and retain its Blob registration before revocation can remove it. */
-  parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLParseResult {
-    return parseURL(input, base, encoding, this);
+  parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLRecord | null {
+    return parseURL(input, base, encoding, this).url;
   }
 
   /**
@@ -176,7 +171,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     url: URLRecord, destination: Destination, corsAttributeState: CORSSettingsState,
     sameOriginFallback = false,
   ): FetchRequest {
-    const request = new FetchRequest(url, null, this);
+    const request = new FetchRequest(url, this.sandbox);
     request.destination = destination;
     request.mode = corsAttributeState === 'no-cors'
       ? sameOriginFallback ? 'same-origin' : 'no-cors'
@@ -203,21 +198,6 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   /** Shared Fetch timestamps use the same clock as HTML and High Resolution Time. */
   unsafeSharedCurrentTime(): number {
     return unsafeSharedCurrentTime().milliseconds;
-  }
-
-  /** Apply the browser-owned Referrer Policy algorithm for Fetch. */
-  determineRequestReferrer(request: FetchRequest): URLRecord | null {
-    return determineRequestReferrer(request);
-  }
-
-  /** Read the response policy without substituting a document's policy for a missing header. */
-  parseReferrerPolicyFromHeader(response: FetchResponse): ReferrerPolicy {
-    return parseReferrerPolicyFromHeader(response);
-  }
-
-  /** Update Fetch's referrer policy using the browser-owned header parser. */
-  setRequestReferrerPolicyOnRedirect(request: FetchRequest, response: FetchResponse): void {
-    setRequestReferrerPolicyOnRedirect(request, response);
   }
 
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
@@ -307,7 +287,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   attemptReportDelivery(
     endpoint: ReportingEndpoint, origin: Origin, reports: ReportImpl[],
   ): InternalPromise<ReportDeliveryResult> {
-    const request = new FetchRequest(endpoint.url, null, this);
+    const request = new FetchRequest(endpoint.url, this.sandbox);
     request.method = 'POST';
     request.origin = origin;
     request.headerList.append('Content-Type', 'application/reports+json');

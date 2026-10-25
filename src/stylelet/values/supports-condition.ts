@@ -5,6 +5,7 @@ import {
   parseAsComponentGrammar, TokenKind,
   type TokenCursor, type TryConsumerResult, type ParserInput, type SyntaxDeclaration,
 } from '../syntax/index';
+import type { ValueContext } from '../value-processing/index';
 
 import { BooleanExprValue } from './boolean-expr';
 
@@ -39,9 +40,9 @@ export class SupportsConditionValue {
   }
 }
 
-export type SupportsContext = {
+export interface SupportsContext extends ValueContext {
   supports?: (declaration: SyntaxDeclaration) => boolean;
-};
+}
 
 export type SupportsDeclaration = {
   type: 'supports-declaration';

@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { CSPDirectiveValue } from '../../../../../src/browlet/browsing/policy/csp/directives';
-import { createOpaqueOrigin, type Origin } from '../../../../../src/url/origin';
-import { obtainURLOrigin, parseURL, type URLRecord } from '../../../../../src/url/url';
+import { createOpaqueOrigin } from '../../../../../src/url/origin';
+import { obtainURLOrigin, parseURL } from '../../../../../src/url/url';
+import type { Origin, URLRecord } from '../../../../../src/url/core/index';
 
 const selfOrigin = obtainURLOrigin(url('https://example.test/page'));
 

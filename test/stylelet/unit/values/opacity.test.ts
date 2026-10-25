@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { OpacityValue } from '../../../../src/stylelet/values/opacity-value';
@@ -8,7 +9,7 @@ import { MathExpression, MathValue } from '../../../../src/stylelet/values/math-
 
 describe('opacity values', () => {
   it('uses the supplied normalization context during consumption', () => {
-    expect(OpacityValue.parse('calc(150%)', { unwrapMathAt: ValueStage.Declared }))
+    expect(OpacityValue.parse('calc(150%)', { env: styleletEnv, unwrapMathAt: ValueStage.Declared }))
       .toEqual(new OpacityValue(new NumberValue(new NumberLiteral(1.5))));
   });
 
@@ -16,14 +17,14 @@ describe('opacity values', () => {
     ['0.5', new OpacityValue(new NumberValue(new NumberLiteral(0.5)))],
     ['50%', new OpacityValue(new NumberValue(new NumberLiteral(0.5)))],
   ])('parses and normalizes the literal opacity value %s', (input, expected) => {
-    expect(OpacityValue.parse(input, {})).toEqual(expected);
+    expect(OpacityValue.parse(input, { env: styleletEnv })).toEqual(expected);
   });
 
   it.each([
     ['calc(0.25 + 0.25)', 'number'],
     ['calc(25% + 25%)', 'percentage'],
   ])('parses the calculated opacity value %s', (input, expectedType) => {
-    expect(OpacityValue.parse(input, {})).toMatchObject({
+    expect(OpacityValue.parse(input, { env: styleletEnv })).toMatchObject({
       repr: { repr: { valueType: expectedType } },
     });
   });
@@ -34,25 +35,25 @@ describe('opacity values', () => {
     'calc(1px)',
     '0.5 1',
   ])('rejects the invalid opacity value %s', (input) => {
-    expect(OpacityValue.parse(input, {})).toBeNull();
+    expect(OpacityValue.parse(input, { env: styleletEnv })).toBeNull();
   });
 
   it('normalizes literal opacity percentages without early clamping', () => {
-    const number = OpacityValue.parse('2', {})!;
+    const number = OpacityValue.parse('2', { env: styleletEnv })!;
     const percentage = new OpacityValue(new PercentageValue(new PercentageLiteral(200)));
 
-    expect(number.resolve(ValueStage.Specified))
+    expect(number.resolve(ValueStage.Specified, { env: styleletEnv }))
       .toEqual(number);
-    expect(percentage.resolve(ValueStage.Specified))
+    expect(percentage.resolve(ValueStage.Specified, { env: styleletEnv }))
       .toEqual(number);
   });
 
   it('resolves a raw percentage through the opacity facade', () => {
     const percentage = new OpacityValue(new PercentageValue(new PercentageLiteral(25)));
 
-    expect(percentage.resolve(ValueStage.Specified))
+    expect(percentage.resolve(ValueStage.Specified, { env: styleletEnv }))
       .toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.25))));
-    expect(percentage.resolve(ValueStage.Computed))
+    expect(percentage.resolve(ValueStage.Computed, { env: styleletEnv }))
       .toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.25))));
   });
 
@@ -66,7 +67,7 @@ describe('opacity values', () => {
   ])(
     'converts and clamps the computed opacity value %s',
     (input, expected) => {
-      expect(OpacityValue.parse(input, {})!.resolve(ValueStage.Computed)).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(expected))));
+      expect(OpacityValue.parse(input, { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv })).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(expected))));
     },
   );
 
@@ -82,19 +83,20 @@ describe('opacity values', () => {
   ])(
     'resolves and clamps the computed opacity value %s',
     (input, expected) => {
-      expect(OpacityValue.parse(input, {})!.resolve(ValueStage.Computed)).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(expected))));
+      expect(OpacityValue.parse(input, { env: styleletEnv })!.resolve(ValueStage.Computed, { env: styleletEnv })).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(expected))));
     },
   );
 
   it('uses the caller math-unwrapping policy', () => {
-    const value = OpacityValue.parse('calc(0.25 + 0.25)', {})!;
+    const value = OpacityValue.parse('calc(0.25 + 0.25)', { env: styleletEnv })!;
 
-    const deferred = value.resolve(ValueStage.Computed, { unwrapMathAt: ValueStage.Used }).repr;
+    const deferred = value.resolve(ValueStage.Computed, { env: styleletEnv, unwrapMathAt: ValueStage.Used }).repr;
     const math = deferred.repr;
     expect(math).toBeInstanceOf(MathValue);
     if (!(math instanceof MathValue)) throw new Error('Expected a retained math value');
     expect(math.repr).toBeInstanceOf(MathExpression);
     expect(value.resolve(ValueStage.Computed, {
+      env: styleletEnv,
       unwrapMathAt: ValueStage.Computed,
     })).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(0.5))));
   });
@@ -116,7 +118,7 @@ describe('opacity values', () => {
     input,
     expected,
   ) => {
-    expect(OpacityValue.parse(input, {})!.serialize())
+    expect(OpacityValue.parse(input, { env: styleletEnv })!.serialize())
       .toBe(expected);
   });
 
@@ -127,7 +129,7 @@ describe('opacity values', () => {
     input,
     expected,
   ) => {
-    expect(OpacityValue.parse(input, {})!.serialize())
+    expect(OpacityValue.parse(input, { env: styleletEnv })!.serialize())
       .toBe(expected);
   });
 
@@ -137,10 +139,10 @@ describe('opacity values', () => {
   ])(
     'serializes %s according to its resolved stage',
     (input, specified, computed) => {
-      const value = OpacityValue.parse(input, {})!;
+      const value = OpacityValue.parse(input, { env: styleletEnv })!;
 
       expect(value.serialize()).toBe(specified);
-      expect(value.resolve(ValueStage.Computed).serialize()).toBe(computed);
+      expect(value.resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe(computed);
     },
   );
 
@@ -150,21 +152,21 @@ describe('opacity values', () => {
   ] as const)(
     'combines computed opacity values by numeric %s without clamping',
     (_name, combine, a, b, expected) => {
-      expect(new OpacityValue(new NumberValue(new NumberLiteral(a)))[combine](new OpacityValue(new NumberValue(new NumberLiteral(b))))).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(expected))));
+      expect(new OpacityValue(new NumberValue(new NumberLiteral(a)))[combine](new OpacityValue(new NumberValue(new NumberLiteral(b))), { env: styleletEnv })).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(expected))));
     },
   );
 
   it('combines percentage calculations on the same scale as number opacities', () => {
-    const percentage = OpacityValue.parse('calc(25%)', {})!;
-    const number = OpacityValue.parse('0.5', {})!;
+    const percentage = OpacityValue.parse('calc(25%)', { env: styleletEnv })!;
+    const number = OpacityValue.parse('0.5', { env: styleletEnv })!;
 
-    expect(percentage.add(number).resolve(ValueStage.Computed).serialize()).toBe('0.75');
-    expect(percentage.interpolate(number, 0.5).resolve(ValueStage.Computed).serialize()).toBe('0.375');
-    expect(percentage.accumulate(number).resolve(ValueStage.Computed).serialize()).toBe('0.75');
+    expect(percentage.add(number, { env: styleletEnv }).resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('0.75');
+    expect(percentage.interpolate(number, 0.5, { env: styleletEnv }).resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('0.375');
+    expect(percentage.accumulate(number, { env: styleletEnv }).resolve(ValueStage.Computed, { env: styleletEnv }).serialize()).toBe('0.75');
     expect(percentage.serialize()).toBe('calc(25%)');
   });
 
   it('interpolates opacity values without clamping', () => {
-    expect(new OpacityValue(new NumberValue(new NumberLiteral(0))).interpolate(new OpacityValue(new NumberValue(new NumberLiteral(1))), -0.25)).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(-0.25))));
+    expect(new OpacityValue(new NumberValue(new NumberLiteral(0))).interpolate(new OpacityValue(new NumberValue(new NumberLiteral(1))), -0.25, { env: styleletEnv })).toEqual(new OpacityValue(new NumberValue(new NumberLiteral(-0.25))));
   });
 });

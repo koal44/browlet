@@ -253,7 +253,7 @@ fields mandatory merely to promise complete resolution.
 | [ColorContext](color.ts): currentColor, systemColors, colorScheme, colorProfiles | Style supplies computed color/scheme; UA policy and output/resource consumers supply effective palettes/profiles | Inheritance, scheme preferences, forced-color palette, and profile availability |
 | [PositionContext](position.ts): writingMode, direction | Computed CSS axes; HTML directionality from DOMOperations is a different question | Relevant computed style |
 | [GradientContext](gradient.ts): gradientBoxSize | Concrete gradient image size chosen by the consuming image/layout operation | Image placement/sizing and reference geometry |
-| [UrlContext](url.ts): URL constructor, baseUrl, treeScope | Declaration/sheet provenance and scoped local references; resolution does not fetch, decode, or locate a resource | Preserve parse-time base and the required scope across later edits/adoption |
+| [UrlContext](url.ts): env, baseUrl, treeScope | Declaration/sheet provenance and scoped local references; resolution does not fetch, decode, or locate a resource | Preserve parse-time base and the required scope across later edits/adoption |
 
 Sources include [system colors](https://drafts.csswg.org/css-color-4/#css-system-colors),
 [scheme selection](https://drafts.csswg.org/css-color-adjust-1/#color-scheme-resolution),

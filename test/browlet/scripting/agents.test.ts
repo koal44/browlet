@@ -8,8 +8,7 @@ import {
 } from '../../../src/browlet/scripting/agents';
 import { BrowletRealm } from '../../../src/browlet/scripting/realm';
 import { networkingTaskSource } from '../../../src/browlet/scripting/tasks';
-import type { Domain, Host } from '../../../src/url/host';
-import type { TupleOrigin } from '../../../src/url/origin';
+import type { Domain, Host, TupleOrigin } from '../../../src/url/core/index';
 import { itPassesWith } from '../../test-runtime';
 
 describe('WindowAgent', () => {

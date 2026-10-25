@@ -72,7 +72,7 @@ exercise Stylelet and retain CSSOM expectations with separate browser failures.
 and [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288.html) supply the contracts.
 PI and header loading are connected; HTML `<link>` remains HTML §4.2.4 work.
 `CSSStyleSheetImpl.loadImports()` connects an import tree and starts its first attempt.
-`loadStyleSheetImports()` connects it to the existing Fetch helper and accepts
+Browlet's `loadStyleSheetImports()` connects it to the CSSOM Fetch helper and accepts
 per-request settings from its caller. Actual decoded encodings survive BOM override;
 child URLs use the final response base. The callback reports aggregate success only
 after all nested attempts finish. Cancelling suppresses old callbacks and associations.
@@ -81,9 +81,10 @@ response CSS is discarded. Other rejection paths retain their existing null asso
 The Fetch helper reports `success`, `http-error`, or `failure`; the import adapter
 uses that outcome without repeating the HTTP-status check.
 
-CSS Values §4.5.4 is translated in the temporary
-[URL-processing module](url-processing.ts), pending ownership and integration review.
-Import parsing now retains `UrlValue` and applies its recognized request modifiers.
+CSS Values §4.5.4 is owned by Stylelet's
+[resource fetcher](../../stylelet/resource.ts), which calls Fetch with the existing
+owning environment. Import parsing retains `UrlValue`, whose
+`applyRequestModifiers()` method supplies the recognized request modifiers.
 The generic fetch algorithm remains separate from the CSSOM import adapter: it
 starts with a client referrer for no-CORS requests, while the existing adapter uses
 the parent stylesheet's referrer and response policy. Reconcile those contracts
@@ -91,7 +92,7 @@ before replacing the existing fetch path; preserve its outcome and cancellation 
 
 `SPEC_GAP(css-style-resource-sheet)`: [fetch a style resource](https://drafts.csswg.org/css-values-4/#fetch-a-style-resource)
 uses `sheet` without defining it, then tests its origin-clean flag without a null
-case. The temporary translation derives the containing stylesheet exactly as the
+case. The translation derives the containing stylesheet exactly as the
 base-URL algorithm does. With no sheet, it leaves the initiator type unset. This is
 an explicit reading of the incomplete algorithm, not a browser-compatibility choice.
 The declaration-block input is `CSSStyleDeclarationImpl`, which carries the parent
@@ -109,7 +110,7 @@ Document abortion also still reaches FetchGroup.cancel's provisional no-op.
 [style completion steps](https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block)
 leave critical-subresource fetching undefined. [Issue 968](https://github.com/whatwg/html/issues/968)
 remains open; its discussion favors shared HTML request setup. Our explicit operation
-keeps CSS dependency tracking in Stylelet and Fetch/request policy in Browlet. HTML
+keeps CSS dependency tracking in Stylelet and document-specific request setup in Browlet. HTML
 retains task delivery, events, blockers, and superseded-load cancellation. This is
 implementation coordination, not a newly specified algorithm. The current
 [critical-subresource definition](https://html.spec.whatwg.org/multipage/infrastructure.html#critical-subresources)
@@ -119,8 +120,7 @@ includes recursive imports; the broader image/font question remains
 Keep coordination centralized in `StyleSheetLoad`. Each sheet is fully parsed before
 its imports start; supplied fetch callbacks may nevertheless complete immediately.
 The `#visiting` guard prevents that completion from overtaking unvisited siblings.
-Encoding Core remains a direct dependency for label/BOM algorithms; byte decoding
-remains supplied by the user agent.
+Encoding remains a direct dependency for label/BOM algorithms and byte decoding.
 
 `SPEC_CLASH(stylesheet-referrer-policy)`: retain each external sheet's response
 policy, including the empty unspecified policy. Import request construction uses
@@ -188,7 +188,7 @@ review; referrer policy alone does not finish
 response-policy propagation. Imported
 conditions/layers and automatic stylesheet loading remain prerequisites for full
 browser import behavior. Focused tests cover explicit completion and cancellation
-in Stylelet, plus real Fetch/decoding through Browlet's adapter.
+in Stylelet, including Fetch/decoding without Browlet, plus Browlet's document integration.
 `SPEC_GAP(http-link-quirks-mode)`: header MIME checks use the document mode at
 response completion. CSSOM leaves early-header/undetermined-mode timing open;
 revisit with HTML loading.

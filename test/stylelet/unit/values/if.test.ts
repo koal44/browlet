@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { OptionalDeclarationValue } from '../../../../src/stylelet/values/declaration-value';
 import { BooleanExprValue } from '../../../../src/stylelet/values/boolean-expr';
 import { SupportsConditionValue } from '../../../../src/stylelet/values/supports-condition';
@@ -45,7 +46,7 @@ describe('<if()>', () => {
     expect(condition.evaluate({
       evaluateTest: (test) => {
         expect(test.condition).toBeInstanceOf(SupportsConditionValue);
-        return test.condition instanceof SupportsConditionValue && test.condition.evaluate({ supports });
+        return test.condition instanceof SupportsConditionValue && test.condition.evaluate({ env: styleletEnv, supports });
       },
     })).toBe(true);
     expect(supports.mock.calls).toHaveLength(2);
@@ -124,7 +125,7 @@ describe('<if-args>', () => {
 describe('if() replacement', () => {
   const parseOrdinary = SyntaxValue.parse('<color>', {})!.createParser();
 
-  function resolve(input: string, context: PropertyContext = {}) {
+  function resolve(input: string, context: PropertyContext = { env: styleletEnv }) {
     const raw = WholeValue.parse(input, context, parseOrdinary, true);
     return raw === null ? null : raw.resolve(ValueStage.Computed, context);
   }
@@ -133,7 +134,7 @@ describe('if() replacement', () => {
     const supports = vi.fn(({ name }) => name === 'color');
     const value = resolve(
       'if(supports(color: red): red; supports(width: 10px): blue; else: black)',
-      { supports },
+      { env: styleletEnv, supports },
     );
 
     expect(value!.serialize()).toBe('rgb(255, 0, 0)');
@@ -144,7 +145,7 @@ describe('if() replacement', () => {
     const supports = vi.fn(() => false);
     const value = resolve(
       'if(supports(color: red): blue; else: red)',
-      { supports },
+      { env: styleletEnv, supports },
     );
 
     expect(value!.serialize()).toBe('rgb(255, 0, 0)');
@@ -155,7 +156,7 @@ describe('if() replacement', () => {
     const supports = vi.fn(() => true);
     const value = resolve(
       'if(not supports(future(feature)): red; else: blue)',
-      { supports },
+      { env: styleletEnv, supports },
     );
 
     expect(value!.serialize()).toBe('rgb(255, 0, 0)');
@@ -163,21 +164,21 @@ describe('if() replacement', () => {
   });
 
   it.fails('skips a condition that does not parse after substitution', () => {
-    const value = resolve('if(not-a-condition: blue; else: red)')!;
+    const value = resolve('if(not-a-condition: blue; else: red)', { env: styleletEnv })!;
     expect(value.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('does not substitute the value of a false branch', () => {
-    const value = resolve('if(future(): var(--missing); else: red)')!;
+    const value = resolve('if(future(): var(--missing); else: red)', { env: styleletEnv })!;
     expect(value.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('substitutes arbitrary functions in the selected value', () => {
-    const value = resolve('if(else: if(else: red))')!;
+    const value = resolve('if(else: if(else: red))', { env: styleletEnv })!;
     expect(value.serialize()).toBe('rgb(255, 0, 0)');
   });
 
   it.fails('returns an empty sequence when no branch matches', () => {
-    expect(resolve('if(future(): red)')?.inner).toBe(guaranteedInvalidValue);
+    expect(resolve('if(future(): red)', { env: styleletEnv })?.inner).toBe(guaranteedInvalidValue);
   });
 });

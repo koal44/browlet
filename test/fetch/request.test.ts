@@ -11,6 +11,18 @@ import { createFetchFixture, createFetchRequest } from './fetch-fixture';
 import { createClientEnvironment, createFetchUserAgent } from './client-fixture';
 
 describe('Fetch request state', () => {
+  it('retains its owning environment when cloning a clientless request', () => {
+    const env = createClientEnvironment();
+    const request = new FetchRequest(env.apiBaseURL, env);
+    const clone = request.clone();
+
+    expect(request.env).toBe(env);
+    expect(request.client).toBeNull();
+    expect(clone.env).toBe(env);
+    expect(clone.env.userAgent).toBe(env.userAgent);
+    expect(clone.client).toBeNull();
+  });
+
   it('starts a request with the §2.2.5 defaults and retains its supplied client', () => {
     const client = createClientEnvironment();
     const request = createFetchRequest(undefined, client);
@@ -28,7 +40,7 @@ describe('Fetch request state', () => {
       timingAllowFailed: false, navigationTimingAllowValuesList: [],
     });
     expect(request.client).toBe(client);
-    expect(request.userAgent).toBe(client.userAgent);
+    expect(request.env.userAgent).toBe(client.userAgent);
     expect(request.urlList).toHaveLength(1);
     expect(request.url).toBe(request.currentURL);
     expect(request.webDriverId).toMatch(/^[\da-f]{8}-[\da-f]{4}-4[\da-f]{3}-[89ab][\da-f]{3}-[\da-f]{12}$/);
@@ -37,8 +49,8 @@ describe('Fetch request state', () => {
   it('keeps URL/current URL as live pointers and copies the initial URL components', () => {
     const url = parseURL('https://[::1]/start#fragment').url!;
     const userAgent = createFetchUserAgent();
-    const request = new FetchRequest(url, null, userAgent);
-    expect(request.userAgent).toBe(userAgent);
+    const request = new FetchRequest(url, Object.assign(createClientEnvironment(), { userAgent: userAgent }));
+    expect(request.env.userAgent).toBe(userAgent);
     expect(request.url).toEqual(url);
     expect(request.url).not.toBe(url);
     expect(request.url.path).not.toBe(url.path);
@@ -207,7 +219,7 @@ describe('Fetch request cloning', () => {
     expect(clone.webDriverId).not.toBe(request.webDriverId);
     expect(clone.body).toBeNull();
     expect(clone.client).toBe(request.client);
-    expect(clone.userAgent).toBe(client.userAgent);
+    expect(clone.env.userAgent).toBe(client.userAgent);
     expect(clone.origin).toBe(request.origin);
     expect(clone.policyContainer).toBe(request.policyContainer);
     expect(clone.reservedClient).toBe(request.reservedClient);
@@ -388,7 +400,7 @@ describe('Fetch request User-Agent headers', () => {
 
   it('uses the owning user agent for a request without a client', () => {
     const request = createFetchRequest();
-    request.userAgent.defaultUserAgentValue = 'BrowserInitiated/1.0';
+    request.env.userAgent.defaultUserAgentValue = 'BrowserInitiated/1.0';
     request.appendUserAgentHeader();
     expect(request.headerList.get('User-Agent')).toBe('BrowserInitiated/1.0');
   });

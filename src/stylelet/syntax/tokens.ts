@@ -1,8 +1,6 @@
 import type { TextCursor } from '../../infra/text-cursor';
 import { asciiLower } from '../../infra/ascii';
-import { detectBOM, getEncoding, type Encoding } from '../../encoding/core/index';
-
-import type { StyleletEnvironment } from '../environment';
+import { decode, detectBOM, getEncoding, type Encoding } from '../../encoding/index';
 
 import type { TokenList } from './token-list';
 
@@ -319,9 +317,8 @@ export type DecodeStylesheetOptions = {
 export function decodeStylesheetBytes(
   bytes: Uint8Array,
   options: DecodeStylesheetOptions = {},
-  env: StyleletEnvironment,
 ): string {
-  return env.userAgent.decodeText(bytes, getStylesheetEncoding(bytes, options));
+  return decode(bytes, getStylesheetEncoding(bytes, options));
 }
 
 /** Return the effective encoding so a loading owner can retain it for imported sheets. */

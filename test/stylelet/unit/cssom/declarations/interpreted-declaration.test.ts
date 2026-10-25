@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../../environment-fixture';
 import { describe, expect, expectTypeOf, it, vi } from 'vitest';
 
 import { InterpretedDeclaration } from '../../../../../src/stylelet/cssom/declarations/interpreted-declaration';
@@ -10,7 +11,7 @@ import { ValueStage } from '../../../../../src/stylelet/value-processing/stage';
 
 describe('interpreted declarations', () => {
   it('retains distinct named property records when expanding a shorthand', () => {
-    const declarations = InterpretedDeclaration.parseBlock('margin: 1px 2px', {});
+    const declarations = InterpretedDeclaration.parseBlock('margin: 1px 2px', { env: styleletEnv });
     const records = ['margin-top', 'margin-right', 'margin-bottom', 'margin-left'] as const;
     expect(new Set(declarations.map(({ property }) => property)).size).toBe(4);
     for (const [index, name] of records.entries()) {
@@ -21,12 +22,13 @@ describe('interpreted declarations', () => {
 
   it('retains resolvable ordinary and pending shorthand whole values', () => {
     const context = {
+      env: styleletEnv,
       length: { em: 16 },
       getCustomProperty: () => OptionalDeclarationValue.parse('2em', {})!,
     };
-    const declarations = InterpretedDeclaration.parseBlock('margin-left: var(--gap); margin: var(--gap) 3em 4em 5em', {});
+    const declarations = InterpretedDeclaration.parseBlock('margin-left: var(--gap); margin: var(--gap) 3em 4em 5em', { env: styleletEnv });
 
-    expect(declarations[1]!.value.resolve(ValueStage.Specified, {})).toBe(declarations[1]!.value);
+    expect(declarations[1]!.value.resolve(ValueStage.Specified, { env: styleletEnv })).toBe(declarations[1]!.value);
     expect(declarations.map((declaration) => declaration.value.resolve(ValueStage.Computed, context).serialize()))
       .toEqual(['32px', '32px', '48px', '64px', '80px']);
     expect(declarations[0]!.serializeValue()).toBe('var(--gap)');
@@ -35,10 +37,12 @@ describe('interpreted declarations', () => {
 
   it('reparses a pending shorthand with the computation context', () => {
     const context = {
+      env: styleletEnv,
       numericVariables: new Map([['step', { valueType: 'number' as const, value: new NumberLiteral(1) }]]),
     };
     const [declaration] = InterpretedDeclaration.parseBlock('margin: var(--gap)', context);
     const computed = declaration!.value.resolve(ValueStage.Computed, {
+      env: styleletEnv,
       numericVariables: new Map([['step', { valueType: 'number' as const, value: new NumberLiteral(3) }]]),
       getCustomProperty: () => OptionalDeclarationValue.parse('calc(step * 1px)', {})!,
     });
@@ -46,20 +50,20 @@ describe('interpreted declarations', () => {
   });
 
   it('caches declared text without changing it when the whole value resolves', () => {
-    const [declared] = InterpretedDeclaration.parseBlock('margin-left: 2em', {});
+    const [declared] = InterpretedDeclaration.parseBlock('margin-left: 2em', { env: styleletEnv });
     const serialize = vi.spyOn(declared!.value, 'serialize');
     expect(serialize).not.toHaveBeenCalled();
     expect(declared!.serializeValue()).toBe('2em');
     expect(declared!.serialize()).toBe('margin-left: 2em;');
     expect(serialize).toHaveBeenCalledOnce();
-    expect(declared!.value.resolve(ValueStage.Computed, { length: { em: 16 } }).serialize()).toBe('32px');
+    expect(declared!.value.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 16 } }).serialize()).toBe('32px');
     expect(declared!.serializeValue()).toBe('2em');
   });
 
   it('caches custom-property spelling without reconstructing its tokens', () => {
     const components = OptionalDeclarationValue.parse('A/**/B foo\\62 ar', {})!;
     const property = new CustomProperty('--accent');
-    const value = property.parse(components.repr, {})!;
+    const value = property.parse(components.repr, { env: styleletEnv })!;
     const declaration = new InterpretedDeclaration(property, value);
     const sourceText = vi.spyOn(components.repr, 'sourceText');
     expect(sourceText).not.toHaveBeenCalled();
@@ -70,6 +74,7 @@ describe('interpreted declarations', () => {
 
   it('carries property context from declaration parsing into the declared value', () => {
     const context = {
+      env: styleletEnv,
       numericVariables: new Map([['progress', {
         valueType: 'number' as const,
         value: new NumberLiteral(0.5),
@@ -80,42 +85,42 @@ describe('interpreted declarations', () => {
     expect(declarations).toMatchObject([{ name: 'opacity', custom: false }]);
     expect(declarations[0]).toBeInstanceOf(InterpretedDeclaration);
     expect(declarations[0]?.value).toBeInstanceOf(WholeValue);
-    expect(InterpretedDeclaration.parseBlock('opacity: calc(progress)', {})).toEqual([]);
+    expect(InterpretedDeclaration.parseBlock('opacity: calc(progress)', { env: styleletEnv })).toEqual([]);
   });
 
   it('keeps declarations unchanged when their whole values resolve', () => {
     const declarations = InterpretedDeclaration.parseBlock(
-      'color: red !important; opacity: 150%; margin-left: 2em; --Accent: 10px', {},
+      'color: red !important; opacity: 150%; margin-left: 2em; --Accent: 10px', { env: styleletEnv },
     );
     const computed = declarations.map((declaration) =>
-      declaration.value.resolve(ValueStage.Computed, { length: { em: 16 } })
+      declaration.value.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 16 } })
     );
 
     expect(computed.map((value) => value.serialize())).toEqual(['rgb(255, 0, 0)', '1', '32px', '10px']);
     expect(declarations.map((declaration) => declaration.serialize())).toEqual([
       'color: red !important;', 'opacity: 1.5;', 'margin-left: 2em;', '--Accent: 10px;',
     ]);
-    expect(declarations[2]!.value.resolve(ValueStage.Computed, { length: { em: 24 } }).serialize()).toBe('48px');
+    expect(declarations[2]!.value.resolve(ValueStage.Computed, { env: styleletEnv, length: { em: 24 } }).serialize()).toBe('48px');
     expect(computed.every((value) => value instanceof WholeValue)).toBe(true);
   });
 
   it('keeps value text separate from declaration syntax and preserves custom-property spelling', () => {
-    const [declaration] = InterpretedDeclaration.parse('--x:y', ' A/**/B foo\\62 ar ', true, {})!;
+    const [declaration] = InterpretedDeclaration.parse('--x:y', ' A/**/B foo\\62 ar ', true, { env: styleletEnv })!;
     expect(declaration!.serializeValue()).toBe('A/**/B foo\\62 ar');
     expect(declaration!.serialize()).toBe('--x\\:y: A/**/B foo\\62 ar !important;');
-    const [reparsed] = InterpretedDeclaration.parseBlock(declaration!.serialize(), {});
+    const [reparsed] = InterpretedDeclaration.parseBlock(declaration!.serialize(), { env: styleletEnv });
     expect(reparsed!.name).toBe('--x:y');
     expect(reparsed!.serializeValue()).toBe('A/**/B foo\\62 ar');
 
-    const [empty] = InterpretedDeclaration.parse('--empty', ' \t ', true, {})!;
+    const [empty] = InterpretedDeclaration.parse('--empty', ' \t ', true, { env: styleletEnv })!;
     expect(empty!.serializeValue()).toBe(' ');
     expect(empty!.serialize()).toBe('--empty:  !important;');
-    expect(InterpretedDeclaration.parse('color', 'red !important', false, {})).toBeNull();
-    expect(InterpretedDeclaration.parse('color', 'red; opacity: .5', false, {})).toBeNull();
+    expect(InterpretedDeclaration.parse('color', 'red !important', false, { env: styleletEnv })).toBeNull();
+    expect(InterpretedDeclaration.parse('color', 'red; opacity: .5', false, { env: styleletEnv })).toBeNull();
   });
 
   it('retains the value directly and preserves name/value typing through construction and narrowing', () => {
-    const value = builtInRegistry.color.parse('red', {})!;
+    const value = builtInRegistry.color.parse('red', { env: styleletEnv })!;
     const color = new InterpretedDeclaration(builtInRegistry.color, value);
     expect(color.property).toBe(builtInRegistry.color);
     expect(color.value).toBe(value);
@@ -126,7 +131,7 @@ describe('interpreted declarations', () => {
       new InterpretedDeclaration(builtInRegistry.color, builtInRegistry.opacity.initialValue);
     }).toBeFunction();
 
-    for (const declaration of InterpretedDeclaration.parseBlock('color: red; --accent: blue; opacity: .5', {})) {
+    for (const declaration of InterpretedDeclaration.parseBlock('color: red; --accent: blue; opacity: .5', { env: styleletEnv })) {
       if (declaration.custom) {
         expectTypeOf(declaration.name).toEqualTypeOf<`--${string}`>();
         expectTypeOf(declaration.value).toEqualTypeOf<CustomPropertyValue>();

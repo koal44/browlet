@@ -4,7 +4,8 @@ import { HSTSPolicy, HSTSStore } from '../../../../src/browlet/browsing/policy/h
 import { FetchResponse } from '../../../../src/fetch/response';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { FetchRequest } from '../../../../src/fetch/request';
-import { parseURL, serializeURL } from '../../../../src/url/url';
+import { parseURL } from '../../../../src/url/url';
+import { serializeURL } from '../../../../src/url/core/index';
 
 describe('HSTS header parsing', () => {
   it.each([
@@ -331,8 +332,8 @@ describe('HSTS browser and Fetch integration', () => {
     const other = new UserAgent();
     owner.hstsStore.processResponse(response('https://example.test/', ['max-age=60; includeSubDomains']), true);
     const input = parseURL('http://sub.example.test:8080/path').url!;
-    const request = new FetchRequest(input, null, owner);
-    const independent = new FetchRequest(input, null, other);
+    const request = new FetchRequest(input, owner.sandbox);
+    const independent = new FetchRequest(input, other.sandbox);
 
     // Construction retains the original URL; main fetch must perform the upgrade.
     expect(request.currentURL.scheme).toBe('http');
@@ -348,7 +349,7 @@ describe('HSTS browser and Fetch integration', () => {
     const owner = new UserAgent();
     owner.hstsStore.processResponse(response('https://example.test/', ['max-age=1']), true);
     clock.mockReturnValue(2001);
-    const request = new FetchRequest(parseURL('http://example.test/').url!, null, owner);
+    const request = new FetchRequest(parseURL('http://example.test/').url!, owner.sandbox);
     request.upgradeForHSTS();
     expect(request.currentURL.scheme).toBe('http');
   });
@@ -357,7 +358,7 @@ describe('HSTS browser and Fetch integration', () => {
     vi.spyOn(Date, 'now').mockReturnValue(1000);
     const owner = new UserAgent();
     owner.hstsStore.processResponse(response('https://localhost/', ['max-age=60; includeSubDomains']), true);
-    const request = new FetchRequest(parseURL('http://sub.localhost./').url!, null, owner);
+    const request = new FetchRequest(parseURL('http://sub.localhost./').url!, owner.sandbox);
     expect(owner.hstsStore.requiresHTTPS(request.currentURL.host)).toBe(true);
     request.upgradeForHSTS();
     expect(request.currentURL.scheme).toBe('http');

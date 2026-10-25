@@ -86,7 +86,8 @@ describe('HTTP network response streams', () => {
     const env = getRelevantRealm(browlet.window).env;
     const transport = new ControlledTransport();
     env.userAgent.httpTransport = transport;
-    const request = new FetchRequest(env.parseURL('https://example.test/upload').url!, env, env.userAgent);
+    const request = new FetchRequest(env.parseURL('https://example.test/upload')!, env);
+    request.client = env;
     request.method = 'POST';
     request.credentialsMode = 'include';
     request.headerList.append('X-Value', 'one');
@@ -215,7 +216,7 @@ describe('HTTP network responses through the real transport and page', () => {
     const transport = new NodeHTTPTransport(f.env.userAgent);
     const dispatch = vi.spyOn(transport, 'dispatch');
     f.env.userAgent.httpTransport = transport;
-    f.operation.request.urlList = [f.env.parseURL(origin).url!];
+    f.operation.request.urlList = [f.env.parseURL(origin)!];
     f.operation.request.method = 'POST';
     await f.browlet.evaluate(() => {
       Reflect.set(globalThis, 'uploadStream', new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1])); controller.close(); } }));
@@ -242,7 +243,8 @@ describe('HTTP network responses through the real transport and page', () => {
     const realm = getRelevantRealm(browlet.window);
     const env = realm.env;
     try {
-      const request = new FetchRequest(env.parseURL(origin + '/bytes').url!, env, env.userAgent);
+      const request = new FetchRequest(env.parseURL(origin + '/bytes')!, env);
+      request.client = env;
       request.populateFromClient();
       request.cacheMode = 'no-store';
       const operation = createFetchOperation(request, env);
@@ -281,7 +283,8 @@ describe('HTTP network responses through the real transport and page', () => {
     const realm = getRelevantRealm(browlet.window);
     const env = realm.env;
     try {
-      const request = new FetchRequest(env.parseURL(origin).url!, env, env.userAgent);
+      const request = new FetchRequest(env.parseURL(origin)!, env);
+      request.client = env;
       request.populateFromClient();
       request.cacheMode = 'no-store';
       const operation = createFetchOperation(request, env);
@@ -308,7 +311,8 @@ async function fixture(start = true) {
   const env = realm.env;
   const transport = new ControlledTransport();
   env.userAgent.httpTransport = transport;
-  const request = new FetchRequest(env.parseURL('https://example.test/data').url!, env, env.userAgent);
+  const request = new FetchRequest(env.parseURL('https://example.test/data')!, env);
+  request.client = env;
   request.populateFromClient();
   request.cacheMode = 'no-store';
   const operation = createFetchOperation(request, env);

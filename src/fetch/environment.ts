@@ -2,8 +2,7 @@ import { ParallelQueue } from '../infra/parallel-queue';
 import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
-import type { ReferrerPolicy } from './core/index';
-import type { BlobURLEntry, Host, Origin, URLParseResult, URLRecord } from '../url/index';
+import type { BlobURLEntry, Host, Origin, URLRecord } from '../url/index';
 import type { CookieStore } from '../http/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { MIMEType } from '../mime/index';
@@ -18,6 +17,7 @@ import type {
   ConnectionPool, HTTPContentDecoder, HTTPContentDecoderListener, HTTPTransport, NetworkPartitionKey,
 } from './transport';
 import type { FetchIntegrityPolicy } from './policy';
+import type { ReferrerPolicy } from './referrer-policy';
 import type { FetchMode, FetchRequest, RequestCredentials, RequestInternalPriority } from './request';
 import type { CacheUsage, FetchResponse } from './response';
 import type { FetchTimingInfo, ResponseBodyInfo, ServiceWorkerTimingInfo } from './timing';
@@ -43,6 +43,8 @@ export function isOffline(env: FetchEnvironment): boolean {
 
 /** The HTML environment settings object, exposing only what Fetch currently uses. */
 export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment {
+  /** Shared user agent owning this environment's networking state. */
+  userAgent: FetchUserAgent;
   /** Execution, body handling, aborts, and task delivery for this environment. */
   exec: FetchExecution;
   /** Whether this environment's global is a Window. */
@@ -69,8 +71,8 @@ export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment 
   ): boolean;
   /** Current base URL used to resolve relative URLs supplied through Fetch APIs. */
   apiBaseURL: URLRecord;
-  /** Parse a URL using this environment's browser and Blob URL store. */
-  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLParseResult;
+  /** Parse through this environment's user agent; omitted base means null and encoding defaults to UTF-8. */
+  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLRecord | null;
   /** Client origin used by Fetch's origin and policy checks. */
   origin: Origin;
   /** Whether the client has cross-site ancestry or cannot establish a same-site ancestor context. */
@@ -184,10 +186,6 @@ export interface FetchUserAgent extends StorageUserAgent {
   runInParallel(this: void, steps: () => void): void;
   /** Read the browser's shared monotonic clock in milliseconds. */
   unsafeSharedCurrentTime(): number;
-  /** Apply Referrer Policy to the request's resolved policy and selected source. */
-  determineRequestReferrer(request: FetchRequest): URLRecord | null;
-  /** Apply a redirect response's Referrer-Policy header before the next main-fetch pass. */
-  setRequestReferrerPolicyOnRedirect(request: FetchRequest, response: FetchResponse): void;
   /** Supply a browser-policy response, or null to continue normal Fetch dispatch. */
   potentiallyOverrideResponse(request: FetchRequest, env: FetchEnvironment): FetchResponse | null;
   /** Select interception from request metadata; prepare its copy only when needed. */
@@ -250,8 +248,8 @@ export interface FetchUserAgent extends StorageUserAgent {
   isURLPotentiallyTrustworthy(url: URLRecord): boolean;
   /** Create HTML's default policy container for a request without a client. */
   createPolicyContainer(): FetchPolicyContainer;
-  /** Browser URL parsing, including capture of the current Blob URL registration. */
-  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLParseResult;
+  /** Parse and capture the Blob registration; omitted base means null and encoding defaults to UTF-8. */
+  parseURL(input: string, base?: URLRecord | null, encoding?: string): URLRecord | null;
   /** Acquire an already-captured File API entry with the caller-selected access context. */
   obtainBlobObject(
     entry: BlobURLEntry | null,

@@ -106,8 +106,8 @@ assertions run before those annotations.
   mutation, rule text, and Browlet behavior remain ordinary passing assertions.
 - `SPEC_CLASH(custom-property-name-serialization)`: CSSOM's
   [literal declaration serializer](https://drafts.csswg.org/cssom/#serialize-a-css-declaration)
-  appends the decoded property name without escaping; WebKit does likewise.
-  Follow Chromium/Firefox by escaping names such as `--x:other` and `--x y`,
+  appends the decoded property name without escaping. All three browsers in
+  Playwright 1.62.1 escape names such as `--x:other` and `--x y`; follow them,
   preserving their identity across a cssText round trip. Ordinary property
   lookup and `item()` still return the decoded name.
 - `SPEC_CLASH(custom-property-value-escapes)`: Follow

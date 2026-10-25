@@ -1,3 +1,4 @@
+import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it, vi } from 'vitest';
 
 import { CustomProperty } from '../../../../src/stylelet/props/custom-property';
@@ -13,15 +14,15 @@ describe('custom property records', () => {
   it('retains complete values and source spelling through computation', () => {
     const property = new CustomProperty('--accent');
     const text = '/*before*/ r\\65 d/**/ /*after*/';
-    const declared = property.parse(text, {})!;
+    const declared = property.parse(text, { env: styleletEnv })!;
     expect(declared).toBeInstanceOf(WholeValue);
     expect(property.serialize(declared)).toBe(text);
-    expect(property.resolve(declared, ValueStage.Specified, {})).toBe(declared);
+    expect(property.resolve(declared, ValueStage.Specified, { env: styleletEnv })).toBe(declared);
 
-    const computed = property.resolve(declared, ValueStage.Computed, {});
+    const computed = property.resolve(declared, ValueStage.Computed, { env: styleletEnv });
     expect(computed).toBeInstanceOf(WholeValue);
     expect(property.serialize(computed)).toBe(text);
-    expect(property.resolve(computed, ValueStage.Computed, {})).toBe(computed);
+    expect(property.resolve(computed, ValueStage.Computed, { env: styleletEnv })).toBe(computed);
     expect(property.serialize(declared)).toBe(text);
   });
 
@@ -31,20 +32,22 @@ describe('custom property records', () => {
       name: '--Gap', custom: true, inherits: true, initialValue: { inner: guaranteedInvalidValue },
       animationType: 'discrete', percentages: 'not-applicable',
     });
-    expect(property.appliesTo({})).toBe(true);
-    expect(property.parse('arbitrary tokens 10px', {})).not.toBeNull();
-    expect(property.parse('!important', {})).toBeNull();
-    expect(property.parse('var()', {})).toBeNull();
+    expect(property.appliesTo({ env: styleletEnv })).toBe(true);
+    expect(property.parse('arbitrary tokens 10px', { env: styleletEnv })).not.toBeNull();
+    expect(property.parse('!important', { env: styleletEnv })).toBeNull();
+    expect(property.parse('var()', { env: styleletEnv })).toBeNull();
   });
 
   it('keeps declared spelling while its property substitutes in different contexts', () => {
-    const [declaration] = InterpretedDeclaration.parseBlock('--Gap: var(--base)', {});
+    const [declaration] = InterpretedDeclaration.parseBlock('--Gap: var(--base)', { env: styleletEnv });
     if (!declaration?.custom) throw new Error('Expected a custom-property declaration');
     const { property, value } = declaration;
     const first = property.resolve(value, ValueStage.Computed, {
+      env: styleletEnv,
       getCustomProperty: () => OptionalDeclarationValue.parse('A/**/B foo\\62 ar', {})!,
     });
     const second = property.resolve(value, ValueStage.Computed, {
+      env: styleletEnv,
       getCustomProperty: () => OptionalDeclarationValue.parse('20px', {})!,
     });
 
@@ -55,21 +58,21 @@ describe('custom property records', () => {
 
   it('requires a computed lookup only when substitution is reached', () => {
     const property = new CustomProperty('--gap');
-    const value = property.parse('var(--base)', {})!;
-    expect(property.resolve(value, ValueStage.Specified, {})).toBe(value);
-    expect(() => property.resolve(value, ValueStage.Computed, {}))
+    const value = property.parse('var(--base)', { env: styleletEnv })!;
+    expect(property.resolve(value, ValueStage.Specified, { env: styleletEnv })).toBe(value);
+    expect(() => property.resolve(value, ValueStage.Computed, { env: styleletEnv }))
       .toThrow('Property substitution requires computed custom properties');
-    const plain = property.parse('10px', {})!;
-    const computed = property.resolve(plain, ValueStage.Computed, {});
+    const plain = property.parse('10px', { env: styleletEnv })!;
+    const computed = property.resolve(plain, ValueStage.Computed, { env: styleletEnv });
     expect(computed.ordinaryValue()).toBeInstanceOf(OptionalDeclarationValue);
     expect(property.serialize(computed)).toBe('10px');
   });
 
   it('distinguishes a failed substitution from a valid empty custom value', () => {
     const property = new CustomProperty('--gap');
-    const context = { getCustomProperty: () => guaranteedInvalidValue };
-    const invalid = property.resolve(property.parse('var(--missing)', {})!, ValueStage.Computed, context);
-    const empty = property.resolve(property.parse('var(--missing,)', {})!, ValueStage.Computed, context);
+    const context = { env: styleletEnv, getCustomProperty: () => guaranteedInvalidValue };
+    const invalid = property.resolve(property.parse('var(--missing)', { env: styleletEnv })!, ValueStage.Computed, context);
+    const empty = property.resolve(property.parse('var(--missing,)', { env: styleletEnv })!, ValueStage.Computed, context);
 
     expect(invalid.inner).toBe(guaranteedInvalidValue);
     expect(empty.ordinaryValue()).toBeInstanceOf(OptionalDeclarationValue);
@@ -83,11 +86,11 @@ describe('custom property records', () => {
     const registration: CustomPropertyRegistration = {
       name: '--gap', syntax, inherits: false,
       parse: (input, context) => WholeValue.parse(input, context, parseOrdinary, true),
-      initialValue: WholeValue.parse('0px', {}, parseOrdinary, true)!,
+      initialValue: WholeValue.parse('0px', { env: styleletEnv }, parseOrdinary, true)!,
     };
     const customPropertyRegistry = new Map<CustomPropertyRegistration['name'], CustomPropertyRegistration>();
     const getRegistration = vi.spyOn(customPropertyRegistry, 'get');
-    const context = { customPropertyRegistry };
+    const context = { env: styleletEnv, customPropertyRegistry };
     const property = new CustomProperty('--gap');
     const value = property.parse('red', context)!;
     expect(getRegistration).not.toHaveBeenCalled();

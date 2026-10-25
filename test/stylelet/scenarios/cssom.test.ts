@@ -1,10 +1,17 @@
-import { runScenarios } from '../../scenario/dispatch';
+import { expect } from '@playwright/test';
+import { require as tsRequire } from 'tsx/cjs/api';
 
-runScenarios('style CSSOM declaration rules', 'normal', [
+import type * as BrowletModule from '../../../src/browlet/browlet';
+import { runScenarios } from '../../scenario/dispatch';
+import type { CssomCase } from '../../scenario/harness';
+import { installBrowserHelpers } from '../../scenario/playwright/page';
+
+const { Browlet } = tsRequire('../../../src/browlet/browlet.ts', __filename) as typeof BrowletModule;
+
+const scenarios: { name: string; markup: string; cases: CssomCase[]; }[] = [
   {
     name: 'simple declaration is exposed',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style id="sheet">
         .foo { margin-left: 3px; }
@@ -20,7 +27,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'valid declaration survives malformed declaration',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { color red; margin-left: 3px; }
@@ -37,7 +43,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
     name: 'discarded nested rules do not separate declarations',
     // SPEC_CLASH(css-invalid-rule-declaration-runs): Browser behavior was chosen.
     // https://github.com/w3c/csswg-drafts/issues/11271
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .invalid { margin-left: 1px; & + {} margin-left: 2px; }
@@ -58,7 +63,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'last normal duplicate declaration wins',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { margin-left: 1px; margin-left: 2px; }
@@ -74,7 +78,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'important declaration beats later normal duplicate',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { margin-left: 1px !important; margin-left: 2px; }
@@ -89,7 +92,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
 
   {
     name: 'semicolon inside custom property string does not split declaration',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { --family: "x;y"; margin-left: 3px; }
@@ -129,7 +131,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'invalid selector list rule is dropped before following rule',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo, { margin-left: 3px; }
@@ -146,7 +147,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'invalid selector list rule is omitted',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo, { margin-left: 3px; }
@@ -167,7 +167,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'later important duplicate beats earlier normal declaration',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { margin-left: 1px; margin-left: 2px !important; }
@@ -183,7 +182,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'invalid later duplicate does not erase earlier declaration',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { margin-left: 1px; margin-left: ; }
@@ -199,7 +197,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   {
     name: 'property names are ASCII case-insensitive',
     // status: 'only',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { MARGIN-LEFT: 3px; }
@@ -214,7 +211,6 @@ runScenarios('style CSSOM declaration rules', 'normal', [
 
   {
     name: 'auto and percentage margin declarations are exposed',
-    engines: ['native', 'selectlet'],
     markup: `
       <style>
         .foo { margin-left: auto; margin-right: 10%; }
@@ -461,4 +457,26 @@ runScenarios('style CSSOM declaration rules', 'normal', [
   //   ],
   // },
 
-]);
+];
+
+runScenarios('style CSSOM declaration rules', 'normal', scenarios.map(({ cases, ...scenario }) => ({
+  ...scenario,
+  engines: ['native'],
+  setupPage: async (page) => {
+    const browlet = new Browlet({ route: () => scenario.markup });
+    await browlet.navigate('https://example.test/');
+    // The same CSSOM inspection runs against the projected objects in both hosts.
+    await browlet.evaluate(installBrowserHelpers);
+    for (const c of cases) {
+      const result = await browlet.evaluate(readCssom, c);
+      if (c.expect!.cssom === null) expect(result).toBeNull();
+      else expect(result).toMatchObject(c.expect!.cssom!);
+      expect(await page.evaluate(readCssom, c)).toEqual(result);
+    }
+  },
+})));
+
+function readCssom(c: CssomCase) {
+  const helpers = window.__pwHelpers;
+  return helpers.readCssom(c.cssom, helpers.resolveQuerySource(document, c.ref));
+}

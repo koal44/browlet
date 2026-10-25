@@ -19,7 +19,9 @@ describe('Document.cookie', () => {
     const response = new FetchResponse();
     response.headerList.append('Set-Cookie', 'visible=server; Path=/');
     response.headerList.append('Set-Cookie', 'secret=server; Path=/; HttpOnly');
-    response.parseAndStoreCookies(new FetchRequest(document.url, document.env, document.env.userAgent));
+    const cookieRequest = new FetchRequest(document.url, document.env);
+    cookieRequest.client = document.env;
+    response.parseAndStoreCookies(cookieRequest);
 
     expect(await browlet.evaluate(() => document.cookie)).toBe('visible=server');
     expect(await browlet.evaluate(() => {
@@ -30,7 +32,8 @@ describe('Document.cookie', () => {
       return document.cookie;
     })).toBe('visible=script; added=script');
 
-    const request = new FetchRequest(document.url, document.env, document.env.userAgent);
+    const request = new FetchRequest(document.url, document.env);
+    request.client = document.env;
     request.appendCookieHeader();
     // Creation timestamps can tie; this assertion concerns membership, not their tie order.
     expect(request.headerList.get('Cookie')?.split('; ').sort()).toEqual([
@@ -141,7 +144,9 @@ describe('Document.cookie', () => {
     expect(cookie.value).toBe('\xE2\x98\x95\xEF\xBF\xBD');
     const response = new FetchResponse();
     response.headerList.append('Set-Cookie', 'malformed=\xFF');
-    response.parseAndStoreCookies(new FetchRequest(document.url, document.env, document.env.userAgent));
+    const cookieRequest = new FetchRequest(document.url, document.env);
+    cookieRequest.client = document.env;
+    response.parseAndStoreCookies(cookieRequest);
     expect(await browlet.evaluate(() => document.cookie)).toBe('\uFEFFcafé=☕\uFFFD; malformed=\uFFFD');
   });
 
