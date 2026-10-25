@@ -1,5 +1,4 @@
-import type { AbortAlgorithmHandle } from '../../../infra/execution';
-import { InternalError } from '../../../infra/internal-error';
+import { type AbortAlgorithmHandle, InternalError } from '../../../infra/index';
 import {
   arg, atArg, ctor, defineCallbackInterface, defineDictionary, defineInterface,
   dictMember, emptyDictionary, idlType, impl, nullable, op, reference, union,

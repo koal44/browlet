@@ -3,7 +3,6 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { parseURL } from '../../../src/url/index';
 import * as fetching from '../../../src/fetch/index';
 import { CSSStyleSheetImpl, type CSSImportRuleImpl } from '../../../src/stylelet/index';
-import { createFetchedStyleSheet, fetchCSSStyleSheet, loadStyleSheetImports } from '../../../src/browlet/style/stylesheet-loading';
 import { DocumentMode } from '../../../src/browlet/dom/nodes/document';
 import { createTestDocument } from '../../support/dom';
 
@@ -15,9 +14,9 @@ it('decodes a sheet using its document encoding and captures the response policy
   const url = parseURL('https://example.test/style.css').url!;
   const response = new fetching.FetchResponse();
   response.headerList.append('Referrer-Policy', 'origin, no-referrer');
-  const sheet = createFetchedStyleSheet(url, response, Buffer.from('.caf\xe9 { opacity: .5 }', 'latin1'), {
+  const sheet = document.createFetchedStyleSheet(url, response, Buffer.from('.caf\xe9 { opacity: .5 }', 'latin1'), {
     ownerNode: null, media: '', title: '', alternate: false,
-  }, document);
+  });
 
   expect(sheet.encoding).toBe('windows-1252');
   expect(sheet.referrerPolicy).toBe('no-referrer');
@@ -35,10 +34,10 @@ it('uses the supplied document security state and reads quirks mode and encoding
   });
   const url = parseURL('data:text/plain,.caf%E9%20%7B%20opacity:%20.5%20%7D').url!;
   const result = new Promise<CSSStyleSheetImpl | null>((resolve) => {
-    fetchCSSStyleSheet(url, document.url, document, {}, (response, bytes) => {
-      resolve(bytes === null ? null : createFetchedStyleSheet(url, response, bytes, {
+    document.fetchCSSStyleSheet(url, document.url, {}, (response, bytes) => {
+      resolve(bytes === null ? null : document.createFetchedStyleSheet(url, response, bytes, {
         ownerNode: null, media: '', title: '', alternate: false,
-      }, document));
+      }));
     });
   });
   document.mode = DocumentMode.Quirks;
@@ -73,7 +72,7 @@ it('loads nested imports using the inline document URL and current policy', asyn
   sheet.insertRule(`@import "${childURL}";`);
   document.policyContainer.referrerPolicy = 'unsafe-url';
   const success = await new Promise<boolean>((resolve) => {
-    loadStyleSheetImports(sheet, document, () => ({}), resolve);
+    document.loadStyleSheetImports(sheet, () => ({}), resolve);
   });
 
   expect(success).toBe(true);

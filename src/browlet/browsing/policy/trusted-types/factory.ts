@@ -1,6 +1,4 @@
-import { TypeError } from '../../../../infra/exceptions';
-import { asciiLower } from '../../../../infra/ascii';
-import { HTML_NAMESPACE } from '../../../../infra/namespaces';
+import { TypeError, asciiLower, HTML_NAMESPACE } from '../../../../infra/index';
 import {
   arg, defineInterface, emptyDictionary, idlType, impl, nullable, op, reference, roAttr, unwrapArg,
 } from '../../../../web-idl/core/index';

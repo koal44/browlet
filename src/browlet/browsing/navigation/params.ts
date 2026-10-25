@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import { copyURL, type Origin, obtainURLOrigin, type URLRecord } from '../../../url/index';
 import type { FetchResponse, FetchRequest, FetchController, ReferrerPolicy } from '../../../fetch/index';
 

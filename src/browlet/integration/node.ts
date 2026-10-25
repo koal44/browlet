@@ -1,5 +1,4 @@
-import { InternalPromise } from '../../infra/promises';
-import type { TimerHost } from '../../infra/execution';
+import { InternalPromise, type TimerHost } from '../../infra/index';
 
 // HTML section 2.1.1 permits cooperative scheduling. Captured closures stay
 // in this isolate; true worker parallelism needs algorithm-specific data and

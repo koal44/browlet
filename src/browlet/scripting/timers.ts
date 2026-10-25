@@ -1,4 +1,4 @@
-import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/execution';
+import type { TaskCreationOptions, TaskHandle, TimerHost } from '../../infra/index';
 
 import type { Duration } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';

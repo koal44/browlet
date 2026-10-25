@@ -1,9 +1,3 @@
-export {
-  ElementCSSInlineStyleMixin, LinkStyleMixin, type LinkStyleOptions,
-} from './integration';
-export { processDefaultStyleHeaders, processStyleSheetLinkHeaders } from './header-stylesheets';
+export { ElementCSSInlineStyleMixin } from './inline-style';
+export { LinkStyleMixin, type LinkStyleOptions } from './link-style';
 export { ProcessingInstructionLinkStyleMixin } from './processing-instruction';
-export {
-  fetchCSSStyleSheet, createFetchedStyleSheet, loadStyleSheetImports,
-  type StyleSheetFetchOutcome, type FetchedStyleSheetOptions,
-} from './stylesheet-loading';

@@ -160,8 +160,8 @@ describe('custom property registration', () => {
       registeredPropertySet: new Map([[registered.name, registered]]),
       context: new StyleletContext(document, styleletEnv),
     });
-    const documentScope = new TreeScope(document, engine);
-    const shadowScope = new TreeScope(shadowRoot, engine);
+    const documentScope = new TreeScope(document, engine.context);
+    const shadowScope = new TreeScope(shadowRoot, engine.context);
     const sheet = engine.createStyleSheet();
     sheet.replaceSync('* { --image: url("#paint") }');
     documentScope.adoptedStyleSheets.push(sheet);
@@ -327,7 +327,7 @@ function propertyRules(
   ...registrations: CustomPropertyRegistration[]
 ): CSSPropertyRuleImpl[] {
   return registrations.map((registration) =>
-    new CSSPropertyRuleImpl(registration, scope.cascade.context.env)
+    new CSSPropertyRuleImpl(registration, scope.context.env)
   );
 }
 
@@ -341,7 +341,7 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 
   return {
     engine,
-    scope: new TreeScope(context.document, engine),
+    scope: new TreeScope(context.document, context),
   };
 }
 
@@ -351,7 +351,7 @@ function addStyleSheet(
   location?: URLRecord,
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.create(
-    scope.cascade.context,
+    scope.context,
     {
       location: location ?? null,
       parentStyleSheet: null,
@@ -363,7 +363,7 @@ function addStyleSheet(
       originClean: true,
     },
   );
-  const context = new RuleListContext(styleSheet.ruleList, null, false, scope.cascade.context.env);
+  const context = new RuleListContext(styleSheet.ruleList, null, false, scope.context.env);
   styleSheet.replaceRules(typeof source === 'string' ? parseStylesheetContents(source, context) : source);
 
   scope.addTreeStyleSheet(styleSheet);

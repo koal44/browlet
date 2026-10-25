@@ -1,6 +1,6 @@
-import type { TaskHandle } from '../../infra/execution';
-import { InternalError } from '../../infra/internal-error';
-import { internalType, type InternalPromise, type InternalPromiseWithResolvers } from '../../infra/promises';
+import {
+  type TaskHandle, InternalError, internalType, type InternalPromise, type InternalPromiseWithResolvers,
+} from '../../infra/index';
 import type { ReadableStreamDefaultReaderImpl } from '../../streams/index';
 import {
   detectSuppliedMIMEType, maximumResourceHeaderLength, preservedMIMEType, sniffMIMEType, type MIMEType,

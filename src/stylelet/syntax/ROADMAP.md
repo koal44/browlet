@@ -22,7 +22,7 @@ rule-specific grammars, loading, and the consuming value/API specifications.
   run; retain that behavior when supporting additional rule grammars.
 - [ ] Supply document encoding when HTML starts inline-sheet imports. Fetched sheets
   now retain `getStylesheetEncoding()`'s effective encoding, using Encoding Core's
-  BOM detection and the existing decoder. [Browlet's resource loader](../../browlet/style/stylesheet-loading.ts)
+  BOM detection and the existing decoder. [Browlet's DocumentImpl](../../browlet/dom/nodes/document.ts)
   also preserves the final response URL for child imports; automatic HTML startup remains separate.
 - [ ] Validate `unicode-range` in its owning descriptor grammar. The Syntax
   [entry algorithm](https://drafts.csswg.org/css-syntax-3/#consume-unicode-range-value)

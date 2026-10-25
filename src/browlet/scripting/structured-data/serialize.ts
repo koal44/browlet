@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import {
   type JSBufferView, copyMapData, copySetData, getArrayBufferMaxByteLength,
   getArrayBufferByteLength, getArrayBufferViewBuffer, getArrayBufferViewByteLength,

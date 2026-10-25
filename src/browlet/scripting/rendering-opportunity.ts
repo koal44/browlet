@@ -1,4 +1,4 @@
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../infra/index';
 
 import type { UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';

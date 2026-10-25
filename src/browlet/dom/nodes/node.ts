@@ -1,7 +1,8 @@
 // Mutable tree cursors start at this node and then advance; they do not capture this for callbacks.
 /* eslint @typescript-eslint/no-this-alias: ["error", { "allowedNames": ["node", "descendant"] }] */
-import { InternalError } from '../../../infra/internal-error';
-import { HTML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE } from '../../../infra/index';
+import {
+  InternalError, HTML_NAMESPACE, SVG_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE,
+} from '../../../infra/index';
 import {
   arg, attr, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, nullable,
   constant, integer, op, reference, roAttr, xattr, DOMExceptionImpl, DOMExceptionNames,

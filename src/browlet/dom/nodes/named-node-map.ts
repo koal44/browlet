@@ -1,5 +1,4 @@
-import { asciiLower } from '../../../infra/ascii';
-import { HTML_NAMESPACE } from '../../../infra/index';
+import { asciiLower, HTML_NAMESPACE } from '../../../infra/index';
 import {
   arg, defineInterface, idlType, impl, indexedGetter, nullable, op, reference,
   roAttr, xattr, DOMExceptionNames, DOMExceptionImpl,

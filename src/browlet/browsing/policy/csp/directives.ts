@@ -1,5 +1,4 @@
-import { asciiLower } from '../../../../infra/ascii';
-import { forgivingBase64Decode } from '../../../../infra/base64';
+import { asciiLower, forgivingBase64Decode } from '../../../../infra/index';
 import { utf8Encode } from '../../../../encoding/index';
 import {
   areSameOrigin, getDefaultPort, hostsEqual, obtainURLOrigin, percentDecodeString, serializeHost, serializeURLPath,

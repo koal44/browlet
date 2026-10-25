@@ -1,4 +1,4 @@
-import { WeakOrderedSet } from '../../../infra/collections';
+import { WeakOrderedSet } from '../../../infra/index';
 import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, op, reference, roAttr, stringifier, xattr,
   DOMExceptionImpl, DOMExceptionNames,

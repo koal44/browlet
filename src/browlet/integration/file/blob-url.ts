@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import { serializeOrigin, serializeURL, type Origin, type URLRecord } from '../../../url/index';
 import { StorageKey, type StorageEnvironment } from '../../../storage/index';
 import type { BlobImpl } from '../../../file/index';

@@ -202,12 +202,12 @@ owner as `StyleletEnvironment`, which extends `FetchEnvironment`.
 runtime or supply transport, security state, or execution on behalf of its consumer.
 Fetch owns request execution, response delivery, and cancellation through its
 controller. `UrlValue.applyRequestModifiers()` applies CSS request modifiers.
-Browlet's [stylesheet loader](browlet/style/stylesheet-loading.ts) owns the
-document-dependent CSSOM fetching and fetched-sheet creation steps. It reads
-the supplied `DocumentImpl`'s URL, origin, policies, live encoding, and quirks mode
-directly and uses `document.env` for execution. These facts are not inferred from
-the environment's currently associated document. Stylelet retains recursive
-import coordination; Browlet connects its fetch callback to the document.
+[DocumentImpl](browlet/dom/nodes/document.ts) owns CSSOM stylesheet header processing,
+document-dependent fetching, and fetched-sheet creation. These methods use the
+document's URL, origin, policies, live encoding, and quirks mode directly, with
+`this.env` for execution. These facts are not inferred from the environment's
+currently associated document. Stylelet retains recursive import coordination;
+Document supplies its fetch callback through `loadStyleSheetImports()`.
 HTML retains events, blockers, and owner lifetime.
 
 URL Core owns `URLRecord` and its supporting host, origin, site, and blob-entry
@@ -253,6 +253,13 @@ attributes, and live HTML state only through those operations. The standard
 provider uses platform DOM APIs; [Browlet's provider](browlet/integration/dom.ts)
 uses implementations, including class checks for HTML elements. There are no
 per-node adapters or required fields on host nodes.
+
+Browlet's Document lazily retains its TreeScope and StyleletContext before any
+style query needs a Stylelet engine. That engine consumes the existing scope.
+ShadowRoot retains its own scope and uses its current node document's context;
+adoption updates the context while preserving the collections. The context reads
+HTML and quirks-mode state live rather than capturing document initialization state.
+
 Attribute operations distinguish qualified-name access from namespace/local-name
 access. Stylelet's `CSSDeclarationBlock` owns parsed property data independently
 of `CSSStyleDeclarationImpl`, which exposes a supplied block through CSSOM.
@@ -297,7 +304,7 @@ completion; sheet removal invokes it before clearing associations. Cancelling an
 handle does not disconnect or cancel a later attempt.
 Stylelet owns recursive import association and completion; its supplied fetch step
 reports a fresh parsed sheet separately from success, allowing failed loads to retain
-empty sheets. Browlet's `loadStyleSheetImports()` connects that step to its
+empty sheets. `DocumentImpl.loadStyleSheetImports()` connects that step to its
 document-dependent CSSOM fetcher, with request settings supplied by the owner for each request.
 Fetched sheets retain their actual encoding, final base URL, and response-derived
 referrer policy for child imports. Inline sheets use the document URL and current
@@ -633,10 +640,12 @@ not a second Fetch implementation. See [Fetch's contract](fetch/README.md).
 
 ## Source boundaries and vocabulary
 
-Import across subsystems through the owner's index. Infra's independent modules
-and test imports are exceptions; narrower indexes such as Web IDL Core are
-deliberate entry points. Group code by responsibility and real consumers, not
-by one folder per specification or one file per algorithm.
+Import across subsystems through the owner's index. Browlet imports all Infra
+symbols through Infra's index. Other subsystems may use Infra's independent
+modules directly, and test imports may use implementation modules. Narrower
+indexes such as Web IDL Core are deliberate entry points. Group code by
+responsibility and real consumers, not by one folder per specification or one
+file per algorithm.
 
 Do not import or re-export through the current folder's or an ancestor's barrel,
 including type-only imports and implicit `.`/`..` directory imports. Named

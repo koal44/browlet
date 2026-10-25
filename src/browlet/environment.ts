@@ -1,4 +1,4 @@
-import { InternalError } from '../infra/internal-error';
+import { InternalError } from '../infra/index';
 import { randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
 import type { SelectletEnvironment } from '../selectlet/index';

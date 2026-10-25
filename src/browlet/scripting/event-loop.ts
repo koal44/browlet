@@ -1,5 +1,4 @@
-import { InternalError } from '../../infra/internal-error';
-import type { TaskCreationOptions } from '../../infra/execution';
+import { InternalError, type TaskCreationOptions } from '../../infra/index';
 import { createMicrotaskQueue } from '../../js-engine/index';
 
 import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';

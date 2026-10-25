@@ -1,5 +1,4 @@
-import { asciiLower } from '../../../infra/ascii';
-import { asciiWhitespaceRunPattern } from '../../../infra/patterns';
+import { asciiLower, asciiWhitespaceRunPattern } from '../../../infra/index';
 
 /** Sandbox restrictions; an empty set imposes none. */
 // https://html.spec.whatwg.org/multipage/browsers.html#sandboxing-flag-set

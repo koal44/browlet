@@ -1,9 +1,8 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEqual, type Origin, type URLRecord } from '../../../url/index';
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
-import { processDefaultStyleHeaders, processStyleSheetLinkHeaders } from '../../style/index';
 import { obtainSimilarOriginWindowAgent } from '../../scripting/index';
 import { PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
 import { CSPList } from '../policy/csp/index';
@@ -252,7 +251,7 @@ export class Navigable {
     document.initializeReferrer(params.request);
     document.createNavigationTimingEntry(params);
     document.initializeResponseMetadata(response);
-    processDefaultStyleHeaders(document, response);
+    document.processDefaultStyleHeaders(response);
     window.env.getWindowOrWorkerGlobalScopeMixin().initializeReportingEndpoints(response);
 
     // https://html.spec.whatwg.org/multipage/semantics.html#shared-declarative-refresh-steps
@@ -261,7 +260,7 @@ export class Navigable {
     }
     params.commitEarlyHints?.(document);
     // CSSOM stylesheet relations are processed once, independently of HTML's two Link phases.
-    processStyleSheetLinkHeaders(document, response);
+    document.processStyleSheetLinkHeaders(response);
     document.processLinkHeaders(response, 'pre-media');
     // https://html.spec.whatwg.org/multipage/speculative-loading.html#process-the-speculation-rules-header
     if (this.isTopLevelTraversable && response.headerList.get('Speculation-Rules') !== null) {

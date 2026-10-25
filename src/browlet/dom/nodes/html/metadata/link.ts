@@ -1,5 +1,4 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { asciiLower } from '../../../../../infra/ascii';
+import { HTML_NAMESPACE, asciiLower } from '../../../../../infra/index';
 import {
   attr, ctor, defineIncludes, defineInterface, idlType, impl, nullable, reference, reflectEnumerated,
   reflectTokens, roAttr, xattr,

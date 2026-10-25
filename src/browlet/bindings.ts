@@ -1,7 +1,6 @@
 import { EOL } from 'node:os';
 
-import { InternalError } from '../infra/internal-error';
-import type { TaskCreationOptions } from '../infra/execution';
+import { InternalError, type TaskCreationOptions } from '../infra/index';
 import { addon } from '../js-engine/index';
 import {
   BindingWorld, type GlobalObjectAllocation,

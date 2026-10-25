@@ -1,6 +1,4 @@
-import { Stamper } from '../../../infra/stamper';
-import { WeakOrderedSet } from '../../../infra/collections';
-import type { AbortAlgorithmHandle, AbortSignal } from '../../../infra/execution';
+import { Stamper, WeakOrderedSet, type AbortAlgorithmHandle, type AbortSignal } from '../../../infra/index';
 import {
   arg, atArg, defineInterface, idlType, impl, invokeWith, op, reference, roAttr,
   sequence, staticOp, xattr, DOMExceptionNames,

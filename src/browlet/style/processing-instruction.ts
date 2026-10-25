@@ -5,8 +5,6 @@ import type { CSSStyleSheetImpl, TreeScope } from '../../stylelet/index';
 
 import type { ProcessingInstructionImpl } from '../dom/nodes/index';
 
-import { createFetchedStyleSheet, fetchCSSStyleSheet } from './stylesheet-loading';
-
 /** LinkStyle association and cancellable CSS loading for an XML stylesheet instruction. */
 // https://drafts.csswg.org/cssom/#requirements-on-user-agents-implementing-the-xml-stylesheet-processing-instruction
 export class ProcessingInstructionLinkStyleMixin {
@@ -69,12 +67,12 @@ export class ProcessingInstructionLinkStyleMixin {
     // SPEC_CLASH(xml-stylesheet-fragment): CSSOM fetches fragment hrefs normally; Chromium/WebKit skip fragment-only CSS references.
     // This does not implement XSLT's separate embedded-stylesheet mechanism.
     // SPEC_GAP(xml-stylesheet-events): CSSOM does not specify load/error events; follow Chromium/WebKit by dispatching neither.
-    const controller = fetchCSSStyleSheet(url, document.url, document, { initiatorType: 'other' }, (response, bytes) => {
+    const controller = document.fetchCSSStyleSheet(url, document.url, { initiatorType: 'other' }, (response, bytes) => {
       if (this.#fetch !== controller) return;
       this.#fetch = null;
       // SPEC_CLASH(xml-stylesheet-rejected-association): Follow CSSOM's null association; browsers retain empty sheets after HTTP/MIME rejection.
       if (bytes === null) return;
-      const sheet = createFetchedStyleSheet(url, response, bytes, options, document);
+      const sheet = document.createFetchedStyleSheet(url, response, bytes, options);
       const scope = document.getStyleScope();
       scope.addTreeStyleSheet(sheet);
       this.sheet = sheet;

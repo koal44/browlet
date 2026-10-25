@@ -1,7 +1,7 @@
 import {
-  asciiWhitespacePattern, firstStrongDirection, getContainedTextDirection, normalizeNewlines, type TextDirection,
+  asciiWhitespacePattern, firstStrongDirection, getContainedTextDirection, normalizeNewlines,
+  type TextDirection, InternalError,
 } from '../../../../infra/index';
-import { InternalError } from '../../../../infra/internal-error';
 import type { CSSDeclarationBlock, CSSStylePropertiesImpl } from '../../../../stylelet/index';
 
 import { ContentCategory, type ElementSanitization } from '../element-definitions/index';

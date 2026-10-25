@@ -1,6 +1,4 @@
-import { HTML_NAMESPACE, type TextDirection } from '../../../infra/index';
-import { asciiLower, asciiUpper } from '../../../infra/ascii';
-import { InternalError } from '../../../infra/internal-error';
+import { HTML_NAMESPACE, type TextDirection, asciiLower, asciiUpper, InternalError } from '../../../infra/index';
 import {
   arg, attr, defineDictionary, defineIncludes, defineInterface, dictMember, idlType, impl,
   nullable, op, reference, roAttr, sequence, union, xattr,

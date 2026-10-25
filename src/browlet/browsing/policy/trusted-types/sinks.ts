@@ -1,4 +1,4 @@
-import { HTML_NAMESPACE, SVG_NAMESPACE, XLINK_NAMESPACE, isHtmlSvgOrMathNamespace } from '../../../../infra/namespaces';
+import { HTML_NAMESPACE, SVG_NAMESPACE, XLINK_NAMESPACE, isHtmlSvgOrMathNamespace } from '../../../../infra/index';
 
 import type { TrustedTypeName } from './value';
 

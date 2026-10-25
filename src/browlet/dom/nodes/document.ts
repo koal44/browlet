@@ -1,8 +1,7 @@
-import type { InternalPromise, InternalPromiseWithResolvers } from '../../../infra/promises';
-import { asciiLower } from '../../../infra/ascii';
-import { HTML_NAMESPACE, SVG_NAMESPACE } from '../../../infra/index';
-import { stripAndCollapseASCIIWhitespace } from '../../../infra/strings';
-import { InternalError } from '../../../infra/internal-error';
+import {
+  type InternalPromise, type InternalPromiseWithResolvers, asciiLower, HTML_NAMESPACE, SVG_NAMESPACE,
+  stripAndCollapseASCIIWhitespace, InternalError,
+} from '../../../infra/index';
 import { addon, isomorphicDecode, isomorphicEncode } from '../../../js-engine/index';
 import {
   arg, atArg, attr, ctor, defineDictionary, defineEnumeration, defineIncludes, defineInterface, definePartialInterface,
@@ -10,15 +9,20 @@ import {
   DOMExceptionNames, DOMExceptionImpl, xattr,
 } from '../../../web-idl/core/index';
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
-import { utf8DecodeWithoutBOM, utf8Encode } from '../../../encoding/index';
+import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
   aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
   type Origin, type URLRecord,
 } from '../../../url/index';
-import { HTTPCookie, parseHTTPDate, type CookieHost } from '../../../http/index';
-import type { FetchRequest, FetchResponse, ReferrerPolicy } from '../../../fetch/index';
+import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost } from '../../../http/index';
+import { getMIMETypeEssence } from '../../../mime/index';
 import {
-  Stylelet, LengthLiteral, type TreeScope, type CSSStyleSheetImpl, type StyleSheetListImpl,
+  fetch, FetchRequest, isFilteredResponse, isOkStatus, parseReferrerPolicyFromHeader,
+  type FetchController, type FetchResponse, type ReferrerPolicy,
+} from '../../../fetch/index';
+import {
+  Stylelet, LengthLiteral, CSSStyleSheetImpl, getStylesheetEncoding, parseStylesheetContents, RuleListContext,
+  TreeScope, StyleletContext, type StyleSheetListImpl, type StyleSheetLoad,
 } from '../../../stylelet/index';
 
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
@@ -217,6 +221,8 @@ export class DocumentImpl extends NodeImpl {
   #fullyActiveObservers = new Set<FullyActiveStateObserver>();
   /** Lazily created style engine for this document. */
   #stylelet?: Stylelet;
+  /** Stylesheet collections and matching context, retained independently of the engine. */
+  #styleScope?: TreeScope;
   /** Selector parsing and compilation caches shared by queries in this document. */
   #selectlet?: Selectlet<NodeImpl, ElementImpl, DocumentImpl, DocumentFragmentImpl>;
   /** Focus and style-sheet behavior shared with shadow roots. */
@@ -1197,6 +1203,56 @@ export class DocumentImpl extends NodeImpl {
     // not implemented. Both loader phases reach this owner without side effects.
   }
 
+  /** Select the preferred stylesheet set from Default-Style fields in response order. */
+  // Implementation helper for CSSOM's response-header requirement.
+  // https://drafts.csswg.org/cssom/#the-http-default-style-header
+  // SPEC_CLASH(default-style-response-fields): Follow CSSOM's ordered fields; Chromium/WebKit ignore them and Firefox combines duplicates.
+  processDefaultStyleHeaders(response: FetchResponse): void {
+    for (const [name, value] of response.headerList) {
+      if (asciiLower(name) === 'default-style') this.getStyleScope().changePreferredStyleSheetSetName(value);
+    }
+  }
+
+  /** Load CSSOM's stylesheet Link relations once, independently of HTML's preload/header phases. */
+  // https://drafts.csswg.org/cssom/#requirements-on-user-agents-implementing-the-http-link-header
+  // SPEC_CLASH(http-link-stylesheets): Follow CSSOM and Firefox; Chromium/WebKit ignore stylesheet Link headers.
+  processStyleSheetLinkHeaders(response: FetchResponse): void {
+    // Retain header order even when requests complete in the opposite order.
+    const sheets: (CSSStyleSheetImpl | null)[] = [];
+    for (const [name, value] of response.headerList) {
+      if (asciiLower(name) !== 'link') continue;
+      for (const { href, parameters } of parseLinkHeader(value)) {
+        const relations = asciiLower(parameters.get('rel') ?? '').split(/ +/);
+        if (!relations.includes('stylesheet')) continue;
+        // RFC 8288 §3.2 permits ignoring anchored links; they need not describe this document.
+        if (parameters.has('anchor')) continue;
+        const title = parameters.get('title') ?? '';
+        const alternate = relations.includes('alternate');
+        if (alternate && title === '') continue;
+        const url = this.env.parseURL(href, this.getBaseURL());
+        if (url === null) continue;
+        const index = sheets.length;
+        sheets.push(null);
+        // SPEC_GAP(http-link-quirks-mode): CSSOM leaves early-header timing open; MIME checks use the document mode at response completion.
+        this.fetchCSSStyleSheet(url, this.url, { initiatorType: 'link' }, (response, bytes) => {
+          if (bytes === null) return;
+          const sheet = this.createFetchedStyleSheet(url, response, bytes, {
+            ownerNode: null, title, alternate, media: parameters.get('media') ?? '',
+          });
+          sheets[index] = sheet;
+          let insertionIndex = 0;
+          for (let i = 0; i < index; i++) if (sheets[i] !== null) insertionIndex++;
+          this.getStyleScope().addHeaderStyleSheet(sheet, insertionIndex);
+          // TODO(HTML stylesheet resources): Register the pending load before
+          // fetching and release it after critical resources complete. Document's
+          // addScriptBlockingStyleSheet()/removeScriptBlockingStyleSheet() hold
+          // elements; header loads need ownership in that resource-lifecycle review.
+          // Start loadStyleSheetImports() here when this owner tracks load completion.
+        });
+      }
+    }
+  }
+
   /** Retain the response's status, modification time, and fallback language. */
   // Implementation helper collecting response-derived Document state.
   initializeResponseMetadata(response: FetchResponse): void {
@@ -1418,12 +1474,121 @@ export class DocumentImpl extends NodeImpl {
 
   /** Initialize or retrieve the style engine owned by this document. */
   getStyleEngine(): Stylelet {
-    return this.#stylelet ??= new Stylelet(this, { env: this.env });
+    return this.#stylelet ??= new Stylelet(this.getStyleScope());
   }
 
   /** Initialize or retrieve the style scope for this document's tree. */
   getStyleScope(): TreeScope {
-    return this.getStyleEngine().documentScope;
+    return this.#styleScope ??= new TreeScope(this, new StyleletContext(this, this.env));
+  }
+
+  /** Fetch a CSS resource, reporting its outcome and delivering null bytes on rejection or failure. */
+  // https://drafts.csswg.org/cssom/#fetch-a-css-style-sheet
+  // SPEC_MISMATCH: fetch a CSS style sheet(parsed URL, referrer, document, request parameters, processTheResponse)
+  // Fetch's consume-body callback provides the bytes after EOF and observes body
+  // failures. Returning the controller permits the owning algorithm to stop it.
+  fetchCSSStyleSheet(
+    url: URLRecord, referrer: URLRecord,
+    parameters: Partial<FetchRequest>,
+    processTheResponse: (response: FetchResponse, bytes: Uint8Array | null, outcome: StyleSheetFetchOutcome) => void,
+  ): FetchController {
+    const env = this.env;
+    const request = new FetchRequest(url, env);
+    request.client = env;
+    request.origin = this.origin;
+    request.referrer = referrer;
+    request.destination = 'style';
+    request.policyContainer = this.policyContainer;
+    Object.assign(request, parameters);
+    const controller: FetchController = fetch(request, {
+      processResponseConsumeBody: (response, body) => {
+        if (controller.state !== 'ongoing' || response.type === 'error' || body === 'failure') {
+          processTheResponse(response, null, 'failure');
+          return;
+        }
+        const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+        // SPEC_CLASH(stylesheet-http-status): Follow all three browsers; CSSOM omits the successful-status check.
+        if (!isOkStatus(internalResponse.status)) {
+          processTheResponse(response, null, 'http-error');
+          return;
+        }
+        let mimeType = internalResponse.headerList.extractMIMEType();
+        const supported = mimeType !== null && getMIMETypeEssence(mimeType) === 'text/css';
+        if (!supported && this.compatMode !== 'CSS1Compat' && response.type !== 'opaque') {
+          internalResponse.headerList.set('Content-Type', 'text/css');
+          mimeType = internalResponse.headerList.extractMIMEType();
+        }
+        if (mimeType === null || getMIMETypeEssence(mimeType) !== 'text/css') {
+          processTheResponse(response, null, 'failure');
+          return;
+        }
+        processTheResponse(response, body ?? new Uint8Array(), 'success');
+      },
+    }, env);
+    return controller;
+  }
+
+  /** Decode accepted bytes and create the CSS implementation; its owner performs association. */
+  // https://drafts.csswg.org/cssom/#create-a-css-style-sheet
+  // https://drafts.csswg.org/css-syntax-3/#input-byte-stream
+  createFetchedStyleSheet(
+    url: URLRecord, response: FetchResponse, bytes: Uint8Array,
+    options: FetchedStyleSheetOptions,
+  ): CSSStyleSheetImpl {
+    const env = this.env;
+    const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
+    const mimeType = internalResponse.headerList.extractMIMEType();
+    const encoding = getStylesheetEncoding(bytes, {
+      transportEncoding: mimeType?.parameters.get('charset'),
+      environmentEncoding: options.encoding ?? getEncoding(this.encoding) ?? 'UTF-8',
+    });
+    const source = decode(bytes, encoding);
+    const sheet = new CSSStyleSheetImpl({
+      location: copyURL(url),
+      baseURL: copyURL(internalResponse.url ?? url),
+      encoding,
+      referrerPolicy: parseReferrerPolicyFromHeader(internalResponse),
+      ownerNode: options.ownerNode,
+      parentStyleSheet: null,
+      ownerRule: null,
+      media: options.media,
+      title: options.title,
+      alternate: options.alternate,
+      originClean: response.type !== 'opaque',
+    }, env);
+    // Parsing does not fetch imports. The owner explicitly starts loadStyleSheetImports()
+    // and waits for its completion before reporting success or releasing blockers.
+    sheet.replaceRules(parseStylesheetContents(source, new RuleListContext(sheet.ruleList, null, false, env)));
+    return sheet;
+  }
+
+  /** Connect an explicit import load to Fetch; HTML supplies current request settings and consumes completion. */
+  loadStyleSheetImports(
+    sheet: CSSStyleSheetImpl,
+    parameters: (parent: CSSStyleSheetImpl) => Partial<FetchRequest>, complete: (success: boolean) => void,
+    started?: (load: StyleSheetLoad) => void,
+  ): StyleSheetLoad {
+    return sheet.loadImports((url, rule, loaded) => {
+      const parent = rule.parentStyleSheet!;
+      if (parent.encoding === undefined) throw new InternalError('Import loading requires the parent stylesheet encoding');
+      // https://w3c.github.io/webappsec-referrer-policy/#integration-with-css
+      const referrer = parent.location === null
+        ? this.url : parent.baseURL ?? parent.location;
+      const requestParameters: Partial<FetchRequest> = {
+        // SPEC_CLASH(stylesheet-referrer-policy): Like Firefox, use the external sheet's own default when no valid header exists.
+        referrerPolicy: parent.location === null
+          ? this.policyContainer.referrerPolicy : parent.referrerPolicy || 'strict-origin-when-cross-origin',
+        ...parameters(parent), initiatorType: 'css',
+      };
+      rule.url.applyRequestModifiers(requestParameters);
+      const controller = this.fetchCSSStyleSheet(url, referrer, requestParameters, (response, bytes, outcome) => {
+        // Failed HTTP imports retain an empty sheet; their response CSS must not be applied.
+        loaded(outcome === 'failure' ? null : this.createFetchedStyleSheet(url, response, bytes ?? new Uint8Array(), {
+          ownerNode: null, media: '', title: '', alternate: false, encoding: parent.encoding,
+        }), outcome === 'success');
+      });
+      return () => controller.terminate();
+    }, complete, started);
   }
 
   /** Temporarily route document.write() to a parser while the callback runs. */
@@ -1982,6 +2147,18 @@ export const documentIncludesNonElementParentNodeIDL = defineIncludes({
 export const documentIncludesDocumentOrShadowRootIDL = defineIncludes({
   interface: 'Document', mixin: documentOrShadowRootIDL.name,
 });
+
+/** HTTP rejection permits an empty import association; other failures do not supply a sheet. */
+export type StyleSheetFetchOutcome = 'success' | 'http-error' | 'failure';
+
+/** Association metadata captured by the initiating processing instruction or header. */
+export type FetchedStyleSheetOptions = {
+  ownerNode: ElementImpl | ProcessingInstructionImpl | null;
+  media: string;
+  title: string;
+  alternate: boolean;
+  encoding?: Encoding;
+};
 
 /** Active parser input used by document.write(). */
 export type DocumentWriter = (markup: string) => void;

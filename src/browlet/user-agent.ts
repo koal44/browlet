@@ -1,6 +1,4 @@
-import { InternalError } from '../infra/internal-error';
-import { internalType, type InternalPromise } from '../infra/promises';
-import type { TimerHost } from '../infra/execution';
+import { InternalError, internalType, type InternalPromise, type TimerHost } from '../infra/index';
 import { randomUUID } from '../js-engine/index';
 import type { SelectletUserAgent } from '../selectlet/index';
 import {

@@ -2,7 +2,6 @@ import { styleletEnv } from '../../environment-fixture';
 import { describe, expect, it } from 'vitest';
 import { ValueStage } from '../../../../src/stylelet/value-processing/stage';
 import { JSDOM } from 'jsdom';
-import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { UrlValue } from '../../../../src/stylelet/values/url';
@@ -35,12 +34,11 @@ function createUrlTreeScopes(): {
     url: 'https://example.com/',
   }).window.document;
   const context = new StyleletContext(document, styleletEnv);
-  const cascade = new CascadeEngine({ context });
   const shadowRoot = document.querySelector('main')!
     .attachShadow({ mode: 'open' });
 
   return {
-    documentScope: new TreeScope(document, cascade),
-    shadowScope: new TreeScope(shadowRoot, cascade),
+    documentScope: new TreeScope(document, context),
+    shadowScope: new TreeScope(shadowRoot, context),
   };
 }

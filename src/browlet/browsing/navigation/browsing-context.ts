@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import {
   aboutBlankURL, serializeSite, copyURL, createOpaqueOrigin, serializeOrigin, type Origin, serializeURL,
   type URLRecord,

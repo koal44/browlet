@@ -1,4 +1,4 @@
-import type { TaskSourceKey } from '../../infra/execution';
+import type { TaskSourceKey } from '../../infra/index';
 
 import { createTaskSource, type TaskSource } from './event-loop';
 

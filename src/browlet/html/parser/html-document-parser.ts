@@ -2,7 +2,7 @@ import { finished } from 'node:stream';
 import { types } from 'node:util';
 import { ParserStream } from 'parse5-parser-stream';
 
-import type { InternalPromise } from '../../../infra/promises';
+import type { InternalPromise } from '../../../infra/index';
 import { bindAsyncContext } from '../../../js-engine/index';
 import { DOMExceptionImpl, DOMExceptionNames, idlType } from '../../../web-idl/core/index';
 import { bomSniff, endOfQueue, getDecoder, getEncoding, IOQueue, type Decoder } from '../../../encoding/index';

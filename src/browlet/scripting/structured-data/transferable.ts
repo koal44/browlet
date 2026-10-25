@@ -1,4 +1,4 @@
-import { Stamper } from '../../../infra/stamper';
+import { Stamper } from '../../../infra/index';
 
 /** HTML's [[Detached]] marker, carried by the transferred implementation instance. */
 export class DetachedTransferableStamper extends Stamper {

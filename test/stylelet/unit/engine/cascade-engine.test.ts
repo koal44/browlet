@@ -147,8 +147,8 @@ describe('cascade engine', () => {
     const shadowRoot = document.querySelector('main')!
       .attachShadow({ mode: 'open' });
     const { engine } = createCascade({ context: new StyleletContext(document, styleletEnv) });
-    const documentScope = new TreeScope(document, engine);
-    const shadowScope = new TreeScope(shadowRoot, engine);
+    const documentScope = new TreeScope(document, engine.context);
+    const shadowScope = new TreeScope(shadowRoot, engine.context);
     const styleSheet = engine.createStyleSheet();
     styleSheet.replaceSync('* { color: red }');
     documentScope.adoptedStyleSheets.push(styleSheet);
@@ -261,7 +261,7 @@ function createCascade(options: Partial<CascadeEngineOptions> = {}) {
 
   return {
     engine,
-    scope: new TreeScope(context.document, engine),
+    scope: new TreeScope(context.document, context),
   };
 }
 
@@ -271,7 +271,7 @@ function addStyleSheet(
   options: StyleSheetOptions = {},
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.create(
-    scope.cascade.context,
+    scope.context,
     {
       location: options.location ?? null,
       baseURL: options.baseUrl,
@@ -284,7 +284,7 @@ function addStyleSheet(
       originClean: options.originClean ?? true,
     },
   );
-  styleSheet.replaceRules(parseStylesheetContents(source, new RuleListContext(styleSheet.ruleList, null, false, scope.cascade.context.env)));
+  styleSheet.replaceRules(parseStylesheetContents(source, new RuleListContext(styleSheet.ruleList, null, false, scope.context.env)));
 
   scope.addTreeStyleSheet(styleSheet);
   return styleSheet;

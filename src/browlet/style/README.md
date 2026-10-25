@@ -9,15 +9,17 @@ the implementation objects currently being exposed.
 
 ## Owners and entry points
 
-- Document lazily creates its Stylelet engine and exposes the document
-  `TreeScope`. `DocumentOrShadowRootMixin` forwards stylesheet access through
-  its root. Each ShadowRoot lazily retains its own collections, using the current
-  node document's engine. Collection ownership does not yet select shadow sheets
-  for computed-style matching.
-- [integration.ts](integration.ts) implements the permanent
-  `ElementCSSInlineStyleMixin` owned by HTML, SVG, and MathML elements, and the
-  `LinkStyleMixin` for current inline-sheet associations. Includers explicitly
-  forward their members and notifications. Generic Element supplies an empty
+- Document lazily retains its `TreeScope` and matching context independently
+  of its Stylelet engine. The engine uses that scope when first needed.
+  `DocumentOrShadowRootMixin` forwards stylesheet access through its root.
+  Each ShadowRoot lazily retains its own collections, using the current node
+  document's context; adoption updates that context without replacing the scope.
+  Collection ownership does not yet select shadow sheets for computed-style matching.
+- [inline-style.ts](inline-style.ts) implements the permanent
+  `ElementCSSInlineStyleMixin` owned by HTML, SVG, and MathML elements;
+  [link-style.ts](link-style.ts) owns `LinkStyleMixin` for current inline-sheet
+  associations. Includers explicitly forward their members and notifications.
+  Generic Element supplies an empty
   internal inline-data query but does not include ElementCSSInlineStyle.
 - [DOM operations](../integration/dom.ts) let Stylelet query Browlet
   implementations without Platform conversion or structural node wrappers.
@@ -68,14 +70,14 @@ can update an existing sheet. TreeScope maintains document order, sheet-set
 selection, and adopted sheets. Document creation applies each `Default-Style`
 response field in order before parsing.
 
-[stylesheet-loading.ts](stylesheet-loading.ts) uses Fetch for external CSS,
+[DocumentImpl.fetchCSSStyleSheet()](../dom/nodes/document.ts) uses Fetch for external CSS,
 including CSP, nosniff, HTTP-status/MIME checks, response filtering, and complete
 body consumption. Accepted bytes use CSS Syntax's decoder with transport,
 `@charset`, and environment encoding inputs. The initial URL supplies `href`;
 the final response URL supplies the parse base. Cross-origin opaque responses
 produce non-origin-clean sheets whose rules cannot be read through CSSOM.
 
-`loadStyleSheetImports(sheet, document, parameters, complete, started?)` explicitly
+`document.loadStyleSheetImports(sheet, parameters, complete, started?)` explicitly
 connects Stylelet's import-tree loading to this fetcher. `parameters(parent)` supplies current
 request settings, including the owner's render-blocking flag. Completion reports
 whether all required attempts succeeded, after nested imports finish; cancellation
@@ -105,9 +107,10 @@ names and character references. DOM setters retain their broader name rules,
 but an invalid XML name prevents stylesheet recognition. ProcessingInstruction's
 LinkStyle inclusion projects the same implementation owned by this lifecycle.
 
-[header-stylesheets.ts](header-stylesheets.ts) handles ordered Default-Style fields
-and stylesheet Link relations. `Navigable.createAndInitializeDocument()` calls
-these owners directly and commits early hints before pre-media Link processing.
+Document's `processDefaultStyleHeaders()` and `processStyleSheetLinkHeaders()` handle
+ordered Default-Style fields and stylesheet Link relations.
+`Navigable.createAndInitializeDocument()` calls these methods directly and commits
+early hints before pre-media Link processing.
 Stylesheet Link handling uses the [HTTP field parser](../../http/link.ts),
 retains field/target order across asynchronous completion, and inserts header
 sheets before tree sheets. First `title`/`media` values and alternate eligibility

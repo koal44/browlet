@@ -1,4 +1,4 @@
-import { asciiLower } from '../../../../../infra/ascii';
+import { asciiLower } from '../../../../../infra/index';
 
 import { splitOnAsciiWhitespace } from '../../../infra/index';
 import type { TokenListAttribute } from '../../../token-list';

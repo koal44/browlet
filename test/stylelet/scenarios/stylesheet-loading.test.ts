@@ -3,7 +3,6 @@ import { expect, test, type Page } from '@playwright/test';
 import { require as tsRequire } from 'tsx/cjs/api';
 
 import type * as BrowletModule from '../../../src/browlet/browlet';
-import type * as HeaderModule from '../../../src/browlet/style/header-stylesheets';
 import type * as ResponseModule from '../../../src/fetch/response';
 import type * as BindingFixtureModule from '../../support/browlet-binding';
 import { closeServer, listen } from '../../browlet/loader/http-fixture';
@@ -13,7 +12,6 @@ import { BROWSER_NAMES, type BrowserName } from '../../scenario/harness';
 // Playwright 1.64.1 emits abstract fields as runtime assignments. Use the same
 // scoped TypeScript loader as declaration generation to preserve the class contracts.
 const { Browlet } = tsRequire('../../../src/browlet/browlet.ts', __filename) as typeof BrowletModule;
-const { processStyleSheetLinkHeaders } = tsRequire('../../../src/browlet/style/header-stylesheets.ts', __filename) as typeof HeaderModule;
 const { FetchResponse } = tsRequire('../../../src/fetch/response.ts', __filename) as typeof ResponseModule;
 const { getRelevantRealm } = tsRequire('../../support/browlet-binding.ts', __filename) as typeof BindingFixtureModule;
 
@@ -74,7 +72,7 @@ runScenarios('external stylesheet association', 'normal', BROWSER_NAMES.flatMap(
       if (comparison.data === null) {
         const response = new FetchResponse();
         response.headerList.append('Link', '</sheet.css>; rel=stylesheet');
-        processStyleSheetLinkHeaders(document, response);
+        document.processStyleSheetLinkHeaders(response);
       } else {
         await browlet.evaluate(insertInstruction, { data: comparison.data, after: comparison.after ?? false });
       }

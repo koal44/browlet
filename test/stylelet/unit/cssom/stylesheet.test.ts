@@ -43,7 +43,7 @@ describe('CSSStyleSheetImpl', () => {
 
   it('creates a stylesheet from specified properties', () => {
     const document = createBrowletDocument();
-    const stylelet = new Stylelet(document, { env: createStyleletTestEnvironment({ dom: browletDOM }) });
+    const stylelet = Stylelet.create(document, { env: createStyleletTestEnvironment({ dom: browletDOM }) });
     const sheet = CSSStyleSheetImpl.create(stylelet.context, {
       location: parseURL('https://example.com/style.css')!,
       parentStyleSheet: null,
@@ -307,7 +307,7 @@ function createStyleSheet(
     value: 'https://example.com/document/',
   });
 
-  return new Stylelet(document, { env: createStyleletTestEnvironment({ dom: browletDOM }) }).createStyleSheet(options);
+  return Stylelet.create(document, { env: createStyleletTestEnvironment({ dom: browletDOM }) }).createStyleSheet(options);
 }
 
 function observe<T>(value: InternalPromise<T>): Promise<T> {

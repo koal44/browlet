@@ -1,4 +1,4 @@
-import { InternalError } from '../../../../../infra/internal-error';
+import { InternalError } from '../../../../../infra/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 

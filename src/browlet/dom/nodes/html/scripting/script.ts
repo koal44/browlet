@@ -1,5 +1,4 @@
-import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { InternalError } from '../../../../../infra/internal-error';
+import { HTML_NAMESPACE, InternalError } from '../../../../../infra/index';
 import {
   attr, ctor, defineInterface, idlType, impl, nullable, reference, reflectEnumerated, reflectTokens, roAttr,
   xattr,

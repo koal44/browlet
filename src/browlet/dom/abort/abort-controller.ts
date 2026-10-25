@@ -1,4 +1,4 @@
-import type { AbortController } from '../../../infra/execution';
+import type { AbortController } from '../../../infra/index';
 import {
   arg, atArg, ctor, defineInterface, idlType, op, roAttr, reference, xattr,
   impl, invokeWith,

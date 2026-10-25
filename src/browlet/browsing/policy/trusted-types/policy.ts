@@ -1,4 +1,4 @@
-import { TypeError } from '../../../../infra/exceptions';
+import { TypeError } from '../../../../infra/index';
 import {
   arg, defineCallbackFunction, defineDictionary, defineInterface, dictMember, idlType,
   impl, nullable, onError, op, reference, roAttr,

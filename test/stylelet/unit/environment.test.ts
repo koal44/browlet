@@ -3,6 +3,7 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import { createAsyncExecution, type TimerHost } from '../../../src/infra/execution';
 import { Stylelet } from '../../../src/stylelet/index';
+import { CascadeEngine } from '../../../src/stylelet/engine/cascade-engine';
 import { ValueStage } from '../../../src/stylelet/value-processing/stage';
 import { SyntaxValue } from '../../../src/stylelet/values/syntax-value';
 import { WholeValue } from '../../../src/stylelet/values/whole-value';
@@ -20,7 +21,7 @@ describe('Stylelet host scheduling', () => {
     };
     const exec = createAsyncExecution(timerHost);
     const document = new JSDOM().window.document;
-    const sheet = new Stylelet(document, { env: createStyleletTestEnvironment({ exec }) }).createStyleSheet();
+    const sheet = Stylelet.create(document, { env: createStyleletTestEnvironment({ exec }) }).createStyleSheet();
     const completed = new Promise<typeof sheet>((resolve, reject) => {
       sheet.replace('main { color: red }').observe(resolve, reject);
     });
@@ -45,7 +46,7 @@ describe('Stylelet host scheduling', () => {
 describe('Stylelet URL integration', () => {
   it('parses stylesheet bases directly and rejects invalid URLs', () => {
     const document = new JSDOM('', { url: 'https://example.test/document/' }).window.document;
-    const styles = new Stylelet(document, { env: createStyleletTestEnvironment() });
+    const styles = Stylelet.create(document, { env: createStyleletTestEnvironment() });
     const sheet = styles.createStyleSheet({ baseURL: '../assets/' });
 
     expect(serializeURL(sheet.baseURL!)).toBe('https://example.test/assets/');
@@ -58,11 +59,11 @@ describe('Stylelet URL integration', () => {
   it('retains the supplied environment when resolving computed resource URLs', () => {
     const document = new JSDOM('<style></style>', { url: 'https://example.test/document/' }).window.document;
     const env = createStyleletTestEnvironment();
-    const styles = new Stylelet(document, { env });
+    const styles = Stylelet.create(document, { env });
     const sheet = styles.createStyleSheet({ baseURL: '../assets/' });
     sheet.replaceSync('* { --image: url("icon.svg") }');
     styles.documentScope.adoptedStyleSheets.push(sheet);
-    const engine = styles.documentScope.cascade;
+    const engine = new CascadeEngine({ context: styles.context });
     const cascaded = engine.getCascadedProperty('--image', styles.documentScope)!;
     const context = engine.getPropertyContext(cascaded);
     const parseOrdinary = SyntaxValue.parse('<url>', {})!.createParser();

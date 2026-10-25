@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import type { GlobalProxy } from '../../../js-engine/index';
 import {
   defineProxyObject, getImplementationObject, type StampedImplInstance, type StampedPlatformObject,

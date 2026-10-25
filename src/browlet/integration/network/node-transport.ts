@@ -4,7 +4,7 @@ import dns from 'node:dns';
 import { nextTick } from 'node:process';
 import { Client, buildConnector, errors, type Dispatcher } from 'undici';
 
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import { utf8Encode } from '../../../encoding/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath } from '../../../url/index';
 import {

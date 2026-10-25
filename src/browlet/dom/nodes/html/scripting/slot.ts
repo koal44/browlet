@@ -1,5 +1,6 @@
-import { HTML_NAMESPACE, getContainedTextDirection, type TextDirection } from '../../../../../infra/index';
-import { WeakOrderedSet } from '../../../../../infra/collections';
+import {
+  HTML_NAMESPACE, getContainedTextDirection, type TextDirection, WeakOrderedSet,
+} from '../../../../../infra/index';
 import {
   arg, attr, ctor, defineDictionary, defineInterface, dictMember, emptyDictionary, idlType, impl, op,
   reference, reflect, sequence, union, xattr,

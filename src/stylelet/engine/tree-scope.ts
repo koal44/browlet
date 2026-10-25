@@ -6,9 +6,8 @@ import { DOMExceptionImpl } from '../../web-idl/core/index';
 import { parseURL } from '../../url/index';
 
 import { parseStylesheetContents } from '../syntax/index';
+import type { StyleletContext } from '../context';
 import { CSSStyleSheetImpl, StyleSheetListImpl, RuleListContext } from '../cssom/index';
-
-import type { CascadeEngine } from './cascade-engine';
 
 /** A document or shadow root's stylesheet collections and stylesheet-set selection state. */
 // https://drafts.csswg.org/cssom/#css-style-sheet-collections
@@ -24,12 +23,12 @@ export class TreeScope {
   /** Preferred stylesheet-set name; empty when none has been established. */
   #preferredStyleSheetSetName = '';
 
-  /** Establish the collections and their current document's style engine. */
+  /** Establish the collections and their current document's matching context. */
   constructor(
     /** Document or shadow root whose stylesheet collections this scope represents. */
     readonly root: Document | ShadowRoot,
-    /** Engine supplying the scope's document context and style queries. */
-    public cascade: CascadeEngine,
+    /** Current document's host operations, matching state, and caches. */
+    public context: StyleletContext,
   ) {}
 
   /** Live header/tree sheet list, excluding adopted sheets. */
@@ -41,7 +40,7 @@ export class TreeScope {
   /** Reject a sheet unless it was constructed for the root's current node document. */
   // https://drafts.csswg.org/cssom/#dom-documentorshadowroot-adoptedstylesheets
   checkAdoptedStyleSheet(styleSheet: CSSStyleSheetImpl): void {
-    const dom = this.cascade.context.dom;
+    const dom = this.context.dom;
     const document = dom.isDocument(this.root) ? this.root : dom.ownerDocument(this.root)!;
     if (!styleSheet.isConstructedFor(document)) {
       throw new DOMExceptionImpl('The stylesheet was not constructed for this document.', 'NotAllowedError');
@@ -67,7 +66,7 @@ export class TreeScope {
     const ownerNode = styleSheet.ownerNode;
     const index = ownerNode === null
       ? this.#styleSheets.length
-      : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode, this.cascade.context.dom);
+      : findStyleSheetInsertionIndex(this.#styleSheets, ownerNode, this.context.dom);
 
     this.#styleSheets.insert(index, styleSheet);
     this.#configureAddedStyleSheet(styleSheet);
@@ -76,7 +75,7 @@ export class TreeScope {
   /** Restore an associated tree sheet's order after its owner moves, preserving its state. */
   moveTreeStyleSheet(styleSheet: CSSStyleSheetImpl): void {
     this.#styleSheets.remove(styleSheet);
-    const index = findStyleSheetInsertionIndex(this.#styleSheets, styleSheet.ownerNode!, this.cascade.context.dom);
+    const index = findStyleSheetInsertionIndex(this.#styleSheets, styleSheet.ownerNode!, this.context.dom);
     this.#styleSheets.insert(index, styleSheet);
   }
 
@@ -89,7 +88,7 @@ export class TreeScope {
       title = '',
     }: StyleElementStyleSheetOptions = {},
   ): CSSStyleSheetImpl {
-    const context = this.cascade.context;
+    const context = this.context;
     const baseURL = parseURL(
       context.dom.baseURI(context.dom.ownerDocument(this.root) ?? this.root), null, 'UTF-8', context.env.userAgent,
     ).url;

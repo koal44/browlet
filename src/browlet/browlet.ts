@@ -1,5 +1,4 @@
-import { internalType, type InternalPromise } from '../infra/promises';
-import { InternalError } from '../infra/internal-error';
+import { internalType, type InternalPromise, InternalError } from '../infra/index';
 import type { StampedPlatformObject } from '../web-idl/index';
 import { isHeaderValue } from '../fetch/index';
 import type { SystemColorPalette } from '../stylelet/index';

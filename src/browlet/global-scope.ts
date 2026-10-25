@@ -1,4 +1,4 @@
-import type { InternalPromise } from '../infra/promises';
+import type { InternalPromise } from '../infra/index';
 import type { JSFunction } from '../js-engine/index';
 import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,

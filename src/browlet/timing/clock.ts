@@ -1,5 +1,4 @@
-import { InternalError } from '../../infra/internal-error';
-import { coarsenTime } from '../../infra/time';
+import { InternalError, coarsenTime } from '../../infra/index';
 
 import type { DOMHighResTimeStamp } from './high-resolution-time';
 

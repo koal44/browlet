@@ -12,7 +12,7 @@ const { createStyleletTestEnvironment } = tsxRequire('../stylelet/environment-fi
 for (const [format, api] of [['ESM', esm], ['CommonJS', cjs]]) {
   test(`Stylelet ${format} parses stylesheet URLs directly`, () => {
     const env = createStyleletTestEnvironment();
-    const styles = new api.Stylelet(createDocument(), { env });
+    const styles = api.Stylelet.create(createDocument(), { env });
     assert.equal(styles.context.env, env);
     const sheet = styles.createStyleSheet({ baseURL: 'https://éxample.test/assets/' });
     assert.deepEqual(sheet.baseURL.host, { kind: 'domain', value: 'xn--xample-9ua.test' });
@@ -27,7 +27,7 @@ for (const [format, api] of [['ESM', esm], ['CommonJS', cjs]]) {
   test(`Stylelet ${format} retains supplied execution for stylesheet replacement`, async () => {
     const env = createStyleletTestEnvironment();
     const exec = env.exec;
-    const styles = new api.Stylelet(createDocument(), { env });
+    const styles = api.Stylelet.create(createDocument(), { env });
     const sheet = styles.createStyleSheet({ baseURL: '../styles/' });
     assert.equal(styles.context.env.exec, exec);
     assert.deepEqual(sheet.baseURL.path, ['styles', '']);

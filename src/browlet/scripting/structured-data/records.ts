@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import type { BufferViewTypeName, StructuredData } from '../../../web-idl/core/index';
 
 import type { AgentCluster } from '../agents';

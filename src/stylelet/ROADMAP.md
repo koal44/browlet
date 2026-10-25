@@ -32,15 +32,38 @@ Missing resource/layout consumers remain explicit at their owners.
 
 ## Decisions still open
 
-- Automatic loading-owner integration remains HTML work. Stylelet's explicit
-  stylesheet loader accepts the actual document and owning environment; HTML
-  must connect its start/completion/cancellation to events and blockers.
+- Automatic loading-owner integration remains HTML work. Document methods own
+  document-dependent stylesheet fetching; Stylelet coordinates the import tree.
+  HTML must connect its start/completion/cancellation to events and blockers.
 - The standalone author's CSSOM binding surface versus direct, post-conversion
   implementation APIs. Keep host-specific Platform objects out of Stylelet.
 - Live computed-style queries and any engine-owned cached value state. Neither
   inline style nor a CSSOM result should become an accidental owner of layout.
 - Stylesheet matcher sharing with Selectlet. Settle the state/consumer
   boundaries before merging these owners.
+
+## Resource consumers
+
+[CSS Values 4 URL processing](https://drafts.csswg.org/css-values-4/#url-processing)
+supplies shared request setup; [Values 5 request modifiers](https://drafts.csswg.org/css-values-5/#request-url-modifiers)
+extend it. The consuming feature selects the destination, CORS mode, and response
+processing. The reading pass identified these distinct callers:
+
+| Consumer / specification | Destination / CORS mode | Work after fetching |
+| --- | --- | --- |
+| [Cascade imports](https://drafts.csswg.org/css-cascade-4/#fetch-an-import) | `style` / `no-cors` | Decode, parse, associate the child sheet, and load its imports |
+| [Images](https://drafts.csswg.org/css-images-4/#fetching-images) | `image` / `no-cors` | Decode and make image data available |
+| [Fonts](https://drafts.csswg.org/css-fonts-4/#font-fetching-requirements) | `font` / `cors` | Validate font data and update face availability |
+| [Color profiles](https://drafts.csswg.org/css-color-5/#fetch-an-external-color-profile) | `color-profile` / `cors` | Validate the external profile before color conversion can use it |
+| [Shapes](https://drafts.csswg.org/css-shapes-2/#fetching-external-shapes) | `image` / `cors` | Interpret the image or SVG shape for the consuming shape property |
+
+Keep these response and availability contracts with their feature owners:
+[values](values/ROADMAP.md#color-image-position-and-relative-value-consumers),
+[fonts](../fonts/ROADMAP.md), and [graphics](../graphics/ROADMAP.md).
+`StyleSheetLoad` currently coordinates a finite import-loading attempt; it is
+neither the resource contents nor a general manager for every CSS URL. Do not
+automatically put all these consumers into its completion condition. HTML's
+critical-subresource boundary remains an [integration gap](../browlet/style/ROADMAP.md#external-stylesheet-loading).
 
 ## Source organization
 

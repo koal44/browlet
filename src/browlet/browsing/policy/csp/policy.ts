@@ -1,7 +1,7 @@
-import { asciiLower } from '../../../../infra/ascii';
-import { forgivingBase64Encode } from '../../../../infra/base64';
-import { InternalError } from '../../../../infra/internal-error';
-import { surroundingASCIIWhitespacePattern, asciiWhitespaceRunPattern } from '../../../../infra/patterns';
+import {
+  asciiLower, forgivingBase64Encode, InternalError, surroundingASCIIWhitespacePattern,
+  asciiWhitespaceRunPattern,
+} from '../../../../infra/index';
 import { isomorphicDecode } from '../../../../js-engine/index';
 import { stripURLForReporting, type Origin, type URLRecord } from '../../../../url/index';
 import { applyIntegrityAlgorithm, isScriptLikeDestination, type FetchRequest, type FetchResponse } from '../../../../fetch/index';

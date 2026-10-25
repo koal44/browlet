@@ -1,6 +1,6 @@
 import { URL } from 'node:url';
 
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import {
   arg, attr, defineInterface, idlType, impl, op, roAttr, xattr,
 } from '../../../web-idl/core/index';

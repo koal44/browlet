@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import { defineInterface, idlType, impl, reference, roAttr } from '../../../web-idl/core/index';
 
 import type { NodeImpl } from '../nodes/index';

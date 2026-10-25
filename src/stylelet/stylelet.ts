@@ -19,16 +19,22 @@ export class Stylelet {
   /** Declaration selection and style-query engine used by this instance. */
   #cascade: CascadeEngine;
 
-  /** Retain the host environment and establish this document's matching and stylesheet state. */
-  constructor(document: Document, { env }: StyleletOptions) {
-    this.context = new StyleletContext(document, env);
-    const environmentBaseUrl = parseURL(this.context.dom.baseURI(document), null, 'UTF-8', env.userAgent).url;
+  /** Create the query engine over the document's retained stylesheet state. */
+  constructor(documentScope: TreeScope) {
+    this.documentScope = documentScope;
+    this.context = documentScope.context;
+    const { document, dom, env } = this.context;
+    const environmentBaseUrl = parseURL(dom.baseURI(document), null, 'UTF-8', env.userAgent).url;
     if (environmentBaseUrl === null) throw new TypeError('The document base URL is invalid.');
     this.#cascade = new CascadeEngine({
       environmentBaseUrl,
       context: this.context,
     });
-    this.documentScope = new TreeScope(document, this.#cascade);
+  }
+
+  /** Create a document scope and engine together for a host that does not retain its own scope. */
+  static create(document: Document, { env }: StyleletOptions): Stylelet {
+    return new Stylelet(new TreeScope(document, new StyleletContext(document, env)));
   }
 
   /** Create a constructed stylesheet owned by this document. */

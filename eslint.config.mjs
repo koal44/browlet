@@ -20,6 +20,18 @@ const nativeErrorNames = [
 ];
 const nativeErrorMessage = 'Use InternalError for implementation failures or an explicit exception import for author-visible errors.';
 
+const subsystemEntryPoints = {
+  'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
+  fetch: ['index'], url: ['index', 'core/index'],
+  stylelet: ['index', 'environment', 'context'],
+  'stylelet/syntax': ['index'], 'stylelet/value-processing': ['index'],
+  'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
+  'stylelet/conditional': ['index'], 'stylelet/values': ['index', 'value'],
+  'stylelet/props': ['index'], 'stylelet/selector': ['index'],
+  'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
+  'stylelet/engine': ['index'],
+};
+
 export default defineConfig(
   {
     ignores: [
@@ -265,18 +277,15 @@ export default defineConfig(
     rules: {
       'browlet/subsystem-imports': ['error', {
         unrestrictedSubsystems: ['infra'],
-        entryPoints: {
-          'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
-          fetch: ['index', 'core/index'], url: ['index', 'core/index'],
-          stylelet: ['index', 'environment', 'context'],
-          'stylelet/syntax': ['index'], 'stylelet/value-processing': ['index'],
-          'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
-          'stylelet/conditional': ['index'], 'stylelet/values': ['index', 'value'],
-          'stylelet/props': ['index'], 'stylelet/selector': ['index'],
-          'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
-          'stylelet/engine': ['index'],
-        },
+        entryPoints: subsystemEntryPoints,
       }],
+    },
+  },
+
+  {
+    files: ['src/browlet/**/*.ts'],
+    rules: {
+      'browlet/subsystem-imports': ['error', { entryPoints: subsystemEntryPoints }],
     },
   },
 

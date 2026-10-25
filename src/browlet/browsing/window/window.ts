@@ -1,7 +1,6 @@
 import type { URL } from 'node:url';
 
-import type { InternalPromise } from '../../../infra/promises';
-import { InternalError } from '../../../infra/internal-error';
+import { type InternalPromise, InternalError } from '../../../infra/index';
 import {
   defineIncludes, defineInterface, definePartialInterface, idlType,
   impl, roAttr, reference, union, xattr, type VoidFunction,

@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
 
-import type { TaskHandle } from '../../infra/execution';
+import type { TaskHandle } from '../../infra/index';
 import {
   type JSRealm, copyMapData, copySetData, getDateValue, getRegExpData,
   hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isCallable, isObject, isProxyObject,

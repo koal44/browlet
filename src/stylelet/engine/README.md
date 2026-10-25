@@ -30,7 +30,11 @@ DOM, stylesheet, registration, and host-input changes.
 The selector caches belong to [StyleletContext](../context.ts); stylesheet
 collections and registration lookup are different state with different owners.
 
-TreeScope retains ordinary implementation lists, including adopted sheets.
+TreeScope retains ordinary implementation lists, including adopted sheets, and
+the current document's StyleletContext. It does not retain or construct a
+CascadeEngine. A host can establish sheet collections before creating an engine;
+both share the same context when style queries begin. HTML and quirks-mode checks
+read the document's current state, including when a context predates document initialization.
 Binding supplies the observable array for author access. Its declared mutation
 step checks the sheet's constructor document against the root's current node
 document; internal list changes remain visible without reprojecting the array.

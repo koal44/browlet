@@ -70,9 +70,11 @@ exercise Stylelet and retain CSSOM expectations with separate browser failures.
 [CSSOM §6.3](https://drafts.csswg.org/cssom/#style-sheet-association), the
 [2010 XML stylesheet Recommendation](https://www.w3.org/TR/2010/REC-xml-stylesheet-20101028/),
 and [RFC 8288](https://www.rfc-editor.org/rfc/rfc8288.html) supply the contracts.
-PI and header loading are connected; HTML `<link>` remains HTML §4.2.4 work.
+PI and header loading are connected; HTML `<link>` needs both
+[§4.2.4's resource acquisition](https://html.spec.whatwg.org/multipage/semantics.html#obtaining-a-resource-from-a-link-element)
+and [§4.6.8.23's stylesheet processing](https://html.spec.whatwg.org/multipage/links.html#link-type-stylesheet).
 `CSSStyleSheetImpl.loadImports()` connects an import tree and starts its first attempt.
-Browlet's `loadStyleSheetImports()` connects it to the CSSOM Fetch helper and accepts
+`DocumentImpl.loadStyleSheetImports()` connects it to `fetchCSSStyleSheet()` and accepts
 per-request settings from its caller. Actual decoded encodings survive BOM override;
 child URLs use the final response base. The callback reports aggregate success only
 after all nested attempts finish. Cancelling suppresses old callbacks and associations.
@@ -99,12 +101,39 @@ The declaration-block input is `CSSStyleDeclarationImpl`, which carries the pare
 rule; the underlying `CSSDeclarationBlock` collection does not retain that ownership.
 
 CSSOM mutations use the retained connection; automatic startup from HTML/PI/header
-owners and imported-rule cascade traversal remain unconnected. Script/load/render blocking remains a separate
-resource-lifecycle review. CSSOM creates header sheets
-after fetching; Firefox registers pending loads before fetching. HTML's current
-Document blocker set holds elements. Connect pending loads, media applicability,
-and critical-resource completion there; a top-level fetch does not finish imports.
-Document abortion also still reaches FetchGroup.cancel's provisional no-op.
+owners and imported-rule cascade traversal remain unconnected. The bounded owner
+integration work is:
+
+- [ ] Follow HTML's [update a style block](https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block)
+  from an inline sheet through unconditional imports; connect the existing PI and
+  header owners too. External `<link>` has the separate algorithms linked above.
+- [ ] Supply the inline sheet's encoding from its owner before starting imports,
+  so imported bytes receive the correct fallback encoding.
+- [ ] Connect attempt completion and cancellation to owner events and the
+  [three distinct blocking gates](../loader/ROADMAP.md). Cover replacement,
+  removal, and adoption; a top-level fetch does not finish its import tree.
+- [ ] Make loaded imports participate at their source-order position in the
+  [cascade](../../stylelet/engine/ROADMAP.md). Conditional applicability and
+  layers remain further work, separate from retaining an imported sheet.
+
+CSSOM creates header sheets after fetching; Firefox registers pending loads
+before fetching. HTML's current Document blocker set holds elements; header loads
+need their own reviewed connection rather than an invented element owner.
+Document abortion still reaches FetchGroup.cancel's provisional no-op, and
+Document.finishLoading's provisional timing does not establish correct load-event ordering.
+
+`SPEC_GAP(stylesheet-import-parse-url)`: Cascade's
+[fetch an import](https://drafts.csswg.org/css-cascade-4/#fetch-an-import) passes
+`parsedUrl` to stylesheet parsing without defining it. Reconcile that input with
+CSSOM's fetch/create path before unifying the algorithms; preserve the existing
+final-response base URL behavior while the specification input remains unresolved.
+
+`SPEC_CLASH(stylesheet-import-content-type)`: the same import algorithm rejects
+a non-`text/css` MIME type after its quirks exception, but the following
+[content-type prose](https://drafts.csswg.org/css-cascade-4/#content-type) also
+treats a missing type as `text/css`. Resolve that discrepancy against CSSOM and
+browser evidence before changing acceptance behavior. No new choice was made
+in this reading pass.
 
 `SPEC_GAP(stylesheet-import-loading)`: HTML's
 [style completion steps](https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block)
@@ -207,7 +236,10 @@ Installed Chromium, Firefox, and WebKit were compared on 2026-10-20:
 - `SPEC_CLASH(stylesheet-http-status)`: reject non-success status codes like all
   three browsers; CSSOM checks network errors and MIME but omits HTTP status.
 - `SPEC_CLASH(http-link-stylesheets)`: implement CSSOM's at-risk Link-header
-  mechanism, as Firefox does; Chromium/WebKit ignore it.
+  mechanism, as Firefox does; Chromium/WebKit ignore it. HTML's
+  [stylesheet link type](https://html.spec.whatwg.org/multipage/links.html#link-type-stylesheet)
+  instead makes its Link-header processing steps a no-op. Preserve the existing
+  CSSOM choice when connecting the generic HTML header path.
 - `SPEC_GAP(xml-stylesheet-events)`: CSSOM leaves PI load/error events unspecified.
   Follow Chromium/WebKit by dispatching neither; Firefox dispatches them.
 - Advisory types use MIME essence comparison, accepting `TEXT/CSS; charset=utf-8`

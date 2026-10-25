@@ -10,8 +10,6 @@ import { RuntimeCache } from './selector/index';
 export class StyleletContext {
   /** Document whose modes and tree are used for style matching. */
   document: Document;
-  /** Whether selector matching uses HTML document rules. */
-  isHtml: boolean;
   /** Owning environment supplying execution and host facilities. */
   env: StyleletEnvironment;
 
@@ -48,12 +46,16 @@ export class StyleletContext {
     this.env = env;
     this.dom = env.userAgent.dom;
     this.document = document;
-    this.isHtml = this.dom.isHTMLDocument(document);
   }
 
   /** Current document element, or null when the document has none. */
   get root(): Element | null {
     return this.dom.documentElement(this.document);
+  }
+
+  /** Whether selector matching currently uses HTML document rules. */
+  get isHtml(): boolean {
+    return this.dom.isHTMLDocument(this.document);
   }
 
   /** Whether the document currently requires quirks-mode selector behavior. */

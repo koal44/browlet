@@ -1,4 +1,4 @@
-export { asciiLower, hasWhitespaceToken, isAsciiWhitespace } from './ascii';
+export { asciiLower, asciiUpper, hasWhitespaceToken, isAsciiWhitespace } from './ascii';
 export { forgivingBase64Decode, forgivingBase64Encode } from './base64';
 export { firstStrongDirection, type TextDirection } from './bidi';
 export {
@@ -41,7 +41,9 @@ export {
   isFormStateElementName,
 } from './selector-matching';
 export { Stamper } from './stamper';
-export { toScalarValueString, normalizeNewlines, escapeRegExp, type ScalarValueString } from './strings';
+export {
+  toScalarValueString, normalizeNewlines, stripAndCollapseASCIIWhitespace, escapeRegExp, type ScalarValueString,
+} from './strings';
 export { TextCursor, TextCursorError } from './text-cursor';
 export { coarsenTime } from './time';
 export {

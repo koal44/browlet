@@ -1,7 +1,6 @@
 import { html, parse, type Token, type TreeAdapter } from 'parse5';
 
-import { Stamper } from '../../../infra/stamper';
-import { InternalError } from '../../../infra/internal-error';
+import { Stamper, InternalError } from '../../../infra/index';
 
 import {
   type AttrImpl, type CommentImpl, DocumentMode, type DocumentImpl, type DocumentTypeImpl,

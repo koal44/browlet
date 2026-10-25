@@ -82,7 +82,7 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
 
   /** Initialize or retrieve the style scope for this shadow tree. */
   getStyleScope(): TreeScope {
-    return this.#styleScope ??= new TreeScope(this, this.nodeDocument.getStyleScope().cascade);
+    return this.#styleScope ??= new TreeScope(this, this.nodeDocument.getStyleScope().context);
   }
 
   override getShadowRootHost(): ElementImpl {
@@ -114,7 +114,7 @@ export class ShadowRootImpl extends DocumentFragmentImpl {
     if (this.#styleScope) {
       // SPEC_GAP(shadow-adopted-sheets-adoption): CSSOM and DOM omit cleanup; follow all three browsers by clearing the retained list.
       this.#styleScope.adoptedStyleSheets.length = 0;
-      this.#styleScope.cascade = this.nodeDocument.getStyleScope().cascade;
+      this.#styleScope.context = this.nodeDocument.getStyleScope().context;
     }
   }
 }

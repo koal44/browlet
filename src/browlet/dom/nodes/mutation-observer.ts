@@ -1,5 +1,4 @@
-import { TypeError } from '../../../infra/exceptions';
-import { InternalError } from '../../../infra/internal-error';
+import { TypeError, InternalError } from '../../../infra/index';
 import {
   arg, atArg, ctor, defineCallbackFunction, defineDictionary, defineInterface, dictMember,
   emptyDictionary, idlType, impl, onError, op, reference, sequence,

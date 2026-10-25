@@ -1,5 +1,4 @@
-import { InternalError } from '../../../../infra/internal-error';
-import { asciiLower } from '../../../../infra/ascii';
+import { InternalError, asciiLower } from '../../../../infra/index';
 import { obtainURLOrigin, type Origin, type URLRecord } from '../../../../url/index';
 import type { FetchCSPList, FetchRequest, FetchResponse } from '../../../../fetch/index';
 

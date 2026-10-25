@@ -1,5 +1,4 @@
-import type { TaskHandle } from '../../../infra/index';
-import { InternalError } from '../../../infra/internal-error';
+import { type TaskHandle, InternalError } from '../../../infra/index';
 import { getBufferSourceCopy } from '../../../js-engine/index';
 import {
   arg, atArg, constant, ctor, defineInterface, idlType, impl, integer, nullable, op, roAttr,

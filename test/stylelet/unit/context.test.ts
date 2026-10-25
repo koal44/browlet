@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Stylelet } from '../../../src/stylelet/stylelet';
 import { StyleletContext } from '../../../src/stylelet/context';
+import { matchSelectorList, parseSelectorList } from '../../../src/stylelet/selector/index';
 
 import { createBrowletDocument } from '../browlet-document';
 import { HTML_NAMESPACE } from '../../../src/infra/index';
@@ -23,6 +24,18 @@ describe('style context', () => {
     expect(context.dom.getId(target)).toBe('adapted-id');
     expect(getId).toHaveBeenCalledWith(target);
     expect(context.dom.getClass(target)).toBe('one two');
+  });
+
+  it('uses the current document type when matching a previously compiled selector', () => {
+    const document = createBrowletDocument('<main></main>');
+    const element = document.body!.firstElementChild!;
+    document.type = 'xml';
+    const context = new StyleletContext(document, document.env);
+    const selector = parseSelectorList('MAIN', {})!;
+
+    expect(matchSelectorList(selector, element, context)).toBeNull();
+    document.type = 'html';
+    expect(matchSelectorList(selector, element, context)).not.toBeNull();
   });
 
   it('owns reusable compiled-selector and regex caches', () => {
@@ -58,7 +71,7 @@ describe('style context', () => {
 
   it('is created and retained by the public Stylelet API', () => {
     const document = createBrowletDocument('<main></main>');
-    const stylelet = new Stylelet(document, { env: document.env });
+    const stylelet = Stylelet.create(document, { env: document.env });
 
     expect(stylelet.context.document).toBe(document);
     expect(stylelet.context.env).toBe(document.env);

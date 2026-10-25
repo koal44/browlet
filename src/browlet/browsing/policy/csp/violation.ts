@@ -1,4 +1,4 @@
-import { InternalError } from '../../../../infra/internal-error';
+import { InternalError } from '../../../../infra/index';
 import {
   arg, atArg, ctor, defineDictionary, defineEnumeration, defineInterface, dictMember,
   emptyDictionary, idlType, impl, integer, nullable, op, reference, roAttr, xattr,

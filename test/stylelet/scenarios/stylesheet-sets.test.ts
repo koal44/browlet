@@ -27,7 +27,7 @@ runScenarios('stylesheet-set selection', 'normal', BROWSER_NAMES.flatMap((browse
   setupPage: async (page: Page) => {
     const expected = titles.map((title) => title !== '' && title !== selection.selected);
     const document = createBrowletDocument();
-    const scope = new Stylelet(document, { env: document.env }).documentScope;
+    const scope = Stylelet.create(document, { env: document.env }).documentScope;
     for (const name of selection.headers) scope.changePreferredStyleSheetSetName(name);
     for (const title of titles) {
       const owner = document.createElement('style');

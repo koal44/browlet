@@ -1,5 +1,4 @@
-import { TextCursor } from '../../../infra/text-cursor';
-import { nonASCIIDigitPattern } from '../../../infra/patterns';
+import { TextCursor, nonASCIIDigitPattern } from '../../../infra/index';
 import type { Host } from '../../../url/index';
 import { isHTTPToken, isHTTPTabOrSpace } from '../../../http/index';
 import type { FetchResponse } from '../../../fetch/index';

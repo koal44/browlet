@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import {
   getArrayBufferMaxByteLength, getArrayBufferByteLength, isArrayBuffer,
   isArrayBufferView, isSharedArrayBuffer, isDetachedArrayBuffer, isObject,

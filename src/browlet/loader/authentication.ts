@@ -1,5 +1,4 @@
-import { InternalError } from '../../infra/internal-error';
-import { internalType, type InternalPromise } from '../../infra/promises';
+import { InternalError, internalType, type InternalPromise } from '../../infra/index';
 import { idlType } from '../../web-idl/core/index';
 import { obtainURLOrigin, serializeOrigin, serializeURLPath, stripURLForReporting, type URLRecord } from '../../url/index';
 import { encodeBasicCredentials } from '../../http/index';

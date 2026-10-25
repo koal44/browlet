@@ -5,8 +5,6 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Browlet } from '../../../src/browlet/browlet';
 import { CSPList } from '../../../src/browlet/browsing/policy/csp/list';
-import { createFetchedStyleSheet, fetchCSSStyleSheet, loadStyleSheetImports } from '../../../src/browlet/style/stylesheet-loading';
-import { processStyleSheetLinkHeaders } from '../../../src/browlet/style/header-stylesheets';
 import { FetchResponse } from '../../../src/fetch/response';
 import { CSSStyleSheetImpl } from '../../../src/stylelet/cssom/css-stylesheet';
 import { CSSStyleRuleImpl } from '../../../src/stylelet/cssom/rules/style';
@@ -29,9 +27,9 @@ describe('CSSOM stylesheet fetching', () => {
     response.urlList.push(finalURL);
     const parser = vi.spyOn(document.env.userAgent, 'parseURL');
     try {
-      const sheet = createFetchedStyleSheet(url, response, new Uint8Array(), {
+      const sheet = document.createFetchedStyleSheet(url, response, new Uint8Array(), {
         ownerNode: null, media: '', title: '', alternate: false,
-      }, document);
+      });
       expect(parser).not.toHaveBeenCalled();
       expect(sheet.location).toEqual(url);
       expect(sheet.baseURL).toEqual(finalURL);
@@ -61,12 +59,12 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${cross ? origin.replace('127.0.0.1', 'localhost') : origin}/sheet.css`)!;
     const result = await new Promise<{ accepted: boolean; clean: boolean; }>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (response, bytes, outcome) => {
+      document.fetchCSSStyleSheet(url, document.url, {}, (response, bytes, outcome) => {
         expect(outcome).toBe(accept ? 'success' : 'failure');
         if (bytes === null) { resolve({ accepted: false, clean: false }); return; }
-        const sheet = createFetchedStyleSheet(url, response, bytes, {
+        const sheet = document.createFetchedStyleSheet(url, response, bytes, {
           ownerNode: null, media: '', title: '', alternate: false,
-        }, document);
+        });
         expect(sheet.ruleList.length).toBe(1);
         let clean = true;
         try { void sheet.cssRules; } catch { clean = false; }
@@ -112,7 +110,7 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${origin}/sheet.css`)!;
     const rejected = await new Promise<boolean>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes) => resolve(bytes === null));
+      document.fetchCSSStyleSheet(url, document.url, {}, (_response, bytes) => resolve(bytes === null));
     });
     expect(rejected).toBe(true);
     expect(requested).toBe(1);
@@ -121,7 +119,7 @@ describe('CSSOM stylesheet fetching', () => {
     policyResponse.headerList.append('Content-Security-Policy', "style-src 'none'");
     document.policyContainer.cspList = CSPList.parse(policyResponse);
     const blocked = await new Promise<boolean>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes) => resolve(bytes === null));
+      document.fetchCSSStyleSheet(url, document.url, {}, (_response, bytes) => resolve(bytes === null));
     });
     expect(blocked).toBe(true);
     expect(requested).toBe(1);
@@ -154,7 +152,7 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${origin}/sheet.css`)!;
     const accepted = await new Promise<boolean>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes, outcome) => {
+      document.fetchCSSStyleSheet(url, document.url, {}, (_response, bytes, outcome) => {
         expect(outcome).toBe('http-error');
         resolve(bytes !== null);
       });
@@ -174,7 +172,7 @@ describe('CSSOM stylesheet fetching', () => {
     const document = getRelevantRealm(browser.window).env.realm.getAssociatedDocument();
     const url = document.env.parseURL(`${origin}/sheet.css`)!;
     const accepted = await new Promise<boolean>((resolve) => {
-      fetchCSSStyleSheet(url, document.url, document, {}, (_response, bytes, outcome) => {
+      document.fetchCSSStyleSheet(url, document.url, {}, (_response, bytes, outcome) => {
         expect(outcome).toBe('failure');
         resolve(bytes !== null);
       });
@@ -189,9 +187,9 @@ describe('CSSOM stylesheet fetching', () => {
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "other.css";'), {
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from('@import "other.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document);
+    });
     const rule = sheet.ruleList.item(0) as CSSImportRuleImpl;
     expect(rule.parentStyleSheet).toBe(sheet);
     expect(rule.styleSheet).toBeNull();
@@ -225,11 +223,11 @@ describe('CSSOM stylesheet fetching', () => {
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
     const importedURL = `${origin.replace('127.0.0.1', 'localhost')}/child.css`;
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from(
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from(
       `@import url("${importedURL}" cross-origin(${credentials}) integrity("sha256-${digest}") referrer-policy(no-referrer));`,
-    ), { ownerNode: null, media: '', title: '', alternate: false }, document);
+    ), { ownerNode: null, media: '', title: '', alternate: false });
     const completed = await new Promise<boolean>((resolve) => {
-      loadStyleSheetImports(sheet, document, () => ({ referrerPolicy: 'unsafe-url' }), resolve);
+      document.loadStyleSheetImports(sheet, () => ({ referrerPolicy: 'unsafe-url' }), resolve);
     });
     expect(completed).toBe(success);
     expect(referrers).toEqual([undefined]);
@@ -260,11 +258,11 @@ describe('CSSOM stylesheet fetching', () => {
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css; charset=windows-1252');
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "child.css";'), {
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from('@import "child.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document);
+    });
     let completed: boolean | undefined;
-    loadStyleSheetImports(sheet, document, () => ({ renderBlocking: false }), (success) => { completed = success; });
+    document.loadStyleSheetImports(sheet, () => ({ renderBlocking: false }), (success) => { completed = success; });
     await expect.poll(() => leafResponse !== undefined).toBe(true);
     expect(completed).toBeUndefined();
     const child = (sheet.ruleList.item(0) as CSSImportRuleImpl).styleSheet!;
@@ -295,12 +293,12 @@ describe('CSSOM stylesheet fetching', () => {
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
     response.headerList.append('Referrer-Policy', 'no-referrer');
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "nested/child.css";'), {
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from('@import "nested/child.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document);
+    });
     const events: string[] = [];
     const parents: (string | null)[] = [];
-    loadStyleSheetImports(sheet, document, (parent) => {
+    document.loadStyleSheetImports(sheet, (parent) => {
       parents.push(parent.href);
       return {};
     }, (success) => events.push(`complete:${success}`), () => events.push('start'));
@@ -336,10 +334,10 @@ describe('CSSOM stylesheet fetching', () => {
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
     response.headerList.append('Referrer-Policy', 'no-referrer');
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from(`@import "${childOrigin}/child.css";`), {
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from(`@import "${childOrigin}/child.css";`), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document);
-    const success = await new Promise<boolean>((resolve) => loadStyleSheetImports(sheet, document, () => ({}), resolve));
+    });
+    const success = await new Promise<boolean>((resolve) => document.loadStyleSheetImports(sheet, () => ({}), resolve));
     expect(success).toBe(true);
     expect(referrers).toEqual([undefined, `${childOrigin}/`]);
     expect(document.policyContainer.referrerPolicy).toBe('unsafe-url');
@@ -361,11 +359,11 @@ describe('CSSOM stylesheet fetching', () => {
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
     if (header !== '') response.headerList.append('Referrer-Policy', header);
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "child.css";'), {
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from('@import "child.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document);
+    });
     expect(sheet.referrerPolicy).toBe('');
-    const success = await new Promise<boolean>((resolve) => loadStyleSheetImports(sheet, document, () => ({}), resolve));
+    const success = await new Promise<boolean>((resolve) => document.loadStyleSheetImports(sheet, () => ({}), resolve));
     expect(success).toBe(true);
     expect(referrer).toBe(`${origin}/root.css`);
   });
@@ -391,7 +389,7 @@ describe('CSSOM stylesheet fetching', () => {
     expect(sheet.referrerPolicy).toBe('');
     sheet.insertRule('@import "child.css";');
     document.policyContainer.referrerPolicy = 'unsafe-url';
-    const success = await new Promise<boolean>((resolve) => loadStyleSheetImports(sheet, document, () => ({}), resolve));
+    const success = await new Promise<boolean>((resolve) => document.loadStyleSheetImports(sheet, () => ({}), resolve));
     expect(success).toBe(true);
     expect(path).toBe('/assets/child.css');
     expect(referrer).toBe(`${origin}/page`);
@@ -411,11 +409,11 @@ describe('CSSOM stylesheet fetching', () => {
     const response = new FetchResponse();
     response.urlList.push(url);
     response.headerList.append('Content-Type', 'text/css');
-    const sheet = createFetchedStyleSheet(url, response, Buffer.from('@import "missing.css"; @import "slow.css";'), {
+    const sheet = document.createFetchedStyleSheet(url, response, Buffer.from('@import "missing.css"; @import "slow.css";'), {
       ownerNode: null, media: '', title: '', alternate: false,
-    }, document);
+    });
     let completed: boolean | undefined;
-    loadStyleSheetImports(sheet, document, () => ({ renderBlocking: false }), (success) => { completed = success; });
+    document.loadStyleSheetImports(sheet, () => ({ renderBlocking: false }), (success) => { completed = success; });
     await expect.poll(() => slow !== undefined).toBe(true);
     expect(completed).toBeUndefined();
     slow!.writeHead(200, { 'Content-Type': 'text/css' }).end('');
@@ -441,7 +439,7 @@ describe('CSSOM stylesheet fetching', () => {
     const response = new FetchResponse();
     response.headerList.append('Link', '</slow.css>; rel=STYLESHEET, </fast.css>; rel=stylesheet');
     response.headerList.append('LINK', '</ignored.css>; rel="alternate stylesheet", </anchored.css>; rel=stylesheet; anchor="/other"');
-    processStyleSheetLinkHeaders(document, response);
+    document.processStyleSheetLinkHeaders(response);
     const style = document.createElement('style');
     style.textContent = 'p { opacity: .2 }';
     document.head!.appendChild(style);

@@ -12,13 +12,14 @@ const options = [{
   unrestrictedSubsystems: ['infra'],
   entryPoints: {
     'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
-    fetch: ['index', 'core/index'],
+    fetch: ['index'],
     stylelet: ['index', 'environment', 'context'],
     'stylelet/syntax': ['index'], 'stylelet/values': ['index', 'value'],
     'stylelet/values/numeric-literal': ['index'], 'stylelet/values/collections': ['index'],
     'stylelet/cssom': ['index', 'declarations/index', 'media/index', 'typed/index', 'rules/index'],
   },
 }];
+const browletOptions = [{ entryPoints: options[0].entryPoints }];
 const styleletFile = (path) => fileURLToPath(new URL(`../../src/stylelet/${path}.ts`, import.meta.url));
 const tester = new RuleTester({ languageOptions: { parser: tseslint.parser } });
 
@@ -40,9 +41,10 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import { getEncoding } from '../encoding/core/index';" },
     { filename, options, code: "import { referrerPolicyValues } from '../fetch/index';" },
     { filename, options, code: "import { parseURL } from '../url/index';" },
-    { filename, options, code: "import { InternalPromise } from '../infra/promises';" },
-    { filename, options, code: "import type { InternalPromise } from '../infra/promises';" },
-    { filename, options, code: "export { TypeError } from '../infra/exceptions';" },
+    { filename, options: browletOptions, code: "import { InternalPromise, type DOMDocument } from '../infra/index';" },
+    { filename: styleletFile('context'), options, code: "import { InternalPromise } from '../infra/promises';" },
+    { filename: styleletFile('context'), options, code: "import type { InternalPromise } from '../infra/promises';" },
+    { filename: styleletFile('context'), options, code: "export { TypeError } from '../infra/exceptions';" },
     { filename, options, code: "import { fetch } from 'another-package/fetch/private';" },
     { filename, options, code: "import { configure } from '../../scripts/configure';" },
     {
@@ -55,6 +57,22 @@ tester.run('subsystem-imports', rule, {
     },
   ],
   invalid: [
+    {
+      filename, options: browletOptions, code: "import { InternalPromise } from '../infra/promises';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename, options: browletOptions, code: "import type { DOMDocument } from '../infra/dom-operations';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename, options: browletOptions, code: "export { TypeError } from '../infra/exceptions';",
+      errors: [{ messageId: 'entryPoint' }],
+    },
+    {
+      filename, options: browletOptions, code: "const module = import('../infra/promises');",
+      errors: [{ messageId: 'entryPoint' }],
+    },
     {
       filename: styleletFile('engine/cascade-engine'), options,
       code: "import { CSSStyleDeclarationImpl } from '../cssom/declarations/style-declaration';",

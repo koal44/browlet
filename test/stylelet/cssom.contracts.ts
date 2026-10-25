@@ -17,9 +17,9 @@ export function stylesheetTypes(
   // @ts-expect-error Options accept the MediaList implementation, not a platform-shaped substitute.
   options.media = { mediaText: 'screen' };
 
-  new Stylelet(document, { env });
+  Stylelet.create(document, { env });
   // @ts-expect-error The owning host must supply an environment.
-  new Stylelet(document);
+  Stylelet.create(document);
   // @ts-expect-error Options must contain the owning environment.
-  new Stylelet(document, {});
+  Stylelet.create(document, {});
 }

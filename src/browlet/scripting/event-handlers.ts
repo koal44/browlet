@@ -1,4 +1,4 @@
-import { InternalError } from '../../infra/internal-error';
+import { InternalError } from '../../infra/index';
 import {
   arg, attr, onError, defineCallbackFunction, defineTypedef, idlType,
   nullable, reference, type AttributeMember, xattr,

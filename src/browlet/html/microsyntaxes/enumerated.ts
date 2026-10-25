@@ -1,5 +1,4 @@
-import { asciiLower } from '../../../infra/index';
-import { InternalError } from '../../../infra/internal-error';
+import { asciiLower, InternalError } from '../../../infra/index';
 
 /** Shared keyword definitions and defaults for one kind of content attribute. */
 // https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#keywords-and-enumerated-attributes

@@ -38,7 +38,7 @@ script callback does not maintain this state yet.
 | `resource-loader.ts` | Fetch-backed subresource requests, credentials, referrer and policy inputs | Fetch plus each HTML element's fetch algorithm |
 | `resource-reader.ts` | Retain response metadata, sniff a bounded prefix, and replay it before subsequent body bytes | HTML §2.5.2, MIME Sniffing, and Streams |
 | `element-fetch-options.ts` | Apply shared attribute rules from `dom/nodes/html/attributes/` to element requests, together with integrity, nonce, lazy-loading, blocking, and fetch-priority inputs | HTML §§2.5.4–2.5.9; SRI §§3.4–3.5 |
-| `linked-resource.ts` | `<link>` processing and external style sheets | HTML §4.2.4 and CSSOM |
+| `linked-resource.ts` | `<link>` processing and external style sheets | HTML §§4.2.4 and 4.6.8.23; CSSOM |
 | `script-loader.ts` | Shared classic/module graph fetching plus parser, worker, `importScripts()`, and worklet coordination | HTML §§4.12.1 and 8.1.5; HTML §§10.2.4, 10.3.1, and 11.3.2 |
 | `preload.ts` | preload/modulepreload resource hints, parser-discovered preloads, and Link-header integrity metadata | HTML §4.2.4; Fetch; SRI §3.6 |
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
@@ -66,6 +66,18 @@ release blockers through the shared Element paths. The script-blocking styleshee
 separate. Script's implicit predicate reads prepared `scriptType`; preparation
 must supply that state rather than using the raw `type` attribute as a shortcut.
 See the [§2.5.8 audit](../html/ROADMAP.md#section-258-blocking-attributes).
+
+Keep three completion gates distinct when connecting stylesheet owners:
+
+- [Script-blocking stylesheets](https://html.spec.whatwg.org/multipage/semantics.html#interactions-of-styling-and-scripting)
+  constrain script execution, including parser progress.
+- [Render blocking](https://html.spec.whatwg.org/multipage/dom.html#render-blocking-mechanism)
+  constrains rendering and supplies the request's render-blocking state.
+- [Style-owner completion](https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block)
+  includes critical subresources and delays the document load event. Releasing
+  that delay does not itself dispatch the document's `load` event: follow
+  [the parser's end steps](https://html.spec.whatwg.org/multipage/parsing.html#the-end)
+  and the remaining [parser lifecycle work](../html/parser/ROADMAP.md).
 
 Image/link/script `fetchPriority` reflection and the shared fetch-priority
 attribute definition are implemented using Fetch's `RequestPriority` type.
@@ -122,7 +134,7 @@ byte retention for restart, and parser lifecycle remain in the
 present callers commit before parser tasks run. `processLinkHeaders()` is a
 marked no-op in the pre-media and media phases; preload/link processing and
 media selection remain here. CSSOM stylesheet Link relations have a separate
-[response integration](../style/header-stylesheets.ts): they fetch once, retain
+[Document method](../dom/nodes/document.ts), `processStyleSheetLinkHeaders()`: they fetch once, retain
 header order, and feed the parsed document's cascade. Script/load blockers remain
 with the [resource-lifecycle review](../style/ROADMAP.md#external-stylesheet-loading),
 including FetchGroup.cancel's unfinished document-abort behavior. Navigation timing retains live Fetch/body/Document
@@ -145,7 +157,8 @@ The first element consumers should be `<link>`, `<script>`, `<img>`, and
 `<iframe>`, in that order of increasing lifecycle reach. That sequence proves
 render blocking, parser execution, an ordinary subresource, and a child
 navigation without making media playback or the full element catalog loader
-prerequisites. Inline `<style>` processing reaches Stylelet without a Fetch.
+prerequisites. Inline `<style>` supplies its root text without a Fetch, but its
+imports still require fetching and [owner integration](../style/ROADMAP.md#external-stylesheet-loading).
 
 `browsing/navigation/` owns the navigation state machine and document-load
 coordination; this directory supplies resource consumption and shared loading

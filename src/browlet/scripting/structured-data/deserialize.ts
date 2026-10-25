@@ -1,4 +1,4 @@
-import { InternalError } from '../../../infra/internal-error';
+import { InternalError } from '../../../infra/index';
 import {
   appendMapData, appendSetData, isAnyArrayBuffer, isObject, writeErrorStack,
   type JSBufferView,

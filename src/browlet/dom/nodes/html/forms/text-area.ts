@@ -1,5 +1,6 @@
-import { HTML_NAMESPACE, firstStrongDirection, type TextDirection } from '../../../../../infra/index';
-import { InternalError } from '../../../../../infra/internal-error';
+import {
+  HTML_NAMESPACE, firstStrongDirection, type TextDirection, InternalError,
+} from '../../../../../infra/index';
 import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';

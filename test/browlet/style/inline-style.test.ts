@@ -4,7 +4,7 @@ import { parseTestDocument } from '../../support/dom';
 import { HTMLElementImpl } from '../../../src/browlet/dom/nodes/html/html-element';
 import { SVGElementImpl } from '../../../src/browlet/dom/nodes/svg/element';
 import { MathMLElementImpl } from '../../../src/browlet/dom/nodes/mathml/element';
-import { ElementCSSInlineStyleMixin } from '../../../src/browlet/style/integration';
+import { ElementCSSInlineStyleMixin } from '../../../src/browlet/style/inline-style';
 import {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE,
 } from '../../../src/infra/index';

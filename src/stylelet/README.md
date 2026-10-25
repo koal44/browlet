@@ -11,10 +11,11 @@ Platform exposure; the limits below distinguish those layers.
 
 ## Entry points and existing layers
 
-[Stylelet](stylelet.ts) composes a `StyleletContext`, `CascadeEngine`, and document
-`TreeScope`. Its public entry points create constructed stylesheets and obtain
-the current computed-style result. [index.ts](index.ts) exports the supported
-entry points and implementation types.
+[Stylelet](stylelet.ts) creates a `CascadeEngine` over a supplied document
+`TreeScope` and its `StyleletContext`. Hosts that do not retain their own scope
+can use `Stylelet.create(document, { env })` to create them together. Its public
+entry points create constructed stylesheets and obtain the current computed-style
+result. [index.ts](index.ts) exports the supported entry points and implementation types.
 
 | Home | Existing responsibility |
 | --- | --- |
@@ -46,7 +47,7 @@ light defaults and accepts overrides as absolute colors:
 env.userAgent.systemColors = createSystemColorPalette({
   canvastext: absoluteColorFromRgba(0x123456ff),
 });
-const styles = new Stylelet(document, { env });
+const styles = Stylelet.create(document, { env });
 ```
 
 Palette entries can be replaced between queries; earlier computed snapshots
@@ -131,11 +132,11 @@ The standalone package targets Node; it no longer builds a browser-global bundle
 `StyleletEnvironment`. The host supplies the Fetch client state, transport, and
 execution facilities. Fetch retains task delivery and cancellation;
 `UrlValue.applyRequestModifiers()` supplies the CSS URL request fields.
-[Browlet's stylesheet loader](../browlet/style/stylesheet-loading.ts) owns the
-document-dependent CSSOM fetch and fetched-sheet creation steps. It reads
-`DocumentImpl` state directly and uses `document.env`. Stylelet's `StyleSheetLoad`
-retains recursive import coordination through a supplied fetch callback;
-Browlet's loader supplies that callback. HTML association, events, and blockers
+[Browlet's DocumentImpl](../browlet/dom/nodes/document.ts) owns the
+document-dependent CSSOM fetch and fetched-sheet creation steps, using its own
+state and environment. Stylelet's `StyleSheetLoad` retains recursive import
+coordination through a fetch callback supplied by `DocumentImpl.loadStyleSheetImports()`.
+HTML association, events, and blockers
 remain in [Browlet's style integration](../browlet/style/ROADMAP.md#external-stylesheet-loading).
 
 `TreeScope` retains ordered stylesheet collections and adopted stylesheets. It

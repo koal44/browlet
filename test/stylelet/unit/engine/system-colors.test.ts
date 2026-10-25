@@ -8,7 +8,7 @@ describe('host-supplied system colors', () => {
   it('supplies the default palette to initial values without a selected declaration', () => {
     const host = createOpaqueDOM('<main></main>');
     try {
-      const styles = new Stylelet(host.document, { env: createStyleletTestEnvironment({ dom: host.dom }) });
+      const styles = Stylelet.create(host.document, { env: createStyleletTestEnvironment({ dom: host.dom }) });
       const element = host.opaque(host.window.document.querySelector('main')!);
       expect(styles.getComputedStyle(element).getPropertyValue('color')).toBe('rgb(0, 0, 0)');
       expect(host.dom.getAttributeNS(element, null, 'style')).toBeNull();
@@ -22,7 +22,7 @@ describe('host-supplied system colors', () => {
         canvastext: absoluteColorFromRgba(0x123456ff),
         highlight: absoluteColorFromRgba(0xabcdefff),
       });
-      const styles = new Stylelet(host.document, { env: createStyleletTestEnvironment({ dom: host.dom, systemColors }) });
+      const styles = Stylelet.create(host.document, { env: createStyleletTestEnvironment({ dom: host.dom, systemColors }) });
       const parent = host.opaque(host.window.document.querySelector('main')!);
       const child = host.opaque(host.window.document.querySelector('span')!);
       const computed = styles.getComputedStyle(parent);
@@ -41,8 +41,8 @@ describe('host-supplied system colors', () => {
     const host = createOpaqueDOM('<main style="color: CanvasText"></main>');
     try {
       const systemColors = createSystemColorPalette({ canvastext: absoluteColorFromRgba(0xff0000ff) });
-      const first = new Stylelet(host.document, { env: createStyleletTestEnvironment({ dom: host.dom, systemColors }) });
-      const second = new Stylelet(host.document, { env: createStyleletTestEnvironment({ dom: host.dom }) });
+      const first = Stylelet.create(host.document, { env: createStyleletTestEnvironment({ dom: host.dom, systemColors }) });
+      const second = Stylelet.create(host.document, { env: createStyleletTestEnvironment({ dom: host.dom }) });
       const element = host.opaque(host.window.document.querySelector('main')!);
       expect(first.getComputedStyle(element).getPropertyValue('color')).toBe('rgb(255, 0, 0)');
       expect(second.getComputedStyle(element).getPropertyValue('color')).toBe('rgb(0, 0, 0)');

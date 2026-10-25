@@ -1,5 +1,5 @@
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Browlet } from '../../../src/browlet/browlet';
 import { unwrap, getRelevantRealm } from '../../support/browlet-binding';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
@@ -8,6 +8,24 @@ import { serializeURL } from '../../../src/url/core/index';
 import { BlobImpl } from '../../../src/file/index';
 
 describe('Stylelet execution integration', () => {
+  it('retains stylesheet state before creating the style engine', () => {
+    const browlet = new Browlet({ route: () => '' });
+    const document = unwrap<DocumentImpl>(browlet.document);
+    const getStyleEngine = vi.spyOn(document, 'getStyleEngine');
+    const scope = document.getStyleScope();
+    const style = document.createElement('style');
+    const sheet = scope.createStyleElementStyleSheet(style, 'div { color: red }');
+
+    expect(getStyleEngine).not.toHaveBeenCalled();
+    getStyleEngine.mockRestore();
+
+    const engine = document.getStyleEngine();
+    expect(engine.documentScope).toBe(scope);
+    expect(engine.context).toBe(scope.context);
+    expect(scope.styleSheets.item(0)).toBe(sheet);
+    expect(engine.getComputedStyle(document.createElement('div')).getPropertyValue('color')).toBe('rgb(255, 0, 0)');
+  });
+
   it('retains the owning environment while parsing stylesheet URLs directly', () => {
     const browlet = new Browlet({ route: () => '' });
     const document = unwrap<DocumentImpl>(browlet.document);

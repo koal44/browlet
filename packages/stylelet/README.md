@@ -23,7 +23,7 @@ Supply a document and its host environment from a DOM implementation running in 
 ```js
 import { Stylelet } from 'stylelet';
 
-const styles = new Stylelet(document, { env });
+const styles = Stylelet.create(document, { env });
 const sheet = styles.createStyleSheet();
 sheet.replaceSync('.item { color: green; }');
 
@@ -43,6 +43,10 @@ ESM and CommonJS exports. It does not provide a browser-global bundle.
 `FetchEnvironment`: the consumer supplies execution, request/security state,
 transport, and shared networking services. Stylelet does not construct a default
 runtime. Browlet supplies its existing environment directly.
+
+Hosts that retain their own document TreeScope can pass it to `new Stylelet(scope)`
+when queries first need an engine. `Stylelet.create(document, { env })` creates
+the context, scope, and engine together for other hosts.
 
 The Stylelet additions are `userAgent.dom`, `userAgent.blobURLStore`, optional
 `userAgent.systemColors`, and `getAssociatedDocument()`. Configure these on the

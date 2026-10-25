@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
 import { CSSStyleSheetImpl } from '../../../../src/stylelet/cssom/css-stylesheet';
-import { CascadeEngine } from '../../../../src/stylelet/engine/cascade-engine';
 import { TreeScope } from '../../../../src/stylelet/engine/tree-scope';
 import { StyleletContext } from '../../../../src/stylelet/context';
 import { createBrowletDocument } from '../../browlet-document';
@@ -122,8 +121,7 @@ describe('tree scope', () => {
 function createTreeScope() {
   const document = createBrowletDocument();
   const context = new StyleletContext(document, document.env);
-  const cascade = new CascadeEngine({ context });
-  return { document, scope: new TreeScope(document, cascade) };
+  return { document, scope: new TreeScope(document, context) };
 }
 
 function createStyleSheet(
@@ -136,7 +134,7 @@ function createStyleSheet(
   }: StyleSheetOptions = {},
 ): CSSStyleSheetImpl {
   const styleSheet = CSSStyleSheetImpl.create(
-    scope.cascade.context,
+    scope.context,
     {
       location: null,
       parentStyleSheet: null,

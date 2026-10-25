@@ -1,5 +1,4 @@
-import { TypeError } from '../../infra/index';
-import { asciiLower, isAsciiWhitespace } from '../../infra/ascii';
+import { TypeError, asciiLower, isAsciiWhitespace } from '../../infra/index';
 import {
   arg, attr, defineInterface, idlType, impl, indexedGetter, iter, nullable, op, roAttr, xattr,
   DOMExceptionImpl, DOMExceptionNames,
