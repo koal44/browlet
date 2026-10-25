@@ -200,20 +200,23 @@ and defaulting comparisons remain ordinary passing expectations.
 
 Eric approved the following choices after Chromium, Firefox, and WebKit probes
 on 2026-10-22. Each native comparison is separate, and Browlet's assertion runs
-before any expected-failure annotation.
+before any expected-failure annotation. Rechecked with Playwright 1.64.1.
 
-- `SPEC_CLASH(lazy-var-fallback)`: the current
-  [var replacement algorithm](https://drafts.csswg.org/css-variables-1/#using-variables)
-  substitutes a fallback only when needed. Chromium/WebKit agree. Firefox
-  invalidates `--b: var(--a, var(--b))` even when `--a` has a valid value.
+The current
+[var replacement algorithm](https://drafts.csswg.org/css-variables-1/#using-variables)
+substitutes a fallback only when needed. All three browsers now agree, including
+`--b: var(--a, var(--b))` when `--a` has a valid value; the lazy-fallback clash
+marker and expected failure have been removed.
+
 - `SPEC_CLASH(var-argument-grammar)`: follow the current
   [argument grammar and spread rules](https://drafts.csswg.org/css-values-5/#early-resolution).
-  All three browsers reject dynamic names (`var(var(--name))`), early spread
-  (`var(...var(--args))`), and a non-custom name before it can use its fallback.
+  Chromium/Firefox reject dynamic names (`var(var(--name))`) and a non-custom name
+  before it can use its fallback; WebKit now agrees with the draft for these cases.
+  All three browsers still reject early spread (`var(...var(--args))`).
   They also retain braces around a fallback where the draft strips one enclosing
   brace block. The draft behavior is tested separately for each feature/browser.
   The margin suite independently covers the same approved name-validation rule
-  for a pending shorthand; its three native cases are expected failures too.
+  for a pending shorthand; Chromium/Firefox remain expected failures there.
 - `SPEC_CLASH(custom-property-eof-serialization)`: follow Variables 1's
   [original-source requirement](https://drafts.csswg.org/css-variables-1/#serializing-custom-props),
   retaining missing EOF delimiters as Chromium does. Firefox completes blocks,

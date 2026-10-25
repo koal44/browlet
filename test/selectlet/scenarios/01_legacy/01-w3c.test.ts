@@ -2031,8 +2031,10 @@ runScenarios('w3c iframes 3', 'normal', [
       {
         setupPage: async (page) => { await page.evaluate(() => { document.documentElement.focus(); }); },
         cases: [
-          { select: ':focus', expect: { ids: ['body'] }, browsers: ['chromium', 'webkit'] },
-          { select: ':focus', expect: { ids: [] }, browsers: ['firefox'] },
+          // HTML targets the viewport; Firefox/WebKit clear element focus.
+          // Chromium retains the previously focused body.
+          { select: ':focus', expect: { ids: ['body'] }, browsers: ['chromium'] },
+          { select: ':focus', expect: { ids: [] }, browsers: ['firefox', 'webkit'] },
         ],
       },
       {

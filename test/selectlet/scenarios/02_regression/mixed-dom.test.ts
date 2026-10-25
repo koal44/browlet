@@ -243,10 +243,8 @@ runScenarios('mixed-dom', 'normal', [
       });
     },
     cases: [
-      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
-      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper', 'xml-input-lower'] }, browsers: ['chromium'], engines: ['native'] },
-      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] }, browsers: ['firefox', 'webkit'], engines: ['native', 'selectlet'] },
+      { select: 'input[type="text"]', expect: { ids: ['html-input', 'xml-input-lower'] } },
+      { select: 'input[type="TEXT"]', expect: { ids: ['html-input', 'xml-input-upper'] } },
     ],
   },
 

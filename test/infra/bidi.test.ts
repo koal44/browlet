@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
 
+import type * as BidiModule from '../../src/infra/bidi';
 import { firstStrongDirection } from '../../src/infra/bidi';
 
 describe('first strong Unicode direction', () => {
@@ -30,11 +31,13 @@ describe('first strong Unicode direction', () => {
   });
 
   it('decodes once on the first nonempty lookup, not during module loading', async () => {
-    vi.resetModules();
     const base64 = await import('../../src/infra/base64.js');
     const decode = vi.spyOn(base64, 'forgivingBase64Decode');
     try {
-      const bidi = await import('../../src/infra/bidi.js');
+      // Refresh only this module; resetting the shared module cache would lose
+      // Browlet's installation state while its native host hooks remain installed.
+      const freshModule = '../../src/infra/bidi.js?cold-start';
+      const bidi = await import(freshModule) as typeof BidiModule;
       expect(decode).not.toHaveBeenCalled();
       expect(bidi.firstStrongDirection('')).toBeNull();
       expect(decode).not.toHaveBeenCalled();

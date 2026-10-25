@@ -35,8 +35,8 @@ export class GeneralEnclosedValue<R extends GeneralEnclosedBlock = GeneralEnclos
 
   /** Serialize the retained contents without interpreting their grammar. */
   // SPEC_GAP(media-general-enclosed-serialization): CSSOM has no serializer for
-  // this newer production. Retain token-based formatting, as WebKit does;
-  // Chromium/Firefox preserve exact source text. See cssom/ROADMAP.md.
+  // this newer production. Retain the approved token-based formatting despite
+  // browsers preserving original whitespace. See cssom/media/ROADMAP.md.
   serialize(): string {
     const block = this.repr;
     const contents = block.value === undefined ? '' : block.value.serialize();

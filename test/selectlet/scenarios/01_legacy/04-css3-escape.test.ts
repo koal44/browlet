@@ -365,10 +365,8 @@ runScenarios('css3 escaped identifiers', 'normal',  [
       { select: '#\u{12345}', expect: { count: 1, ids: ['\u{12345}'] } },
       { select: '.\u{12345}', expect: { count: 1, ids: ['\u{12345}'] } },
 
-      // U+0000 is normally replaced with U+FFFD during selector parsing.
-      // Firefox/WebKit do this for ID selectors; Chromium rejects the ID form but still accepts the class form
-      { select: '#\u{0}', expect: { count: 1, ids: ['\u{fffd}'] }, browsers: ['firefox', 'webkit'] },
-      { select: '#\u{0}', expect: { throws: true }, browsers: ['chromium'], engines: ['native'] },
+      // U+0000 is replaced with U+FFFD during selector parsing.
+      { select: '#\u{0}', expect: { count: 1, ids: ['\u{fffd}'] } },
       { select: '.\u{0}', expect: { count: 1, ids: ['\u{fffd}'] } },
 
       { select: '#ab\u{0}c', expect: { count: 1, ids: ['ab\u{fffd}c'] } },

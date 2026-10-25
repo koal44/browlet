@@ -111,7 +111,7 @@ export class SubstitutionValue {
       throw new InternalError(`Substitution for ${fn.name}() is not implemented`);
     }
     // SPEC_CLASH(var-argument-grammar): Follow Values 5 / Variables 1's free-form arguments,
-    // dynamic names, and spread expansion. Chromium, Firefox, and WebKit use the older grammar.
+    // dynamic names, and spread expansion. Browser support for the draft grammar is partial.
     const args = parseAsComponentGrammar(early, SubstitutionValue.#consumeVarArguments, {});
     if (args === null) return guaranteedInvalidValue;
     const first = SubstitutionValue.#substitute(args.name.repr, getCustomProperty);
@@ -124,8 +124,6 @@ export class SubstitutionValue {
         result = value instanceof GuaranteedInvalidValue ? value : value.repr;
       }
     }
-    // SPEC_CLASH(lazy-var-fallback): Follow the draft and Chromium/WebKit; Firefox still
-    // lets a cycle in an unused fallback invalidate the containing custom property.
     if (result instanceof GuaranteedInvalidValue && args.fallback !== null) {
       result = SubstitutionValue.#substitute(args.fallback.repr, getCustomProperty);
     }

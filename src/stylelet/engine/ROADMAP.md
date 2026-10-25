@@ -122,8 +122,9 @@ The custom-property slices have connected tests for acceptance, case-sensitive
 names, source preservation, importance/specificity/order, root defaulting,
 inheritance, empty versus invalid values, substitution, cycle/defaulting order,
 bounded expansion, and fresh queries after CSSOM edits. The
-[approved draft differences](README.md#substitution-draft-differences) cover lazy
-fallbacks, argument grammar/spread, and EOF source spelling.
+[approved draft differences](README.md#substitution-draft-differences) cover
+argument grammar/spread and EOF source spelling. Lazy fallback behavior now agrees
+across all three browsers.
 The inline raw-text fallback regression also covers duplicate declarations and
 importance; an authoritative empty inline provider remains authoritative.
 

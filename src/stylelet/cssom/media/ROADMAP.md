@@ -14,7 +14,7 @@ mutation paths have regression coverage; condition evaluation remains separate.
 ## Media-query disagreements
 
 Three-engine probes and the retained media-list browser regressions establish
-the following choices, rechecked with Playwright 1.62.1. Revisit the markers
+the following choices, rechecked with Playwright 1.64.1. Revisit the markers
 when the specifications or engines converge.
 
 - `SPEC_CLASH(media-query-only-serialization)`: CSSOM's
@@ -28,10 +28,12 @@ when the specifications or engines converge.
   Syntax entry point is unchanged. A comma inside a folded block is not a separator.
 - `SPEC_GAP(media-general-enclosed-serialization)`: Media Queries defines
   [`<general-enclosed>`](https://drafts.csswg.org/mediaqueries-4/#typedef-general-enclosed),
-  but CSSOM's older serializer does not cover it. Retain token-based serialization,
-  as WebKit does: `future(a,` becomes `future(a,)`, and repeated whitespace
-  collapses. Chromium and Firefox preserve source text, including missing
-  closers and comments. Unknown grammar remains opaque; its function names
+  but CSSOM's older serializer does not cover it. Retain the approved token-based
+  serialization: `future(a,` becomes `future(a,)`, and repeated whitespace
+  collapses. All three browsers retain original whitespace. Chromium and Firefox
+  also retain missing closers; WebKit completes them. Each native comparison is
+  an expected failure, annotated after Stylelet's assertions so its behavior
+  remains checked normally. Unknown grammar remains opaque; its function names
   are not treated as interpreted CSS function keywords.
 - `SPEC_CLASH(media-list-mutation-comparison)`: Keep CSSOM's
   [append](https://drafts.csswg.org/cssom/#dom-medialist-appendmedium) and
