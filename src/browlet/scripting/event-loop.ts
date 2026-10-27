@@ -5,6 +5,8 @@ import { unsafeSharedCurrentTime, type UnsafeMoment } from '../timing/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
+import { JSExecutionContext } from './execution-context';
+
 // Task-source/queue associations stay private so scheduling can coalesce
 // sources without changing callers.
 /** Runs an agent's HTML tasks and coordinates its microtask checkpoints. */
@@ -14,9 +16,13 @@ export class EventLoop {
   microtaskQueue = createMicrotaskQueue();
   /** Most recent rendering opportunity reported by the host. */
   lastRenderOpportunityTime: UnsafeMoment | null = null;
+  /** Explicit context stack for this loop's agent, including retained realm contexts. */
+  executionContextStack: JSExecutionContext[] = [];
+  /** Incumbent environments retained across host callback entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#backup-incumbent-settings-object-stack
-  #backupIncumbentEnvironmentStack: BrowletEnvironment[] = [];
-  #jsExecutionContextStack: TrackedExecutionContext[] = [];
+  backupIncumbentEnvironmentStack: BrowletEnvironment[] = [];
+  // Task association belongs to each entry, not the retained context reused by nested entries.
+  #scriptEntryTasks: (Task | null)[] = [];
   #currentlyRunningTask: Task | null = null;
   #runningTaskTurn = false;
   #performingMicrotaskCheckpoint = false;
@@ -33,6 +39,25 @@ export class EventLoop {
   /** Task executing on this loop, or null outside task execution. */
   get currentlyRunningTask(): Task | null {
     return this.#currentlyRunningTask;
+  }
+
+  /** The currently running context, or null outside modeled JavaScript execution. */
+  get runningExecutionContext(): JSExecutionContext | null {
+    return this.executionContextStack.at(-1) ?? null;
+  }
+
+  /** The most recently pushed retained realm context. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#entry-execution-context
+  get entryExecutionContext(): JSExecutionContext {
+    const context = this.executionContextStack.findLast((entry) => entry === entry.realm.executionContext);
+    if (context === undefined) throw new InternalError('There is no entry execution context');
+    return context;
+  }
+
+  /** The topmost context with a non-null ScriptOrModule, irrespective of its skip counter. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#topmost-script-having-execution-context
+  get topmostScriptHavingExecutionContext(): JSExecutionContext | null {
+    return this.executionContextStack.findLast((context) => context.scriptOrModule !== null) ?? null;
   }
 
   hasRunnableTasks(): boolean {
@@ -110,29 +135,20 @@ export class EventLoop {
     return true;
   }
 
-  /** Find the incumbent environment for a script or host entry. */
+  /** Find the incumbent environment from the active script or backup settings. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#incumbent-settings-object
-  getIncumbentEnvironment(
-    hostEntryEnv: BrowletEnvironment,
-  ): BrowletEnvironment {
-    const context = findTopmostScriptHavingExecutionContext(
-      this.#jsExecutionContextStack,
-    );
+  getIncumbentEnvironment(): BrowletEnvironment {
+    const context = this.topmostScriptHavingExecutionContext;
     if (
-      context !== undefined &&
+      context !== null &&
       context.skipWhenDeterminingIncumbent === 0
     ) {
-      return context.env;
+      return context.realm.env;
     }
 
-    const backup = this.#backupIncumbentEnvironmentStack.at(-1);
+    const backup = this.backupIncumbentEnvironmentStack.at(-1);
     if (backup !== undefined) return backup;
-
-    // ACCOMMODATION(node-v8-execution-contexts):
-    // HTML's algorithm asserts here. A call directly from Browlet's embedder
-    // has no engine-visible ScriptOrModule for userland to inspect, so its
-    // binding realm is the explicit entry boundary.
-    return hostEntryEnv;
+    throw new InternalError('The backup incumbent settings stack is empty');
   }
 
   /** Push the callback environment and hide the active script from incumbent selection. */
@@ -142,30 +158,26 @@ export class EventLoop {
       throw new InternalError('A callback context belongs to another event loop');
     }
 
-    this.#backupIncumbentEnvironmentStack.push(env);
-    const context = findTopmostScriptHavingExecutionContext(
-      this.#jsExecutionContextStack,
-    );
-    if (context !== undefined) context.skipWhenDeterminingIncumbent++;
+    this.backupIncumbentEnvironmentStack.push(env);
+    const context = this.topmostScriptHavingExecutionContext;
+    if (context !== null) context.skipWhenDeterminingIncumbent++;
   }
 
   /** Restore incumbent selection after the matching callback entry. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-a-callback
   cleanUpAfterRunningCallback(env: BrowletEnvironment): void {
-    const context = findTopmostScriptHavingExecutionContext(
-      this.#jsExecutionContextStack,
-    );
-    if (context !== undefined) {
+    const context = this.topmostScriptHavingExecutionContext;
+    if (context !== null) {
       if (context.skipWhenDeterminingIncumbent === 0) {
         throw new InternalError('A callback incumbent counter is already zero');
       }
       context.skipWhenDeterminingIncumbent--;
     }
 
-    if (this.#backupIncumbentEnvironmentStack.at(-1) !== env) {
+    if (this.backupIncumbentEnvironmentStack.at(-1) !== env) {
       throw new InternalError('Callback environments were cleaned up out of order');
     }
-    this.#backupIncumbentEnvironmentStack.pop();
+    this.backupIncumbentEnvironmentStack.pop();
   }
 
   /** Enter script execution with this environment and the current task. */
@@ -181,40 +193,36 @@ export class EventLoop {
     // installed its microtask task before this point. The custom engine's
     // Promise hook does so. Unsupported engines and uncontrolled host entries
     // still need a nullable task; do not infer that V8's unseen stack is empty.
-    this.#jsExecutionContextStack.push({
-      kind: 'realm',
-      env,
-      task,
-    });
+    this.executionContextStack.push(env.realmExecutionContext);
+    this.#scriptEntryTasks.push(task);
     task?.scriptEvaluationEnvironments.add(env);
   }
 
   /** Leave script execution and checkpoint when the execution stack becomes empty. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script
   cleanUpAfterRunningScript(env: BrowletEnvironment): void {
-    const entry = this.#jsExecutionContextStack.at(-1);
-    if (
-      entry?.kind !== 'realm' ||
-      entry.env !== env
-    ) {
+    const entry = this.runningExecutionContext;
+    if (entry !== env.realmExecutionContext) {
       throw new InternalError('Script settings were cleaned up out of order');
     }
-    this.#jsExecutionContextStack.pop();
+    this.executionContextStack.pop();
+    const task = this.#scriptEntryTasks.pop();
+    if (task === undefined) throw new InternalError('Script settings have no matching preparation');
 
     // ACCOMMODATION(node-v8-execution-contexts): A checkpoint clears the current
     // task even while its outer task turn continues. Later callbacks in that
     // turn still have a controlled entry; unrelated engine entries do not.
     if (
-      (entry.task !== null || this.#runningTaskTurn) &&
-      this.#jsExecutionContextStack.length === 0
+      (task !== null || this.#runningTaskTurn) &&
+      this.executionContextStack.length === 0
     ) {
       this.performMicrotaskCheckpoint();
     }
   }
 
   // HTML §§8.1.3.2 and 8.1.4.4 — Browlet-controlled ScriptEvaluation entry.
-  // The settings and skip counter are the host-visible portion needed for
-  // incumbent selection; the eventual Script record remains §8.1.4.1 work.
+  // TODO(HTML §8.1.4): Receive the complete Script/Module record from script processing.
+  // The realm-bearing record below supplies only ScriptOrModule identity for this entry.
   // ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
   // a temporary task because Node exposes no surrounding execution context.
   runScriptEvaluation<Result>(
@@ -228,12 +236,9 @@ export class EventLoop {
 
     try {
       this.prepareToRunScript(env);
-      const context: ScriptHavingExecutionContext = {
-        kind: 'script',
-        env,
-        skipWhenDeterminingIncumbent: 0,
-      };
-      this.#jsExecutionContextStack.push(context);
+      const context = new JSExecutionContext(env.realm);
+      context.scriptOrModule = { realm: env.realm };
+      this.executionContextStack.push(context);
       try {
         return steps();
       } finally {
@@ -249,7 +254,7 @@ export class EventLoop {
 
   /** Conditional checkpoint at a Browlet-controlled parser entry. */
   performMicrotaskCheckpointIfStackEmpty(): void {
-    if (this.#jsExecutionContextStack.length === 0) {
+    if (this.executionContextStack.length === 0) {
       this.performMicrotaskCheckpoint();
     }
   }
@@ -347,11 +352,11 @@ export class EventLoop {
     return queue;
   }
 
-  #popScriptExecutionContext(context: ScriptHavingExecutionContext): void {
-    if (this.#jsExecutionContextStack.at(-1) !== context) {
+  #popScriptExecutionContext(context: JSExecutionContext): void {
+    if (this.runningExecutionContext !== context) {
       throw new InternalError('Script execution contexts were cleaned up out of order');
     }
-    this.#jsExecutionContextStack.pop();
+    this.executionContextStack.pop();
   }
 
   #finishHostScriptEntry(task: Task): void {
@@ -468,28 +473,6 @@ export function createTaskSource(name: string): TaskSource {
 
 const microtaskTaskSource = createTaskSource('microtask');
 const hostEntryTaskSource = createTaskSource('host script entry');
-
-type TrackedExecutionContext =
-  | RealmExecutionContextEntry
-  | ScriptHavingExecutionContext;
-
-type RealmExecutionContextEntry = {
-  kind: 'realm';
-  env: BrowletEnvironment;
-  task: Task | null;
-};
-
-type ScriptHavingExecutionContext = {
-  kind: 'script';
-  env: BrowletEnvironment;
-  skipWhenDeterminingIncumbent: number;
-};
-
-function findTopmostScriptHavingExecutionContext(
-  stack: TrackedExecutionContext[],
-): ScriptHavingExecutionContext | undefined {
-  return stack.findLast((context) => context.kind === 'script');
-}
 
 function findFirstRunnableTask(
   taskQueue: ReadonlySet<Task>,

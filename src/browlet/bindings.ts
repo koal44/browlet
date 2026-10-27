@@ -103,45 +103,48 @@ export function createWindowEnvironment(
   });
   // This new realm is registered exactly once; composition runs synchronously.
   let env!: WindowEnvironment;
-  const context = browletBindingWorld.register(realm, (binding) => {
-    // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
-    // Execution reads the installed global lazily; all consumers retain this environment.
-    env = new WindowEnvironment(realm, baseEnv, createBrowletExecution(binding));
-    env.creationURL = creationURL;
-    env.topLevelCreationURL = topLevelCreationURL;
-    env.topLevelOrigin = topLevelOrigin;
-    return env;
+  realm.initialize({
+    createGlobalObject: () => {
+      const context = browletBindingWorld.register(realm, (binding) => {
+        // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
+        // Execution reads the installed global lazily; all consumers retain this environment.
+        env = new WindowEnvironment(realm, baseEnv, createBrowletExecution(binding));
+        env.creationURL = creationURL;
+        env.topLevelCreationURL = topLevelCreationURL;
+        env.topLevelOrigin = topLevelOrigin;
+        return env;
+      });
+      const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
+      realm.windowImplementation = window;
+      if (!useAddonGlobals) return projectWindow(context, window);
+
+      const { object, prototypeChain } = realm.globalAllocation;
+      const [windowPrototype, namedProperties, eventTargetPrototype] = prototypeChain;
+      if (!windowPrototype || !namedProperties || !eventTargetPrototype) {
+        throw new InternalError('Incomplete native Window allocation');
+      }
+      // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
+      return projectWindow(context, window, {
+        object,
+        prototypes: new Map([
+          ['Window', windowPrototype],
+          ['EventTarget', eventTargetPrototype],
+        ]),
+        namedProperties: {
+          object: namedProperties,
+          setDelegate: (delegate) => { realm.setPropertyDelegate(namedProperties, delegate); },
+        },
+      });
+    },
+    createGlobalThisValue: () => {
+      realm.windowProxy = previousRealm?.windowProxy ?? new WindowProxyHandle(
+        useAddonGlobals ? realm.globalProxy : undefined,
+      );
+      return realm.windowProxy.platform;
+    },
   });
-  const window = new WindowImpl(new URL(serializeURL(creationURL)), env);
-  realm.windowImplementation = window;
-  let globalObject: StampedPlatformObject<Window>;
-  if (useAddonGlobals) {
-    const { object, prototypeChain } = realm.globalAllocation;
-    const [windowPrototype, namedProperties, eventTargetPrototype] = prototypeChain;
-    if (!windowPrototype || !namedProperties || !eventTargetPrototype) {
-      throw new InternalError('Incomplete native Window allocation');
-    }
-    // With add-on globals, supply the engine-allocated global object and prototypes to Web IDL.
-    globalObject = projectWindow(context, window, {
-      object,
-      prototypes: new Map([
-        ['Window', windowPrototype],
-        ['EventTarget', eventTargetPrototype],
-      ]),
-      namedProperties: {
-        object: namedProperties,
-        setDelegate: (delegate) => { realm.setPropertyDelegate(namedProperties, delegate); },
-      },
-    });
-  } else {
-    globalObject = projectWindow(context, window);
-  }
-  realm.windowProxy = previousRealm?.windowProxy ?? new WindowProxyHandle(
-    useAddonGlobals ? realm.globalProxy : undefined,
-  );
-  realm.setGlobalObjects(globalObject, realm.windowProxy.platform);
   if (reservedEnv !== null) reservedEnv.id = '';
-  window.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
+  realm.windowImplementation.setWindowOrWorkerGlobalScopeMixin(new WindowOrWorkerGlobalScopeMixin(env));
   return env;
 }
 

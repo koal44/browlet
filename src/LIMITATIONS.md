@@ -40,6 +40,15 @@ and native callback iterators. Test capabilities, not just the `custom` label.
 
 ## Scheduling and callback context
 
+- **`node-v8-agent-policy`:** `Agent.canBlock` records HTML's policy without
+  enforcing it in V8. Window author code can call Atomics.wait and receive
+  `"timed-out"` instead of TypeError, even with a zero timeout. The public
+  [agent regression](../test/browlet/scripting/agents.test.ts) records this as an
+  expected failure on all backends. Agent signifiers and cluster membership are
+  likewise Browlet state, not native execution identities or memory barriers.
+  Worker/worklet allocation supplies records and separate loops only; globals,
+  independent execution, and shutdown remain unfinished. See the
+  [§8.1.2 audit](browlet/scripting/ROADMAP.md#html-811812-audit).
 - **`node-v8-microtask-queue` / `node-v8-checkpoint`:** Without explicit queues,
   all event loops share Node's ambient queue and use private `_tickCallback()`.
   It can drain unrelated jobs, next-ticks, and rejection machinery, including
@@ -50,9 +59,13 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   retain the affected tests and exact replacement conditions.
 - **`node-v8-execution-contexts`:** Custom job hooks capture controlled Promise
   callback/job boundaries; official engines lack those hooks. Neither exposes
-  the entire execution stack or supplies HTML Script records. The mirrored
-  entries/incumbent fallback remain necessary for unobserved calls until script
-  integration and host-entry handling are complete. See the
+  the entire execution stack or supplies HTML Script records. Browlet's explicit
+  JavaScript context model tracks controlled entries only. The A-to-B bound-listener
+  investigation is skipped by agreement: its JavaScript observer's equivalence to
+  the native API in HTML's examples is uncertain. Revisit with the actual example
+  pages and platform APIs when supported. Manual stack selection/restoration tests
+  do not establish automatic function-call tracking.
+  The direct-host-entry fallback remains in place. See the
   [callback lifecycle record](browlet/scripting/EVENT-LOOP-ARCHITECTURE.md#node-v8-execution-contexts)
   and [tests](../test/browlet/scripting/callback-lifecycle.test.ts).
 - **Custom generic/timeout hooks are isolate-wide.** They cannot decline an

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { itPassesWith } from '../../test-runtime';
 import { createMicrotaskQueue, type JSMicrotaskQueue } from '../../../src/js-engine/index';
 import { createManualEventLoop } from '../../support/browlet-agent';
+import { getRelevantRealm } from '../../support/browlet-binding';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 import { createBrowletExecution, browletBindingWorld } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -20,7 +21,7 @@ import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/container';
 import type { ModuleMap } from
   '../../../src/browlet/dom/nodes/document';
-import { Agent } from '../../../src/browlet/scripting/agents';
+import { Agent, AgentCluster } from '../../../src/browlet/scripting/agents';
 import { BrowletEnvironmentBase } from '../../../src/browlet/environment';
 import { BrowletEnvironment } from '../../../src/browlet/environment';
 import { WindowOrWorkerGlobalScopeMixin } from '../../../src/browlet/global-scope';
@@ -30,6 +31,7 @@ import { Moment, monotonicClock } from '../../../src/browlet/timing/clock';
 import {
   createBrowletRealm,
 } from '../../../src/browlet/scripting/realm';
+import { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
 
 describe('HTML callback and script-entry lifecycle', () => {
   it('attaches the environment to its realm during construction', () => {
@@ -40,7 +42,178 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(realm.env).toBe(env);
     expect(realm.baseEnv).toBe(env);
     expect(env.realm).toBe(realm);
+    expect(env.realmExecutionContext).toBe(realm.executionContext);
+    expect(realm.executionContext.realm).toBe(realm);
     expect(context.getEnvironment()).toBe(env);
+  });
+
+  it('creates a default global and returns the retained realm execution context', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const context = createBrowletRealm(agent);
+
+    expect(context.realm.executionContext).toBe(context);
+    expect(context.function).toBeNull();
+    expect(context.scriptOrModule).toBeNull();
+    expect(context.skipWhenDeterminingIncumbent).toBe(0);
+    expect(context.realm.globalThis).toBe(context.realm.globalObject);
+    expect(context.realm.evaluate('typeof Array', 'default-global.js')).toBe('function');
+    expect(agent.eventLoop.runningExecutionContext).toBeNull();
+  });
+
+  it('runs global customization with the new context and restores the previous stack on failure', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const outer = createTestRealm(agent, 'outer');
+    const loop = agent.eventLoop;
+    loop.prepareToRunScript(outer.env);
+    try {
+      expect(() => createBrowletRealm(agent, {
+        createGlobalObject(realm) {
+          expect(loop.runningExecutionContext).toBe(realm.executionContext);
+          expect(loop.entryExecutionContext).toBe(realm.executionContext);
+          throw new Error('global creation failed');
+        },
+      })).toThrow('global creation failed');
+      expect(loop.runningExecutionContext).toBe(outer.realm.executionContext);
+    } finally {
+      loop.cleanUpAfterRunningScript(outer.env);
+    }
+    expect(loop.executionContextStack).toEqual([]);
+  });
+
+  it('removes SharedArrayBuffer after restoring the previous execution context', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    new AgentCluster().add(agent);
+    const outer = createTestRealm(agent, 'outer');
+    const loop = agent.eventLoop;
+    const deletionContexts: (JSExecutionContext | null)[] = [];
+    loop.prepareToRunScript(outer.env);
+    try {
+      const context = createBrowletRealm(agent, {
+        createGlobalObject: (realm) => new Proxy(
+          realm.createOrdinaryObject(realm.intrinsics.objectPrototype),
+          {
+            deleteProperty(target, key) {
+              if (key === 'SharedArrayBuffer') deletionContexts.push(loop.runningExecutionContext);
+              return Reflect.deleteProperty(target, key);
+            },
+          },
+        ),
+      });
+      expect(deletionContexts).toEqual([outer.realm.executionContext]);
+      expect(Reflect.has(context.realm.globalObject, 'SharedArrayBuffer')).toBe(false);
+    } finally {
+      loop.cleanUpAfterRunningScript(outer.env);
+    }
+  });
+
+  it('keeps direct-host callback capture separate from strict incumbent lookup', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const a = createTestRealm(agent, 'a');
+    const b = createTestRealm(agent, 'b');
+    const loop = agent.eventLoop;
+
+    expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
+    expect(b.realm.callbacks.captureContext()).toBe(b.env);
+    loop.prepareToRunCallback(a.env);
+    try {
+      expect(b.realm.callbacks.captureContext()).toBe(a.env);
+    } finally {
+      loop.cleanUpAfterRunningCallback(a.env);
+    }
+    loop.runScriptEvaluation(a.env, () => {
+      expect(b.realm.callbacks.captureContext()).toBe(a.env);
+    });
+    expect(b.realm.callbacks.captureContext()).toBe(b.env);
+  });
+
+  it('distinguishes entry, incumbent, current, and relevant realms, settings, and globals', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const a = createTestRealm(agent, 'a');
+    const b = createTestRealm(agent, 'b');
+    const c = createTestRealm(agent, 'c');
+    const d = createTestRealm(agent, 'd');
+    d.context.install(d.realm.globalObject);
+    const EventTarget = Reflect.get(d.realm.globalObject, 'EventTarget') as new () => object;
+    const target = new EventTarget();
+    const loop = agent.eventLoop;
+    // Supply the script and built-in records explicitly: this tests selection,
+    // not interception of the real calls in HTML's four-page example.
+    const script = new JSExecutionContext(b.realm);
+    script.scriptOrModule = { realm: b.realm };
+    const builtin = new JSExecutionContext(c.realm);
+    builtin.function = c.realm.createFunction(() => {}, { name: 'builtin', length: 0 });
+    loop.prepareToRunScript(a.env);
+    loop.executionContextStack.push(script, builtin);
+    try {
+      const entry = loop.entryExecutionContext.realm;
+      const incumbent = loop.getIncumbentEnvironment();
+      const current = loop.runningExecutionContext!.realm;
+      const relevant = getRelevantRealm(target);
+      expect(entry).toBe(a.realm);
+      expect(entry.env).toBe(a.env);
+      expect(entry.globalObject).toBe(a.realm.globalObject);
+      expect(incumbent).toBe(b.env);
+      expect(incumbent.realm).toBe(b.realm);
+      expect(incumbent.global).toBe(b.realm.globalObject);
+      expect(current).toBe(c.realm);
+      expect(current.env).toBe(c.env);
+      expect(current.globalObject).toBe(c.realm.globalObject);
+      expect(relevant).toBe(d.realm);
+      expect(relevant.env).toBe(d.env);
+      expect(relevant.globalObject).toBe(d.realm.globalObject);
+      expect(loop.topmostScriptHavingExecutionContext).toBe(script);
+      // A nested HTML entry is the new entry realm even though B is still the topmost script.
+      loop.prepareToRunScript(c.env);
+      try {
+        expect(loop.entryExecutionContext.realm).toBe(c.realm);
+        expect(loop.getIncumbentEnvironment()).toBe(b.env);
+        expect(getRelevantRealm(target)).toBe(d.realm);
+      } finally {
+        loop.cleanUpAfterRunningScript(c.env);
+      }
+      expect(loop.entryExecutionContext.realm).toBe(a.realm);
+    } finally {
+      loop.executionContextStack.pop();
+      loop.executionContextStack.pop();
+      loop.cleanUpAfterRunningScript(a.env);
+    }
+    expect(loop.runningExecutionContext).toBeNull();
+    expect(getRelevantRealm(target)).toBe(d.realm);
+    expect(() => loop.entryExecutionContext).toThrow('no entry execution context');
+    expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
+  });
+
+  it('restores nested backup incumbents and lets a newer script take precedence', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const a = createTestRealm(agent, 'a');
+    const b = createTestRealm(agent, 'b');
+    const c = createTestRealm(agent, 'c');
+    const loop = agent.eventLoop;
+    loop.runScriptEvaluation(a.env, () => {
+      const script = loop.topmostScriptHavingExecutionContext!;
+      loop.prepareToRunCallback(b.env);
+      try {
+        expect(script.skipWhenDeterminingIncumbent).toBe(1);
+        expect(loop.getIncumbentEnvironment()).toBe(b.env);
+        loop.prepareToRunCallback(c.env);
+        try {
+          expect(script.skipWhenDeterminingIncumbent).toBe(2);
+          expect(loop.getIncumbentEnvironment()).toBe(c.env);
+        } finally {
+          loop.cleanUpAfterRunningCallback(c.env);
+        }
+        loop.runScriptEvaluation(c.env, () => {
+          expect(loop.getIncumbentEnvironment()).toBe(c.env);
+        });
+        expect(loop.getIncumbentEnvironment()).toBe(b.env);
+      } finally {
+        loop.cleanUpAfterRunningCallback(b.env);
+      }
+      expect(script.skipWhenDeterminingIncumbent).toBe(0);
+      expect(loop.getIncumbentEnvironment()).toBe(a.env);
+    });
+    expect(loop.executionContextStack).toEqual([]);
+    expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
   });
 
   it('uses the non-Window environment timer owner for AbortSignal.timeout', () => {
@@ -181,6 +354,36 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(agent.eventLoop.currentlyRunningTask).toBeNull();
   });
 
+  // Skipped by agreement: this translation of HTML §8.1.3.3's examples is uncertain.
+  // createFunction supplies an ordinary JavaScript forwarding function; observe
+  // is not an established stand-in for a native API that reads the incumbent.
+  // Revisit with the actual example pages and platform APIs when supported.
+  it.skip('captures B as incumbent when A calls B to register a bound event listener', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const entry = createTestRealm(agent, 'a');
+    const author = createTestRealm(agent, 'b');
+    entry.context.install(entry.realm.globalObject);
+    const observations: string[] = [];
+    const observe = entry.realm.createFunction(() => {
+      const incumbent = entry.realm.callbacks.captureContext();
+      observations.push(incumbent === author.env ? 'B' : incumbent === entry.env ? 'A' : 'other');
+    }, { name: 'observe', length: 0 });
+    const register = author.realm.evaluate(
+      '(target, callback) => target.addEventListener("probe", callback)',
+      'b.js',
+    );
+    Reflect.set(entry.realm.globalObject, 'register', register);
+    Reflect.set(entry.realm.globalObject, 'observe', observe);
+    entry.realm.evaluate(`
+      globalThis.target = new EventTarget();
+      register(target, observe.bind(undefined));
+    `, 'a.js');
+
+    entry.realm.evaluate('target.dispatchEvent(new Event("probe"))', 'dispatch.js');
+
+    expect(observations).toEqual(['B']);
+  });
+
   it('keeps backup incumbent stacks independent per event loop', () => {
     const first = createTestRealm(
       new TestAgent(createTestMicrotaskQueue()),
@@ -298,7 +501,7 @@ function createTestRealm(
   agent: Agent,
   name: string,
 ) {
-  const realm = createBrowletRealm(agent, {
+  const { realm } = createBrowletRealm(agent, {
     createGlobalObject: () => ({}),
   }, { globalNames: ['Worker'] });
   const baseEnv = new BrowletEnvironmentBase({

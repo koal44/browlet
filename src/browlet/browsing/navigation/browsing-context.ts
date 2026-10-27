@@ -1,12 +1,12 @@
 import { InternalError } from '../../../infra/index';
 import {
-  aboutBlankURL, serializeSite, copyURL, createOpaqueOrigin, serializeOrigin, type Origin, serializeURL,
-  type URLRecord,
+  aboutBlankURL, serializeSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
+  areSameOrigin, isOrigin, obtainSite, type Origin, type URLRecord,
 } from '../../../url/index';
 
 import { unsafeSharedCurrentTime } from '../../timing/index';
 import {
-  type AgentCluster, type AgentClusterKey, type CrossOriginIsolationMode, obtainSimilarOriginWindowAgent,
+  AgentCluster, WindowAgent, type AgentClusterKey, type CrossOriginIsolationMode,
 } from '../../scripting/index';
 import { PermissionsPolicy, SandboxingFlagSet, InsecureRequestsPolicy } from '../policy/index';
 import { DocumentMode, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
@@ -77,7 +77,7 @@ export class BrowsingContext {
       ? createOpaqueOrigin()
       : creatorOrigin;
     const permissionsPolicy = PermissionsPolicy.create(embedder, origin);
-    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+    const agent = group.obtainSimilarOriginWindowAgent(origin, false);
     const creationURL = copyURL(aboutBlankURL);
     if (embedder !== null) {
       // TODO: inherit top-level creation URL and origin from embedder.env and
@@ -239,6 +239,51 @@ export class BrowsingContextGroup {
     const [browsingContext, document] = BrowsingContext.create(null, null, group);
     group.append(browsingContext);
     return [group, document];
+  }
+
+  /** Reuse or allocate the Window agent selected by this group's origin/site policy. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#obtain-a-similar-origin-window-agent
+  obtainSimilarOriginWindowAgent(origin: Origin, requestsOAC: boolean): WindowAgent {
+    const site = obtainSite(origin);
+    let key: AgentClusterKey = site;
+
+    if (this.crossOriginIsolationMode !== 'none') {
+      key = origin;
+    } else if (this.historicalAgentClusterKeyMap.has(origin)) {
+      key = this.historicalAgentClusterKeyMap.get(origin)!;
+    } else {
+      if (requestsOAC) {
+        key = origin;
+      }
+
+      this.historicalAgentClusterKeyMap.set(origin, key);
+    }
+
+    let agentCluster = this.agentClusterMap.get(key);
+
+    if (agentCluster === undefined) {
+      agentCluster = new AgentCluster(this.crossOriginIsolationMode);
+
+      if (isOrigin(key)) {
+        if (!areSameOrigin(key, origin)) {
+          throw new InternalError('An origin agent cluster key must be the given origin');
+        }
+
+        agentCluster.isOriginKeyed = true;
+      }
+
+      agentCluster.add(this.userAgent.createWindowAgent());
+      this.agentClusterMap.set(key, agentCluster);
+    }
+
+    const [windowAgent, ...additionalWindowAgents] = [...agentCluster.agents]
+      .filter((agent) => agent instanceof WindowAgent);
+
+    if (windowAgent === undefined || additionalWindowAgents.length > 0) {
+      throw new InternalError('An agent cluster must contain one Window agent');
+    }
+
+    return windowAgent;
   }
 
   append(browsingContext: BrowsingContext): void {

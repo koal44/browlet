@@ -121,6 +121,29 @@ for an actual shared implementation, not to simulate multiple class inheritance.
 
 ### Realm execution
 
+`BrowletEnvironment` owns its `BrowletExecution` as `env.exec`. The attached
+`BrowletRealm` reaches that execution through `realm.env.exec`; the realm is not
+itself the facilities object. These existing names stay in place during the
+explicit JavaScript execution-context experiment.
+
+[`JSExecutionContext`](browlet/scripting/execution-context.ts) separately models
+the record used by HTML: realm, function, ScriptOrModule, and the incumbent skip
+counter. Each `BrowletRealm` retains one context; the environment's
+`realmExecutionContext` query returns it. EventLoop owns the agent's modeled
+stack and backup incumbent stack. Controlled script entries push the retained
+context followed by a script context. This does not intercept arbitrary author
+function calls. The A-to-B callback-registration investigation is skipped pending
+review of its observer and translation of HTML's examples; see the
+[audit record](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment).
+New Node/V8 work remains parked.
+
+HTML's per-global scripting state belongs to global implementations, described
+by [`BrowletGlobalObject`](browlet/scripting/global-object.ts). Window initializes
+it directly without changing EventTarget inheritance or projecting internal
+fields onto the author-facing object. Worker/worklet global implementations must
+provide the same state. Module maps remain settings-owned; import maps are a
+separate per-global record.
+
 [`RealmExecution`](js-engine/realm-execution.ts) groups JavaScript facilities for
 one execution owner: Promises, errors, buffers, JSON, microtasks, background
 scheduling, and task delivery. Infra's [`execution.ts`](infra/execution.ts)

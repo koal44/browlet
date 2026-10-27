@@ -32,8 +32,20 @@ The DOM mutation, range, traversal, collection, shadow/slot and Trusted Types
 passes are recorded in their [owning roadmaps](browlet/dom/ROADMAP.md). The
 [HTML audit](browlet/html/ROADMAP.md) has reached §3.2.6.5, the style attribute,
 with referenced missing dependencies explicit. The next global attribute is
-§3.2.6.6, data-*. The current detour is the CSSOM/inline-style boundary review;
-return to the HTML audit after that bounded review, without waiting for all CSS.
+§3.2.6.6, data-*. Style/loading work is paused while the
+[HTML §8 audit](browlet/scripting/ROADMAP.md#html-811812-audit) proceeds in order.
+§§8.1.1–8.1.3.2 are reviewed. The
+[§8.1.3.3 experiment](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment)
+now models execution contexts and global state in JavaScript. Continue with
+§8.1.3.4, enabling and disabling scripting. Script/module processing and later
+host-hook algorithms must be connected before judging the complete model;
+the interim cross-realm callback-registration failure does not block this audit.
+The [environment audit](browlet/scripting/ROADMAP.md#html-81318132-audit) maps
+every covered item to code or an explicit implementation dependency. Preserve
+specified state and explicit unfinished dependencies, with approved expected
+failures for observable gaps.
+New addon/V8 work remains parked on `research/html-agent-execution` until real
+consumers justify returning to it.
 
 The [Stylelet roadmap](stylelet/ROADMAP.md) maps missing contracts and dependencies;
 its [README](stylelet/README.md) records existing implementations. Keep detailed
@@ -90,7 +102,7 @@ property or referenced specification first.
    worklets follow module/global lifetime support and an actual rendering consumer.
    Their names in the scheduler are integration points, not implementations.
 
-The immediate task remains step 1. The
+When Stylelet work resumes, continue from step 1. The
 [CSSOM review order](stylelet/cssom/ROADMAP.md#next-review-order) bounds this detour;
 [subsystem roadmaps](stylelet/ROADMAP.md#source-organization) keep later dependencies
 visible. Geometry, fonts, graphics, animation, and layout have roadmap-only

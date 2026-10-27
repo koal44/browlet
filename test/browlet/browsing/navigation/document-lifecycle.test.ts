@@ -9,9 +9,7 @@ import { unwrap, project, getBindingContext, getRelevantRealm } from '../../../s
 import { Browlet } from '../../../../src/browlet/browlet';
 import type { Window } from '../../../../src/browlet/platform';
 import { BrowletRealm, WindowRealm } from '../../../../src/browlet/scripting/realm';
-import {
-  obtainSimilarOriginWindowAgent, WindowAgent,
-} from '../../../../src/browlet/scripting/agents';
+import { WindowAgent } from '../../../../src/browlet/scripting/agents';
 import { BrowletEnvironmentBase } from '../../../../src/browlet/environment';
 import { Navigable, TopLevelTraversable } from '../../../../src/browlet/browsing/navigation/navigable';
 import { createDocumentState } from '../../../../src/browlet/browsing/navigation/document-state';
@@ -108,6 +106,26 @@ describe('browsing context groups', () => {
     expect(agent.windowObjects).toEqual(new Set([window]));
   });
 
+  it('installs Window globals with the retained creation context running', () => {
+    // eslint-disable-next-line @typescript-eslint/unbound-method -- The spy forwards with the original receiver.
+    const installGlobals = WindowRealm.prototype.setGlobalObjects;
+    const observed: boolean[] = [];
+    const spy = vi.spyOn(WindowRealm.prototype, 'setGlobalObjects').mockImplementation(
+      function(this: WindowRealm, globalObject, globalThis) {
+        observed.push(this.agent.eventLoop.runningExecutionContext === this.executionContext);
+        installGlobals.call(this, globalObject, globalThis);
+      },
+    );
+    try {
+      const browlet = new Browlet({ route: () => '' });
+      const realm = getRelevantRealm(browlet.window);
+      expect(observed).toEqual([true]);
+      expect(realm.agent.eventLoop.runningExecutionContext).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('rejects reassignment of a Window realm\'s Window implementation', () => {
     const realm = getRelevantRealm(new Browlet({ route: () => '' }).window);
     const window = realm.windowImplementation;
@@ -171,7 +189,7 @@ describe('browsing context groups', () => {
     const userAgent = new UserAgent();
     const group = userAgent.createBrowsingContextGroup();
     const origin = createOpaqueOrigin();
-    const agent = obtainSimilarOriginWindowAgent(origin, group, false);
+    const agent = group.obtainSimilarOriginWindowAgent(origin, false);
     const creationURL = requireURL('about:blank');
     const env = createWindowEnvironment({
       agent, userAgent, creationURL, origin, parent: null,

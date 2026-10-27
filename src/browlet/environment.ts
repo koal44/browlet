@@ -14,7 +14,9 @@ import {
 import type { StyleletEnvironment, StyleletExecution } from '../stylelet/index';
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
-import type { EventLoop, BrowletRealm, WindowRealm, WindowAgent } from './scripting/index';
+import type {
+  EventLoop, BrowletRealm, WindowRealm, WindowAgent, JSExecutionContext,
+} from './scripting/index';
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { AbortSignalImpl } from './dom/abort/index';
@@ -34,11 +36,16 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   /** Top-level creation URL, or null when the environment has none. */
   topLevelCreationURL: URLRecord | null;
   /** Top-level origin, or null until it can be determined. */
+  // TODO: Worker/worklet setup must inherit this where specified; shared/service
+  // worker setup must choose its implementation-defined top-level origin policy.
   topLevelOrigin: Origin | null;
   /** Navigation's target browsing context, when present. */
   targetBrowsingContext: BrowsingContext | null;
   /** Service worker controlling this environment, when present. */
+  // PROVISIONAL: Replace object with the service worker record when its control lifecycle exists.
   activeServiceWorker: object | null;
+  /** Whether the environment discarding steps have run for this client. */
+  discarded = false;
   /** Browser owner; null only for an internal sandbox constructed without one. */
   #userAgent: UserAgent | null;
   /** Creation URL; null only for internal sandboxes. */
@@ -94,6 +101,15 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
     this.#executionReady = true;
   }
 
+  /** Run the discarding steps for an environment that will never become execution ready. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#environment-discarding-steps
+  // https://w3c.github.io/ServiceWorker/#service-worker-client-concept
+  discard(): void {
+    // TODO: Call from failed/aborted navigation, redirect reservation replacement,
+    // and failed worker startup when those processing paths are implemented.
+    this.discarded = true;
+  }
+
   /** Determine this environment's partition before or after a realm exists. */
   // https://fetch.spec.whatwg.org/#determine-the-network-partition-key
   determineNetworkPartitionKey(): NetworkPartitionKey {
@@ -121,8 +137,7 @@ export interface BrowletExecution extends
 }
 
 /** Composed browser settings and execution for one realm and global. */
-// HTML's environment settings object. The engine owns execution-context stacks;
-// its realm component is retained directly here.
+// HTML's environment settings object, owning its composed execution as env.exec.
 export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
   JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
   /** Requests tracked for this environment's lifetime. */
@@ -148,6 +163,12 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** The platform global installed in this environment's realm. */
   get global(): RealmExecution['global'] {
     return this.realm.globalObject;
+  }
+
+  /** The retained context shared by scripts using these settings. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#realm-execution-context
+  get realmExecutionContext(): JSExecutionContext {
+    return this.realm.executionContext;
   }
 
   /** Window environments can consume their Document's preload map. */

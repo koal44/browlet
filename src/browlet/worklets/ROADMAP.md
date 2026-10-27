@@ -12,6 +12,9 @@ only when the first concrete consumer can prove it.
   its own realm, false-`[[CanBlock]]` agent, event loop, module map, and
   environment settings object. Never equate a Worklet with one persistent
   global or realm.
+- Each global implementation must initialize the HTML state described by
+  [`BrowletGlobalObject`](../scripting/global-object.ts). The interface does not
+  impose EventTarget inheritance or move global state onto its environment.
 - Worklet agents can be scheduled on any suitable host thread. Their HTML
   identity and queues remain separate even if Node executes several agents on
   one thread.
@@ -43,7 +46,9 @@ only when the first concrete consumer can prove it.
 
 The existing `WorkletAgent.globalScope` slot in `scripting/agents.ts` is
 correctly one scope per agent. The future `Worklet` object—not the agent—owns
-the collection of agents/scopes.
+the collection of agents/scopes. `UserAgent.obtainWorkletAgent()` allocates an agent
+and distinct loop in its creator's cluster. It does not create a global,
+evaluate a module, or supply a worklet execution lifecycle.
 
 ## Planned ownership
 

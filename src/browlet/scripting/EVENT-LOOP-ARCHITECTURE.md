@@ -12,8 +12,10 @@ and thread; a loop is not a Window, Document, realm, or browsing context.
 The EventLoop owns task queues, per-source queue associations, the current task,
 the microtask/checkpoint boundary, and Window rendering-opportunity state.
 
-UserAgent constructs Window Agents and their EventLoops; bindings constructs the
-sandbox Agent and its EventLoop. `EventLoopInit` supplies the host-turn callback
+UserAgent allocates Window, worker, and worklet Agents using a private loop
+factory. Worker/worklet allocations remain provisional and
+do not create independently executing workers. Bindings constructs the sandbox
+Agent and its EventLoop. `EventLoopInit` supplies the host-turn callback
 and optional subsystem accounting hooks at construction. The loop creates its
 engine microtask queue and imports the shared clock directly. There is no separate
 start phase, and `runTaskTurn()` needs no configuration. Tests that need manual
@@ -81,9 +83,20 @@ The backup incumbent settings stack belongs to the EventLoop. Web IDL brackets
 callbacks with HTML script/callback preparation and cleanup using the callback's
 relevant and stored incumbent settings respectively.
 
-Browlet mirrors entries it controls. Direct `BrowletRealm.evaluate()` supplies a temporary
-task when necessary, records its settings on that task, and checkpoints after
-the last mirrored entry exits. Custom engine hooks capture callback registration,
+Browlet models entries it controls with explicit `JSExecutionContext` records.
+Every realm retains one context; settings return that same identity. Direct
+`BrowletRealm.evaluate()` supplies a temporary task when necessary, pushes the
+retained context followed by a script context, and checkpoints after the last
+context exits. Entry selection finds the most recent retained context; incumbent
+selection finds the topmost ScriptOrModule or uses the backup stack. Per-entry
+task associations stay separate because nested entries reuse the retained context.
+
+The environment still owns its composed facilities as `env.exec`; its associated
+`JSRealm` owns the Node/V8 context used for evaluation. Neither is the new record.
+These facility names remain unchanged during the experiment. HTML's per-global
+state is held by global implementations under `BrowletGlobalObject`, not by the
+settings object or by EventTarget generally.
+Custom engine hooks capture callback registration,
 bracket invocation, and place Promise jobs in HTML microtask tasks. Handlerless
 jobs still have a queue/task even when their specification realm is null.
 
@@ -119,18 +132,24 @@ These anchors retain the ownership and replacement conditions for source markers
 ### `node-v8-execution-contexts`
 
 Node does not expose V8's full execution-context stack. Cleanup checkpoints when
-the mirrored stack empties within a controlled task or script entry. A nested
+the modeled stack empties within a controlled task or script entry. A nested
 checkpoint clears HTML's current task, so the loop separately tracks whether an
 outer task turn is still running. A null task alone cannot identify an uncontrolled
-engine entry. Incumbent selection uses mirrored script/backup-incumbent evidence,
-then the explicit entry settings.
+engine entry. Incumbent selection follows the model's script/backup-incumbent
+records and asserts that backup settings exist when required. Callback capture
+uses its binding environment for direct Node-host calls when both modeled stacks
+are empty; the specification lookup itself has no fallback.
 
-Custom job hooks add native job association but do not justify deleting this
-mirror or its direct-host-entry fallback. Complete Script records, transparent
-host-function handling, and uncontrolled-entry evidence first. Use
-[callback lifecycle tests](../../../test/browlet/scripting/callback-lifecycle.test.ts)
-for the supported boundary; an ordinary script function is not a substitute
-for the bound-platform-callback case where the backup stack is decisive.
+The [callback lifecycle tests](../../../test/browlet/scripting/callback-lifecycle.test.ts)
+exercise selection and restoration with explicit records. The A-to-B bound-listener
+investigation is skipped by agreement: its ordinary JavaScript `createFunction`
+observer is not an established substitute for the native API in HTML's examples.
+Revisit with the actual example pages and platform APIs when supported, rather
+than treating that probe as a settled conformance failure. Manually supplying
+records does not establish automatic tracking of author/built-in calls. Custom
+job hooks cover their own boundaries; full Script records and active-script
+restoration also remain unfinished. Continue through the later script-processing
+and host-hook algorithms. New Node/V8 work stays parked.
 
 ### `node-v8-microtask-queue`
 

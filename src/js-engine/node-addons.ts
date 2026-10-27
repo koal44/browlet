@@ -7,7 +7,7 @@ import { InternalError } from '../infra/internal-error';
 import type {
   CollectionIteratorKind, GlobalObject, GlobalPrototypeKind, GlobalProxy, JSFunction, JSIteratorResult,
 } from './realm';
-import type { JSJobCallback, NodeContext } from './runtime';
+import type { JSJobCallback, VMContext } from './runtime';
 
 /** Typed calls to the selected backend's optional engine extensions. */
 export class NodeAPI {
@@ -16,11 +16,11 @@ export class NodeAPI {
 
   // Requires the V8 iterator-factory patch.
   createCollectionIterator?: <Value>(
-    context: NodeContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
+    context: VMContext, kind: CollectionIteratorKind, next: () => JSIteratorResult<Value>,
   ) => MapIterator<Value> | SetIterator<Value>;
   createContextHandle?: (options?: AddonContextOptions) => AddonContextHandle;
   /** Allocate the callable, undetectable object used for document.all; attach properties with setPropertyHandlers. */
-  createHTMLDDA?: <Result>(context: NodeContext, call: JSFunction<Result>) => JSFunction<Result>;
+  createHTMLDDA?: <Result>(context: VMContext, call: JSFunction<Result>) => JSFunction<Result>;
   createMicrotaskQueue?: () => AddonMicrotaskQueueHandle;
   getFunctionRealm?: (value: JSFunction) => object;
   getRealm?: (value: object) => object;
@@ -29,7 +29,7 @@ export class NodeAPI {
   isStringIterator?: (value: unknown) => boolean;
   isRegExpStringIterator?: (value: unknown) => boolean;
   /** Allocate in the destination context while retaining the source's shared backing store. */
-  cloneSharedArrayBuffer?: (buffer: SharedArrayBuffer, context: NodeContext) => SharedArrayBuffer;
+  cloneSharedArrayBuffer?: (buffer: SharedArrayBuffer, context: VMContext) => SharedArrayBuffer;
   // Requires the V8 length-tracking patch.
   isLengthTrackingArrayBufferView?: (view: ArrayBufferView) => boolean;
   /** Recognize a genuine WeakRef without dereferencing its target. */
@@ -43,9 +43,9 @@ export class NodeAPI {
     onFulfilled?: JSFunction, onRejected?: JSFunction,
   ) => Promise<unknown>;
   runInContext?: (
-    source: string, context: NodeContext, options?: ContextEvaluationOptions,
+    source: string, context: VMContext, options?: ContextEvaluationOptions,
   ) => unknown;
-  setGlobalObject?: (context: NodeContext, object: object) => void;
+  setGlobalObject?: (context: VMContext, object: object) => void;
   // Requires the V8 host-hook patches.
   setHostHooks?: <HostDefined>(hooks: AddonHostHooks<HostDefined>) => void;
   setPropertyDelegate?: (object: object, delegate: object) => void;
@@ -133,7 +133,7 @@ export type AddonContextHandle = {
 
 type AddonContextOptions = {
   microtaskQueue?: AddonMicrotaskQueueHandle;
-  reuseGlobalProxyFrom?: NodeContext;
+  reuseGlobalProxyFrom?: VMContext;
   globalPrototypeChain?: GlobalPrototypeKind[];
 };
 

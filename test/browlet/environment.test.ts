@@ -20,6 +20,66 @@ import { networkPartitionKeysEqual } from '../../src/fetch/transport';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { copyURL, serializeURL } from '../../src/url/core/index';
 
+describe('Environment lifecycle', () => {
+  it('marks an unready environment as discarded', () => {
+    const env = createReservedEnvironment('https://example.com/');
+    expect(env.executionReady).toBe(false);
+    expect(env.discarded).toBe(false);
+
+    env.discard();
+
+    expect(env.discarded).toBe(true);
+    expect(env.executionReady).toBe(false);
+  });
+
+  it('keeps global scripting state on the Window when its Document changes', () => {
+    const first = createEnvironment('https://first.test/');
+    const second = createEnvironment('https://second.test/');
+    const { env } = first;
+    const { window } = env;
+    const importMap = window.importMap;
+    const promise = env.exec.NativePromise.resolve();
+    const moduleURL = parseURL('https://first.test/module.js').url!;
+    const resolution = {
+      serializedBaseURL: 'https://first.test/',
+      specifier: 'module',
+      specifierAsURL: null,
+    };
+    expect(window.inErrorReportingMode).toBe(false);
+    window.inErrorReportingMode = true;
+    window.outstandingRejectedPromises.add(promise);
+    window.aboutToBeNotifiedRejectedPromises.push(promise);
+    importMap.imports.set('module', moduleURL);
+    importMap.scopes.set('https://first.test/scoped/', new Map([['module', moduleURL]]));
+    importMap.integrity.set(moduleURL, 'sha256-example');
+    window.resolvedModuleSet.add(resolution);
+
+    const replacement = env.exec.createDocument();
+    env.window.setAssociatedDocument(replacement);
+
+    expect(env.moduleMap).toBe(replacement.moduleMap);
+    expect(env.moduleMap).not.toBe(first.document.moduleMap);
+    expect(window.importMap).toBe(importMap);
+    expect(window.inErrorReportingMode).toBe(true);
+    expect(window.outstandingRejectedPromises.has(promise)).toBe(true);
+    expect(window.aboutToBeNotifiedRejectedPromises).toEqual([promise]);
+    expect(window.resolvedModuleSet.has(resolution)).toBe(true);
+    expect(second.env.window.inErrorReportingMode).toBe(false);
+    expect(second.env.window.outstandingRejectedPromises.has(promise)).toBe(false);
+    expect(second.env.window.aboutToBeNotifiedRejectedPromises).toEqual([]);
+    expect(second.env.window.importMap.imports.size).toBe(0);
+    expect(second.env.window.importMap.scopes.size).toBe(0);
+    expect(second.env.window.importMap.integrity.size).toBe(0);
+    expect(second.env.window.resolvedModuleSet.size).toBe(0);
+    for (const name of [
+      'inErrorReportingMode', 'outstandingRejectedPromises', 'aboutToBeNotifiedRejectedPromises',
+      'importMap', 'resolvedModuleSet',
+    ]) {
+      expect(Reflect.has(env.global, name), name).toBe(false);
+    }
+  });
+});
+
 describe('Window environment cross-site ancestry', () => {
   it('has no cross-site ancestor in a top-level window', () => {
     const top = createEnvironment('https://example.com/');

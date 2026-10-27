@@ -44,6 +44,11 @@ download/POST handling, nested navigables, reload, traversal, unloading,
 ongoing-navigation cancellation, and full history-step application (HTML
 §7.4).
 
+Failed/aborted navigation and cross-origin redirect replacement must run
+`reservedEnv.discard()` before releasing the reserved environment. The operation
+now implements the Service Workers client discarded flag; the incomplete
+navigation and redirect algorithms still need to call it.
+
 Document now retains the §3.1.5 `previousDocumentUnloadTiming` record with zero
 defaults. The unloading/navigation algorithms must capture the old document's
 unload-event start/end times and supply them to the destination document;

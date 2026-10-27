@@ -1,5 +1,5 @@
 export {
-  obtainSimilarOriginWindowAgent, Agent, WindowAgent, SandboxAgent, DedicatedWorkerAgent,
+  Agent, WindowAgent, SandboxAgent, DedicatedWorkerAgent,
   SharedWorkerAgent, ServiceWorkerAgent, WorkletAgent, AgentCluster, type AgentClusterKey,
   type CrossOriginIsolationMode,
 } from './agents';
@@ -11,6 +11,9 @@ export {
   type TaskQueueSelector, Task, type TaskSource,
 } from './event-loop';
 export { installHostHooks, jsEngineTaskSource } from './host-hooks';
+export { JSExecutionContext, type JSScriptOrModule } from './execution-context';
+export type { BrowletGlobalObject } from './global-object';
+export type { ImportMap, ModuleSpecifierMap, ModuleIntegrityMap, SpecifierResolutionRecord } from './import-map';
 export {
   createBrowletRealm, BrowletRealm, WindowRealm,
   type BrowletRealmCustomizations, type BrowletRealmCreationOptions, type BrowletRealmOptions, type WindowRealmOptions,

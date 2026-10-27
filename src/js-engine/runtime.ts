@@ -31,7 +31,7 @@ export const associateObjectRealm: (object: object, realm: JSRealm) => void = ge
   ? () => undefined
   : (object, realm) => { RealmStamper.stamp(object, realm); };
 
-export function associateContext(context: NodeContext, realm: JSRealm): void {
+export function associateContext(context: VMContext, realm: JSRealm): void {
   if (isAddonContextHandle(context)) RealmStamper.stamp(context.realm, realm);
 }
 
@@ -46,7 +46,7 @@ export function getNativeArrayBufferViewLengthTracking(value: ArrayBufferView): 
 }
 
 /** Allocate a new buffer object in the context without copying its shared storage. */
-export function cloneSharedArrayBuffer(buffer: SharedArrayBuffer, context: NodeContext): SharedArrayBuffer {
+export function cloneSharedArrayBuffer(buffer: SharedArrayBuffer, context: VMContext): SharedArrayBuffer {
   const clone = addon.cloneSharedArrayBuffer;
   if (clone) return clone(buffer, context);
 
@@ -116,9 +116,9 @@ export function getAssociatedRealm(value: object): JSRealm | undefined {
 
 export function createContext(
   microtaskQueue: JSMicrotaskQueue,
-  reuseGlobalProxyFrom?: NodeContext,
+  reuseGlobalProxyFrom?: VMContext,
   globalPrototypeChain?: GlobalPrototypeKind[],
-): NodeContext {
+): VMContext {
   const handle = microtaskQueue instanceof AddonMicrotaskQueue
     ? microtaskQueue.handle
     : undefined;
@@ -146,7 +146,7 @@ export function createContext(
   ]) as GlobalProxy;
 }
 
-export function getContextGlobalProxy(context: NodeContext): GlobalProxy {
+export function getContextGlobalProxy(context: VMContext): GlobalProxy {
   return isAddonContextHandle(context)
     ? context.globalProxy
     : context;
@@ -154,14 +154,14 @@ export function getContextGlobalProxy(context: NodeContext): GlobalProxy {
 
 /** Undefined when the backend lacks callback-driven native iterator creation. */
 export function createCollectionIterator<Value>(
-  context: NodeContext,
+  context: VMContext,
   kind: CollectionIteratorKind,
   next: () => JSIteratorResult<Value>,
 ): MapIterator<Value> | SetIterator<Value> | undefined {
   return addon.createCollectionIterator?.(context, kind, next);
 }
 
-export function getContextGlobalAllocation(context: NodeContext): GlobalAllocation | undefined {
+export function getContextGlobalAllocation(context: VMContext): GlobalAllocation | undefined {
   if (!isAddonContextHandle(context)) return undefined;
   const { globalObject, prototypeChain } = context;
   if (globalObject === undefined && prototypeChain === undefined) return undefined;
@@ -178,14 +178,14 @@ export function setPropertyDelegate(object: object, delegate: object): void {
   addon.setPropertyDelegate(object, delegate);
 }
 
-export function setGlobalObject(context: NodeContext, object: object): void {
+export function setGlobalObject(context: VMContext, object: object): void {
   if (!addon.setGlobalObject) {
     throw new InternalError('Node backend does not provide setGlobalObject');
   }
   addon.setGlobalObject(context, object);
 }
 
-export function detachContext(context: NodeContext): GlobalProxy {
+export function detachContext(context: VMContext): GlobalProxy {
   if (!isAddonContextHandle(context)) {
     throw new InternalError('Node does not support detachable context handles');
   }
@@ -198,7 +198,7 @@ export function makePrototypeImmutable(object: object): void {
 
 export function runInContext(
   source: string,
-  context: NodeContext,
+  context: VMContext,
   options?: ContextEvaluationOptions,
 ): unknown {
   if (addon.createContextHandle && addon.runInContext &&
@@ -384,7 +384,7 @@ export type JSMicrotaskQueue = {
 };
 
 /** Stock Node's DONT_CONTEXTIFY global proxy or a compatibility-addon context handle. */
-export type NodeContext = GlobalProxy | AddonContextHandle;
+export type VMContext = GlobalProxy | AddonContextHandle;
 
 /** Attach a realm to its backend reference or, on plain Node, its ordinary objects. */
 class RealmStamper extends Stamper {

@@ -14,6 +14,7 @@ import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } fr
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
 
 import type { Agent, WindowAgent } from './agents';
+import { JSExecutionContext } from './execution-context';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
 
@@ -21,24 +22,20 @@ import type { QueuedTaskHandle } from './tasks';
 // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm
 export function createBrowletRealm(
   agent: Agent,
-  customizations: BrowletRealmCustomizations,
+  customizations: BrowletRealmCustomizations = {},
   options: BrowletRealmCreationOptions = {},
-): BrowletRealm {
-  const realm = new BrowletRealm({ ...options, agent });
-  const globalObject = customizations.createGlobalObject(realm);
-  const globalThis = customizations.createGlobalThisValue
-    ? customizations.createGlobalThisValue(realm, globalObject)
-    : globalObject;
-
-  realm.setGlobalObjects(globalObject, globalThis);
-  return realm;
+): JSExecutionContext {
+  return new BrowletRealm({ ...options, agent }).initialize(customizations);
 }
 
 /** Adds HTML ownership, callback lifecycle, and task routing to an engine realm. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#realms-settings-objects-global-objects
+// The attached environment owns the composed execution, available as realm.env.exec.
 export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
-  /** Agent whose event loop serves this realm. */
+  /** Browlet agent whose event loop serves this realm. */
   agent: Agent;
+  /** Shared realm context pushed below each script's own execution context. */
+  executionContext: JSExecutionContext;
   /** Binding hooks for HTML script and callback entry and cleanup. */
   callbacks: CallbackHooks;
   /** Whether the realm was created with cross-origin isolation enabled. */
@@ -58,6 +55,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       reuseGlobalProxyFrom: options.reuseGlobalProxyFrom,
     });
     this.agent = agent;
+    this.executionContext = new JSExecutionContext(this);
     this.crossOriginIsolated = options.crossOriginIsolated ?? false;
     this.globalNames = new Set(options.globalNames ?? []);
     this.isGlobalPrototypeChainMutable =
@@ -68,7 +66,15 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
       captureContext: () => {
         const env = this.#hostDefined;
         if (env === undefined) return this;
-        return env.responsibleEventLoop.getIncumbentEnvironment(env);
+        const loop = env.responsibleEventLoop;
+        // ACCOMMODATION(node-v8-execution-contexts): A direct Node-host call
+        // has no modeled entry. Capture its binding environment here rather
+        // than weakening HTML's incumbent lookup inside an active entry.
+        if (
+          loop.executionContextStack.length === 0 &&
+          loop.backupIncumbentEnvironmentStack.length === 0
+        ) return env;
+        return loop.getIncumbentEnvironment();
       },
       cleanUpAfterRunningCallback: (context) => {
         const env = this.#getCallbackEnvironment(context);
@@ -143,6 +149,31 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     return env.timing.currentHighResolutionTime().toTimestamp();
   }
 
+  /** Install this realm's globals while its retained creation context is running. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm
+  initialize(customizations: BrowletRealmCustomizations = {}): JSExecutionContext {
+    const stack = this.agent.eventLoop.executionContextStack;
+    stack.push(this.executionContext);
+    try {
+      const globalObject = customizations.createGlobalObject
+        ? customizations.createGlobalObject(this)
+        : this.createOrdinaryObject(this.intrinsics.objectPrototype);
+      const globalThis = customizations.createGlobalThisValue
+        ? customizations.createGlobalThisValue(this, globalObject)
+        : globalObject;
+
+      this.setGlobalObjects(globalObject, globalThis);
+    } finally {
+      stack.pop();
+    }
+
+    if (this.agent.agentCluster?.crossOriginIsolationMode === 'none') {
+      const status = Reflect.deleteProperty(this.globalObject, 'SharedArrayBuffer');
+      if (!status) throw new InternalError('Could not remove SharedArrayBuffer');
+    }
+    return this.executionContext;
+  }
+
   isWindow(): this is WindowRealm {
     return false;
   }
@@ -190,10 +221,6 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     globalThis: GlobalThis,
   ): void {
     this.initializeGlobalObjects(globalObject, globalThis);
-    if (this.agent.agentCluster?.crossOriginIsolationMode === 'none') {
-      const status = Reflect.deleteProperty(globalObject, 'SharedArrayBuffer');
-      if (!status) throw new InternalError('Could not remove SharedArrayBuffer');
-    }
     if (!this.isGlobalPrototypeChainMutable) {
       this.makeHostGlobalPrototypeImmutable();
     }
@@ -295,7 +322,7 @@ export class WindowRealm extends BrowletRealm implements WindowDOMRealm {
 }
 
 export type BrowletRealmCustomizations = {
-  createGlobalObject(realm: BrowletRealm): GlobalObject;
+  createGlobalObject?(realm: BrowletRealm): GlobalObject;
   createGlobalThisValue?(realm: BrowletRealm, globalObject: GlobalObject): GlobalThis;
 };
 

@@ -52,9 +52,10 @@ constructor correctness alone does not settle incumbent/script selection.
 
 ### Promise rejection lifecycle
 
-Add `HostPromiseRejectionTracker`, per-global rejected-promise state,
-`unhandledrejection`, and `rejectionhandled` after script/settings ownership is
-established. Node's process-wide rejection events do not supply HTML's required
+Connect `HostPromiseRejectionTracker`, `unhandledrejection`, and
+`rejectionhandled` to the per-global rejected-promise collections now initialized
+on Window and the service-worker global skeleton. The fields alone do not track
+rejections. Node's process-wide rejection events do not supply HTML's required
 per-realm context. Test unrelated Node rejections and runner shutdown as well
 as page events; routing diagnostics onto an HTML queue previously prevented exit.
 
@@ -125,10 +126,18 @@ properties without enforcing them in the engine. A Window VM can still call
 arbitrary sharing of a native SharedArrayBuffer through an exposed host value.
 Native queues solve scheduling separation, not those execution/memory controls.
 
-Establish actual isolate/worker topology and engine controls with Workers and
-cross-origin isolation. Do not add inert lock-free fields. The earlier audit
-also found HTML's agent initialization omitted ECMAScript's `[[IsLockFree8]]`;
-recheck that upstream discrepancy when implementing the Agent coupling.
+Agent lock-free and byte-order fields now report immutable observations of
+this runtime; they do not configure it. They include ECMAScript's
+`[[IsLockFree8]]`, which HTML's initialization list still omits. CandidateExecution
+remains the engine's memory-model machinery rather than a fabricated host log.
+
+New addon/V8 integration is parked on `research/html-agent-execution` while the
+[HTML §8 audit](../browlet/scripting/ROADMAP.md#html-811812-audit) proceeds.
+Establish actual execution topology and engine controls with their consuming
+features. The Window Atomics.wait regression in
+[agents.test.ts](../../test/browlet/scripting/agents.test.ts) is an approved
+expected failure; replace it with a normal test when enforcement exists.
+Worker/worklet cluster allocation is bookkeeping, not a working worker backend.
 
 Generic/timeout hooks are isolate-wide and cannot reject individual jobs.
 Supporting unrelated Node/VM Atomics.waitAsync while HTML installs these hooks

@@ -1,28 +1,35 @@
 import { InternalError } from '../../infra/index';
-import {
-  areSameOrigin, isOrigin, obtainSite, type Site,
-  type Origin,
-} from '../../url/index';
+import type { Origin, Site } from '../../url/index';
 
 import type { MutationObserverImpl } from '../dom/nodes/index';
 import type { HTMLSlotElementImpl } from '../dom/nodes/html/index';
 import type { CustomElementRegistryImpl } from '../dom/nodes/html/custom-elements/index';
 import type { WindowImpl } from '../browsing/window/index';
-import type { BrowsingContextGroup } from '../browsing/navigation/index';
 
 import type { EventLoop } from './event-loop';
 
-// V8 owns ECMAScript execution contexts and engine-level agent state;
-// Browlet owns the HTML event loop and host state shared by the agent's realms.
+// Browlet models the contexts it enters on the agent's EventLoop. V8 still owns
+// actual function execution and engine-level agent state; ordinary JS calls do
+// not automatically add records to Browlet's stack.
+// CandidateExecution is the engine's memory-model bookkeeping, not a second
+// event log to maintain here. Its association with our modeled clusters is unwired.
 /** Owns the HTML execution boundary shared by one or more realms. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-formalism
 export abstract class Agent {
-  /** Whether blocking operations are permitted for this agent kind. */
+  /** Intended blocking policy for this agent kind. */
+  // PROVISIONAL: not connected to V8's AgentCanSuspend; Window Atomics.wait still succeeds.
   canBlock: boolean;
   /** Task processing and microtask checkpoints shared by the agent's realms. */
   eventLoop: EventLoop;
-  /** Unique identifier corresponding to the agent signifier. */
-  signifier: symbol;
+  /** Unique Browlet identifier, fixed for the agent's lifetime. */
+  // PROVISIONAL: not V8's [[Signifier]] or the realm's native [[AgentSignifier]].
+  readonly signifier: symbol;
+  /** Observed runtime facts, not independently configurable engine settings. */
+  readonly isLockFree1 = isLockFree1;
+  readonly isLockFree2 = isLockFree2;
+  // ECMAScript also defines [[IsLockFree8]], omitted by HTML's initialization list.
+  readonly isLockFree8 = isLockFree8;
+  readonly littleEndian = littleEndian;
   #agentCluster: AgentCluster | null = null;
 
   protected constructor(canBlock: boolean, eventLoop: EventLoop) {
@@ -96,6 +103,7 @@ export class SandboxAgent extends Agent {
 }
 
 /** Execution owner for one dedicated worker global. */
+// PROVISIONAL: no DedicatedWorkerGlobalScope, worker settings, or independent execution yet.
 export class DedicatedWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -105,6 +113,7 @@ export class DedicatedWorkerAgent extends Agent {
 }
 
 /** Execution owner for one shared worker global. */
+// PROVISIONAL: no SharedWorkerGlobalScope, connection manager, or independent execution yet.
 export class SharedWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -114,6 +123,7 @@ export class SharedWorkerAgent extends Agent {
 }
 
 /** Execution owner for one service worker global. */
+// PROVISIONAL: the existing service-worker listener hook does not supply a global or execution lifetime.
 export class ServiceWorkerAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -123,6 +133,7 @@ export class ServiceWorkerAgent extends Agent {
 }
 
 /** Execution owner for one worklet global. */
+// PROVISIONAL: no WorkletGlobalScope, module evaluation, or worklet execution lifecycle yet.
 export class WorkletAgent extends Agent {
   globalScope: unknown = undefined;
 
@@ -131,66 +142,18 @@ export class WorkletAgent extends Agent {
   }
 }
 
-/** Reuse or allocate the Window agent selected by this group's origin/site policy. */
-// https://html.spec.whatwg.org/multipage/webappapis.html#obtain-a-similar-origin-window-agent
-export function obtainSimilarOriginWindowAgent(
-  origin: Origin,
-  group: BrowsingContextGroup,
-  requestsOAC: boolean,
-): WindowAgent {
-  const site = obtainSite(origin);
-  let key: AgentClusterKey = site;
-
-  if (group.crossOriginIsolationMode !== 'none') {
-    key = origin;
-  } else if (group.historicalAgentClusterKeyMap.has(origin)) {
-    key = group.historicalAgentClusterKeyMap.get(origin)!;
-  } else {
-    if (requestsOAC) {
-      key = origin;
-    }
-
-    group.historicalAgentClusterKeyMap.set(origin, key);
-  }
-
-  let agentCluster = group.agentClusterMap.get(key);
-
-  if (agentCluster === undefined) {
-    agentCluster = new AgentCluster(group.crossOriginIsolationMode);
-
-    if (isOrigin(key)) {
-      if (!areSameOrigin(key, origin)) {
-        throw new InternalError('An origin agent cluster key must be the given origin');
-      }
-
-      agentCluster.isOriginKeyed = true;
-    }
-
-    agentCluster.add(group.userAgent.createWindowAgent());
-    group.agentClusterMap.set(key, agentCluster);
-  }
-
-  const [windowAgent, ...additionalWindowAgents] = [...agentCluster.agents]
-    .filter((agent) => agent instanceof WindowAgent);
-
-  if (windowAgent === undefined || additionalWindowAgents.length > 0) {
-    throw new InternalError('An agent cluster must contain one Window agent');
-  }
-
-  return windowAgent;
-}
-
-/** Defines the shared-memory boundary for a set of agents. */
+/** Records the shared-memory boundary used by Browlet's serialization algorithms. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#integration-with-the-javascript-agent-cluster-formalism
+// PROVISIONAL: membership does not isolate native execution, memory, or host-injected values.
 export class AgentCluster {
   /** Agents permanently associated with this cluster. */
   agents = new Set<Agent>();
-  /** Isolation mode inherited from the browsing context group. */
+  /** Defaults to none; Window clusters inherit their browsing context group's mode. */
   crossOriginIsolationMode: CrossOriginIsolationMode;
   /** Whether this cluster uses an origin key instead of a site key. */
   isOriginKeyed = false;
 
-  constructor(crossOriginIsolationMode: CrossOriginIsolationMode) {
+  constructor(crossOriginIsolationMode: CrossOriginIsolationMode = 'none') {
     this.crossOriginIsolationMode = crossOriginIsolationMode;
   }
 
@@ -203,3 +166,11 @@ export class AgentCluster {
 export type AgentClusterKey = Origin | Site;
 
 export type CrossOriginIsolationMode = 'none' | 'logical' | 'concrete';
+
+// All current realms use this runtime. Read its immutable facts once, without
+// replacing Atomics or adding checks to author calls. Future worker runtimes
+// must report their own facts and agree with their cluster before running code.
+const isLockFree1 = Atomics.isLockFree(1);
+const isLockFree2 = Atomics.isLockFree(2);
+const isLockFree8 = Atomics.isLockFree(8);
+const littleEndian = new Uint8Array(new Uint16Array([1]).buffer)[0] === 1;

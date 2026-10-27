@@ -3,7 +3,6 @@ import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEq
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
-import { obtainSimilarOriginWindowAgent } from '../../scripting/index';
 import { PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
 import { CSPList } from '../policy/csp/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
@@ -212,7 +211,7 @@ export class Navigable {
     } else {
       const group = browsingContext.group;
       if (group === null) throw new InternalError('Navigation browsing context has no group');
-      const agent = obtainSimilarOriginWindowAgent(params.origin, group, params.requestsOriginAgentCluster());
+      const agent = group.obtainSimilarOriginWindowAgent(params.origin, params.requestsOriginAgentCluster());
       window = group.userAgent.createWindowEnvironment({
         agent, userAgent: group.userAgent,
         creationURL,

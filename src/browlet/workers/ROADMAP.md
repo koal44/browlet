@@ -8,9 +8,11 @@ structured-clone implementation.
 
 ## Present
 
-- `service-worker-global-scope.ts` implements only the DOM legacy-listener
-  warning hook needed by current event-listener behavior. Full service workers
-  are owned by the Service Workers specification, not HTML §10.
+- `service-worker-global-scope.ts` implements the DOM legacy-listener warning
+  hook and initializes HTML's `BrowletGlobalObject` state. Error reporting,
+  rejected-promise notification, and import-map consumers remain unwired. Move
+  these initializers to `WorkerGlobalScopeImpl` when that common base exists.
+  Full service workers are owned by the Service Workers specification, not HTML §10.
 - `UserAgent.handleFetch()` is the provisional Fetch interception entry. With
   no registrations or active workers, it returns a host-owned Promise of null
   so Fetch continues to the network. Replace it with Service Workers' Handle
@@ -18,9 +20,11 @@ structured-clone implementation.
   exist; retain host-owned completion independently of a page's task queue.
   Select interception before invoking `prepareRequest()` once, before body
   consumption. The no-worker path must not create an unused upload branch.
-- `scripting/agents.ts` reserves dedicated- and shared-worker agent types with
-  the specified true `[[CanBlock]]` value. It does not yet obtain those agents
-  or run workers.
+- `UserAgent` allocates dedicated/shared/service worker agent records
+  and their clusters according to HTML §8.1.2. Dedicated/shared agents record
+  true `[[CanBlock]]`; service worker agents record false. The current loop
+  factory uses the existing host thread. No production worker startup consumes
+  these allocators, and they do not provide globals or independent execution.
 
 ## Execution and lifetime constraints
 
@@ -33,6 +37,9 @@ structured-clone implementation.
   Fetch-backed classic script or module graph. Fetch and script parsing may do
   realm-neutral work in parallel, but success and failure return through named
   tasks on the appropriate outside or worker global.
+- If worker startup fails before execution readiness, run the inside
+  environment's `discard()` steps. The Service Workers client discarded flag
+  exists on `BrowletEnvironmentBase`; this startup caller remains unimplemented.
 - `WorkerGlobalScope` owns its URL, type, name, owner set, policy container,
   embedder policy, module map, cross-origin-isolated capability, and closing
   flag. `WorkerLocation` and `WorkerNavigator` are stable worker-global objects,
@@ -70,7 +77,7 @@ structured-clone implementation.
 
 Declarations accompany their implementations; partial contributions stay with
 their primary constructs. Worker settings extend `browlet/environment.ts`; worker-agent acquisition
-extends `scripting/agents.ts`; `WorkerNavigator` and its shared capability
+uses `UserAgent`; `WorkerNavigator` and its shared capability
 mixins belong under `navigator/`. Keeping those owners explicit prevents the
 worker processing model from turning into a second browser kernel.
 

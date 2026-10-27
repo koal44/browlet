@@ -16,6 +16,11 @@ transfer and cross-agent task delivery together.
 - Window messaging captures the incumbent sender, its origin, and corresponding
   WindowProxy, but checks the target Window's origin when the queued task runs.
   Navigation between send and delivery can therefore discard a message.
+  When this API exists, test A calling a function from B which posts to C:
+  C must observe B as `event.source`, with the sender's corresponding origin.
+  Include callback/built-in entry cases and retain expected failures for missing
+  runtime attribution. The investigation on `research/html-agent-execution`
+  is deferred evidence, not a prerequisite patch to adopt before this consumer.
 - A MessagePort owns a movable port-message task source. Transferring a port
   moves its pending delivery tasks and reconstructs the endpoint in the target
   realm; the queue cannot be a closure permanently bound to the original

@@ -8,7 +8,9 @@ import {
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
-import type { SpeculationRulesParseResult, TimerAction } from '../../scripting/index';
+import type {
+  BrowletGlobalObject, ImportMap, SpecifierResolutionRecord, SpeculationRulesParseResult, TimerAction,
+} from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
@@ -22,8 +24,15 @@ import type { WindowProxyHandle } from './window-proxy';
 
 /** Owns a document global and forwards shared browser facilities to its global-scope mixin. */
 // https://html.spec.whatwg.org/multipage/nav-history-apis.html#the-window-object
-export class WindowImpl extends EventTargetImpl {
+export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   declare env: WindowEnvironment;
+  // HTML §8.1.3.3 — internal global state, retained when the associated Document changes.
+  // TODO: Connect error reporting, rejection tracking, and import-map processing.
+  inErrorReportingMode = false;
+  outstandingRejectedPromises = new WeakSet<Promise<unknown>>();
+  aboutToBeNotifiedRejectedPromises: Promise<unknown>[] = [];
+  importMap: ImportMap = { imports: new Map(), scopes: new Map(), integrity: new Map() };
+  resolvedModuleSet = new Set<SpecifierResolutionRecord>();
   /** Event currently being invoked in this Window, restored after each listener. @deprecated */
   event: EventImpl | undefined = undefined;
   /** Stable Location object; Web IDL forwards author assignments to its href. */

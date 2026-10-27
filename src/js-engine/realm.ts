@@ -15,11 +15,11 @@ import {
   createCollectionIterator, createContext, createMicrotaskQueue, detachContext,
   getContextGlobalAllocation, getContextGlobalProxy,
   makePrototypeImmutable, observePromise, runInContext, runWithActiveRealm,
-  setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type NodeContext,
+  setGlobalObject, setPropertyDelegate, type JSMicrotaskQueue, type VMContext,
 } from './runtime';
 
 /**
- * Owns an engine context, its captured intrinsics, and realm-specific allocation.
+ * Owns a VM context, its captured intrinsics, and realm-specific allocation.
  * Hosts subclass this identity to supply Web IDL and HTML policy, and install
  * their global object and global-this through initializeGlobalObjects().
  */
@@ -30,7 +30,6 @@ export class JSRealm {
   Promise: typeof InternalPromise;
 
   #callableFunctionFactory: RealmFunctionFactory;
-  #context: NodeContext;
   #constructibleFunctionFactory: RealmFunctionFactory;
   #fallbackIteratorNext: Partial<Record<CollectionIteratorKind, JSFunction>> = {};
   #globalAllocation: GlobalAllocation | undefined;
@@ -38,6 +37,7 @@ export class JSRealm {
   #globalProxy: GlobalProxy;
   #globalThis: GlobalThis;
   #microtaskQueue: JSMicrotaskQueue;
+  #vmContext: VMContext;
 
   /**
    * Create a context on the supplied microtask queue and capture its built-ins.
@@ -52,17 +52,17 @@ export class JSRealm {
     this.#microtaskQueue = microtaskQueue;
     const reuseGlobalProxyFrom = options.reuseGlobalProxyFrom === undefined
       ? undefined
-      : options.reuseGlobalProxyFrom.#context;
-    this.#context = createContext(
+      : options.reuseGlobalProxyFrom.#vmContext;
+    this.#vmContext = createContext(
       microtaskQueue,
       reuseGlobalProxyFrom,
       options.globalPrototypeChain,
     );
-    this.#globalAllocation = getContextGlobalAllocation(this.#context);
+    this.#globalAllocation = getContextGlobalAllocation(this.#vmContext);
     if (options.globalPrototypeChain && !this.#globalAllocation) {
       throw new InternalError('The Node backend did not allocate the requested global prototypes');
     }
-    this.#globalProxy = getContextGlobalProxy(this.#context);
+    this.#globalProxy = getContextGlobalProxy(this.#vmContext);
     this.#globalObject = this.#globalProxy;
     this.#globalThis = this.#globalProxy;
 
@@ -134,7 +134,7 @@ export class JSRealm {
     }
     const asyncIterator = runInContext(
       '(async function* () {})()',
-      this.#context,
+      this.#vmContext,
     ) as object;
     const asyncGeneratorFunctionPrototype = Reflect.getPrototypeOf(
       asyncIterator,
@@ -253,15 +253,15 @@ export class JSRealm {
     };
     this.#callableFunctionFactory = runInContext(
       callableFunctionFactorySource,
-      this.#context,
+      this.#vmContext,
     ) as RealmFunctionFactory;
     this.#constructibleFunctionFactory = runInContext(
       constructibleFunctionFactorySource,
-      this.#context,
+      this.#vmContext,
     ) as RealmFunctionFactory;
 
     // Native lookup uses the context identity; fallback lookup also needs these prototype anchors.
-    associateContext(this.#context, this);
+    associateContext(this.#vmContext, this);
     associateGlobalRealm(this.#globalProxy, this);
     associateObjectRealm(this.intrinsics.functionPrototype, this);
     associateObjectRealm(this.intrinsics.objectPrototype, this);
@@ -299,7 +299,7 @@ export class JSRealm {
 
   /** Detach the native proxy for reuse; the host must finish pending work first. */
   detachGlobal(): GlobalProxy {
-    return detachContext(this.#context);
+    return detachContext(this.#vmContext);
   }
 
   /** Install property forwarding on an object allocated with a delegated native template. */
@@ -346,7 +346,7 @@ export class JSRealm {
     if (!addon.createHTMLDDA) {
       throw new InternalError('Node backend does not provide createHTMLDDA');
     }
-    return addon.createHTMLDDA(this.#context, call);
+    return addon.createHTMLDDA(this.#vmContext, call);
   }
 
   /** Parse JSON with this realm's captured intrinsic and allocation prototypes. */
@@ -373,7 +373,7 @@ export class JSRealm {
     kind: CollectionIteratorKind,
     next: () => JSIteratorResult<Value>,
   ): MapIterator<Value> | SetIterator<Value> {
-    const native = createCollectionIterator(this.#context, kind, next);
+    const native = createCollectionIterator(this.#vmContext, kind, next);
     if (native !== undefined) return native;
 
     /*
@@ -446,7 +446,7 @@ export class JSRealm {
 
   /** Allocate a new buffer object in this realm while sharing the source's storage and growth. */
   cloneSharedArrayBuffer(buffer: SharedArrayBuffer): SharedArrayBuffer {
-    return cloneSharedArrayBuffer(buffer, this.#context);
+    return cloneSharedArrayBuffer(buffer, this.#vmContext);
   }
 
   /** Copy bytes into a new realm-owned view and non-shared backing buffer. */
@@ -508,7 +508,7 @@ export class JSRealm {
   /** Evaluate a script in this realm, using the supplied source location in diagnostics. */
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
     return runWithActiveRealm(this, () =>
-      runInContext(source, this.#context, {
+      runInContext(source, this.#vmContext, {
         displayErrors: false,
         filename,
         lineOffset,
@@ -548,7 +548,7 @@ export class JSRealm {
           Reflect.deleteProperty(this.#globalProxy, key);
         }
       }
-      setGlobalObject(this.#context, globalObject);
+      setGlobalObject(this.#vmContext, globalObject);
     } else {
       /*
        * ACCOMMODATION(node-vm-global-proxy): Node cannot make an existing host

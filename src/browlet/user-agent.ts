@@ -18,7 +18,10 @@ import { PercentageLiteral, createSystemColorPalette, type StyleletUserAgent } f
 
 import { unsafeSharedCurrentTime } from './timing/index';
 import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
-import { EventLoop, WindowAgent } from './scripting/index';
+import {
+  type Agent, AgentCluster, DedicatedWorkerAgent, EventLoop, ServiceWorkerAgent,
+  SharedWorkerAgent, WindowAgent, WorkletAgent,
+} from './scripting/index';
 import { type ReportingEndpoint, ReportImpl } from './reporting/index';
 import {
   PolicyContainer, HSTSStore,
@@ -119,7 +122,25 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
 
   /** Create an Agent with its own microtask queue and running browser event loop. */
   createWindowAgent(): WindowAgent {
-    return new WindowAgent(new EventLoop({ requestTurn: queueNodeTask }));
+    return new WindowAgent(this.#createEventLoop());
+  }
+
+  /** Allocate a dedicated worker in its creator's cluster, or a shared worker in a new cluster. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#obtain-a-dedicated/shared-worker-agent
+  obtainDedicatedOrSharedWorkerAgent(outsideEnv: BrowletEnvironment, isShared: boolean): Agent {
+    return this.#obtainWorkerOrWorkletAgent(outsideEnv, isShared, true);
+  }
+
+  /** Allocate one worklet agent in its creator's cluster. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#obtain-a-worklet-agent
+  obtainWorkletAgent(outsideEnv: BrowletEnvironment): Agent {
+    return this.#obtainWorkerOrWorkletAgent(outsideEnv, false, false);
+  }
+
+  /** Allocate a service worker in a new cluster without an outside environment. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#obtain-a-service-worker-agent
+  obtainServiceWorkerAgent(): Agent {
+    return this.#obtainWorkerOrWorkletAgent(null, true, false);
   }
 
   createBrowsingContextGroup(): BrowsingContextGroup {
@@ -415,6 +436,41 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
     if (url.scheme === 'about' && (url.path === 'blank' || url.path === 'srcdoc')) return true;
     if (url.scheme === 'data') return true;
     return this.isOriginPotentiallyTrustworthy(obtainURLOrigin(url));
+  }
+
+  /** Allocate the agent and its cluster; its caller must still create and start the global. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#obtaining-a-worker/worklet-agent
+  // outsideEnv is HTML's outside settings: the creator's environment, not the new global's.
+  #obtainWorkerOrWorkletAgent(
+    outsideEnv: BrowletEnvironment | null,
+    isTopLevel: boolean,
+    canBlock: boolean,
+  ): Agent {
+    let cluster: AgentCluster;
+    if (isTopLevel) {
+      cluster = new AgentCluster();
+      cluster.isOriginKeyed = true;
+    } else {
+      const ownerCluster = outsideEnv?.realm.agent.agentCluster ?? null;
+      if (ownerCluster === null) {
+        throw new InternalError('A non-top-level worker or worklet requires its owner\'s agent cluster');
+      }
+      cluster = ownerCluster;
+    }
+
+    const AgentConstructor = canBlock
+      ? (isTopLevel ? SharedWorkerAgent : DedicatedWorkerAgent)
+      : (isTopLevel ? ServiceWorkerAgent : WorkletAgent);
+    // PROVISIONAL: this allocates records and a host-driven loop on the current thread.
+    // Worker/worklet processing must supply independent execution and termination.
+    const agent = new AgentConstructor(this.#createEventLoop());
+    cluster.add(agent);
+    return agent;
+  }
+
+  /** Allocate an agent's loop using this host's task-turn scheduler. */
+  #createEventLoop(): EventLoop {
+    return new EventLoop({ requestTurn: queueNodeTask });
   }
 
   /** Retain copied reports and their original endpoint configuration until delivery finishes. */
