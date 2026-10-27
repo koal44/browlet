@@ -16,7 +16,7 @@ export type {
   FetchInsecureRequestsPolicy, FetchEmbedderPolicy,
   FetchPolicyContainer, FetchCSPList, FetchPromptTarget, fetchPromptTargetBrand, FetchEmbedderPolicyValue,
 } from './environment';
-export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, FetchHeaders } from './headers';
+export { getEnvironmentDefaultUserAgent, isHeaderValue, isOkStatus, legacyExtractEncoding, FetchHeaders } from './headers';
 export { isScriptLikeDestination, type Destination } from './destination';
 export {
   requestIDL, FetchRequest, type FetchMode, type RequestCredentials, type RequestPriority, type RequestInternalPriority,

@@ -59,6 +59,7 @@ describe('Environment lifecycle', () => {
 
     expect(env.moduleMap).toBe(replacement.moduleMap);
     expect(env.moduleMap).not.toBe(first.document.moduleMap);
+    expect(env.globalImplementation).toBe(window);
     expect(window.importMap).toBe(importMap);
     expect(window.inErrorReportingMode).toBe(true);
     expect(window.outstandingRejectedPromises.has(promise)).toBe(true);

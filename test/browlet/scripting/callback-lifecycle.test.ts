@@ -3,6 +3,7 @@ import { itPassesWith } from '../../test-runtime';
 import { createMicrotaskQueue, type JSMicrotaskQueue } from '../../../src/js-engine/index';
 import { createManualEventLoop } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
+import { createScriptState } from '../../support/script-state';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
 import { createBrowletExecution, browletBindingWorld } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -19,8 +20,7 @@ import {
 } from '../../../src/web-idl/core/index';
 import { BindingWorld } from '../../../src/web-idl/binding/world';
 import { PolicyContainer } from '../../../src/browlet/browsing/policy/container';
-import type { ModuleMap } from
-  '../../../src/browlet/dom/nodes/document';
+import { ModuleMap } from '../../../src/browlet/scripting/module-map';
 import { Agent, AgentCluster } from '../../../src/browlet/scripting/agents';
 import { BrowletEnvironmentBase } from '../../../src/browlet/environment';
 import { BrowletEnvironment } from '../../../src/browlet/environment';
@@ -32,6 +32,10 @@ import {
   createBrowletRealm,
 } from '../../../src/browlet/scripting/realm';
 import { JSExecutionContext } from '../../../src/browlet/scripting/execution-context';
+import {
+  JSScriptOrModule, ClassicScript, JSSourceTextModuleRecord, type JavaScriptModuleScript,
+} from '../../../src/browlet/scripting/script';
+import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
 
 describe('HTML callback and script-entry lifecycle', () => {
   it('attaches the environment to its realm during construction', () => {
@@ -139,7 +143,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     // Supply the script and built-in records explicitly: this tests selection,
     // not interception of the real calls in HTML's four-page example.
     const script = new JSExecutionContext(b.realm);
-    script.scriptOrModule = { realm: b.realm };
+    script.scriptOrModule = new JSScriptOrModule(b.realm, null);
     const builtin = new JSExecutionContext(c.realm);
     builtin.function = c.realm.createFunction(() => {}, { name: 'builtin', length: 0 });
     loop.prepareToRunScript(a.env);
@@ -214,6 +218,58 @@ describe('HTML callback and script-entry lifecycle', () => {
     });
     expect(loop.executionContextStack).toEqual([]);
     expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
+  });
+
+  it('selects the active script independently of built-in frames and incumbent skipping', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const a = createTestRealm(agent, 'a');
+    const b = createTestRealm(agent, 'b');
+    const loop = agent.eventLoop;
+    const classic = new ClassicScript('', a.env, a.env.apiBaseURL, new ScriptFetchOptions());
+    const module: JavaScriptModuleScript = createScriptState(b.env);
+    module.baseURL = b.env.apiBaseURL;
+    module.record = new JSSourceTextModuleRecord(module);
+    const classicContext = new JSExecutionContext(a.realm);
+    classicContext.scriptOrModule = classic.record;
+    const moduleContext = new JSExecutionContext(b.realm);
+    moduleContext.scriptOrModule = module.record;
+    const builtin = new JSExecutionContext(a.realm);
+    builtin.function = a.realm.createFunction(() => {}, { name: 'builtin', length: 0 });
+
+    expect(loop.activeScript).toBeNull();
+    loop.prepareToRunScript(a.env);
+    try {
+      expect(loop.activeScript).toBeNull();
+      loop.executionContextStack.push(classicContext);
+      try {
+        expect(loop.activeScript).toBe(classic);
+        loop.executionContextStack.push(moduleContext, builtin);
+        try {
+          loop.prepareToRunCallback(a.env);
+          try {
+            expect(loop.getIncumbentEnvironment()).toBe(a.env);
+            expect(loop.runningExecutionContext?.realm).toBe(a.realm);
+            expect(loop.activeScript).toBe(module);
+          } finally {
+            loop.cleanUpAfterRunningCallback(a.env);
+          }
+          // A provisional topmost record must not expose a lower script's base URL.
+          loop.runScriptEvaluation(a.env, () => {
+            expect(loop.activeScript).toBeNull();
+          });
+          expect(loop.activeScript).toBe(module);
+        } finally {
+          loop.executionContextStack.pop();
+          loop.executionContextStack.pop();
+        }
+        expect(loop.activeScript).toBe(classic);
+      } finally {
+        loop.executionContextStack.pop();
+      }
+    } finally {
+      loop.cleanUpAfterRunningScript(a.env);
+    }
+    expect(loop.activeScript).toBeNull();
   });
 
   it('uses the non-Window environment timer owner for AbortSignal.timeout', () => {
@@ -455,13 +511,17 @@ class TestAgent extends Agent {
 }
 
 class TestEnvironment extends BrowletEnvironment {
-  #moduleMap: ModuleMap = { entries: [] };
+  #moduleMap = new ModuleMap();
   #origin = createOpaqueOrigin();
   #policyContainer = new PolicyContainer();
   #globalScopeMixin = new WindowOrWorkerGlobalScopeMixin(this);
 
   get apiBaseURL(): URLRecord {
     return this.creationURL;
+  }
+
+  get globalImplementation(): never {
+    throw new Error('This callback fixture has no HTML global implementation');
   }
 
   get crossOriginIsolatedCapability(): boolean {

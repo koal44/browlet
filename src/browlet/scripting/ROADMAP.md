@@ -4,8 +4,9 @@ HTML [§8](https://html.spec.whatwg.org/multipage/webappapis.html) owns Agents,
 settings, script execution, scheduling, global utilities, and timers.
 The Window scheduling kernel, controlled script/callback entries, function
 timers, and reached Fetch/Streams/Reporting consumers are implemented.
-Formal Script records, modules, remaining checkpoint work, and other global
-lifecycles remain open.
+HTML script-state contracts and modeled active-script lookup exist. Parsing,
+script/module execution, remaining checkpoint work, and other global lifecycles
+remain open.
 
 [Project priority](../../PRIORITY.md) orders cross-subsystem work.
 [Event-loop architecture](EVENT-LOOP-ARCHITECTURE.md) owns scheduling boundaries;
@@ -92,7 +93,7 @@ No extension registry or worker startup machinery is needed to set that flag.
 | §8.1.3.2 settings algorithm | Code and remaining dependency |
 | --- | --- |
 | Realm execution context | `realmExecutionContext` returns the associated realm's retained `JSExecutionContext`. Controlled script entry pushes that context below the script's own context. `env.exec` remains the separate facilities object. |
-| Module map | `moduleMap` returns the Document's `ModuleMap`; entries exist, but their result type and the module-loading algorithms remain provisional. |
+| Module map | `moduleMap` returns the Document's `ModuleMap`; single-module fetching now stores pending callbacks and module results by URL value and type. Graph loading/linking remains unfinished. |
 | API base URL | `apiBaseURL` queries the associated Document's current base URL. |
 | Origin | `origin` queries the associated Document's origin. |
 | Has cross-site ancestor | `hasCrossSiteAncestor` uses the Document's live ancestry query. |
@@ -123,9 +124,10 @@ claim that the engine supplies a record for every actual function invocation.
 | Current | `runningExecutionContext.realm` gives the top modeled realm; that realm's `.env` and `.globalObject` supply current settings and global. It is only current for the transitions recorded in this stack; arbitrary author/built-in calls do not yet maintain it. |
 | Relevant | A platform object's `PlatformRecord.realm` supplies its relevant realm independently of the stack; that realm's `.env` and `.globalObject` supply relevant settings and global. The binding records ownership, so changing the object's prototype does not change it. |
 
-`JSScriptOrModule` currently carries only the realm. Complete Script/Module
-records, their HTML host-defined scripts, and active-script restoration remain
-§§8.1.4 and 8.1.6 work; the temporary record in `runScriptEvaluation()` is marked.
+`JSScriptOrModule` carries the realm and HTML host-defined script. Complete
+Script/Module records and active-script restoration remain §§8.1.4 and 8.1.6
+work; the temporary record in `runScriptEvaluation()` has null `hostDefined`
+until script creation and execution supply a parsed HTML script.
 The generic realm factory alone does not construct an HTML global implementation
 or attach settings; Window/worker/worklet composition owns those steps.
 
@@ -147,9 +149,261 @@ Revisit with the actual example pages and platform APIs when supported. Script
 and module processing, execution, and host-hook algorithms still lie ahead;
 continue in specification order. New native work remains parked.
 
-**Stop before §8.1.3.4.** Scripting enablement and secure contexts (§8.1.3.5)
-await their own audit. Broader consumer regressions can follow when
+The entry/incumbent/current/relevant audit stops before §8.1.3.4. Scripting
+enablement still awaits its own audit. Broader consumer regressions can follow when
 [Window messaging](../communication/ROADMAP.md) exists.
+
+## HTML §8.1.3.5: secure contexts
+
+The fixed classification on `BrowletEnvironmentBase` is read by the realm for
+Web IDL exposure, by Fetch, and by the projected `isSecureContext` attribute.
+Full settings retain the reserved classification rather than recomputing it.
+`UserAgent.isURLPotentiallyTrustworthy()` already supplies the referenced URL
+algorithm, including about/data URLs, loopback, and configured trust.
+
+`SPEC_CLASH(secure-context-top-level-url)` preserves the existing Window
+origin-and-ancestry checks by agreement. HTML's top-level-URL-only fallback
+differs for creatorless about:blank, data documents, and insecure intermediate
+ancestors. The [policy record](../browsing/policy/ROADMAP.md#trustworthiness)
+contains the decision, source evidence, and existing regression coverage.
+
+The other branches depend on missing globals/settings setup: a WorkerGlobalScope
+uses its first owner's relevant settings; a WorkletGlobalScope is secure.
+These requirements are marked on the environment query and in the worker/worklet
+roadmaps. Do not infer them from a worker's own URL or opaque worklet origin.
+
+## HTML §8.1.4.1: scripts
+
+[script.ts](script.ts) owns the script classes, their creation algorithms, and partial
+parsed-record classes; it does not evaluate code. `ScriptBase` holds shared state, `ClassicScript`
+is concrete, and the abstract `ModuleScript` is the base for the module variants.
+The base initializes `record` to null; subclasses only narrow its type. Concrete
+JS records take their HTML script and derive the realm from its environment.
+
+| Requirement | Code and remaining dependency |
+| --- | --- |
+| Classic or module script | `Script` is the union. Both retain `env`, `record`, `parseError`, `errorToRethrow`, `fetchOptions`, and `baseURL`; classic scripts also retain `mutedErrors`. |
+| Parse failure versus evaluation failure | `record` can be null; creation retains the immediate failure in `parseError`. Classic creation also sets `errorToRethrow`; module creation leaves it null for graph loading to set. Calling scripts must consume these in §8.1.4.4. |
+| ECMAScript records | Browlet's record classes distinguish kinds and carry realm/HostDefined. Classic records retain compiled code; synthetic records retain their default-export input. Module parsing, linking, evaluation, and remaining ECMAScript fields are still missing. |
+| Module classifications | JavaScript and WebAssembly script classes have their corresponding record types. CSS/JSON/text share a synthetic-module base with null base URL and fetch options. See the creation slice below. |
+| Fetch options | `ScriptFetchOptions` owns the seven fields, their defaults, request setup, and descendant copying; see the §8.1.4.2 slice below. |
+| Active script | `EventLoop.activeScript` implements the lookup over the modeled stack: select the topmost non-null ScriptOrModule, then return its HostDefined. Built-in frames and incumbent skip counters do not change selection. |
+| Existing consumers | HTMLScriptElement's result accepts `Script`; base-URL changes reparse only speculation-rule results. The current parser/Browlet evaluation path still supplies a provisional record with null HostDefined. Script creation/calling must establish actual records; job hooks must later capture and restore them. |
+
+The callback lifecycle test exercises active-script selection across classic,
+module, built-in, skipped-incumbent, and provisional entries, with restoration
+after nested evaluation. It supplies records explicitly; it does not establish
+dynamic import, actual module evaluation, or automatic author-call tracking.
+[Base-URL regressions](../../../test/browlet/html/base-url.test.ts) also keep
+classic/module parse failures out of speculation-rule reparsing. Both failed
+before the result-kind check was added to the document's base-URL handler.
+
+Module-map states, script creation/calling, error reporting, and module host hooks
+retain their later audit boundaries. No Node/V8 work was added.
+
+## HTML §8.1.4.2: fetching scripts
+
+[script-fetch-options.ts](script-fetch-options.ts) implements default options,
+classic/module request setup, and descendant option copying. Classic request
+setup preserves the CORS setting's credentials; module setup uses the options'
+credentials. Descendants inherit
+the other options but select their own integrity and reset priority to auto.
+`BrowletEnvironment.resolveModuleIntegrityMetadata()` reads the global
+implementation's existing import map and compares URL keys by value.
+Import-map parsing and normalization remain §8.1.5 work.
+
+The fetch algorithms live together in [script-fetching.ts](script-fetching.ts).
+[BrowletEnvironment](../environment.ts) supplies thin forwarding methods that
+select the target settings. Integrity lookup and realm-specific module-type
+permission remain environment operations. The first two fetchers cover:
+
+- **Classic script:** potential-CORS request, client/options setup, complete body
+  consumption, HTTP/body failure checks, legacy charset selection with BOM
+  override, and the script-creation handoff. Preserve the original response's
+  CORS taint before unwrapping it; muted errors depend on that taint. Creation
+  receives both the final response URL and the original source URL.
+- **Classic worker script:** `env.fetchClassicWorkerScript()` uses the target
+  environment as its receiver and retains the outside fetch client explicitly.
+  It supplies a same-origin request,
+  optional perform-fetch hook, HTTP(S)-only JavaScript MIME check, UTF-8 decoding,
+  and creation in the supplied target settings with default fetch options.
+  Hook responses undergo the same validation as ordinary Fetch responses.
+
+Both reuse Fetch's policy, integrity, MIME blocking, and networking task delivery.
+No parallel promise scheduler or alternate HTTP path was added.
+
+`ClassicScript` now applies scripting policy and compiles without evaluation;
+the creation slice below records its remaining timing and execution dependencies.
+The existing `JSRealm.evaluate()` executes immediately and is not a replacement
+for ParseScript. No HTML element or worker-startup caller is connected yet.
+
+[Option tests](../../../test/browlet/scripting/script-fetch-options.test.ts) cover
+defaults, request setup, descendant inheritance, and global/URL-key selection.
+[Fetch tests](../../../test/browlet/scripting/script-fetching.test.ts) use real
+Fetch with a controlled HTTP transport and replace only script creation. They
+cover CORS credentials/taint, redirects, decoding, body/status failures, integrity,
+nosniff, worker MIME checks, data URLs, and the custom hook. Successful tests prove
+the fetch-to-creation handoff, not parsing, execution, or worker startup.
+
+### Single-module fetching slice
+
+`BrowletEnvironment.fetchSingleModuleScript()` and
+`fetchSingleImportedModuleScript()` now implement request setup, type validation,
+Fetch/custom-hook delivery, MIME selection, UTF-8 decoding, response referrer-policy
+propagation, and the appropriate creation handoff. The receiver is the target
+settings object; `fetchClient` remains the request's separate client and owner.
+The optional module request occupies its specified position as an explicit
+`undefined` when absent. Referrer arguments retain HTML's `client`/`no-referrer`
+sentinels, translated to FetchRequest's existing representation at assignment.
+
+[ModuleMap](module-map.ts) replaces the provisional `unknown` entries with module
+scripts, null, or lists of waiting callbacks. It remains retained by the Document
+and accessed through its environment. URL equality includes queries and fragments;
+equal URL records share an entry. Different module types remain separate. Pending
+requests share a callback list, and a successful result is stored before notifying
+those callbacks. The map uses the original request URL; creation receives the final
+response URL. The fetch algorithm removes HTTP/body/MIME failures before callbacks,
+allowing a later attempt. Its initial lookup still honors a retained null, as
+specified, although this fetcher does not produce one.
+
+`JSModuleRequest` models ECMAScript's specifier and import-attribute list. Its
+`getModuleType()` returns `ModuleType | null` (`javascript-or-wasm`, `css`, `json`,
+or `text`). Explicit `javascript-or-wasm` attributes are invalid even though that
+string is the internal default. Unsupported attribute strings also become null
+here, moving HTML's supported-name check from `module type allowed` into type
+selection. This keeps arbitrary strings out of the fetcher without a cast; all
+unsupported imports still fail before fetching. `isModuleTypeAllowed()` checks
+realm permission for a recognized type. The module map and destination helper
+accept the same union. The CSS check uses
+Web IDL's existing exposure predicate against the CSSStyleSheet declaration and
+target realm, not a mutable global property.
+The destination helper covers JSON, CSS, and text. These helpers live in §8.1.4.3
+but are prerequisites for the fetchers. Parser production of ModuleRequests and
+HostGetSupportedImportAttributes remain unconnected.
+
+All five module creation operations are constructors. JavaScript and WebAssembly
+still stop at explicit parser boundaries; CSS/JSON/text retain their synthetic
+export inputs. [Module-fetch tests](../../../test/browlet/scripting/module-fetching.test.ts)
+replace the constructors to isolate fetching and cover request/target separation,
+top-level worker modes, creation dispatch, redirects, decoding, shared callbacks,
+cache keys, failure/retry behavior, and target-realm exposure. They do not prove
+module parsing, exports, dependency discovery, linking, or evaluation.
+
+### Document module-graph orchestration
+
+External, inline, and modulepreload graph entry points now connect root loading or
+creation to `fetchDescendantsAndLink()`. External graphs report a failed root as
+null. Inline graphs retain their source, base URL, options, and target settings
+at the creation boundary. Modulepreload reports its root first, then takes HTML's
+optional descendant-preloading branch without notifying its owner a second time.
+
+The shared descendant algorithm retains root parse errors and link exceptions on
+the script. A dependency loading rejection returns null unless the host loading
+state records an error to rethrow, in which case the script carries that error.
+`ModuleGraphLoadingState` retains the destination, optional custom fetch hook,
+fetch client, and error slot for the later HostLoadImportedModule algorithm.
+
+`JSModuleRecord.loadRequestedModules()` and `link()` are explicit throwing
+dependencies. They do not walk imports, invent parsed records, or call V8.
+Promise completion uses the record's existing `InternalPromise` observation path.
+Internal implementation errors remain explicit rather than becoming author
+link errors. [Graph tests](../../../test/browlet/scripting/module-graphs.test.ts)
+replace the unfinished record operations and verify completion ordering,
+fetch-client propagation, and the distinction between loading and module errors.
+These tests establish orchestration only, not working module graphs.
+
+### Worker and worklet module graphs
+
+`fetchModuleWorkerScriptGraph()` and `fetchWorkletScriptGraph()` delegate to
+`fetchWorkletModuleWorkerScriptGraph()`. The shared algorithm creates default
+fetch options with the supplied credentials, fetches the root with the outside
+client, and passes that client, destination, and optional custom fetch hook into
+descendant loading. Each target environment retains its own created modules.
+
+Worklet fetching supplies the custom hook. A caller-owned
+[`ModuleResponsesMap`](../worklets/module-responses-map.ts) retains the specified
+`fetching` state or response/body tuple by request URL, including failed downloads.
+Pending consumers register completion callbacks and resume through their target
+environment's networking task queue. Completed entries replay immediately, as the
+algorithm specifies. Updating the map precedes notification, so reentrant and later
+consumers see the retained response. This map shares bytes, not per-global module
+records, and the same hook is carried into descendant loading.
+
+The class lives with Worklets, but no `Worklet`, `WorkletGlobalScope`, or `addModule()`
+lifecycle is implied. Those owners must supply the shared map and distinct settings
+when implemented. Access is serialized on the current Node thread; separate runtime
+threads will need an explicit transport for the shared response state.
+
+**SPEC_CLASH(script-fetch-hook-failure):** The general
+[`perform the fetch` hook](https://html.spec.whatwg.org/multipage/webappapis.html#fetching-scripts-perform-fetch)
+says its callback receives null or bytes. The
+[worklet algorithm](https://html.spec.whatwg.org/multipage/webappapis.html#fetch-a-worklet-script-graph)
+and [module responses map](https://html.spec.whatwg.org/multipage/worklets.html#concept-Worklet-module-responses-map)
+explicitly retain and forward Fetch's `failure` sentinel too. The approved choice
+follows that worklet algorithm: `PerformScriptFetch` accepts all three body results,
+and existing fetchers handle `failure` as a failed fetch. Revisit when the preamble
+and detailed algorithm agree.
+
+[Worker/worklet graph tests](../../../test/browlet/scripting/worker-worklet-graphs.test.ts)
+use real Fetch with a controlled transport. They cover separate request/target
+environments, credentials/default options, retained descendant hooks, simultaneous
+and later consumers, per-global completion tasks, and cached HTTP/body/MIME failures.
+Only script creation and the still-unimplemented module-record operations are
+replaced; these are fetch orchestration tests, not worker/worklet startup tests.
+
+**Remaining implementation dependencies:**
+
+- `fetchClassicWorkerImportedScript()` is an explicit throwing skeleton. Unlike
+  the two callback-based classic fetchers, this algorithm pauses synchronously
+  until Fetch completes, then returns a script or throws NetworkError. The
+  [event-loop pause dependency](#deferred-processing-model-tails) is not supplied by today's
+  asynchronous Fetch task delivery. Do not substitute a Promise return or launch
+  a fetch that cannot finish before this method returns.
+- Descendant orchestration is translated, but its module-record operations
+  `LoadRequestedModules(state)` and `Link()`, plus HostLoadImportedModule, remain
+  unfinished. Successful single-module fetches do not satisfy these dependencies.
+
+Calling remains §8.1.4.4; new native work remains parked.
+
+## HTML §8.1.4.3: creating scripts
+
+The constructors in [script.ts](script.ts) translate creation without evaluating
+author code. Existing module-type/destination helpers already cover the section's
+remaining algorithms.
+
+| Creation | Implemented behavior and explicit boundary |
+| --- | --- |
+| Classic | Muted errors select `about:blank`; disabled scripting supplies empty source unless bypassed. Retains options, original source URL, realm, and HostDefined. Node's `vm.Script` compiles without executing. Syntax errors are allocated in the target realm and populate both error fields. |
+| JavaScript module | Applies scripting policy and initializes state, then calls `BrowletRealm.parseModule()`. That parser still throws InternalError pending integration with the actual VM context. Error lists select the first parse error without setting `errorToRethrow`. |
+| WebAssembly | Disabled scripting substitutes the eight-byte empty module. Calls an explicit, unfinished ESM parser; ordinary Wasm compilation alone would not provide the required module record/linking. Parse exceptions populate only `parseError`; implementation failures propagate. |
+| CSS | Constructs a sheet with default options and calls `replaceSync`; replacement exceptions become `parseError`. Retains the sheet implementation as the synthetic default-export input. Binding must project it before module execution exposes an author value. |
+| JSON | Uses the target realm's captured JSON parser, retaining the parsed value or realm-owned parse error. Does not blank source when scripting is disabled. |
+| Text | Retains the supplied string unchanged as the default-export input, also independently of scripting enablement. |
+
+Two representation boundaries remain marked for review: `JSRealm.parseScript()`
+returns an opaque compiled artifact instead of a complete ECMAScript Script Record;
+HTML wraps it with the realm/HostDefined. CSS retains an implementation until the
+future module-execution binding projects its export. Synthetic records are still
+models, not engine modules: their dependency-loading and linking methods throw.
+Compiled classic code likewise still needs the §8.1.4.4 execution path, including
+an addon-context execution operation and active-script metadata. No recompile or
+fallback evaluation path was added here.
+
+The Long Animation Frames creation hook retains `originalSourceURL`, but frame
+timing records, pending-script entry creation, and reporting remain missing in
+[Performance](../performance/ROADMAP.md). This is not a complete timing hook.
+
+**SPEC_CLASH(css-module-imports):** HTML's creation note says `replaceSync` throws
+for `@import`, while [CSSOM's algorithm](https://drafts.csswg.org/cssom/#dom-cssstylesheet-replacesync)
+discards imports. Eric approved following the invoked CSSOM algorithm and retaining
+the existing Stylelet behavior. The creation test verifies the remaining rules
+survive; no import load or adoption is started.
+
+[Creation tests](../../../test/browlet/scripting/script-creation.test.ts) use real
+classic compilation, CSS parsing, and realm-owned JSON parsing. JavaScript-module
+and Wasm tests replace only the explicit parser dependencies to check policy,
+state, and error handoffs. These tests do not establish module execution or an
+HTML script-element/worker startup lifecycle.
 
 ## Present
 
@@ -157,7 +411,9 @@ await their own audit. Broader consumer regressions can follow when
 | --- | --- |
 | `agents.ts` | Agent/cluster records, Window inventory, one EventLoop per Agent, observer creation counters, and batched MutationObserver/slot-change notification |
 | `realm.ts` | Relevant/incumbent ownership and controlled script/callback entry; environment bases and full browser settings live in [`../environment.ts`](../environment.ts) |
-| `execution-context.ts` | Explicit context records and the provisional realm-bearing ScriptOrModule contract |
+| `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic records, synthetic export inputs, ModuleRequests, and module-parser boundaries |
+| `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
+| [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
 | `global-object.ts`, `import-map.ts` | Shared HTML global-state contract and import-map/specifier-resolution record shapes |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
@@ -197,7 +453,7 @@ respect the new preference.
 
 | Owner | Missing contract |
 | --- | --- |
-| Script records/classic scripts | Formal script state, creation/fetch/run algorithms, active-script restoration, scripting-disabled checks, and runtime errors |
+| Script records/classic scripts | Creation/run algorithms, worker-imported fetching, production fetch callers, active-script restoration, scripting-disabled checks, and runtime errors |
 | Module scripts/maps | Parse/link/evaluate, graph fetching, import maps/attributes, dynamic import, and host hooks |
 | Error reporting | ErrorEvent, PromiseRejectionEvent, muted-error handling, source locations, and rejection tracking |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
@@ -223,7 +479,8 @@ Use bounded consumer slices within HTML's script algorithms:
 
 1. **Classic-script records and creation (§§8.1.4.1–8.1.4.3).** Fetch, MIME,
    Encoding, referrer policy, integrity, and body transport now exist. Complete
-   script preparation/readiness and the actual compiler/loader contract.
+   script preparation/readiness and connect the retained compiled code to execution.
+   Classic and synthetic creation are translated; module parsing and creation timing remain open.
    The existing evaluation entry and parser ScriptHandler do not supply it.
 2. **Calling scripts and errors (§§8.1.4.4–8.1.4.6).** Preserve implemented
    callback preparation/cleanup, task settings sets, and empty-stack checkpoints.
@@ -231,8 +488,9 @@ Use bounded consumer slices within HTML's script algorithms:
    source provenance. General termination needs an enforceable host primitive.
 3. **Rejected promises (§8.1.4.7).** Obtain a faithful rejection host hook and
    per-global lifecycle. Node's process-wide events cannot supply that ownership.
-4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Introduce module maps,
-   engine linking/evaluation, fetching, registration, and dynamic-import hooks.
+4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Build on the module map
+   and single-module fetchers with graph loading, engine linking/evaluation,
+   registration, and dynamic-import hooks.
 5. **Speculation rules (§8.1.4.9).** Replace the provisional Document parse-result
    factory and Window update with parsing/error capture and registration with the
    Document and loader policy that consume it. The record's rule-set field is

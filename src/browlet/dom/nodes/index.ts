@@ -24,8 +24,7 @@ export {
   type ElementCreationOptions, elementCreationOptionsIDL, documentIncludesParentNodeIDL,
   documentIncludesNonElementParentNodeIDL,
   documentIncludesDocumentOrShadowRootIDL, type DocumentWriter,
-  type DocumentReadyState, type DocumentVisibilityState, type DocumentType, DocumentMode, type ModuleMap,
-  type ModuleMapKey, type ModuleMapEntry, type DocumentLoadTimingInfo,
+  type DocumentReadyState, type DocumentVisibilityState, type DocumentType, DocumentMode, type DocumentLoadTimingInfo,
   type StyleSheetFetchOutcome, type FetchedStyleSheetOptions,
 } from './document';
 export {

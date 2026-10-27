@@ -53,6 +53,25 @@ Window, including insecure intermediate ancestors. New Window creation computes
 a new decision. Full iframe/popup, sandbox, worker, and worklet inheritance remain
 with those lifecycles.
 
+`SPEC_CLASH(secure-context-top-level-url)` was reviewed at HTML §8.1.3.5.
+Its written fallback tests only `topLevelCreationURL` using URL trustworthiness.
+That treats creatorless about:blank and top-level data URLs as secure, and does
+not account for an insecure intermediate ancestor beneath a secure top-level URL.
+Browlet instead preserves its selected-origin and parent-security checks by
+agreement. This also preserves classification before binding exposure and the
+reserved environment's decision when full settings are created.
+
+Evidence: HTML `webappapis.html#secure-context`; Secure Contexts'
+[ancestral-risk discussion](https://w3c.github.io/webappsec-secure-contexts/#ancestors);
+and Blink's
+[SecurityContext::SetSecurityOrigin](https://source.chromium.org/chromium/chromium/src/+/main:third_party/blink/renderer/core/execution_context/security_context.cc),
+which checks origin trustworthiness and insecure ancestors. Existing
+[secure-context tests](../../../../test/browlet/browsing/policy/secure-contexts.test.ts)
+cover creatorless/inherited about:blank, data URLs, insecure intermediate
+ancestors, configured trust, reserved settings, and Web IDL exposure.
+This does not complete sandboxed or worker/worklet setup; their security inputs
+must be reviewed with those lifecycles.
+
 ### Referrer Policy
 
 [Referrer Policy](https://w3c.github.io/webappsec-referrer-policy/) parsing,

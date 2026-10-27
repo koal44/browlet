@@ -52,6 +52,13 @@ implementation should be introduced then.
 
 ## Missing timing families
 
+Classic-script creation now retains the Long Animation Frames `originalSourceURL`
+before compilation. The remainder of
+[record classic script creation time](https://w3c.github.io/long-animation-frames/#record-classic-script-creation-time)
+still needs document frame timing info, a pending script entry, and lifecycle
+reporting. The TODO remains in the constructor; source attribution alone
+does not implement this timing algorithm.
+
 | Planned source | Contract | Specification |
 | --- | --- | --- |
 | `timeline.ts` | `PerformanceEntry`, buffers, observers, and entry delivery | Performance Timeline |

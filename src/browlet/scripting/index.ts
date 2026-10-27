@@ -11,9 +11,24 @@ export {
   type TaskQueueSelector, Task, type TaskSource,
 } from './event-loop';
 export { installHostHooks, jsEngineTaskSource } from './host-hooks';
-export { JSExecutionContext, type JSScriptOrModule } from './execution-context';
+export { JSExecutionContext } from './execution-context';
 export type { BrowletGlobalObject } from './global-object';
 export type { ImportMap, ModuleSpecifierMap, ModuleIntegrityMap, SpecifierResolutionRecord } from './import-map';
+export {
+  ClassicScript, ModuleScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript,
+  TextModuleScript, WebAssemblyModuleScript, type Script, type ModuleType,
+  JSScriptOrModule, JSScriptRecord, JSModuleRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord, JSWebAssemblyModuleRecord,
+  JSModuleRequest,
+} from './script';
+export { ModuleMap, type ModuleMapKey, type ModuleMapEntry, type ModuleFetchCallback } from './module-map';
+export { ScriptFetchOptions } from './script-fetch-options';
+export {
+  fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
+  fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph, fetchDescendantsAndLink,
+  fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph, fetchWorkletModuleWorkerScriptGraph,
+  fetchSingleModuleScript, fetchSingleImportedModuleScript, fetchDestinationFromModuleType,
+  type PerformScriptFetch, type ModuleGraphLoadingState,
+} from './script-fetching';
 export {
   createBrowletRealm, BrowletRealm, WindowRealm,
   type BrowletRealmCustomizations, type BrowletRealmCreationOptions, type BrowletRealmOptions, type WindowRealmOptions,
@@ -23,7 +38,7 @@ export {
   type RenderingUpdateContext, type RenderingDocumentFilters, type RenderingUpdatePhase,
   renderingUpdatePhases,
 } from './rendering-opportunity';
-export type { SpeculationRulesParseResult } from './speculation-rules';
+export { SpeculationRulesParseResult } from './speculation-rules';
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
   navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource,

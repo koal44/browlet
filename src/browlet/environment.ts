@@ -1,32 +1,43 @@
 import { InternalError } from '../infra/index';
 import { randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
+import { matchesExposure } from '../web-idl/index';
 import type { SelectletEnvironment } from '../selectlet/index';
+import type { Encoding } from '../encoding/index';
 import {
-  obtainSite, obtainURLOrigin, serializeURL,
+  obtainSite, obtainURLOrigin, serializeURL, urlsEqual,
   type Origin, type URLRecord,
 } from '../url/index';
 import {
-  FetchGroup, type FetchEnvironment, type FetchEnvironmentBase, type FetchExecution,
+  FetchGroup,
+  type FetchEnvironment, type FetchEnvironmentBase, type FetchExecution,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../fetch/index';
-import type { StyleletEnvironment, StyleletExecution } from '../stylelet/index';
+import { cssStyleSheetIDL, type StyleletEnvironment, type StyleletExecution } from '../stylelet/index';
 
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
-import type {
-  EventLoop, BrowletRealm, WindowRealm, WindowAgent, JSExecutionContext,
+import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
+import {
+  fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
+  fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
+  fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph,
+  fetchSingleModuleScript, fetchSingleImportedModuleScript,
+  type ClassicScript, type ScriptFetchOptions, type ModuleMap, type ModuleType,
+  type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
+  type EventLoop, type BrowletRealm, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
 } from './scripting/index';
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { AbortSignalImpl } from './dom/abort/index';
-import type { DocumentImpl, ModuleMap } from './dom/nodes/index';
+import type { DocumentImpl } from './dom/nodes/index';
 import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
 import type { WindowImpl } from './browsing/window/index';
 import type { BrowsingContext, Traversable } from './browsing/navigation/index';
 import type { UserAgent } from './user-agent';
+import type { ModuleResponsesMap } from './worklets/index';
 
 /** Browser state shared by reserved clients and full environments. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#environment
@@ -87,6 +98,8 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
 
   /** Security classification fixed when the environment was created. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
+  // TODO(HTML §8.1.3.5): Worker setup must use the first owner's relevant settings;
+  // worklet setup must supply true. Neither global/settings lifecycle exists yet.
   get isSecureContext(): boolean {
     return this.#isSecureContext;
   }
@@ -187,6 +200,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   }
 
   abstract get apiBaseURL(): URLRecord;
+  /** Internal HTML global state; separate from the platform global exposed to scripts. */
+  abstract get globalImplementation(): BrowletGlobalObject;
   abstract get moduleMap(): ModuleMap;
   abstract get origin(): Origin;
   abstract get hasCrossSiteAncestor(): boolean;
@@ -250,6 +265,98 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   encodingParseAndSerializeURL(input: string): string | null {
     const url = this.encodingParseURL(input);
     return url === null ? null : serializeURL(url);
+  }
+
+  /** Find integrity metadata in this environment's global import map. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#resolving-a-module-integrity-metadata
+  resolveModuleIntegrityMetadata(url: URLRecord): string {
+    // URL-record keys compare by URL value, independently of object identity.
+    for (const [key, integrity] of this.globalImplementation.importMap.integrity) {
+      if (urlsEqual(key, url)) return integrity;
+    }
+    return '';
+  }
+
+  /** Fetch a classic script using these settings. */
+  fetchClassicScript(
+    url: URLRecord, options: ScriptFetchOptions, corsSetting: CORSSettingsState, encoding: Encoding,
+    onComplete: (script: ClassicScript | null) => void,
+  ): void {
+    fetchClassicScript(url, this, options, corsSetting, encoding, onComplete);
+  }
+
+  /** Fetch a worker's initial classic script for these settings using its outside client. */
+  fetchClassicWorkerScript(
+    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination,
+    onComplete: (script: ClassicScript | null) => void, performFetch?: PerformScriptFetch,
+  ): void {
+    fetchClassicWorkerScript(url, fetchClient, destination, this, onComplete, performFetch);
+  }
+
+  /** Synchronously fetch an importScripts() dependency; the required pause is unfinished. */
+  fetchClassicWorkerImportedScript(url: URLRecord, performFetch?: PerformScriptFetch): ClassicScript {
+    return fetchClassicWorkerImportedScript(url, this, performFetch);
+  }
+
+  /** Fetch an external module graph for these settings. */
+  fetchExternalModuleScriptGraph(url: URLRecord, options: ScriptFetchOptions, onComplete: ModuleFetchCallback): void {
+    fetchExternalModuleScriptGraph(url, this, options, onComplete);
+  }
+
+  /** Preload a module root and its descendants for these Window settings. */
+  fetchModulepreloadModuleScriptGraph(
+    url: URLRecord, destination: Destination, options: ScriptFetchOptions, onComplete: ModuleFetchCallback,
+  ): void {
+    fetchModulepreloadModuleScriptGraph(url, destination, this, options, onComplete);
+  }
+
+  /** Create an inline module graph for these settings. */
+  fetchInlineModuleScriptGraph(
+    sourceText: string, baseURL: URLRecord, options: ScriptFetchOptions, onComplete: ModuleFetchCallback,
+  ): void {
+    fetchInlineModuleScriptGraph(sourceText, baseURL, this, options, onComplete);
+  }
+
+  /** Fetch a worker module graph for these settings using the outside fetch client. */
+  fetchModuleWorkerScriptGraph(
+    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
+    onComplete: ModuleFetchCallback,
+  ): void {
+    fetchModuleWorkerScriptGraph(url, fetchClient, destination, credentialsMode, this, onComplete);
+  }
+
+  /** Fetch a worklet module graph using responses shared across its globals. */
+  fetchWorkletScriptGraph(
+    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, credentialsMode: RequestCredentials,
+    moduleResponsesMap: ModuleResponsesMap, onComplete: ModuleFetchCallback,
+  ): void {
+    fetchWorkletScriptGraph(url, fetchClient, destination, credentialsMode, this, moduleResponsesMap, onComplete);
+  }
+
+  /** Fetch one module for these settings, sharing in-flight work and retained results. */
+  fetchSingleModuleScript(
+    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, options: ScriptFetchOptions,
+    referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest | undefined,
+    isTopLevel: boolean, onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
+  ): void {
+    fetchSingleModuleScript(
+      url, fetchClient, destination, options, this, referrer, moduleRequest, isTopLevel, onComplete, performFetch,
+    );
+  }
+
+  /** Validate an imported module's attributes and fetch it as a descendant. */
+  fetchSingleImportedModuleScript(
+    url: URLRecord, fetchClient: BrowletEnvironment, destination: Destination, options: ScriptFetchOptions,
+    referrer: URLRecord | 'client' | 'no-referrer', moduleRequest: JSModuleRequest,
+    onComplete: ModuleFetchCallback, performFetch?: PerformScriptFetch,
+  ): void {
+    fetchSingleImportedModuleScript(url, fetchClient, destination, options, this, referrer, moduleRequest, onComplete, performFetch);
+  }
+
+  /** Whether this realm permits the requested module type, including CSS interface exposure. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#module-type-allowed
+  isModuleTypeAllowed(moduleType: ModuleType): boolean {
+    return moduleType !== 'css' || matchesExposure(cssStyleSheetIDL, this.realm);
   }
 
   /** Whether these settings currently permit scripting, including sandbox and automation policy. */
@@ -319,6 +426,10 @@ export class SandboxEnvironment extends BrowletEnvironment {
     throw new InternalError('Sandbox has no API base URL');
   }
 
+  get globalImplementation(): BrowletGlobalObject {
+    throw new InternalError('Sandbox has no HTML global implementation');
+  }
+
   get moduleMap(): ModuleMap {
     throw new InternalError('Sandbox has no module map');
   }
@@ -368,6 +479,10 @@ export class WindowEnvironment extends BrowletEnvironment {
   /** Window implementation whose current Document supplies browser state. */
   get window(): WindowImpl {
     return this.realm.windowImplementation;
+  }
+
+  get globalImplementation(): WindowImpl {
+    return this.window;
   }
 
   override get isWindow(): boolean {

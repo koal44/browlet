@@ -34,12 +34,21 @@ passes are recorded in their [owning roadmaps](browlet/dom/ROADMAP.md). The
 with referenced missing dependencies explicit. The next global attribute is
 §3.2.6.6, data-*. Style/loading work is paused while the
 [HTML §8 audit](browlet/scripting/ROADMAP.md#html-811812-audit) proceeds in order.
-§§8.1.1–8.1.3.2 are reviewed. The
+§§8.1.1–8.1.3.3 are reviewed. The
 [§8.1.3.3 experiment](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment)
-now models execution contexts and global state in JavaScript. Continue with
-§8.1.3.4, enabling and disabling scripting. Script/module processing and later
-host-hook algorithms must be connected before judging the complete model;
-the interim cross-realm callback-registration failure does not block this audit.
+now models execution contexts and global state in JavaScript. The next slice
+audited §8.1.3.5 secure contexts and §8.1.4.1 script definitions, preserving the
+agreed secure-context clash and adding modeled active-script lookup.
+[§8.1.4.2's fetch algorithms](browlet/scripting/ROADMAP.md#html-8142-fetching-scripts)
+now supplies fetch options, classic-script/classic-worker fetchers, and single-module
+fetching with shared module-map callbacks, plus document/worker/worklet graph
+orchestration and shared worklet responses. §8.1.4.3 now creates compiled classic
+scripts and CSS/JSON/text synthetic export inputs. JavaScript/Wasm module parsing,
+module-record loading/linking, CSS export projection, and creation timing retain
+explicit unfinished boundaries. Worker-imported scripts
+still need synchronous pause. §8.1.3.4 enabling/disabling scripting awaits its
+own audit. Script calling and later host-hook algorithms must be connected
+before judging the complete model; the uncertain cross-realm observer test is skipped.
 The [environment audit](browlet/scripting/ROADMAP.md#html-81318132-audit) maps
 every covered item to code or an explicit implementation dependency. Preserve
 specified state and explicit unfinished dependencies, with approved expected

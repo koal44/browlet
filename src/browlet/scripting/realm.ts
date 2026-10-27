@@ -17,6 +17,9 @@ import type { Agent, WindowAgent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
+import type {
+  JavaScriptModuleScript, JSSourceTextModuleRecord, JSWebAssemblyModuleRecord, WebAssemblyModuleScript,
+} from './script';
 
 /** Create an HTML realm and install the host-selected global and global-this identities. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#creating-a-new-javascript-realm
@@ -130,6 +133,21 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 
   get secureContext(): boolean {
     return this.#baseEnv?.isSecureContext ?? false;
+  }
+
+  /** Parse a source-text module in this realm without linking or evaluating it. */
+  // https://tc39.es/ecma262/#sec-parsemodule
+  parseModule(_source: string, _hostDefined: JavaScriptModuleScript): JSSourceTextModuleRecord | SyntaxError[] {
+    // TODO: Connect ParseModule to our VMContext backend. Node's SourceTextModule
+    // requires a Node context, whereas the native backend owns an addon context handle.
+    throw new InternalError('Source-text module parsing is not implemented');
+  }
+
+  /** Parse a WebAssembly ESM record, including its imports, in this realm. */
+  parseWebAssemblyModule(_bodyBytes: Uint8Array, _hostDefined: WebAssemblyModuleScript): JSWebAssemblyModuleRecord {
+    // TODO: Supply WebAssembly's ESM integration. Compiling a WebAssembly.Module
+    // alone does not provide its Module Record or JavaScript linking behavior.
+    throw new InternalError('WebAssembly ESM parsing is not implemented');
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {

@@ -22,6 +22,9 @@ only when the first concrete consumer can prove it.
   container, but use a unique opaque origin, always report a cross-site
   ancestor, and expose no time origin. They are intentionally not reduced
   Window settings objects.
+- HTML §8.1.3.5 makes worklet globals secure. Their missing settings-creation
+  path must supply that decision before binding exposure, independently of the
+  worklet's opaque origin; creation itself is restricted to secure contexts.
 - Worklets load module scripts only. A Worklet retains an ordered added-modules
   list and a shared module-responses map so every existing scope evaluates the
   same source and every later replacement scope can replay it without a new
@@ -49,6 +52,15 @@ correctly one scope per agent. The future `Worklet` object—not the agent—own
 the collection of agents/scopes. `UserAgent.obtainWorkletAgent()` allocates an agent
 and distinct loop in its creator's cluster. It does not create a global,
 evaluate a module, or supply a worklet execution lifecycle.
+
+The §8.1.4.2 fetch algorithms now supply the worklet graph entry point and its
+shared [`ModuleResponsesMap`](module-responses-map.ts). It retains response/body
+tuples and wakes pending consumers through their target networking tasks. Tests
+prove concurrent and later reuse with separate target environments; actual global
+creation, module parsing/linking, evaluation, and `addModule()` are still missing.
+Future Worklet instances must own one shared map while each global retains its own
+module map. The current map is accessed on one Node thread; separate runtime threads
+must transport the retained source/response state explicitly.
 
 ## Planned ownership
 
@@ -87,8 +99,8 @@ local Houdini Worklets document redirects to HTML's infrastructure.
 
 ## Delivery order
 
-1. Wait for module-graph fetching, environment-targeted tasks, and disposable
-   realm/event-loop teardown.
+1. Connect the existing graph fetching and environment-targeted tasks to module
+   parsing/linking/evaluation and disposable realm/event-loop teardown.
 2. Implement the base Worklet records and choose one concrete worklet consumer
    to define the global type, destination, registration, and invocation hook.
 3. Test at least two scopes, one network fetch, evaluation in every scope,

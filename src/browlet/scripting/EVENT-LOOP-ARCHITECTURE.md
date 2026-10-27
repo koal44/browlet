@@ -90,6 +90,10 @@ retained context followed by a script context, and checkpoints after the last
 context exits. Entry selection finds the most recent retained context; incumbent
 selection finds the topmost ScriptOrModule or uses the backup stack. Per-entry
 task associations stay separate because nested entries reuse the retained context.
+Active-script lookup uses the topmost non-null ScriptOrModule's HostDefined,
+without incumbent skip counters. Direct evaluation still supplies null HostDefined;
+the creating/calling algorithms must attach the HTML script, and job hooks must
+later preserve it across asynchronous entry.
 
 The environment still owns its composed facilities as `env.exec`; its associated
 `JSRealm` owns the Node/V8 context used for evaluation. Neither is the new record.

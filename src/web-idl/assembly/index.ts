@@ -26,3 +26,4 @@ export { AssembledTypedef } from './typedef';
 export { AssembledProxyObject } from './proxy-object';
 export { DefinitionAssembly } from './assembly';
 export { validateDefinitions } from './validation';
+export { matchesExposure } from './exposure';

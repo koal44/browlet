@@ -119,6 +119,15 @@ Portable contracts describe that behavior without making Fetch depend on HTML.
 Use the same approach for other owners; introduce inheritance or a mixin only
 for an actual shared implementation, not to simulate multiple class inheritance.
 
+HTML's script-fetch algorithms are grouped in `browlet/scripting/script-fetching.ts`.
+BrowletEnvironment forwards its fetch methods there with itself as the target
+settings. Its module map, integrity lookup, and realm-specific permissions remain
+environment-owned; the separate fetch client is retained where HTML requires it.
+Worklet graph fetching receives a caller-owned shared response map from `worklets/`.
+That map retains downloaded bytes across globals; each environment's module map
+still owns its separate script records. Pending response reuse resumes on the
+waiting environment's networking task queue.
+
 ### Realm execution
 
 `BrowletEnvironment` owns its `BrowletExecution` as `env.exec`. The attached
@@ -142,7 +151,9 @@ by [`BrowletGlobalObject`](browlet/scripting/global-object.ts). Window initializ
 it directly without changing EventTarget inheritance or projecting internal
 fields onto the author-facing object. Worker/worklet global implementations must
 provide the same state. Module maps remain settings-owned; import maps are a
-separate per-global record.
+separate per-global record. `env.globalImplementation` selects that internal
+global state; `env.global` remains the platform global used for author execution
+and task routing. Neither lookup copies state or moves it onto the environment.
 
 [`RealmExecution`](js-engine/realm-execution.ts) groups JavaScript facilities for
 one execution owner: Promises, errors, buffers, JSON, microtasks, background

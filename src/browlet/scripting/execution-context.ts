@@ -1,6 +1,7 @@
 import type { JSFunction } from '../../js-engine/index';
 
 import type { BrowletRealm } from './realm';
+import type { JSScriptOrModule } from './script';
 
 /** A JavaScript execution-context record used by HTML's entry and callback algorithms. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#realm-execution-context
@@ -15,10 +16,4 @@ export class JSExecutionContext {
   constructor(realm: BrowletRealm) {
     this.realm = realm;
   }
-}
-
-/** The realm-bearing portion shared by ECMAScript Script and Module records. */
-// TODO(HTML §8.1.4): Supply full Script/Module records, including their HTML host-defined scripts.
-export interface JSScriptOrModule {
-  realm: BrowletRealm;
 }

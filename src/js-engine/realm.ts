@@ -1,3 +1,5 @@
+import { Script } from 'node:vm';
+
 import { Stamper } from '../infra/stamper';
 import { InternalPromise } from '../infra/promises';
 import { InternalError } from '../infra/internal-error';
@@ -505,6 +507,20 @@ export class JSRealm {
     observePromise(this, promise, onFulfilled, onRejected);
   }
 
+  /** Compile without execution, allocating any syntax failure in this realm. */
+  // https://tc39.es/ecma262/#sec-parse-script
+  // SPEC_MISMATCH: ParseScript(sourceText, realm, hostDefined) -> Script Record or a List of SyntaxError objects
+  // HTML supplies its Script Record and HostDefined around this unbound compiled code.
+  parseScript(source: string, filename: string): CompiledScript | SyntaxError[] {
+    try {
+      return new Script(source, { filename }) as unknown as CompiledScript;
+    } catch (error) {
+      // eslint-disable-next-line no-restricted-properties -- Node's compiler allocates its syntax failure in the host realm.
+      if (!(error instanceof globalThis.SyntaxError)) throw error;
+      return [new this.intrinsics.syntaxError(error.message)];
+    }
+  }
+
   /** Evaluate a script in this realm, using the supplied source location in diagnostics. */
   evaluate(source: string, filename: string, lineOffset = 0): unknown {
     return runWithActiveRealm(this, () =>
@@ -621,6 +637,11 @@ export class JSRealm {
     });
   }
 }
+
+declare const compiledScriptBrand: unique symbol;
+
+/** Opaque compiled classic code; HTML separately retains its realm and HostDefined. */
+export type CompiledScript = { [compiledScriptBrand]: true; };
 
 export type CollectionIteratorKind = 'map' | 'set';
 

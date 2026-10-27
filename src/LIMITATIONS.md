@@ -40,6 +40,18 @@ and native callback iterators. Test capabilities, not just the `custom` label.
 
 ## Scheduling and callback context
 
+- **Script creation is separate from execution.** Classic creation now compiles
+  without running; CSS/JSON/text creation retains synthetic default-export inputs.
+  JavaScript-module parsing and WebAssembly ESM parsing still throw explicitly.
+  Synthetic records are not engine modules, and CSS export projection remains
+  unfinished. Classic compiled code still needs execution in the retained realm
+  through the selected backend. Long Animation Frames creation timing is also missing. Module
+  graph orchestration covers document, worker, and worklet entry points, including
+  shared worklet responses, but the record operations that load dependencies and
+  link remain unfinished. Worker `importScripts()` fetching
+  requires an unavailable synchronous pause. Existing direct evaluation remains
+  separate, and HTML script/worker startup does not call these fetchers yet. See the
+  [script-creation audit](browlet/scripting/ROADMAP.md#html-8143-creating-scripts).
 - **`node-v8-agent-policy`:** `Agent.canBlock` records HTML's policy without
   enforcing it in V8. Window author code can call Atomics.wait and receive
   `"timed-out"` instead of TypeError, even with a zero timeout. The public

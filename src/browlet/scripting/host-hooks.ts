@@ -36,9 +36,9 @@ function makeJobCallback(
   registration: JSJobRegistration,
 ): JobCallback {
   const incumbent = registration.incumbent;
-  // TODO(HTML §8.1.4.1): Capture an active-script execution context when the
-  // classic-script pipeline supplies HTML Script records. BrowletRealm.evaluate()
-  // currently supplies only a controlled realm/settings entry.
+  // TODO(HTML §8.1.6.6.6): Capture/restore the active-script execution context once
+  // script creation/evaluation supplies parsed records to the modeled stack.
+  // The record contracts exist; BrowletRealm.evaluate() still has hostDefined null.
   return {
     callback,
     hostDefined: incumbent instanceof BrowletRealm ? incumbent.hostDefined ?? null : null,

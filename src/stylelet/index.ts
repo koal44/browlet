@@ -12,7 +12,7 @@ export { standardDOM, type DOMOperations, type TaskHandle, type TimerHost } from
 export { TreeScope, createSystemColorPalette, type SystemColorPalette } from './engine/index';
 export {
   CSSStyleSheetImpl, CSSRuleImpl, CSSStyleRuleImpl, CSSImportRuleImpl, StylePropertyMapImpl, CSSStyleDeclarationImpl, RuleListContext,
-  MediaListImpl, StyleSheetListImpl, CSSStylePropertiesImpl,
+  MediaListImpl, StyleSheetListImpl, CSSStylePropertiesImpl, cssStyleSheetIDL,
   type CSSStyleSheetInit, type StyleSheetLoad, type FetchImportedStyleSheet,
 } from './cssom/index';
 export { CSSDeclarationBlock } from './cssom/declarations/index';

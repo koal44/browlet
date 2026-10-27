@@ -8,6 +8,17 @@ structured-clone implementation.
 
 ## Present
 
+- `BrowletEnvironment.fetchClassicWorkerScript()` supplies request setup, the custom fetch
+  hook, response validation, and UTF-8 decoding up to the explicitly unfinished
+  classic-script creation method. Its tests use existing Window settings to
+  exercise the fetch-client/target-settings boundary; worker globals, startup,
+  and production callers remain absent. See the
+  [script-fetching audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).
+- `fetchModuleWorkerScriptGraph()` now fetches the root and delegates descendant
+  loading/linking, retaining the outside fetch client and target worker settings.
+  Its constructors and module-record operations remain explicit dependencies;
+  worker startup still needs to call it. Classic `importScripts()` fetching remains
+  an explicit stub until synchronous pause can be supplied.
 - `service-worker-global-scope.ts` implements the DOM legacy-listener warning
   hook and initializes HTML's `BrowletGlobalObject` state. Error reporting,
   rejected-promise notification, and import-map consumers remain unwired. Move
@@ -49,6 +60,9 @@ structured-clone implementation.
   permissible, and suspendable state derives transitively from those owners,
   fully-active Documents, entangled ports, timers, database transactions, and
   network connections. JavaScript wrapper reachability alone is insufficient.
+- HTML §8.1.3.5 takes secure-context status from the first owner's relevant
+  settings. Populate the environment's fixed decision during worker setup;
+  the worker script URL alone is not the classification input.
 - Closing discards already-queued tasks and sets a flag that prevents new tasks
   from entering the worker queues. Termination additionally aborts the running
   script and clears the dedicated worker's pending outside messages. These are

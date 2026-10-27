@@ -2,10 +2,13 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { HTML_NAMESPACE } from '../../../src/infra/index';
 import { parseURL } from '../../../src/url/index';
+import type { ClassicScript, JavaScriptModuleScript } from '../../../src/browlet/scripting/script';
+import { SpeculationRulesParseResult } from '../../../src/browlet/scripting/speculation-rules';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLBaseElementImpl } from '../../../src/browlet/dom/nodes/html/metadata/base';
 import { HTMLScriptElementImpl } from '../../../src/browlet/dom/nodes/html/scripting/script';
 import { createTestDocument } from '../../support/dom';
+import { createScriptState } from '../../support/script-state';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -114,7 +117,7 @@ describe('Document base URL changes', () => {
     const parse = vi.spyOn(document, 'createSpeculationRulesParseResult').mockImplementation((input) => {
       expect(document.getBaseURL()).toBe(url);
       order.push(input);
-      return { speculationRuleSet: null, errorToRethrow: null };
+      return new SpeculationRulesParseResult();
     });
     vi.spyOn(document, 'updateLinkStates').mockImplementation(() => { order.push('links'); });
     const update = vi.spyOn(document.getRelevantGlobalObject()!, 'updateSpeculationRules')
@@ -152,6 +155,31 @@ describe('Document base URL changes', () => {
     expect(originalUpdate.mock.calls[0]![0]).toBe(oldResult);
     expect(originalUpdate.mock.calls[0]![1]).toBe(parse.mock.results[0]!.value);
     expect(destinationUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each(['classic', 'module'] as const)('does not reparse a failed %s script as speculation rules', (kind) => {
+    const document = createTestDocument();
+    const script = createScript(document);
+    document.appendChild(script);
+    const baseURL = parseURL('https://example.test/original/').url!;
+    const parseError = new SyntaxError('Script parse failure');
+    const result: ClassicScript | JavaScriptModuleScript = kind === 'classic'
+      ? { ...createScriptState(document.env), mutedErrors: false, originalSourceURL: null } : createScriptState(document.env);
+    result.parseError = parseError;
+    result.errorToRethrow = parseError;
+    result.baseURL = baseURL;
+    script.scriptType = kind;
+    script.result = result;
+    const oldResult = script.result;
+    const parse = vi.spyOn(document, 'createSpeculationRulesParseResult');
+    const update = vi.spyOn(script.getRelevantGlobalObject(), 'updateSpeculationRules');
+
+    document.setURL(parseURL('https://example.test/changed/').url!);
+
+    expect(parse).not.toHaveBeenCalled();
+    expect(update).not.toHaveBeenCalled();
+    expect(script.result).toBe(oldResult);
+    expect(oldResult.baseURL).toBe(baseURL);
   });
 });
 

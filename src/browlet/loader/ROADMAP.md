@@ -39,7 +39,7 @@ script callback does not maintain this state yet.
 | `resource-reader.ts` | Retain response metadata, sniff a bounded prefix, and replay it before subsequent body bytes | HTML §2.5.2, MIME Sniffing, and Streams |
 | `element-fetch-options.ts` | Apply shared attribute rules from `dom/nodes/html/attributes/` to element requests, together with integrity, nonce, lazy-loading, blocking, and fetch-priority inputs | HTML §§2.5.4–2.5.9; SRI §§3.4–3.5 |
 | `linked-resource.ts` | `<link>` processing and external style sheets | HTML §§4.2.4 and 4.6.8.23; CSSOM |
-| `script-loader.ts` | Shared classic/module graph fetching plus parser, worker, `importScripts()`, and worklet coordination | HTML §§4.12.1 and 8.1.5; HTML §§10.2.4, 10.3.1, and 11.3.2 |
+| [`../scripting/script-fetching.ts`](../scripting/script-fetching.ts), `BrowletEnvironment` forwarders | Classic/worker/single-module fetching and document/worker/worklet graph orchestration reach explicit creation and module-record dependencies; worklet responses are shared across target globals. Worker-imported fetching needs synchronous pause, and owner callers remain pending | HTML §8.1.4.2; HTML §§4.12.1, 10.2.4, 10.3.1, and 11.3.2 |
 | `preload.ts` | preload/modulepreload resource hints, parser-discovered preloads, and Link-header integrity metadata | HTML §4.2.4; Fetch; SRI §3.6 |
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
@@ -195,9 +195,11 @@ specified networking, DOM-manipulation, or navigation task source; a Node
 promise continuation must not become a hidden second lifecycle scheduler.
 
 Worker and worklet processing create their own realms, settings objects, and
-lifetime state under `workers/` and `worklets/`. The loader supplies Fetch-backed
-classic scripts and module graphs to those callers; it does not own their
-globals, ports, exposure, or termination.
+lifetime state under `workers/` and `worklets/`. Shared script fetching lives in
+`scripting/`, currently stopping at the explicit classic-creation dependency.
+Those algorithms supply scripts to the eventual callers; they do not own their
+globals, ports, exposure, or termination. See the
+[fetch algorithm audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).
 
 Unloading, destroying, and aborting Documents are browsing-lifecycle
 algorithms even when they cancel loader work. The loader exposes cancellation

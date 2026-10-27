@@ -38,6 +38,12 @@ metadata, errors, and `GetActiveScriptOrModule`. The existing `JSRealm.evaluate(
 entry and parser ScriptHandler do not constitute the formal classic-script
 pipeline. [Scripting](../browlet/scripting/ROADMAP.md) owns that pipeline;
 [loader](../browlet/loader/ROADMAP.md) owns fetching and resource lifetime.
+HTML now defines script-state and partial parsed-record contracts, including
+HostDefined, and active-script lookup over its modeled stack. `JSRealm.parseScript()`
+now compiles with Node's `vm.Script` without execution and realizes syntax failures
+in the target realm. HTML retains that opaque compiled artifact on its Script Record.
+Running it in the retained realm, including addon-owned contexts, remains unfinished;
+the existing source-string evaluation path has not been repurposed to recompile it.
 
 Custom hooks expose incumbent registration and opaque script metadata. Connect
 those to actual Script records and restore them around callbacks. The existing
@@ -67,6 +73,10 @@ module records, resolution policy, and script integration remain the dependencie
 Wire `HostLoadImportedModule`, `HostGetImportMetaProperties`, and
 `HostGetSupportedImportAttributes` through that pipeline.
 Include JSON, text, and synthetic modules when their specified consumers arrive.
+HTML now parses JSON/CSS and retains their default-export inputs, alongside text.
+These modeled records still require engine linking/evaluation; CSS additionally
+requires binding projection of the retained stylesheet implementation. Source-text
+module and Wasm ESM parsers have explicit throwing boundaries on BrowletRealm.
 
 The addon still lacks context-level dynamic-import callbacks. Re-enable the
 approved skipped case in [capabilities.test.cjs](../../node-compat/test/capabilities.test.cjs)
@@ -80,7 +90,6 @@ Implement these with their consuming feature, rather than adding inert hooks:
 
 | Missing boundary | Consumer and completion condition |
 | --- | --- |
-| `HostEnsureCanAddPrivateElement` | WindowProxy/Location private-field policy; V8 must recognize the actual platform identities |
 | `HostEnsureCanCompileStrings` | CSP checks for eval/Function-family compilation; existing CSP algorithms need an engine interception point, not just a coarse VM switch |
 | `HostGetCodeForEval` | TrustedScript extraction when Trusted Types and its engine hook are available |
 | `HostEnqueueFinalizationRegistryCleanupJob` | HTML cleanup tasks and script bracketing; capturing a registry callback does not control collection or cleanup scheduling |
@@ -94,6 +103,21 @@ For the last two rows, preserve the tests and replacement conditions in the
 [limitations catalog](../LIMITATIONS.md), rather than inventing stronger answers
 from the existing probes. Broaden the inventory for a new Web IDL or platform
 consumer only when it introduces an additional engine requirement.
+
+## Private elements on host objects
+
+`SPEC_CLASH(html-private-elements)`: Browlet leaves `HostEnsureCanAddPrivateElement`
+unimplemented and does not enforce HTML's WindowProxy/Location rejection. This follows
+Chromium 156.0.8078.4, which accepted private fields, methods, and accessors on
+both objects in the 2026-10-26 probe. HTML requires TypeError; Firefox rejects
+them.
+
+A working prototype cost about 116 ms per million constructions with a JavaScript
+callback versus 11 ms before; even the no-hook path added overhead. The engine
+and addon prototypes are saved on `research/private-element-hook` branches in
+their respective repositories, outside the active runtime. The independent
+experimental repository retains the [probes and findings](../../node-compat/experimental/private-element-hook/RESULTS.md).
+Revisit if an upstream facility provides an inexpensive host-object restriction.
 
 ## Buffer-source byte length
 

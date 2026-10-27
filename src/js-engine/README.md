@@ -13,7 +13,7 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 | Module | Responsibility |
 | --- | --- |
-| [realm.ts](realm.ts) | `JSRealm`, captured intrinsics, evaluation, function/object allocation, runtime buffers, and global-object integration |
+| [realm.ts](realm.ts) | `JSRealm`, captured intrinsics, classic compilation/evaluation, function/object allocation, runtime buffers, and global-object integration |
 | [runtime.ts](runtime.ts) | Isolate associations, microtask queues, realm lookup, Promise observation, and host-hook adaptation |
 | [node-addons.ts](node-addons.ts) | Typed optional backend operations, bound once when loaded |
 | [environment.ts](environment.ts), [realm-execution.ts](realm-execution.ts) | Portable environment and execution contracts supplied to implementations |
@@ -70,6 +70,12 @@ owner-defined record and reconstruct in the destination environment; `clone`
 performs the immediate operation.
 
 ## Runtime and realm ownership
+
+`JSRealm.parseScript()` compiles classic code with Node's `vm.Script` without
+executing it, returning an opaque artifact or target-realm syntax errors. HTML
+wraps successful code with its Script Record, realm, and HostDefined. Execution
+of retained compiled artifacts remains separate, unfinished work; `evaluate()`
+still takes source text and is not used as a parser.
 
 One private `JSRuntime` per module instance owns isolate-level associations and
 the ambient queue. Consumers use named functions; realm-owned operations stay

@@ -28,7 +28,7 @@ import {
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import { DOMStringListImpl } from '../string-list';
-import { EventHandlerMap, type EventHandlerCallback, type SpeculationRulesParseResult } from '../../scripting/index';
+import { EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback } from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
@@ -138,7 +138,7 @@ export class DocumentImpl extends NodeImpl {
   /** Custom element registry associated with this document, if any. */
   customElementRegistry: CustomElementRegistryImpl | null = null;
   /** Module scripts known to this document. */
-  moduleMap: ModuleMap = { entries: [] };
+  moduleMap = new ModuleMap();
   /** Policies inherited or supplied when the document was created. */
   policyContainer = new PolicyContainer();
   /** HTTP status of the resource that created this Document; zero when there was no response. */
@@ -1330,9 +1330,7 @@ export class DocumentImpl extends NodeImpl {
     ) {
       if (!HTMLScriptElementImpl.is(descendant)) continue;
       const oldResult = descendant.result;
-      if (oldResult === null || oldResult === 'uninitialized') continue;
-      // PROVISIONAL: speculation rules are the only prepared result type currently represented.
-      // Distinguish them from classic/module scripts and import maps when those records are added.
+      if (!(oldResult instanceof SpeculationRulesParseResult)) continue;
 
       const newResult = this.createSpeculationRulesParseResult(descendant.getChildTextContent());
       // Use the script's relevant Window, which adoption need not change.
@@ -1352,7 +1350,7 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/multipage/webappapis.html#create-a-speculation-rules-parse-result
   createSpeculationRulesParseResult(_input: string): SpeculationRulesParseResult {
     // PROVISIONAL: initialize the record only; HTML §7.6 rule-set parsing and error capture are missing.
-    return { speculationRuleSet: null, errorToRethrow: null };
+    return new SpeculationRulesParseResult();
   }
 
   /** Reconsider prefetch and prerender candidates for this document. */
@@ -2174,23 +2172,6 @@ export enum DocumentMode {
   Quirks = 'quirks',
   LimitedQuirks = 'limited-quirks',
 }
-
-/** Module loading results retained by the document. */
-// https://html.spec.whatwg.org/#module-map
-export type ModuleMap = {
-  /** Entries indexed by request URL and module type. */
-  entries: ModuleMapEntry[];
-};
-
-/** Request URL and module type used to identify a module-map entry. */
-export type ModuleMapKey = [URLRecord, string];
-
-export type ModuleMapEntry = {
-  /** Request identity used to find this entry. */
-  key: ModuleMapKey;
-  /** Loading state or module result; the module loader's representation is provisional. */
-  value: unknown;
-};
 
 /** Loading milestones, with zero for those not yet reached. */
 // https://html.spec.whatwg.org/#document-load-timing-info

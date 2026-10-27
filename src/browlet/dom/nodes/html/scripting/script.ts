@@ -9,7 +9,7 @@ import {
   corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, blockingAttribute,
   fetchPriorityAttribute,
 } from '../attributes/index';
-import type { SpeculationRulesParseResult } from '../../../../scripting/index';
+import type { Script, SpeculationRulesParseResult } from '../../../../scripting/index';
 import type { WindowImpl } from '../../../../browsing/window/index';
 
 import type { DocumentImpl } from '../../document';
@@ -37,8 +37,8 @@ export class HTMLScriptElementImpl extends HTMLElementImpl {
   scriptType: ScriptElementType | null = null;
   /** Prepared result, an error represented by null, or the initial unprepared state. */
   // https://html.spec.whatwg.org/multipage/scripting.html#concept-script-result
-  // PROVISIONAL: extend the union when classic/module scripts and import maps exist.
-  result: 'uninitialized' | null | SpeculationRulesParseResult = 'uninitialized';
+  // TODO(HTML §8.1.4.8): Add the import-map parse result when that record is implemented.
+  result: 'uninitialized' | null | Script | SpeculationRulesParseResult = 'uninitialized';
 
   /** Recognize an HTML script implementation, independently of mutable attributes. */
   static is(value: unknown): value is HTMLScriptElementImpl {

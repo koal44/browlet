@@ -79,8 +79,10 @@ export function createWindowEnvironment(
     agent, userAgent, creationURL, origin, parent, topLevelCreationURL, topLevelOrigin,
     reservedEnv = null, previousRealm,
   } = initialization;
-  // HTML secure-context determination; browser ancestry checks include the
-  // parent's full chain. A reserved environment already carries that decision.
+  // SPEC_CLASH(secure-context-top-level-url): HTML checks the top-level creation URL; retain origin-and-ancestry checks.
+  // Approved for Window creation: preserve the selected origin and parent's full
+  // security chain. A reserved environment already carries that fixed decision.
+  // See browsing/policy/ROADMAP.md#trustworthiness for the differing results.
   // https://html.spec.whatwg.org/multipage/webappapis.html#secure-context
   // https://w3c.github.io/webappsec-secure-contexts/#ancestors
   const baseEnv = reservedEnv ?? new BrowletEnvironmentBase({

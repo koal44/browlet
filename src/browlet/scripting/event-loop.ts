@@ -6,6 +6,7 @@ import type { DocumentImpl } from '../dom/nodes/index';
 import type { BrowletEnvironment } from '../environment';
 
 import { JSExecutionContext } from './execution-context';
+import { JSScriptOrModule, type Script } from './script';
 
 // Task-source/queue associations stay private so scheduling can coalesce
 // sources without changing callers.
@@ -58,6 +59,14 @@ export class EventLoop {
   // https://html.spec.whatwg.org/multipage/webappapis.html#topmost-script-having-execution-context
   get topmostScriptHavingExecutionContext(): JSExecutionContext | null {
     return this.executionContextStack.findLast((context) => context.scriptOrModule !== null) ?? null;
+  }
+
+  /** The HTML script of the topmost ScriptOrModule, independently of incumbent skipping. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#active-script
+  get activeScript(): Script | null {
+    // GetActiveScriptOrModule selects the same topmost non-null record in our modeled stack.
+    const record = this.topmostScriptHavingExecutionContext?.scriptOrModule ?? null;
+    return record === null ? null : record.hostDefined;
   }
 
   hasRunnableTasks(): boolean {
@@ -222,7 +231,7 @@ export class EventLoop {
 
   // HTML §§8.1.3.2 and 8.1.4.4 — Browlet-controlled ScriptEvaluation entry.
   // TODO(HTML §8.1.4): Receive the complete Script/Module record from script processing.
-  // The realm-bearing record below supplies only ScriptOrModule identity for this entry.
+  // The record below has no HTML script until the creating/calling algorithms supply one.
   // ACCOMMODATION(node-v8-execution-contexts): Direct embedder entry receives
   // a temporary task because Node exposes no surrounding execution context.
   runScriptEvaluation<Result>(
@@ -237,7 +246,7 @@ export class EventLoop {
     try {
       this.prepareToRunScript(env);
       const context = new JSExecutionContext(env.realm);
-      context.scriptOrModule = { realm: env.realm };
+      context.scriptOrModule = new JSScriptOrModule(env.realm, null);
       this.executionContextStack.push(context);
       try {
         return steps();
