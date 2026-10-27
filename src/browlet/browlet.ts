@@ -15,11 +15,10 @@ import { UserAgent } from './user-agent';
 
 /** Hosts one top-level browsing session with navigation and page evaluation. */
 export class Browlet {
-  #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
-  #evaluation: PageEvaluation;
   #route: BrowletRoute;
   #traversable: TopLevelTraversable;
   #userAgent: UserAgent;
+  #evaluation: PageEvaluation;
 
   constructor(config: BrowletConfig) {
     installHostHooks();
@@ -46,7 +45,7 @@ export class Browlet {
     ) {
       throw new InternalError('Initial top-level traversable is incomplete');
     }
-    this.#evaluation = new PageEvaluation(this.#traversable.activeWindow.env.realm);
+    this.#evaluation = new PageEvaluation(this.#traversable);
   }
 
   /** Platform Document currently active in this session. */
@@ -88,7 +87,7 @@ export class Browlet {
   evaluate<Result = unknown, Argument = unknown>(
     expression: string | ((argument: Argument) => Result), argument?: Argument,
   ): Promise<Awaited<Result>> {
-    return this.#evaluation.evaluate(String(expression), typeof expression === 'function', argument) as Promise<Awaited<Result>>;
+    return this.#evaluation.evaluate(expression, argument);
   }
 
   /** Install an asynchronous page-to-host callback, including after navigation. */
@@ -96,11 +95,8 @@ export class Browlet {
   async exposeFunction<Arguments extends unknown[], Result>(
     name: string, callback: (...args: Arguments) => Result,
   ): Promise<void> {
-    // eslint-disable-next-line no-restricted-globals -- This is validation of the Node-facing host API.
-    if (this.#exposures.has(name)) throw new Error(`Host function ${name} is already exposed`);
     const invoke = (args: unknown[]) => callback(...args as Arguments);
     this.#evaluation.exposeFunction(name, invoke);
-    this.#exposures.set(name, invoke);
   }
 
   /** Load a document and resolve with its browsing context's WindowProxy. */
@@ -136,11 +132,6 @@ export class Browlet {
       navigationParams.userInvolvement,
       historyEntry,
     );
-    this.#evaluation.dispose();
-    this.#evaluation = new PageEvaluation(realm);
-    for (const [name, callback] of this.#exposures) {
-      this.#evaluation.exposeFunction(name, callback);
-    }
 
     const parser = new HTMLDocumentParser(
       document,

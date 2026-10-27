@@ -1087,6 +1087,10 @@ export class DocumentImpl extends NodeImpl {
 
     this.browsingContext = null;
     documentState.document = null;
+    for (const evaluation of env.userAgent.pageEvaluations.get(navigable) ?? []) {
+      evaluation.activeDocumentChanged();
+    }
+    env.userAgent.pageEvaluations.delete(navigable);
     this.notifyFullyActiveStateChanged();
 
     for (const worker of this.ownedWorkers) worker.ownerSet.delete(this);

@@ -146,6 +146,16 @@ review of its observer and translation of HTML's examples; see the
 [audit record](browlet/scripting/ROADMAP.md#html-8133-explicit-context-experiment).
 New Node/V8 work remains parked.
 
+`UserAgent.webDriver` owns the BiDi remote-end command algorithms, whose completion
+uses `InternalPromise` through `UserAgent.HostPromise`. `PageEvaluation`
+owns Browlet's Node convenience API above that boundary. Its existing local source
+evaluator remains in use until the driver's retained-script execution, protocol
+values, and target/session lifecycles are connected. Navigation currently notifies
+the local evaluation clients through a UserAgent-owned weak map; cancellation and
+Node callback reinstallation are convenience behavior, not BiDi events. The
+[automation boundary](browlet/automation/README.md) records this temporary path and
+the explicit driver dependencies; there is no fallback from failed driver commands.
+
 HTML's per-global scripting state belongs to global implementations, described
 by [`BrowletGlobalObject`](browlet/scripting/global-object.ts). Window initializes
 it directly without changing EventTarget inheritance or projecting internal

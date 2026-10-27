@@ -214,7 +214,18 @@ export class JSScriptRecord extends JSScriptOrModule {
     super(script.env.realm, script);
     this.code = code;
   }
+
+  /** Evaluate this retained record without reparsing its source. */
+  // https://tc39.es/ecma262/#sec-runtime-semantics-scriptevaluation
+  evaluate(): ScriptCompletion {
+    // TODO(HTML §8.1.4.4): Execute the compiled artifact in its realm and supply
+    // this record to the modeled script context. The addon exposes only source execution.
+    throw new InternalError('Retained ScriptEvaluation is not implemented');
+  }
 }
+
+/** The normal or abrupt completion produced by script evaluation and function calls. */
+export type ScriptCompletion = { type: 'normal' | 'throw'; value: unknown; };
 
 /** Module-record operations required by HTML's graph loader; engine integration remains pending. */
 export abstract class JSModuleRecord extends JSScriptOrModule {

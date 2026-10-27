@@ -89,6 +89,13 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   [automation entry](browlet/automation/README.md) for page commands; a broader
   embedder contract must define direct-call/Promise interoperability. Do not
   hide this by checkpointing after every Web IDL operation.
+- **WebDriver command algorithms have unfinished dependencies.** BiDi evaluation
+  has protocol-shaped inputs/results and explicit target, execution, Await,
+  serialization, activation, and exception-detail boundaries. It cannot execute
+  end to end yet. Browlet's existing `PageEvaluation` remains a separate local
+  source-evaluation path until these are connected. Its copying, cancellation,
+  and exposed Node callbacks are convenience behavior, not protocol conformance.
+  See the [automation boundary](browlet/automation/README.md).
 - **Internal sandboxes provide execution, with browser client settings stubbed.**
   Their binding uses the full BrowletEnvironment contract, but origin, base
   URL, creation URL, policy, module, ancestry, time-origin, and Window/Worker

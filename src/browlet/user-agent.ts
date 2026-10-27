@@ -29,6 +29,7 @@ import {
 import type { IntersectionObserverMargin } from './dom/intersection-observer/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import { type BrowletEnvironment } from './environment';
+import { WebDriver, type PageEvaluation } from './automation/index';
 import { HTTPAuthenticationStore } from './loader/index';
 import { BrowsingContextGroup, type Navigable, type TopLevelTraversable } from './browsing/navigation/index';
 import { NodeHTTPTransport, createContentDecoder, supportedContentCodings } from './integration/network/index';
@@ -40,6 +41,10 @@ import { createSandboxEnvironment, createWindowEnvironment } from './bindings';
 
 /** Owns browsing contexts and shared browser services that outlive individual documents. */
 export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent, StyleletUserAgent, SelectletUserAgent {
+  /** WebDriver BiDi command implementation; separate from Browlet's convenience API. */
+  webDriver = new WebDriver(this);
+  /** Local clients notified of document replacement; not WebDriver session state. */
+  pageEvaluations = new WeakMap<Navigable, Set<PageEvaluation>>();
   /** Implementation access shared by selector and style engines. */
   dom = browletDOM;
   /** Configurable CSS system colors, independent of the machine running Browlet. */
@@ -52,7 +57,7 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   sandbox: BrowletEnvironment;
   /** Browser binding factory used by browsing algorithms to create Window environments. */
   createWindowEnvironment = createWindowEnvironment;
-  /** Background Fetch continuations outlive their initiating environments. */
+  /** Browser-owned continuations, including Fetch and protocol commands, outlive individual environments. */
   HostPromise = NodePromise;
   /** Background steps remain distinct from task delivery to a global. */
   runInParallel = queueNodeTask;

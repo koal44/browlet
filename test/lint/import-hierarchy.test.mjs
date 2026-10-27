@@ -169,7 +169,7 @@ tester.run('import-order', order, {
   invalid: [
     {
       filename, code: "import { Navigable } from './navigable'; // Keep this explanation.\nimport { InternalError } from '../../../infra/index';",
-      output: null, errors: [{ messageId: 'commented' }],
+      output: null, errors: [{ messageId: 'commented', line: 2, column: 1 }],
     },
     {
       filename, code: "// This explains Navigable.\nimport { Navigable } from './navigable';\nimport { InternalError } from '../../../infra/index';",
@@ -182,6 +182,12 @@ tester.run('import-order', order, {
     {
       filename, code: "import { Navigable } from './navigable';\nimport { InternalError } from '../../../infra/index'; // Error handling.",
       output: null, errors: [{ messageId: 'commented' }],
+    },
+    {
+      filename,
+      code: "import { InternalError } from '../../../infra/index';\n\nimport { Navigable } from './navigable';\nimport { JSRealm } from '../../../js-engine/index';",
+      output: "import { InternalError } from '../../../infra/index';\nimport { JSRealm } from '../../../js-engine/index';\n\nimport { Navigable } from './navigable';",
+      errors: [{ messageId: 'order', line: 4, column: 1 }],
     },
     {
       filename,
@@ -211,7 +217,7 @@ tester.run('import-order', order, {
       filename,
       code: "import {\n  InternalError,\n} from '../../../infra/index';\n\nimport type { JSValue } from '../../../js-engine/index';",
       output: "import {\n  InternalError,\n} from '../../../infra/index';\nimport type { JSValue } from '../../../js-engine/index';",
-      errors: [{ messageId: 'spacing' }],
+      errors: [{ messageId: 'spacing', line: 5, column: 1 }],
     },
     {
       filename,

@@ -389,6 +389,17 @@ Compiled classic code likewise still needs the §8.1.4.4 execution path, includi
 an addon-context execution operation and active-script metadata. No recompile or
 fallback evaluation path was added here.
 
+`UserAgent.webDriver` now contains BiDi's create/prepare/ScriptEvaluation command
+sequence, stopping at explicit unfinished dependencies. `JSScriptRecord.evaluate()`
+is the retained-record execution boundary; it throws rather than recompiling source.
+ECMAScript Await must also suspend/resume the modeled context before asynchronous
+command completion can work. Browlet's local `PageEvaluation` remains separate
+until the driver is executable. The [automation boundary](../automation/README.md)
+records target/session, serialization, activation, and exception requirements,
+plus the reviewed BiDi parse-error choice: a null record returns the retained
+parse error through the normal exception-result path, following browser and WPT
+behavior despite the omitted branch in the command algorithms.
+
 The Long Animation Frames creation hook retains `originalSourceURL`, but frame
 timing records, pending-script entry creation, and reporting remain missing in
 [Performance](../performance/ROADMAP.md). This is not a complete timing hook.

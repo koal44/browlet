@@ -16,7 +16,7 @@ export type { BrowletGlobalObject } from './global-object';
 export type { ImportMap, ModuleSpecifierMap, ModuleIntegrityMap, SpecifierResolutionRecord } from './import-map';
 export {
   ClassicScript, ModuleScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript,
-  TextModuleScript, WebAssemblyModuleScript, type Script, type ModuleType,
+  TextModuleScript, WebAssemblyModuleScript, type Script, type ModuleType, type ScriptCompletion,
   JSScriptOrModule, JSScriptRecord, JSModuleRecord, JSSourceTextModuleRecord, JSSyntheticModuleRecord, JSWebAssemblyModuleRecord,
   JSModuleRequest,
 } from './script';

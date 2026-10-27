@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/prefer-promise-reject-errors -- Evaluation preserves arbitrary JavaScript throws and rejection reasons. */
 import { Script } from 'node:vm';
 
-import type { TaskHandle } from '../../infra/index';
+import { InternalError, type TaskHandle } from '../../infra/index';
 import {
   type JSRealm, copyMapData, copySetData, getDateValue, getRegExpData,
   hasDateValue, hasErrorData, hasMapData, hasRegExpMatcher, hasSetData, isCallable, isObject, isProxyObject,
@@ -9,9 +9,69 @@ import {
 import { idlType } from '../../web-idl/core/index';
 
 import type { WindowRealm } from '../scripting/index';
+import type { Navigable } from '../browsing/navigation/index';
 
-/** One page execution context and its outstanding automation calls from Node. */
+/** Browlet's Node-facing evaluation conveniences and their page lifetime. */
 export class PageEvaluation {
+  #target: Navigable;
+  #evaluation: LocalEvaluation | null;
+  #exposures: Map<string, (args: unknown[]) => unknown> = new Map();
+
+  constructor(target: Navigable) {
+    const window = target.activeDocument?.getRelevantGlobalObject();
+    if (!window) throw new InternalError('Page evaluation requires an active Window');
+    this.#target = target;
+    this.#evaluation = new LocalEvaluation(window.env.realm);
+    const clients = window.env.userAgent.pageEvaluations;
+    let evaluations = clients.get(target);
+    if (evaluations === undefined) clients.set(target, evaluations = new Set());
+    evaluations.add(this);
+  }
+
+  /** Evaluate source or a serialized function, await the result, and copy it to Node. */
+  evaluate<Result = unknown, Argument = unknown>(
+    expression: string | ((argument: Argument) => Result), argument?: Argument,
+  ): Promise<Awaited<Result>> {
+    const evaluation = this.#getEvaluation();
+    // TODO(WebDriver BiDi): Encode inputs and call the protocol commands after
+    // retained-script execution and protocol value serialization are connected.
+    // Keep this temporary path explicit; never fall back from a failed driver command.
+    return (typeof expression === 'function'
+      ? evaluation.callFunction(String(expression), [argument])
+      : evaluation.evaluate(expression)) as Promise<Awaited<Result>>;
+  }
+
+  /** Retain a host callback and install it in the active and subsequent Windows. */
+  exposeFunction(name: string, callback: (args: unknown[]) => unknown): void {
+    // eslint-disable-next-line no-restricted-globals -- Node-facing convenience API.
+    if (this.#exposures.has(name)) throw new Error(`Host function ${name} is already exposed`);
+    this.#getEvaluation().exposeFunction(name, callback);
+    this.#exposures.set(name, callback);
+  }
+
+  /** Apply Browlet's local cancellation/reinstallation policy, not a BiDi event. */
+  activeDocumentChanged(): void {
+    this.#evaluation?.dispose();
+    const window = this.#target.activeDocument?.getRelevantGlobalObject() ?? null;
+    this.#evaluation = window === null ? null : new LocalEvaluation(window.env.realm);
+    if (window === null) {
+      this.#exposures.clear();
+      return;
+    }
+    for (const [name, callback] of this.#exposures) {
+      this.#evaluation?.exposeFunction(name, callback);
+    }
+  }
+
+  #getEvaluation(): LocalEvaluation {
+    // eslint-disable-next-line no-restricted-globals -- Node-facing convenience API.
+    if (this.#evaluation === null) throw new Error('Evaluation context was destroyed');
+    return this.#evaluation;
+  }
+}
+
+/** Temporary source evaluator; it is not an implementation of a WebDriver command. */
+class LocalEvaluation {
   #realm: WindowRealm;
   /** Evaluations to reject in Node if navigation destroys this page context. */
   #pending = new Set<(reason: Error) => void>();
@@ -24,49 +84,13 @@ export class PageEvaluation {
   }
 
   /** Run page source as an HTML task and copy its eventual result back to Node. */
-  evaluate(expression: string, isFunction: boolean, argument: unknown): Promise<unknown> {
-    // eslint-disable-next-line no-restricted-globals -- Automation calls return promises in Node.
-    return new Promise((resolve, reject) => {
-      if (isFunction) {
-        // Method shorthand needs a function keyword when parsed as an expression.
-        try { new Script(`(${expression})`); }
-        catch {
-          expression = expression.trim().replace(/^(async\s+)?/, '$1function ');
-          try { new Script(`(${expression})`); }
-          // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
-          catch { throw new TypeError('The evaluation function cannot be serialized'); }
-        }
-      }
-      const input = copyEvaluationValue(argument);
-      this.#pending.add(reject);
-      const complete = (value: unknown, failed = false): void => {
-        if (!this.#pending.delete(reject)) return;
-        try {
-          const output = copyEvaluationValue(value);
-          if (failed) reject(output);
-          else resolve(output);
-        } catch (error) {
-          // A page getter can throw while its result is being copied.
-          try { reject(copyEvaluationValue(error)); }
-          // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
-          catch { reject(new TypeError('Evaluation failure could not be copied')); }
-        }
-      };
-      this.#enqueue(() => {
-        try {
-          let result = this.#realm.evaluate(
-            isFunction ? `(${expression})` : expression, 'browlet-evaluate.js',
-          );
-          if (isFunction) {
-            result = Reflect.apply(result as (...args: unknown[]) => unknown,
-              undefined, [copyEvaluationValue(input, this.#realm)]);
-          }
-          this.#realm.Promise.fromValue(result, this.#realm.intrinsics.promise.constructor, idlType.any).observe(
-            (value) => complete(value), (error) => complete(error, true),
-          );
-        } catch (error) { complete(error, true); }
-      });
-    });
+  evaluate(expression: string): Promise<unknown> {
+    return this.#evaluate(expression, null);
+  }
+
+  /** Call a function in this page with a snapshot of the supplied arguments. */
+  callFunction(functionDeclaration: string, args: unknown[]): Promise<unknown> {
+    return this.#evaluate(functionDeclaration, args);
   }
 
   /** Install a page function that copies arguments and results between the page and Node. */
@@ -90,16 +114,63 @@ export class PageEvaluation {
     });
   }
 
-  /** Cancel queued delivery and reject outstanding commands after navigation. */
+  /** Cancel queued delivery and reject commands after replacement or destruction. */
   dispose(): void {
     this.#disposed = true;
     for (const task of this.#tasks) task.remove();
     this.#tasks.clear();
     for (const reject of this.#pending) {
       // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
-      reject(new Error('Evaluation context was destroyed by navigation'));
+      reject(new Error('Evaluation context was destroyed'));
     }
     this.#pending.clear();
+  }
+
+  #evaluate(expression: string, args: unknown[] | null): Promise<unknown> {
+    // eslint-disable-next-line no-restricted-globals -- Automation calls return promises in Node.
+    return new Promise((resolve, reject) => {
+      if (args !== null) {
+        // The local Browlet API also accepts serialized method shorthand.
+        try { new Script(`(${expression})`); }
+        catch {
+          expression = expression.trim().replace(/^(async\s+)?/, '$1function ');
+          try { new Script(`(${expression})`); }
+          // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
+          catch { throw new TypeError('The evaluation function cannot be serialized'); }
+        }
+      }
+      const input = copyEvaluationValue(args) as unknown[] | null;
+      this.#pending.add(reject);
+      const complete = (value: unknown, failed = false): void => {
+        if (!this.#pending.delete(reject)) return;
+        try {
+          const output = copyEvaluationValue(value);
+          if (failed) reject(output);
+          else resolve(output);
+        } catch (error) {
+          // A page getter can throw while its result is being copied.
+          try { reject(copyEvaluationValue(error)); }
+          // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
+          catch { reject(new TypeError('Evaluation failure could not be copied')); }
+        }
+      };
+      this.#enqueue(() => {
+        try {
+          // Retained only for Browlet's existing convenience API while the
+          // WebDriver execution and protocol serialization dependencies are unfinished.
+          let result = this.#realm.evaluate(
+            input === null ? expression : `(${expression})`, 'browlet-evaluate.js',
+          );
+          if (input !== null) {
+            result = Reflect.apply(result as (...args: unknown[]) => unknown,
+              undefined, copyEvaluationValue(input, this.#realm) as unknown[]);
+          }
+          this.#realm.Promise.fromValue(result, this.#realm.intrinsics.promise.constructor, idlType.any).observe(
+            (value) => complete(value), (error) => complete(error, true),
+          );
+        } catch (error) { complete(error, true); }
+      });
+    });
   }
 
   #deliver(
@@ -123,7 +194,7 @@ export class PageEvaluation {
 
   #enqueue(steps: () => void): void {
     // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
-    if (this.#disposed) throw new Error('Evaluation context was destroyed by navigation');
+    if (this.#disposed) throw new Error('Evaluation context was destroyed');
     const realm = this.#realm;
     const task = realm.env.exec.queueTask('automation', () => {
       this.#tasks.delete(task);

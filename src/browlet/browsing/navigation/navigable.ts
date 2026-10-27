@@ -73,6 +73,9 @@ export class Navigable {
 
     this.#activeSessionHistoryEntry = entry;
     if (previousDocument !== document) {
+      for (const evaluation of previousDocument?.env.userAgent.pageEvaluations.get(this) ?? []) {
+        evaluation.activeDocumentChanged();
+      }
       previousDocument?.notifyFullyActiveStateChanged();
       document?.notifyFullyActiveStateChanged();
     }

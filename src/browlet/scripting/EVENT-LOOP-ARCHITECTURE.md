@@ -117,10 +117,17 @@ through networking tasks. Complete script preparation and readiness remain with
 
 ## Host commands and callback completion
 
-[PageEvaluation](../automation/evaluation.ts) queues external commands and
-callback results on the automation task source, brackets page execution, and
-installs result observation before cleanup checkpoints. It copies values across
-the boundary and returns a native Node Promise to the host.
+BiDi command completion uses `userAgent.HostPromise`, keeping protocol
+continuations off the target page's queue. Awaiting an author Promise is a
+separate, unfinished runtime operation: it must suspend and resume the script
+context for cleanup before command processing continues on the host.
+
+[PageEvaluation](../automation/evaluation.ts) retains a temporary local evaluator
+that queues external commands and callback results on the automation task source,
+brackets page execution, and installs result observation before cleanup checkpoints.
+It copies values across the boundary and returns a native Node Promise to the host.
+This remains separate from the BiDi command algorithms until retained-script
+execution, protocol values, and Await's context suspension/resumption are connected.
 
 Host callback work stays on Node's queue. Completion queues an HTML task, waking
 an idle page normally. Navigation removes pending bridge tasks, rejects outstanding

@@ -35,26 +35,28 @@ export default {
     function check(block) {
       if (block.length < 2) return;
       const entries = block.map((node) => ({ node, ...importPosition(context.filename, node) }));
-      const sorted = [...entries].sort((a, b) => a.group - b.group || a.order - b.order);
-      const reordered = sorted.some((entry, i) => entry !== entries[i]);
+      const compare = (a, b) => a.group - b.group || a.order - b.order;
+      const misplaced = entries.find((entry, i) => i > 0 && compare(entries[i - 1], entry) > 0);
       const newline = code.text.includes('\r\n') ? '\r\n' : '\n';
       const gaps = entries.slice(1).map((entry, i) => code.text.slice(entries[i].node.range[1], entry.node.range[0]));
-      const spaced = gaps.every((gap, i) => /\S/.test(gap) ||
-        gap === newline.repeat(entries[i].group === entries[i + 1].group ? 1 : 2));
-      if (!reordered && spaced) return;
+      const badGap = gaps.findIndex((gap, i) => !/\S/.test(gap) &&
+        gap !== newline.repeat(entries[i].group === entries[i + 1].group ? 1 : 2));
+      if (!misplaced && badGap === -1) return;
+      const node = misplaced?.node ?? entries[badGap + 1].node;
       const commented = code.getCommentsBefore(block[0]).length > 0 || gaps.some((gap) => /\S/.test(gap)) ||
         code.getCommentsAfter(block.at(-1)).some((comment) => comment.loc.start.line === block.at(-1).loc.end.line);
       if (commented) {
-        context.report({ node: block[0], messageId: 'commented' });
+        context.report({ node, messageId: 'commented' });
         return;
       }
+      const sorted = [...entries].sort(compare);
       const output = sorted.map((entry, i) =>
         (i === 0 ? '' : newline.repeat(entry.group === sorted[i - 1].group ? 1 : 2)) + code.getText(entry.node)
       ).join('');
       const range = [block[0].range[0], block.at(-1).range[1]];
       context.report({
-        node: block[0],
-        messageId: reordered ? 'order' : 'spacing',
+        node,
+        messageId: misplaced ? 'order' : 'spacing',
         fix: (fixer) => fixer.replaceTextRange(range, output),
       });
     }
