@@ -43,7 +43,7 @@ script callback does not maintain this state yet.
 | `preload.ts` | preload/modulepreload resource hints, parser-discovered preloads, and Link-header integrity metadata | HTML §4.2.4; Fetch; SRI §3.6 |
 | `response-policy.ts` | Convert response headers into CSP, COOP, COEP, OAC, referrer, permissions, Integrity Policy, policy-container, and `X-Frame-Options` state | HTML §§7.1 and 7.7; Fetch; SRI §3.8.1 |
 | `refresh.ts` | Parse `Refresh` response/`meta` input and schedule the corresponding navigation | HTML §7.8 and §4.2.5 |
-| `speculation.ts` | Speculation rule sets, parsing/processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers | HTML §7.6 |
+| `speculation.ts` (planned), [`../scripting/speculation-rules.ts`](../scripting/speculation-rules.ts) | Loader processing, navigational prefetch, and `Speculation-Rules`/`Sec-Speculation-Tags` headers; rule-set records and the parser boundary live in Scripting | HTML §7.6 |
 
 The shared [CORS attribute definition](../dom/nodes/html/attributes/cors.ts) and link/script
 `crossOrigin` reflection are implemented. Element loaders must read the current
@@ -100,14 +100,22 @@ and lifecycle are known; preserve which inputs were captured versus read at
 resumption, cancellation/replacement, clearing before invocation, and the
 independent media and poster loads.
 
-HTML §2.4.3's `Document.respondToBaseURLChanges()` has approved provisional
-consumers: a basic HTML script result (§4.12.1), a parse-result record initialized
-without parsing, and a no-op Window update (§8.1.4.9).
-`Document.considerSpeculativeLoads()` (§7.6) is also a marked no-op. Completing it
-requires rule matching, candidate selection, prefetch/prerender state, and
-navigation lifecycles; it is a substantial subsystem, not a direct `fetch()` call.
-The result type lives in `scripting/speculation-rules.ts`; expand its currently
-null rule-set field when the concrete rule-set representation is implemented here.
+HTML §2.4.3's `Document.respondToBaseURLChanges()` reparses prepared speculation
+results against the current document base and replaces registration through the
+script's relevant Window. §8.1.4.9 now supplies parse-result creation/error capture,
+Window registration/removal/replacement, and queued errors on replacement.
+Document owns the registered rule-set list. The result and empty-only rule-set
+record live in `scripting/speculation-rules.ts`, with an explicitly throwing
+static parser. Expand that record/parser for §7.6; Loader can consume it without
+making the lower Scripting component depend on Loader.
+
+`Document.considerSpeculativeLoads()` (§7.6) remains a marked no-op. Completing it
+requires coalesced microtasks, rule matching, candidate selection, prefetch/prerender
+state, and navigation lifecycles; it is a substantial subsystem, not a direct
+`fetch()` call. §4.12.1 script preparation, execution, and removal also need to
+call the parse-result lifecycle algorithms. The bounded
+[§8.1.4.9 tests](../../../test/browlet/scripting/speculation-rules-parse-results.test.ts)
+supply parser results and establish no actual speculative loading.
 
 UserAgent composes the [Node transport](../integration/network/node-transport.ts)
 and [native decoders](../integration/network/node-decoder.ts) from `integration/network/`.
@@ -196,7 +204,8 @@ promise continuation must not become a hidden second lifecycle scheduler.
 
 Worker and worklet processing create their own realms, settings objects, and
 lifetime state under `workers/` and `worklets/`. Shared script fetching lives in
-`scripting/`, currently stopping at the explicit classic-creation dependency.
+`scripting/`; creation compiles classic scripts, but retained execution and
+engine module loading/linking remain explicit dependencies.
 Those algorithms supply scripts to the eventual callers; they do not own their
 globals, ports, exposure, or termination. See the
 [fetch algorithm audit](../scripting/ROADMAP.md#html-8142-fetching-scripts).

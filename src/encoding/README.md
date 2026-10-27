@@ -11,9 +11,9 @@ UTF-8; legacy output encodings are available through the internal operations.
 | --- | --- |
 | `index.ts` | Entry point for other subsystems. |
 | `web-idl.ts` | Collects interface, dictionary, and mixin declarations for the host binding. |
-| `core/index.ts` | Portable labels, canonical encoding types, and BOM detection. |
+| `labels.ts`, `decoding.ts` | Canonical encoding names, label lookup, and shared BOM detection. |
 | `encodings.ts` | Codec factories and complete-input/queue operations. |
-| `codecs/` | Encoder and decoder algorithms, including state retained across input chunks. |
+| `codecs/` | Encoder and decoder algorithms, including complete-input UTF-8 helpers and state retained across input chunks. |
 | `io-queue.ts` | Typed byte/scalar queues, output collection, and suspension through the owning environment. |
 | `indexes.ts`, `gen/` | Lazy lookup tables and checked-in packed mapping data. |
 | `text-*.ts` | Interface implementation, stream composition, and Web IDL declarations. |
@@ -26,10 +26,23 @@ It returns a canonical `Encoding` or null. `getOutputEncoding` maps replacement
 and UTF-16 names to UTF-8 where the caller's specification requires it;
 replacement and UTF-16 deliberately have no encoders.
 
-Core is independently compiled without Node or Web IDL dependencies. Stylelet
-imports label lookup and `decode` from the full subsystem. CSS selects the fallback
-encoding; Encoding applies BOM override and replacement decoding. The codec
-implementation retains its existing Node fast paths.
+Encoding sits above JS Engine in the dependency hierarchy. Label lookup uses
+Infra's ASCII helpers; complete-input UTF-8 conversion uses the existing Node
+backend and has no environment or realm dependency.
+
+Stylelet imports label lookup and `decode` from the full subsystem. CSS selects
+the fallback encoding; Encoding applies BOM override and replacement decoding.
+Complete-input UTF-8 helpers live in `codecs/utf-8.ts` and are exported by Encoding.
+`utf8Encode` returns internal bytes without an environment. TextEncoder and
+TextEncoderStream allocate their own final buffers through `env.exec.buffers`
+and use the UTF-8 writer to fill them, so author-visible
+results need no intermediate allocation or copy. Streaming codecs retain their
+Node fast paths and queue state.
+
+Infra's JSON-byte algorithms live on [BrowletEnvironment](../browlet/environment.ts).
+They combine these UTF-8 helpers with the realm-owned JSON string operations.
+Fetch obtains the two operations it uses through its environment contract.
+Neither Infra nor JS Engine depends on Encoding.
 
 `decode` and `encode` accept complete inputs and return complete results.
 Their `*Queue` counterparts retain supplied output and return `InternalPromise`
@@ -73,12 +86,14 @@ their respective BOM policies.
 
 ## Native paths and interoperability
 
-Bulk UTF-8 conversion and UTF-16 string materialization use JS Engine's native
-byte/string operations. Large single-byte replacement chunks use a lazily retained
-Node TextDecoder; small chunks and fatal decoding use our mapping tables. Keep
+UTF-8 conversion and byte writing use the existing native backend; UTF-16 string
+materialization uses JS Engine's byte/string operations. Large single-byte
+replacement chunks use a lazily retained Node TextDecoder; small chunks and fatal
+decoding use our mapping tables. Keep
 partial-character and fatal-recovery behavior when changing these fast paths.
-The JS Engine `writeUTF8Into` accommodation completes a native underfilled prefix
-on affected Node versions without discarding the native bulk conversion.
+The `utf8EncodeInto` accommodation completes a native underfilled prefix on
+affected Node versions without discarding the native bulk conversion. Remove the
+repair when all supported engines supply the correct fitting behavior.
 
 Fatal streaming TextDecoder recovery has a known browser difference. Browlet
 follows the written §7.2 queue steps and retains unread input after a fatal
@@ -101,7 +116,7 @@ The generator downloads the published `index-<name>.txt` files, validates their
 entries, and checks packing through the runtime loader. It writes `gen/indexes.ts`
 and independent mapping digests under `test/encoding/gen/`. Both generator modes
 require network access; builds and runtime use checked-in data. Canonical names
-and labels are maintained in [core/labels.ts](core/labels.ts).
+and labels are maintained in [labels.ts](labels.ts).
 
 Indexes expand on first use; reverse lookups are also lazy. Packed source strings
 are present at module load. Source URLs, published identifiers, and WHATWG data

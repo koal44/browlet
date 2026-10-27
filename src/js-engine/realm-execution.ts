@@ -1,4 +1,5 @@
 import type { AsyncExecution } from '../infra/execution';
+import type { JSONValue, InfraValue } from '../infra/json';
 
 import type { RuntimeBuffers } from './buffers';
 import type { GlobalObject } from './realm';
@@ -15,8 +16,16 @@ export interface RealmExecution extends AsyncExecution {
   buffers: RuntimeBuffers;
 
   queueMicrotask(steps: () => void): void;
-  /** Parse JSON in the owner's realm without calling an author-replaced JSON.parse. */
-  parseJSON(text: string): unknown;
-  /** Serialize using the owner's captured JSON intrinsic. */
+  /** Parse JSON with the owner's captured intrinsic. */
+  parseJSON(text: string): JSONValue;
+  /** Call the captured JSON.stringify, including its undefined result. */
   stringifyJSON(value: unknown): string | undefined;
+  /** Serialize JavaScript as JSON, throwing when it has no JSON representation. */
+  serializeJavaScriptValueToJSONString(value: unknown): string;
+  /** Parse JSON into realm-independent maps, lists, and primitives. */
+  parseJSONStringToInfra(input: string): InfraValue;
+  /** Serialize Infra data using this realm's intrinsics and allocation. */
+  serializeInfraValueToJSONString(value: InfraValue): string;
+  /** Convert Infra data to arrays and null-prototype objects in this realm. */
+  convertInfraValueToJavaScript(value: InfraValue): JSONValue;
 }

@@ -7,7 +7,7 @@ import { ReportingEndpoint } from '../../../src/browlet/reporting/endpoint';
 import { ReportImpl } from '../../../src/browlet/reporting/report';
 import { BrowletRealm } from '../../../src/browlet/scripting/realm';
 import { navigationAndTraversalTaskSource } from '../../../src/browlet/scripting/tasks';
-import { utf8Decode } from '../../../src/encoding/codecs/utf-8';
+import { utf8Decode } from '../../../src/encoding/index';
 import { FetchBody } from '../../../src/fetch/body';
 import { FetchHeaders } from '../../../src/fetch/headers';
 import type { HTTPTransportListener, HTTPUploadSource } from '../../../src/fetch/transport';

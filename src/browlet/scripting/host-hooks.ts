@@ -21,6 +21,9 @@ export function installHostHooks(): void {
   // TODO(HTML HostPromiseRejectionTracker): Forward engine reject/handle
   // notifications to the current environment's trackPromiseRejection().
   // The existing addon job-hook contract does not expose rejection tracking.
+  // TODO(HTML §8.1.6.5): HostLoadImportedModule and import.meta.resolve must call
+  // env.resolveModuleSpecifier() with the referring script.
+  // §8.1.5's resolver exists; engine module hooks are not installed here yet.
   setHostHooks({
     makeJobCallback,
     callJobCallback,

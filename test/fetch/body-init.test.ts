@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { utf8Decode, utf8Encode } from '../../src/encoding/codecs/utf-8';
+import { utf8Decode, utf8Encode } from '../../src/encoding/index';
 import { FetchBody, type BodyInitValue } from '../../src/fetch/body';
 import { BlobData, BlobImpl, FileImpl } from '../../src/file/index';
 import { toScalarValueString } from '../../src/infra/index';

@@ -891,7 +891,9 @@ function isSpecialScheme(scheme: string): boolean {
   return specialSchemes.has(scheme);
 }
 
-function isSpecialURL(url: URLRecord): boolean {
+/** Whether the URL uses one of the URL Standard's special schemes, including file. */
+// https://url.spec.whatwg.org/#is-special
+export function isSpecialURL(url: URLRecord): boolean {
   return isSpecialScheme(url.scheme);
 }
 

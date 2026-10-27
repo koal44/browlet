@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HTML_NAMESPACE } from '../../../src/infra/index';
 import { parseURL } from '../../../src/url/index';
 import type { ClassicScript, JavaScriptModuleScript } from '../../../src/browlet/scripting/script';
-import { SpeculationRulesParseResult } from '../../../src/browlet/scripting/speculation-rules';
+import { SpeculationRulesParseResult, SpeculationRuleSet } from '../../../src/browlet/scripting/speculation-rules';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
 import type { HTMLBaseElementImpl } from '../../../src/browlet/dom/nodes/html/metadata/base';
 import { HTMLScriptElementImpl } from '../../../src/browlet/dom/nodes/html/scripting/script';
@@ -80,6 +80,7 @@ describe('Document base URL changes', () => {
   });
 
   it('updates UI, link state, prepared scripts, and speculative loads in order', () => {
+    vi.spyOn(SpeculationRuleSet, 'parse').mockImplementation(() => new SpeculationRuleSet());
     const document = createTestDocument();
     const root = document.createElementNS(HTML_NAMESPACE, 'div');
     document.appendChild(root);
@@ -117,7 +118,7 @@ describe('Document base URL changes', () => {
     const parse = vi.spyOn(document, 'createSpeculationRulesParseResult').mockImplementation((input) => {
       expect(document.getBaseURL()).toBe(url);
       order.push(input);
-      return new SpeculationRulesParseResult();
+      return new SpeculationRulesParseResult(input, document);
     });
     vi.spyOn(document, 'updateLinkStates').mockImplementation(() => { order.push('links'); });
     const update = vi.spyOn(document.getRelevantGlobalObject()!, 'updateSpeculationRules')
@@ -135,6 +136,7 @@ describe('Document base URL changes', () => {
   });
 
   it('reparses an adopted script in its current document and updates its original Window', () => {
+    vi.spyOn(SpeculationRuleSet, 'parse').mockImplementation(() => new SpeculationRuleSet());
     const original = createTestDocument();
     const document = createTestDocument();
     const script = createScript(original);

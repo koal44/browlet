@@ -3,6 +3,7 @@ import { Script } from 'node:vm';
 import { Stamper } from '../infra/stamper';
 import { InternalPromise } from '../infra/promises';
 import { InternalError } from '../infra/internal-error';
+import { convertJSONDerivedValueToInfra, type JSONValue, type InfraValue } from '../infra/json';
 
 import {
   bufferViewNames, getArrayBufferViewElementSize,
@@ -352,13 +353,61 @@ export class JSRealm {
   }
 
   /** Parse JSON with this realm's captured intrinsic and allocation prototypes. */
-  parseJSON(text: string): unknown {
+  // https://infra.spec.whatwg.org/#parse-a-json-string-to-a-javascript-value
+  parseJSON(text: string): JSONValue {
     return this.intrinsics.jsonParse(text);
   }
 
   /** Serialize JSON with this realm's captured intrinsic and exception constructors. */
   stringifyJSON(value: unknown): string | undefined {
     return this.intrinsics.jsonStringify(value);
+  }
+
+  /** Serialize without a replacer or spacing; throw when the value has no JSON representation. */
+  // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-a-json-string
+  serializeJavaScriptValueToJSONString(value: unknown): string {
+    const result = this.stringifyJSON(value);
+    if (result === undefined) throw new this.intrinsics.typeError('Value cannot be serialized as JSON');
+    return result;
+  }
+
+  /** Parse JSON into realm-independent ordered maps, lists, and primitive values. */
+  // https://infra.spec.whatwg.org/#parse-a-json-string-to-an-infra-value
+  parseJSONStringToInfra(input: string): InfraValue {
+    return convertJSONDerivedValueToInfra(this.parseJSON(input));
+  }
+
+  /** Serialize an Infra value through JSON-compatible objects allocated in this realm. */
+  // https://infra.spec.whatwg.org/#serialize-an-infra-value-to-a-json-string
+  serializeInfraValueToJSONString(value: InfraValue): string {
+    return this.stringifyJSON(this.convertInfraValueToJavaScript(value))!;
+  }
+
+  /** Convert Infra lists and maps to realm-owned arrays and null-prototype objects. */
+  // https://infra.spec.whatwg.org/#convert-an-infra-value-to-a-json-compatible-javascript-value
+  convertInfraValueToJavaScript(value: InfraValue): JSONValue {
+    if (value === null || typeof value === 'boolean' || typeof value === 'string' || typeof value === 'number') {
+      return value;
+    }
+    if (Array.isArray(value)) {
+      const result = new this.intrinsics.array<JSONValue>();
+      associateObjectRealm(result, this);
+      for (let index = 0; index < value.length; ++index) {
+        Object.defineProperty(result, index, {
+          value: this.convertInfraValueToJavaScript(value[index]!),
+          writable: true, enumerable: true, configurable: true,
+        });
+      }
+      return result;
+    }
+    const result = this.createOrdinaryObject(null) as { [key: string]: JSONValue; };
+    for (const [key, item] of value) {
+      Object.defineProperty(result, key, {
+        value: this.convertInfraValueToJavaScript(item),
+        writable: true, enumerable: true, configurable: true,
+      });
+    }
+    return result;
   }
 
   /** ECMAScript CreateIterResultObject, using this realm's Object prototype. */
@@ -728,7 +777,7 @@ export type JSIntrinsics = {
   evalError: EvalErrorConstructor;
   function: FunctionConstructor;
   functionPrototype: object;
-  jsonParse(text: string): unknown;
+  jsonParse(text: string): JSONValue;
   jsonStringify(value: unknown): string | undefined;
   iteration: {
     arrayEntries: JSMethod;

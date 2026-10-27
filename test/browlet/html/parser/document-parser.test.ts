@@ -10,7 +10,7 @@ import { FetchBody } from '../../../../src/fetch/body';
 import { FetchHeaders } from '../../../../src/fetch/headers';
 import { FetchResponse } from '../../../../src/fetch/response';
 import { ResourceReader } from '../../../../src/browlet/loader/resource-reader';
-import { utf8Encode } from '../../../../src/encoding/codecs/utf-8';
+import { utf8Encode } from '../../../../src/encoding/index';
 import { ReadableStreamImpl } from '../../../../src/streams/index';
 
 import {

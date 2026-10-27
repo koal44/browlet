@@ -21,7 +21,7 @@ rule-specific grammars, loading, and the consuming value/API specifications.
   The style-rule interpreter now waits for a surviving child before ending a
   run; retain that behavior when supporting additional rule grammars.
 - [ ] Supply document encoding when HTML starts inline-sheet imports. Fetched sheets
-  now retain `getStylesheetEncoding()`'s effective encoding, using Encoding Core's
+  now retain `getStylesheetEncoding()`'s effective encoding, using Encoding's
   BOM detection and the existing decoder. [Browlet's DocumentImpl](../../browlet/dom/nodes/document.ts)
   also preserves the final response URL for child imports; automatic HTML startup remains separate.
 - [ ] Validate `unicode-range` in its owning descriptor grammar. The Syntax

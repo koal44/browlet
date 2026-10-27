@@ -4,7 +4,7 @@ import {
   arg, ctor, defineDictionary, defineInterface, definePartialInterface, dictMember, DOMExceptionImpl,
   emptyDictionary, idlType, impl, implementationType, integer, nullable, op, promise, reference, roAttr, union, xattr,
 } from '../../web-idl/core/index';
-import type { Encoding } from '../../encoding/core/index';
+import type { Encoding } from '../../encoding/index';
 import { parseURL, type URLRecord } from '../../url/index';
 import type { ReferrerPolicy } from '../../fetch/index';
 

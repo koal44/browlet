@@ -144,15 +144,16 @@ The larger stopping point is [respond to base URL changes](https://html.spec.wha
   initially uninitialized result, and its relevant Window from its existing realm.
   Parsed and created HTML scripts have their own platform interface; the later
   §2.5 slices add fetch-attribute reflection, while preparation remains missing.
-  `Document.createSpeculationRulesParseResult(input)` currently initializes only
-  the two-field record from [HTML §8.1.4.9](https://html.spec.whatwg.org/multipage/webappapis.html#speculation-rules-parse-results):
-  `speculationRuleSet: null` and `errorToRethrow: null`. The shared type lives in
-  `scripting/speculation-rules.ts`; real rule-set parsing and error capture remain
-  missing. `Window.updateSpeculationRules(oldResult, newResult)` is a provisional
-  no-op pending registration and queued error reporting. The response uses the
-  current Document for parsing and the script's original Window for updating,
-  including after adoption. When classic/module script and import-map records
-  are added, extend the result union and distinguish speculation records here.
+  `Document.createSpeculationRulesParseResult(input)` now invokes the
+  [§8.1.4.9 parse-result constructor](../scripting/speculation-rules.ts), retaining
+  a rule set or an author parse exception. The §7.6 parser explicitly throws
+  InternalError until implemented, and the rule-set model is currently empty-only.
+  `Window.updateSpeculationRules(oldResult, newResult)` removes the old set,
+  registers the replacement, and queues any new parse error as a DOM manipulation
+  task. The response uses the current Document for parsing and the script's
+  original Window for updating, including after adoption. Tests supply parser
+  results and preserve that ownership; the result union already distinguishes
+  speculation results from classic/module scripts and import-map results.
 - Consider speculative loads. The [loader roadmap](../loader/ROADMAP.md) owns
   this missing subsystem under HTML §7.6. `Document.considerSpeculativeLoads()`
   is an explicit provisional no-op pending rule matching, candidate selection,

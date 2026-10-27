@@ -1,33 +1,87 @@
-import { internalType, type InternalPromise } from '../../infra/promises';
-import {
-  codeUnitsToString, decodeValidUTF8, readUTF8, utf8ByteLength, writeUTF8, type JSEnvironment,
-} from '../../js-engine/index';
+import { Buffer, isUtf8 } from 'node:buffer';
+import { TextEncoder } from 'node:util';
 
+import { internalType, type InternalPromise } from '../../infra/promises';
+import { codeUnitsToString, type JSEnvironment } from '../../js-engine/index';
+
+import { detectBOM } from '../decoding';
 import { endOfQueue, IOQueue, processQueue, type QueueResult } from '../io-queue';
 
-/** Complete-input convenience for Encoding §6 — UTF-8 decode. */
+/** Decode complete UTF-8 with replacement, removing one initial BOM. */
+// https://encoding.spec.whatwg.org/#utf-8-decode
 export function utf8Decode(input: Uint8Array): string {
-  return utf8DecodeWithoutBOM(hasBOM(input) ? input.subarray(3) : input);
+  return utf8DecodeWithoutBOM(detectBOM(input) === 'UTF-8' ? input.subarray(3) : input);
 }
 
-/** Complete-input convenience for UTF-8 decode without BOM (preserves U+FEFF). */
+/** Decode complete UTF-8 with replacement, preserving U+FEFF. */
+// https://encoding.spec.whatwg.org/#utf-8-decode-without-bom
 export function utf8DecodeWithoutBOM(input: Uint8Array): string {
-  return input.length === 0 ? '' : readUTF8(input);
+  return input.length === 0 ? '' : Buffer.from(input.buffer, input.byteOffset, input.byteLength).toString('utf8');
 }
 
-/** Complete-input convenience for UTF-8 decode without BOM or fail. */
+/** Decode complete UTF-8, preserving U+FEFF; null represents malformed or incomplete input. */
+// https://encoding.spec.whatwg.org/#utf-8-decode-without-bom-or-fail
 export function utf8DecodeWithoutBOMOrFail(input: Uint8Array): string | null {
-  return input.length === 0 ? '' : decodeValidUTF8(input) ?? null;
+  if (input.length === 0) return '';
+  return isUtf8(input) ? utf8DecodeWithoutBOM(input) : null;
 }
 
-/** Complete-string UTF-8 encoding, with one allocation in the supplied runtime. */
-export function utf8Encode(input: string, env?: JSEnvironment): Uint8Array<ArrayBuffer> {
+/** Encode complete UTF-8 into an internal byte sequence with one backing allocation. */
+// https://encoding.spec.whatwg.org/#utf-8-encode
+export function utf8Encode(input: string): Uint8Array<ArrayBuffer> {
   const length = utf8ByteLength(input);
-  const bytes = env
-    ? env.exec.buffers.createView('Uint8Array', env.exec.buffers.allocateArrayBuffer(length))
-    : new Uint8Array(length);
-  writeUTF8(input, bytes);
-  return bytes;
+  const buffer = new ArrayBuffer(length);
+  writeUTF8(input, buffer, 0, length);
+  return new Uint8Array(buffer);
+}
+
+/** Count UTF-8 bytes, replacing unpaired surrogate code units with U+FFFD. */
+export function utf8ByteLength(input: string): number {
+  return Buffer.byteLength(input, 'utf8');
+}
+
+/** Write complete UTF-8 sequences within the supplied storage bounds; return the byte count. */
+export function writeUTF8(input: string, buffer: ArrayBufferLike, byteOffset: number, byteLength: number): number {
+  return Buffer.from(buffer, byteOffset, byteLength).write(input, 'utf8');
+}
+
+/**
+ * Write complete UTF-8 sequences and report UTF-16 code units read and bytes written.
+ * Supply an internal byte view; callers resolve author-supplied views through the engine first.
+ */
+export function utf8EncodeInto(source: string, destination: Uint8Array): { read: number; written: number; } {
+  const result = encoder.encodeInto(source, destination);
+  if (result.read === source.length || result.written === destination.length) return result;
+  // ACCOMMODATION(node-utf8-encode-into): Node's fitting can stop too soon at
+  // two-byte scalars or surrogate pairs. Its prefix is correct; finish from the
+  // reported positions, retaining native conversion for the bulk of the input.
+  let { read, written } = result;
+  while (read < source.length) {
+    let point = source.codePointAt(read)!;
+    if (point >= 0xd800 && point <= 0xdfff) point = 0xfffd;
+    const length = point <= 0x7f ? 1 : point <= 0x7ff ? 2 : point <= 0xffff ? 3 : 4;
+    if (written + length > destination.length) break;
+    read += point > 0xffff ? 2 : 1;
+    if (length === 1) {
+      destination[written++] = point;
+    } else {
+      if (length === 2) {
+        destination[written++] = 0xc0 | (point >> 6);
+      } else {
+        if (length === 3) {
+          destination[written++] = 0xe0 | (point >> 12);
+        } else {
+          destination[written++] = 0xf0 | (point >> 18);
+          destination[written++] = 0x80 | ((point >> 12) & 0x3f);
+        }
+        destination[written++] = 0x80 | ((point >> 6) & 0x3f);
+      }
+      destination[written++] = 0x80 | (point & 0x3f);
+    }
+  }
+  result.read = read;
+  result.written = written;
+  return result;
 }
 
 /** Encoding §6 — UTF-8 decode; consume one leading BOM, including across chunks. */
@@ -35,7 +89,7 @@ export function utf8DecodeQueue(
   input: IOQueue<Uint8Array>, output: IOQueue<string> = new IOQueue<string>(), env: JSEnvironment,
 ): InternalPromise<IOQueue<string>> {
   return input.waitFor(3, env).then(() => {
-    if (hasBOM(input.peek(3)!)) input.readAvailable(3);
+    if (detectBOM(input.peek(3)!) === 'UTF-8') input.readAvailable(3);
     return utf8DecodeWithoutBOMQueue(input, output, env);
   }, undefined, internalType<IOQueue<string>>());
 }
@@ -105,8 +159,8 @@ export class UTF8Decoder {
       while (offset < chunk.length) {
         if (this.#bytesNeeded === 0 && offset < bulkEnd) {
           const bytes = offset === 0 && bulkEnd === chunk.length ? chunk : chunk.subarray(offset, bulkEnd);
-          const text = mode === 'replacement' ? readUTF8(bytes) : decodeValidUTF8(bytes);
-          if (text !== undefined) {
+          const text = mode === 'replacement' ? utf8DecodeWithoutBOM(bytes) : utf8DecodeWithoutBOMOrFail(bytes);
+          if (text !== null) {
             output.push(text);
             offset = bulkEnd;
           }
@@ -194,13 +248,6 @@ export class UTF8Encoder {
   }
 }
 
-/** §7.4 — Write whole scalar values directly into an existing Uint8Array. */
-export { writeUTF8Into as utf8EncodeInto } from '../../js-engine/index';
-
-function hasBOM(bytes: Uint8Array | number[]): boolean {
-  return bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf;
-}
-
 /** Leave a possibly incomplete final sequence for the stateful handler. */
 function completeUTF8Prefix(bytes: Uint8Array): number {
   const end = bytes.length;
@@ -212,3 +259,5 @@ function completeUTF8Prefix(bytes: Uint8Array): number {
     lead >= 0xe0 && lead <= 0xef ? 3 : lead >= 0xf0 && lead <= 0xf4 ? 4 : 1;
   return end - start < length ? start : end;
 }
+
+const encoder = new TextEncoder();

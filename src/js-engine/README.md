@@ -13,7 +13,7 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 | Module | Responsibility |
 | --- | --- |
-| [realm.ts](realm.ts) | `JSRealm`, captured intrinsics, classic compilation/evaluation, function/object allocation, runtime buffers, and global-object integration |
+| [realm.ts](realm.ts) | `JSRealm`, captured intrinsics, JSON, classic compilation/evaluation, function/object allocation, runtime buffers, and global-object integration |
 | [runtime.ts](runtime.ts) | Isolate associations, microtask queues, realm lookup, Promise observation, and host-hook adaptation |
 | [node-addons.ts](node-addons.ts) | Typed optional backend operations, bound once when loaded |
 | [environment.ts](environment.ts), [realm-execution.ts](realm-execution.ts) | Portable environment and execution contracts supplied to implementations |
@@ -68,6 +68,26 @@ specification decides which inputs may be transferred. Allocate final storage
 directly when possible. Structured `serialize`/`deserialize` retain an opaque
 owner-defined record and reconstruct in the destination environment; `clone`
 performs the immediate operation.
+
+## JSON
+
+JSRealm implements Infra §6's JSON string and object-conversion algorithms;
+`RealmExecution` exposes them through the owning environment's `exec`. Infra
+retains the `JSONValue`/`InfraValue` types and the realm-independent conversion to
+maps and lists.
+Captured JSON intrinsics preserve parse errors and ignore author replacements of
+the global methods. Infra lists become arrays in this realm; maps become
+null-prototype objects, with entries defined as data properties.
+
+`stringifyJSON()` retains the intrinsic's possible undefined result.
+`serializeJavaScriptValueToJSONString()` instead implements Infra's required
+TypeError for a value without a JSON representation. Both preserve exceptions
+from author getters and toJSON. Serializers add neither a replacer nor spacing.
+
+[BrowletEnvironment's JSON-byte operations](../browlet/environment.ts) combine
+these string operations with Encoding's UTF-8 conversion. JS Engine has
+no Encoding dependency. String parsing does not strip a BOM; the byte algorithms
+apply their own decoding rules before entering the realm's JSON parser.
 
 ## Runtime and realm ownership
 
@@ -184,9 +204,6 @@ and replacement conditions. The remaining implementation boundaries are:
   The non-destructive detach-key predicate remains unavailable.
 - Captured intrinsic/brand probes support structured data without taking over
   HTML graph traversal, serialization policy, or DataCloneError construction.
-- `writeUTF8Into()` retains native bulk conversion and finishes an underfilled
-  prefix with a scalar writer. Remove that repair when all supported engines
-  supply the correct fitting behavior.
 
 Tests in [test/js-engine](../../test/js-engine/) cover these contracts. Browser
 integration tests additionally establish actual realm, binding, and HTML task

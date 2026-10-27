@@ -3,7 +3,7 @@ export { URLImpl, URLSearchParamsImpl } from './api';
 export { urlIDLDefinitions } from './web-idl';
 export { originIDL } from './origin-api';
 export {
-  aboutBlankURL, getDefaultPort, obtainURLOrigin, parseURL, stripURLForReporting,
+  aboutBlankURL, getDefaultPort, isSpecialURL, obtainURLOrigin, parseURL, stripURLForReporting,
   setURLUsername, setURLPassword,
   type URLUserAgent, type URLParseResult,
 } from './url';

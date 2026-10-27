@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { Buffer } from 'node:buffer';
 import { setImmediate as nextTurn } from 'node:timers/promises';
+import { runInNewContext } from 'node:vm';
 import {
   utf8Decode, utf8DecodeWithoutBOM, utf8DecodeWithoutBOMOrFail, utf8Encode,
-  UTF8Decoder, UTF8Encoder, utf8EncodeInto, utf8DecodeQueue,
+  utf8EncodeInto, writeUTF8,
+  UTF8Decoder, UTF8Encoder, utf8DecodeQueue,
   utf8DecodeWithoutBOMQueue, utf8DecodeWithoutBOMOrFailQueue, utf8EncodeQueue,
 } from '../../src/encoding/codecs/utf-8';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
@@ -61,6 +63,57 @@ describe('Encoding Standard UTF-8 hooks', () => {
     bytes.buffer.transfer();
     for (const decode of [utf8Decode, utf8DecodeWithoutBOM, utf8DecodeWithoutBOMOrFail]) {
       expect(decode(bytes)).toBe('');
+    }
+  });
+});
+
+describe('UTF-8 destination writing', () => {
+  it.each([false, true])('writes only complete characters within supplied storage bounds (shared=%s)', (shared) => {
+    const buffer = shared ? new SharedArrayBuffer(12) : new ArrayBuffer(12);
+    const bytes = new Uint8Array(buffer).fill(0xaa);
+    expect(writeUTF8('Aé😀Z', buffer, 2, 6)).toBe(3);
+    expect(Array.from(bytes)).toEqual([0xaa, 0xaa, 0x41, 0xc3, 0xa9, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa, 0xaa]);
+    expect(writeUTF8('😀', buffer, 5, 4)).toBe(4);
+    expect(Array.from(bytes)).toEqual([0xaa, 0xaa, 0x41, 0xc3, 0xa9, 0xf0, 0x9f, 0x98, 0x80, 0xaa, 0xaa, 0xaa]);
+  });
+
+  it.each(['\u00e9', '\u0400', '\u07ff'])('fills destinations from two-byte character %j', (character) => {
+    for (const length of [32, 33, 258]) {
+      const source = character.repeat(length);
+      for (const capacity of [0, 1, 2, 3, 4, length * 2]) {
+        const destination = new Uint8Array(capacity).fill(0xaa);
+        const read = Math.min(length, Math.floor(capacity / 2));
+        const expected = Buffer.from(source.slice(0, read));
+        expect(utf8EncodeInto(source, destination)).toEqual({ read, written: expected.length });
+        expect(destination.subarray(0, expected.length)).toEqual(new Uint8Array(expected));
+        expect(destination.subarray(expected.length).every((byte) => byte === 0xaa)).toBe(true);
+      }
+    }
+  });
+
+  it.each([false, true])('respects foreign destination offsets (shared=%s)', (shared) => {
+    const destination = runInNewContext(`new Uint8Array(new ${shared ? 'SharedArrayBuffer' : 'ArrayBuffer'}(8), 2, 4)`) as Uint8Array;
+    const storage = new Uint8Array(destination.buffer).fill(0xaa);
+    expect(utf8EncodeInto('é'.repeat(33), destination)).toEqual({ read: 2, written: 4 });
+    expect(Array.from(storage)).toEqual([0xaa, 0xaa, 0xc3, 0xa9, 0xc3, 0xa9, 0xaa, 0xaa]);
+  });
+
+  it('counts consumed code units without splitting characters, replacing unpaired surrogates', () => {
+    const source = 'Aé😀\ud800Z';
+    const characters = Array.from(source.toWellFormed());
+    for (let capacity = 0; capacity <= 12; capacity++) {
+      let read = 0;
+      let written = 0;
+      for (const character of characters) {
+        const size = Buffer.byteLength(character);
+        if (written + size > capacity) break;
+        read += character.length;
+        written += size;
+      }
+      const destination = new Uint8Array(capacity).fill(0xaa);
+      expect(utf8EncodeInto(source, destination)).toEqual({ read, written });
+      expect(destination.subarray(0, written)).toEqual(new Uint8Array(Buffer.from(source.slice(0, read))));
+      expect(destination.subarray(written).every((byte) => byte === 0xaa)).toBe(true);
     }
   });
 });

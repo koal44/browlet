@@ -11,7 +11,7 @@ const filename = fileURLToPath(new URL('../../src/browlet/example.ts', import.me
 const options = [{
   unrestrictedSubsystems: ['infra'],
   entryPoints: {
-    'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
+    'web-idl': ['index', 'core/index'], encoding: ['index'],
     fetch: ['index'],
     stylelet: ['index', 'environment', 'context'],
     'stylelet/syntax': ['index'], 'stylelet/values': ['index', 'value'],
@@ -38,7 +38,7 @@ tester.run('subsystem-imports', rule, {
     { filename, options, code: "import { FetchGroup } from '../fetch/index';" },
     { filename, options, code: "import type { ReferrerPolicy } from '../fetch/index.js';" },
     { filename, options, code: "export { defineInterface } from '../web-idl/core/index';" },
-    { filename, options, code: "import { getEncoding } from '../encoding/core/index';" },
+    { filename, options, code: "import { getEncoding } from '../encoding/index';" },
     { filename, options, code: "import { referrerPolicyValues } from '../fetch/index';" },
     { filename, options, code: "import { parseURL } from '../url/index';" },
     { filename, options: browletOptions, code: "import { InternalPromise, type DOMDocument } from '../infra/index';" },
@@ -110,7 +110,7 @@ tester.run('subsystem-imports', rule, {
     { filename, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { parseURL } from '../url/url';", errors: [{ messageId: 'entryPoint' }] },
     { filename, options, code: "import { FetchRequest } from '../fetch/request';", errors: [{ messageId: 'entryPoint' }] },
-    { filename, options, code: "import { detectBOM } from '../encoding/core/decoding';", errors: [{ messageId: 'entryPoint' }] },
+    { filename, options, code: "import { detectBOM } from '../encoding/decoding';", errors: [{ messageId: 'entryPoint' }] },
     {
       filename, options, code: "import type { FetchPolicyContainer } from '../fetch/environment';",
       errors: [{ messageId: 'entryPoint' }],

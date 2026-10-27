@@ -78,6 +78,12 @@ the same `FetchEnvironment`. `FetchExecution` combines JS Engine's facilities,
 Web IDL Core's `DOMException` constructor, and the global task-delivery contract.
 Abort fallback exceptions retain their destination realm.
 
+`FetchEnvironment` also requires `parseJSONBytes()` and
+`serializeJavaScriptValueToJSONBytes()` for Body.json() and Response.json().
+Browlet implements them directly on its environment, combining Encoding's UTF-8
+helpers with the realm-owned JSON string operations. Standalone hosts supply
+the same contract with parsed objects and exceptions belonging to that environment.
+
 UserAgent owns transport, connections, HTTP/CORS caches, authentication, cookies,
 and HSTS. Its sandbox supplies execution for work that outlives a Window, such
 as retired Reporting deliveries. Reserved HTML environments supply early

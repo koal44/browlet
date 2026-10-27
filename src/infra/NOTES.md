@@ -113,9 +113,19 @@
   It removes only ASCII whitespace, permits omitted padding, rejects a length
   congruent to 1 modulo 4, and does not require discarded trailing bits to be
   zero. Trailing padding is removed only in the form accepted by the algorithm.
-- JSON-to-Infra conversion when a realm-independent map/list is required.
-  Infra-map serialization creates a null-prototype JavaScript object, and its
-  JSON string serializer throws when `JSON.stringify()` returns `undefined`.
+
+## JSON (§6)
+
+[`json.ts`](json.ts) defines `JSONValue`, `InfraValue`, and the realm-independent
+conversion from parsed JavaScript data to ordered maps and lists. The converter
+accepts JSON-derived values, preserves own-key order, and avoids author array iterators.
+
+The JSON string and object-conversion algorithms live on [JSRealm](../js-engine/realm.ts)
+and are available through `env.exec`; see [JS Engine's JSON contract](../js-engine/README.md#json).
+The four JSON-byte algorithms live on [BrowletEnvironment](../browlet/environment.ts)
+and combine Encoding's UTF-8 conversion with those realm-owned string operations.
+Fetch declares the two operations it needs on its environment contract.
+Infra does not depend on an environment, JS Engine, or Encoding to provide its converter.
 
 ## Platform constants
 

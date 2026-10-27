@@ -22,6 +22,7 @@ export {
 } from './execution';
 export { InternalError } from './internal-error';
 export { endOfIteration, type AsyncIterator } from './iteration';
+export { convertJSONDerivedValueToInfra, type JSONValue, type InfraValue } from './json';
 export {
   HTML_NAMESPACE, MATHML_NAMESPACE, SVG_NAMESPACE, XLINK_NAMESPACE,
   XML_NAMESPACE, XMLNS_NAMESPACE, isHtmlSvgOrMathNamespace,

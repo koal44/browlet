@@ -5,7 +5,7 @@ import {
   roAttr, reference, xattr,
 } from '../web-idl/core/index';
 
-import { utf8Encode, utf8EncodeInto } from './codecs/utf-8';
+import { utf8ByteLength, utf8EncodeInto, writeUTF8 } from './codecs/utf-8';
 
 /*
  * dictionary TextEncoderEncodeIntoResult {
@@ -40,7 +40,10 @@ export class TextEncoderImpl {
 
   /** Encode directly into the returned typed array in the receiver's realm. */
   encode(input: string): Uint8Array {
-    return utf8Encode(input, this.#env);
+    const length = utf8ByteLength(input);
+    const buffer = this.#env.exec.buffers.allocateArrayBuffer(length);
+    writeUTF8(input, buffer, 0, length);
+    return this.#env.exec.buffers.createView('Uint8Array', buffer);
   }
 
   encodeInto(

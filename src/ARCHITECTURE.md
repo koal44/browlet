@@ -128,6 +128,12 @@ That map retains downloaded bytes across globals; each environment's module map
 still owns its separate script records. Pending response reuse resumes on the
 waiting environment's networking task queue.
 
+Module specifier resolution is an environment method, with its algorithm body
+kept in `scripting/import-map.ts`. A global's `mergeImportMap()` method likewise
+forwards to that module, operating on its import map and resolved-module set.
+Private normalization helpers stay beside the map parser; globals gain no
+additional Web IDL surface from these implementation methods.
+
 ### Realm execution
 
 `BrowletEnvironment` owns its `BrowletExecution` as `env.exec`. The attached
@@ -189,6 +195,19 @@ scheduling, and task delivery. Infra's [`execution.ts`](infra/execution.ts)
 separately defines `AbortExecution` and `StructuredDataExecution`; these
 contracts have no dependency on DOM, HTML, or JS Engine. The corresponding
 algorithms remain in DOM and HTML.
+
+Infra §6's JSON string and object-conversion operations live on JSRealm and are
+exposed through the existing `env.exec`. They use that realm's captured intrinsics
+and allocation; no JSON-specific execution contract or allocation forwarders are needed. Infra
+retains `JSONValue`, `InfraValue`, and the realm-independent conversion to maps and
+lists. BrowletEnvironment owns the four JSON-byte operations, combining Encoding's
+UTF-8 helpers with its realm's string operations through `exec`. FetchEnvironment
+requires the two methods used by Body.json() and Response.json(), supplied by the
+host environment. Parsed objects and errors retain the environment's realm;
+serialized bytes remain internal. Neither Infra nor JS Engine depends on Encoding.
+Encoding's UTF-8 helpers preserve the existing native Buffer paths and accept no
+environment. TextEncoder and TextEncoderStream allocate their results through
+their owning environments and fill that storage with the UTF-8 writer.
 
 `StreamsExecution` combines realm facilities with these execution contracts.
 `FileExecution` extends it with `nativeLineEnding`, required by Blob processing
@@ -279,8 +298,12 @@ Parsing and platform implementations remain in the full URL subsystem.
 
 Stylelet also imports Encoding's label lookup and complete-input `decode`
 algorithm. CSS retains fallback-encoding selection; Encoding owns BOM override,
-byte decoding, and replacement handling. Encoding Core remains independently
-usable, but Stylelet now includes the full codecs and their Node dependencies.
+byte decoding, and replacement handling. Stylelet includes the full codecs and
+their Node dependencies. Encoding sits above JS Engine; there is no separate
+Encoding Core. Labels and BOM detection live in Encoding, and `codecs/utf-8.ts`
+owns complete-input UTF-8 conversion and byte writing without realm allocation.
+Infra has no Encoding dependency. Each `core` entry point retains its own
+reviewed dependency level.
 `RealmExecution`, inherited through `FetchExecution` by `StyleletExecution`, extends
 Infra's [`AsyncExecution`](infra/execution.ts) for Promise creation, background
 work, and `queueTask(source, steps, options?)` delivery. The source keyword selects
@@ -751,8 +774,9 @@ is initialized.
 
 [`import-hierarchy.mjs`](../scripts/eslint/import-hierarchy.mjs) records the reviewed
 component order for import layout and dependency review. Imports put external
-packages first, then other subsystems and foundations (Infra before JS Engine and
-Web IDL), then sibling components, then the current component's collaborators.
+packages first, then other subsystems and foundations (Infra, JS Engine,
+Web IDL, Streams, then Encoding), then sibling components, then the current component's
+collaborators.
 Use one blank line between those groups and keep type and runtime imports with
 their owner. `browlet/import-order` enforces this layout without sorting imported
 names or moving comments automatically.

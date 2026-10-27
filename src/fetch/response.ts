@@ -7,7 +7,6 @@ import {
   roAttr, staticOp, invokeWith, xattr,
 } from '../web-idl/core/index';
 import type { ReadableStreamImpl } from '../streams/index';
-import { utf8Encode } from '../encoding/index';
 import { copyURL, serializeURL, type Origin, type URLRecord } from '../url/index';
 import { calculateCacheFreshness, type CacheTiming } from '../http/index';
 import type { BlobImpl } from '../file/index';
@@ -338,10 +337,7 @@ export class ResponseImpl {
 
   // https://fetch.spec.whatwg.org/#dom-response-json
   static json(data: unknown, init: FetchResponseInit, env: FetchEnvironment): ResponseImpl {
-    // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
-    const json = env.exec.stringifyJSON(data);
-    if (json === undefined) throw new TypeError('Value cannot be serialized as JSON');
-    const body = FetchBody.fromBytes(utf8Encode(json), env);
+    const body = FetchBody.fromBytes(env.serializeJavaScriptValueToJSONBytes(data), env);
     const response = new ResponseImpl(new FetchResponse(), 'response', env);
     response.#initialize(init, { body, type: 'application/json' });
     return response;

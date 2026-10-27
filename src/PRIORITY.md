@@ -60,8 +60,17 @@ dedicated-worker propagation, and special onerror handlers remain explicit
 dependencies. §8.1.4.7 now supplies PromiseRejectionEvent and the HTML rejection
 tracker/notification algorithms. Engine reject/handle notifications, read-only
 Promise slot queries, and checkpoint environment enumeration remain explicit
-dependencies; ordinary page rejections are not yet connected. The next section
-is §8.1.4.8, Import map parse results.
+dependencies; ordinary page rejections are not yet connected. §8.1.4.8 now
+supplies import-map parse results and Window registration. §8.1.4.9 now supplies
+speculation-rule parse-result creation, Document registration state, and Window
+registration/removal/replacement with synchronous or queued parse-error reporting.
+The §7.6 rule model/parser and speculative-load processing remain unfinished,
+as do script-element callers. [§8.1.5](browlet/scripting/ROADMAP.md#html-815-module-specifier-resolution)
+now supplies module specifier resolution and import-map parsing, normalization,
+and merging. The approved merge conflicts follow Chromium/WebKit, with Firefox's
+differences recorded. Script-element callers, module host-hook integration, and
+console warning output remain explicit dependencies. The next section is §8.1.6,
+JavaScript specification host hooks.
 Later host-hook algorithms must be connected before judging
 the complete model; the uncertain cross-realm observer test is skipped.
 The [environment audit](browlet/scripting/ROADMAP.md#html-81318132-audit) maps

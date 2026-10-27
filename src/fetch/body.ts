@@ -275,7 +275,7 @@ export class BodyMixin {
   // https://fetch.spec.whatwg.org/#dom-body-json
   // https://infra.spec.whatwg.org/#parse-json-bytes-to-a-javascript-value
   json(): InternalPromise<unknown> {
-    return this.#consume(idlType.any, (bytes) => this.#env.exec.parseJSON(utf8Decode(bytes)));
+    return this.#consume(idlType.any, (bytes) => this.#env.parseJSONBytes(bytes));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-text

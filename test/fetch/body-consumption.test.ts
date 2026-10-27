@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { utf8Encode } from '../../src/encoding/codecs/utf-8';
+import { utf8Encode } from '../../src/encoding/index';
 import { BodyMixin, FetchBody } from '../../src/fetch/body';
 import { RequestImpl } from '../../src/fetch/request';
 import { FetchResponse, ResponseImpl } from '../../src/fetch/response';

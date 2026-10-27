@@ -629,7 +629,179 @@ identity-bearing fixtures; they do not claim native rejection tracking. Cases
 cover early/late handling, handling during notification, cancellation,
 rejections added during dispatch, script-selected settings, and muted scripts.
 The native dependency is the stopping point for this audit; no addon changes
-are part of this slice. Continue with §8.1.4.8, Import map parse results.
+are part of this slice. Window and WorkerGlobalScope inherit EventTarget;
+WorkletGlobalScope does not. Keep the common global-state contract independent
+of EventTarget and review worklet rejection delivery with its eventual consumer.
+
+## HTML §8.1.4.8 import map parse results
+
+[`ImportMapParseResult`](import-map.ts) retains either a normalized
+import map or the parser's exception. It is a class with the specification's
+two fields, separate from `Script`; HTMLScriptElement's result union includes it.
+Creation neither registers the map nor reports parse errors. As with script
+creation, InternalError escapes rather than masquerading as invalid author input.
+
+`WindowImpl.registerImportMap()` reports a retained error through the Window's
+environment and returns; otherwise it calls that Window's `mergeImportMap()`
+with the parsed map. This does not replace the global's map by assignment or add a
+new author-facing API.
+
+The §8.1.5 parser and merger are now implemented in
+[`import-map.ts`](import-map.ts), so explicit creation and registration produce
+a usable map. §4.12.1 script-element preparation must still call these operations;
+this does not yet implement `<script type="importmap">` processing.
+
+`ImportMap` owns empty-map construction and its static parser; the parse-result
+class lives beside it. The merge algorithm updates the global's existing map,
+using copies of the incoming mappings. The global contract exposes
+`mergeImportMap()` because merging needs its map and resolved-module set together.
+Window and the existing service-worker global shell forward to the shared
+algorithm body in this module; neither gains an author-facing API.
+
+[Tests](../../../test/browlet/scripting/import-map-parse-results.test.ts)
+control parser and merger results, checking the handoffs, deferred error
+reporting, and real trusted/cancelable ErrorEvent dispatch at the registering
+Window, including a different Window from the one used for parsing. They do not
+establish import-map parsing, merging, or module resolution.
+
+## HTML §8.1.4.9 speculation rules parse results
+
+[`SpeculationRulesParseResult`](speculation-rules.ts) retains a rule set or its
+parse exception, separately from `Script`. Its constructor supplies the input,
+Document, and current document base URL to `SpeculationRuleSet.parse()` without
+registering the result or reporting errors. InternalError escapes rather than
+becoming an author parse error. The existing Document factory now calls this
+constructor instead of returning an unparsed, apparently successful result.
+
+Window owns the three lifecycle algorithms:
+
+- `registerSpeculationRules()` reports a parse error synchronously by default,
+  or queues a DOM manipulation task when requested. Success appends the rule set
+  to the Window's associated Document and calls `considerSpeculativeLoads()`.
+- `unregisterSpeculationRules()` ignores failed results; otherwise it removes
+  all occurrences of that rule set, as Infra list removal requires, and calls
+  `considerSpeculativeLoads()` even if the set was already absent.
+- `updateSpeculationRules()` removes the old set and registers the new result
+  with queued errors. Following the written algorithm, a failed replacement
+  queues its error without an additional call to `considerSpeculativeLoads()`.
+
+The approved §7.6 dependency is deliberately bounded. `SpeculationRuleSet` lives
+beside the parse result and can currently represent only an empty `prefetchRules`
+list. Expand it with the actual SpeculationRule model, URL-pattern/selector
+predicates, requirements, tags, and No-Vary-Search hints when implementing §7.6.
+Its static parser explicitly throws; no source string can produce a usable rule
+set yet. Keeping the record/parser in Scripting lets the higher Loader consume
+it without a reverse runtime dependency.
+
+Document owns `speculationRuleSets`; its existing `considerSpeculativeLoads()`
+remains an explicit no-op pending coalesced microtasks, rule matching, candidate
+selection, and speculative resource lifecycles. §4.12.1 must connect script
+preparation, execution, and removal to these entry points. Base-URL changes
+already call creation and replacement, using the current Document for parsing
+and the script's relevant Window for registration, including after adoption.
+
+[Tests](../../../test/browlet/scripting/speculation-rules-parse-results.test.ts)
+supply controlled parser results and exercise document ownership, list removal,
+replacement, real Window ErrorEvents, and delayed DOM-task delivery. The
+[base-URL suite](../../../test/browlet/html/base-url.test.ts) retains its ordering
+and adoption checks. These establish the §8.1.4.9 lifecycle, not §7.6 parsing or
+loading.
+
+## HTML §8.1.5 module specifier resolution
+
+Reviewed 2026-10-26. [`import-map.ts`](import-map.ts) translates the complete
+section's algorithms. Import maps select URLs; the separate per-environment
+`ModuleMap` caches fetched scripts and pending fetches. Resolution does not
+fetch, link, or evaluate a module.
+
+| Algorithm or state | Implementation |
+| --- | --- |
+| Resolve a module specifier | `env.resolveModuleSpecifier()` selects the referring script's environment and captured base, or this current environment and its API base. It checks scoped maps, top-level imports, then the URL fallback. The environment forwards to the algorithm body in `import-map.ts`. |
+| Resolve an imports match / URL-like specifier | Private helpers implement exact and slash-prefix matches, special-scheme restrictions, blocked entries, invalid suffixes, and prevention of backtracking above a mapped prefix. A blocking error terminates resolution rather than trying a broader scope. |
+| Resolved module set | Successful Window resolutions retain the normalized original specifier, original URL interpretation, and serialized base. Failures and non-Window resolutions add nothing. |
+| Parse an import map string | `ImportMap.parse()` calls `env.exec.parseJSONStringToInfra()`, validates object shapes, and normalizes imports, scopes, and integrity. |
+| Normalize keys, specifier maps, scopes, and integrity | Private helpers preserve URL alias behavior, use descending code-unit ordering, and distinguish ignored entries from null entries that block resolution. Integrity keys compare by URL value. |
+| Merge module specifier maps / import maps | `global.mergeImportMap()` forwards to the shared body. Earlier definitions win, including null blocks. Copies of incoming mappings are filtered against completed resolutions; the existing global ImportMap object is retained. |
+
+Infra retains the [JSON value types and realm-independent conversion](../../infra/json.ts).
+The §6 string and object-conversion algorithms live on [JSRealm](../../js-engine/realm.ts)
+and are exposed through `env.exec`, preserving realm-owned SyntaxErrors. The four
+[JSON-byte algorithms on BrowletEnvironment](../environment.ts) combine Encoding's
+UTF-8 primitives with those string operations through `this.exec`. Fetch calls
+the two operations it needs through its environment contract. Neither Infra nor
+JS Engine depends on Encoding.
+The explicit current
+environment also allocates resolver TypeErrors, even when the referring script
+selects a different environment's map. URL exports its existing `isSpecialURL()`
+predicate instead of duplicating the special-scheme list in Scripting.
+
+### Specification conflicts and browser evidence
+
+Eric approved the Chromium/WebKit choices for the two merge conflicts:
+
+- **`import-map-resolved-prefix`:** HTML removes a new key when it starts with
+  an already resolved name. That can reject unrelated later names and allow a
+  shorter prefix to remap a resolved URL. Browlet instead removes exact keys and
+  slash-delimited prefixes of an already resolved name, matching Chromium/WebKit.
+  Gecko references [WHATWG issue #11875](https://github.com/whatwg/html/issues/11875)
+  and reverses the test, but still treats partial bare names as prefixes.
+- **`import-map-merge-order`:** Resolution requires descending, most-specific
+  ordering. HTML's merge steps append new entries without restoring it. Browlet
+  re-sorts merged specifier maps and scopes, matching Chromium/WebKit's selection.
+
+A live probe on 2026-10-26 used Chromium 156.0.8078.4, Firefox 157.0, and
+WebKit 27.2. Start with `foo -> /foo.js` and `pkg/ -> /old/`, resolve `foo` and
+`https://maps.test/untouched/a.js`, then add `f -> /f.js`, `foo/ -> /foo-sub/`,
+`https://maps.test/untouched/ -> /changed/`, and `pkg/deep/ -> /specific/`.
+The [merge regression](../../../test/browlet/scripting/import-maps.test.ts)
+retains this sequence with Browlet's approved expectations.
+
+| Later resolution | Chromium / WebKit / Browlet choice | Firefox observed |
+| --- | --- | --- |
+| `f` | `/f.js` | TypeError |
+| `foo/x.js` | `/foo-sub/x.js` | TypeError |
+| `https://maps.test/untouched/a.js` | Original URL | Original URL |
+| `pkg/deep/x.js` | `/specific/x.js` | `/old/deep/x.js` |
+
+Source evidence: Blink's `DocumentModulatorImpl::AddModuleToResolvedModuleSet`
+and `ImportMap::MergeExistingAndNewImportMaps` retain slash-delimited prefixes
+and reinitialize scope ordering; WebKit's `ImportMap.cpp` uses the same prefix
+sets. Gecko's `js/loader/ImportMap.cpp` contains the reversed prefix comparison.
+These observations establish the listed cases, not general browser conformance.
+
+Two smaller editorial conflicts follow the algorithms:
+`import-map-bare-address-example` rejects the bare address accepted by HTML's
+normalization example; `import-map-scope-keys` uses the serialized string keys
+produced and consumed by the algorithms despite the record definition saying
+URLs. The integrity-normalization signature also omits `baseURL`, although its
+caller supplies it and its steps use it. Our helper accepts it explicitly and
+retains a pending `SPEC_MISMATCH` for that signature repair.
+
+### Remaining integration
+
+- §4.12.1 script preparation must create/register import maps. Existing tests call
+  the real parse-result and Window registration path explicitly.
+- §8.1.6 module hooks must call the resolver for static/dynamic dependencies and
+  `import.meta.resolve`. Module parser, dependency loading, linking, and engine
+  evaluation remain separate unfinished boundaries; no addon changes were made.
+- Normalization routes warnings through `env.reportConsoleWarning()`. Console's
+  internal Printer/output is still provisional, so those warnings are not visible.
+  Optional merge warnings are omitted.
+- Worker/worklet globals and production module consumers remain unfinished. A
+  real Sandbox environment tests the non-Window resolver path without inventing
+  an HTML global or claiming worker loading support.
+
+[Tests](../../../test/browlet/scripting/import-maps.test.ts) cover normalization,
+scope fallback/blocking, prefix escapes, captured bases and realms, merge
+conflicts, integrity, and actual registration. [Infra tests](../../../test/infra/json.test.ts)
+cover nested conversion and object-key behavior. Continue with §8.1.6,
+JavaScript specification host hooks.
+
+Validation: the 43 focused tests across these suites, parse-result lifecycle,
+and script-fetch options pass on 24.19.0, 26.8.1, and custom Node, each in stock
+and compat mode. Typechecking, declaration-contract checks, and touched-file
+ESLint also pass. This does not establish engine module execution or HTML
+script-element integration.
 
 ## Present
 
@@ -640,13 +812,13 @@ are part of this slice. Continue with §8.1.4.8, Import map parse results.
 | `execution-context.ts`, `script.ts` | Explicit contexts, HTML script state/creation, compiled classic records, synthetic export inputs, ModuleRequests, and module-parser boundaries |
 | `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
 | [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
-| `global-object.ts`, `import-map.ts` | Shared HTML global-state contract and import-map/specifier-resolution record shapes |
+| `global-object.ts`, `import-map.ts` | Shared HTML global state, import-map parsing/normalization/merging, module specifier resolution, and parse-result creation; Window owns registration |
 | [`../environment.ts`](../environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
 | `rendering-opportunity.ts` | Independent opportunity producer, Document render-blocking filter, and ordered rendering pipeline seams |
-| `speculation-rules.ts` | Provisional parse-result record shared by HTML scripts, Document parsing, and Window updates; no rule-set parsing or registration yet |
+| `speculation-rules.ts` | Parse-result creation and an empty-only rule-set record with an explicit parser boundary; Document owns registered sets and Window owns registration/removal/replacement |
 | [Structured data](structured-data/ROADMAP.md) | Graph serialization/deserialization, ArrayBuffer transfer, and the Window structuredClone API |
 
 `createWindowEnvironment()` composes the same Window/realm/execution boundary
@@ -681,7 +853,7 @@ evaluation and automation do not acquire this gate automatically.
 | Owner | Missing contract |
 | --- | --- |
 | Script records/classic scripts | Retained compiled execution, production fetch/run callers, script-context restoration, worker-imported synchronous pause, timing, and runtime errors |
-| Module scripts/maps | Engine parse/load/link/evaluate, import maps/attributes, dynamic import, and host hooks; HTML fetch/run orchestration is present |
+| Module scripts/maps | Engine parse/load/link/evaluate, import attributes, dynamic import, host hooks, and script-element callers; HTML fetch/run orchestration and import-map algorithms are present |
 | Error reporting | Source locations, complete script attribution, dedicated-worker propagation, native rejection notifications/slot queries, and checkpoint notification integration |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
@@ -719,11 +891,13 @@ Use bounded consumer slices within HTML's script algorithms:
    process-wide events cannot supply that ownership.
 4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Build on the module map
    and single-module fetchers with graph loading, engine linking/evaluation,
-   registration, and dynamic-import hooks.
-5. **Speculation rules (§8.1.4.9).** Replace the provisional Document parse-result
-   factory and Window update with parsing/error capture and registration with the
-   Document and loader policy that consume it. The record's rule-set field is
-   currently null; extend it with the concrete §7.6 rule-set type at that point.
+   and dynamic-import hooks. Import-map parsing, merging, resolution, parse
+   results, and Window registration are translated; connect script-element
+   callers and module hooks to them.
+5. **Speculation rules (§8.1.4.9).** Creation/error capture and Window registration,
+   removal, and replacement are translated. Complete the §7.6 rule model/parser
+   and Document's speculative-load processing, then connect §4.12.1 script
+   preparation, execution, and removal. The current rule set is empty-only.
 
 The early controlled-entry subset is complete. Custom host hooks extend it,
 but neither they nor native queues reveal every arbitrary V8 frame. Retain the

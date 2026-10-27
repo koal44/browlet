@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../src/browlet/user-agent';
 import { getRelevantRealm } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
-import { utf8Decode, utf8Encode } from '../../src/encoding/codecs/utf-8';
+import { utf8Decode, utf8Encode } from '../../src/encoding/index';
 import { FetchBody } from '../../src/fetch/body';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetch } from '../../src/fetch/fetch';

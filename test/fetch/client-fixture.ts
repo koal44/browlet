@@ -9,6 +9,7 @@ import { HTTPCacheStore } from '../../src/fetch/cache-http';
 import { ConnectionPool } from '../../src/fetch/transport';
 import { CORSPreflightCache } from '../../src/fetch/cache-cors';
 import { CookieStore } from '../../src/http/index';
+import { utf8Decode, utf8Encode } from '../../src/encoding/index';
 import { obtainSite, type Origin } from '../../src/url/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
@@ -34,6 +35,8 @@ export function createClientEnvironment(
     markResourceTiming() {},
     consumePreloadedResource: () => false,
     parseURL(input, base, encoding) { return this.userAgent.parseURL(input, base, encoding); },
+    parseJSONBytes(bytes) { return this.exec.parseJSON(utf8Decode(bytes)); },
+    serializeJavaScriptValueToJSONBytes(value) { return utf8Encode(this.exec.serializeJavaScriptValueToJSONString(value)); },
     apiBaseURL: topLevelCreationURL,
     creationURL: topLevelCreationURL,
     origin: obtainURLOrigin(topLevelCreationURL),

@@ -28,7 +28,9 @@ import {
 import { currentCoarsenedWallTime, type DOMHighResTimeStamp } from '../../timing/index';
 import { isValidAttributeLocalName, isValidElementLocalName, validateAndExtract } from '../infra/index';
 import { DOMStringListImpl } from '../string-list';
-import { EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback } from '../../scripting/index';
+import {
+  EventHandlerMap, ModuleMap, SpeculationRulesParseResult, type EventHandlerCallback, type SpeculationRuleSet,
+} from '../../scripting/index';
 import { EventImpl, CustomEventImpl, type EventTargetImpl } from '../events/index';
 import {
   InsecureRequestsPolicy, PolicyContainer, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet,
@@ -139,6 +141,9 @@ export class DocumentImpl extends NodeImpl {
   customElementRegistry: CustomElementRegistryImpl | null = null;
   /** Module scripts known to this document. */
   moduleMap = new ModuleMap();
+  /** Rule sets registered for this document's speculative loading. */
+  // https://html.spec.whatwg.org/multipage/speculative-loading.html#document-sr-sets
+  speculationRuleSets: SpeculationRuleSet[] = [];
   /** Policies inherited or supplied when the document was created. */
   policyContainer = new PolicyContainer();
   /** HTTP status of the resource that created this Document; zero when there was no response. */
@@ -1352,15 +1357,15 @@ export class DocumentImpl extends NodeImpl {
 
   /** Create the result record for speculation rules parsed against this document's base URL. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#create-a-speculation-rules-parse-result
-  createSpeculationRulesParseResult(_input: string): SpeculationRulesParseResult {
-    // PROVISIONAL: initialize the record only; HTML §7.6 rule-set parsing and error capture are missing.
-    return new SpeculationRulesParseResult();
+  createSpeculationRulesParseResult(input: string): SpeculationRulesParseResult {
+    return new SpeculationRulesParseResult(input, this);
   }
 
   /** Reconsider prefetch and prerender candidates for this document. */
   // https://html.spec.whatwg.org/multipage/speculative-loading.html#consider-speculative-loads
   considerSpeculativeLoads(): void {
-    // PROVISIONAL: rule matching, candidate selection, prefetch, and prerender lifecycles are not implemented.
+    // PROVISIONAL: coalesced microtasks, rule matching, candidate selection,
+    // prefetch, and prerender lifecycles are not implemented.
   }
 
   /** Observe a deferred resource element belonging to this document, sharing one internal observer. */

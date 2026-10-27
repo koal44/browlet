@@ -9,7 +9,7 @@ import {
   corsSettingsAttribute, referrerPolicyAttribute, getBlockingTokens, blockingAttribute,
   fetchPriorityAttribute,
 } from '../attributes/index';
-import type { Script, SpeculationRulesParseResult } from '../../../../scripting/index';
+import type { ImportMapParseResult, Script, SpeculationRulesParseResult } from '../../../../scripting/index';
 import type { WindowImpl } from '../../../../browsing/window/index';
 
 import type { DocumentImpl } from '../../document';
@@ -37,8 +37,9 @@ export class HTMLScriptElementImpl extends HTMLElementImpl {
   scriptType: ScriptElementType | null = null;
   /** Prepared result, an error represented by null, or the initial unprepared state. */
   // https://html.spec.whatwg.org/multipage/scripting.html#concept-script-result
-  // TODO(HTML §8.1.4.8): Add the import-map parse result when that record is implemented.
-  result: 'uninitialized' | null | Script | SpeculationRulesParseResult = 'uninitialized';
+  // TODO(HTML §4.12.1): Preparation/execution must create and register import maps
+  // and speculation rules; removal must unregister speculation rules.
+  result: 'uninitialized' | null | Script | ImportMapParseResult | SpeculationRulesParseResult = 'uninitialized';
 
   /** Recognize an HTML script implementation, independently of mutable attributes. */
   static is(value: unknown): value is HTMLScriptElementImpl {

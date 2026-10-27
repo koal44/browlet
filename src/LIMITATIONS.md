@@ -81,6 +81,15 @@ and native callback iterators. Test capabilities, not just the `custom` label.
   directly; they do not establish end-to-end rejection delivery. See the
   [rejection audit](browlet/scripting/ROADMAP.md#html-8147-unhandled-promise-rejections).
 
+- **Import-map algorithms still need production callers.** Parsing, normalization,
+  merging, module specifier resolution, parse-result creation, and Window
+  registration work when explicitly invoked. Script-element preparation and
+  module host hooks do not yet call them; `<script type="importmap">`, dynamic
+  import, and `import.meta.resolve` are not established by those algorithm tests.
+  Internal console warning output also remains provisional. Approved merge
+  choices follow Chromium/WebKit where HTML and Firefox disagree; see the
+  [import-map audit](browlet/scripting/ROADMAP.md#html-815-module-specifier-resolution).
+
 - **Script creation is separate from execution.** Classic creation now compiles
   without running; CSS/JSON/text creation retains synthetic default-export inputs.
   JavaScript-module parsing and WebAssembly ESM parsing still throw explicitly.
@@ -451,9 +460,13 @@ explicit standard content-handler list used for sink metadata.
 The [§2.4.3 base-change response](browlet/html/ROADMAP.md#section-24-audit)
 connects explicitly provisional consumers. Base/fallback selection and notification
 sequencing are implemented, but browser UI updates, link-state invalidation,
-Window speculation-rule registration, and speculative loading remain no-ops.
-Parse-result creation only initializes an empty record; it does not parse or
-report errors yet.
+and speculative loading remain no-ops. Speculation-rule parse-result creation
+now calls an explicitly unfinished parser and retains author parse exceptions;
+the parser's InternalError escapes. Window registration/removal/replacement
+maintain the associated Document's rule-set list and report parse errors
+synchronously or through DOM manipulation tasks. The rule-set record is
+empty-only pending §7.6's full rule model. Tests supply parser results; no source
+string can produce a usable rule set or speculative request through this path yet.
 `HTMLScriptElement` has a dedicated implementation/platform identity and result
 state, plus `crossOrigin` and `referrerPolicy` reflection, without its preparation
 algorithm. Link and script reflection uses the shared HTML attribute definitions,

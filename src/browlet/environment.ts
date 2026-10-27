@@ -1,9 +1,9 @@
-import { InternalError } from '../infra/index';
+import { InternalError, type JSONValue, type InfraValue } from '../infra/index';
 import { getPromiseResult, isPromiseHandled, randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
 import { matchesExposure } from '../web-idl/index';
 import type { SelectletEnvironment } from '../selectlet/index';
-import type { Encoding } from '../encoding/index';
+import { utf8Decode, utf8Encode, type Encoding } from '../encoding/index';
 import {
   obtainSite, obtainURLOrigin, serializeURL, urlsEqual,
   type Origin, type URLRecord,
@@ -23,7 +23,7 @@ import {
   fetchClassicScript, fetchClassicWorkerScript, fetchClassicWorkerImportedScript,
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph,
-  fetchSingleModuleScript, fetchSingleImportedModuleScript,
+  fetchSingleModuleScript, fetchSingleImportedModuleScript, resolveModuleSpecifier,
   ClassicScript, DedicatedWorkerAgent, SandboxAgent, domManipulationTaskSource, type Script,
   type ScriptFetchOptions, type ModuleMap, type ModuleType,
   type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
@@ -358,6 +358,30 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     return false;
   }
 
+  /** Decode UTF-8 with replacement and initial BOM removal, then parse in this environment's realm. */
+  // https://infra.spec.whatwg.org/#parse-json-bytes-to-a-javascript-value
+  parseJSONBytes(bytes: Uint8Array): JSONValue {
+    return this.exec.parseJSON(utf8Decode(bytes));
+  }
+
+  /** Decode UTF-8 JSON and return its realm-independent representation. */
+  // https://infra.spec.whatwg.org/#parse-json-bytes-to-an-infra-value
+  parseJSONBytesToInfra(bytes: Uint8Array): InfraValue {
+    return this.exec.parseJSONStringToInfra(utf8Decode(bytes));
+  }
+
+  /** Serialize JavaScript in this environment's realm, then encode UTF-8 without a BOM. */
+  // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
+  serializeJavaScriptValueToJSONBytes(value: unknown): Uint8Array<ArrayBuffer> {
+    return utf8Encode(this.exec.serializeJavaScriptValueToJSONString(value));
+  }
+
+  /** Serialize an Infra value in this environment's realm, then encode UTF-8 without a BOM. */
+  // https://infra.spec.whatwg.org/#serialize-an-infra-value-to-json-bytes
+  serializeInfraValueToJSONBytes(value: InfraValue): Uint8Array<ArrayBuffer> {
+    return utf8Encode(this.exec.serializeInfraValueToJSONString(value));
+  }
+
   /** Parse with this browser's Blob URL store; the caller selects any base URL. */
   parseURL(input: string, base: URLRecord | null = null, encoding = 'UTF-8'): URLRecord | null {
     return this.userAgent.parseURL(input, base, encoding);
@@ -381,6 +405,12 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   encodingParseAndSerializeURL(input: string): string | null {
     const url = this.encodingParseURL(input);
     return url === null ? null : serializeURL(url);
+  }
+
+  /** Resolve using the referring script, with this environment as the current execution owner. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#resolve-a-module-specifier
+  resolveModuleSpecifier(referringScript: Script | null, specifier: string): URLRecord {
+    return resolveModuleSpecifier(referringScript, specifier, this);
   }
 
   /** Find integrity metadata in this environment's global import map. */

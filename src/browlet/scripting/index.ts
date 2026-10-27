@@ -13,7 +13,10 @@ export {
 export { installHostHooks, jsEngineTaskSource } from './host-hooks';
 export { JSExecutionContext } from './execution-context';
 export type { BrowletGlobalObject } from './global-object';
-export type { ImportMap, ModuleSpecifierMap, ModuleIntegrityMap, SpecifierResolutionRecord } from './import-map';
+export {
+  ImportMap, ImportMapParseResult, resolveModuleSpecifier, mergeExistingAndNewImportMaps,
+  type ModuleSpecifierMap, type ModuleIntegrityMap, type SpecifierResolutionRecord,
+} from './import-map';
 export {
   ClassicScript, ModuleScript, JavaScriptModuleScript, CSSModuleScript, JSONModuleScript,
   TextModuleScript, WebAssemblyModuleScript, emptyCompletionValue, type Script, type ModuleType, type ScriptCompletion,
@@ -38,7 +41,7 @@ export {
   type RenderingUpdateContext, type RenderingDocumentFilters, type RenderingUpdatePhase,
   renderingUpdatePhases,
 } from './rendering-opportunity';
-export { SpeculationRulesParseResult } from './speculation-rules';
+export { SpeculationRulesParseResult, SpeculationRuleSet } from './speculation-rules';
 export {
   domManipulationTaskSource, userInteractionTaskSource, networkingTaskSource,
   navigationAndTraversalTaskSource, renderingTaskSource, fileTaskSource, timerTaskSource,

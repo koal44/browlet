@@ -193,6 +193,10 @@ export function createBrowletExecution(context: BindingContext<BrowletEnvironmen
     },
     parseJSON: (text) => realm.parseJSON(text),
     stringifyJSON: (value) => realm.stringifyJSON(value),
+    serializeJavaScriptValueToJSONString: (value) => realm.serializeJavaScriptValueToJSONString(value),
+    parseJSONStringToInfra: (input) => realm.parseJSONStringToInfra(input),
+    serializeInfraValueToJSONString: (value) => realm.serializeInfraValueToJSONString(value),
+    convertInfraValueToJavaScript: (value) => realm.convertInfraValueToJavaScript(value),
     constructNode<T extends object>(implementation: ImplementationClass<T>, argumentsList: unknown[]): T {
       return context.construct(implementation, argumentsList);
     },

@@ -1,4 +1,4 @@
-import type { BrowletGlobalObject, ImportMap, SpecifierResolutionRecord } from '../scripting/index';
+import { ImportMap, mergeExistingAndNewImportMaps, type BrowletGlobalObject, type SpecifierResolutionRecord } from '../scripting/index';
 import { EventTargetImpl, type EventListenerValue } from '../dom/events/index';
 
 // Registration, script resources, and worker event types await the worker host.
@@ -10,12 +10,18 @@ export abstract class ServiceWorkerGlobalScopeImpl extends EventTargetImpl imple
   inErrorReportingMode = false;
   outstandingRejectedPromises = new WeakSet<Promise<unknown>>();
   aboutToBeNotifiedRejectedPromises: Promise<unknown>[] = [];
-  importMap: ImportMap = { imports: new Map(), scopes: new Map(), integrity: new Map() };
+  importMap = new ImportMap();
   resolvedModuleSet = new Set<SpecifierResolutionRecord>();
   /** Whether the worker's script has completed its initial evaluation. */
   protected abstract scriptResourceHasEverBeenEvaluated: boolean;
   /** Event types recorded as handled by this service worker. */
   protected abstract eventTypesToHandle: ReadonlySet<string>;
+
+  /** Shared global contract; HTML currently registers author import maps only in Windows. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#merge-existing-and-new-import-maps
+  mergeImportMap(newImportMap: ImportMap): void {
+    mergeExistingAndNewImportMaps(this, newImportMap);
+  }
 
   // https://dom.spec.whatwg.org/#legacy-obtain-service-worker-fetch-event-listener-callbacks
   getFetchEventListenerCallbacks(): EventListenerValue[] {

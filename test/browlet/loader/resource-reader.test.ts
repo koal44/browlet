@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { type InternalPromise } from '../../../src/infra/promises';
-import { utf8Encode } from '../../../src/encoding/codecs/utf-8';
+import { utf8Encode } from '../../../src/encoding/index';
 import { FetchBody } from '../../../src/fetch/body';
 import { FetchResponse } from '../../../src/fetch/response';
 import { ReadableStreamImpl } from '../../../src/streams/readable-stream';

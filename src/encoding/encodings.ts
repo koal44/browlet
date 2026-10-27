@@ -1,8 +1,9 @@
 import { RangeError } from '../infra/exceptions';
 import { internalType, type InternalPromise } from '../infra/promises';
 import type { JSEnvironment } from '../js-engine/index';
-import { detectBOM, type BOMEncoding, type Encoding } from './core/index';
 
+import type { Encoding } from './labels';
+import { detectBOM, type BOMEncoding } from './decoding';
 import { endOfQueue, IOQueue, processQueue, type Decoder, type Encoder } from './io-queue';
 import { GB18030Decoder, GB18030Encoder } from './codecs/gb18030';
 import { Big5Decoder, Big5Encoder } from './codecs/big5';
@@ -15,7 +16,7 @@ import { getSingleByteCodec } from './codecs/single-byte';
 import { UTF8Decoder, UTF8Encoder, utf8Decode, utf8Encode } from './codecs/utf-8';
 import { UTF16Decoder } from './codecs/utf-16';
 
-export { getEncoding, getOutputEncoding, type Encoding, type OutputEncoding } from './core/index';
+export { getEncoding, getOutputEncoding, type Encoding, type OutputEncoding } from './labels';
 
 /** Create a decoder for any canonical encoding. Stateful decoders are never shared. */
 export function getDecoder(encoding: Encoding): Decoder {

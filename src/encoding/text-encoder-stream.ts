@@ -5,7 +5,7 @@ import {
   type ReadableStreamImpl, type StreamsEnvironment, type WritableStreamImpl,
 } from '../streams/index';
 
-import { utf8Encode } from './codecs/utf-8';
+import { utf8ByteLength, writeUTF8 } from './codecs/utf-8';
 
 /*
  * [Exposed=*]
@@ -30,7 +30,7 @@ export class TextEncoderStreamImpl {
       },
       () => {
         if (this.#leadingSurrogate === '') return;
-        transform.enqueue(utf8Encode('\uFFFD', env));
+        this.#enqueueEncoded('\uFFFD');
         this.#leadingSurrogate = '';
       },
     );
@@ -62,7 +62,15 @@ export class TextEncoderStreamImpl {
       this.#leadingSurrogate = input.at(-1) ?? '';
       input = input.slice(0, -1);
     }
-    if (input !== '') this.#transform.enqueue(utf8Encode(input, this.#env));
+    if (input !== '') this.#enqueueEncoded(input);
+  }
+
+  /** Create each chunk in the encoder's realm before downstream callbacks can observe it. */
+  #enqueueEncoded(input: string): void {
+    const length = utf8ByteLength(input);
+    const buffer = this.#env.exec.buffers.allocateArrayBuffer(length);
+    writeUTF8(input, buffer, 0, length);
+    this.#transform.enqueue(this.#env.exec.buffers.createView('Uint8Array', buffer));
   }
 }
 

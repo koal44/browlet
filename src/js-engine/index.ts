@@ -8,10 +8,7 @@ export {
 export * from './abstract-operations';
 export * from './built-in-primitives';
 export * from './buffers';
-export {
-  codeUnitsToString, decodeValidUTF8, isomorphicDecode, isomorphicEncode,
-  readUTF8, utf8ByteLength, writeUTF8, writeUTF8Into,
-} from './byte-string';
+export { codeUnitsToString, isomorphicDecode, isomorphicEncode } from './byte-string';
 export { computeHash, randomUUID } from './crypto';
 export type { RealmExecution } from './realm-execution';
 export type {

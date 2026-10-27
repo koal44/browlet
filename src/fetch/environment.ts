@@ -1,4 +1,5 @@
 import { ParallelQueue } from '../infra/parallel-queue';
+import type { JSONValue } from '../infra/json';
 import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
@@ -73,6 +74,10 @@ export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment 
   apiBaseURL: URLRecord;
   /** Parse through this environment's user agent; omitted base means null and encoding defaults to UTF-8. */
   parseURL(input: string, base?: URLRecord | null, encoding?: string): URLRecord | null;
+  /** Decode UTF-8 JSON bytes and parse with this environment's captured realm intrinsics. */
+  parseJSONBytes(bytes: Uint8Array): JSONValue;
+  /** Serialize JavaScript with this environment's realm intrinsics and return internal UTF-8 bytes. */
+  serializeJavaScriptValueToJSONBytes(value: unknown): Uint8Array<ArrayBuffer>;
   /** Client origin used by Fetch's origin and policy checks. */
   origin: Origin;
   /** Whether the client has cross-site ancestry or cannot establish a same-site ancestor context. */

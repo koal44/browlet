@@ -13,6 +13,8 @@ const filename = sourceFile('browlet/browsing/navigation/example');
 
 tester.run('dependency-direction', direction, {
   valid: [
+    { filename: sourceFile('encoding/labels'), code: "import { asciiLower } from '../infra/index';" },
+    { filename: sourceFile('encoding/text-encoder'), code: "import { getBufferSourceView } from '../js-engine/index';" },
     { filename: sourceFile('fetch/referrer-policy'), code: "import { defineEnumeration } from '../web-idl/core/index';" },
     { filename: sourceFile('stylelet/values/url-modifier'), code: "import { referrerPolicyValues } from '../../fetch/index';" },
     { filename: sourceFile('stylelet/props/registry'), code: "import { colorProperty } from './built-in/index';" },
@@ -60,6 +62,14 @@ tester.run('dependency-direction', direction, {
     { filename, code: "import type { Helper } from '../../../new-subsystem/index';" },
   ],
   invalid: [
+    {
+      filename: sourceFile('js-engine/realm'), code: "import { utf8Decode } from '../encoding/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'js-engine', target: 'encoding' } }],
+    },
+    {
+      filename: sourceFile('infra/json'), code: "import { detectBOM } from '../encoding/index';",
+      errors: [{ messageId: 'upward', data: { owner: 'infra', target: 'encoding' } }],
+    },
     {
       filename: sourceFile('fetch/referrer-policy'), code: "import { UrlModifierValue } from '../stylelet/index';",
       errors: [{ messageId: 'upward', data: { owner: 'fetch', target: 'stylelet' } }],

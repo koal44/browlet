@@ -21,7 +21,7 @@ const nativeErrorNames = [
 const nativeErrorMessage = 'Use InternalError for implementation failures or an explicit exception import for author-visible errors.';
 
 const subsystemEntryPoints = {
-  'web-idl': ['index', 'core/index'], encoding: ['index', 'core/index'],
+  'web-idl': ['index', 'core/index'], encoding: ['index'],
   fetch: ['index'], url: ['index', 'core/index'],
   stylelet: ['index', 'environment', 'context'],
   'stylelet/syntax': ['index'], 'stylelet/value-processing': ['index'],

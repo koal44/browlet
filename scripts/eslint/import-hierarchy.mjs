@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // own modules are treated as mutually cooperating peers.
 export const layers = [
   ['infra'],
-  ['js-engine', 'web-idl/core', 'encoding/core', 'url/core'],
+  ['js-engine', 'web-idl/core', 'url/core'],
   ['web-idl/environment', 'web-idl/compiler'],
   ['web-idl/assembly'],
   ['web-idl/binding/platform'],
@@ -112,6 +112,6 @@ export function importPosition(filename, node) {
   if (!target) return { group: 0, order: 0 };
   if (target === owner) return { group: 3, order: 0 };
   const sibling = target.id.split('/')[0] === owner?.id.split('/')[0];
-  const foundation = ['infra', 'js-engine', 'web-idl/core', 'encoding/core', 'url/core'].includes(target.id);
+  const foundation = ['infra', 'js-engine', 'web-idl/core', 'url/core'].includes(target.id);
   return { group: sibling && !foundation ? 2 : 1, order: components.indexOf(target) };
 }

@@ -7,7 +7,7 @@ import type { Window } from '../../src/browlet/platform';
 import { BrowletEnvironmentBase } from '../../src/browlet/environment';
 import { type WindowEnvironment } from '../../src/browlet/environment';
 import { navigationAndTraversalTaskSource } from '../../src/browlet/scripting/tasks';
-import { utf8Decode } from '../../src/encoding/codecs/utf-8';
+import { utf8Decode } from '../../src/encoding/index';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetch } from '../../src/fetch/fetch';
 import { FetchRequest } from '../../src/fetch/request';

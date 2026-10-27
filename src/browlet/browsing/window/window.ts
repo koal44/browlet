@@ -8,8 +8,9 @@ import {
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
-import type {
-  BrowletGlobalObject, ImportMap, SpecifierResolutionRecord, SpeculationRulesParseResult, TimerAction,
+import {
+  ImportMap, mergeExistingAndNewImportMaps, domManipulationTaskSource, type ImportMapParseResult,
+  type BrowletGlobalObject, type SpecifierResolutionRecord, type SpeculationRulesParseResult, type TimerAction,
 } from '../../scripting/index';
 import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
@@ -31,7 +32,7 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   inErrorReportingMode = false;
   outstandingRejectedPromises = new WeakSet<Promise<unknown>>();
   aboutToBeNotifiedRejectedPromises: Promise<unknown>[] = [];
-  importMap: ImportMap = { imports: new Map(), scopes: new Map(), integrity: new Map() };
+  importMap = new ImportMap();
   resolvedModuleSet = new Set<SpecifierResolutionRecord>();
   /** Event currently being invoked in this Window, restored after each listener. @deprecated */
   event: EventImpl | undefined = undefined;
@@ -160,10 +161,57 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
       .structuredClone(value, options) as T;
   }
 
+  /** Register a parsed import map, reporting any retained parse error at this Window. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#register-an-import-map
+  registerImportMap(result: ImportMapParseResult): void {
+    if (result.errorToRethrow !== null) {
+      this.env.reportException(result.errorToRethrow);
+      return;
+    }
+    // Successful creation supplies a map; failed creation supplies an error above.
+    this.mergeImportMap(result.importMap!);
+  }
+
+  /** Update this global's import map without changing completed resolutions. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#merge-existing-and-new-import-maps
+  mergeImportMap(newImportMap: ImportMap): void {
+    mergeExistingAndNewImportMaps(this, newImportMap);
+  }
+
+  /** Register a rule set, reporting parse errors now or as DOM manipulation tasks. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#register-speculation-rules
+  registerSpeculationRules(result: SpeculationRulesParseResult, queueErrors = false): void {
+    if (result.errorToRethrow !== null) {
+      if (queueErrors) {
+        this.env.realm.queueGlobalTask(domManipulationTaskSource, () => {
+          this.env.reportException(result.errorToRethrow);
+        });
+      } else {
+        this.env.reportException(result.errorToRethrow);
+      }
+      return;
+    }
+    const document = this.getAssociatedDocument();
+    // Successful creation supplies a rule set; failed creation supplies an error above.
+    document.speculationRuleSets.push(result.speculationRuleSet!);
+    document.considerSpeculativeLoads();
+  }
+
+  /** Remove a successful result's rule set and reconsider this document's speculative loads. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#unregister-speculation-rules
+  unregisterSpeculationRules(result: SpeculationRulesParseResult): void {
+    if (result.errorToRethrow !== null) return;
+    const document = this.getAssociatedDocument();
+    document.speculationRuleSets = document.speculationRuleSets.filter((ruleSet) => ruleSet !== result.speculationRuleSet);
+    document.considerSpeculativeLoads();
+  }
+
   /** Replace registered speculation rules and queue any new parse error for this Window. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#update-speculation-rules
-  updateSpeculationRules(_oldResult: SpeculationRulesParseResult, _newResult: SpeculationRulesParseResult): void {
-    // PROVISIONAL: document rule-set registration and queued parse-error reporting are not implemented.
+  updateSpeculationRules(oldResult: SpeculationRulesParseResult, newResult: SpeculationRulesParseResult): void {
+    const document = this.getAssociatedDocument();
+    document.speculationRuleSets = document.speculationRuleSets.filter((ruleSet) => ruleSet !== oldResult.speculationRuleSet);
+    this.registerSpeculationRules(newResult, true);
   }
 
   /** Return the current associated document, throwing until it has been attached. */
