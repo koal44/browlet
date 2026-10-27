@@ -42,7 +42,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     const agent = new TestAgent(createTestMicrotaskQueue());
     const { realm, env, context } = createTestRealm(agent, 'attachment');
 
-    expect(realm.hostDefined).toBe(env);
+    expect(realm.hasEnvironment).toBe(true);
     expect(realm.env).toBe(env);
     expect(realm.baseEnv).toBe(env);
     expect(env.realm).toBe(realm);
@@ -62,6 +62,15 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(context.realm.globalThis).toBe(context.realm.globalObject);
     expect(context.realm.evaluate('typeof Array', 'default-global.js')).toBe('function');
     expect(agent.eventLoop.runningExecutionContext).toBeNull();
+  });
+
+  it('does not require an associated document for non-Window script settings', () => {
+    const agent = new TestAgent(createTestMicrotaskQueue());
+    const { env } = createTestRealm(agent, 'script-policy');
+    expect(env.realm.getAssociatedDocument()).toBeNull();
+    expect(env.canRunScript()).toBe(true);
+    env.userAgent.scriptingEnabled = false;
+    expect(env.canRunScript()).toBe(false);
   });
 
   it('runs global customization with the new context and restores the previous stack on failure', () => {
@@ -220,7 +229,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     expect(() => loop.getIncumbentEnvironment()).toThrow('backup incumbent settings stack is empty');
   });
 
-  it('selects the active script independently of built-in frames and incumbent skipping', () => {
+  it('distinguishes the active script from the running frame and incumbent skipping', () => {
     const agent = new TestAgent(createTestMicrotaskQueue());
     const a = createTestRealm(agent, 'a');
     const b = createTestRealm(agent, 'b');
@@ -237,12 +246,15 @@ describe('HTML callback and script-entry lifecycle', () => {
     builtin.function = a.realm.createFunction(() => {}, { name: 'builtin', length: 0 });
 
     expect(loop.activeScript).toBeNull();
+    expect(loop.runningScript).toBeNull();
     loop.prepareToRunScript(a.env);
     try {
       expect(loop.activeScript).toBeNull();
+      expect(loop.runningScript).toBeNull();
       loop.executionContextStack.push(classicContext);
       try {
         expect(loop.activeScript).toBe(classic);
+        expect(loop.runningScript).toBe(classic);
         loop.executionContextStack.push(moduleContext, builtin);
         try {
           loop.prepareToRunCallback(a.env);
@@ -250,12 +262,14 @@ describe('HTML callback and script-entry lifecycle', () => {
             expect(loop.getIncumbentEnvironment()).toBe(a.env);
             expect(loop.runningExecutionContext?.realm).toBe(a.realm);
             expect(loop.activeScript).toBe(module);
+            expect(loop.runningScript).toBeNull();
           } finally {
             loop.cleanUpAfterRunningCallback(a.env);
           }
           // A provisional topmost record must not expose a lower script's base URL.
           loop.runScriptEvaluation(a.env, () => {
             expect(loop.activeScript).toBeNull();
+            expect(loop.runningScript).toBeNull();
           });
           expect(loop.activeScript).toBe(module);
         } finally {
@@ -263,6 +277,7 @@ describe('HTML callback and script-entry lifecycle', () => {
           loop.executionContextStack.pop();
         }
         expect(loop.activeScript).toBe(classic);
+        expect(loop.runningScript).toBe(classic);
       } finally {
         loop.executionContextStack.pop();
       }
@@ -270,6 +285,7 @@ describe('HTML callback and script-entry lifecycle', () => {
       loop.cleanUpAfterRunningScript(a.env);
     }
     expect(loop.activeScript).toBeNull();
+    expect(loop.runningScript).toBeNull();
   });
 
   it('uses the non-Window environment timer owner for AbortSignal.timeout', () => {

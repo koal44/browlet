@@ -259,7 +259,7 @@ describe('Secure Contexts: Web IDL exposure', () => {
     const target = realm.createOrdinaryObject(null);
     world.register(realm, (ctx) => ({ realm: ctx.realm })).install(target);
 
-    expect(realm.hostDefined).toBeUndefined();
+    expect(realm.hasEnvironment).toBe(false);
     expect(() => realm.env).toThrow('Realm has no environment');
     expect(realm.baseEnv).toBe(baseEnv);
     expect(realm.secureContext).toBe(expected);
@@ -274,7 +274,6 @@ describe('Secure Contexts: Web IDL exposure', () => {
     const installedTarget = env.realm.createOrdinaryObject(null);
     world.register(env.realm, (ctx) => ({ realm: ctx.realm })).install(installedTarget);
     expect(env.realm.baseEnv).toBe(env);
-    expect(env.realm.hostDefined).toBe(env);
     expect(env.realm.env).toBe(env);
     expect(env.realm.secureContext).toBe(expected);
     expect(env.isSecureContext).toBe(expected);

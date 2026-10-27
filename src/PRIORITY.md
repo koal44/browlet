@@ -46,15 +46,31 @@ orchestration and shared worklet responses. §8.1.4.3 now creates compiled class
 scripts and CSS/JSON/text synthetic export inputs. JavaScript/Wasm module parsing,
 module-record loading/linking, CSS export projection, and creation timing retain
 explicit unfinished boundaries. Worker-imported scripts
-still need synchronous pause. §8.1.3.4 enabling/disabling scripting awaits its
-own audit. Script calling and later host-hook algorithms must be connected
-before judging the complete model; the uncertain cross-realm observer test is skipped.
+still need synchronous pause. §8.1.3.4 now has settings/object scripting predicates;
+§8.1.4.4 has classic/module runners and the running-script lookup. Active child
+documents provisionally pass the missing ancestor activity check until Section 7.
+Retained engine evaluation, termination, timing, and production
+script callers remain explicit dependencies. §8.1.4.5 now records the Agent's
+unfinished abort operation, live-disable integration, and optional resource/UI
+policies. Forced interruption is explicitly deferred for the shared Node thread;
+do not pursue addon termination work or a worker migration for this audit.
+§8.1.4.6 now supplies ErrorEvent, reportError, cancellation, recursion handling,
+and classic-script muting. Source diagnostics, complete script attribution,
+dedicated-worker propagation, and special onerror handlers remain explicit
+dependencies. §8.1.4.7 now supplies PromiseRejectionEvent and the HTML rejection
+tracker/notification algorithms. Engine reject/handle notifications, read-only
+Promise slot queries, and checkpoint environment enumeration remain explicit
+dependencies; ordinary page rejections are not yet connected. The next section
+is §8.1.4.8, Import map parse results.
+Later host-hook algorithms must be connected before judging
+the complete model; the uncertain cross-realm observer test is skipped.
 The [environment audit](browlet/scripting/ROADMAP.md#html-81318132-audit) maps
 every covered item to code or an explicit implementation dependency. Preserve
 specified state and explicit unfinished dependencies, with approved expected
 failures for observable gaps.
-New addon/V8 work remains parked on `research/html-agent-execution` until real
-consumers justify returning to it.
+Vin's HTML audit keeps runtime dependencies explicit. Pip is investigating
+Node/addon/V8 facilities separately; production adoption remains a coordinated
+step, distinct from the older `research/html-agent-execution` work.
 
 The [Stylelet roadmap](stylelet/ROADMAP.md) maps missing contracts and dependencies;
 its [README](stylelet/README.md) records existing implementations. Keep detailed

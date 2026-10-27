@@ -164,6 +164,24 @@ provide the same state. Module maps remain settings-owned; import maps are a
 separate per-global record. `env.globalImplementation` selects that internal
 global state; `env.global` remains the platform global used for author execution
 and task routing. Neither lookup copies state or moves it onto the environment.
+`BrowletEnvironment.reportException()` combines that global's reporting flag with
+DOM ErrorEvent dispatch. The realm's existing reporting callback and Window's
+`reportError()` method forward directly to it. ErrorEvent lives beside the
+other DOM events, keeping scripting foundations independent of DOM implementation
+imports. Classic runners report before their modeled realm context is popped,
+but that context has no script; parse failures also have no script record.
+They therefore pass their script explicitly. Other callers use the modeled
+running-script lookup. An unattached browser realm rejects reporting with an
+InternalError; internal sandboxes deliberately retain console-only diagnostics.
+
+Rejected-promise state also stays on each global. The environment's
+`trackPromiseRejection()` translates HTML's rejection hook using the modeled
+running script and current settings; `notifyAboutRejectedPromises()` schedules
+the global's DOM notification task. `PromiseRejectionEvent` retains the original
+promise as an IDL object, without adopting it or installing reactions. Engine
+reject/handle delivery, non-observing Promise slot reads, and the checkpoint's
+environment enumeration remain explicit dependencies. No process-wide Node
+rejection listener substitutes for them.
 
 [`RealmExecution`](js-engine/realm-execution.ts) groups JavaScript facilities for
 one execution owner: Promises, errors, buffers, JSON, microtasks, background

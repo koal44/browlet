@@ -120,6 +120,25 @@ export interface ReportingObserverOptions {
   types?: Iterable<string>;
 }
 
+export interface ErrorEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  colno?: number;
+  error?: any;
+  filename?: string;
+  lineno?: number;
+  message?: string;
+}
+
+export interface PromiseRejectionEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  promise: object;
+  reason?: any;
+}
+
 export interface StructuredSerializeOptions {
   transfer?: Iterable<object>;
 }
@@ -1486,6 +1505,31 @@ export interface PerformanceConstructor extends Ctor<EventTargetConstructor> {
   [Symbol.hasInstance](value: unknown): value is Performance;
 }
 
+export interface ErrorEvent extends Event {
+  readonly message: string;
+  readonly filename: string;
+  readonly lineno: number;
+  readonly colno: number;
+  readonly error: any;
+}
+
+export interface ErrorEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: ErrorEvent;
+  [Symbol.hasInstance](value: unknown): value is ErrorEvent;
+  new (type: string, eventInitDict?: ErrorEventInit): ErrorEvent;
+}
+
+export interface PromiseRejectionEvent extends Event {
+  readonly promise: object;
+  readonly reason: any;
+}
+
+export interface PromiseRejectionEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: PromiseRejectionEvent;
+  [Symbol.hasInstance](value: unknown): value is PromiseRejectionEvent;
+  new (type: string, eventInitDict: PromiseRejectionEventInit): PromiseRejectionEvent;
+}
+
 export interface Window extends EventTarget {
   readonly window: WindowProxy;
   get self(): WindowProxy;
@@ -1497,6 +1541,7 @@ export interface Window extends EventTarget {
   set event(value: unknown);
   getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
   readonly isSecureContext: boolean;
+  reportError(e: any): void;
   setTimeout(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
   clearTimeout(id?: number): void;
   setInterval(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
@@ -1602,6 +1647,8 @@ export interface Window extends EventTarget {
   SecurityPolicyViolationEvent: SecurityPolicyViolationEventConstructor;
   ReportingObserver: ReportingObserverConstructor;
   Performance: PerformanceConstructor;
+  ErrorEvent: ErrorEventConstructor;
+  PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Window: WindowConstructor;
   Event: EventConstructor;
   CustomEvent: CustomEventConstructor;

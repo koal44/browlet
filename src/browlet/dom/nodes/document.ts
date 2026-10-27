@@ -1417,10 +1417,11 @@ export class DocumentImpl extends NodeImpl {
     if (navigable === null) return false;
     if (navigable.isTopLevelTraversable) return true;
 
-    // TODO: recurse through the child navigable's container document.
+    // PROVISIONAL (approved): Allow an active child until the Section 7 audit
+    // supplies its container-document association and ancestor activity checks.
     // parent.activeDocument is not a substitute: the container can remain
     // in the inactive predecessor document after its parent navigates.
-    return false;
+    return true;
   }
 
   /** Subscribe to activity changes and return an unsubscribe function. */

@@ -1,3 +1,4 @@
+import { InternalError } from '../../src/infra/index';
 import type { BrowletEnvironment } from '../../src/browlet/environment';
 
 /** State for tests of script consumers; deliberately bypasses unfinished parsing. */
@@ -9,5 +10,6 @@ export function createScriptState(env: BrowletEnvironment) {
     fetchOptions: null,
     baseURL: null,
     record: null,
+    run(): never { throw new InternalError('Script state fixtures cannot execute'); },
   };
 }

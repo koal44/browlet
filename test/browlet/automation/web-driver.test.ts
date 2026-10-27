@@ -53,9 +53,9 @@ describe('WebDriver BiDi script command algorithms', () => {
 
     expect(result).toEqual({ type: 'success', result: { type: 'number', value: 42 }, realm: driver.getRealmId(realm) });
     expect(parse.mock.calls[0]![0]).toBe('globalThis.mustNotRun = true; 42');
-    expect(scriptRecords[0]!.hostDefined.baseURL).toBe(env.apiBaseURL);
-    expect(scriptRecords[0]!.hostDefined.mutedErrors).toBe(false);
-    expect(scriptRecords[0]!.hostDefined.originalSourceURL).toBeNull();
+    expect(scriptRecords[0]!.script.baseURL).toBe(env.apiBaseURL);
+    expect(scriptRecords[0]!.script.mutedErrors).toBe(false);
+    expect(scriptRecords[0]!.script.originalSourceURL).toBeNull();
     expect(sourceEvaluation).not.toHaveBeenCalled();
     expect(Reflect.has(realm.globalObject, 'mustNotRun')).toBe(false);
     expect(prepare).toHaveBeenCalledExactlyOnceWith(env);

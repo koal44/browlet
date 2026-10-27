@@ -165,15 +165,27 @@ describe('browsing context groups', () => {
 
     expect(realm.baseEnv?.creationURL).toBe(creationURL);
     expect(realm.windowImplementation).toBeUndefined();
-    expect(realm.hostDefined).toBeUndefined();
+    expect(realm.hasEnvironment).toBe(false);
     expect(() => realm.env).toThrow('Realm has no environment');
   });
 
   it('rejects required environment access before attachment', () => {
     const realm = createManualRealm();
 
-    expect(realm.hostDefined).toBeUndefined();
+    expect(realm.hasEnvironment).toBe(false);
     expect(() => realm.env).toThrow('Realm has no environment');
+  });
+
+  it('rejects exception reporting before its browser environment exists', () => {
+    const realm = createManualRealm();
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(() => realm.reportException(new Error('failed')))
+        .toThrow(new InternalError('Realm has no environment'));
+      expect(output).not.toHaveBeenCalled();
+    } finally {
+      output.mockRestore();
+    }
   });
 
   it('finds the relevant realm before its environment is attached', () => {
@@ -304,7 +316,7 @@ describe('navigables', () => {
     expect(activity).toEqual([false, true]);
   });
 
-  it('does not mistake a parent association for a container Document', () => {
+  it('provisionally treats an active child as fully active until its container is modeled', () => {
     const parent = TopLevelTraversable.create(
       new UserAgent(),
       null,
@@ -321,7 +333,7 @@ describe('navigables', () => {
 
     expect(childDocument.getNodeNavigable()).toBe(child);
     expect(parentDocument.isFullyActive()).toBe(true);
-    expect(childDocument.isFullyActive()).toBe(false);
+    expect(childDocument.isFullyActive()).toBe(true);
   });
 
   it('creates the complete initial top-level about:blank graph', () => {
@@ -455,7 +467,7 @@ describe('environment settings objects', () => {
     expect(reservedEnv.executionReady).toBe(false);
     expect(bindingEnv).toBe(env);
     expect(env.exec.global).toBe(env.global);
-    expect(realm.hostDefined).toBe(env);
+    expect(realm.env).toBe(env);
     expect(realm.baseEnv).toBe(env);
     expect(realm.secureContext).toBe(true);
     expect(env.isSecureContext).toBe(true);

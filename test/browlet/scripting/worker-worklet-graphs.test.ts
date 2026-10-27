@@ -17,6 +17,7 @@ import type { HTTPTransportListener } from '../../../src/fetch/transport';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createScriptState } from '../../support/script-state';
+import { runInHostTask } from '../../support/tasks';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -44,7 +45,7 @@ describe('worker module graphs', () => {
     expect(fetchClient.moduleMap.get(url, 'javascript-or-wasm')).toBeUndefined();
     expect(target.env.moduleMap.get(url, 'javascript-or-wasm')).toBe(target.script);
     expect(complete).not.toHaveBeenCalled();
-    finish(target);
+    await finish(target);
     expect(complete).toHaveBeenCalledExactlyOnceWith(target.script);
   });
 
@@ -92,7 +93,7 @@ describe('worker module graphs', () => {
 
       expect(construct).toHaveBeenCalledOnce();
       expect(state).toEqual({ errorToRethrow: null, fetchClient, destination: 'paintworklet', performFetch });
-      finish(target);
+      await finish(target);
       expect(complete).toHaveBeenCalledExactlyOnceWith(target.script);
     },
   );
@@ -145,7 +146,7 @@ describe('worklet module response sharing', () => {
     expect(fetchClient.moduleMap.entries).toHaveLength(0);
     for (const target of [first, second, later]) {
       expect(target.env.moduleMap.get(url, 'javascript-or-wasm')).toBe(target.script);
-      finish(target);
+      await finish(target);
     }
     expect(completeFirst).toHaveBeenCalledExactlyOnceWith(first.script);
     expect(completeSecond).toHaveBeenCalledExactlyOnceWith(second.script);
@@ -176,7 +177,7 @@ describe('worklet module response sharing', () => {
     expect(transport).toHaveBeenCalledTimes(2);
     expect(replay).toHaveBeenCalledExactlyOnceWith(response, utf8Encode('export default 1;'));
     expect(responses.get(dependencyURL)).toEqual([response, utf8Encode('export default 1;')]);
-    finish(target);
+    await finish(target);
   });
 
   it.each(['HTTP error', 'null body', 'network error', 'body error', 'wrong MIME'] as const)(
@@ -262,9 +263,11 @@ function mockCreation(...targets: Awaited<ReturnType<typeof createModule>>[]) {
 }
 
 function finish(target: Awaited<ReturnType<typeof createModule>>) {
-  target.loading.resolve(undefined);
-  target.env.realm.agent.eventLoop.performMicrotaskCheckpoint();
-  expect(target.link).toHaveBeenCalledOnce();
+  return runInHostTask(() => {
+    target.loading.resolve(undefined);
+    target.env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    expect(target.link).toHaveBeenCalledOnce();
+  });
 }
 
 function respond(listener: HTTPTransportListener, status = 200) {

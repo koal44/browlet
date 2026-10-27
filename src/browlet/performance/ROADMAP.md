@@ -58,6 +58,9 @@ before compilation. The remainder of
 still needs document frame timing info, a pending script entry, and lifecycle
 reporting. The TODO remains in the constructor; source attribution alone
 does not implement this timing algorithm.
+Classic/module `run()` also mark their execution-start hooks as unfinished;
+they need the same frame timing and pending-script entry machinery. Reading a
+clock alone would not implement those hooks.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |

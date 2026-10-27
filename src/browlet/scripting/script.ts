@@ -1,5 +1,6 @@
 import { InternalError, type InternalPromise } from '../../infra/index';
 import type { CompiledScript } from '../../js-engine/index';
+import { idlType } from '../../web-idl/core/index';
 import { aboutBlankURL, copyURL, serializeURL, type URLRecord } from '../../url/index';
 import { CSSStyleSheetImpl } from '../../stylelet/index';
 
@@ -61,6 +62,41 @@ export class ClassicScript extends ScriptBase {
     }
     this.record = new JSScriptRecord(this, result);
   }
+
+  /** Run this classic script, optionally rethrowing its exception to the caller. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#run-a-classic-script
+  run(rethrowErrors = false): ScriptCompletion {
+    const { env } = this;
+    if (!env.canRunScript()) {
+      return { type: 'normal', value: emptyCompletionValue };
+    }
+    // TODO(Long Animation Frames): Record classic script execution start time.
+    // Frame timing info and pending script entry points are not implemented.
+    const loop = env.responsibleEventLoop;
+    loop.prepareToRunScript(env);
+    let status: ScriptCompletion | null;
+    try {
+      if (this.errorToRethrow !== null) {
+        status = { type: 'throw', value: this.errorToRethrow };
+      } else {
+        if (this.record === null) throw new InternalError('A classic script has no record or error to rethrow');
+        status = this.record.evaluate();
+      }
+      if (status?.type === 'throw' && !rethrowErrors) {
+        // The prepared realm context has no script; parse failures have no record
+        // either. Retain this script for muting while reporting before cleanup.
+        env.reportException(status.value, false, this);
+      }
+    } finally {
+      loop.cleanUpAfterRunningScript(env);
+    }
+    if (status === null) return { type: 'throw', value: env.exec.createQuotaExceededError() };
+    if (status.type === 'throw' && rethrowErrors) {
+      if (this.mutedErrors) throw new env.exec.DOMException('', 'NetworkError');
+      throw status.value;
+    }
+    return status;
+  }
 }
 
 /** Supported HTML module types; the response MIME distinguishes JavaScript from WebAssembly. */
@@ -68,6 +104,35 @@ export type ModuleType = 'javascript-or-wasm' | 'css' | 'json' | 'text';
 
 export abstract class ModuleScript extends ScriptBase {
   declare record: JSSourceTextModuleRecord | JSSyntheticModuleRecord | JSWebAssemblyModuleRecord | null;
+
+  /** Evaluate this module graph and report rejections unless the caller takes responsibility. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#run-a-module-script
+  run(preventErrorReporting = false): InternalPromise<void> {
+    const { env } = this;
+    if (!env.canRunScript()) {
+      return env.exec.Promise.resolve(undefined, idlType.undefined);
+    }
+    // TODO(Long Animation Frames): Record module script execution start time.
+    // Frame timing info and pending script entry points are not implemented.
+    const loop = env.responsibleEventLoop;
+    loop.prepareToRunScript(env);
+    try {
+      let promise: InternalPromise<void>;
+      if (this.errorToRethrow !== null) {
+        promise = env.exec.Promise.reject(this.errorToRethrow, idlType.undefined);
+      } else {
+        if (this.record === null) throw new InternalError('A module script has no record or error to rethrow');
+        promise = this.record.evaluate() ?? env.exec.Promise.reject(env.exec.createQuotaExceededError(), idlType.undefined);
+      }
+      if (!preventErrorReporting) {
+        // Reporting is attached before cleanup can perform a microtask checkpoint.
+        promise.observe(() => {}, (reason) => { env.reportException(reason); });
+      }
+      return promise;
+    } finally {
+      loop.cleanUpAfterRunningScript(env);
+    }
+  }
 }
 
 export class JavaScriptModuleScript extends ModuleScript {
@@ -194,11 +259,12 @@ export class JSModuleRequest {
 export class JSScriptOrModule {
   realm: BrowletRealm;
   /** The HTML script; null for a provisional entry without a parsed HTML script. */
-  hostDefined: Script | null;
+  // ECMAScript's [[HostDefined]] field.
+  script: Script | null;
 
-  constructor(realm: BrowletRealm, hostDefined: Script | null) {
+  constructor(realm: BrowletRealm, script: Script | null) {
     this.realm = realm;
-    this.hostDefined = hostDefined;
+    this.script = script;
   }
 }
 
@@ -207,7 +273,7 @@ export class JSScriptOrModule {
 // TODO(HTML §§8.1.4.3–4): Connect parsing/evaluation and the remaining ECMAScript fields.
 export class JSScriptRecord extends JSScriptOrModule {
   kind = 'script' as const;
-  declare hostDefined: ClassicScript;
+  declare script: ClassicScript;
   code: CompiledScript;
 
   constructor(script: ClassicScript, code: CompiledScript) {
@@ -215,17 +281,23 @@ export class JSScriptRecord extends JSScriptOrModule {
     this.code = code;
   }
 
-  /** Evaluate this retained record without reparsing its source. */
+  /** Evaluate this retained record; null denotes termination without a completion. */
   // https://tc39.es/ecma262/#sec-runtime-semantics-scriptevaluation
-  evaluate(): ScriptCompletion {
+  // SPEC_MISMATCH: ScriptEvaluation(scriptRecord) -> Completion Record
+  evaluate(): ScriptCompletion | null {
     // TODO(HTML §8.1.4.4): Execute the compiled artifact in its realm and supply
     // this record to the modeled script context. The addon exposes only source execution.
+    // TODO(HTML §8.1.4.5): Coordinate actual termination and modeled-state cleanup
+    // before returning null. JavaScript throws remain throw completions.
     throw new InternalError('Retained ScriptEvaluation is not implemented');
   }
 }
 
 /** The normal or abrupt completion produced by script evaluation and function calls. */
 export type ScriptCompletion = { type: 'normal' | 'throw'; value: unknown; };
+
+/** ECMAScript's empty completion value, distinct from the JavaScript value undefined. */
+export const emptyCompletionValue = Symbol('empty completion value');
 
 /** Module-record operations required by HTML's graph loader; engine integration remains pending. */
 export abstract class JSModuleRecord extends JSScriptOrModule {
@@ -238,11 +310,20 @@ export abstract class JSModuleRecord extends JSScriptOrModule {
     // TODO(HTML §8.1.4.3): Connect the parsed module record and its Link operation.
     throw new InternalError('Module linking is not implemented');
   }
+
+  /** Evaluate this linked graph; null denotes termination before a promise is returned. */
+  // https://tc39.es/ecma262/#sec-moduleevaluation
+  // SPEC_MISMATCH: ModuleRecord.Evaluate() -> Promise
+  evaluate(): InternalPromise<void> | null {
+    // TODO: Supply engine module evaluation, including dependency execution, top-level
+    // await, and script-context entry/restoration. Do not simulate it with export inputs.
+    throw new InternalError('Module evaluation is not implemented');
+  }
 }
 
 export class JSSourceTextModuleRecord extends JSModuleRecord {
   kind = 'source-text-module' as const;
-  declare hostDefined: JavaScriptModuleScript;
+  declare script: JavaScriptModuleScript;
 
   constructor(script: JavaScriptModuleScript) {
     super(script.env.realm, script);
@@ -251,7 +332,7 @@ export class JSSourceTextModuleRecord extends JSModuleRecord {
 
 export class JSSyntheticModuleRecord extends JSModuleRecord {
   kind = 'synthetic-module' as const;
-  declare hostDefined: SyntheticModuleScript;
+  declare script: SyntheticModuleScript;
   /** Value retained by CreateDefaultExportSyntheticModule's evaluation steps. */
   defaultExport: unknown;
 
@@ -263,7 +344,7 @@ export class JSSyntheticModuleRecord extends JSModuleRecord {
 
 export class JSWebAssemblyModuleRecord extends JSModuleRecord {
   kind = 'webassembly-module' as const;
-  declare hostDefined: WebAssemblyModuleScript;
+  declare script: WebAssemblyModuleScript;
 
   constructor(script: WebAssemblyModuleScript) {
     super(script.env.realm, script);

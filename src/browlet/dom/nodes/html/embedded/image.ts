@@ -37,7 +37,7 @@ export class HTMLImageElementImpl extends HTMLElementImpl {
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#will-lazy-load-element-steps
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-n-noscript
   willLazyLoad(): boolean {
-    if (!this.env.isScriptingEnabled() || this.nodeDocument.browsingContext === null) return false;
+    if (!this.env.isScriptingEnabledFor(this)) return false;
     return loadingAttribute.getState(this.getAttributeNS(null, 'loading')) === 'lazy';
   }
 

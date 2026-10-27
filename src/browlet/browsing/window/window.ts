@@ -27,7 +27,7 @@ import type { WindowProxyHandle } from './window-proxy';
 export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   declare env: WindowEnvironment;
   // HTML §8.1.3.3 — internal global state, retained when the associated Document changes.
-  // TODO: Connect error reporting, rejection tracking, and import-map processing.
+  // TODO: Connect engine rejection notifications, checkpoint delivery, and import-map processing.
   inErrorReportingMode = false;
   outstandingRejectedPromises = new WeakSet<Promise<unknown>>();
   aboutToBeNotifiedRejectedPromises: Promise<unknown>[] = [];
@@ -136,6 +136,14 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Queue a converted callback on this Window's event loop. */
   queueMicrotask(callback: VoidFunction): void {
     this.getWindowOrWorkerGlobalScopeMixin().queueMicrotask(callback);
+  }
+
+  /** Report a value as an uncaught exception at this Window. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-reporterror
+  reportError(exception: unknown): void {
+    // SPEC_CLASH(report-error-muting): Follow HTML's algorithm and Chrome/Safari
+    // by applying classic-script muting; HTML notes Firefox does not mute here.
+    this.env.reportException(exception);
   }
 
   /** Fetch with this Window's environment and converted request arguments. */

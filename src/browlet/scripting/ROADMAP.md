@@ -116,7 +116,7 @@ claim that the engine supplies a record for every actual function invocation.
 
 | Requirement | Present model and remaining dependency |
 | --- | --- |
-| Global state | `BrowletGlobalObject` requires the error-reporting flag, both rejected-promise collections, import map, and resolved module set. Window and the service-worker global skeleton initialize them; future worker/worklet globals must do so too. Error reporting, rejection tracking, and import-map processing remain unwired consumers. |
+| Global state | `BrowletGlobalObject` requires the error-reporting flag, both rejected-promise collections, import map, and resolved module set. Window and the service-worker global skeleton initialize them; future worker/worklet globals must do so too. Error reporting and the translated rejection algorithms consume their state; engine rejection delivery and import-map processing remain unwired. |
 | Realm creation | `createBrowletRealm()` and production Window composition share `BrowletRealm.initialize()`: bracket global creation with the retained context, pop it, then remove SharedArrayBuffer when required. The ordinary factory accepts omitted customizations and returns the retained context. |
 | Retained context | `BrowletRealm.executionContext` is stable for the realm's lifetime. Environment settings return that same record. The existing VM context and `env.exec` facilities are separate. |
 | Entry | `entryExecutionContext` selects the most recently pushed retained realm context, including a nested HTML entry. Its `.realm` supplies entry realm, `.realm.env` entry settings, and `.realm.globalObject` entry global. Missing entry context throws. |
@@ -126,7 +126,7 @@ claim that the engine supplies a record for every actual function invocation.
 
 `JSScriptOrModule` carries the realm and HTML host-defined script. Complete
 Script/Module records and active-script restoration remain §§8.1.4 and 8.1.6
-work; the temporary record in `runScriptEvaluation()` has null `hostDefined`
+work; the temporary record in `runScriptEvaluation()` has null `script`
 until script creation and execution supply a parsed HTML script.
 The generic realm factory alone does not construct an HTML global implementation
 or attach settings; Window/worker/worklet composition owns those steps.
@@ -149,9 +149,33 @@ Revisit with the actual example pages and platform APIs when supported. Script
 and module processing, execution, and host-hook algorithms still lie ahead;
 continue in specification order. New native work remains parked.
 
-The entry/incumbent/current/relevant audit stops before §8.1.3.4. Scripting
-enablement still awaits its own audit. Broader consumer regressions can follow when
+The entry/incumbent/current/relevant audit stops before §8.1.3.4, audited separately
+below. Broader consumer regressions can follow when
 [Window messaging](../communication/ROADMAP.md) exists.
+
+## HTML §8.1.3.4 enabling and disabling scripting
+
+`BrowletEnvironment.isScriptingEnabled()` checks the existing JavaScript support,
+UserAgent preference, the relevant Window's current sandbox flags, and the BiDi
+hook. Global disabling is sufficient; finer per-origin preferences are optional.
+BiDi's approved no-session true result remains provisional until its scoped
+overrides exist. A non-Window environment does not require a Document.
+
+`env.isScriptingEnabledFor(object)` takes the implementation in its original
+owning environment. In addition to settings policy, a Node's current node document
+and a Window's associated document must have a browsing context. Adoption changes
+the former without changing the object's relevant settings. Other platform-object
+implementations need only the settings check. Image/iframe/media lazy-loading now
+uses this shared predicate. Disabled is the negation of enabled; it needs no
+separately stored state.
+
+[Policy tests](../../../test/browlet/scripting/scripting-policy.test.ts) cover
+settings versus object eligibility, live sandbox/preference/BiDi changes, adoption,
+and replacement of a Window's associated document. The existing lazy-loading
+suite exercises the real consumers. Parser `scriptingEnabled` configuration,
+script-element preparation, and content event-handler compilation still need
+their specified consumers; this audit does not route every execution path through
+the predicate. Automation's explicit scripting bypass remains separate.
 
 ## HTML §8.1.3.5: secure contexts
 
@@ -416,6 +440,197 @@ and Wasm tests replace only the explicit parser dependencies to check policy,
 state, and error handoffs. These tests do not establish module execution or an
 HTML script-element/worker startup lifecycle.
 
+## HTML §8.1.4.4 calling scripts
+
+The HTML control flow now lives on `ClassicScript.run(rethrowErrors)` and
+`ModuleScript.run(preventErrorReporting)`. These use the script's own environment;
+they do not replace Browlet's convenience evaluator or BiDi's distinct command
+algorithms.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Check if we can run script | `env.canRunScript()` returns a boolean, checking a Window's fully-active document before scripting policy; non-Window globals have no document gate. |
+| Run a classic script | Returns an empty normal completion when disallowed, prepares the realm, selects the retained error or ScriptEvaluation result, reports or rethrows as specified, and cleans up before returning/rethrowing. Muted rethrows become a realm-owned NetworkError. |
+| Run a module script | Returns a fulfilled internal promise when disallowed; otherwise prepares the realm, rejects with the retained error or requests graph evaluation, attaches optional rejection reporting before cleanup, and returns the same evaluation promise. Cleanup does not wait for settlement. |
+| Preparation and cleanup | Existing EventLoop methods retain the realm context and task's settings set. Direct Node-host entries still have the documented nullable-task/checkpoint accommodation; uncontrolled JavaScript entries are not made observable by this audit. |
+| Running script | `EventLoop.runningScript` reads only the running context's ScriptOrModule.HostDefined. Unlike `activeScript`, it does not search lower frames. |
+| Execution timing | Explicit TODOs at both run entry points; Long Animation Frames needs document frame timing and pending-script entries. |
+| Retained execution | `JSScriptRecord.evaluate()` still throws. `JSModuleRecord.evaluate()` now supplies an explicit throwing boundary for linked graph execution, dependencies, top-level await, and context restoration. |
+| Runtime errors | The run algorithms invoke `env.reportException`; §8.1.4.6 now supplies ErrorEvent dispatch, cancellation, and muting. Classic runners retain their script explicitly for parse errors and unwound evaluation. Source attribution and worker propagation remain unfinished. |
+| Termination | A null evaluation outcome selects the specified QuotaExceededError completion/rejected promise. Binding allocates that exception in the script's realm. Actual termination and unwinding remain §8.1.4.5/runtime work. |
+
+**Approved provisional activity check:** an active child Document now passes
+`isFullyActive()` until Section 7 supplies the actual container-document association
+and recursive ancestor checks. A Document with no browsing context or one that is
+not its navigable's active entry still fails. Do not use `parent.activeDocument` as
+a substitute for the embedding element's node document. This affects every existing
+consumer of `isFullyActive`, including task/timer eligibility, not just scripts.
+
+**Representation review:** the evaluation boundaries use null for termination
+without a completion/promise; ordinary author exceptions remain throw completions
+or promise rejections. The current runner branch assumes the retained realm context
+is present for HTML's cleanup. Actual termination and modeled-state reconciliation
+remain the §8.1.4.5 dependency below. BiDi has an explicit unfinished termination branch.
+`emptyCompletionValue` distinguishes ECMAScript's empty from JavaScript undefined.
+The module operation uses the established InternalPromise contract.
+
+[Calling tests](../../../test/browlet/scripting/script-calling.test.ts) exercise
+real script creation, settings, task preparation, cleanup, and realm-owned exception
+allocation. They replace only the unfinished record evaluation and error reporter
+to inspect those handoffs. They do not prove executable compiled code, module
+graphs, termination, or browser error events. The child-document expectation was
+observed failing before applying the approved provisional behavior. No new skipped
+or expected-failure tests were introduced.
+
+Script-element/worker startup still needs production callers for these runners.
+
+## HTML §8.1.4.5 killing scripts
+
+`Agent.abortRunningScript()` names the operation on the execution owner, shared
+by its realms. It explicitly throws an InternalError until runtime termination
+is available. That throw reports an unfinished implementation; it is not the
+specified abortion. No callers are wired to claim successful termination.
+
+**Decision:** retain direct synchronous host access on Node's JavaScript thread
+and defer forced script interruption. No addon termination work, watchdog, or
+move of Browlet into a worker is planned for this audit. An infinite loop can
+therefore block both the page and its Node caller indefinitely. Node does not
+automatically impose a script execution deadline.
+
+The missing piece is an independently runnable stop source, not merely another
+VM context. A native thread could enforce a pre-armed deadline or receive an
+external command without moving Browlet into a worker. It cannot make a timer or
+abort listener on the blocked JavaScript thread run. Chromium has independently
+runnable browser/IO control and can interrupt page execution; that capability
+does not establish an equivalent control channel or safe unwind boundary here.
+Revisit this only for a concrete independent-control requirement or a future
+worker lifecycle, rather than treating it as a prerequisite for the next section.
+
+| Requirement or permitted policy | Current disposition |
+| --- | --- |
+| Abort a running script | Must immediately stop ScriptEvaluation or source-text-module Evaluate, empty the real JavaScript execution stack, and bypass author catch/finally. Agent exposes the explicit runtime dependency. A JavaScript throw, rejected Promise, or clearing our context array does not implement this. |
+| Resource limits | CPU, memory, execution-time, and bandwidth quotas are optional. This audit introduces no script-specific quota, throttle, or watchdog. Existing Fetch cancellation is not script termination. |
+| Response to exceeding a limit | The permitted QuotaExceededError, silent abort, prompt, or throttle choices remain with a future resource-policy owner. The calling algorithms' existing termination result is separate from choosing or enforcing a quota. |
+| Offer disabling at a prompt | Encouraged UI behavior; dialogs and unresponsive-script prompts are not implemented. No artificial prompt callback or configuration is added here. |
+| Disable scripting during execution | `UserAgent.scriptingEnabled` gates later HTML entries, but does not interrupt an executing script. Its TODO requires targeting affected Agents once runtime interruption exists, including policy changes made while a host prompt is active. |
+| Close without executing further scripts | Optional close-time policy, including suppressing unload handlers. Browsing-context closing/unload integration remains with Section 7; no global disable-and-restore workaround is installed. |
+
+The runtime boundary must preserve the host's ability to continue. The local V8
+headers expose isolate-wide `TerminateExecution` and `CancelTerminateExecution`;
+our multiple HTML Agents and Node host currently share an isolate. A direct call
+does not establish safe targeting or containment. The addon has no abort entry
+point, and Node callbacks on the same blocked thread cannot act as a watchdog.
+
+Termination also needs an explicit return boundary for our JavaScript host
+implementation. `EventLoop.cleanUpAfterRunningScript()` assumes its retained realm
+context is still present; ordinary controlled entries use try/finally. Clearing
+the modeled stack alone would both leave author code executing and break cleanup.
+The backend and HTML integration must agree how actual unwinding reconciles
+retained contexts, script-entry task bookkeeping, and backup incumbent state.
+The previous null-outcome tests only exercise the runner branch with the retained
+context intact; they do not prove that reconciliation or suppression of finally.
+
+`LocalEvaluation.dispose()` removes queued delivery and rejects pending host
+commands. It is not an implementation of aborting running JavaScript. Worker and
+worklet termination will also need the Agent operation when their lifecycles are
+implemented.
+
+If this work is reopened, runtime acceptance must cover a bounded hostile loop
+stopped externally, author catch/finally suppression, nested script/callback
+entry, cleanup of the modeled state, and subsequent unrelated Node/realm progress.
+Such probes require a separate process with an external timeout; this audit does
+not run an unbounded loop in the test runner or add tests asserting that termination
+works.
+
+This completes the section's inventory with termination explicitly unfinished.
+The deferred termination work does not block script creation, execution, or the
+remaining HTML audit.
+
+## HTML §8.1.4.6 runtime script errors
+
+`BrowletEnvironment.reportException()` coordinates the owning global's reporting
+state and DOM events. The existing `BrowletRealm.reportException()` callback
+forwards to it, so DOM/Web IDL callback failures reach the same reporter as
+classic/module runners and the public `reportError()` operation. Internal
+sandboxes without an HTML global retain console-only reporting. A browser realm
+without its environment throws an InternalError instead of falling back to the
+console. The realm exposes that environment as `env`; its setter also replaces
+the early environment base. HTML's `[[HostDefined]]` name remains a spec reference.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Extract error information | `ErrorEventImpl.extractErrorInformation()` retains the exception and derives a message by string conversion, using `Unknown error` if conversion throws. Source filename, line, and column remain empty/zero pending runtime diagnostic metadata; Node stack text is not parsed as author-source metadata. |
+| Muted classic errors | Replace author-visible details with `Script error.`, an empty filename, zero positions, and a null error. Classic runners supply their script explicitly, including parse failures without an evaluated frame; other callers use the modeled running-script lookup. Uncontrolled engine transitions still limit that lookup. |
+| Omit the error | `omitError` clears only the error value, preserving the other diagnostic attributes. |
+| Dispatch and recursion | Set the global's `inErrorReportingMode`, fire a trusted cancelable ErrorEvent when the global is an EventTarget, then clear the flag. Nested reporting does not dispatch another event on that global; different globals retain independent flags. |
+| Unhandled exception | Cancellation suppresses console reporting. Otherwise log the original exception to the Node console, the permitted developer sink. Dedicated-worker propagation has an explicit throwing boundary instead. |
+| Dedicated-worker propagation | Still needs the associated Worker object, its relevant global, DOM-manipulation task delivery, and implicit-port disentanglement state. The task must fire an event without the error value, then recursively report an unhandled exception with `omitError=true`. Continue through terminated/collected parents while suppressing handlers as specified. |
+| `reportError()` | Window calls its environment's reporter directly. Binding supplies the required argument and receiver ownership. Worker exposure awaits concrete worker globals. |
+| ErrorEvent | DOM event implementation and HTML IDL contribution provide the five attributes and constructor dictionary. An omitted `error` starts as undefined, unlike the explicit null used for muting/omission. |
+
+**Representation review:** extraction returns a typed attribute record in place
+of the specification's ordered map keyed by IDL attributes; its `SPEC_MISMATCH`
+marker remains pending review. Reporting through the global's environment is an
+accepted ownership translation. The additional final script argument is retained:
+`ClassicScript.run()` already reports before our cleanup pops the realm context,
+but that context's `scriptOrModule` is null, and a parse failure has no script
+record to push. Keeping the argument preserves muting without inventing a parsed
+record for a failed parse. Other callers default to the modeled running script.
+Revisit the explicit runner argument when retained-record evaluation supplies
+script contexts and their lifetime. This is a boundary in Browlet's current
+implementation, not a conclusion about which frames V8 retains.
+
+**SPEC_CLASH(report-error-muting):** follow the written
+[reportError algorithm](https://html.spec.whatwg.org/multipage/webappapis.html#dom-reporterror),
+including classic-script muting. Its note reports that Firefox does not mute,
+whereas Chrome and Safari do. Eric approved following the algorithm on
+2026-10-26. This records the specification's browser evidence, not a new browser
+comparison performed by this audit.
+
+Window's special five-argument `onerror` callback and return-true cancellation
+remain §8.1.8.1 work. `addEventListener('error', ...)` and `preventDefault()` work
+through existing DOM dispatch. Source-location extraction, complete active-script
+provenance, and dedicated-worker ownership are the remaining dependencies of
+this section; no new native bridge is introduced.
+
+[Runtime-error tests](../../../test/browlet/scripting/runtime-errors.test.ts)
+cover public projection, trusted events, cancellation, recursion, independent
+globals, borrowed receivers, classic parse-error muting, modeled running-script
+muting, omission, and constructor defaults/conversion. The first event-dispatch
+expectation was observed failing against the prior console-only reporter. The
+tests do not claim retained-script execution or worker propagation.
+
+## HTML §8.1.4.7 unhandled promise rejections
+
+`BrowletEnvironment.notifyAboutRejectedPromises()` translates this section's
+notification algorithm. `trackPromiseRejection()` supplies the corresponding
+HTML §8.1.6.4 hook body, treating its receiver as the current settings and using
+the modeled running script when present. Neither currently receives automatic
+engine notifications. Global state remains on the global implementation.
+
+| Requirement | Implementation or explicit dependency |
+| --- | --- |
+| Rejection notification | Clone and clear the pending list, then queue a DOM-manipulation task for the global. Skip handled promises, fire a trusted cancelable `unhandledrejection`, optionally report an uncanceled reason to the console, and retain still-unhandled promises in the weak set. Recheck handled state after listeners run. |
+| HostPromiseRejectionTracker | Ignore a muted running classic script; otherwise select its settings or the current settings. Reject appends to the pending list. Handle removes an unnotified promise, or removes a previously reported promise from the weak set and queues a noncancelable `rejectionhandled` event. The native notification entry remains unwired in `installHostHooks()`. |
+| PromiseRejectionEvent | The DOM event implementation and HTML IDL declarations expose `promise` as an opaque object and `reason` as any. Constructor conversion requires an object-valued promise but deliberately does not adopt thenables or require an actual Promise. Omitted reason is undefined. |
+| Engine slot reads | `isPromiseHandled()` and `getPromiseResult()` explicitly throw until JS Engine provides non-observing reads. Attaching a reaction to learn the result would itself change handled state. |
+| Checkpoint integration | §8.1.7.3 requires notification for each settings object's global served by the loop. That enumeration and the production caller remain explicit TODOs; no new environment registry is introduced for this slice. |
+| Global lifecycle | Window event delivery is exercised. Worker/worklet globals and their lifetime integration remain with their owners; notification dispatch currently requires an EventTarget global. Event-handler attributes remain §8.1.8 work. |
+
+The outstanding weak set has no implementation-specific capacity limit. No
+Node process listener or Promise prototype replacement intercepts existing
+reporting. Internal sandboxes have no HTML global and are not tracker targets.
+
+[Rejection tests](../../../test/browlet/scripting/promise-rejections.test.ts)
+exercise public constructor conversion/identity and the real DOM task/event
+path, with only the missing engine slot reads substituted. They explicitly
+call the tracker and notification operation using pending native Promises as
+identity-bearing fixtures; they do not claim native rejection tracking. Cases
+cover early/late handling, handling during notification, cancellation,
+rejections added during dispatch, script-selected settings, and muted scripts.
+The native dependency is the stopping point for this audit; no addon changes
+are part of this slice. Continue with §8.1.4.8, Import map parse results.
+
 ## Present
 
 | Source | Current responsibility |
@@ -426,6 +641,7 @@ HTML script-element/worker startup lifecycle.
 | `script-fetch-options.ts`, `script-fetching.ts`, `module-map.ts` | Fetch options, classic/worker/single-module fetching, document/worker/worklet module-graph orchestration, and cached results/pending callbacks; the environment forwards fetch calls and owns integrity lookup/type permission |
 | [`../worklets/module-responses-map.ts`](../worklets/module-responses-map.ts) | Downloaded responses and pending notifications shared across a Worklet's globals; separate from their per-environment module maps |
 | `global-object.ts`, `import-map.ts` | Shared HTML global-state contract and import-map/specifier-resolution record shapes |
+| [`../environment.ts`](../environment.ts), [`../dom/events/error-event.ts`](../dom/events/error-event.ts) | Global exception reporting and ErrorEvent; the realm callback and global-scope operation delegate to the environment |
 | `event-loop.ts`, `tasks.ts` | Task records, source/queue associations, fully-active gating, deterministic turns, checkpoints, incumbent stack, timing hooks, and coalesced wake-ups |
 | `host-hooks.ts` | Custom-engine make/call hooks plus Promise, generic, and timeout job delivery |
 | [`../global-scope.ts`](../global-scope.ts), `timers.ts` | Higher-level global API composition; lower-level active-time waits and Window function timers |
@@ -456,25 +672,25 @@ it checks the UserAgent preference and the relevant Window's current sandbox,
 then calls `webDriverBiDiScriptingIsEnabled(env)`. That hook provisionally returns
 true, the no-session/no-override result, alongside the existing network hooks.
 BiDi's top-level traversable/user-context override selection remains unimplemented.
-Script preparation/execution must eventually consume the
-same settings predicate; adding this consumer has not made all execution paths
-respect the new preference.
+The HTML run algorithms consume the same predicate through `canRunScript`;
+script-element preparation and the parser still need integration. Existing direct
+evaluation and automation do not acquire this gate automatically.
 
 ## Remaining implementation
 
 | Owner | Missing contract |
 | --- | --- |
-| Script records/classic scripts | Creation/run algorithms, worker-imported fetching, production fetch callers, active-script restoration, scripting-disabled checks, and runtime errors |
-| Module scripts/maps | Parse/link/evaluate, graph fetching, import maps/attributes, dynamic import, and host hooks |
-| Error reporting | ErrorEvent, PromiseRejectionEvent, muted-error handling, source locations, and rejection tracking |
+| Script records/classic scripts | Retained compiled execution, production fetch/run callers, script-context restoration, worker-imported synchronous pause, timing, and runtime errors |
+| Module scripts/maps | Engine parse/load/link/evaluate, import maps/attributes, dynamic import, and host hooks; HTML fetch/run orchestration is present |
+| Error reporting | Source locations, complete script attribution, dedicated-worker propagation, native rejection notifications/slot queries, and checkpoint notification integration |
 | Event handlers | Content-attribute compilation, Window/body/frameset targeting, global handler mixins, and special error/beforeunload behavior |
 | DOM checkpoint consumers | Custom-element reactions; MutationObserver and signal-slot delivery already use the existing checkpoint |
 | Task routing/lifecycle | Element-task wrapper using the relevant global, worker restrictions, and complete loop teardown |
-| Global utilities/timers | Origin/base64/reportError/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
+| Global utilities/timers | Origin/base64/image APIs and isolation exposure; worker suspension; handler timing; TrustedScript/CSP/classic-script string timers |
 | Rendering/idle | AnimationFrameProvider, real rendering hooks, idle callbacks, deadlines, and lifecycle cleanup |
 | Workers/worklets | Real globals/settings, production callers of Agent allocation, execution readiness, termination, and engine enforcement |
 
-Secure-context exposure, structured cloning, Fetch, and function timers already
+Secure-context exposure, structured cloning, Fetch, reportError, and function timers already
 have their reached Window implementations. Origin/base64 and the other global
 utilities above still need public implementations, even where their underlying
 records or primitives exist.
@@ -494,11 +710,13 @@ Use bounded consumer slices within HTML's script algorithms:
    Classic and synthetic creation are translated; module parsing and creation timing remain open.
    The existing evaluation entry and parser ScriptHandler do not supply it.
 2. **Calling scripts and errors (§§8.1.4.4–8.1.4.6).** Preserve implemented
-   callback preparation/cleanup, task settings sets, and empty-stack checkpoints.
-   Add formal active-script ownership, muted errors, ErrorEvent, and reliable
-   source provenance. General termination needs an enforceable host primitive.
-3. **Rejected promises (§8.1.4.7).** Obtain a faithful rejection host hook and
-   per-global lifecycle. Node's process-wide events cannot supply that ownership.
+   callback preparation/cleanup, task settings sets, empty-stack checkpoints,
+   ErrorEvent dispatch, and muting. Complete active-script/source provenance and
+   dedicated-worker propagation with their consumers. Forced termination stays deferred.
+3. **Rejected promises (§8.1.4.7).** The HTML tracker, notification tasks, and
+   PromiseRejectionEvent are translated. Connect the rejection engine hook,
+   non-observing slot reads, and checkpoint environment enumeration. Node's
+   process-wide events cannot supply that ownership.
 4. **Modules/import maps (§8.1.4.8 and §§8.1.5–8.1.6).** Build on the module map
    and single-module fetchers with graph loading, engine linking/evaluation,
    registration, and dynamic-import hooks.

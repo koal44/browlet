@@ -66,7 +66,13 @@ export class EventLoop {
   get activeScript(): Script | null {
     // GetActiveScriptOrModule selects the same topmost non-null record in our modeled stack.
     const record = this.topmostScriptHavingExecutionContext?.scriptOrModule ?? null;
-    return record === null ? null : record.hostDefined;
+    return record === null ? null : record.script;
+  }
+
+  /** The HTML script in the running context; do not search through lower frames. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#running-script
+  get runningScript(): Script | null {
+    return this.runningExecutionContext?.scriptOrModule?.script ?? null;
   }
 
   hasRunnableTasks(): boolean {
@@ -210,6 +216,9 @@ export class EventLoop {
   /** Leave script execution and checkpoint when the execution stack becomes empty. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#clean-up-after-running-script
   cleanUpAfterRunningScript(env: BrowletEnvironment): void {
+    // TODO(HTML §8.1.4.5, deferred): Coordinate with a future termination boundary.
+    // These checks assume normal unwinding; clearing only the modeled stack
+    // would leave the actual script running and make this cleanup fail.
     const entry = this.runningExecutionContext;
     if (entry !== env.realmExecutionContext) {
       throw new InternalError('Script settings were cleaned up out of order');
@@ -275,7 +284,9 @@ export class EventLoop {
     try {
       this.microtaskQueue.performMicrotaskCheckpoint();
 
-      // TODO(HTML §8.1.7.3): Notify rejected promises and clean up IndexedDB transactions.
+      // TODO(HTML §8.1.7.3): Call env.notifyAboutRejectedPromises() for each HTML
+      // environment served by this loop, once environment enumeration and the
+      // rejection tracker are connected. Clean up IndexedDB transactions too.
       // Native checkpoints already clear kept objects; review ordering and isolation
       // with those consumers (EVENT-LOOP-ARCHITECTURE.md#node-v8-checkpoint).
     } finally {

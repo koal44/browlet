@@ -49,6 +49,20 @@ export abstract class Agent {
 
     this.#agentCluster = cluster;
   }
+
+  /** Abort this agent's running script without executing author catch/finally blocks. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#abort-a-running-script
+  abortRunningScript(): void {
+    // Deferred for the shared Node execution thread: same-thread callers cannot
+    // request a stop during a blocking loop. No independent stop channel or native
+    // termination work is planned for this audit; see ROADMAP.md's killing-scripts section.
+    // TODO(HTML §8.1.4.5): Interrupt ScriptEvaluation/module Evaluate and empty
+    // the actual execution stack. The backend must return control to the host
+    // without aborting unrelated Node work, then reconcile the modeled contexts,
+    // script-entry tasks, and callback bookkeeping with HTML's cleanup.
+    // Throwing below reports the missing implementation; it does not abort a script.
+    throw new InternalError('Aborting a running script is not implemented (HTML §8.1.4.5)');
+  }
 }
 
 /** Groups Windows that can potentially access one another. */

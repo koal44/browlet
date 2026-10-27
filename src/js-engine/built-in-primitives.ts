@@ -68,6 +68,18 @@ export function getDateValue(value: Date): number {
   return Reflect.apply(dateValueOf, value, []);
 }
 
+/** Read [[PromiseIsHandled]] without attaching a reaction or otherwise changing the promise. */
+export function isPromiseHandled(_promise: Promise<unknown>): boolean {
+  // TODO: Supply a non-observing backend query. Promise.then would mark it handled.
+  throw new InternalError('Reading PromiseIsHandled is not implemented');
+}
+
+/** Read [[PromiseResult]] from a settled promise without running author code. */
+export function getPromiseResult(_promise: Promise<unknown>): unknown {
+  // TODO: Supply a non-observing backend query; there is no public JavaScript accessor.
+  throw new InternalError('Reading PromiseResult is not implemented');
+}
+
 export function getRegExpData(value: RegExp): RegExpData {
   let flags = '';
   for (const [getter, flag] of regExpFlagAccessors) {

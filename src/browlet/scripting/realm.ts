@@ -13,7 +13,7 @@ import type { DOMRealm, WindowDOMRealm } from '../dom/index';
 import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from '../environment';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
 
-import type { Agent, WindowAgent } from './agents';
+import { SandboxAgent, type Agent, type WindowAgent } from './agents';
 import { JSExecutionContext } from './execution-context';
 import type { TaskSource } from './event-loop';
 import type { QueuedTaskHandle } from './tasks';
@@ -49,7 +49,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   isGlobalPrototypeChainMutable: boolean;
   /** Security state retained during realm creation and replaced by the attached full environment. */
   #baseEnv: BrowletEnvironmentBase | undefined;
-  #hostDefined: BrowletEnvironment | undefined;
+  #env: BrowletEnvironment | undefined;
 
   constructor(options: BrowletRealmOptions) {
     const { agent } = options;
@@ -67,7 +67,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     this.callbacks = {
       // Web IDL §§3.2.16 and 3.2.19; HTML §8.1.3.3.
       captureContext: () => {
-        const env = this.#hostDefined;
+        const env = this.#env;
         if (env === undefined) return this;
         const loop = env.responsibleEventLoop;
         // ACCOMMODATION(node-v8-execution-contexts): A direct Node-host call
@@ -86,7 +86,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
         }
       },
       cleanUpAfterRunningScript: () => {
-        const env = this.#hostDefined;
+        const env = this.#env;
         if (env !== undefined) {
           env.responsibleEventLoop.cleanUpAfterRunningScript(env);
         }
@@ -100,7 +100,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
         }
       },
       prepareToRunScript: () => {
-        const env = this.#hostDefined;
+        const env = this.#env;
         if (env !== undefined) {
           env.responsibleEventLoop.prepareToRunScript(env);
         }
@@ -113,17 +113,22 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     return realm instanceof BrowletRealm ? realm : undefined;
   }
 
-  /** Attached browser environment; internal sandbox realms have none. */
-  get hostDefined(): BrowletEnvironment | undefined {
-    return this.#hostDefined;
+  /** Whether this realm has HTML settings; false during construction and for internal sandboxes. */
+  get hasEnvironment(): boolean {
+    return this.#env !== undefined;
   }
 
-  // TODO: Revisit merging env and hostDefined when additional realm
-  // lifecycles clarify which callers still need an optional environment.
   /** Required browser environment; throws if none is attached. */
+  // HTML stores the realm's environment settings object in ECMAScript's [[HostDefined]] field.
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-realm-settings-object
   get env(): BrowletEnvironment {
-    if (this.#hostDefined === undefined) throw new InternalError('Realm has no environment');
-    return this.#hostDefined;
+    if (this.#env === undefined) throw new InternalError('Realm has no environment');
+    return this.#env;
+  }
+
+  set env(env: BrowletEnvironment) {
+    this.#baseEnv = env;
+    this.#env = env;
   }
 
   /** Shared security state, available before and after full environment attachment. */
@@ -137,21 +142,21 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
 
   /** Parse a source-text module in this realm without linking or evaluating it. */
   // https://tc39.es/ecma262/#sec-parsemodule
-  parseModule(_source: string, _hostDefined: JavaScriptModuleScript): JSSourceTextModuleRecord | SyntaxError[] {
+  parseModule(_source: string, _script: JavaScriptModuleScript): JSSourceTextModuleRecord | SyntaxError[] {
     // TODO: Connect ParseModule to our VMContext backend. Node's SourceTextModule
     // requires a Node context, whereas the native backend owns an addon context handle.
     throw new InternalError('Source-text module parsing is not implemented');
   }
 
   /** Parse a WebAssembly ESM record, including its imports, in this realm. */
-  parseWebAssemblyModule(_bodyBytes: Uint8Array, _hostDefined: WebAssemblyModuleScript): JSWebAssemblyModuleRecord {
+  parseWebAssemblyModule(_bodyBytes: Uint8Array, _script: WebAssemblyModuleScript): JSWebAssemblyModuleRecord {
     // TODO: Supply WebAssembly's ESM integration. Compiling a WebAssembly.Module
     // alone does not provide its Module Record or JavaScript linking behavior.
     throw new InternalError('WebAssembly ESM parsing is not implemented');
   }
 
   override evaluate(source: string, filename: string, lineOffset = 0): unknown {
-    const env = this.#hostDefined;
+    const env = this.#env;
     if (env === undefined) return super.evaluate(source, filename, lineOffset);
     return env.responsibleEventLoop.runScriptEvaluation(
       env,
@@ -160,7 +165,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   }
 
   eventTimeStamp(): DOMHighResTimeStamp {
-    const env = this.#hostDefined;
+    const env = this.#env;
     if (env === undefined) {
       return coarsenedSharedCurrentTime().milliseconds;
     }
@@ -197,10 +202,14 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   }
 
   /** Report an uncaught exception for this realm's global. */
-  // https://html.spec.whatwg.org/multipage/webappapis.html#report-an-exception
   reportException(exception: unknown): void {
-    // TODO: Implement HTML error reporting, including ErrorEvent dispatch.
-    console.error(exception);
+    // Internal sandboxes have no HTML settings or error-event target. A missing
+    // environment on a browser realm is instead an initialization error.
+    if (this.agent instanceof SandboxAgent) {
+      console.error(exception);
+      return;
+    }
+    this.env.reportException(exception);
   }
 
   /** Document associated with a Window global; non-Window globals have none. */
@@ -244,18 +253,12 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     }
   }
 
-  /** Attach this realm's HTML environment. */
-  setHostDefined(env: BrowletEnvironment): void {
-    this.#baseEnv = env;
-    this.#hostDefined = env;
-  }
-
   #getCallbackEnvironment(
     context: object,
   ): BrowletEnvironment | undefined {
-    if (this.#hostDefined === undefined && context instanceof BrowletRealm) return undefined;
+    if (this.#env === undefined && context instanceof BrowletRealm) return undefined;
     const env = context as BrowletEnvironment;
-    if (env.realm.hostDefined === env) {
+    if (env.realm.#env === env) {
       return env;
     }
     throw new InternalError('A callback context is not a browser environment');
@@ -275,6 +278,10 @@ export class WindowRealm extends BrowletRealm implements WindowDOMRealm {
   /** Window environment attached during composition. */
   override get env(): WindowEnvironment {
     return super.env as WindowEnvironment;
+  }
+
+  override set env(env: WindowEnvironment) {
+    super.env = env;
   }
 
   /** This realm's projected Window, distinct from its reusable global proxy. */

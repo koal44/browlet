@@ -221,6 +221,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   name: 'WindowOrWorkerGlobalScope',
   members: [
     roAttr('isSecureContext', idlType.boolean),
+    op('reportError', idlType.undefined, [arg('e', idlType.any)]),
     op('setTimeout', idlType.long, [
       arg('handler', reference('TimerHandler'), onError('report')),
       arg('timeout', idlType.long, { default: integer(0), optional: true }),

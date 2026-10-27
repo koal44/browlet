@@ -13,6 +13,8 @@
 - [ui-event.ts](ui-event.ts): UIEvent and MouseEvent identities, defined by
   UI Events and used by DOM click activation. These extensions share the
   events component; their platform declarations remain unfinished.
+- `error-event.ts` and `promise-rejection-event.ts`: HTML event payloads and
+  Web IDL declarations. Scripting owns their reporting and notification algorithms.
 
 [ProgressEvent](../../integration/xhr/progress-event.ts) belongs to XHR
 integration and is also used by FileReader. It imports DOM's shared event
@@ -58,7 +60,7 @@ not add a generic `listener-observation.ts` registry in advance.
 | --- | --- | --- |
 | `browsing/window/` and elements | Extend the existing Window.event/default-passive integration with complete body/element targets | DOM §§2.3 and 2.7 |
 | concrete HTML elements | Supply activation, legacy pre-activation, and canceled-activation behavior only for the elements that define it | DOM §§2.7 and 2.9; HTML |
-| `scripting/` | Extend existing callback preparation/cleanup and exception routing with formal Script records, ErrorEvent, and full runtime-error reporting | DOM §2.9; HTML §8.1; Web IDL callbacks |
+| `scripting/` | Complete runtime-error attribution and worker propagation; connect native rejection notifications and checkpoint delivery | DOM §2.9; HTML §8.1; Web IDL callbacks |
 | `performance/` | Record event-listener timing when the Event Timing and Long Animation Frames producers exist | DOM §2.9; Event Timing; Long Animation Frames |
 | workers/service workers | Apply the late-listener warning and legacy fetch-listener inspection at their specified globals | DOM §§2.7–2.8; Service Workers |
 
@@ -70,9 +72,10 @@ The legacy Window event extensions in DOM §2.3 belong with Window projection,
 not in the generic event implementation. Blink similarly separates generic
 events (`core/events`) from Window/frame ownership (`core/frame`).
 
-HTML's `ErrorEvent`, `PromiseRejectionEvent`, and `MessageEvent` reuse this
-event machinery but remain owned by `scripting/` and `communication/`. Generic
-dispatch must not acquire their payload, realm, or task-delivery state.
+HTML's `ErrorEvent` and `PromiseRejectionEvent` implementations live here;
+their producers remain owned by `scripting/`. `MessageEvent` remains future
+`communication/` work. Generic dispatch must not acquire their payload, realm,
+or task-delivery state.
 
 Dispatch and firing stay synchronous. HTML, Fetch, timers, workers, and other
 producers own any task that precedes the call into this machinery.

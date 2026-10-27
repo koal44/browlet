@@ -20,7 +20,7 @@ describe('Browser-owned sandbox execution', () => {
     expect(realm.agent).toBeInstanceOf(SandboxAgent);
     expect(realm.agent.eventLoop).not.toBe(other.agent.eventLoop);
     expect(realm.getAssociatedDocument()).toBeNull();
-    expect(realm.hostDefined).toBeUndefined();
+    expect(realm.hasEnvironment).toBe(false);
     expect(realm.globalNames.size).toBe(0);
     expect(Reflect.has(env.exec.global, 'Window')).toBe(false);
     expect(getBindingContext(realm).getEnvironment()).toBe(env);
@@ -47,6 +47,18 @@ describe('Browser-owned sandbox execution', () => {
   it('reports a missing UserAgent when a standalone sandbox needs browser services', () => {
     const env = createSandboxEnvironment();
     expect(() => env.userAgent).toThrow('Environment has no UserAgent');
+  });
+
+  it('reports sandbox exceptions without requiring HTML settings', () => {
+    const env = createSandboxEnvironment();
+    const exception = new Error('sandbox failure');
+    const output = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      env.realm.reportException(exception);
+      expect(output).toHaveBeenCalledExactlyOnceWith(exception);
+    } finally {
+      output.mockRestore();
+    }
   });
 
   it('runs owner tasks and their Promise continuations without manual checkpoints', async () => {

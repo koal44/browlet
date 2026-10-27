@@ -227,7 +227,13 @@ export class WebDriver {
       // through the command's ordinary exception-result path.
       return { type: 'throw', value: script.parseError };
     }
-    return script.record.evaluate();
+    const completion = script.record.evaluate();
+    if (completion === null) {
+      // TODO(WebDriver BiDi): Connect command cancellation/realm destruction to
+      // the backend's termination outcome; HTML's run algorithm is not this command.
+      throw new InternalError('Aborted WebDriver script evaluation is not implemented');
+    }
+    return completion;
   }
 }
 

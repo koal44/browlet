@@ -1,0 +1,199 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { InternalError, type InternalPromise } from '../../../src/infra/index';
+import { idlType } from '../../../src/web-idl/core/index';
+import { Browlet } from '../../../src/browlet/browlet';
+import type { BrowletEnvironment } from '../../../src/browlet/environment';
+import { ClassicScript, TextModuleScript, emptyCompletionValue, type ScriptCompletion } from '../../../src/browlet/scripting/script';
+import { ScriptFetchOptions } from '../../../src/browlet/scripting/script-fetch-options';
+import { createTaskSource } from '../../../src/browlet/scripting/event-loop';
+import { getRelevantRealm } from '../../support/browlet-binding';
+
+afterEach(() => vi.restoreAllMocks());
+
+describe('run a classic script', () => {
+  it.each(['disabled', 'inactive'] as const)('returns an empty completion for %s settings without entering execution', (policy) => {
+    const { env, script, loop } = fixture();
+    const evaluate = vi.spyOn(script.record!, 'evaluate');
+    const prepare = vi.spyOn(loop, 'prepareToRunScript');
+    if (policy === 'disabled') env.userAgent.scriptingEnabled = false;
+    else env.window.document.browsingContext = null;
+
+    expect(script.run()).toEqual({ type: 'normal', value: emptyCompletionValue });
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+  });
+
+  it('prepares the task settings, preserves the completion, and cleans up', () => {
+    const { env, script, loop } = fixture();
+    const completion: ScriptCompletion = { type: 'normal', value: undefined };
+    vi.spyOn(script.record!, 'evaluate').mockImplementation(() => {
+      expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
+      expect(loop.currentlyRunningTask!.scriptEvaluationEnvironments.has(env)).toBe(true);
+      return completion;
+    });
+    const checkpoint = vi.spyOn(loop, 'performMicrotaskCheckpoint');
+    let result: ScriptCompletion | undefined;
+    loop.queueTask(createTaskSource('classic-script-test'), env.window.document, () => { result = script.run(); });
+    expect(loop.runTaskTurn()).toBe(true);
+    expect(result).toBe(completion);
+    expect(result!.value).not.toBe(emptyCompletionValue);
+    expect(loop.executionContextStack).toHaveLength(0);
+    expect(checkpoint).toHaveBeenCalled();
+  });
+
+  it('reports a stored parse error while its realm context is still prepared', () => {
+    const { env, loop } = fixture();
+    const script = new ClassicScript('const =', env, env.apiBaseURL, new ScriptFetchOptions());
+    const report = vi.spyOn(env, 'reportException').mockImplementation((error) => {
+      expect(error).toBe(script.parseError);
+      expect(script.record).toBeNull();
+      expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
+      expect(loop.runningScript).toBeNull();
+    });
+    expect(script.run()).toEqual({ type: 'throw', value: script.parseError });
+    expect(report).toHaveBeenCalledExactlyOnceWith(script.parseError, false, script);
+    expect(loop.executionContextStack).toHaveLength(0);
+  });
+
+  it.each([false, true])('rethrows only after cleanup, with muted errors %s', (muted) => {
+    const { env, script, loop } = fixture();
+    const error = new env.realm.intrinsics.error('private details');
+    script.errorToRethrow = error;
+    script.mutedErrors = muted;
+    const report = vi.spyOn(env, 'reportException');
+    let thrown: unknown;
+    try { script.run(true); } catch (reason) { thrown = reason; }
+    expect(loop.executionContextStack).toHaveLength(0);
+    expect(report).not.toHaveBeenCalled();
+    if (!muted) {
+      expect(thrown).toBe(error);
+    } else {
+      expect(thrown).toBeInstanceOf(env.exec.DOMException);
+      expect(thrown).toMatchObject({ name: 'NetworkError', message: '' });
+    }
+  });
+
+  it('reports an evaluation throw without changing its completion', () => {
+    const { env, script, loop } = fixture();
+    const completion: ScriptCompletion = { type: 'throw', value: 42 };
+    vi.spyOn(script.record!, 'evaluate').mockReturnValue(completion);
+    const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
+    expect(script.run()).toBe(completion);
+    expect(report).toHaveBeenCalledExactlyOnceWith(42, false, script);
+    expect(loop.executionContextStack).toHaveLength(0);
+  });
+
+  it('returns a realm-owned QuotaExceededError after a termination outcome', () => {
+    const { env, script, loop } = fixture();
+    vi.spyOn(script.record!, 'evaluate').mockReturnValue(null);
+    Reflect.set(env.global, 'QuotaExceededError', () => { throw new Error('author replacement'); });
+    const report = vi.spyOn(env, 'reportException');
+    const result = script.run(true);
+    expect(result.type).toBe('throw');
+    expect(result.value).toMatchObject({ name: 'QuotaExceededError', quota: null, requested: null });
+    expect(getRelevantRealm(result.value as object)).toBe(env.realm);
+    expect(loop.executionContextStack).toHaveLength(0);
+    expect(report).not.toHaveBeenCalled();
+  });
+
+  it('keeps a missing runtime operation explicit and still restores the stack', () => {
+    const { env, script, loop } = fixture();
+    const report = vi.spyOn(env, 'reportException');
+    expect(() => script.run()).toThrow(new InternalError('Retained ScriptEvaluation is not implemented'));
+    expect(loop.executionContextStack).toHaveLength(0);
+    expect(report).not.toHaveBeenCalled();
+  });
+});
+
+describe('run a module script', () => {
+  it.each(['disabled', 'inactive'] as const)('resolves without evaluation or preparation for %s settings', async (policy) => {
+    const { env, module, loop } = fixture();
+    const evaluate = vi.spyOn(module.record!, 'evaluate');
+    const prepare = vi.spyOn(loop, 'prepareToRunScript');
+    if (policy === 'disabled') env.userAgent.scriptingEnabled = false;
+    else env.window.document.browsingContext = null;
+    const result = module.run();
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(prepare).not.toHaveBeenCalled();
+    // Observing the resolved promise subsequently enters its realm's Promise job.
+    await expect(observe(result, env)).resolves.toBeUndefined();
+  });
+
+  it('returns the evaluation promise and cleans up before it settles', async () => {
+    const { env, module, loop } = fixture();
+    const pending = env.exec.Promise.withResolvers(idlType.undefined);
+    vi.spyOn(module.record!, 'evaluate').mockImplementation(() => {
+      expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
+      return pending.promise;
+    });
+    const result = module.run();
+    expect(result).toBe(pending.promise);
+    expect(loop.executionContextStack).toHaveLength(0);
+    pending.resolve(undefined);
+    await expect(observe(result, env)).resolves.toBeUndefined();
+  });
+
+  it.each([false, true])('retains the stored error and honors preventErrorReporting %s', async (prevent) => {
+    const { env, module, loop } = fixture();
+    const reason = new env.realm.intrinsics.syntaxError('dependency failed');
+    module.errorToRethrow = reason;
+    const evaluate = vi.spyOn(module.record!, 'evaluate');
+    const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
+    const result = module.run(prevent);
+    await expect(observe(result, env)).rejects.toBe(reason);
+    expect(evaluate).not.toHaveBeenCalled();
+    expect(report).toHaveBeenCalledTimes(prevent ? 0 : 1);
+    if (!prevent) expect(report).toHaveBeenCalledWith(reason);
+    expect(loop.executionContextStack).toHaveLength(0);
+  });
+
+  it('reports a later evaluation rejection without replacing its promise', async () => {
+    const { env, module } = fixture();
+    const pending = env.exec.Promise.withResolvers(idlType.undefined);
+    const reason = new env.realm.intrinsics.error('top-level await rejected');
+    const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
+    vi.spyOn(module.record!, 'evaluate').mockReturnValue(pending.promise);
+    const result = module.run();
+    expect(result).toBe(pending.promise);
+    expect(report).not.toHaveBeenCalled();
+    pending.reject(reason);
+    await expect(observe(result, env)).rejects.toBe(reason);
+    expect(report).toHaveBeenCalledExactlyOnceWith(reason);
+  });
+
+  it('rejects with a realm-owned QuotaExceededError for termination', async () => {
+    const { env, module, loop } = fixture();
+    vi.spyOn(module.record!, 'evaluate').mockReturnValue(null);
+    let reason: unknown;
+    await observe(module.run(true), env).catch((error: unknown) => { reason = error; });
+    expect(reason).toMatchObject({ name: 'QuotaExceededError', quota: null, requested: null });
+    expect(getRelevantRealm(reason as object)).toBe(env.realm);
+    expect(loop.executionContextStack).toHaveLength(0);
+  });
+
+  it('keeps missing engine evaluation explicit instead of simulating a synthetic export', () => {
+    const { env, module, loop } = fixture();
+    const report = vi.spyOn(env, 'reportException');
+    expect(() => module.run()).toThrow(new InternalError('Module evaluation is not implemented'));
+    expect(loop.executionContextStack).toHaveLength(0);
+    expect(report).not.toHaveBeenCalled();
+  });
+});
+
+function fixture() {
+  const browser = new Browlet({ route: () => '', reporting: false });
+  const env = getRelevantRealm(browser.window).env;
+  return {
+    env,
+    loop: env.responsibleEventLoop,
+    script: new ClassicScript('', env, env.apiBaseURL, new ScriptFetchOptions()),
+    module: new TextModuleScript('text', env),
+  };
+}
+
+function observe<T>(promise: InternalPromise<T>, env: BrowletEnvironment): Promise<T> {
+  const result = new Promise<T>((resolve, reject) => { promise.observe(resolve, reject); });
+  env.responsibleEventLoop.performMicrotaskCheckpoint();
+  return result;
+}

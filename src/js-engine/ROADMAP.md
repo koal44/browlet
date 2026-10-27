@@ -58,12 +58,22 @@ constructor correctness alone does not settle incumbent/script selection.
 
 ### Promise rejection lifecycle
 
-Connect `HostPromiseRejectionTracker`, `unhandledrejection`, and
-`rejectionhandled` to the per-global rejected-promise collections now initialized
-on Window and the service-worker global skeleton. The fields alone do not track
-rejections. Node's process-wide rejection events do not supply HTML's required
-per-realm context. Test unrelated Node rejections and runner shutdown as well
-as page events; routing diagnostics onto an HTML queue previously prevented exit.
+HTML now translates `HostPromiseRejectionTracker` as
+`BrowletEnvironment.trackPromiseRejection()` and supplies the queued
+`unhandledrejection`/`rejectionhandled` event algorithms. The engine still must
+deliver reject/handle notifications at their specified boundary, with current
+settings and running-script attribution. Existing job hooks do not do so.
+
+`isPromiseHandled()` and `getPromiseResult()` in `built-in-primitives.ts` mark
+the missing non-observing slot queries with explicit throws. Do not implement
+them by attaching Promise reactions: that changes handled state and can affect
+species, scheduling, and rejection reporting. HTML's tests substitute these
+reads while exercising its real event bindings and tasks; they do not establish
+native delivery. Checkpoint environment enumeration remains HTML's dependency.
+
+Node's process-wide rejection events do not supply HTML's required per-realm
+context. Test unrelated Node rejections and runner shutdown as well as page
+events; routing diagnostics onto an HTML queue previously prevented exit.
 
 ### Modules and dynamic import
 

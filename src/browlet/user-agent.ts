@@ -97,6 +97,9 @@ export class UserAgent implements FetchUserAgent, StorageUserAgent, URLUserAgent
   reportDeliveryEnabled = true;
   /** User preference for scripting; Browlet itself always has JavaScript support. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#concept-environment-script
+  // TODO(HTML §8.1.4.5): Disabling must also interrupt already-running scripts
+  // through their Agents. This is deferred with Agent.abortRunningScript(); the
+  // preference gates subsequent entries and cannot preempt the shared Node thread.
   scriptingEnabled = true;
   /** Scroll-container expansion used when a document creates its lazy-loading observer. */
   // https://html.spec.whatwg.org/multipage/urls-and-fetching.html#lazy-load-root-margin

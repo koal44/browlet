@@ -116,6 +116,8 @@ class LocalEvaluation {
 
   /** Cancel queued delivery and reject commands after replacement or destruction. */
   dispose(): void {
+    // This cancels pending host work; it cannot interrupt executing JavaScript.
+    // HTML §8.1.4.5 termination is explicitly deferred at Agent.abortRunningScript().
     this.#disposed = true;
     for (const task of this.#tasks) task.remove();
     this.#tasks.clear();

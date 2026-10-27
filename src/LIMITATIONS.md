@@ -40,6 +40,47 @@ and native callback iterators. Test capabilities, not just the `custom` label.
 
 ## Scheduling and callback context
 
+- **Forcibly aborting running scripts is unsupported and deferred.** Browlet,
+  page JavaScript, and the Node caller share a JavaScript execution thread. An
+  infinite loop prevents same-thread callers, timers, and abort listeners from
+  requesting a stop. `Agent.abortRunningScript()` explicitly throws an
+  unfinished-operation error; no watchdog or independent stop channel is supplied.
+  Changing `scriptingEnabled` blocks later HTML entries, and navigation's local
+  evaluation cancellation rejects host commands and removes queued work. Neither
+  interrupts executing JavaScript. We retain direct synchronous host access and
+  defer native termination work; this does not imply that external interruption
+  is impossible. See the [killing audit](browlet/scripting/ROADMAP.md#html-8145-killing-scripts).
+
+- **HTML script calling has explicit runtime boundaries.** Classic/module run
+  methods implement eligibility, error/rejection control flow, and preparation/
+  cleanup, but retained classic execution and module evaluation still throw.
+  Termination is only a represented outcome; timing remains unfinished.
+  Active child documents provisionally pass the missing
+  ancestor portion of `isFullyActive()` by agreement. Documents without a browsing
+  context and inactive history entries still fail. Section 7 must supply container
+  associations and correct ancestry before nested-page task/timer/script activity
+  is complete. See the [calling audit](browlet/scripting/ROADMAP.md#html-8144-calling-scripts).
+
+- **Runtime error reporting has incomplete attribution and worker support.**
+  Window reporting dispatches trusted cancelable ErrorEvents, prevents recursive
+  dispatch, and applies classic-script muting. Filename, line, and column remain
+  empty/zero until runtime diagnostics are available. The modeled running-script
+  lookup cannot identify every uncontrolled JavaScript transition; classic run
+  explicitly retains its script for reporting. Special five-argument `onerror`
+  handlers and dedicated-worker propagation are not implemented. `reportError`
+  follows HTML's muting algorithm despite its noted Firefox disagreement. See
+  the [runtime-error audit](browlet/scripting/ROADMAP.md#html-8146-runtime-script-errors).
+
+- **Automatic HTML promise-rejection reporting is not connected.**
+  PromiseRejectionEvent and HTML's tracker/notification algorithms exist, but
+  native reject/handle notifications do not reach them. Reading PromiseIsHandled
+  and PromiseResult still throws explicit unfinished-operation errors; the
+  checkpoint also lacks enumeration of its HTML environments. Ordinary rejected
+  page promises therefore retain Node's existing reporting behavior. Tests of
+  the HTML task flow substitute only the missing slot reads and call the tracker
+  directly; they do not establish end-to-end rejection delivery. See the
+  [rejection audit](browlet/scripting/ROADMAP.md#html-8147-unhandled-promise-rejections).
+
 - **Script creation is separate from execution.** Classic creation now compiles
   without running; CSS/JSON/text creation retains synthetic default-export inputs.
   JavaScript-module parsing and WebAssembly ESM parsing still throw explicitly.

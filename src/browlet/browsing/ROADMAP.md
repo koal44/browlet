@@ -56,6 +56,12 @@ frozen-base and Blob acquisition tests already cover retention.
 - Whether a Document is active or fully active must be derived from those
   relationships. Do not add an independently mutable `fullyActive` flag that
   can disagree with navigation commit or traversal.
+  **Approved provisional behavior:** `isFullyActive()` accepts an active child
+  Document while container association is missing, so the §8 scripting audit
+  can proceed. Section 7 must replace this allowance with recursive activity
+  through the actual embedding element's node document, including an inactive
+  predecessor document after parent navigation. Missing browsing contexts and
+  inactive history entries still fail. Task/timer eligibility shares this allowance.
 - Worker owner liveness and deferred `storage` event delivery consume that same
   fully-active predicate. Neither subsystem may cache an independent notion of
   whether a Document currently participates in its traversable.

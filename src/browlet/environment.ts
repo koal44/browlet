@@ -1,5 +1,5 @@
 import { InternalError } from '../infra/index';
-import { randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
+import { getPromiseResult, isPromiseHandled, randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
 import type { WebIDLExecution } from '../web-idl/core/index';
 import { matchesExposure } from '../web-idl/index';
 import type { SelectletEnvironment } from '../selectlet/index';
@@ -16,6 +16,7 @@ import {
 } from '../fetch/index';
 import { cssStyleSheetIDL, type StyleletEnvironment, type StyleletExecution } from '../stylelet/index';
 
+import type { QuotaExceededError } from './platform';
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
 import type { CORSSettingsState } from './dom/nodes/html/attributes/index';
 import {
@@ -23,14 +24,16 @@ import {
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph,
   fetchSingleModuleScript, fetchSingleImportedModuleScript,
-  type ClassicScript, type ScriptFetchOptions, type ModuleMap, type ModuleType,
+  ClassicScript, DedicatedWorkerAgent, SandboxAgent, domManipulationTaskSource, type Script,
+  type ScriptFetchOptions, type ModuleMap, type ModuleType,
   type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
   type EventLoop, type BrowletRealm, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
 } from './scripting/index';
+import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl } from './dom/events/index';
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { AbortSignalImpl } from './dom/abort/index';
-import type { DocumentImpl } from './dom/nodes/index';
+import { NodeImpl, type DocumentImpl } from './dom/nodes/index';
 import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
@@ -147,6 +150,8 @@ export interface BrowletExecution extends
   ): T;
   /** Allocate an AbortSignal with this environment's binding ownership before first projection. */
   createAbortSignal(): AbortSignalImpl;
+  /** Allocate a projected QuotaExceededError in this execution's realm. */
+  createQuotaExceededError(): QuotaExceededError;
 }
 
 /** Composed browser settings and execution for one realm and global. */
@@ -170,7 +175,7 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     this.timing = new EnvironmentTiming(this);
     this.realm = realm;
     // Internal sandboxes participate in Binding without becoming HTML settings objects.
-    if (baseEnv !== null) realm.setHostDefined(this);
+    if (baseEnv !== null) realm.env = this;
   }
 
   /** The platform global installed in this environment's realm. */
@@ -216,6 +221,117 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** The owning global's Document, when this is a Window environment. */
   getAssociatedDocument(): DocumentImpl | null {
     return this.realm.getAssociatedDocument();
+  }
+
+  /** Report an exception at this environment's global, unless its error event is canceled. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#report-an-exception
+  // ClassicScript.run reports before popping our realm context, but that context
+  // has no script. Parse failures also have no script record, so the runner passes
+  // its script explicitly. Other callers use the modeled running script below.
+  reportException(
+    exception: unknown, omitError = false,
+    script: Script | null = this.responsibleEventLoop.runningScript,
+  ): void {
+    // Internal sandbox execution has no HTML global or error-event target.
+    if (this.realm.agent instanceof SandboxAgent) {
+      console.error(exception);
+      return;
+    }
+
+    const global = this.globalImplementation;
+    let notHandled = true;
+    const errorInfo = ErrorEventImpl.extractErrorInformation(exception);
+    if (script instanceof ClassicScript && script.mutedErrors) {
+      errorInfo.error = null;
+      errorInfo.message = 'Script error.';
+      errorInfo.filename = '';
+      errorInfo.lineno = 0;
+      errorInfo.colno = 0;
+    }
+    if (omitError) errorInfo.error = null;
+
+    if (!global.inErrorReportingMode) {
+      global.inErrorReportingMode = true;
+      try {
+        if (EventTargetImpl.is(global)) {
+          notHandled = global.fireEvent('error', ErrorEventImpl, (event) => {
+            (event as ErrorEventImpl).initialize({ ...errorInfo, cancelable: true });
+          });
+          // TODO(HTML §8.1.8.1): onerror needs its special five-argument callback
+          // and return-true cancellation. addEventListener uses DOM cancellation.
+        }
+      } finally {
+        global.inErrorReportingMode = false;
+      }
+    }
+
+    if (!notHandled) return;
+    errorInfo.error = null;
+    if (this.realm.agent instanceof DedicatedWorkerAgent) {
+      // TODO(HTML §8.1.4.6): Queue a DOM-manipulation task for the associated
+      // Worker's relevant global, fire the sanitized ErrorEvent there, and report
+      // an unhandled exception on the owner global with omitError=true. Worker
+      // objects, owner links, and implicit-port disentanglement are not implemented.
+      // Propagation must survive terminated parents while suppressing their handlers.
+      throw new InternalError('Dedicated-worker error propagation is not implemented');
+    }
+    // HTML permits reporting an unhandled exception to a developer console.
+    console.error(exception);
+  }
+
+  /** Track rejection changes using this current environment and the modeled running script. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#the-hostpromiserejectiontracker-implementation
+  // TODO: Call from the engine's HostPromiseRejectionTracker notification. Existing
+  // job hooks and Node's later process-wide events do not supply that boundary.
+  trackPromiseRejection(promise: Promise<unknown>, operation: 'reject' | 'handle'): void {
+    const script = this.responsibleEventLoop.runningScript;
+    if (script instanceof ClassicScript && script.mutedErrors) return;
+    const env = script?.env ?? this;
+    const global = env.globalImplementation;
+    if (operation === 'reject') {
+      global.aboutToBeNotifiedRejectedPromises.push(promise);
+      return;
+    }
+
+    const pending = global.aboutToBeNotifiedRejectedPromises;
+    const index = pending.indexOf(promise);
+    if (index !== -1) {
+      void pending.splice(index, 1);
+      return;
+    }
+    if (!global.outstandingRejectedPromises.delete(promise)) return;
+    env.realm.queueGlobalTask(domManipulationTaskSource, () => {
+      if (!EventTargetImpl.is(global)) {
+        throw new InternalError('Promise rejection events require an EventTarget global');
+      }
+      global.fireEvent('rejectionhandled', PromiseRejectionEventImpl, (event) => {
+        (event as PromiseRejectionEventImpl).initialize({ promise, reason: getPromiseResult(promise) });
+      });
+    });
+  }
+
+  /** Queue notification of this global's currently pending promise rejections. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#notify-about-rejected-promises
+  notifyAboutRejectedPromises(): void {
+    const global = this.globalImplementation;
+    const list = [...global.aboutToBeNotifiedRejectedPromises];
+    if (list.length === 0) return;
+    global.aboutToBeNotifiedRejectedPromises.length = 0;
+    this.realm.queueGlobalTask(domManipulationTaskSource, () => {
+      for (const promise of list) {
+        if (isPromiseHandled(promise)) continue;
+        if (!EventTargetImpl.is(global)) {
+          throw new InternalError('Promise rejection events require an EventTarget global');
+        }
+        const reason = getPromiseResult(promise);
+        const notCanceled = global.fireEvent('unhandledrejection', PromiseRejectionEventImpl, (event) => {
+          (event as PromiseRejectionEventImpl).initialize({ promise, reason, cancelable: true });
+        });
+        if (notCanceled) console.error(reason);
+        // A listener can attach a handler while the event is being dispatched.
+        if (!isPromiseHandled(promise)) global.outstandingRejectedPromises.add(promise);
+      }
+    });
   }
 
   /** Fetch supplies shared numeric timestamps; HRT owns coarsening and time-origin conversion. */
@@ -367,6 +483,28 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
     const document = this.realm.getAssociatedDocument();
     if (document?.activeSandboxingFlagSet.has('sandboxed-scripts')) return false;
     return this.userAgent.webDriverBiDiScriptingIsEnabled(this);
+  }
+
+  /** Whether an implementation owned by these settings permits scripting. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#concept-n-script
+  // Use the object's original environment, even after a Node changes documents.
+  isScriptingEnabledFor(object: object): boolean {
+    if (!this.isScriptingEnabled()) return false;
+    if (NodeImpl.is(object)) return object.nodeDocument.browsingContext !== null;
+    if (this.realm.isWindow() && object === this.globalImplementation) {
+      return this.realm.getAssociatedDocument().browsingContext !== null;
+    }
+    return true;
+  }
+
+  /** Check document activity and scripting policy before an HTML script runs. */
+  // https://html.spec.whatwg.org/multipage/webappapis.html#check-if-we-can-run-script
+  canRunScript(): boolean {
+    const document = this.realm.getAssociatedDocument();
+    // isFullyActive provisionally allows active children until the Section 7
+    // audit supplies their container-document and ancestor activity checks.
+    if (document !== null && !document.isFullyActive()) return false;
+    return this.isScriptingEnabled();
   }
 
   /** Document or worker URL for reports, or null for other kinds of global. */

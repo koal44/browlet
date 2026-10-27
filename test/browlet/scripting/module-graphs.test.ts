@@ -10,6 +10,7 @@ import { FetchHeaders } from '../../../src/fetch/headers';
 import { mockHTTPTransport } from '../../fetch/transport-fixture';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createScriptState } from '../../support/script-state';
+import { runInHostTask } from '../../support/tasks';
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -29,7 +30,7 @@ describe('module script graph entry points', () => {
     expect(link).not.toHaveBeenCalled();
     expect(complete).not.toHaveBeenCalled();
     loading.resolve(undefined);
-    env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
     expect(link).toHaveBeenCalledOnce();
     expect(complete).toHaveBeenCalledExactlyOnceWith(script);
   });
@@ -62,7 +63,7 @@ describe('module script graph entry points', () => {
     expect(load).toHaveBeenCalledOnce();
     expect(complete).not.toHaveBeenCalled();
     loading.resolve(undefined);
-    env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
     expect(link).toHaveBeenCalledOnce();
     expect(complete).toHaveBeenCalledExactlyOnceWith(script);
   });
@@ -83,7 +84,7 @@ describe('module script graph entry points', () => {
       expect(load).toHaveBeenCalledOnce();
       if (outcome === 'fulfillment') loading.resolve(undefined);
       else loading.reject(new Error('Dependency fetch failed'));
-      env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+      await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
       expect(link).toHaveBeenCalledTimes(outcome === 'fulfillment' ? 1 : 0);
       expect(complete).toHaveBeenCalledExactlyOnceWith(script);
     },
@@ -130,7 +131,7 @@ describe('fetch descendants and link a module script', () => {
     expect(script.env).toBe(env);
     expect(complete).not.toHaveBeenCalled();
     loading.resolve(undefined);
-    env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
     expect(link).toHaveBeenCalledOnce();
     expect(complete).toHaveBeenCalledExactlyOnceWith(script);
   });
@@ -143,7 +144,7 @@ describe('fetch descendants and link a module script', () => {
     if (hasModuleError) load.mock.calls[0]![0].errorToRethrow = error;
 
     loading.reject(new Error('Loading rejected'));
-    env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
 
     expect(link).not.toHaveBeenCalled();
     expect(complete).toHaveBeenCalledExactlyOnceWith(hasModuleError ? script : null);
@@ -158,7 +159,7 @@ describe('fetch descendants and link a module script', () => {
     fetchDescendantsAndLink(script, env, 'script', complete);
 
     loading.resolve(undefined);
-    env.realm.agent.eventLoop.performMicrotaskCheckpoint();
+    await runInHostTask(() => { env.realm.agent.eventLoop.performMicrotaskCheckpoint(); });
 
     expect(link).toHaveBeenCalledOnce();
     expect(script.errorToRethrow).toBe(error);

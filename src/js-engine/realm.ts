@@ -640,7 +640,11 @@ export class JSRealm {
 
 declare const compiledScriptBrand: unique symbol;
 
-/** Opaque compiled classic code; HTML separately retains its realm and HostDefined. */
+/**
+ * Opaque Node.js vm.Script object, compiled from source by V8 in JSRealm.parseScript().
+ * The type-only brand adds no runtime property; it hides Node's methods from callers.
+ * HTML separately retains the associated realm and script.
+ */
 export type CompiledScript = { [compiledScriptBrand]: true; };
 
 export type CollectionIteratorKind = 'map' | 'set';

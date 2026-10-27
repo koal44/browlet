@@ -20,7 +20,7 @@ describe('create a classic script', () => {
     const script = new ClassicScript('var creationSideEffect = 1; throw new Error("not yet");', env, baseURL, options);
 
     expect(script.record).toBeInstanceOf(JSScriptRecord);
-    expect(script.record!.hostDefined).toBe(script);
+    expect(script.record!.script).toBe(script);
     expect(script.record!.realm).toBe(env.realm);
     expect(script.record!.code).toBeDefined();
     expect(script.env).toBe(env);
@@ -86,7 +86,7 @@ describe('create synthetic module scripts', () => {
     expect(Object.getPrototypeOf(value.items)).toBe(env.realm.intrinsics.array.prototype);
     expect(value.items[0]).toBe(1);
     expect(script.record).toBeInstanceOf(JSSyntheticModuleRecord);
-    expect(script.record!.hostDefined).toBe(script);
+    expect(script.record!.script).toBe(script);
     expect(script.record!.realm).toBe(env.realm);
     expect(script.baseURL).toBeNull();
     expect(script.fetchOptions).toBeNull();
@@ -172,7 +172,7 @@ describe('module parser handoffs', () => {
     });
     const script = new JavaScriptModuleScript('export default 1;', env, baseURL, options);
     expect(parse).toHaveBeenCalledExactlyOnceWith(enabled ? 'export default 1;' : '', script);
-    expect(script.record!.hostDefined).toBe(script);
+    expect(script.record!.script).toBe(script);
     expect(script.parseError).toBeNull();
     expect(script.errorToRethrow).toBeNull();
   });
@@ -200,7 +200,7 @@ describe('module parser handoffs', () => {
     expect(parse).toHaveBeenCalledExactlyOnceWith(enabled ? bytes : new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]), script);
     if (enabled) expect(parse.mock.calls[0]![0]).toBe(bytes);
     expect(bytes).toEqual(new Uint8Array([10, 20, 30]));
-    expect(script.record!.hostDefined).toBe(script);
+    expect(script.record!.script).toBe(script);
     expect(script.parseError).toBeNull();
   });
 

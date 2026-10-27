@@ -3,7 +3,7 @@ import { EOL } from 'node:os';
 import { InternalError, type TaskCreationOptions } from '../infra/index';
 import { addon } from '../js-engine/index';
 import {
-  BindingWorld, type GlobalObjectAllocation,
+  BindingWorld, QuotaExceededErrorImpl, type GlobalObjectAllocation,
   type BindingContext, type ImplementationClass, type StampedPlatformObject,
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
@@ -14,13 +14,15 @@ import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
 import { styleletIDLDefinitions } from '../stylelet/index';
 
-import type { Window } from './platform';
+import type { QuotaExceededError, Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
   EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
   BrowletRealm, WindowRealm, taskSources,
 } from './scripting/index';
-import { EventImpl } from './dom/events/index';
+import {
+  EventImpl, errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
+} from './dom/events/index';
 import {
   reportIDL, reportBodyIDL, testReportBodyIDL, reportingObserverIDL, reportingObserverCallbackIDL,
   reportingObserverOptionsIDL, reportListIDL,
@@ -201,6 +203,8 @@ export function createBrowletExecution(context: BindingContext<BrowletEnvironmen
       return event;
     },
     createAbortSignal: () => context.construct(AbortSignalImpl),
+    createQuotaExceededError: () =>
+      context.project(QuotaExceededErrorImpl, new QuotaExceededErrorImpl()) as StampedPlatformObject<QuotaExceededError>,
     createAbortController: () => context.construct(AbortControllerImpl),
     createDependentAbortSignal: (signals) => AbortSignalImpl.any(
       context.construct(AbortSignalImpl), signals as AbortSignalImpl[],
@@ -246,6 +250,10 @@ export const browletDefinitions = [
   performanceIDL,
   eventHandlerNonNullIDL,
   eventHandlerIDL,
+  errorEventIDL,
+  errorEventInitIDL,
+  promiseRejectionEventIDL,
+  promiseRejectionEventInitIDL,
   structuredSerializeOptionsIDL,
   timerHandlerIDL,
   windowOrWorkerGlobalScopeIDL,
