@@ -36,7 +36,11 @@ class NativeHandle {
         External::New(isolate, this)).Check();
     persistent.Reset(isolate, holder);
     persistent.SetWeak(this, [](const WeakCallbackInfo<NativeHandle>& info) {
-      info.GetParameter()->persistent.Reset();
+      auto handle = info.GetParameter();
+      handle->persistent.Reset();
+      // The second pass now owns deletion, even if environment cleanup runs first.
+      handle->owner->handles.erase(handle);
+      handle->owner = nullptr;
       // Queue destruction can touch V8's queue list. Wait until the second
       // pass, when V8 permits work beyond resetting this weak handle.
       info.SetSecondPassCallback([](const WeakCallbackInfo<NativeHandle>& next) {
@@ -44,7 +48,9 @@ class NativeHandle {
       });
     }, WeakCallbackType::kParameter);
   }
-  virtual ~NativeHandle() { owner->handles.erase(this); }
+  virtual ~NativeHandle() {
+    if (owner) owner->handles.erase(this);
+  }
  private:
   AddonData* owner;
   Global<Object> persistent;
