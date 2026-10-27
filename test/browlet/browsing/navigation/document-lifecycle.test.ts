@@ -101,7 +101,7 @@ describe('browsing context groups', () => {
     expect(realm.windowImplementation).toBe(window);
     expect(realm.globalObject).toBe(project(window));
     expect(realm.globalThis).toBe(context.windowProxy.platform);
-    expect(Reflect.get(realm.globalObject, 'Object')).toBe(realm.intrinsics.object);
+    expect(Reflect.get(realm.globalObject, 'Object')).toBe(realm.Object);
     expect(Reflect.get(realm.globalObject, 'globalThis')).toBe(context.windowProxy.platform);
     expect(agent.windowObjects).toEqual(new Set([window]));
   });
@@ -211,7 +211,7 @@ describe('browsing context groups', () => {
     window.setAssociatedDocument(createTestDocument(env));
 
     expect(Reflect.has(realm.globalObject, 'SharedArrayBuffer')).toBe(false);
-    expect(realm.intrinsics.bufferSource.sharedArrayBuffer)
+    expect(realm.SharedArrayBuffer)
       .toBeTypeOf('function');
   });
 
@@ -466,7 +466,7 @@ describe('environment settings objects', () => {
     expect(env.executionReady).toBe(false);
     expect(reservedEnv.executionReady).toBe(false);
     expect(bindingEnv).toBe(env);
-    expect(env.exec.global).toBe(env.global);
+    expect(env.realm.globalObject).toBe(env.global);
     expect(realm.env).toBe(env);
     expect(realm.baseEnv).toBe(env);
     expect(realm.secureContext).toBe(true);

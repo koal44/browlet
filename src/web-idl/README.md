@@ -28,7 +28,6 @@ Web IDL runtime modules import Core through its index; Core modules import their
 | `core/types.ts` | Type expressions, literals, extended attributes, implementation identity, environment dependencies, and callback-adapter contracts |
 | `core/structured-data.ts` | Portable contracts for interface serialization and transfer steps |
 | `core/dom-exception.ts`, `core/common.ts` | DOMException implementations, recognition, and shared Web IDL declarations |
-| `core/execution.ts` | Host-neutral execution contract supplying the DOMException constructor |
 | `assembly/assembly.ts` | Compose the assembled collections and cache declared type uses |
 | `assembly/types.ts` | Realm-independent type contracts, conversion rules, comparison keys, and JSON classification |
 | `assembly/interface.ts`, `dictionary.ts`, `namespace.ts`, `callback.ts`, `enumeration.ts`, `typedef.ts`, `proxy-object.ts` | Each definition family, its collection, and its construction and search logic |
@@ -169,7 +168,7 @@ independently meaningful specification behavior out of the implementation.
 
 Declarations take one environment type, which also determines their realm type.
 For example, `defineInterface<DOMEnvironment>()` gives its callbacks both
-`env.exec.createEvent()` and `env.realm.eventTimeStamp()`.
+`env.createEvent()` and `env.realm.eventTimeStamp()`.
 The host's binding world must supply that environment contract.
 
 Binding recognizes `DOMExceptionImpl` and its subclasses during projection,
@@ -848,7 +847,7 @@ Later conversions explicitly required by an algorithm remain at that later step.
 ## Promises, iteration, and exceptions
 
 Every `InternalPromise<T>` stores its runtime result descriptor in `type`.
-Select its owner's constructor: `env.exec.Promise.withResolvers(idlType.Uint8Array)`.
+Select its owner's constructor: `env.InternalPromise.withResolvers(idlType.Uint8Array)`.
 The descriptor determines the resolver's TypeScript payload too:
 `reference(BarImpl)` supplies both the interface identity and its implementation type.
 Named dictionary results can use `implementationType<MyRecord>(reference('MyRecord'))`.
@@ -886,8 +885,8 @@ contract without allocating a descriptor. Private fulfillment values stay on the
 internal Promise; its native backing signals completion without adopting arbitrary
 `then` properties. Imported views retain that value's original storage owner.
 A host without Binding also retains values this way without IDL conversion.
-`P.fromValue(value, env.exec.NativePromise, type)` uses native Promise
-resolution; `NativePromise` is the owner's captured JavaScript constructor. Forwarding
+`P.fromValue(value, env.realm.NativePromise, type)` uses the
+owner's captured native Promise constructor for resolution. Forwarding
 through `try()` or `fromValue()` preserves an existing internal Promise's contract.
 There is no untyped creation path or separate Promise class for private methods.
 Resolving functions remain in `InternalPromiseWithResolvers`; importing an existing
@@ -915,13 +914,14 @@ Output conversion realizes exception values for `any`,
 converters; an interface result projects its implementation directly. Thrown
 failures and Promise rejections are realized at their invocation/delivery boundary.
 When an algorithm stores or shares a newly created error before returning,
-allocate it through the selected `env.exec.TypeError`,
-`RangeError`, or `DOMException` constructor. Binding supplies the original
+allocate it through the selected `env.realm.TypeError`,
+`env.realm.RangeError`, or `env.DOMException` constructor.
+Binding supplies the original
 `DOMException` independently of its writable global property.
 Core owns the structural `DOMException` and `DOMExceptionConstructor` types.
-Its `WebIDLExecution` contract supplies that constructor on an existing `exec`
-object without importing JS Engine or requiring a realm. Browlet and Fetch
-combine it with engine execution; Stylelet combines it with Infra scheduling.
+Subsystem environment interfaces require that constructor directly where needed.
+Browlet supplies it through a lazy environment getter, preserving registration
+order without exposing Binding Context to implementations.
 Later Promise delivery must not decide that error's realm.
 `InternalError` diagnoses an implementation contract failure.
 DOMException's engine Error allocation and legacy/global exotic behavior are

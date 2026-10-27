@@ -14,12 +14,8 @@ export type {
   StandardNode, StandardElement, StandardDocument, StandardDocumentFragment, StandardProcessingInstruction, StandardAttribute,
 } from './dom-standard';
 export { RangeError, SyntaxError, TypeError, ExceptionRequestStamper } from './exceptions';
-export {
-  createAsyncExecution, nativeTimerHost,
-  type AbortExecution, type AbortController, type AbortSignal, type AbortAlgorithmHandle,
-  type StructuredDataExecution,
-  type AsyncExecution, type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type TimerHost,
-} from './execution';
+export type { AbortController, AbortSignal, AbortAlgorithmHandle } from './abort';
+export { nativeTimerHost, type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type TimerHost } from './tasks';
 export { InternalError } from './internal-error';
 export { endOfIteration, type AsyncIterator } from './iteration';
 export { convertJSONDerivedValueToInfra, type JSONValue, type InfraValue } from './json';

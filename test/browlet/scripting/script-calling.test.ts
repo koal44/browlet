@@ -58,7 +58,7 @@ describe('run a classic script', () => {
 
   it.each([false, true])('rethrows only after cleanup, with muted errors %s', (muted) => {
     const { env, script, loop } = fixture();
-    const error = new env.realm.intrinsics.error('private details');
+    const error = new env.realm.Error('private details');
     script.errorToRethrow = error;
     script.mutedErrors = muted;
     const report = vi.spyOn(env, 'reportException');
@@ -69,7 +69,7 @@ describe('run a classic script', () => {
     if (!muted) {
       expect(thrown).toBe(error);
     } else {
-      expect(thrown).toBeInstanceOf(env.exec.DOMException);
+      expect(thrown).toBeInstanceOf(env.DOMException);
       expect(thrown).toMatchObject({ name: 'NetworkError', message: '' });
     }
   });
@@ -122,7 +122,7 @@ describe('run a module script', () => {
 
   it('returns the evaluation promise and cleans up before it settles', async () => {
     const { env, module, loop } = fixture();
-    const pending = env.exec.Promise.withResolvers(idlType.undefined);
+    const pending = env.InternalPromise.withResolvers(idlType.undefined);
     vi.spyOn(module.record!, 'evaluate').mockImplementation(() => {
       expect(loop.runningExecutionContext).toBe(env.realmExecutionContext);
       return pending.promise;
@@ -136,7 +136,7 @@ describe('run a module script', () => {
 
   it.each([false, true])('retains the stored error and honors preventErrorReporting %s', async (prevent) => {
     const { env, module, loop } = fixture();
-    const reason = new env.realm.intrinsics.syntaxError('dependency failed');
+    const reason = new env.realm.SyntaxError('dependency failed');
     module.errorToRethrow = reason;
     const evaluate = vi.spyOn(module.record!, 'evaluate');
     const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
@@ -150,8 +150,8 @@ describe('run a module script', () => {
 
   it('reports a later evaluation rejection without replacing its promise', async () => {
     const { env, module } = fixture();
-    const pending = env.exec.Promise.withResolvers(idlType.undefined);
-    const reason = new env.realm.intrinsics.error('top-level await rejected');
+    const pending = env.InternalPromise.withResolvers(idlType.undefined);
+    const reason = new env.realm.Error('top-level await rejected');
     const report = vi.spyOn(env, 'reportException').mockImplementation(() => {});
     vi.spyOn(module.record!, 'evaluate').mockReturnValue(pending.promise);
     const result = module.run();

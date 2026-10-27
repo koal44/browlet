@@ -50,7 +50,7 @@ describe('HTML element constructors', () => {
     const browser = new Browlet({ route: () => '' });
     const Target = browser.window.HTMLDivElement;
     addDefinition(browser, Target, 'div');
-    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).TypeError);
   });
 
   it('creates an autonomous element with its definition, document, and author prototype', async () => {
@@ -108,7 +108,7 @@ describe('HTML element constructors', () => {
     ['HTMLParagraphElement', 'x-test'], ['HTMLQuoteElement', 'p'], ['HTMLElement', 'div'],
   ])('rejects the mismatched %s base for %s', async (base, localName) => {
     const { browser, Target } = await fixture(base, localName);
-    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).TypeError);
   });
 
   it('rejects an unregistered subclass before reading its prototype', async () => {
@@ -151,10 +151,10 @@ describe('HTML element constructors', () => {
     const active = getRelevantRealm(browser.window).agent.activeCustomElementConstructorMap;
     active.set(Target, new CustomElementRegistryImpl());
     try {
-      expect(() => new Target()).toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+      expect(() => new Target()).toThrow(getRelevantRealm(browser.window).TypeError);
     } finally { active.delete(Target); }
     document.customElementRegistry = null;
-    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).TypeError);
   });
 
   it('reuses the upgrade element and replaces only the last stack entry', async () => {
@@ -171,7 +171,7 @@ describe('HTML element constructors', () => {
     expect(definition.constructionStack).toEqual([unwrap(first), alreadyConstructed]);
     // The upgrade algorithm, not super(), changes precustomized to custom and pops the stack.
     expect(implementation.customElementState).toBe('precustomized');
-    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).TypeError);
   });
 
   it('rejects a second super() call through the already-constructed marker', async () => {
@@ -184,7 +184,7 @@ describe('HTML element constructors', () => {
     const Target = Reflect.get(browser.window, 'Target') as new() => HTMLElement;
     const definition = addDefinition(browser, Target);
     definition.constructionStack.push(unwrap<ElementImpl>(browser.document.createElement('x-test')));
-    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+    expect(() => new Target()).toThrow(getRelevantRealm(browser.window).TypeError);
     expect(definition.constructionStack).toEqual([alreadyConstructed]);
   });
 
@@ -231,7 +231,7 @@ describe('HTML element constructors', () => {
     });
     definition.constructor = Target;
     expect(() => { Reflect.construct(browser.window.HTMLElement, [], Target); })
-      .toThrow(getRelevantRealm(browser.window).intrinsics.typeError);
+      .toThrow(getRelevantRealm(browser.window).TypeError);
     expect(reads).toBe(2);
     expect(nested).toBe(existing);
     expect(definition.constructionStack).toEqual([alreadyConstructed]);

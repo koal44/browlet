@@ -38,14 +38,14 @@ export class SynchronousIterableBinding {
   // Extracted from Web IDL §3.7.9 Iterable declarations — install Array iteration methods for indexed
   // properties.
   defineIndexedMethods(target: object, valueIterable: boolean): void {
-    const { iteration } = this.#binding.realm.intrinsics;
-    defineMethod(target, Symbol.iterator, iteration.arrayValues);
+    const { realm } = this.#binding;
+    defineMethod(target, Symbol.iterator, realm.arrayValues);
     if (!valueIterable) return;
 
-    defineDataProperty(target, 'entries', iteration.arrayEntries);
-    defineDataProperty(target, 'keys', iteration.arrayKeys);
-    defineDataProperty(target, 'values', iteration.arrayValues);
-    defineDataProperty(target, 'forEach', iteration.arrayForEach);
+    defineDataProperty(target, 'entries', realm.arrayEntries);
+    defineDataProperty(target, 'keys', realm.arrayKeys);
+    defineDataProperty(target, 'values', realm.arrayValues);
+    defineDataProperty(target, 'forEach', realm.arrayForEach);
   }
 
   // Extracted from Web IDL §3.7.9 Iterable declarations — install pair iteration methods.
@@ -149,7 +149,7 @@ export class SynchronousIterableBinding {
     if (implementationBinding.iteratorPrototype) return implementationBinding.iteratorPrototype;
 
     const prototype = this.#binding.realm.createOrdinaryObject(
-      this.#binding.realm.intrinsics.iteration.iteratorPrototype,
+      this.#binding.realm.iteratorPrototype,
     );
     const next = this.#binding.realm.createFunction(
       (thisArgument) => this.#next(assembled, member, thisArgument),
@@ -227,7 +227,7 @@ export class SynchronousIterableBinding {
     if (kind === 'key') return convertedKey;
     if (kind === 'value') return convertedValue;
 
-    const result = Reflect.construct(this.#binding.realm.intrinsics.array, [2]);
+    const result = Reflect.construct(this.#binding.realm.Array, [2]);
     defineDataProperty(result, '0', convertedKey);
     defineDataProperty(result, '1', convertedValue);
     return result;
@@ -250,7 +250,7 @@ export class SynchronousIterableBinding {
 
   // Project helper: throw a TypeError allocated in this binding's realm.
   #throwTypeError(message: string): never {
-    throw new this.#binding.realm.intrinsics.typeError(message);
+    throw new this.#binding.realm.TypeError(message);
   }
 }
 

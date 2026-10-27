@@ -9,6 +9,21 @@ response, header, body, cancellation, and fetch-algorithm semantics. This
 directory supplies HTML settings, policy, task, navigation, and element inputs;
 it must not wrap Node's global `fetch()` as an independent second Fetch stack.
 
+Loading separates discovery, request execution, resource readiness, and owner
+completion. URL parsing alone starts no request. Navigation/iframe loads, script
+graphs, image candidate selection, media tracks, workers/worklets, and link hints
+have different response processing and cancellation lifetimes. Preloading a
+stylesheet does not apply it; speculative or lazy discovery does not establish
+successful use. Keep each completion contract with its consuming owner.
+
+For stylesheet integration, follow the
+[style-loading reading order](../style/ROADMAP.md#loading-algorithm-reading-order)
+and the [CSS resource consumers](../../stylelet/ROADMAP.md#resource-consumers).
+Fetch owns redirects, caching, CORS, body delivery, controllers, and fetch groups;
+the owner supplies live URL, encoding, MIME, CSP, referrer-policy, and integrity
+inputs at the steps that require them. Delivery returns through the specified
+networking/element/document task rather than an arbitrary Promise continuation.
+
 Document creation retains a valid response `Last-Modified` date for
 `document.lastModified`. The source-only route supplies no such metadata, so
 the getter uses the current time. A future local-file loader must populate

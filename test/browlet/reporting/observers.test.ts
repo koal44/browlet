@@ -264,7 +264,7 @@ describe('ReportingObserver', () => {
     });
     const otherRealm = sibling.realm;
     const proxy = otherRealm.windowProxy;
-    const document = otherRealm.env.exec.createDocument();
+    const document = otherRealm.env.createDocument();
     document.browsingContext = new BrowsingContext(proxy);
     sibling.window.setAssociatedDocument(document);
     proxy.setAssociatedWindow(sibling.window.env.realm.globalObject);

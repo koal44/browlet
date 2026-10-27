@@ -249,6 +249,36 @@ Installed Chromium, Firefox, and WebKit were compared on 2026-10-20:
 and [enabled browser comparisons](../../../test/stylelet/scenarios/stylesheet-loading.test.ts)
 cover this boundary. Native expected failures cannot mask project assertions.
 
+### Loading algorithm reading order
+
+Start with one inline `<style>` and an unconditional `@import`:
+
+1. HTML's [update a style block](https://html.spec.whatwg.org/multipage/semantics.html#update-a-style-block)
+   and [critical subresources](https://html.spec.whatwg.org/multipage/infrastructure.html#critical-subresources)
+   establish owner completion.
+2. Cascade's [import processing](https://drafts.csswg.org/css-cascade-4/#import-processing)
+   and [conditional imports](https://drafts.csswg.org/css-cascade-4/#conditional-import)
+   establish dependencies. False supports conditions forbid fetching; media
+   mismatch is not an interchangeable condition.
+3. CSS Values [URL processing](https://drafts.csswg.org/css-values-4/#url-processing)
+   and [request modifiers](https://drafts.csswg.org/css-values-5/#request-url-modifiers)
+   supply request inputs. CSS Syntax decoding retains the importer's encoding as
+   fallback; CSSOM owns sheet identity and association, including cached responses.
+4. Return completion/cancellation to HTML's distinct script, rendering, and
+   document-load gates, then follow the parser's end steps. Document abortion
+   must cancel the owned work; top-level response completion is insufficient.
+
+Compare external `<link>` next: its general resource-acquisition algorithm and
+stylesheet specialization cooperate. XML processing instructions and HTTP Link
+headers remain separate owners. HTML's incomplete sheet-creation steps are also
+tracked in [issue 2997](https://github.com/whatwg/html/issues/2997); compare CSSOM
+before treating those omissions as a complete parsing/association contract.
+
+The undefined `sheet`/`parsedUrl` inputs, MIME/referrer differences, and recursive
+completion gaps are recorded above. A stylesheet resource, one fetch attempt,
+its recursive import attempt, and the owner's loading lifetime remain distinct
+when reviewing names or coordination state.
+
 ## Media matching
 
 Defer [HTML §2.3.10](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#mq)
@@ -315,7 +345,7 @@ Dependencies still open:
 
 Tests: `test/browlet/style/inline-style.test.ts`, CSP's `style-attribute.test.ts`
 and `source-list.test.ts`, and the enabled Stylelet `style-attribute` browser
-scenarios. The manual `scratch/STYLE-ATTRIBUTE-PROBE.mjs` records the browser-only
+scenarios. The manual `node-compat/experimental/browser-probes/css/style-attributes.mjs` records the browser-only
 CSP and base-URL comparisons; it is not part of the automatic regression suite.
 
 ### Lifecycle — explicit attribute input

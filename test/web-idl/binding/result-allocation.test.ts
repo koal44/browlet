@@ -9,7 +9,7 @@ import {
 } from '../../../src/web-idl/index';
 
 import { TestRealm } from '../../support/web-idl-realm';
-import { createEnvironment, type TestEnvironment } from '../../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../../support/environment';
 
 describe('Web IDL result allocation', () => {
   it('allocates sequence results in the receiver realm through a borrowed method', () => {
@@ -17,7 +17,7 @@ describe('Web IDL result allocation', () => {
     const { call, realm } = createFixture(sequence(idlType.ByteString), values);
     const first = call('create');
     const second = call('create');
-    expect(first).toBeInstanceOf(realm.intrinsics.array);
+    expect(first).toBeInstanceOf(realm.Array);
     expect(first).toEqual(values);
     expect(first).not.toBe(values);
     expect(second).not.toBe(first);
@@ -28,9 +28,9 @@ describe('Web IDL result allocation', () => {
   ] as const)('preserves an existing %s result and its realm', (name) => {
     const sourceRealm = new TestRealm();
     const bytes = [1, 2, 3, 4];
-    const value = name === 'ArrayBuffer' ? sourceRealm.createArrayBuffer(bytes)
-      : name === 'SharedArrayBuffer' ? sourceRealm.createSharedArrayBuffer(bytes)
-        : sourceRealm.createArrayBufferView(name, bytes);
+    const value = name === 'ArrayBuffer' ? sourceRealm.copyArrayBuffer(bytes)
+      : name === 'SharedArrayBuffer' ? sourceRealm.copySharedArrayBuffer(bytes)
+        : sourceRealm.copyArrayBufferView(name, bytes);
     const { call, realm } = createFixture(idlType[name], value);
     const result = call('create') as ArrayBufferLike | ArrayBufferView;
 
@@ -49,8 +49,8 @@ describe('Web IDL result allocation', () => {
     const value = kind === 'record' ? new Map([['names', ['a=1']]]) : { names: ['a=1'] };
     const { call, realm } = createFixture(type, value);
     const result = call('create') as { names: string[]; };
-    expect(Object.getPrototypeOf(result)).toBe(realm.intrinsics.objectPrototype);
-    expect(result.names).toBeInstanceOf(realm.intrinsics.array);
+    expect(Object.getPrototypeOf(result)).toBe(realm.objectPrototype);
+    expect(result.names).toBeInstanceOf(realm.Array);
     expect(result).toEqual({ names: ['a=1'] });
     expect(call('create')).not.toBe(result);
   });
@@ -74,7 +74,7 @@ describe('Web IDL result allocation', () => {
     const value = Uint8Array.of(1, 2);
     const { call, realm } = createFixture(sequence(idlType.Uint8Array), [value]);
     const result = call('create') as Uint8Array[];
-    expect(result).toBeInstanceOf(realm.intrinsics.array);
+    expect(result).toBeInstanceOf(realm.Array);
     expect(result[0]).toBe(value);
   });
 
@@ -83,7 +83,7 @@ describe('Web IDL result allocation', () => {
     const { call, context, realm } = createFixture(sequence(reference('Item')), [item]);
     const previous = stage === 'projected' ? context.project(ItemImpl, item) : undefined;
     const result = call('create') as object[];
-    expect(result).toBeInstanceOf(realm.intrinsics.array);
+    expect(result).toBeInstanceOf(realm.Array);
     expect(result[0]).toBeInstanceOf(Reflect.get(realm.globalObject, 'Item'));
     expect(result[0]).toBe(context.project(ItemImpl, item));
     if (previous) expect(result[0]).toBe(previous);
@@ -93,21 +93,21 @@ describe('Web IDL result allocation', () => {
     const { MethodConstructor, methodRealm } = createFixture(sequence(idlType.ByteString));
     const method = Reflect.get(MethodConstructor, 'createStatic') as CallableFunction;
     const result: unknown = Reflect.apply(method, null, []);
-    expect(result).toBeInstanceOf(methodRealm.intrinsics.array);
+    expect(result).toBeInstanceOf(methodRealm.Array);
     expect(result).toEqual(['static']);
   });
 
   it('allocates each overload result in the receiver realm', () => {
     const { call, realm } = createFixture(sequence(idlType.ByteString));
-    expect(call('overloaded', 1)).toBeInstanceOf(realm.intrinsics.array);
-    expect(call('overloaded', 'value')).toBeInstanceOf(realm.intrinsics.array);
+    expect(call('overloaded', 1)).toBeInstanceOf(realm.Array);
+    expect(call('overloaded', 'value')).toBeInstanceOf(realm.Array);
   });
 
   it.each(['receiver', 'method'] as const)('retains promised bytes allocated in the %s realm without changing existing results', async (promiseOwner) => {
     const { call, value, realm, methodRealm } = createFixture(idlType.Uint8Array, undefined, promiseOwner);
     const target = promiseOwner === 'method' ? methodRealm : realm;
     const result = call('createAsync') as Promise<Uint8Array>;
-    expect(result).toBeInstanceOf(target.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(target.NativePromise);
     const bytes = await result;
     expect(bytes).toBeInstanceOf(Reflect.get(target.globalObject, 'Uint8Array'));
     expect(getBufferSourceCopy(bytes)).toEqual(value);
@@ -121,8 +121,8 @@ describe('Web IDL result allocation', () => {
   it('allocates a promised sequence in the method realm', async () => {
     const { call, methodRealm } = createFixture(sequence(idlType.ByteString), ['a=1'], 'method');
     const result = call('createAsync') as Promise<string[]>;
-    expect(result).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
-    expect(await result).toBeInstanceOf(methodRealm.intrinsics.array);
+    expect(result).toBeInstanceOf(methodRealm.NativePromise);
+    expect(await result).toBeInstanceOf(methodRealm.Array);
     expect(await result).toEqual(['a=1']);
   });
 
@@ -130,7 +130,7 @@ describe('Web IDL result allocation', () => {
     const { call, methodRealm } = createFixture(idlType.Uint8Array);
     const result = call('failAsync');
     await expect(result).rejects.toThrow('Failed to create result');
-    expect(result).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(methodRealm.NativePromise);
   });
 
   it.each([
@@ -214,7 +214,7 @@ class ResultImpl {
 
   otherAsync(): InternalPromise<unknown> { return this.otherPending ??= this.#createPromise(this.otherEnv); }
 
-  existingAsync(): InternalPromise<unknown> { return this.env.exec.Promise.resolve(this.value, implementationType<unknown>(this.type)); }
+  existingAsync(): InternalPromise<unknown> { return this.env.InternalPromise.resolve(this.value, implementationType<unknown>(this.type)); }
 
   failAsync(): never { throw new Error('Failed to create result'); }
 
@@ -223,8 +223,8 @@ class ResultImpl {
   static createStatic(): string[] { return ['static']; }
 
   #createPromise(env: JSEnvironment): InternalPromise<unknown> {
-    const value = this.value instanceof Uint8Array ? env.exec.buffers.copyUint8Array(this.value) : this.value;
-    return env.exec.Promise.resolve(value, implementationType<unknown>(this.type));
+    const value = this.value instanceof Uint8Array ? new env.realm.Uint8Array(this.value) : this.value;
+    return env.InternalPromise.resolve(value, implementationType<unknown>(this.type));
   }
 }
 

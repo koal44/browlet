@@ -7,8 +7,8 @@ import type { HTMLSlotElementImpl } from './nodes/html/index';
 export interface DOMEnvironment {
   /** Realm owning this environment's DOM objects. */
   realm: DOMRealm;
-  /** Realm-owned allocation facilities used by DOM algorithms. */
-  exec: DOMExecution;
+  /** Create a trusted event owned by this environment's realm. */
+  createEvent(eventConstructor?: EventImplConstructor): EventImpl;
 }
 
 /** Realm facilities used by DOM constructors as well as event dispatch. */
@@ -21,12 +21,6 @@ export interface DOMRealm {
   getAssociatedDocument(): DocumentImpl | null;
   /** Report an exception thrown by an event listener in the listener's own realm. */
   reportException(exception: unknown): void;
-}
-
-/** Allocation facilities supplied to DOM implementations by their owning environment. */
-export interface DOMExecution {
-  /** Create a trusted event owned by this execution's realm. */
-  createEvent(eventConstructor?: EventImplConstructor): EventImpl;
 }
 
 /** Window-specific DOM facilities, available after isWindow() succeeds. */

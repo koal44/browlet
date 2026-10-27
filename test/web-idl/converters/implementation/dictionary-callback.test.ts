@@ -145,8 +145,8 @@ describe('Dictionary and callback implementation conversion', () => {
     expect(first).not.toBe(second);
     expect(received[0]!.values).not.toBe(received[1]!.values);
     expect(received[0]!.children[0]).not.toBe(received[1]!.children[0]);
-    expect(Object.getPrototypeOf(first)).toBe(realm.intrinsics.objectPrototype);
-    expect(first.values).toBeInstanceOf(realm.intrinsics.array);
+    expect(Object.getPrototypeOf(first)).toBe(realm.objectPrototype);
+    expect(first.values).toBeInstanceOf(realm.Array);
     expect(reads).toBe(2);
     expect(coercions).toBe(2);
   });

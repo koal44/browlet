@@ -35,7 +35,7 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
   #prepareInput(): ConversionSteps<IDLDictionary> {
     const assembled = this.type.assembled;
     const dependencies: Record<string, unknown> = {
-      IDLDictionary, isObject, TypeError: this.realm.intrinsics.typeError,
+      IDLDictionary, isObject, TypeError: this.realm.TypeError,
     };
     const complete = assembled.hasCompleteShape;
     const members = assembled.members.map((member, index) => {
@@ -88,7 +88,7 @@ export class DictionaryConverter<Type extends IDLDictionaryType = IDLDictionaryT
       const record = value instanceof IDLDictionary ? value.record : value as Record<string, unknown>;
 
       const result = this.realm.createOrdinaryObject(
-        this.realm.intrinsics.objectPrototype,
+        this.realm.objectPrototype,
       );
       for (const { name, convert } of members) {
         if (!Object.hasOwn(record, name)) continue;

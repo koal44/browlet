@@ -9,12 +9,12 @@ import {
 describe('JavaScript Realm', () => {
   it('captures realm intrinsics and creates realm-owned functions', () => {
     const realm = new JSRealm();
-    const Array_ = realm.intrinsics.array;
-    const BigInt_ = realm.intrinsics.bigInt;
-    const Number_ = realm.intrinsics.number;
-    const Object_ = realm.intrinsics.object;
-    const String_ = realm.intrinsics.string;
-    const TypeError_ = realm.intrinsics.typeError;
+    const Array_ = realm.Array;
+    const BigInt_ = realm.BigInt;
+    const Number_ = realm.Number;
+    const Object_ = realm.Object;
+    const String_ = realm.String;
+    const TypeError_ = realm.TypeError;
     const receiver = {};
     const callable = realm.createFunction(
       (thisArgument, argumentsList, newTarget) => ({
@@ -38,10 +38,10 @@ describe('JavaScript Realm', () => {
     expect(Object_).toBe(Reflect.get(realm.globalObject, 'Object'));
     expect(Object_).not.toBe(Object);
     expect(String_).toBe(Reflect.get(realm.globalObject, 'String'));
-    expect(realm.intrinsics.objectPrototype).toBe(Object_.prototype);
-    expect(realm.intrinsics.functionPrototype)
-      .toBe(realm.intrinsics.function.prototype);
-    expect(callable).toBeInstanceOf(realm.intrinsics.function);
+    expect(realm.objectPrototype).toBe(Object_.prototype);
+    expect(realm.functionPrototype)
+      .toBe(realm.Function.prototype);
+    expect(callable).toBeInstanceOf(realm.Function);
     expect(Object.hasOwn(callable, 'prototype')).toBe(false);
     expect({ length: callable.length, name: callable.name }).toEqual({
       length: 2,
@@ -61,9 +61,9 @@ describe('JavaScript Realm', () => {
     };
     expect(Object.hasOwn(constructible, 'prototype')).toBe(true);
     expect(Object.getPrototypeOf(constructible))
-      .toBe(realm.intrinsics.functionPrototype);
+      .toBe(realm.functionPrototype);
     expect(Reflect.get(constructible, 'prototype'))
-      .toBeInstanceOf(realm.intrinsics.object);
+      .toBeInstanceOf(realm.Object);
     expect(Reflect.get(Reflect.get(constructible, 'prototype') as object, 'constructor'))
       .toBe(constructible);
     expect(instance.argumentsList).toEqual(['value']);
@@ -75,12 +75,12 @@ describe('JavaScript Realm', () => {
     Reflect.set(realm.globalObject, 'Object', Object);
     Reflect.set(realm.globalObject, 'String', String);
     Reflect.set(realm.globalObject, 'TypeError', TypeError);
-    expect(realm.intrinsics.array).toBe(Array_);
-    expect(realm.intrinsics.bigInt).toBe(BigInt_);
-    expect(realm.intrinsics.number).toBe(Number_);
-    expect(realm.intrinsics.object).toBe(Object_);
-    expect(realm.intrinsics.string).toBe(String_);
-    expect(realm.intrinsics.typeError).toBe(TypeError_);
+    expect(realm.Array).toBe(Array_);
+    expect(realm.BigInt).toBe(BigInt_);
+    expect(realm.Number).toBe(Number_);
+    expect(realm.Object).toBe(Object_);
+    expect(realm.String).toBe(String_);
+    expect(realm.TypeError).toBe(TypeError_);
   });
 
   it('passes call arguments without invoking author iterator methods', () => {
@@ -114,7 +114,7 @@ describe('JavaScript Realm', () => {
     expect(second.evaluate('this', 'second-global.js')).toBe(second.globalObject);
     expect(first.evaluate('answer', 'first.js')).toBe(41);
     expect(second.evaluate('answer', 'second.js')).toBe(42);
-    expect(first.intrinsics.object).not.toBe(second.intrinsics.object);
+    expect(first.Object).not.toBe(second.Object);
 
     const container = first.evaluate('({ nested: {} })', 'object.js') as {
       nested: object;
@@ -152,7 +152,7 @@ describe('JavaScript Realm', () => {
     expect(realm.globalProxy).toBe(globalProxy);
     expect(realm.globalThis).toBe(globalThis);
     expect(realm.evaluate('this', 'global-proxy.js')).toBe(globalProxy);
-    expect(Reflect.get(globalObject, 'Object')).toBe(realm.intrinsics.object);
+    expect(Reflect.get(globalObject, 'Object')).toBe(realm.Object);
     expect(Reflect.get(globalObject, 'globalThis')).toBe(globalThis);
     expect(realm.evaluate('globalThis', 'global-this.js')).toBe(globalThis);
     expect(realm.evaluate('answer', 'free-name.js')).toBe(42);
@@ -168,7 +168,7 @@ describe('JavaScript Realm', () => {
     const second = new JSRealm();
     second.evaluate('globalThis.target = function () {}; undefined;', 'target.js');
     const target = Reflect.get(second.globalObject, 'target') as object;
-    Reflect.setPrototypeOf(target, first.intrinsics.functionPrototype);
+    Reflect.setPrototypeOf(target, first.functionPrototype);
 
     expect(getAssociatedRealm(target)).toBe(second);
   });
@@ -227,7 +227,7 @@ describe('JavaScript Realm', () => {
     expectTypeOf(result.done).toEqualTypeOf<false>();
     expect(result).toEqual({ value: 'value', done: false });
     expect(Reflect.getPrototypeOf(result))
-      .toBe(realm.intrinsics.objectPrototype);
+      .toBe(realm.objectPrototype);
   });
 
   it('keeps allocation ownership across foreign prototypes and repeated evaluation', () => {
@@ -237,7 +237,7 @@ describe('JavaScript Realm', () => {
     Object.setPrototypeOf(callable, null);
 
     for (const value of [
-      first.createOrdinaryObject(second.intrinsics.objectPrototype),
+      first.createOrdinaryObject(second.objectPrototype),
       first.createOrdinaryObject(null),
       callable,
     ]) {
@@ -278,8 +278,8 @@ describe('Realm collection iterators', () => {
     const iterator = realm.createCollectionIterator(kind, () =>
       realm.createIteratorResultObject('value', false));
     const prototype = kind === 'map'
-      ? realm.intrinsics.iteration.mapIteratorPrototype
-      : realm.intrinsics.iteration.setIteratorPrototype;
+      ? realm.mapIteratorPrototype
+      : realm.setIteratorPrototype;
     const next = Reflect.get(iterator, 'next') as JSFunction;
 
     expect(Reflect.getPrototypeOf(iterator)).toBe(prototype);
@@ -297,7 +297,7 @@ describe('Realm collection iterators', () => {
     const iterator = realm.createCollectionIterator(kind, () => {
       ++calls;
       expect(() => Reflect.apply(next, iterator, []))
-        .toThrow(realm.intrinsics.typeError);
+        .toThrow(realm.TypeError);
       return calls === 1 ? first : realm.createIteratorResultObject('ignored', true);
     });
     const next = Reflect.get(iterator, 'next') as JSFunction;
@@ -308,12 +308,12 @@ describe('Realm collection iterators', () => {
     expect(Reflect.get(other, 'next')).toBe(next);
     const opposite = realm.createCollectionIterator(kind === 'map' ? 'set' : 'map', () => first);
     for (const receiver of [{}, new Proxy(iterator, {}), opposite]) {
-      expect(() => Reflect.apply(next, receiver, [])).toThrow(realm.intrinsics.typeError);
+      expect(() => Reflect.apply(next, receiver, [])).toThrow(realm.TypeError);
     }
     for (let i = 0; i < 2; ++i) {
       const result = Reflect.apply(next, iterator, []) as object;
       expect(result).toEqual({ value: undefined, done: true });
-      expect(Object.getPrototypeOf(result)).toBe(realm.intrinsics.objectPrototype);
+      expect(Object.getPrototypeOf(result)).toBe(realm.objectPrototype);
     }
     expect(calls).toBe(2);
   });
@@ -344,7 +344,7 @@ describe('Realm Promise observation', () => {
   it('installs reactions without consulting the promise then property', async () => {
     const microtaskQueue = createMicrotaskQueue();
     const realm = new JSRealm(microtaskQueue);
-    const promise = new realm.intrinsics.promise.constructor((resolve) => {
+    const promise = new realm.NativePromise((resolve) => {
       resolve('fulfilled');
     });
     const values: unknown[] = [];
@@ -365,7 +365,7 @@ describe('Realm Promise observation', () => {
 
   itPassesWith('v26+', 'explicitQueues')('does not consult author-defined promise constructors', () => {
     const realm = new JSRealm();
-    const promise = new realm.intrinsics.promise.constructor(() => undefined);
+    const promise = new realm.NativePromise(() => undefined);
     expect(Reflect.defineProperty(promise, 'constructor', {
       get() { throw new Error('author constructor was consulted'); },
     })).toBe(true);

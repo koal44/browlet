@@ -34,12 +34,17 @@ import type { BindingContext, BindingWorld } from './world';
 export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   assembly: DefinitionAssembly;
   world: BindingWorld;
+  realm: Env['realm'];
+  /** The projected global and any engine-supplied objects reserved for its prototype chain. */
+  globalObject: PlatformRecord | undefined;
+  globalAllocation: GlobalObjectAllocation | undefined;
+
+  /** InternalPromise constructor whose results use this realm's Web IDL conversion. */
+  InternalPromise: typeof InternalPromise;
+  implementationConverter: ImplementationConverter;
   /** Project DOMExceptions and realize Infra exception requests once; preserve other values. */
   realizeException: (value: unknown) => unknown;
-  realm: Env['realm'];
-  /** InternalPromise constructor whose results use this realm's Web IDL conversion. */
-  Promise: typeof InternalPromise;
-  implementationConverter: ImplementationConverter;
+
   /** Construct-specific services share this realm's allocation and receiver facilities. */
   callbacks: CallbackBinding;
   maplikes: MaplikeBinding;
@@ -49,10 +54,6 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   iterables: SynchronousIterableBinding;
   legacyPlatformObjects: LegacyPlatformObjectBinding;
   observableArrays: ObservableArrayBinding;
-
-  /** The projected global and any engine-supplied objects reserved for its prototype chain. */
-  globalObject: PlatformRecord | undefined;
-  globalAllocation: GlobalObjectAllocation | undefined;
 
   /** Owning environment, unavailable until its composition factory returns. */
   #env: Env | undefined;
@@ -88,13 +89,13 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
       let error: object;
       switch (request.type) {
         case 'TypeError':
-          error = new this.realm.intrinsics.typeError(request.exception.message);
+          error = new this.realm.TypeError(request.exception.message);
           break;
         case 'RangeError':
-          error = new this.realm.intrinsics.rangeError(request.exception.message);
+          error = new this.realm.RangeError(request.exception.message);
           break;
         case 'SyntaxError':
-          error = new this.realm.intrinsics.syntaxError(request.exception.message);
+          error = new this.realm.SyntaxError(request.exception.message);
           break;
       }
       void ExceptionRealizationStamper.stamp(value, error);
@@ -109,7 +110,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     this.legacyPlatformObjects = new LegacyPlatformObjectBinding(this);
     this.observableArrays = new ObservableArrayBinding(this);
     this.implementationConverter = new ImplementationConverter(this);
-    this.Promise = createWebIDLPromiseConstructor(this);
+    this.InternalPromise = createWebIDLPromiseConstructor(this);
     this.#env = createEnvironment(this);
     if (this.#env.realm !== this.realm) {
       throw new InternalError('The binding environment belongs to a different realm');
@@ -486,7 +487,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
   ): object {
     if (!newTarget) return this.getImplementationBinding(assembled).getInterfacePrototypeObject();
 
-    const candidate: unknown = this.realm.intrinsics.reflectGet(newTarget, 'prototype');
+    const candidate: unknown = this.realm.reflectGet(newTarget, 'prototype');
     if (isObject(candidate)) return candidate;
 
     // Web IDL's interface-object fallback uses newTarget's function realm,
@@ -524,7 +525,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
     let backingObject: object;
     if (implInst instanceof DOMExceptionImpl) {
       // https://webidl.spec.whatwg.org/#js-DOMException-specialness
-      backingObject = new this.realm.intrinsics.error();
+      backingObject = new this.realm.Error();
       Object.setPrototypeOf(backingObject, prototype);
     } else {
       backingObject = this.realm.createOrdinaryObject(prototype);
@@ -735,7 +736,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
   // Throw a TypeError allocated in this binding's realm.
   throwTypeError(message: string): never {
-    throw new this.realm.intrinsics.typeError(message);
+    throw new this.realm.TypeError(message);
   }
 
   // Resolve direct platform receivers and proxy object receiver aliases.
@@ -755,7 +756,7 @@ export class RealmBinding<Env extends WebIDLEnvironment = WebIDLEnvironment> {
 
 /** Add this binding's result conversion to the realm's implementation Promise constructor. */
 function createWebIDLPromiseConstructor(binding: RealmBinding): typeof InternalPromise {
-  return class WebIDLPromise<T> extends binding.realm.Promise<T> {
+  return class WebIDLPromise<T> extends binding.realm.InternalPromise<T> {
     static override withResolvers<T>(type: PromiseResultType<T>): InternalPromiseWithResolvers<T> {
       if (type.kind === 'implementation') return super.withResolvers(type);
       // eslint-disable-next-line @typescript-eslint/no-this-alias -- Adopted values are observed through the destination constructor.

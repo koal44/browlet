@@ -96,7 +96,7 @@ WebKit 26.5. Eric approved these choices:
   to inline hashes. Chromium/WebKit accept omitted padding; Firefox/the draft's
   encoded comparison reject it. All three accept padded Base64url spelling.
 
-The native probes are in `scratch/STYLE-ATTRIBUTE-PROBE.mjs`; persistent Browlet
+The native probes are in `node-compat/experimental/browser-probes/css/style-attributes.mjs`; persistent Browlet
 regressions cover pre-CSSOM checks, parser input, both dispositions and multiple
 policies, report targets/samples, adoption, namespaces, and CSSOM bypass. Source
 list regressions cover all three hashes, UTF-8 input, equivalent hash encodings,

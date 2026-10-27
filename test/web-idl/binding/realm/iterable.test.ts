@@ -87,7 +87,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const iteratorPrototype = Object.getPrototypeOf(iterator) as object;
     const next = getMethod(iteratorPrototype, 'next');
     expect(Object.getPrototypeOf(iteratorPrototype))
-      .toBe(realm.intrinsics.iteration.iteratorPrototype);
+      .toBe(realm.iteratorPrototype);
     expect(Object.prototype.toString.call(iterator))
       .toBe('[object PairCollection Iterator]');
     expect([next.name, next.length]).toEqual(['next', 0]);
@@ -98,10 +98,10 @@ describe('Web IDL synchronous iterable declarations', () => {
 
     const first = callNext(iterator);
     expect(first.done).toBe(false);
-    expect(first.value).toBeInstanceOf(realm.intrinsics.array);
+    expect(first.value).toBeInstanceOf(realm.Array);
     expect(first.value).not.toBeInstanceOf(Array);
     expect(Array.from(first.value as ArrayLike<unknown>)).toEqual(['one', 1]);
-    expect(Object.getPrototypeOf(first)).toBe(realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(first)).toBe(realm.objectPrototype);
     expect(callNext(iterator)).toMatchObject({ done: false });
     expect(callNext(iterator)).toEqual({ done: true, value: undefined });
     expect(callNext(iterator)).toEqual({ done: true, value: undefined });
@@ -232,8 +232,8 @@ describe('Web IDL synchronous iterable declarations', () => {
         const iterator = Reflect.apply(getMethod(method === 'borrowed next' ? object : foreign, operation), object, []) as object;
         const foreignIterator = Reflect.apply(getMethod(foreign, operation), foreign, []) as object;
         const result = Reflect.apply(getMethod(foreignIterator, 'next'), iterator, []) as IteratorResult<unknown>;
-        expect(Object.getPrototypeOf(result)).toBe(other.realm.intrinsics.objectPrototype);
-        if (operation === 'entries') expect(result.value).toBeInstanceOf(other.realm.intrinsics.array);
+        expect(Object.getPrototypeOf(result)).toBe(other.realm.objectPrototype);
+        if (operation === 'entries') expect(result.value).toBeInstanceOf(other.realm.Array);
         value = (operation === 'values' ? result.value : (result.value as unknown[])[1]) as object;
       }
       expect(bindings.getRealm(value!)).toBe(owner.realm);
@@ -270,9 +270,9 @@ describe('Web IDL synchronous iterable declarations', () => {
     const iterator = Reflect.apply(entries, object, []) as object;
     const next = getMethod(iterator, 'next');
     expect(() => { Reflect.apply(entries, {}, []); })
-      .toThrow(pair.realm.intrinsics.typeError);
+      .toThrow(pair.realm.TypeError);
     expect(() => { Reflect.apply(next, {}, []); })
-      .toThrow(pair.realm.intrinsics.typeError);
+      .toThrow(pair.realm.TypeError);
   });
 
   it('rejects an iterator from a separate binding world', () => {
@@ -292,7 +292,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     const otherIterator = Reflect.apply(getMethod(otherObject, 'entries'), otherObject, []) as object;
 
     expect(() => { Reflect.apply(getMethod(otherIterator, 'next'), iterator, []); })
-      .toThrow(otherRealm.intrinsics.typeError);
+      .toThrow(otherRealm.TypeError);
   });
 
   it('keeps iterator state private and independent of author property changes', () => {
@@ -304,7 +304,7 @@ describe('Web IDL synchronous iterable declarations', () => {
     expect(Reflect.ownKeys(iterator)).toEqual([]);
 
     const forged: object = Object.create(Object.getPrototypeOf(iterator) as object) as object;
-    expect(() => { Reflect.apply(next, forged, []); }).toThrow(realm.intrinsics.typeError);
+    expect(() => { Reflect.apply(next, forged, []); }).toThrow(realm.TypeError);
     const traps: PropertyKey[] = [];
     const proxy = new Proxy(iterator, {
       get(target, key, receiver) {
@@ -312,7 +312,7 @@ describe('Web IDL synchronous iterable declarations', () => {
         return Reflect.get(target, key, receiver) as unknown;
       },
     });
-    expect(() => { Reflect.apply(next, proxy, []); }).toThrow(realm.intrinsics.typeError);
+    expect(() => { Reflect.apply(next, proxy, []); }).toThrow(realm.TypeError);
     expect(traps).toEqual([]);
 
     Object.setPrototypeOf(iterator, null);

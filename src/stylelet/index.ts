@@ -3,7 +3,7 @@ export type { ValueContext } from './value-processing/index';
 export { Stylelet, StyleletContext } from './stylelet';
 export { fetchStyleResource } from './resource';
 export type {
-  StyleletEnvironment, StyleletExecution, StyleletOptions, StyleletUserAgent,
+  StyleletEnvironment, StyleletOptions, StyleletUserAgent,
 } from './environment';
 export type { DOMException, DOMExceptionConstructor, DOMExceptionName } from '../web-idl/core/index';
 export type { Encoding } from '../encoding/index';

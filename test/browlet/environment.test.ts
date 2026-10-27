@@ -38,7 +38,7 @@ describe('Environment lifecycle', () => {
     const { env } = first;
     const { window } = env;
     const importMap = window.importMap;
-    const promise = env.exec.NativePromise.resolve();
+    const promise = env.realm.NativePromise.resolve();
     const moduleURL = parseURL('https://first.test/module.js').url!;
     const resolution = {
       serializedBaseURL: 'https://first.test/',
@@ -54,7 +54,7 @@ describe('Environment lifecycle', () => {
     importMap.integrity.set(moduleURL, 'sha256-example');
     window.resolvedModuleSet.add(resolution);
 
-    const replacement = env.exec.createDocument();
+    const replacement = env.createDocument();
     env.window.setAssociatedDocument(replacement);
 
     expect(env.moduleMap).toBe(replacement.moduleMap);
@@ -399,7 +399,7 @@ function createEnvironment(url: string, parent: Navigable | null = null) {
   const { window } = env;
   const realm = env.realm;
   const proxy = realm.windowProxy;
-  const document = realm.env.exec.createDocument();
+  const document = realm.env.createDocument();
   document.type = 'html';
   document.contentType = 'text/html';
   document.url = creationURL;

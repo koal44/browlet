@@ -59,7 +59,7 @@ describe('ReadableStream source reaction delivery', () => {
     for (const fixture of [first, second]) {
       expect(fixture.callbackReceivers).toEqual([true, true]);
       expect(fixture.callbackControllers).toEqual([true, true]);
-      expect(Object.getPrototypeOf(fixture.results[0])).toBe(fixture.realm.intrinsics.objectPrototype);
+      expect(Object.getPrototypeOf(fixture.results[0])).toBe(fixture.realm.objectPrototype);
     }
   });
 

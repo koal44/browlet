@@ -108,8 +108,8 @@ describe('DOMException implementation projection', () => {
     const first = createContext(world);
     const second = createContext(world);
     const value = new DOMExceptionImpl('rejected', 'AbortError');
-    const one = first.Promise.reject(value, idlType.undefined);
-    const two = second.Promise.reject(value, idlType.undefined);
+    const one = first.InternalPromise.reject(value, idlType.undefined);
+    const two = second.InternalPromise.reject(value, idlType.undefined);
     const observe = (promise: typeof one) => new Promise<unknown>((resolve, reject) => promise.observe(
       () => { reject(new Error('Expected rejection')); }, resolve,
     ));

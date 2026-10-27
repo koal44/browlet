@@ -1,17 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { createAsyncExecution, nativeTimerHost } from '../../src/infra/execution';
+import { nativeTimerHost } from '../../src/infra/tasks';
+import { createTestScheduling } from '../support/scheduling';
 import { internalType } from '../../src/infra/promises';
 
-describe('standalone execution', () => {
+describe('host task scheduling', () => {
   it('defers work and cancels queued tasks through native timer handles', async () => {
-    const exec = createAsyncExecution(nativeTimerHost);
+    const host = createTestScheduling(nativeTimerHost);
     const calls: string[] = [];
-    const cancelled = exec.queueTask('dom-manipulation', () => { calls.push('cancelled'); });
+    const cancelled = host.queueTask('dom-manipulation', () => { calls.push('cancelled'); });
     cancelled.remove();
 
     const completed = new Promise<void>((resolve) => {
-      exec.runInParallel(() => { calls.push('background'); });
-      exec.queueTask('dom-manipulation', () => {
+      host.runInParallel(() => { calls.push('background'); });
+      host.queueTask('dom-manipulation', () => {
         calls.push('task');
         resolve();
       });
@@ -25,7 +26,7 @@ describe('standalone execution', () => {
   it('cancels work through the supplied timer host', () => {
     const pending = new Set<() => void>();
     const calls: string[] = [];
-    const exec = createAsyncExecution({
+    const host = createTestScheduling({
       scheduleTimeout(milliseconds, steps) {
         expect(milliseconds).toBe(0);
         pending.add(steps);
@@ -33,9 +34,9 @@ describe('standalone execution', () => {
       },
     });
 
-    const cancelled = exec.queueTask('dom-manipulation', () => { calls.push('cancelled'); });
-    exec.runInParallel(() => { calls.push('background'); });
-    exec.queueTask('dom-manipulation', () => { calls.push('task'); });
+    const cancelled = host.queueTask('dom-manipulation', () => { calls.push('cancelled'); });
+    host.runInParallel(() => { calls.push('background'); });
+    host.queueTask('dom-manipulation', () => { calls.push('task'); });
     expect(calls).toEqual([]);
     cancelled.remove();
 
@@ -45,7 +46,7 @@ describe('standalone execution', () => {
 
   it('reports Promise observer failures through a later host wake-up', async () => {
     const scheduled = Promise.withResolvers<() => void>();
-    const exec = createAsyncExecution({
+    const host = createTestScheduling({
       scheduleTimeout(milliseconds, steps) {
         expect(milliseconds).toBe(0);
         scheduled.resolve(steps);
@@ -54,7 +55,7 @@ describe('standalone execution', () => {
     });
     const failure = new Error('Observer failed');
 
-    exec.Promise.resolve(1, internalType<number>()).observe(
+    host.InternalPromise.resolve(1, internalType<number>()).observe(
       () => { throw failure; },
       (reason) => { throw reason; },
     );

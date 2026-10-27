@@ -65,6 +65,14 @@ neither the resource contents nor a general manager for every CSS URL. Do not
 automatically put all these consumers into its completion condition. HTML's
 critical-subresource boundary remains an [integration gap](../browlet/style/ROADMAP.md#external-stylesheet-loading).
 
+FontFace/FontFaceSet readiness also depends on font use and layout; it is not
+stylesheet-import completion. External masks, clipping sources, and filters have
+their own [Masking](https://drafts.csswg.org/css-masking-1/#sec) and
+[Filter Effects](https://drafts.csswg.org/filter-effects-1/#origin-restrictions)
+request/security rules. Do not inherit ordinary image parameters solely because
+these values contain a URL. Constructed-sheet replacement discards imports;
+dynamic rule mutation and loading notification need their own lifecycle review.
+
 ## Source organization
 
 Keep responsibility-based folders: a specification can contribute syntax,

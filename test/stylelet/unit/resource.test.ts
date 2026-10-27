@@ -8,7 +8,7 @@ it('fetches a CSS resource through a standalone host with its own bindings and t
   const env = createStyleletTestEnvironment();
   // The Fetch fixture trusts HTTPS/WSS only; this host also permits its data: resource.
   env.userAgent.isURLPotentiallyTrustworthy = (url) => ['https', 'wss', 'data'].includes(url.scheme);
-  const tasks = vi.spyOn(env.exec, 'queueGlobalFetchTask');
+  const tasks = vi.spyOn(env, 'queueGlobalFetchTask');
   const declaration = new CSSStyleDeclarationImpl({}, env);
   const url = UrlValue.fromString('url', 'data:text/plain,standalone', {});
   const result = await new Promise<{ response: FetchResponse; body: Uint8Array | null | 'failure'; }>((resolve) => {
@@ -19,6 +19,6 @@ it('fetches a CSS resource through a standalone host with its own bindings and t
 
   expect(result.response.status).toBe(200);
   expect(result.body).toEqual(new TextEncoder().encode('standalone'));
-  expect(tasks).toHaveBeenCalledWith(env.exec.global, expect.any(Function));
+  expect(tasks).toHaveBeenCalledWith(env.realm.globalObject, expect.any(Function));
   tasks.mockRestore();
 });

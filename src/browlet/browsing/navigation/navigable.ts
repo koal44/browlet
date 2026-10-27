@@ -188,10 +188,10 @@ export class Navigable {
       () => document.processLinkHeaders(params.response, 'media'),
     );
     parsing.observe(
-      () => env.exec.queueTask('network', () => {
+      () => env.queueTask('network', () => {
         document.finishLoading();
       }),
-      () => env.exec.queueTask('network', () => {
+      () => env.queueTask('network', () => {
         document.abort();
       }),
     );
@@ -233,7 +233,7 @@ export class Navigable {
       }).window;
     }
 
-    const document = window.env.exec.createDocument();
+    const document = window.env.createDocument();
     document.type = type;
     document.contentType = contentType;
     document.origin = params.origin;

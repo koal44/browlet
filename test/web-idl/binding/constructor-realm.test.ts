@@ -27,7 +27,7 @@ describe('interface constructor prototype fallback', () => {
     const bound = first.realm.evaluate(
       'Function.prototype.bind.call(foreignTarget, null)', 'bound.js',
     ) as JSFunction;
-    Reflect.setPrototypeOf(bound, first.realm.intrinsics.functionPrototype);
+    Reflect.setPrototypeOf(bound, first.realm.functionPrototype);
     const object = Reflect.construct(Example, [], bound) as object;
 
     expect(Reflect.getPrototypeOf(object)).toBe(second.getImplementationBinding(second.resolveInterface('Example')).getInterfacePrototypeObject());
@@ -56,7 +56,7 @@ describe('interface constructor prototype fallback', () => {
       get() { revoke(); return null; },
     });
     expect(() => { Reflect.construct(Example, [], proxy); })
-      .toThrow(first.realm.intrinsics.typeError);
+      .toThrow(first.realm.TypeError);
   });
 
   it('throws in the constructor realm when newTarget is already revoked', () => {
@@ -64,12 +64,12 @@ describe('interface constructor prototype fallback', () => {
     const { proxy, revoke } = Proxy.revocable(target, {});
     revoke();
     expect(() => { Reflect.construct(Example, [], proxy); })
-      .toThrow(first.realm.intrinsics.typeError);
+      .toThrow(first.realm.TypeError);
   });
 
   it('preserves the exception thrown by a prototype getter', () => {
     const { second, target, Example } = createBindings();
-    const error = new second.realm.intrinsics.typeError('from the getter');
+    const error = new second.realm.TypeError('from the getter');
     const proxy = new Proxy(target, { get() { throw error; } });
     let thrown: unknown;
     try { Reflect.construct(Example, [], proxy); }

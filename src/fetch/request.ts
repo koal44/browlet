@@ -1,4 +1,4 @@
-import type { AbortSignal } from '../infra/execution';
+import type { AbortSignal } from '../infra/abort';
 import type { InternalPromise } from '../infra/promises';
 import { TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
@@ -519,7 +519,7 @@ export class RequestImpl {
     }
 
     const result = new RequestImpl(
-      request, 'request', env.exec.createDependentAbortSignal(signal === null ? [] : [signal]), env,
+      request, 'request', env.createDependentAbortSignal(signal === null ? [] : [signal]), env,
     );
     if (request.mode === 'no-cors') {
       if (!isCORSSafelistedMethod(request.method)) throw new TypeError('Invalid method for no-cors mode');
@@ -593,7 +593,7 @@ export class RequestImpl {
   clone(): RequestImpl {
     if (this.#bodyMixin.unusable) throw new TypeError('Request body is disturbed or locked');
     const request = this.#request.clone();
-    const signal = this.#env.exec.createDependentAbortSignal([this.#signal]);
+    const signal = this.#env.createDependentAbortSignal([this.#signal]);
     return new RequestImpl(request, this.#headers.guard, signal, this.#env);
   }
   arrayBuffer(): InternalPromise<ArrayBuffer> { return this.#bodyMixin.arrayBuffer(); }

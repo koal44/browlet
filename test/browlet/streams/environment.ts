@@ -2,7 +2,7 @@ import { streamsIDLDefinitions } from '../../../src/streams/index';
 import {
   BindingWorld, defineInterface, xattr, type BindingContext,
 } from '../../../src/web-idl/index';
-import { createEnvironment, type TestEnvironment } from '../../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../../support/environment';
 import { TestRealm } from '../../support/web-idl-realm';
 
 export function createTestContext(): BindingContext<TestEnvironment> {

@@ -146,7 +146,7 @@ describe('ResourceReader', () => {
     response.headerList.append('Content-Type', 'text/html');
     await observe(reader.determineMIMEType());
     const tasks: (() => void)[] = [];
-    vi.spyOn(userAgent.sandbox.exec, 'queueGlobalFetchTask').mockImplementation((_global, steps) => {
+    vi.spyOn(userAgent.sandbox, 'queueGlobalFetchTask').mockImplementation((_global, steps) => {
       tasks.push(steps);
     });
     stream.enqueueChunk(Uint8Array.of(1));
@@ -190,7 +190,7 @@ describe('ResourceReader', () => {
     const clock = controlSniffingClock(userAgent);
     const reads = vi.spyOn(response.body!, 'readChunk');
     const tasks: (() => void)[] = [];
-    vi.spyOn(userAgent.sandbox.exec, 'queueGlobalFetchTask').mockImplementation((_global, steps) => {
+    vi.spyOn(userAgent.sandbox, 'queueGlobalFetchTask').mockImplementation((_global, steps) => {
       tasks.push(steps);
     });
     const mimeType = observe(reader.determineMIMEType());

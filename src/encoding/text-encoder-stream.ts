@@ -68,9 +68,9 @@ export class TextEncoderStreamImpl {
   /** Create each chunk in the encoder's realm before downstream callbacks can observe it. */
   #enqueueEncoded(input: string): void {
     const length = utf8ByteLength(input);
-    const buffer = this.#env.exec.buffers.allocateArrayBuffer(length);
+    const buffer = new this.#env.realm.ArrayBuffer(length);
     writeUTF8(input, buffer, 0, length);
-    this.#transform.enqueue(this.#env.exec.buffers.createView('Uint8Array', buffer));
+    this.#transform.enqueue(new this.#env.realm.Uint8Array(buffer));
   }
 }
 

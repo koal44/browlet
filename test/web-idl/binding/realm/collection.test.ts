@@ -42,7 +42,7 @@ describe('Web IDL inherited collections', () => {
     expect(call(second, 'has', [1])).toBe(false);
     expect(call(second, 'has', [2])).toBe(true);
     expect(() => { Reflect.apply(getMethod(first, 'has'), unrelated, [1]); })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 });
 
@@ -50,8 +50,8 @@ describe('Web IDL collection iterator overrides', () => {
   it.each(['map', 'set'] as const)('honors a replaced %s iterator prototype next', (kind) => {
     const { object, realm } = kind === 'map' ? createMaplikeBinding() : createSetlikeBinding();
     const prototype = kind === 'map'
-      ? realm.intrinsics.iteration.mapIteratorPrototype
-      : realm.intrinsics.iteration.setIteratorPrototype;
+      ? realm.mapIteratorPrototype
+      : realm.setIteratorPrototype;
     const next = () => ({ value: 'replacement', done: true });
     Reflect.set(prototype, 'next', next);
 
@@ -63,8 +63,8 @@ describe('Web IDL collection iterator overrides', () => {
   it.each(['map', 'set'] as const)('does not read a %s prototype next getter during creation', (kind) => {
     const { object, realm } = kind === 'map' ? createMaplikeBinding() : createSetlikeBinding();
     const prototype = kind === 'map'
-      ? realm.intrinsics.iteration.mapIteratorPrototype
-      : realm.intrinsics.iteration.setIteratorPrototype;
+      ? realm.mapIteratorPrototype
+      : realm.setIteratorPrototype;
     let reads = 0;
     const next = () => ({ value: 'replacement', done: true });
     Object.defineProperty(prototype, 'next', {
@@ -113,7 +113,7 @@ describe('Web IDL maplike declarations', () => {
 
     const iterator = Reflect.apply(entries, object, []) as object;
     expect(Object.getPrototypeOf(iterator))
-      .toBe(realm.intrinsics.iteration.mapIteratorPrototype);
+      .toBe(realm.mapIteratorPrototype);
     expect(Object.prototype.toString.call(iterator)).toBe('[object Map Iterator]');
     expect(Object.hasOwn(iterator, 'next')).toBe(false);
     expect(Reflect.apply(getMethod(iterator, Symbol.iterator), iterator, []))
@@ -122,11 +122,11 @@ describe('Web IDL maplike declarations', () => {
     binding.getMapEntries(object).set(2, 'two');
     const first = callNext(iterator);
     const second = callNext(iterator);
-    expect(first.value).toBeInstanceOf(realm.intrinsics.array);
+    expect(first.value).toBeInstanceOf(realm.Array);
     expect(first.value).not.toBeInstanceOf(Array);
     expect(first.value).toEqual([1, '42']);
     expect(second.value).toEqual([2, 'two']);
-    expect(Object.getPrototypeOf(first)).toBe(realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(first)).toBe(realm.objectPrototype);
     expect(callNext(iterator)).toEqual({ done: true, value: undefined });
 
     expect(readIterator(getMethod(object, 'keys'), object)).toEqual([1, 2]);
@@ -137,7 +137,7 @@ describe('Web IDL maplike declarations', () => {
       [2, 'two'],
     ]);
     expect(() => { Reflect.apply(entries, {}, []); })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 
   itPassesWith('collectionIterators')('accepts native Map iterator next', () => {
@@ -145,7 +145,7 @@ describe('Web IDL maplike declarations', () => {
     call(object, 'set', [1, 'one']);
     const iterator = call(object, 'entries') as object;
     const nativeNext = getMethod(
-      realm.intrinsics.iteration.mapIteratorPrototype,
+      realm.mapIteratorPrototype,
       'next',
     );
 
@@ -154,11 +154,11 @@ describe('Web IDL maplike declarations', () => {
     expect(Reflect.get(iterator, 'next')).toBe(nativeNext);
     call(object, 'set', [2, 'two']);
     const foreignRealm = new Realm();
-    const foreignNext = getMethod(foreignRealm.intrinsics.iteration.mapIteratorPrototype, 'next');
+    const foreignNext = getMethod(foreignRealm.mapIteratorPrototype, 'next');
     const result = Reflect.apply(foreignNext, iterator, []) as IteratorResult<unknown>;
     expect(result.value).toEqual([2, 'two']);
-    expect(result.value).toBeInstanceOf(realm.intrinsics.array);
-    expect(Object.getPrototypeOf(result)).toBe(realm.intrinsics.objectPrototype);
+    expect(result.value).toBeInstanceOf(realm.Array);
+    expect(Object.getPrototypeOf(result)).toBe(realm.objectPrototype);
   });
 
   it('converts sequence values for each live iteration', () => {
@@ -184,7 +184,7 @@ describe('Web IDL maplike declarations', () => {
     const second = callNext(secondIterator).value as number[];
     expect(second).toEqual([1, 2]);
     expect(second).not.toBe(first);
-    expect(second).toBeInstanceOf(realm.intrinsics.array);
+    expect(second).toBeInstanceOf(realm.Array);
     expect(call(object, 'get', ['first'])).toEqual([1, 2]);
 
     call(object, 'set', ['later', [3]]);
@@ -367,7 +367,7 @@ describe('Web IDL setlike declarations', () => {
 
     const entries = call(object, 'entries') as object;
     expect(Object.getPrototypeOf(entries))
-      .toBe(realm.intrinsics.iteration.setIteratorPrototype);
+      .toBe(realm.setIteratorPrototype);
     expect(Object.prototype.toString.call(entries)).toBe('[object Set Iterator]');
     expect(callNext(entries).value).toEqual([1, 1]);
     expect(callNext(entries).value).toEqual([2, 2]);
@@ -403,13 +403,13 @@ describe('Web IDL setlike declarations', () => {
     const pair = callNext(entries).value as [number[], number[]];
 
     expect(pair[0]).toBe(pair[1]);
-    expect(pair).toBeInstanceOf(realm.intrinsics.array);
-    expect(pair[0]).toBeInstanceOf(realm.intrinsics.array);
+    expect(pair).toBeInstanceOf(realm.Array);
+    expect(pair[0]).toBeInstanceOf(realm.Array);
     pair[0].push(99);
     const value = callNext(values).value;
     expect(value).toEqual([1, 2]);
     expect(value).not.toBe(pair[0]);
-    expect(value).toBeInstanceOf(realm.intrinsics.array);
+    expect(value).toBeInstanceOf(realm.Array);
 
     call(object, 'add', [[3]]);
     expect(callNext(entries).value).toEqual([[3], [3]]);
@@ -421,7 +421,7 @@ describe('Web IDL setlike declarations', () => {
     call(object, 'add', [1]);
     const iterator = call(object, 'values') as object;
     const nativeNext = getMethod(
-      realm.intrinsics.iteration.setIteratorPrototype,
+      realm.setIteratorPrototype,
       'next',
     );
 
@@ -430,10 +430,10 @@ describe('Web IDL setlike declarations', () => {
     expect(Reflect.get(iterator, 'next')).toBe(nativeNext);
     call(object, 'add', [2]);
     const foreignRealm = new Realm();
-    const foreignNext = getMethod(foreignRealm.intrinsics.iteration.setIteratorPrototype, 'next');
+    const foreignNext = getMethod(foreignRealm.setIteratorPrototype, 'next');
     const result = Reflect.apply(foreignNext, iterator, []) as IteratorResult<unknown>;
     expect(result.value).toBe(2);
-    expect(Object.getPrototypeOf(result)).toBe(realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(result)).toBe(realm.objectPrototype);
   });
 
   it('omits mutation methods from readonly maplike and setlike interfaces', () => {
@@ -545,9 +545,9 @@ describe('Web IDL collection result ownership', () => {
     } else {
       const iterator = Reflect.apply(getMethod(foreign, method), object, []) as object;
       const item = callNext(iterator);
-      expect(Object.getPrototypeOf(item)).toBe(other.realm.intrinsics.objectPrototype);
+      expect(Object.getPrototypeOf(item)).toBe(other.realm.objectPrototype);
       if (method === 'entries') {
-        expect(item.value).toBeInstanceOf(other.realm.intrinsics.array);
+        expect(item.value).toBeInstanceOf(other.realm.Array);
         result = (item.value as object[])[1]!;
       } else {
         result = item.value as object;

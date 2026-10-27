@@ -18,9 +18,9 @@ describe('Web IDL observable arrays', () => {
 
     expect(first).toBe(second);
     expect(Array.isArray(first)).toBe(true);
-    expect(first).toBeInstanceOf(fixture.realm.intrinsics.array);
+    expect(first).toBeInstanceOf(fixture.realm.Array);
     expect(first).not.toBeInstanceOf(Array);
-    expect(first.constructor).toBe(fixture.realm.intrinsics.array);
+    expect(first.constructor).toBe(fixture.realm.Array);
 
     first.push('1', 2);
 
@@ -49,7 +49,7 @@ describe('Web IDL observable arrays', () => {
     // eslint-disable-next-line @typescript-eslint/unbound-method -- explicitly apply the borrowed getter to the owner
     const getter = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(foreign), 'values')!.get!;
     const values = Reflect.apply(getter, object, []) as object[];
-    expect(Object.getPrototypeOf(values)).toBe(owner.realm.intrinsics.array.prototype);
+    expect(Object.getPrototypeOf(values)).toBe(owner.realm.Array.prototype);
     const value = new ValueImpl();
     implementation.values.push(value);
 
@@ -122,7 +122,7 @@ describe('Web IDL observable arrays', () => {
       fixture.object,
       'values',
       [2, Symbol('invalid')],
-    )).toThrow(fixture.realm.intrinsics.typeError);
+    )).toThrow(fixture.realm.TypeError);
     expect(values).toEqual([1]);
     expect(operations).toEqual([]);
 
@@ -159,7 +159,7 @@ describe('Web IDL observable arrays', () => {
     expect(Reflect.preventExtensions(values)).toBe(false);
     expect(Object.isExtensible(values)).toBe(true);
     expect(() => Reflect.set(values, 'length', 1.5))
-      .toThrow(fixture.realm.intrinsics.rangeError);
+      .toThrow(fixture.realm.RangeError);
 
     values.label = 'numbers';
     expect(values.label).toBe('numbers');
@@ -170,7 +170,7 @@ describe('Web IDL observable arrays', () => {
     const fixture = createNumberArrayBinding();
     const values = getValues(fixture.object);
     values.push(1);
-    expect(() => Reflect.set(fixture.object, 'values', value)).toThrow(fixture.realm.intrinsics.typeError);
+    expect(() => Reflect.set(fixture.object, 'values', value)).toThrow(fixture.realm.TypeError);
     expect(values).toEqual([1]);
   });
 
@@ -222,7 +222,7 @@ describe('Web IDL observable arrays', () => {
     } finally {
       Reflect.deleteProperty(Object.prototype, 'get');
     }
-    expect(exception).toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    expect(exception).toBeInstanceOf(fixture.realm.TypeError);
   });
 
   it('converts interface elements and reflects specification list changes', () => {
@@ -260,7 +260,7 @@ describe('Web IDL observable arrays', () => {
     expect(backingList).toHaveLength(1);
     expect(backingList[0]).toBe(employeeImpl);
     expect(values[0]).toBe(employeeObject);
-    expect(() => values.push({})).toThrow(realm.intrinsics.typeError);
+    expect(() => values.push({})).toThrow(realm.TypeError);
 
     backingList.push(employeeImpl);
     expect(values).toEqual([employeeObject, employeeObject]);

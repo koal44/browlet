@@ -97,7 +97,7 @@ class LocalEvaluation {
   exposeFunction(name: string, callback: (args: unknown[]) => unknown): void {
     const realm = this.#realm;
     const function_ = realm.createFunction((_receiver, args) => {
-      return new realm.intrinsics.promise.constructor((resolve, reject) => {
+      return new realm.NativePromise((resolve, reject) => {
         let input: unknown[];
         try { input = copyEvaluationValue(args) as unknown[]; }
         catch (error) { reject(copyEvaluationValue(error, realm)); return; }
@@ -167,7 +167,7 @@ class LocalEvaluation {
             result = Reflect.apply(result as (...args: unknown[]) => unknown,
               undefined, copyEvaluationValue(input, this.#realm) as unknown[]);
           }
-          this.#realm.Promise.fromValue(result, this.#realm.intrinsics.promise.constructor, idlType.any).observe(
+          this.#realm.InternalPromise.fromValue(result, this.#realm.NativePromise, idlType.any).observe(
             (value) => complete(value), (error) => complete(error, true),
           );
         } catch (error) { complete(error, true); }
@@ -198,7 +198,7 @@ class LocalEvaluation {
     // eslint-disable-next-line no-restricted-globals -- Automation command failures belong to the Node caller, not a page realm.
     if (this.#disposed) throw new Error('Evaluation context was destroyed');
     const realm = this.#realm;
-    const task = realm.env.exec.queueTask('automation', () => {
+    const task = realm.env.queueTask('automation', () => {
       this.#tasks.delete(task);
       realm.agent.eventLoop.runScriptEvaluation(realm.env, steps);
     });
@@ -223,18 +223,18 @@ function copyEvaluationValue(
 
   let copy: object;
   if (hasDateValue(value)) {
-    const date = new (realm?.intrinsics.date ?? Date)(getDateValue(value));
+    const date = new (realm?.Date ?? Date)(getDateValue(value));
     memory.set(value, date);
     return date;
   }
   if (hasRegExpMatcher(value)) {
     const { source, flags } = getRegExpData(value);
-    const expression = new (realm?.intrinsics.regExp ?? RegExp)(source, flags);
+    const expression = new (realm?.RegExp ?? RegExp)(source, flags);
     memory.set(value, expression);
     return expression;
   }
   if (hasMapData(value)) {
-    const map = new (realm?.intrinsics.map ?? Map)();
+    const map = new (realm?.Map ?? Map)();
     memory.set(value, map);
     for (const [key, item] of copyMapData(value)) {
       Map.prototype.set.call(map,
@@ -243,7 +243,7 @@ function copyEvaluationValue(
     return map;
   }
   if (hasSetData(value)) {
-    const set = new (realm?.intrinsics.set ?? Set)();
+    const set = new (realm?.Set ?? Set)();
     memory.set(value, set);
     for (const item of copySetData(value)) {
       Set.prototype.add.call(set, copyEvaluationValue(item, realm, memory));
@@ -254,10 +254,10 @@ function copyEvaluationValue(
     const error = value;
     const name = String(error.name);
     const constructors: Record<string, ErrorConstructor> = realm ? {
-      Error: realm.intrinsics.error, TypeError: realm.intrinsics.typeError,
-      RangeError: realm.intrinsics.rangeError, SyntaxError: realm.intrinsics.syntaxError,
-      ReferenceError: realm.intrinsics.referenceError, EvalError: realm.intrinsics.evalError,
-      URIError: realm.intrinsics.uriError,
+      Error: realm.Error, TypeError: realm.TypeError,
+      RangeError: realm.RangeError, SyntaxError: realm.SyntaxError,
+      ReferenceError: realm.ReferenceError, EvalError: realm.EvalError,
+      URIError: realm.URIError,
     // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
     } : { Error, TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError };
     const constructor = Object.hasOwn(constructors, name) ? constructors[name]! : constructors.Error!;
@@ -270,14 +270,14 @@ function copyEvaluationValue(
     return result;
   }
   if (Array.isArray(value)) {
-    copy = new (realm?.intrinsics.array ?? Array)(value.length);
+    copy = new (realm?.Array ?? Array)(value.length);
   } else {
     const prototype = Object.getPrototypeOf(value) as object | null;
     if (prototype !== null && Object.getPrototypeOf(prototype) !== null) {
       // eslint-disable-next-line no-restricted-globals -- Automation copies values and reports validation errors in the Node caller's realm.
       throw new TypeError('Only data values can cross the evaluation boundary; live objects require handles');
     }
-    copy = realm ? realm.createOrdinaryObject(realm.intrinsics.objectPrototype) : {};
+    copy = realm ? realm.createOrdinaryObject(realm.objectPrototype) : {};
   }
   memory.set(value, copy);
   for (const key of Object.keys(value)) {

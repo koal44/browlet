@@ -125,7 +125,7 @@ export class HTMLDocumentParser extends DocumentParser {
   }
 
   #startParsing(start: () => void): InternalPromise<void> {
-    const complete = this.document.env.exec.Promise.withResolvers(idlType.undefined);
+    const complete = this.document.env.InternalPromise.withResolvers(idlType.undefined);
     // Node owns stream completion; DOM finalization re-enters an HTML task.
     const cleanup = finished(this.#parse5Stream, (error) => {
       cleanup();

@@ -9,7 +9,7 @@ import type { StorageEnvironment, StorageUserAgent } from '../../src/storage/env
 import { createOpaqueOrigin } from '../../src/url/origin';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
 import { serializeURL } from '../../src/url/core/index';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 
 const firstUUID = '550e8400-e29b-41d4-a716-446655440000';
 const secondUUID = '550e8400-e29b-41d4-a716-446655440001';

@@ -43,7 +43,8 @@ describe('CORS preflight transactions', () => {
     expect(preflight.webDriverId).toBe(first.request.webDriverId);
     expect(cancellation).toHaveBeenCalledTimes(2);
     expect(mark.mock.calls[0]![0].startTime).toBe(12);
-    clock.mockRestore();
+    // Cache expiry uses this same clock; switching to real uptime can expire the permission immediately.
+    clock.mockReturnValue(13);
     expect(await f.text(await f.operation().start())).toBe('actual response');
     expect(wire.map(({ method }) => method)).toEqual(['OPTIONS', 'PUT', 'PUT']);
     expect(wire[0]!.headers).toMatchObject({

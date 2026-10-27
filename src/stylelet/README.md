@@ -36,7 +36,7 @@ Each implemented component has an explicit `index.ts`; imports across its bounda
 barrel, while collaborating modules inside it import each other directly.
 `environment.ts` and `context.ts` remain named entries for their existing owners.
 The public [index](index.ts) also exports Infra's `InternalPromise` for standalone
-hosts supplying `exec.Promise`. Implementation modules import it directly from Infra.
+hosts supplying `env.InternalPromise`. Implementation modules import it directly from Infra.
 
 Hosts can supply `systemColors` through `env.userAgent`; Browlet accepts the same
 map in `BrowletConfig`. It is a complete

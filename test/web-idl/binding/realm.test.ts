@@ -127,9 +127,9 @@ describe('Web IDL realm interface bindings', () => {
 
     expect(installed.get('ProjectionBase')).toBe(Base);
     expect(installed.get('ProjectionDerived')).toBe(Derived);
-    expect(Derived).toBeInstanceOf(realm.intrinsics.function);
+    expect(Derived).toBeInstanceOf(realm.Function);
     expect(Derived).not.toBeInstanceOf(Function);
-    expect(prototype).toBeInstanceOf(realm.intrinsics.object);
+    expect(prototype).toBeInstanceOf(realm.Object);
     expect(prototype).not.toBeInstanceOf(Object);
     expect(Object.getPrototypeOf(Derived)).toBe(Base);
     expect(Object.getPrototypeOf(prototype)).toBe(Base.prototype);
@@ -236,9 +236,9 @@ describe('Web IDL realm interface bindings', () => {
     expect(Reflect.apply(firstGetter!, firstObject, [])).toBe(1);
     expect(Reflect.apply(secondGetter!, secondObject, [])).toBe(1);
     expect(() => { Reflect.apply(firstRead, secondObject, []); })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
     expect(() => { Reflect.apply(secondRead, firstObject, []); })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 
   it('materializes constant tokens as their declared IDL values', () => {
@@ -356,7 +356,7 @@ describe('Web IDL realm interface bindings', () => {
       type: 'method',
     }]);
     expect(() => call(firstPrototype, 'read', {}, [])).toThrow(
-      firstRealm.intrinsics.typeError,
+      firstRealm.TypeError,
     );
   });
 
@@ -472,7 +472,7 @@ describe('Web IDL realm interface bindings', () => {
     const object = construct(Interface, []);
     const json = call(Interface.prototype, 'toJSON', object);
 
-    expect(json).toBeInstanceOf(realm.intrinsics.object);
+    expect(json).toBeInstanceOf(realm.Object);
     expect(json).toEqual({ inheritedValue: 12, ownValue: 'first' });
     expect(Reflect.ownKeys(json as object)).not.toContain('nonJSONValue');
     currentValue = 'second';
@@ -512,7 +512,7 @@ describe('Web IDL realm interface bindings', () => {
       const object = ctx.project(JSONValuesImpl, value);
       const first = call(object, 'toJSON', object);
       expect(first).toEqual(secureContext ? { value: 1, secureValue: 2 } : { value: 1 });
-      expect(first).toBeInstanceOf(realm.intrinsics.object);
+      expect(first).toBeInstanceOf(realm.Object);
 
       value.current = 3;
       const second = call(object, 'toJSON', object);
@@ -590,7 +590,7 @@ describe('Web IDL realm interface bindings', () => {
       holderObject,
     );
 
-    expect(json).toBeInstanceOf(foreign.realm.intrinsics.object);
+    expect(json).toBeInstanceOf(foreign.realm.Object);
     const child = Reflect.get(json as object, 'point') as object;
     expect(getPlatformRecord(child)?.binding).toBe(local);
     if (pointObject) expect(child).toBe(pointObject);
@@ -622,7 +622,7 @@ describe('Web IDL realm interface bindings', () => {
     getMemberBinding(interfaceBinding, constructor).constructorBehavior = {
       kind: 'initialize',
       steps: function(receiver) {
-        state.set(receiver, Object.freeze(new realm.intrinsics.array()));
+        state.set(receiver, Object.freeze(new realm.Array()));
       },
     };
     getMemberBinding(interfaceBinding, values).attributeSteps = {
@@ -640,7 +640,7 @@ describe('Web IDL realm interface bindings', () => {
     expect(first).toEqual([1, 2]);
     expect(first).toBe(second);
     expect(first).not.toBe(source);
-    expect(first).toBeInstanceOf(realm.intrinsics.array);
+    expect(first).toBeInstanceOf(realm.Array);
     expect(Object.isFrozen(first)).toBe(true);
   });
 
@@ -682,7 +682,7 @@ describe('Web IDL realm interface bindings', () => {
       'echo',
       object,
       new SharedArrayBuffer(2),
-    )).toThrow(realm.intrinsics.typeError);
+    )).toThrow(realm.TypeError);
   });
 
   it('implements applicable member extended attributes', () => {
@@ -779,7 +779,7 @@ describe('Web IDL realm interface bindings', () => {
     expect(Object.hasOwn(first, 'replaceable')).toBe(true);
     Object.preventExtensions(second);
     expect(() => Reflect.set(second, 'replaceable', 'blocked'))
-      .toThrow(binding.realm.intrinsics.typeError);
+      .toThrow(binding.realm.TypeError);
     expect(Reflect.set(first, 'forwarded', 'forwarded value')).toBe(true);
     expect(forwarded.value).toBe('forwarded value');
 

@@ -37,7 +37,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s sequence and record c
 
     const jsSequence = idlToJS(idlSequence, binding.getConverter(binding.assembly.getIDLType(sequence(idlType.long))));
     expect(jsSequence).toEqual([1, 2]);
-    expect(jsSequence).toBeInstanceOf(realm.intrinsics.array);
+    expect(jsSequence).toBeInstanceOf(realm.Array);
     expect(jsSequence).not.toBe(idlSequence);
 
     const input = { d: '5', c: 6 };
@@ -46,6 +46,6 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s sequence and record c
 
     const jsRecord = idlToJS(idlRecord, binding.getConverter(binding.assembly.getIDLType(record(idlType.DOMString, idlType.double)))) as Record<string, unknown>;
     expect(Object.keys(jsRecord)).toEqual(['d', 'c']);
-    expect(Object.getPrototypeOf(jsRecord)).toBe(realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(jsRecord)).toBe(realm.objectPrototype);
   });
 });

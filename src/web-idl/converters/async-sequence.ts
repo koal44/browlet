@@ -14,7 +14,7 @@ export class AsyncSequenceConverter<Type extends IDLAsyncSequenceType = IDLAsync
     const { realm } = this;
     return (value) => {
       if (!isObject(value)) {
-        throw new realm.intrinsics.typeError(
+        throw new realm.TypeError(
           'An async sequence value must be an object',
         );
       }
@@ -25,7 +25,7 @@ export class AsyncSequenceConverter<Type extends IDLAsyncSequenceType = IDLAsync
       }
       const syncMethod = getMethod(value, Symbol.iterator, realm);
       if (syncMethod === undefined) {
-        throw new realm.intrinsics.typeError('Value is not asynchronously iterable');
+        throw new realm.TypeError('Value is not asynchronously iterable');
       }
       return new IDLAsyncSequence(value, type.elementType, syncMethod, 'sync');
     };

@@ -27,13 +27,13 @@ describe('parse an import map', () => {
   it.each(['null', '[]', 'true', '"text"', '{"imports":[]}', '{"scopes":null}', '{"integrity":0}', '{"scopes":{"/":[]}}'])(
     'rejects invalid map structure %s with a realm-owned TypeError', (input) => {
       const { env, baseURL } = fixture();
-      expect(() => ImportMap.parse(input, baseURL, env)).toThrow(env.exec.TypeError);
+      expect(() => ImportMap.parse(input, baseURL, env)).toThrow(env.realm.TypeError);
     },
   );
 
   it('preserves intrinsic JSON SyntaxErrors', () => {
     const { env, baseURL } = fixture();
-    expect(() => ImportMap.parse('{', baseURL, env)).toThrow(env.realm.intrinsics.syntaxError);
+    expect(() => ImportMap.parse('{', baseURL, env)).toThrow(env.realm.SyntaxError);
   });
 
   it('ignores empty keys and blocks non-string, bare, invalid, and mismatched prefix addresses', () => {
@@ -66,7 +66,7 @@ describe('parse an import map', () => {
     expect(serializeURL(map.scopes.get('https://maps.test/app/deep/')!.get('lib')!)).toBe('https://maps.test/app/lib.js');
     expect(warning).toHaveBeenCalledTimes(1);
     // Invalid scope values throw even when the scope URL itself would be skipped.
-    expect(() => parse({ scopes: { 'https://[invalid': null } })).toThrow(env.exec.TypeError);
+    expect(() => parse({ scopes: { 'https://[invalid': null } })).toThrow(env.realm.TypeError);
   });
 
   it('normalizes integrity aliases by URL value and feeds descendant integrity lookup', () => {
@@ -110,7 +110,7 @@ describe('resolve a module specifier', () => {
     expect(resolve('//other.test/lib.js')).toBe('https://other.test/lib.js');
     expect(resolve('data:text/javascript,export{}')).toBe('data:text/javascript,export{}');
     for (const specifier of ['bare', ' ./lib.js', '?query', '#fragment', 'https://[invalid']) {
-      expect(() => resolve(specifier)).toThrow(env.exec.TypeError);
+      expect(() => resolve(specifier)).toThrow(env.realm.TypeError);
     }
   });
 
@@ -142,8 +142,8 @@ describe('resolve a module specifier', () => {
   it('stops on blocked exact or prefix mappings without falling back', () => {
     const { env, install, resolve, global } = fixture();
     install({ imports: { lib: '/lib.js', 'pkg/': '/pkg/' }, scopes: { '/app/': { lib: null, 'pkg/': null } } });
-    expect(() => resolve('lib')).toThrow(env.exec.TypeError);
-    expect(() => resolve('pkg/entry.js')).toThrow(env.exec.TypeError);
+    expect(() => resolve('lib')).toThrow(env.realm.TypeError);
+    expect(() => resolve('pkg/entry.js')).toThrow(env.realm.TypeError);
     expect(global.resolvedModuleSet.size).toBe(0);
   });
 
@@ -159,7 +159,7 @@ describe('resolve a module specifier', () => {
     const { env, install, resolve, global } = fixture();
     install({ imports: { 'pkg/': '/packages/', 'opaque/': 'data:text/javascript,/' } });
     for (const specifier of ['pkg/../escape.js', 'pkg/%2e%2e/escape.js', 'pkg//outside.js', 'pkg/https://[invalid', 'opaque/child']) {
-      expect(() => resolve(specifier)).toThrow(env.exec.TypeError);
+      expect(() => resolve(specifier)).toThrow(env.realm.TypeError);
     }
     expect(global.resolvedModuleSet.size).toBe(0);
     expect(resolve('pkg/deep/../entry.js')).toBe('https://maps.test/packages/entry.js');
@@ -186,7 +186,7 @@ describe('resolve a module specifier', () => {
     expect(serializeURL(current.env.resolveModuleSpecifier(script, 'lib'))).toBe('https://maps.test/source.js');
     expect(source.global.resolvedModuleSet.size).toBe(2);
     expect(current.global.resolvedModuleSet.size).toBe(0);
-    expect(() => current.env.resolveModuleSpecifier(script, 'missing')).toThrow(current.env.exec.TypeError);
+    expect(() => current.env.resolveModuleSpecifier(script, 'missing')).toThrow(current.env.realm.TypeError);
   });
 
   it('does not require import-map state on a non-Window environment', () => {
@@ -195,7 +195,7 @@ describe('resolve a module specifier', () => {
     const script = new ClassicScript('', sandbox, baseURL, new ScriptFetchOptions(), false, null, true);
     // Sandbox's globalImplementation getter throws: non-Window resolution must not consult it.
     expect(serializeURL(sandbox.resolveModuleSpecifier(script, './child.js'))).toBe('https://maps.test/app/child.js');
-    expect(() => sandbox.resolveModuleSpecifier(script, 'missing')).toThrow(sandbox.exec.TypeError);
+    expect(() => sandbox.resolveModuleSpecifier(script, 'missing')).toThrow(sandbox.realm.TypeError);
   });
 });
 
@@ -214,7 +214,7 @@ describe('merge import maps', () => {
     expect(resolve('lib')).toBe('https://maps.test/old.js');
     expect(resolve('scoped')).toBe('https://maps.test/old-scoped.js');
     expect(resolve('extra')).toBe('https://maps.test/extra.js');
-    expect(() => resolve('blocked')).toThrow(env.exec.TypeError);
+    expect(() => resolve('blocked')).toThrow(env.realm.TypeError);
     expect(serializeURL(map.imports.get('lib')!)).toBe('https://maps.test/new.js');
     expect(global.importMap.imports.get('added')).not.toBe(map.imports.get('added'));
     expect(global.importMap.scopes.get('https://maps.test/another/')).not.toBe(map.scopes.get('https://maps.test/another/'));
@@ -261,7 +261,7 @@ describe('merge import maps', () => {
     expect(map.scopes.get('https://maps.test/app/')!.has('https://maps.test/app/fixed.js')).toBe(true);
     env.window.document.url = env.parseURL('https://maps.test/other/page.html')!;
     expect(resolve('https://maps.test/app/fixed.js')).toBe('https://maps.test/other.js');
-    expect(() => resolve('previously-missing')).toThrow(env.exec.TypeError);
+    expect(() => resolve('previously-missing')).toThrow(env.realm.TypeError);
     install({ imports: { 'previously-missing': '/now-present.js' } });
     expect(resolve('previously-missing')).toBe('https://maps.test/now-present.js');
   });

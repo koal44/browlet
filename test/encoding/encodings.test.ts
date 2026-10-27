@@ -9,7 +9,7 @@ import {
 } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
 import { getSingleByteCodec } from '../../src/encoding/codecs/single-byte';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 
 const encodings: Encoding[] = [
   'UTF-8', 'IBM866',

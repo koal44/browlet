@@ -35,8 +35,8 @@ describe('Web IDL promise member binding', () => {
 
     expect(result).toBe(property);
     expect(result).toBe(ownResult);
-    expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
-    expect(result).not.toBeInstanceOf(second.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(first.NativePromise);
+    expect(result).not.toBeInstanceOf(second.NativePromise);
     expect(projected).toBe(fixture.bindings.project(child));
     expect(projected).toBeInstanceOf(Reflect.get(first.globalObject, 'PromiseChild'));
   });
@@ -56,10 +56,10 @@ describe('Web IDL promise member binding', () => {
     implementation.pending.reject(request);
     const [firstReason, secondReason] = await observed;
 
-    expect(firstReason).toBeInstanceOf(first.intrinsics.typeError);
+    expect(firstReason).toBeInstanceOf(first.TypeError);
     expect(firstReason).not.toBe(request);
     expect(secondReason).toBe(firstReason);
-    const authorError = new fixture.second.intrinsics.typeError('author failed');
+    const authorError = new fixture.second.TypeError('author failed');
     await expect(call(owner, 'reject', authorError)).rejects.toBe(authorError);
   });
 
@@ -74,7 +74,7 @@ describe('Web IDL promise member binding', () => {
     await expect(call(fixture.owner, 'consume', input())).resolves.toBe(7);
     await expect(call(fixture.owner, 'invoke', input)).resolves.toBe(7);
     expect(fixture.implementation.received).toBe(child);
-    const authorError = new fixture.second.intrinsics.typeError('callback failed');
+    const authorError = new fixture.second.TypeError('callback failed');
     await expect(call(fixture.owner, 'invoke', () => { throw authorError; }))
       .rejects.toBe(authorError);
   });
@@ -82,7 +82,7 @@ describe('Web IDL promise member binding', () => {
   it('rejects an incoming fulfillment that does not match its declared interface', async () => {
     const fixture = createOrdinaryPromiseFixture();
     await expect(call(fixture.owner, 'consume', Promise.resolve(4)))
-      .rejects.toBeInstanceOf(fixture.first.intrinsics.typeError);
+      .rejects.toBeInstanceOf(fixture.first.TypeError);
     expect(fixture.implementation.received).toBeUndefined();
   });
 
@@ -93,7 +93,7 @@ describe('Web IDL promise member binding', () => {
     fixture.implementation.pending.resolve(child);
     const record = await result;
 
-    expect(Object.getPrototypeOf(record)).toBe(fixture.first.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(record)).toBe(fixture.first.objectPrototype);
     expect(Reflect.get(record, 'value')).toBe(fixture.bindings.project(child));
     expect(Reflect.get(record, 'value')).toBeInstanceOf(Reflect.get(fixture.first.globalObject, 'PromiseChild'));
     expect(record).toHaveProperty('done', false);
@@ -114,9 +114,9 @@ describe('Web IDL promise member binding', () => {
     fixture.implementation.pending.resolve(child);
 
     const pending = Reflect.apply(next, iterator, []) as Promise<IteratorResult<object>>;
-    expect(pending).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
+    expect(pending).toBeInstanceOf(methodRealm.NativePromise);
     const first = await pending;
-    expect(Object.getPrototypeOf(first)).toBe(methodRealm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(first)).toBe(methodRealm.objectPrototype);
     expect(first.done).toBe(false);
     expect(first.value).toBe(fixture.bindings.project(child));
     await expect(Reflect.apply(next, iterator, [])).resolves.toEqual({ done: true, value: undefined });
@@ -156,19 +156,19 @@ describe('Web IDL promise member binding', () => {
     const world = new BindingWorld([itemIDL, itemsIDL]);
     const binding = world.register(realm, (ctx) => ({ realm: ctx.realm }));
     const item = stamped ? binding.construct(ItemImpl) : new ItemImpl();
-    const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.Promise));
+    const owner = binding.project(ItemsImpl, new ItemsImpl(item, realm.InternalPromise));
     const iterator = call(owner, 'values') as object;
     const methodRealm = borrowed ? new Realm() : realm;
     const methodOwner = borrowed ? call(world.register(methodRealm, (ctx) => ({ realm: ctx.realm })).project(
-      ItemsImpl, new ItemsImpl(item, realm.Promise),
+      ItemsImpl, new ItemsImpl(item, realm.InternalPromise),
     ), 'values') as object : iterator;
     const pending = Reflect.apply(
       Reflect.get(methodOwner, 'next') as CallableFunction, iterator, [],
     ) as Promise<IteratorResult<object, undefined>>;
-    expect(pending).toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
+    expect(pending).toBeInstanceOf(methodRealm.NativePromise);
     const result = await pending;
 
-    expect(Reflect.getPrototypeOf(result)).toBe(methodRealm.intrinsics.objectPrototype);
+    expect(Reflect.getPrototypeOf(result)).toBe(methodRealm.objectPrototype);
     expect(result.done).toBe(false);
     expect(world.getRealm(result.value!)).toBe(realm);
     expect(result.value).toBe(binding.project(ItemImpl, item));
@@ -183,7 +183,7 @@ describe('Web IDL promise member binding', () => {
       members: [asyncIter(childType, { create: 'createIterator' })],
     });
     const binding = new BindingWorld([definition, promiseChildIDL]).register(new Realm(), (ctx) => ({ realm: ctx.realm }));
-    const implementation = new OrdinaryPromiseOwnerImpl(binding.Promise);
+    const implementation = new OrdinaryPromiseOwnerImpl(binding.InternalPromise);
     const owner = binding.project(OrdinaryPromiseOwnerImpl, implementation);
     const iterator = call(owner, 'values') as object;
     const child = new PromiseChildImpl();
@@ -248,7 +248,7 @@ describe('Web IDL promise member binding', () => {
       resolvedCall,
       rejectedCall,
     ]) {
-      expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
+      expect(promise).toBeInstanceOf(realm.NativePromise);
       expect(promise).not.toBeInstanceOf(Promise);
     }
     await expect(resolvedProperty).resolves.toBe(4);
@@ -281,8 +281,8 @@ describe('Web IDL promise member binding', () => {
     const method = Reflect.get(object, 'read') as CallableFunction;
     const promise = Reflect.apply(method, {}, []) as Promise<unknown>;
 
-    expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
-    await expect(promise).rejects.toBeInstanceOf(realm.intrinsics.typeError);
+    expect(promise).toBeInstanceOf(realm.NativePromise);
+    await expect(promise).rejects.toBeInstanceOf(realm.TypeError);
   });
 
   it('realizes only requested DOMException rejections in the operation realm', async () => {
@@ -310,7 +310,7 @@ describe('Web IDL promise member binding', () => {
     const object = binding.allocatePlatformRecord(binding.resolveInterface('PromiseExceptionSource')).platformObject!;
     const promise = call(object, 'reject') as Promise<unknown>;
 
-    expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    expect(promise).toBeInstanceOf(realm.NativePromise);
     await expect(promise).rejects.toMatchObject({
       message: 'requested rejection',
       name: 'NotAllowedError',
@@ -346,7 +346,7 @@ function createOrdinaryPromiseFixture() {
   ]);
   const { realm: first, context: firstBinding } = installTestBindings(bindings);
   const { realm: second } = installTestBindings(bindings);
-  const implementation = new OrdinaryPromiseOwnerImpl(firstBinding.Promise);
+  const implementation = new OrdinaryPromiseOwnerImpl(firstBinding.InternalPromise);
   const owner = firstBinding.project(OrdinaryPromiseOwnerImpl, implementation);
   const foreignConstructor = Reflect.get(second.globalObject, 'OrdinaryPromiseOwner') as { prototype: object; };
   return { bindings, first, second, firstBinding, implementation, owner, foreignPrototype: foreignConstructor.prototype };

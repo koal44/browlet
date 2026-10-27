@@ -60,7 +60,7 @@ identities at those boundaries.
 
 ResourceReader supplies its UserAgent's support predicate during determination.
 Do not install a mutable module singleton or put the capability on a realm,
-Binding Context, or RealmExecution. Context-specific sniffing remains in the
+Binding Context, or realm facilities. Context-specific sniffing remains in the
 standalone functions until its element or loader callers establish the needed
 input lifetime; the general resource path need not anticipate those consumers.
 

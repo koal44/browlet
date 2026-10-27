@@ -79,12 +79,12 @@ describe('Web IDL direct collection and iterable receivers', () => {
 
         security.mockClear();
         for (const value of [undefined, null, 1, {}, alias, foreign, new Proxy(target, {})]) {
-          expect(() => Reflect.apply(method, value, [])).toThrow(methodRealm.intrinsics.typeError);
+          expect(() => Reflect.apply(method, value, [])).toThrow(methodRealm.TypeError);
         }
         expect(security).not.toHaveBeenCalled();
         expect(resolveReceiver).not.toHaveBeenCalled();
 
-        expect(() => Reflect.apply(method, unrelated, [])).toThrow(methodRealm.intrinsics.typeError);
+        expect(() => Reflect.apply(method, unrelated, [])).toThrow(methodRealm.TypeError);
         expect(security).toHaveBeenCalledTimes(1);
         expect(security.mock.calls[0]![0] === unrelated).toBe(true);
         expect(security.mock.calls[0]!.slice(1)).toEqual([name, type]);

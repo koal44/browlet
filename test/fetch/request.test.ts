@@ -79,7 +79,7 @@ describe('Request implementation state', () => {
   it('retains the same request, signal, and duplicate-preserving Headers list', () => {
     const fixture = createFetchFixture();
     const record = createFetchRequest();
-    const signal = fixture.env.exec.createAbortController().signal;
+    const signal = fixture.env.createAbortController().signal;
     const request = fixture.createRequest(record, signal);
     expect(request.getRequest()).toBe(record);
     expect(request.signal).toBe(signal);

@@ -22,7 +22,7 @@ export function fetchForGlobal(
   const requestObject = RequestImpl.create(input, init, env);
   // SPEC_CLASH(fetch-borrowed-realm): Blink/Gecko use the receiver realm for
   // successful promises and Responses; WebKit uses the method realm. Keep the receiver.
-  const result = env.exec.Promise.withResolvers(responseType);
+  const result = env.InternalPromise.withResolvers(responseType);
   const request = requestObject.getRequest();
   const signal = requestObject.signal;
   if (signal.aborted) {

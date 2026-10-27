@@ -133,7 +133,7 @@ export class ImplementationConverter {
     if (type.kind === 'promise') {
       const convertResult = this.#createResultConverter(type.resultType, options);
       const convert: ImplConverter<IDLPromise, InternalPromise<unknown>> = (value, context) =>
-        this.#promiseToImpl(value, (result) => convertResult(result, context), context.Promise);
+        this.#promiseToImpl(value, (result) => convertResult(result, context), context.InternalPromise);
       return convert as ImplConverter;
     }
     if (type.kind === 'callback-function') {
@@ -239,7 +239,7 @@ export class ImplementationConverter {
         // Containers are consumed in place, so each step retains its first conversion.
         let status: 'pending' | 'fulfilled' | 'rejected' = 'pending';
         let outcome: unknown;
-        return context.Promise.fromNative(result.promise, (item) => {
+        return context.InternalPromise.fromNative(result.promise, (item) => {
           if (status === 'pending') {
             try {
               outcome = read(item);
@@ -255,7 +255,7 @@ export class ImplementationConverter {
       },
       return: (reason) => {
         const result = iterator.close(reason, realm);
-        return context.Promise.fromNative(result.promise, () => undefined, result.type as IDLType & PromiseResultType<void>);
+        return context.InternalPromise.fromNative(result.promise, () => undefined, result.type as IDLType & PromiseResultType<void>);
       },
     };
   }

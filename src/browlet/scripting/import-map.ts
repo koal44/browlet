@@ -26,7 +26,7 @@ export function resolveModuleSpecifier(referringScript: Script | null, specifier
   }
   result ??= resolveImportsMatch(normalizedSpecifier, asURL, importMap.imports, env);
   result ??= asURL;
-  if (result === null) throw new env.exec.TypeError(`The module specifier '${specifier}' could not be resolved`);
+  if (result === null) throw new env.realm.TypeError(`The module specifier '${specifier}' could not be resolved`);
   addModuleToResolvedModuleSet(targetEnv, serializedBaseURL, normalizedSpecifier, asURL);
   return result;
 }
@@ -44,22 +44,22 @@ export class ImportMap {
   /** Parse and normalize imports, scopes, and integrity metadata against the supplied base URL. */
   // https://html.spec.whatwg.org/multipage/webappapis.html#parse-an-import-map-string
   static parse(input: string, baseURL: URLRecord, env: BrowletEnvironment): ImportMap {
-    const parsed = env.exec.parseJSONStringToInfra(input);
-    if (!(parsed instanceof Map)) throw new env.exec.TypeError('An import map must be a JSON object');
+    const parsed = env.realm.parseJSONStringToInfra(input);
+    if (!(parsed instanceof Map)) throw new env.realm.TypeError('An import map must be a JSON object');
     const result = new ImportMap();
     if (parsed.has('imports')) {
       const imports = parsed.get('imports');
-      if (!(imports instanceof Map)) throw new env.exec.TypeError('The import map imports must be a JSON object');
+      if (!(imports instanceof Map)) throw new env.realm.TypeError('The import map imports must be a JSON object');
       result.imports = sortAndNormalizeModuleSpecifierMap(imports, baseURL, env);
     }
     if (parsed.has('scopes')) {
       const scopes = parsed.get('scopes');
-      if (!(scopes instanceof Map)) throw new env.exec.TypeError('The import map scopes must be a JSON object');
+      if (!(scopes instanceof Map)) throw new env.realm.TypeError('The import map scopes must be a JSON object');
       result.scopes = sortAndNormalizeScopes(scopes, baseURL, env);
     }
     if (parsed.has('integrity')) {
       const integrity = parsed.get('integrity');
-      if (!(integrity instanceof Map)) throw new env.exec.TypeError('The import map integrity must be a JSON object');
+      if (!(integrity instanceof Map)) throw new env.realm.TypeError('The import map integrity must be a JSON object');
       result.integrity = normalizeModuleIntegrityMap(integrity, baseURL, env);
     }
     if ([...parsed.keys()].some((key) => key !== 'imports' && key !== 'scopes' && key !== 'integrity')) {
@@ -154,16 +154,16 @@ function resolveImportsMatch(
   const allowsPrefix = asURL === null || isSpecialURL(asURL);
   for (const [specifierKey, resolutionResult] of specifierMap) {
     if (specifierKey === normalizedSpecifier) {
-      if (resolutionResult === null) throw new env.exec.TypeError(`The module specifier '${specifierKey}' is blocked`);
+      if (resolutionResult === null) throw new env.realm.TypeError(`The module specifier '${specifierKey}' is blocked`);
       return resolutionResult;
     }
     if (!allowsPrefix || !specifierKey.endsWith('/') || !normalizedSpecifier.startsWith(specifierKey)) continue;
-    if (resolutionResult === null) throw new env.exec.TypeError(`The module specifier prefix '${specifierKey}' is blocked`);
+    if (resolutionResult === null) throw new env.realm.TypeError(`The module specifier prefix '${specifierKey}' is blocked`);
     const afterPrefix = normalizedSpecifier.slice(specifierKey.length);
     const url = env.parseURL(afterPrefix, resolutionResult);
-    if (url === null) throw new env.exec.TypeError(`The module specifier '${normalizedSpecifier}' has an invalid suffix`);
+    if (url === null) throw new env.realm.TypeError(`The module specifier '${normalizedSpecifier}' has an invalid suffix`);
     if (!serializeURL(url).startsWith(serializeURL(resolutionResult))) {
-      throw new env.exec.TypeError(`The module specifier '${normalizedSpecifier}' backtracks above '${specifierKey}'`);
+      throw new env.realm.TypeError(`The module specifier '${normalizedSpecifier}' backtracks above '${specifierKey}'`);
     }
     return url;
   }
@@ -226,7 +226,7 @@ function sortAndNormalizeScopes(
 ): Map<string, ModuleSpecifierMap> {
   const normalized = new Map<string, ModuleSpecifierMap>();
   for (const [scopePrefix, value] of originalMap) {
-    if (!(value instanceof Map)) throw new env.exec.TypeError(`The import map scope '${scopePrefix}' must be a JSON object`);
+    if (!(value instanceof Map)) throw new env.realm.TypeError(`The import map scope '${scopePrefix}' must be a JSON object`);
     const scopeURL = env.parseURL(scopePrefix, baseURL);
     if (scopeURL === null) {
       env.reportConsoleWarning(`The import map scope '${scopePrefix}' is not a URL`);

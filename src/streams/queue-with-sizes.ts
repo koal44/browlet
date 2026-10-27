@@ -27,7 +27,7 @@ export class QueueWithSizes<Value> {
   /** EnqueueValueWithSize. */
   enqueue(value: Value, size: number, env: JSEnvironment): void {
     if (!isNonNegativeNumber(size) || size === Infinity) {
-      throw new env.exec.RangeError('Size must be a finite, non-NaN, non-negative number.');
+      throw new env.realm.RangeError('Size must be a finite, non-NaN, non-negative number.');
     }
     this.#entries.push({ size, value });
     this.#totalSize += size;

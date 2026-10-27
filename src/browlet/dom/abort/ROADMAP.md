@@ -14,7 +14,7 @@ Consumers reject with that stored reason and own their own cancellation/cleanup.
 
 AbortController retains its same-object signal and aborts idempotently.
 AbortSignal.any preserves the first already-aborted source's reason and flattens
-dependent sources. Default errors use `env.exec.DOMException`, supplied by
+dependent sources. Default errors use `env.DOMException`, supplied by
 Binding's original interface constructor independently of the writable global
 property. Borrowed `abort()` methods select their invoking environment for the
 default error; internal calls default to the signal's owning environment.
@@ -41,7 +41,7 @@ dependents. Explicit reasons keep their original identity.
 ## HTML delivery and retention
 
 AbortSignal.timeout's declaration composes the owning global's active-time wait
-with `env.exec.queueTask('timer', steps)`. GlobalTimers and the running
+with `env.queueTask('timer', steps)`. GlobalTimers and the running
 event loop now supply those operations. It retains the original Window owner
 across WindowProxy retargeting. DOM does not schedule a separate Node timer.
 

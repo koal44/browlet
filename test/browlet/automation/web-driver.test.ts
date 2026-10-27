@@ -94,7 +94,7 @@ describe('WebDriver BiDi script command algorithms', () => {
     const describeException = vi.spyOn(driver, 'getExceptionDetails').mockImplementation((actualRealm, completion) => {
       expect(actualRealm).toBe(realm);
       expect(completion.type).toBe('throw');
-      expect(completion.value).toBeInstanceOf(realm.intrinsics.syntaxError);
+      expect(completion.value).toBeInstanceOf(realm.SyntaxError);
       expect(parse.mock.results[0]!.value).toEqual([completion.value]);
       expect(env.responsibleEventLoop.executionContextStack).toHaveLength(0);
       return details;
@@ -127,7 +127,7 @@ describe('WebDriver BiDi script command algorithms', () => {
 
   it('retains a Promise result when awaitPromise is false', async () => {
     const { driver, session, realm, parameters } = fixture();
-    const promise = new realm.intrinsics.promise.constructor(() => {});
+    const promise = new realm.NativePromise(() => {});
     vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value: promise });
     const awaitPromise = vi.spyOn(driver, 'awaitPromise');
     const serialize = vi.spyOn(driver, 'serializeAsRemoteValue').mockReturnValue({ type: 'promise' });
@@ -139,7 +139,7 @@ describe('WebDriver BiDi script command algorithms', () => {
 
   it('deserializes arguments and an explicit receiver before evaluating and calling the function', async () => {
     const { driver, session, realm, env, parameters } = fixture();
-    const receiver = realm.createOrdinaryObject(realm.intrinsics.objectPrototype);
+    const receiver = realm.createOrdinaryObject(realm.objectPrototype);
     Reflect.set(receiver, 'base', 40);
     // The test supplies the function the missing retained-record backend would produce.
     const function_ = realm.evaluate('(function (increment) { "use strict"; return this.base + increment; })', 'fixture.js');
@@ -217,7 +217,7 @@ describe('WebDriver BiDi script command algorithms', () => {
 
   it.each(['evaluate', 'callFunction'] as const)('unwinds %s when Await fails before suspending', async (command) => {
     const { driver, session, realm, env, parameters } = fixture();
-    const promise = new realm.intrinsics.promise.constructor(() => {});
+    const promise = new realm.NativePromise(() => {});
     const failure = new InternalError('Await unavailable');
     const value = command === 'evaluate' ? promise : () => promise;
     vi.spyOn(JSScriptRecord.prototype, 'evaluate').mockReturnValue({ type: 'normal', value });

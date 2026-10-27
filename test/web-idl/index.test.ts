@@ -11,6 +11,7 @@ describe('Web IDL package surface', () => {
       'getImplementationObject',
       'isStampedImplInstance',
       'isStampedPlatformObject',
+      'matchesExposure',
     ].sort());
   });
 });

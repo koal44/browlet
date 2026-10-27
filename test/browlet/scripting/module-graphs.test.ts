@@ -177,7 +177,7 @@ async function createFixture() {
   script.fetchOptions = new ScriptFetchOptions();
   const record = new JSSourceTextModuleRecord(script);
   script.record = record;
-  const loading = env.exec.Promise.withResolvers(internalType<void>());
+  const loading = env.InternalPromise.withResolvers(internalType<void>());
   const load = vi.spyOn(record, 'loadRequestedModules').mockReturnValue(loading.promise);
   const link = vi.spyOn(record, 'link').mockImplementation(() => {});
   return { env, url, script, loading, load, link };

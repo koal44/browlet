@@ -129,8 +129,8 @@ describe('CSSOM sheet bindings', () => {
     expect(error).not.toBeInstanceOf(browser.window.DOMException);
     expect(error).toMatchObject({ name: 'IndexSizeError' });
     const result: Promise<CSSStyleSheet> = Reflect.apply(other.window.CSSStyleSheet.prototype.replace, sheet, ['.one {}']);
-    expect(result).toBeInstanceOf(getRelevantRealm(browser.window).intrinsics.promise.constructor);
-    expect(result).not.toBeInstanceOf(getRelevantRealm(other.window).intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(getRelevantRealm(browser.window).NativePromise);
+    expect(result).not.toBeInstanceOf(getRelevantRealm(other.window).NativePromise);
     expect(() => sheet.replaceSync('')).toThrow(expect.objectContaining({ name: 'NotAllowedError' }));
     await expect(result).resolves.toBe(sheet);
     expect(sheet.cssRules).toHaveLength(1);

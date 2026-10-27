@@ -13,7 +13,7 @@ describe('runtime script errors', () => {
   it('dispatches a trusted, cancelable error event before reporting to the console', () => {
     const { window } = new Browlet({ route: () => '', reporting: false });
     const realm = getRelevantRealm(window);
-    const exception = new realm.intrinsics.error('failed');
+    const exception = new realm.Error('failed');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn((event: BrowletEvent) => { event.preventDefault(); });
     window.addEventListener('error', listener);
@@ -44,8 +44,8 @@ describe('runtime script errors', () => {
   it('reports a throwing error listener without recursively dispatching error events', () => {
     const { window } = browser();
     const realm = getRelevantRealm(window);
-    const original = new realm.intrinsics.error('original');
-    const nested = new realm.intrinsics.error('listener');
+    const original = new realm.Error('original');
+    const nested = new realm.Error('listener');
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn(() => {
       expect(realm.env.globalImplementation.inErrorReportingMode).toBe(true);

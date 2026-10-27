@@ -793,7 +793,7 @@ export class DocumentImpl extends NodeImpl {
 
   /** Create a detached Document or XMLDocument in this document's environment. */
   createDocumentNode(xml = false): DocumentImpl {
-    return this.env.exec.constructNode(xml ? XMLDocumentImpl : DocumentImpl, []);
+    return this.env.constructNode(xml ? XMLDocumentImpl : DocumentImpl, []);
   }
 
   /** Copy document metadata without copying its browsing context or runtime services. */
@@ -821,13 +821,13 @@ export class DocumentImpl extends NodeImpl {
 
   /** Allocate existing CDATA data, including data that became non-XML after mutation. */
   createCDATASectionNode(data: string): CDATASectionImpl {
-    return this.env.exec.constructNode(CDATASectionImpl, [data, this]);
+    return this.env.constructNode(CDATASectionImpl, [data, this]);
   }
 
   /** Create and initialize a processing instruction in this document. */
   // https://dom.spec.whatwg.org/#dom-document-createprocessinginstruction
   createProcessingInstruction(target: string, data: string): ProcessingInstructionImpl {
-    return this.env.exec.constructNode(ProcessingInstructionImpl, [target, data, this]);
+    return this.env.constructNode(ProcessingInstructionImpl, [target, data, this]);
   }
 
   /** Copy retained instruction data without repeating public creation validation. */
@@ -858,12 +858,12 @@ export class DocumentImpl extends NodeImpl {
 
   // https://dom.spec.whatwg.org/#dom-document-createtextnode
   createTextNode(data: string): TextImpl {
-    return this.env.exec.constructNode(TextImpl, [data, this]);
+    return this.env.constructNode(TextImpl, [data, this]);
   }
 
   // https://dom.spec.whatwg.org/#dom-document-createcomment
   createComment(data: string): CommentImpl {
-    return this.env.exec.constructNode(CommentImpl, [data, this]);
+    return this.env.constructNode(CommentImpl, [data, this]);
   }
 
   /** Create a live range collapsed at this document's start. */
@@ -880,7 +880,7 @@ export class DocumentImpl extends NodeImpl {
       : normalized === 'event' || normalized === 'events' || normalized === 'htmlevents' ? EventImpl : null;
     // Other entries in DOM's legacy table are not exposed by Browlet yet.
     if (constructor === null) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
-    const event = this.env.exec.createEvent(constructor);
+    const event = this.env.createEvent(constructor);
     event.isTrusted = false;
     event.initialized = false;
     return event;
@@ -1231,7 +1231,7 @@ export class DocumentImpl extends NodeImpl {
   waitForScriptsMayRun(): InternalPromise<void> {
     // PROVISIONAL(HTML navigation): current callers commit synchronously before
     // parser tasks run. Full navigation must supply its script-readiness gate.
-    return this.env.exec.Promise.try(() => {}, idlType.undefined);
+    return this.env.InternalPromise.try(() => {}, idlType.undefined);
   }
 
   /** Process response Link fields for the selected document-loading phase. */
@@ -1646,7 +1646,7 @@ export class DocumentImpl extends NodeImpl {
     isValue: string | null = null, registry: CustomElementRegistryImpl | null = this.customElementRegistry,
   ): ElementImpl {
     const implementation = getElementConstructor(namespaceURI, localName);
-    const element = this.env.exec.constructNode<ElementImpl>(
+    const element = this.env.constructNode<ElementImpl>(
       implementation,
       [{
         document: this,
@@ -1663,14 +1663,14 @@ export class DocumentImpl extends NodeImpl {
 
   // https://dom.spec.whatwg.org/#dom-document-createdocumentfragment
   createDocumentFragment(): DocumentFragmentImpl {
-    return this.env.exec.constructNode(DocumentFragmentImpl, [this]);
+    return this.env.constructNode(DocumentFragmentImpl, [this]);
   }
 
   /** Allocate a shadow root in this document's realm, including for an adopted host. */
   // https://dom.spec.whatwg.org/#concept-node-create
   // SPEC_CLASH(adopted-shadow-root-realm): follow DOM and Firefox; Chromium/WebKit use the host's original realm.
   createShadowRoot(host: ElementImpl, mode: ShadowRootMode): ShadowRootImpl {
-    return this.env.exec.constructNode(ShadowRootImpl, [host, mode]);
+    return this.env.constructNode(ShadowRootImpl, [host, mode]);
   }
 
   /** Allocate an attribute from an already selected name, namespace, and value. */
@@ -1680,7 +1680,7 @@ export class DocumentImpl extends NodeImpl {
     namespaceURI: string | null,
     prefix: string | null,
   ): AttrImpl {
-    return this.env.exec.constructNode(AttrImpl, [
+    return this.env.constructNode(AttrImpl, [
       localName,
       value,
       namespaceURI,
@@ -1696,7 +1696,7 @@ export class DocumentImpl extends NodeImpl {
     publicId: string,
     systemId: string,
   ): DocumentTypeImpl {
-    return this.env.exec.constructNode(
+    return this.env.constructNode(
       DocumentTypeImpl,
       [name, publicId, systemId, this, this.env],
     );
@@ -1724,10 +1724,10 @@ export class DocumentImpl extends NodeImpl {
   /** Wait for the blocking set to empty, rechecking for sheets added before resumption. */
   waitForScriptBlockingStyleSheets(): InternalPromise<void> {
     const { env } = this;
-    return env.exec.Promise.try(() => {
+    return env.InternalPromise.try(() => {
       if (this.#scriptBlockingStyleSheets.size === 0) return;
       const ready = this.#scriptBlockingStyleSheetsReady ??=
-        env.exec.Promise.withResolvers(idlType.undefined);
+        env.InternalPromise.withResolvers(idlType.undefined);
       return ready.promise.then(() =>
         this.waitForScriptBlockingStyleSheets(),
       );

@@ -12,7 +12,7 @@ describe('writer monitoring Promise lifecycle', () => {
       mockEventLoopTurns();
       const owner = createWriter(state === 'pending' ? 0 : 1);
       const foreign = createWriter();
-      const failure = new foreign.realm.intrinsics.typeError('sink failed');
+      const failure = new foreign.realm.TypeError('sink failed');
       if (state === 'closed') observe(owner, owner.writer.close());
       if (state === 'errored') owner.controller.error(failure);
       owner.realm.agent.eventLoop.performMicrotaskCheckpoint();
@@ -48,8 +48,8 @@ describe('writer monitoring Promise lifecycle', () => {
       expect(after).toEqual([[], []]);
       owner.realm.agent.eventLoop.performMicrotaskCheckpoint();
       const releasedError = after[0]![0]!.value;
-      expect(releasedError).toBeInstanceOf(owner.realm.intrinsics.typeError);
-      expect(releasedError).not.toBeInstanceOf(foreign.realm.intrinsics.typeError);
+      expect(releasedError).toBeInstanceOf(owner.realm.TypeError);
+      expect(releasedError).not.toBeInstanceOf(foreign.realm.TypeError);
       for (const trace of after) {
         expect(trace).toEqual([{ status: 'rejected', value: releasedError }]);
       }
@@ -72,12 +72,12 @@ function createWriter(highWaterMark = 1) {
 }
 
 function observe(owner: ReturnType<typeof createWriter>, promise: Promise<void>) {
-  expect(promise).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
+  expect(promise).toBeInstanceOf(owner.realm.NativePromise);
   const trace: { status: string; value: unknown; }[] = [];
   const record = (status: string) => owner.realm.createFunction((_receiver, [value]) => {
     trace.push({ status, value });
   }, { name: '', length: 1 });
-  Reflect.apply(owner.realm.intrinsics.promise.then, promise, [
+  Reflect.apply(owner.realm.promiseThen, promise, [
     record('fulfilled'), record('rejected'),
   ]);
   return trace;

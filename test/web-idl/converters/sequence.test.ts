@@ -24,7 +24,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s sequence conversion',
     const value = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(frozenArray(idlType.long))));
 
     expect(value).toEqual([1, 2]);
-    expect(value).toBeInstanceOf(realm.intrinsics.array);
+    expect(value).toBeInstanceOf(realm.Array);
     expect(Object.isFrozen(value)).toBe(true);
     expect(iteratorGets).toBe(1);
     expect(idlToJS(value, binding.getConverter(binding.assembly.getIDLType(frozenArray(idlType.long))))).toBe(value);
@@ -40,7 +40,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s sequence conversion',
     const converter = binding.getConverter(type);
     const created = converter.createFrozenArray([4]);
     expect(created).toEqual([4]);
-    expect(created).toBeInstanceOf(realm.intrinsics.array);
+    expect(created).toBeInstanceOf(realm.Array);
     expect(Object.isFrozen(created)).toBe(true);
 
     const iterable = new Set(['5']);
@@ -68,7 +68,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s sequence conversion',
     const result = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(type)));
 
     expect(result).toEqual([7]);
-    expect(result).toBeInstanceOf(realm.intrinsics.array);
+    expect(result).toBeInstanceOf(realm.Array);
     expect(Object.isFrozen(result)).toBe(true);
     expect(iteratorGets).toBe(1);
   });

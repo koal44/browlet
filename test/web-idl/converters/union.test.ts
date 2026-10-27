@@ -130,7 +130,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s union conversion', (m
 
     const sequenceValue = jsToIDL(source, binding.getConverter(binding.assembly.getIDLType(type)));
     expect(sequenceValue).toEqual([7]);
-    expect(idlToJS(sequenceValue, binding.getConverter(binding.assembly.getIDLType(type)))).toBeInstanceOf(realm.intrinsics.array);
+    expect(idlToJS(sequenceValue, binding.getConverter(binding.assembly.getIDLType(type)))).toBeInstanceOf(realm.Array);
     expect(fieldGets).toBe(0);
     iterable = false;
     for (let i = 1; i <= 2; i++) {
@@ -138,7 +138,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s union conversion', (m
       expect(dictionary).toMatchObject({ record: { value: i } });
       const platform = idlToJS(dictionary, binding.getConverter(binding.assembly.getIDLType(type)));
       expect(platform).toEqual({ value: i });
-      expect(Object.getPrototypeOf(platform)).toBe(realm.intrinsics.objectPrototype);
+      expect(Object.getPrototypeOf(platform)).toBe(realm.objectPrototype);
     }
     expect(iteratorGets).toBe(3);
     expect(jsToIDL(true, binding.getConverter(binding.assembly.getIDLType(type)))).toBe(true);

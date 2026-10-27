@@ -56,7 +56,7 @@ export function fetch(
   const params = new FetchParams(request, timing, env);
   params.taskDestination = options.useParallelQueue
     ? new ParallelQueue(userAgent.runInParallel)
-    : client?.exec.global ?? null;
+    : client?.realm.globalObject ?? null;
   params.crossOriginIsolatedCapability = isolated;
   params.processRequestBodyChunkLength = options.processRequestBodyChunkLength ?? null;
   params.processRequestEndOfBody = options.processRequestEndOfBody ?? null;
@@ -163,8 +163,8 @@ function mainFetch(params: FetchParams, recursive = false): InternalPromise<Fetc
   userAgent.runInParallel(() => {
     userAgent.HostPromise.try(getResponse, responseType).observe(
       // Body/Streams operations must enter their owner's task and checkpoint.
-      (result) => params.env.exec.queueTask('network', () => processFetchResponse(params, result)),
-      (error) => params.env.exec.queueTask('network', () => { throw error; }),
+      (result) => params.env.queueTask('network', () => processFetchResponse(params, result)),
+      (error) => params.env.queueTask('network', () => { throw error; }),
     );
   });
 }
@@ -256,9 +256,9 @@ function httpFetch(params: FetchParams, makeCORSPreflight = false): InternalProm
           httpRedirectFetch(params, response).observe(
             // Invalid redirect targets finish here; a valid navigation restarts nonrecursive main fetch.
             (result) => {
-              if (result !== undefined) params.env.exec.queueTask('network', () => processFetchResponse(params, result));
+              if (result !== undefined) params.env.queueTask('network', () => processFetchResponse(params, result));
             },
-            (error) => params.env.exec.queueTask('network', () => { throw error; }),
+            (error) => params.env.queueTask('network', () => { throw error; }),
           );
         };
         return response;
@@ -533,7 +533,7 @@ function httpNetworkFetch(
   }
 
   // Stream creation and all subsequent stream mutations belong to this execution owner.
-  env.exec.queueTask('network', () => {
+  env.queueTask('network', () => {
     if (params.canceled) {
       result.resolve(FetchResponse.appropriateNetworkError(params));
       return;
@@ -703,7 +703,7 @@ function httpNetworkFetch(
       return coarsenTime(request.env.userAgent.unsafeSharedCurrentTime(), params.crossOriginIsolatedCapability);
     }
     function queueCallback(steps: () => void): void {
-      queueFetchTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.exec.global, env);
+      queueFetchTask(() => { if (!params.canceled && !discarded) steps(); }, params.taskDestination ?? env.realm.globalObject, env);
     }
     function endUpload(): void {
       if (uploadEnded) return;
@@ -1034,7 +1034,7 @@ function processFetchResponse(params: FetchParams, response: FetchResponse): voi
       if (!bytesMatchIntegrityMetadata(bytes, request.integrityMetadata)) { fail(); return; }
       response.body = FetchBody.fromBytes(bytes, params.env);
       fetchFinale(params, response);
-    }, fail, params.env.exec.global);
+    }, fail, params.env.realm.globalObject);
   } else {
     fetchFinale(params, response);
   }
@@ -1071,7 +1071,7 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
     request.done = true;
     params.processResponseEndOfBody?.(response);
     if (request.initiatorType !== null && request.client !== null &&
-      request.client.exec.global === params.taskDestination) {
+      request.client.realm.globalObject === params.taskDestination) {
       params.controller.reportTiming(request.client);
     }
   });
@@ -1080,7 +1080,7 @@ function endResponseBody(params: FetchParams, response: FetchResponse): void {
 // Stream operations enter the body's task/checkpoint owner.
 function runBodySteps<T>(params: FetchParams, steps: () => NoInfer<T>, type: PromiseResultType<T>): InternalPromise<T> {
   const result = params.request.env.userAgent.HostPromise.withResolvers(type);
-  params.env.exec.queueTask('network', () => {
+  params.env.queueTask('network', () => {
     try { result.resolve(steps()); }
     catch (error) { result.reject(error); }
   });
@@ -1169,7 +1169,7 @@ function fetchWithCache(
   return result.promise;
 
   function queue(steps: () => void): void {
-    env.exec.queueTask('network', () => {
+    env.queueTask('network', () => {
       try { steps(); }
       catch (error) { result.reject(error); }
     });
@@ -1189,11 +1189,11 @@ function revalidateInBackground(sourceRequest: FetchRequest): void {
   const timing = new FetchTimingInfo();
   timing.startTime = timing.postRedirectStartTime = coarsenTime(client.userAgent.unsafeSharedCurrentTime(), client.crossOriginIsolatedCapability);
   const params = new FetchParams(request, timing, client);
-  params.taskDestination = client.exec.global;
+  params.taskDestination = client.realm.globalObject;
   params.crossOriginIsolatedCapability = client.crossOriginIsolatedCapability;
   params.processResponse = (response) => {
     const internalResponse = isFilteredResponse(response) ? response.internalResponse : response;
-    internalResponse.body?.incrementallyRead(() => {}, () => {}, () => {}, client.exec.global);
+    internalResponse.body?.incrementallyRead(() => {}, () => {}, () => {}, client.realm.globalObject);
   };
   client.fetchGroup.fetchRecords.push({ request, controller: params.controller });
   // Enter main fetch directly: revalidation must not consume a preload candidate.
@@ -1231,7 +1231,7 @@ class NetworkUpload implements HTTPUploadSource {
     const { env, request } = this.#params;
     const result = request.env.userAgent.HostPromise.withResolvers(internalType<Uint8Array | null>());
     this.#pending = result;
-    env.exec.queueTask('network', () => {
+    env.queueTask('network', () => {
       if (this.#finished || this.#params.canceled) { this.#settle(null); return; }
       try {
         if (!this.#reader) {
@@ -1265,7 +1265,7 @@ class NetworkUpload implements HTTPUploadSource {
     this.#finished = true;
     this.#settle(null);
     const { env } = this.#params;
-    env.exec.queueTask('network', () => {
+    env.queueTask('network', () => {
       const pending = this.#reader ? this.#reader.cancel() : this.#body.stream.cancelInternal(undefined);
       pending.observe(() => {}, () => {});
       this.#reader?.release(env);
@@ -1311,7 +1311,7 @@ class NetworkBody {
     this.#finish = finish;
     this.stream = ReadableStreamImpl.createWithByteReadingSupport(
       () => {
-        this.#pull = params.env.exec.Promise.withResolvers(idlType.undefined);
+        this.#pull = params.env.InternalPromise.withResolvers(idlType.undefined);
         this.#scheduleDelivery();
         return this.#pull.promise;
       },
@@ -1357,7 +1357,7 @@ class NetworkBody {
       !(this.#pull && this.#size > 0)) return;
     this.#taskQueued = true;
     const { env } = this.#params;
-    env.exec.queueTask('network', () => {
+    env.queueTask('network', () => {
       this.#taskQueued = false;
       this.#deliver();
     });

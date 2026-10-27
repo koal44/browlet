@@ -55,5 +55,5 @@ function createOwner() {
   const { window } = new Browlet({ route: () => '' });
   const realm = getRelevantRealm(window);
   const env = getBindingContext(realm).getEnvironment();
-  return { queue: realm.agent.eventLoop, Promise: env.exec.Promise, env };
+  return { queue: realm.agent.eventLoop, Promise: env.InternalPromise, env };
 }

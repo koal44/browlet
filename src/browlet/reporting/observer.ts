@@ -70,7 +70,7 @@ export class ReportingObserverImpl {
     this.#reports.push(report);
     if (this.#reports.length !== 1) return;
     const observers = [...this.#global.reportingObservers];
-    this.#global.env.exec.queueTask('report', () => {
+    this.#global.env.queueTask('report', () => {
       for (const observer of observers) observer.#invokeCallback();
     });
   }

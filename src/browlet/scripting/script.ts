@@ -90,9 +90,9 @@ export class ClassicScript extends ScriptBase {
     } finally {
       loop.cleanUpAfterRunningScript(env);
     }
-    if (status === null) return { type: 'throw', value: env.exec.createQuotaExceededError() };
+    if (status === null) return { type: 'throw', value: env.createQuotaExceededError() };
     if (status.type === 'throw' && rethrowErrors) {
-      if (this.mutedErrors) throw new env.exec.DOMException('', 'NetworkError');
+      if (this.mutedErrors) throw new env.DOMException('', 'NetworkError');
       throw status.value;
     }
     return status;
@@ -110,7 +110,7 @@ export abstract class ModuleScript extends ScriptBase {
   run(preventErrorReporting = false): InternalPromise<void> {
     const { env } = this;
     if (!env.canRunScript()) {
-      return env.exec.Promise.resolve(undefined, idlType.undefined);
+      return env.InternalPromise.resolve(undefined, idlType.undefined);
     }
     // TODO(Long Animation Frames): Record module script execution start time.
     // Frame timing info and pending script entry points are not implemented.
@@ -119,10 +119,10 @@ export abstract class ModuleScript extends ScriptBase {
     try {
       let promise: InternalPromise<void>;
       if (this.errorToRethrow !== null) {
-        promise = env.exec.Promise.reject(this.errorToRethrow, idlType.undefined);
+        promise = env.InternalPromise.reject(this.errorToRethrow, idlType.undefined);
       } else {
         if (this.record === null) throw new InternalError('A module script has no record or error to rethrow');
-        promise = this.record.evaluate() ?? env.exec.Promise.reject(env.exec.createQuotaExceededError(), idlType.undefined);
+        promise = this.record.evaluate() ?? env.InternalPromise.reject(env.createQuotaExceededError(), idlType.undefined);
       }
       if (!preventErrorReporting) {
         // Reporting is attached before cleanup can perform a microtask checkpoint.
@@ -192,7 +192,7 @@ export class JSONModuleScript extends SyntheticModuleScript {
   constructor(source: string, env: BrowletEnvironment) {
     super(env);
     let value: unknown;
-    try { value = env.exec.parseJSON(source); }
+    try { value = env.realm.parseJSON(source); }
     catch (error) {
       if (error instanceof InternalError) throw error;
       this.parseError = error;

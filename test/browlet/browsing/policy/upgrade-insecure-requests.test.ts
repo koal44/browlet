@@ -239,7 +239,7 @@ describe('Upgrade Insecure Requests: document initialization', () => {
     const env = createPolicyEnvironment('https://example.test/');
     const previous = env.window.getAssociatedDocument();
     env.insecureRequestsPolicy.enableFor(previous.url);
-    const next = env.exec.createDocument();
+    const next = env.createDocument();
     next.browsingContext = previous.browsingContext;
     env.window.setAssociatedDocument(next);
     next.initializeInsecureRequestsPolicy();

@@ -6,7 +6,7 @@ import { parseHTMLDocument } from '../../src/browlet/html/parser/parse';
 
 /** Create a detached document through its environment's real binding and execution. */
 export function createTestDocument(env: BrowletEnvironment = createDocumentEnvironment()): DocumentImpl {
-  return env.exec.createDocument();
+  return env.createDocument();
 }
 
 /** Parse an implementation tree using real browser settings. */

@@ -604,7 +604,7 @@ function createRealmArray(
   realm: JSRealm,
 ): unknown[] {
   const result = Reflect.construct(
-    realm.intrinsics.array,
+    realm.Array,
     [values.length],
   );
   values.forEach((value, index) => {

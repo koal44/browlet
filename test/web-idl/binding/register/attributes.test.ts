@@ -34,7 +34,7 @@ describe('Web IDL implementation attribute registration', () => {
     expect(function_).toBe(Reflect.get(first, 'first'));
     expect(function_).toBe(Reflect.get(second, 'first'));
     expect(function_).not.toBe(Reflect.get(first, 'second'));
-    expect(function_).toBeInstanceOf(realm.intrinsics.function);
+    expect(function_).toBeInstanceOf(realm.Function);
     expect(function_.name).toBe('first');
     expect(function_.length).toBe(callback.length);
     expect(Object.hasOwn(function_, 'prototype')).toBe(false);
@@ -147,9 +147,9 @@ describe('Web IDL implementation attribute registration', () => {
     Reflect.apply(setter, object, ['fast']);
     expect(object.mode).toBe('fast');
     expect(() => Reflect.apply(setter, object, [Symbol('mode')]))
-      .toThrow(foreignRealm.intrinsics.typeError);
+      .toThrow(foreignRealm.TypeError);
     expect(() => Reflect.apply(setter, {}, ['fast']))
-      .toThrow(foreignRealm.intrinsics.typeError);
+      .toThrow(foreignRealm.TypeError);
     const thrown = new Error('coercion failed');
     let caught: unknown;
     try { Reflect.apply(setter, object, [{ toString() { throw thrown; } }]); }

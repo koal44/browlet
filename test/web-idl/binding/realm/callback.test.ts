@@ -81,7 +81,7 @@ describe('Web IDL callbacks', () => {
       Reflect.set(realm.globalObject, 'fail', true);
       const value = values[0]!;
       if (!IDLCallbackFunction.is(value)) throw new Error('Expected a converted callback');
-      expect(() => value.invoke([[4]], 'rethrow')).toThrow(realm.intrinsics.typeError);
+      expect(() => value.invoke([[4]], 'rethrow')).toThrow(realm.TypeError);
       expect(clean.mock.calls).toEqual([[firstContext], [secondContext], [firstContext]]);
     }
   });
@@ -119,7 +119,7 @@ describe('Web IDL callbacks', () => {
     expect(prepareCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
     expect(cleanUpCallback).toHaveBeenCalledExactlyOnceWith(callbackContext);
     expect(prepareTargetCallback).not.toHaveBeenCalled();
-    expect(() => ctx.binding.getConverter(ctx.binding.assembly.getIDLType(reference('NumberHandler')), ctx.realm).jsToIDL(1)).toThrow(targetRealm.intrinsics.typeError);
+    expect(() => ctx.binding.getConverter(ctx.binding.assembly.getIDLType(reference('NumberHandler')), ctx.realm).jsToIDL(1)).toThrow(targetRealm.TypeError);
   });
 
   it('retains each callback\'s identity and realm when reusing union candidates', () => {
@@ -292,10 +292,10 @@ describe('Web IDL callbacks', () => {
     const interfacePromise = ctx.binding.getConverter(ctx.binding.assembly.getIDLType(promiseType(idlType.long)), ctx.realm).idlToJS(interfaceResult);
 
     expect(functionPromise).toBeInstanceOf(
-      callbackRealm.intrinsics.promise.constructor,
+      callbackRealm.NativePromise,
     );
     expect(interfacePromise).toBeInstanceOf(
-      callbackRealm.intrinsics.promise.constructor,
+      callbackRealm.NativePromise,
     );
     const order: string[] = [];
     void functionPromise.catch(() => { order.push('rejected'); });
@@ -346,7 +346,7 @@ describe('Web IDL callbacks', () => {
     }
     expect(() => arrowValue.construct([7],
       targetRealm,
-    )).toThrow(targetRealm.intrinsics.typeError);
+    )).toThrow(targetRealm.TypeError);
   });
 
   it('applies LegacyTreatNonObjectAsNull only during nullable attribute assignment', () => {
@@ -361,7 +361,7 @@ describe('Web IDL callbacks', () => {
     const value = convert(object);
     expect(converter.idlToJS(value)).toBe(object);
     expect(() => converter.jsToIDL(object))
-      .toThrow(targetRealm.intrinsics.typeError);
+      .toThrow(targetRealm.TypeError);
   });
 
   it.each(['direct', 'alias'] as const)('keeps legacy %s attribute conversion separate from a shared ordinary converter', (mode) => {
@@ -410,13 +410,13 @@ describe('Web IDL callbacks', () => {
 
     Reflect.set(object, 'handler', 1);
     expect(Reflect.get(object, 'handler')).toBeNull();
-    expect(() => convert(1)).toThrow(realm.intrinsics.typeError);
+    expect(() => convert(1)).toThrow(realm.TypeError);
 
     const handler = {};
     Reflect.set(object, 'handler', handler);
     expect(Reflect.get(object, 'handler')).toBe(handler);
-    expect(() => convert(handler)).toThrow(realm.intrinsics.typeError);
-    expect(() => converter.jsToIDL(handler)).toThrow(realm.intrinsics.typeError);
+    expect(() => convert(handler)).toThrow(realm.TypeError);
+    expect(() => converter.jsToIDL(handler)).toThrow(realm.TypeError);
     expect(binding.getConverter(binding.assembly.getIDLType(type))).toBe(converter);
     expect(converter.getJSToIDLSteps()).toBe(convert);
   });
@@ -428,9 +428,9 @@ describe('Web IDL callbacks', () => {
     if (!Handler) throw new Error('ConstantHandler was not installed');
 
     expect(typeof Handler).toBe('function');
-    expect(Handler).toBeInstanceOf(targetRealm.intrinsics.function);
+    expect(Handler).toBeInstanceOf(targetRealm.Function);
     expect(Reflect.getPrototypeOf(Handler))
-      .toBe(targetRealm.intrinsics.functionPrototype);
+      .toBe(targetRealm.functionPrototype);
     expect(Reflect.get(targetRealm.globalObject, 'ConstantHandler')).toBe(Handler);
     expect(Reflect.getOwnPropertyDescriptor(
       targetRealm.globalObject,
@@ -464,11 +464,11 @@ describe('Web IDL callbacks', () => {
     expect(() => {
       Reflect.apply(Handler as CallableFunction, undefined, []);
     })
-      .toThrow(targetRealm.intrinsics.typeError);
+      .toThrow(targetRealm.TypeError);
     expect(() => targetRealm.evaluate(
       'new ConstantHandler()',
       'legacy-callback-interface-object.js',
-    )).toThrow(targetRealm.intrinsics.typeError);
+    )).toThrow(targetRealm.TypeError);
     expect(targetRealm.evaluate(
       '5 instanceof ConstantHandler',
       'legacy-callback-interface-instanceof-primitive.js',
@@ -476,7 +476,7 @@ describe('Web IDL callbacks', () => {
     expect(() => targetRealm.evaluate(
       '({}) instanceof ConstantHandler',
       'legacy-callback-interface-instanceof-object.js',
-    )).toThrow(targetRealm.intrinsics.typeError);
+    )).toThrow(targetRealm.TypeError);
   });
 });
 

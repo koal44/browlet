@@ -131,7 +131,7 @@ export type BindingWorldOptions<Env extends WebIDLEnvironment = WebIDLEnvironmen
 
 /** Public operations of a realm binding; this type does not introduce another runtime object. */
 export type BindingContext<Env extends WebIDLEnvironment = WebIDLEnvironment> = Pick<RealmBinding<Env>,
-  | 'realm' | 'Promise' | 'DOMException' | 'getEnvironment'
+  | 'realm' | 'InternalPromise' | 'DOMException' | 'getEnvironment'
   | 'install' | 'projectGlobalObject' | 'createPlatformRecord' | 'isInterfaceExposed'
   | 'jsToImpl' | 'implToJS' | 'createFrozenArray' | 'realizeException'
   | 'construct' | 'resolveArguments' | 'getObjectRecord' | 'associate' | 'project' | 'unwrap'

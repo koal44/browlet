@@ -1,4 +1,4 @@
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { observe } from '../browlet/streams/implementation-fixture';
 import { assert, describe, expect, it, vi } from 'vitest';
 
@@ -51,7 +51,7 @@ describe('TextEncoderStream byte production', () => {
     const writing = observe(writer.write(chunk, env)).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
-    expect(error).toBeInstanceOf(realm.intrinsics.typeError);
+    expect(error).toBeInstanceOf(realm.TypeError);
     expect(await failure).toBe(error);
   });
 

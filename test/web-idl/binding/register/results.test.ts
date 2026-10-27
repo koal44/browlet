@@ -8,7 +8,7 @@ import { getImplementationObject } from '../../../../src/web-idl/binding/platfor
 import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { TestRealm } from '../../../support/web-idl-realm';
-import { createEnvironment, type TestEnvironment } from '../../../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../../../support/environment';
 
 describe('Web IDL implementation result conversion', () => {
   it('projects nested implementation results without exposing their identity', async () => {
@@ -93,7 +93,7 @@ describe('Web IDL implementation result conversion', () => {
           [],
           {
             invoke(env) {
-              return env.exec.Promise.resolve(createResult('created promise'), resultType);
+              return env.InternalPromise.resolve(createResult('created promise'), resultType);
             },
           },
         ),
@@ -101,7 +101,7 @@ describe('Web IDL implementation result conversion', () => {
           [],
           {
             invoke(env) {
-              const result = env.exec.Promise.withResolvers(resultType);
+              const result = env.InternalPromise.withResolvers(resultType);
               result.resolve(createResult('resolved promise'));
               return result.promise;
             },
@@ -111,7 +111,7 @@ describe('Web IDL implementation result conversion', () => {
           [],
           {
             invoke(env) {
-              return env.exec.Promise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
+              return env.InternalPromise.resolve(undefined, idlType.undefined).then(() => createResult('reacted promise'), undefined, resultType);
             },
           },
         ),

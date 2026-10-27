@@ -4,7 +4,7 @@ import { Browlet } from '../../../src/browlet/browlet';
 import type { WindowProxy } from '../../../src/browlet/platform';
 import { createSandboxEnvironment } from '../../../src/browlet/bindings';
 import { AbortSignalImpl } from '../../../src/browlet/dom/abort/abort-signal';
-import type { AbortAlgorithmHandle } from '../../../src/infra/execution';
+import type { AbortAlgorithmHandle } from '../../../src/infra/abort';
 
 /*
  * DOM section 3 and the corresponding Web Platform Tests define these public
@@ -553,7 +553,7 @@ describe('AbortSignal internal algorithms', () => {
   it('supports repeated construction on a frozen global without exposing retention state', () => {
     const global = Object.freeze({});
     const env = createSandboxEnvironment();
-    Object.defineProperty(env.exec, 'global', { value: global });
+    Object.defineProperty(env, 'global', { value: global });
     const prototype: unknown = Object.getPrototypeOf(global);
     const source = new AbortSignalImpl(env);
     const first = AbortSignalImpl.any(new AbortSignalImpl(env), [source]);

@@ -93,8 +93,8 @@ describe('Fetch body delivery through HTML', () => {
     const firstTasks = firstRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const secondTasks = secondRealm.agent.eventLoop.getTaskQueue(networkingTaskSource);
     const previousTasks = new Set([...firstTasks, ...secondTasks]);
-    firstRealm.env.exec.queueGlobalFetchTask(firstRealm.globalObject, vi.fn());
-    firstRealm.env.exec.queueGlobalFetchTask(proxy, vi.fn());
+    firstRealm.env.queueGlobalFetchTask(firstRealm.globalObject, vi.fn());
+    firstRealm.env.queueGlobalFetchTask(proxy, vi.fn());
 
     const documents = [...new Set([...firstTasks, ...secondTasks])]
       .filter((task) => !previousTasks.has(task))
@@ -127,7 +127,7 @@ describe('Fetch body delivery through HTML', () => {
         const request = createFetchRequest();
         request.body = body;
         return context.project(RequestImpl, context.construct(
-          RequestImpl, [request, 'request', context.getEnvironment().exec.createDependentAbortSignal([])],
+          RequestImpl, [request, 'request', context.getEnvironment().createDependentAbortSignal([])],
         ));
       }
       const response = new FetchResponse();
@@ -142,7 +142,7 @@ describe('Fetch body delivery through HTML', () => {
     let result: Promise<string> | undefined;
     owner.queueTask(() => { result = Reflect.apply(text, receiver, []); });
     owner.runTask();
-    expect(result).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(owner.realm.NativePromise);
     const completion = observeBrowletPromise(owner.realm.globalObject, result!);
     // The foreign stream's reads complete in its own queue before scheduling
     // the receiver's networking task. Stock Node drains its ambient queue here.
@@ -165,7 +165,7 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     const env = owner.context.getEnvironment();
     const stream = ReadableStreamImpl.createDefault(undefined, undefined, 1, () => 1, env);
     const body = new FetchBody(stream, env);
-    const authorError = new other.realm.intrinsics.typeError('author failure');
+    const authorError = new other.realm.TypeError('author failure');
     if (failure === 'locked') stream.getDefaultReader();
     else if (failure === 'non-byte') stream.enqueueChunk('not bytes');
     else stream.error(authorError);
@@ -179,13 +179,13 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     const otherPrototype = (Reflect.get(other.realm.globalObject, 'BodyConsumer') as typeof Object).prototype;
     const borrowed = Reflect.get(otherPrototype, method) as CallableFunction;
     const result = Reflect.apply(borrowed, consumer, []) as Promise<void>;
-    expect(result).toBeInstanceOf(owner.realm.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(owner.realm.NativePromise);
     const observed: unknown[] = [];
     const fulfilled = vi.fn();
     const record = owner.realm.createFunction(
       (_receiver, [reason]) => { observed.push(reason); }, { name: 'record', length: 1 },
     );
-    Reflect.apply(owner.realm.intrinsics.promise.then, result, [fulfilled, record]);
+    Reflect.apply(owner.realm.promiseThen, result, [fulfilled, record]);
 
     performTestMicrotaskCheckpoint(owner.realm.globalObject);
     other.runTask();
@@ -196,8 +196,8 @@ describe('Fetch body errors at the Promise binding boundary', () => {
     if (failure === 'author') {
       expect(observed[0]).toBe(authorError);
     } else {
-      expect(observed[0]).toBeInstanceOf(owner.realm.intrinsics.typeError);
-      expect(observed[0]).not.toBeInstanceOf(other.realm.intrinsics.typeError);
+      expect(observed[0]).toBeInstanceOf(owner.realm.TypeError);
+      expect(observed[0]).not.toBeInstanceOf(other.realm.TypeError);
     }
   });
 });
@@ -211,13 +211,13 @@ class BodyConsumerImpl {
   ) {}
 
   full(): InternalPromise<void> {
-    const result = this.env.exec.Promise.withResolvers(idlType.undefined);
+    const result = this.env.InternalPromise.withResolvers(idlType.undefined);
     this.body.readAll(() => result.resolve(), result.reject, this.destination);
     return result.promise;
   }
 
   incremental(): InternalPromise<void> {
-    const result = this.env.exec.Promise.withResolvers(idlType.undefined);
+    const result = this.env.InternalPromise.withResolvers(idlType.undefined);
     this.body.incrementallyRead(() => {}, result.resolve, result.reject, this.destination);
     return result.promise;
   }

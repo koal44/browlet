@@ -1,6 +1,12 @@
-import { InternalError, type JSONValue, type InfraValue } from '../infra/index';
-import { getPromiseResult, isPromiseHandled, randomUUID, type JSEnvironment, type RealmExecution } from '../js-engine/index';
-import type { WebIDLExecution } from '../web-idl/core/index';
+import {
+  InternalError, type InternalPromise, type JSONValue, type InfraValue,
+  type TaskCreationOptions, type TaskHandle, type TaskSourceKey, type AbortSignal,
+} from '../infra/index';
+import {
+  getPromiseResult, isPromiseHandled, randomUUID,
+  type GlobalObject, type JSEnvironment,
+} from '../js-engine/index';
+import type { DOMExceptionConstructor } from '../web-idl/core/index';
 import { matchesExposure } from '../web-idl/index';
 import type { SelectletEnvironment } from '../selectlet/index';
 import { utf8Decode, utf8Encode, type Encoding } from '../encoding/index';
@@ -10,11 +16,11 @@ import {
 } from '../url/index';
 import {
   FetchGroup,
-  type FetchEnvironment, type FetchEnvironmentBase, type FetchExecution,
+  type FetchEnvironment, type FetchEnvironmentBase, type FetchRequest,
   type CacheUsage, type Destination, type FetchMode, type FetchResponse, type FetchTimingInfo,
   type NetworkPartitionKey, type RequestCredentials, type ResponseBodyInfo,
 } from '../fetch/index';
-import { cssStyleSheetIDL, type StyleletEnvironment, type StyleletExecution } from '../stylelet/index';
+import { cssStyleSheetIDL, type StyleletEnvironment } from '../stylelet/index';
 
 import type { QuotaExceededError } from './platform';
 import { Moment, UnsafeMoment, monotonicClock, EnvironmentTiming } from './timing/index';
@@ -24,19 +30,20 @@ import {
   fetchExternalModuleScriptGraph, fetchModulepreloadModuleScriptGraph, fetchInlineModuleScriptGraph,
   fetchModuleWorkerScriptGraph, fetchWorkletScriptGraph,
   fetchSingleModuleScript, fetchSingleImportedModuleScript, resolveModuleSpecifier,
-  ClassicScript, DedicatedWorkerAgent, SandboxAgent, domManipulationTaskSource, type Script,
+  ClassicScript, DedicatedWorkerAgent, SandboxAgent, BrowletRealm, taskSources, domManipulationTaskSource, type Script,
   type ScriptFetchOptions, type ModuleMap, type ModuleType,
   type JSModuleRequest, type ModuleFetchCallback, type PerformScriptFetch,
-  type EventLoop, type BrowletRealm, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
+  type EventLoop, type WindowRealm, type WindowAgent, type JSExecutionContext, type BrowletGlobalObject,
 } from './scripting/index';
-import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl } from './dom/events/index';
+import { ErrorEventImpl, EventTargetImpl, PromiseRejectionEventImpl, type EventImpl } from './dom/events/index';
 import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
-import type { AbortSignalImpl } from './dom/abort/index';
+import { ContentSecurityPolicy } from './browsing/policy/csp/index';
+import type { AbortControllerImpl, AbortSignalImpl } from './dom/abort/index';
 import { NodeImpl, type DocumentImpl } from './dom/nodes/index';
 import { HTMLAnchorElementImpl } from './dom/nodes/html/text/index';
 import { HTMLAreaElementImpl } from './dom/nodes/html/embedded/index';
-import type { DOMEnvironment, DOMExecution } from './dom/index';
+import type { DOMEnvironment, EventImplConstructor } from './dom/index';
 import { generateReport } from './reporting/generate';
 import { WindowImpl } from './browsing/window/index';
 import { MessageEventImpl } from './communication/index';
@@ -142,40 +149,101 @@ export class BrowletEnvironmentBase implements FetchEnvironmentBase {
   }
 }
 
-/** Engine, Fetch, Web IDL, DOM, and style facilities composed for one Browlet execution owner. */
-export interface BrowletExecution extends
-  RealmExecution, FetchExecution, WebIDLExecution, DOMExecution, StyleletExecution {
+/** Construction inputs consumed once; binding closures stay at the composition root. */
+export interface BrowletEnvironmentInit {
+  /** Binding-aware internal Promise constructor. */
+  InternalPromise: typeof InternalPromise;
+  /** Host line ending used for Blob string parts. */
+  nativeLineEnding: '\n' | '\r\n';
+  /** Request background work from the host without entering an HTML task. */
+  runInParallel: (steps: () => void) => void;
+  /** Resolve the constructor after interface registration has finished. */
+  getDOMException: () => DOMExceptionConstructor;
   /** Allocate a Document with this environment's binding ownership. */
-  createDocument(): DocumentImpl;
+  createDocument: () => DocumentImpl;
   /** Allocate a node implementation with this environment's binding ownership. */
-  constructNode<T extends object>(
+  constructNode: <T extends object>(
     implementation: abstract new (...argumentsList: never[]) => T,
     argumentsList: unknown[],
-  ): T;
+  ) => T;
+  /** Create a trusted event in this environment's realm. */
+  createEvent: (eventConstructor?: EventImplConstructor) => EventImpl;
+  /** Allocate a controller and its signal with binding ownership. */
+  createAbortController: () => AbortControllerImpl;
+  /** Allocate a signal following the supplied implementation-side signals. */
+  createDependentAbortSignal: (signals: AbortSignal[]) => AbortSignalImpl;
   /** Allocate an AbortSignal with this environment's binding ownership before first projection. */
-  createAbortSignal(): AbortSignalImpl;
-  /** Allocate a projected QuotaExceededError in this execution's realm. */
-  createQuotaExceededError(): QuotaExceededError;
+  createAbortSignal: () => AbortSignalImpl;
+  /** Allocate a projected QuotaExceededError in this environment's realm. */
+  createQuotaExceededError: () => QuotaExceededError;
+  /** Clone into this environment's realm, optionally transferring objects. */
+  clone: (value: unknown, transferList?: object[]) => unknown;
+  /** Serialize through this environment's binding. */
+  serialize: (value: unknown) => object;
+  /** Reconstruct a serialized record in this environment's realm. */
+  deserialize: (record: object) => unknown;
 }
 
-/** Composed browser settings and execution for one realm and global. */
-// HTML's environment settings object, owning its composed execution as env.exec.
+/** Composed browser settings, allocation, and task delivery for one realm and global. */
+// HTML's environment settings object.
 export abstract class BrowletEnvironment extends BrowletEnvironmentBase implements
   JSEnvironment, DOMEnvironment, FetchEnvironment, StyleletEnvironment, SelectletEnvironment {
+  /** JavaScript realm associated with this browser environment. */
+  realm: BrowletRealm;
+  /** Browser timing relative to this environment's time origin. */
+  timing: EnvironmentTiming;
   /** Requests tracked for this environment's lifetime. */
   fetchGroup = new FetchGroup();
   /** Upgrade policy and navigation targets inherited or enabled for this environment. */
   insecureRequestsPolicy = new InsecureRequestsPolicy();
-  /** Browser timing relative to this environment's time origin. */
-  timing: EnvironmentTiming;
-  /** JavaScript realm associated with this browser environment. */
-  realm: BrowletRealm;
-  /** Allocation, execution, and owner task delivery for this realm. */
-  exec: BrowletExecution;
+  /** Host line ending used for Blob string parts. */
+  nativeLineEnding;
 
-  constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, exec: BrowletExecution) {
+  /** Binding-aware internal Promise constructor, including IDL result conversion. */
+  InternalPromise;
+  /** Schedule background work without entering an HTML task. */
+  runInParallel;
+
+  /** Allocate a Document with this environment's binding ownership. */
+  createDocument;
+  /** Allocate a node implementation with this environment's binding ownership. */
+  constructNode;
+  /** Create a trusted event in this environment's realm. */
+  createEvent;
+  /** Allocate a controller and its signal with binding ownership. */
+  createAbortController;
+  /** Allocate an AbortSignal with binding ownership before projection. */
+  createAbortSignal;
+  /** Allocate a signal following the supplied implementation-side signals. */
+  createDependentAbortSignal;
+  /** Allocate a projected QuotaExceededError in this environment's realm. */
+  createQuotaExceededError;
+
+  /** Clone into this environment's realm, optionally transferring objects. */
+  clone;
+  /** Serialize through this environment's binding. */
+  serialize;
+  /** Reconstruct a serialized record in this environment's realm. */
+  deserialize;
+
+  #getDOMException;
+
+  constructor(realm: BrowletRealm, baseEnv: BrowletEnvironmentBase | null, initialization: BrowletEnvironmentInit) {
     super(baseEnv);
-    this.exec = exec;
+    this.InternalPromise = initialization.InternalPromise;
+    this.nativeLineEnding = initialization.nativeLineEnding;
+    this.runInParallel = initialization.runInParallel;
+    this.createDocument = initialization.createDocument;
+    this.constructNode = initialization.constructNode;
+    this.createEvent = initialization.createEvent;
+    this.createAbortController = initialization.createAbortController;
+    this.createDependentAbortSignal = initialization.createDependentAbortSignal;
+    this.createAbortSignal = initialization.createAbortSignal;
+    this.createQuotaExceededError = initialization.createQuotaExceededError;
+    this.clone = initialization.clone;
+    this.serialize = initialization.serialize;
+    this.deserialize = initialization.deserialize;
+    this.#getDOMException = initialization.getDOMException;
     this.timing = new EnvironmentTiming(this);
     this.realm = realm;
     // Internal sandboxes participate in Binding without becoming HTML settings objects.
@@ -183,8 +251,13 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   }
 
   /** The platform global installed in this environment's realm. */
-  get global(): RealmExecution['global'] {
+  get global(): GlobalObject {
     return this.realm.globalObject;
+  }
+
+  /** Binding registration finishes after environment construction, so resolve this lazily. */
+  get DOMException(): DOMExceptionConstructor {
+    return this.#getDOMException();
   }
 
   /** The retained context shared by scripts using these settings. */
@@ -220,6 +293,27 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
   get responsibleEventLoop(): EventLoop {
     return this.realm.agent.eventLoop;
+  }
+
+  /** Queue timer work with the nesting level inherited by timers created inside it. */
+  queueTask(source: 'timer', steps: () => void, options: TaskCreationOptions): TaskHandle;
+  /** Queue a later task on this environment's selected HTML task source. */
+  queueTask(source: TaskSourceKey, steps: () => void): TaskHandle;
+  queueTask(source: TaskSourceKey, steps: () => void, options?: TaskCreationOptions): TaskHandle {
+    return this.realm.queueGlobalTask(taskSources[source], steps, options);
+  }
+
+  /** Deliver Fetch work to its destination global, which can differ from the body owner's. */
+  queueGlobalFetchTask(global: GlobalObject, steps: () => void): void {
+    const targetRealm = BrowletRealm.getAssociatedRealm(global);
+    if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
+    targetRealm.queueGlobalTask(taskSources.network, steps);
+  }
+
+  /** Report a request's policy violation for this client. */
+  reportCSPViolation(policy: unknown, request: FetchRequest): void {
+    if (!(policy instanceof ContentSecurityPolicy)) throw new InternalError('Expected a Content Security Policy');
+    policy.createViolationForRequest(request, this).report();
   }
 
   /** The owning global's Document, when this is a Window environment. */
@@ -377,25 +471,25 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** Decode UTF-8 with replacement and initial BOM removal, then parse in this environment's realm. */
   // https://infra.spec.whatwg.org/#parse-json-bytes-to-a-javascript-value
   parseJSONBytes(bytes: Uint8Array): JSONValue {
-    return this.exec.parseJSON(utf8Decode(bytes));
+    return this.realm.parseJSON(utf8Decode(bytes));
   }
 
   /** Decode UTF-8 JSON and return its realm-independent representation. */
   // https://infra.spec.whatwg.org/#parse-json-bytes-to-an-infra-value
   parseJSONBytesToInfra(bytes: Uint8Array): InfraValue {
-    return this.exec.parseJSONStringToInfra(utf8Decode(bytes));
+    return this.realm.parseJSONStringToInfra(utf8Decode(bytes));
   }
 
   /** Serialize JavaScript in this environment's realm, then encode UTF-8 without a BOM. */
   // https://infra.spec.whatwg.org/#serialize-a-javascript-value-to-json-bytes
   serializeJavaScriptValueToJSONBytes(value: unknown): Uint8Array<ArrayBuffer> {
-    return utf8Encode(this.exec.serializeJavaScriptValueToJSONString(value));
+    return utf8Encode(this.realm.serializeJavaScriptValueToJSONString(value));
   }
 
   /** Serialize an Infra value in this environment's realm, then encode UTF-8 without a BOM. */
   // https://infra.spec.whatwg.org/#serialize-an-infra-value-to-json-bytes
   serializeInfraValueToJSONBytes(value: InfraValue): Uint8Array<ArrayBuffer> {
-    return utf8Encode(this.exec.serializeInfraValueToJSONString(value));
+    return utf8Encode(this.realm.serializeInfraValueToJSONString(value));
   }
 
   /** Parse with this browser's Blob URL store; the caller selects any base URL. */
@@ -601,8 +695,8 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
 
 /** Internal execution with explicit failures for unsupported browser client settings. */
 export class SandboxEnvironment extends BrowletEnvironment {
-  constructor(realm: BrowletRealm, exec: BrowletExecution, userAgent?: UserAgent) {
-    super(realm, null, exec);
+  constructor(realm: BrowletRealm, initialization: BrowletEnvironmentInit, userAgent?: UserAgent) {
+    super(realm, null, initialization);
     if (userAgent !== undefined) this.userAgent = userAgent;
   }
 
@@ -656,8 +750,8 @@ export class SandboxEnvironment extends BrowletEnvironment {
 export class WindowEnvironment extends BrowletEnvironment {
   declare realm: WindowRealm;
 
-  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, exec: BrowletExecution) {
-    super(realm, baseEnv, exec);
+  constructor(realm: WindowRealm, baseEnv: BrowletEnvironmentBase, initialization: BrowletEnvironmentInit) {
+    super(realm, baseEnv, initialization);
   }
 
   /** Window implementation whose current Document supplies browser state. */

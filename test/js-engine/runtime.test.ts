@@ -15,7 +15,7 @@ describe('JavaScript runtime', () => {
       assert(addon.getRealm);
       const microtaskQueue = createMicrotaskQueue();
       const first = new JSRealm(microtaskQueue);
-      const firstObject = first.intrinsics.object;
+      const firstObject = first.Object;
       const retained = first.evaluate('({ nested: Object.create(null) })', 'retained.js') as {
         nested: object;
       };
@@ -36,12 +36,12 @@ describe('JavaScript runtime', () => {
       expect(second.globalObject).toBe(globalProxy);
       expect(getAssociatedRealm(globalProxy)).toBe(second);
       expect(second.evaluate('this', 'replacement.js')).toBe(globalProxy);
-      expect(second.intrinsics.object).not.toBe(firstObject);
+      expect(second.Object).not.toBe(firstObject);
       expect(getAssociatedRealm(retained.nested)).toBe(first);
       expect(getAssociatedRealm(firstObject)).toBe(first);
-      expect(getAssociatedRealm(second.intrinsics.object)).toBe(second);
+      expect(getAssociatedRealm(second.Object)).toBe(second);
       expect(addon.getRealm(retained.nested)).toBe(firstReference);
-      expect(addon.getRealm(second.intrinsics.object)).not.toBe(firstReference);
+      expect(addon.getRealm(second.Object)).not.toBe(firstReference);
       expect(Reflect.ownKeys(firstReference)).toEqual(['global']);
     },
   );

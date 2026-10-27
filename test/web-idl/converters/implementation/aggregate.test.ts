@@ -41,8 +41,8 @@ describe('Sequence and record conversion through implementations', () => {
     const output = Array.isArray(result) ? result[0]! : result;
 
     expect(output).toEqual({ ['__proto__']: [2], values: [3] });
-    expect(Object.getPrototypeOf(output)).toBe(realm.intrinsics.objectPrototype);
-    expect(output.values).toBeInstanceOf(realm.intrinsics.array);
+    expect(Object.getPrototypeOf(output)).toBe(realm.objectPrototype);
+    expect(output.values).toBeInstanceOf(realm.Array);
     expect(reads).toBe(1);
     expect(coercions).toBe(1);
     expect(result).not.toBe(received);
@@ -97,9 +97,9 @@ describe('Sequence and record conversion through implementations', () => {
     expect(Array.isArray(received) ? received[0] : received.item).toBe(implementation);
     expect(item).toBe(platform);
     expect(Object.getPrototypeOf(result)).toBe(kind === 'sequence'
-      ? realm.intrinsics.array.prototype : realm.intrinsics.objectPrototype);
+      ? realm.Array.prototype : realm.objectPrototype);
     expect(other.getObjectRecord(item)!.binding.realm).toBe(otherRealm);
-    expect(() => new Echo().echo(kind === 'sequence' ? [{}] : { item: {} })).toThrow(realm.intrinsics.typeError);
+    expect(() => new Echo().echo(kind === 'sequence' ? [{}] : { item: {} })).toThrow(realm.TypeError);
   });
 
   it.each(['direct', 'prepared'] as const)('converts callback-interface records through a union in the %s path', (mode) => {

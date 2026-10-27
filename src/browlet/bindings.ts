@@ -1,6 +1,6 @@
 import { EOL } from 'node:os';
 
-import { InternalError, type TaskCreationOptions } from '../infra/index';
+import { InternalError } from '../infra/index';
 import { addon } from '../js-engine/index';
 import {
   BindingWorld, QuotaExceededErrorImpl, type GlobalObjectAllocation,
@@ -18,7 +18,7 @@ import type { QuotaExceededError, Window } from './platform';
 import { domHighResTimeStampIDL, epochTimeStampIDL } from './timing/index';
 import {
   EventLoop, SandboxAgent, eventHandlerIDL, eventHandlerNonNullIDL,
-  BrowletRealm, WindowRealm, taskSources,
+  BrowletRealm, WindowRealm,
 } from './scripting/index';
 import {
   EventImpl, errorEventIDL, errorEventInitIDL, promiseRejectionEventIDL, promiseRejectionEventInitIDL,
@@ -29,7 +29,7 @@ import {
 } from './reporting/index';
 import { integrityViolationReportBodyIDL, coepViolationReportBodyIDL } from './browsing/policy/index';
 import {
-  ContentSecurityPolicy, cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
+  cspViolationReportBodyIDL, securityPolicyViolationEventIDL, securityPolicyViolationEventInitIDL,
   securityPolicyViolationEventDispositionIDL,
 } from './browsing/policy/csp/index';
 import { trustedTypesIDLDefinitions } from './browsing/policy/trusted-types/index';
@@ -51,7 +51,7 @@ import { messageEventIDL } from './communication/index';
 import { originIDL } from './browsing/index';
 import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
-  type BrowletExecution,
+  type BrowletEnvironmentInit,
 } from './environment';
 import {
   WindowOrWorkerGlobalScopeMixin, highResolutionTimeWindowOrWorkerGlobalScopeIDL,
@@ -113,8 +113,8 @@ export function createWindowEnvironment(
     createGlobalObject: () => {
       const context = browletBindingWorld.register(realm, (binding) => {
         // https://html.spec.whatwg.org/multipage/nav-history-apis.html#set-up-a-window-environment-settings-object
-        // Execution reads the installed global lazily; all consumers retain this environment.
-        env = new WindowEnvironment(realm, baseEnv, createBrowletExecution(binding));
+        // All consumers retain this environment; its realm supplies the installed global.
+        env = new WindowEnvironment(realm, baseEnv, createBrowletEnvironmentInit(binding));
         env.creationURL = creationURL;
         env.topLevelCreationURL = topLevelCreationURL;
         env.topLevelOrigin = topLevelOrigin;
@@ -154,51 +154,27 @@ export function createWindowEnvironment(
   return env;
 }
 
-/** Create browser-owned execution without a Window, Document, or HTML settings object. */
+/** Create browser-owned facilities without a Window, Document, or HTML settings object. */
 export function createSandboxEnvironment(userAgent?: UserAgent): BrowletEnvironment {
   const agent = new SandboxAgent(new EventLoop({ requestTurn: queueNodeTask }));
   const realm = new BrowletRealm({ agent });
   // Reuse the main binding world for internal allocations without installing
   // author-facing interfaces on the sandbox's global.
   return browletBindingWorld.register(realm, (context) =>
-    new SandboxEnvironment(realm, createBrowletExecution(context), userAgent),
+    new SandboxEnvironment(realm, createBrowletEnvironmentInit(context), userAgent),
   ).getEnvironment();
 }
 
 // -- Construction helpers -----------------------------------------------
 
-/** Compose Browlet's realm execution, task delivery, and binding-owned allocations. */
-export function createBrowletExecution(context: BindingContext<BrowletEnvironment>): BrowletExecution {
-  const { realm } = context;
+/** Supply the binding-owned functions consumed during environment construction. */
+export function createBrowletEnvironmentInit(context: BindingContext<BrowletEnvironment>): BrowletEnvironmentInit {
   return {
     nativeLineEnding: EOL as '\n' | '\r\n',
-    // Window installation follows binding registration; retain the live global.
-    get global() { return realm.globalObject; },
-    Promise: context.Promise,
-    NativePromise: realm.intrinsics.promise.constructor,
-    TypeError: realm.intrinsics.typeError,
-    RangeError: realm.intrinsics.rangeError,
-    // Interface binding registration finishes after execution is composed.
-    get DOMException() { return context.DOMException; },
-    buffers: realm.createRuntimeBuffers(),
-    queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel: queueNodeTask,
-    queueTask: (source, steps, options?: TaskCreationOptions) => realm.queueGlobalTask(taskSources[source], steps, options),
-    queueGlobalFetchTask: (global, steps) => {
-      const targetRealm = BrowletRealm.getAssociatedRealm(global);
-      if (!targetRealm) throw new InternalError('A Fetch task destination must have an HTML realm');
-      targetRealm.queueGlobalTask(taskSources.network, steps);
-    },
-    reportCSPViolation: (policy, request) => {
-      if (!(policy instanceof ContentSecurityPolicy)) throw new InternalError('Expected a Content Security Policy');
-      policy.createViolationForRequest(request, context.getEnvironment()).report();
-    },
-    parseJSON: (text) => realm.parseJSON(text),
-    stringifyJSON: (value) => realm.stringifyJSON(value),
-    serializeJavaScriptValueToJSONString: (value) => realm.serializeJavaScriptValueToJSONString(value),
-    parseJSONStringToInfra: (input) => realm.parseJSONStringToInfra(input),
-    serializeInfraValueToJSONString: (value) => realm.serializeInfraValueToJSONString(value),
-    convertInfraValueToJavaScript: (value) => realm.convertInfraValueToJavaScript(value),
+    InternalPromise: context.InternalPromise,
+    // Interface binding registration finishes after the environment is composed.
+    getDOMException: () => context.DOMException,
     constructNode<T extends object>(implementation: ImplementationClass<T>, argumentsList: unknown[]): T {
       return context.construct(implementation, argumentsList);
     },

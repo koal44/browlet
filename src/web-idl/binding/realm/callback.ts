@@ -52,7 +52,7 @@ export class CallbackBinding {
         if (!isCallable(function_)) {
           function_ = (cbValue.object as Record<string, unknown>)[operationName];
           if (!isCallable(function_)) {
-            throw new cbValue.realm.intrinsics.typeError(
+            throw new cbValue.realm.TypeError(
               `${operationName} is not callable`,
             );
           }
@@ -141,7 +141,7 @@ export class CallbackInvoker {
     const constructor = cbValue.object;
     if (!isConstructor(constructor)) {
       // IsConstructor runs before preparing to enter the callback's realm.
-      throw new currentRealm.intrinsics.typeError(`${cbValue.assembled.primary.name} is not a constructor`);
+      throw new currentRealm.TypeError(`${cbValue.assembled.primary.name} is not a constructor`);
     }
     return runCallback(cbValue.realm, cbValue.callbackContext, () => {
       const result = Reflect.construct(constructor, this.idlToJSArguments(argumentsList));
@@ -182,8 +182,8 @@ export class CallbackInvoker {
   rejectPromiseReturn(exception: unknown): IDLPromise {
     if (!this.returnsPromise) throw exception;
     const rejected = Reflect.apply(
-      this.#realm.intrinsics.promise.reject,
-      this.#realm.intrinsics.promise.constructor,
+      this.#realm.promiseReject,
+      this.#realm.NativePromise,
       [exception],
     );
     const promise = this.jsToIDLResult(rejected);

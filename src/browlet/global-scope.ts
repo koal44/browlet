@@ -54,7 +54,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     this.timers = new GlobalTimers({
       eventLoop: env.responsibleEventLoop,
       host: env.userAgent.timerHost,
-      queueTask: (steps, options) => env.exec.queueTask('timer', steps, options),
+      queueTask: (steps, options) => env.queueTask('timer', steps, options),
       time: env.timing,
     });
   }
@@ -103,7 +103,7 @@ export class WindowOrWorkerGlobalScopeMixin {
     value: unknown,
     options: StructuredSerializeOptions = { transfer: [] },
   ): unknown {
-    return this.env.exec.clone(value, options.transfer);
+    return this.env.clone(value, options.transfer);
   }
 
   /** Fetch's addition to the WindowOrWorkerGlobalScope mixin. */

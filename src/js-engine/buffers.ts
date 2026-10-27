@@ -5,26 +5,6 @@ import { InternalError } from '../infra/internal-error';
 
 import { getNativeArrayBufferViewLengthTracking } from './runtime';
 
-export type RuntimeBuffers = {
-  /** Allocate zero-initialized final storage directly in the owning realm. */
-  allocateArrayBuffer(byteLength: number): ArrayBuffer;
-  /**
-   * Share a buffer; length is elements for typed arrays and bytes for DataView.
-   * Omit length to use the remaining range and track subsequent resizing.
-   */
-  createView<Name extends JSBufferViewName, Buffer extends ArrayBufferLike>(
-    name: Name,
-    buffer: Buffer,
-    byteOffset?: number,
-    length?: number,
-  ): JSBufferView<Name, Buffer>;
-  /** Copy the supplied bytes into independent storage, preserving the source. */
-  copyArrayBuffer(bytes: Uint8Array): ArrayBuffer;
-  copyUint8Array(bytes: Uint8Array): Uint8Array<ArrayBuffer>;
-  /** Consume an exclusively owned buffer, detaching the source. */
-  transferArrayBuffer(buffer: ArrayBuffer): ArrayBuffer;
-};
-
 export type JSBuffer<Name extends JSBufferTypeName = JSBufferTypeName> =
   (typeof globalThis)[Name]['prototype'];
 export type JSBufferView<

@@ -118,8 +118,8 @@ describe('Promise dependencies', () => {
         return then;
       },
     };
-    const result = P.fromValue(value, realm.intrinsics.promise.constructor, idlType.any);
-    expect(result.backing).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    const result = P.fromValue(value, realm.NativePromise, idlType.any);
+    expect(result.backing).toBeInstanceOf(realm.NativePromise);
     result.observe((value) => { observed.push(value); }, fail);
     expect(observed).toEqual(['get then']);
     queue.performMicrotaskCheckpoint();
@@ -281,7 +281,7 @@ describe('internal Promise results', () => {
 function createTarget() {
   const queue = createMicrotaskQueue();
   const realm = new JSRealm(queue);
-  return { queue, realm, Promise: realm.Promise };
+  return { queue, realm, Promise: realm.InternalPromise };
 }
 
 function fail(value: unknown): never { throw new Error(`Unexpected completion: ${String(value)}`); }

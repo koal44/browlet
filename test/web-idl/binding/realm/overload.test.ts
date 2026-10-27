@@ -32,7 +32,7 @@ describe('Web IDL effective overload sets', () => {
     expect(resolveArguments('label')).toEqual(['label', 'default']);
     expect(resolveArguments('label', undefined, 2.5, '3')).toEqual(['label', 'default', 2.5, 3]);
     expect(resolveArguments('label', 'explicit')).toEqual(['label', 'explicit']);
-    expect(() => resolveArguments()).toThrow(binding.realm.intrinsics.typeError);
+    expect(() => resolveArguments()).toThrow(binding.realm.TypeError);
   });
 
   it('keeps mutable defaults fresh and leaves omitted arguments without defaults undefined', () => {
@@ -63,7 +63,7 @@ describe('Web IDL effective overload sets', () => {
     const { realm } = installTestBindings(new BindingWorld([definition]));
     const OptionalArgument = Reflect.get(realm.globalObject, definition.name) as { read(value?: unknown): string; };
     let reads = 0;
-    Object.defineProperty(realm.intrinsics.array.prototype, '0', {
+    Object.defineProperty(realm.Array.prototype, '0', {
       configurable: true,
       get() { reads++; return 'prototype'; },
     });
@@ -71,7 +71,7 @@ describe('Web IDL effective overload sets', () => {
     try {
       result = OptionalArgument.read();
     } finally {
-      Reflect.deleteProperty(realm.intrinsics.array.prototype, '0');
+      Reflect.deleteProperty(realm.Array.prototype, '0');
     }
     expect({ result, reads }).toEqual({ result: 'fallback', reads: 0 });
   });
@@ -153,7 +153,7 @@ describe('Web IDL effective overload sets', () => {
     };
 
     expect(Overloaded.choose.length).toBe(2);
-    expect(() => Overloaded.choose(1)).toThrow(realm.intrinsics.typeError);
+    expect(() => Overloaded.choose(1)).toThrow(realm.TypeError);
     expect(Overloaded.choose(1.8, 'first')).toBe('string:1:first');
     expect(Overloaded.choose(2, true)).toBe('boolean:2:true:');
     expect(Overloaded.choose(3, false, '4')).toBe('boolean:3:false:4');
@@ -223,7 +223,7 @@ describe('Web IDL effective overload sets', () => {
       expect(ExposedOverloads.choose(true)).toBe(secureContext ? 'boolean:true' : 'string:true');
       expect(ExposedOverloads.choose('text')).toBe('string:text');
       if (secureContext) expect(ExposedOverloads.choose()).toBe('boolean:false');
-      else expect(() => ExposedOverloads.choose()).toThrow(realm.intrinsics.typeError);
+      else expect(() => ExposedOverloads.choose()).toThrow(realm.TypeError);
     }
   });
 
@@ -273,7 +273,7 @@ describe('Web IDL effective overload sets', () => {
     const iterable = namedOperation('iterable', type, binding);
 
     expect(() => resolve([string, iterable], [[Symbol('element')]], binding))
-      .toThrow(binding.realm.intrinsics.typeError);
+      .toThrow(binding.realm.TypeError);
   });
 
   it.each([
@@ -292,7 +292,7 @@ describe('Web IDL effective overload sets', () => {
     const { realm } = installTestBindings(world);
     const Converted = Reflect.get(realm.globalObject, 'Converted') as new(value: unknown) => object;
 
-    expect(() => new Converted([Symbol('element')])).toThrow(realm.intrinsics.typeError);
+    expect(() => new Converted([Symbol('element')])).toThrow(realm.TypeError);
   });
 
   it.each([
@@ -309,7 +309,7 @@ describe('Web IDL effective overload sets', () => {
       const resolver = createOverloadResolver(new AssembledOverloads(callables), binding, 'symbol');
       expect(resolver([value])).toEqual({ callable: symbol, values: [value] });
       expect(resolver(['value'])).toEqual({ callable: string, values: ['value'] });
-      expect(() => resolver([Object(value)])).toThrow(binding.realm.intrinsics.typeError);
+      expect(() => resolver([Object(value)])).toThrow(binding.realm.TypeError);
     }
   });
 
@@ -319,7 +319,7 @@ describe('Web IDL effective overload sets', () => {
     const numeric = namedOperation('numeric', idlType.long, binding);
 
     expect(() => resolve([string, numeric], [Symbol('value')], binding))
-      .toThrow(binding.realm.intrinsics.typeError);
+      .toThrow(binding.realm.TypeError);
   });
 
   it('selects optional and platform-object overloads', () => {
@@ -431,7 +431,7 @@ describe('Web IDL effective overload sets', () => {
         .toBe('p:string:foreign');
       expect(trace).toEqual(['prefix', 'value']);
     }
-    expect(() => Chooser.choose('p', Symbol('value'))).toThrow(realm.intrinsics.typeError);
+    expect(() => Chooser.choose('p', Symbol('value'))).toThrow(realm.TypeError);
   });
 
   it('keeps proxy recognition dependent on the value when ordinary interface matches are reused', () => {

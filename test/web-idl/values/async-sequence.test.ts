@@ -134,7 +134,7 @@ describe('Web IDL async sequences', () => {
     const next = iterator.nextValue(realm,
       (value, type) => binding.getConverter(type).jsToIDL(value),
     );
-    expect(next.promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    expect(next.promise).toBeInstanceOf(realm.NativePromise);
     expect(next.promise).not.toBeInstanceOf(Promise);
     await expect(next.promise).resolves.toBe(4);
     await expect(iterator.nextValue(realm,
@@ -161,7 +161,7 @@ describe('Web IDL async sequences', () => {
 
     await expect(nextValue(iterator, binding)).resolves.toBe(8);
     await expect(nextValue(iterator, binding)).rejects
-      .toBeInstanceOf(realm.intrinsics.typeError);
+      .toBeInstanceOf(realm.TypeError);
   });
 
   it.each(['next', 'return'] as const)('keeps sync %s failures in the opening realm', async (operation) => {
@@ -174,9 +174,9 @@ describe('Web IDL async sequences', () => {
     const iterator = converter.jsToIDL(source).open(openingRealm);
     const promise = operation === 'next' ? nextValue(iterator, binding) : iterator.close('stop', realm).promise;
 
-    expect(promise).toBeInstanceOf(realm.intrinsics.promise.constructor);
-    await expect(promise).rejects.toBeInstanceOf(openingRealm.intrinsics.typeError);
-    await expect(promise).rejects.not.toBeInstanceOf(realm.intrinsics.typeError);
+    expect(promise).toBeInstanceOf(realm.NativePromise);
+    await expect(promise).rejects.toBeInstanceOf(openingRealm.TypeError);
+    await expect(promise).rejects.not.toBeInstanceOf(realm.TypeError);
   });
 
   it('uses the invocation realm for element conversion after sync adaptation', async () => {
@@ -188,7 +188,7 @@ describe('Web IDL async sequences', () => {
     const converter = binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long)));
     const iterator = converter.jsToIDL(source).open(openingRealm);
 
-    await expect(nextValue(iterator, binding)).rejects.toBeInstanceOf(realm.intrinsics.typeError);
+    await expect(nextValue(iterator, binding)).rejects.toBeInstanceOf(realm.TypeError);
   });
 
   it.each(['sync', 'async'] as const)('preserves %s close adoption when return is absent', async (kind) => {
@@ -201,7 +201,7 @@ describe('Web IDL async sequences', () => {
     const iterator = converter.jsToIDL(source).open(openingRealm);
     const results: object[] = [];
     const order: string[] = [];
-    const prototype = openingRealm.intrinsics.objectPrototype;
+    const prototype = openingRealm.objectPrototype;
     Object.defineProperty(prototype, 'then', {
       configurable: true,
       get(this: object) { results.push(this); return undefined; },
@@ -209,7 +209,7 @@ describe('Web IDL async sequences', () => {
 
     try {
       const close = iterator.close('stop', realm).promise;
-      expect(close).toBeInstanceOf(realm.intrinsics.promise.constructor);
+      expect(close).toBeInstanceOf(realm.NativePromise);
       const settled = close.then((value) => {
         expect(value).toBeUndefined();
         order.push('closed');
@@ -242,7 +242,7 @@ describe('Web IDL async sequences', () => {
     const iterator = requireAsyncSequence(binding.getConverter(binding.assembly.getIDLType(asyncSequence(idlType.long))).jsToIDL(source)).open(realm);
     const order: string[] = [];
     const rejection = nextValue(iterator, binding).catch((error: unknown) => {
-      expect(error).toBeInstanceOf(realm.intrinsics.typeError);
+      expect(error).toBeInstanceOf(realm.TypeError);
       order.push('rejected');
     });
     realm.queueMicrotask(() => { order.push('queued'); });

@@ -6,7 +6,7 @@ import { toScalarValueString } from '../../src/infra/index';
 import { isomorphicEncode } from '../../src/js-engine/byte-string';
 import { parseMIMEType } from '../../src/mime/index';
 import type { FormDataEntry } from '../../src/xhr/index';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 
 const env = createEnvironment();
 const mimeType = parseMIMEType('multipart/form-data; boundary=Boundary')!;

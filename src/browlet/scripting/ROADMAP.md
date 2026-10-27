@@ -70,10 +70,10 @@ rejected cross-cluster deserialization.
 Reviewed 2026-10-25. Every item in these two subsections is mapped to existing
 code or an explicit implementation dependency. `BrowletEnvironmentBase` represents
 HTML's environment; `BrowletEnvironment` represents its environment settings
-object and owns its composed execution facilities as `env.exec`. The associated
-realm reaches those facilities through its environment. The explicit context
-model below is separate; the existing facilities names remain unchanged during
-this experiment. Internal sandboxes are not HTML settings objects.
+object and owns its binding-aware promises, allocation functions, and task delivery
+directly. The associated realm reaches those facilities through its environment.
+The explicit context model below is separate. Internal sandboxes are not HTML
+settings objects.
 
 | §8.1.3.1 environment state | Code and remaining dependency |
 | --- | --- |
@@ -92,7 +92,7 @@ No extension registry or worker startup machinery is needed to set that flag.
 
 | §8.1.3.2 settings algorithm | Code and remaining dependency |
 | --- | --- |
-| Realm execution context | `realmExecutionContext` returns the associated realm's retained `JSExecutionContext`. Controlled script entry pushes that context below the script's own context. `env.exec` remains the separate facilities object. |
+| Realm execution context | `realmExecutionContext` returns the associated realm's retained `JSExecutionContext`. Controlled script entry pushes that context below the script's own context. `env` remains the separate facilities object. |
 | Module map | `moduleMap` returns the Document's `ModuleMap`; single-module fetching now stores pending callbacks and module results by URL value and type. Graph loading/linking remains unfinished. |
 | API base URL | `apiBaseURL` queries the associated Document's current base URL. |
 | Origin | `origin` queries the associated Document's origin. |
@@ -118,7 +118,7 @@ claim that the engine supplies a record for every actual function invocation.
 | --- | --- |
 | Global state | `BrowletGlobalObject` requires the error-reporting flag, both rejected-promise collections, import map, and resolved module set. Window and the service-worker global skeleton initialize them; future worker/worklet globals must do so too. Error reporting and the translated rejection algorithms consume their state; engine rejection delivery and import-map processing remain unwired. |
 | Realm creation | `createBrowletRealm()` and production Window composition share `BrowletRealm.initialize()`: bracket global creation with the retained context, pop it, then remove SharedArrayBuffer when required. The ordinary factory accepts omitted customizations and returns the retained context. |
-| Retained context | `BrowletRealm.executionContext` is stable for the realm's lifetime. Environment settings return that same record. The existing VM context and `env.exec` facilities are separate. |
+| Retained context | `BrowletRealm.executionContext` is stable for the realm's lifetime. Environment settings return that same record. The existing VM context and `env` facilities are separate. |
 | Entry | `entryExecutionContext` selects the most recently pushed retained realm context, including a nested HTML entry. Its `.realm` supplies entry realm, `.realm.env` entry settings, and `.realm.globalObject` entry global. Missing entry context throws. |
 | Incumbent | The topmost non-null ScriptOrModule and its skip counter select script settings or the backup stack; missing backup settings throw. Callback preparation/cleanup maintain the counter and backup settings. Callback capture uses its binding environment for direct Node-host calls when both modeled stacks are empty; that accommodation stays outside the specification lookup. |
 | Current | `runningExecutionContext.realm` gives the top modeled realm; that realm's `.env` and `.globalObject` supply current settings and global. It is only current for the transitions recorded in this stack; arbitrary author/built-in calls do not yet maintain it. |
@@ -145,7 +145,9 @@ translation of the examples is uncertain. Its `createFunction` observer is an
 ordinary JavaScript forwarding function, not an established substitute for the
 native API used to observe incumbent settings. Keep the original expectation
 for review, without treating this probe as a settled conformance failure.
-Revisit with the actual example pages and platform APIs when supported. Script
+Revisit with the actual example pages and platform APIs when supported. The
+[native browser probe and review qualification](../../../node-compat/experimental/browser-probes/callback-incumbent/README.md)
+are retained separately from the synthetic test. Script
 and module processing, execution, and host-hook algorithms still lie ahead;
 continue in specification order. New native work remains parked.
 
@@ -719,15 +721,15 @@ fetch, link, or evaluate a module.
 | Resolve a module specifier | `env.resolveModuleSpecifier()` selects the referring script's environment and captured base, or this current environment and its API base. It checks scoped maps, top-level imports, then the URL fallback. The environment forwards to the algorithm body in `import-map.ts`. |
 | Resolve an imports match / URL-like specifier | Private helpers implement exact and slash-prefix matches, special-scheme restrictions, blocked entries, invalid suffixes, and prevention of backtracking above a mapped prefix. A blocking error terminates resolution rather than trying a broader scope. |
 | Resolved module set | Successful Window resolutions retain the normalized original specifier, original URL interpretation, and serialized base. Failures and non-Window resolutions add nothing. |
-| Parse an import map string | `ImportMap.parse()` calls `env.exec.parseJSONStringToInfra()`, validates object shapes, and normalizes imports, scopes, and integrity. |
+| Parse an import map string | `ImportMap.parse()` calls `env.realm.parseJSONStringToInfra()`, validates object shapes, and normalizes imports, scopes, and integrity. |
 | Normalize keys, specifier maps, scopes, and integrity | Private helpers preserve URL alias behavior, use descending code-unit ordering, and distinguish ignored entries from null entries that block resolution. Integrity keys compare by URL value. |
 | Merge module specifier maps / import maps | `global.mergeImportMap()` forwards to the shared body. Earlier definitions win, including null blocks. Copies of incoming mappings are filtered against completed resolutions; the existing global ImportMap object is retained. |
 
 Infra retains the [JSON value types and realm-independent conversion](../../infra/json.ts).
 The §6 string and object-conversion algorithms live on [JSRealm](../../js-engine/realm.ts)
-and are exposed through `env.exec`, preserving realm-owned SyntaxErrors. The four
+and are exposed through `env.realm`, preserving realm-owned SyntaxErrors. The four
 [JSON-byte algorithms on BrowletEnvironment](../environment.ts) combine Encoding's
-UTF-8 primitives with those string operations through `this.exec`. Fetch calls
+UTF-8 primitives with those string operations through `this.realm`. Fetch calls
 the two operations it needs through its environment contract. Neither Infra nor
 JS Engine depends on Encoding.
 The explicit current
@@ -825,7 +827,7 @@ script-element integration.
 for initial browsing and navigation. BrowletEnvironmentBase supplies security,
 navigation state, network partitioning, and the UserAgent before a realm exists.
 The base and full environments live in `browlet/environment.ts`; full environments
-inherit the base state and add the actual realm, exec, global, and browser
+inherit the base state and add the actual realm, allocation facilities, global, and browser
 policy/reporting operations. They sit above the scripting foundations, which retain
 type-only references to them, and are not re-exported by Scripting's barrel.
 SandboxEnvironment supplies internal execution through the same binding

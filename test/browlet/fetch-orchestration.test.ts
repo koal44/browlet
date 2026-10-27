@@ -339,7 +339,7 @@ describe('Fetch body completion', () => {
     const run = (steps: () => void) => new Promise<void>((resolve, reject) => queueFetchTask(() => {
       try { steps(); resolve(); }
       catch (error) { reject(new Error('Body task failed', { cause: error })); }
-    }, env.exec.global, env));
+    }, env.realm.globalObject, env));
     const events: string[] = [];
     operation.options.processResponse = () => { events.push('response'); };
     operation.options.processResponseEndOfBody = () => { events.push('end'); };
@@ -351,7 +351,7 @@ describe('Fetch body completion', () => {
       expect(request.done).toBe(false);
       const bytes = await new Promise((resolve, reject) => queueFetchTask(() => {
         stream.getDefaultReader().readAllBytes(resolve, reject);
-      }, env.exec.global, env));
+      }, env.realm.globalObject, env));
       expect(bytes).toEqual(Uint8Array.of(1, 2, 3));
     } else if (mode === 'cancel') {
       await run(() => { stream.cancelInternal('stop').observe(() => {}, () => {}); });

@@ -1,4 +1,4 @@
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { observe } from '../browlet/streams/implementation-fixture';
 import { describe, expect, it } from 'vitest';
 
@@ -44,7 +44,7 @@ describe('TextDecoderStream chunk conversion', () => {
     const writing = observe(writer.write(createChunk(), env)).catch((error: unknown) => error);
     const error = await writing;
     expect(error).toMatchObject({ name: 'TypeError' });
-    expect(error).toBeInstanceOf(realm.intrinsics.typeError);
+    expect(error).toBeInstanceOf(realm.TypeError);
     expect(await reading).toBe(error);
   });
 

@@ -161,7 +161,7 @@ export class CSSStyleSheetImpl
   // https://drafts.csswg.org/cssom/#dom-cssstylesheet-replace
   replace(text: string): InternalPromise<CSSStyleSheetImpl> {
     if (!this.#constructed || this.#disallowModification) {
-      return this.env.exec.Promise.reject(new DOMExceptionImpl(
+      return this.env.InternalPromise.reject(new DOMExceptionImpl(
         'This stylesheet cannot be replaced.',
         'NotAllowedError',
       ), reference(CSSStyleSheetImpl));
@@ -169,18 +169,18 @@ export class CSSStyleSheetImpl
 
     this.#disallowModification = true;
 
-    const result = this.env.exec.Promise.withResolvers(reference(CSSStyleSheetImpl));
+    const result = this.env.InternalPromise.withResolvers(reference(CSSStyleSheetImpl));
     const reject = (error: unknown): void => {
       this.#disallowModification = false;
       result.reject(error);
     };
     // Parse in parallel; return to the owner before changing rules or settling the promise.
     // CSSOM leaves the task source unspecified; use DOM manipulation delivery.
-    this.env.exec.runInParallel(() => {
+    this.env.runInParallel(() => {
       try {
         // CSSOM removes imports from replacement input; discard them during parsing.
         const rules = parseStylesheetContents(text, new RuleListContext(this.ruleList, null, this.#constructed, this.env));
-        this.env.exec.queueTask('dom-manipulation', () => {
+        this.env.queueTask('dom-manipulation', () => {
           try {
             this.replaceRules(rules);
             this.#disallowModification = false;
@@ -190,7 +190,7 @@ export class CSSStyleSheetImpl
           }
         });
       } catch (error) {
-        this.env.exec.queueTask('dom-manipulation', () => { reject(error); });
+        this.env.queueTask('dom-manipulation', () => { reject(error); });
       }
     });
     return result.promise;

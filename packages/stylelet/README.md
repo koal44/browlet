@@ -71,11 +71,11 @@ fetch callback. The host supplies document-dependent request setup and parsed
 sheet results, and handles completion, cancellation, events, and blockers.
 Browlet provides that integration in its style subsystem using `DocumentImpl`.
 
-Custom execution providers distinguish `exec.runInParallel()` from result delivery
-through `exec.queueTask('dom-manipulation', steps)`. Cancellation uses
+Hosts distinguish `env.runInParallel()` from result delivery
+through `env.queueTask('dom-manipulation', steps)`. Cancellation uses
 `TaskHandle.remove()`. To choose the Promise continuation queue, subclass the
-exported `InternalPromise`, override `observeNative()`, and supply it as `exec.Promise`.
-`StyleletExecution` uses Fetch's full execution contract. The package also
+exported `InternalPromise`, override `observeNative()`, and supply it as `env.InternalPromise`.
+`StyleletEnvironment` extends Fetch's complete environment contract. The package also
 exports `DOMOperations`, `TimerHost`, `TaskHandle`, `Encoding`,
 and the `DOMException`/`DOMExceptionConstructor` contracts for host providers.
 

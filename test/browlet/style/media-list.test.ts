@@ -27,7 +27,7 @@ describe('MediaList binding', () => {
       .toEqual({ value: 'screen', writable: false, enumerable: true, configurable: true });
     expect([platform[0], platform[2], platform.item(2)]).toEqual(['screen', undefined, null]);
     expect(String(platform)).toBe('screen, print');
-    expect(Reflect.get(platform, Symbol.iterator)).toBe(getRelevantRealm(browser.window).intrinsics.array.prototype.values);
+    expect(Reflect.get(platform, Symbol.iterator)).toBe(getRelevantRealm(browser.window).Array.prototype.values);
     const iterator = platform[Symbol.iterator]();
     expect(iterator.next().value).toBe('screen');
     platform.appendMedium('speech');
@@ -42,7 +42,7 @@ describe('MediaList binding', () => {
   it('converts arguments and checks receivers at the binding boundary', () => {
     const { browser, platform } = projectList('screen, print');
     const { item, appendMedium } = browser.window.MediaList.prototype;
-    const TypeError_ = getRelevantRealm(browser.window).intrinsics.typeError;
+    const TypeError_ = getRelevantRealm(browser.window).TypeError;
     expect(Reflect.apply(item, platform, [1.9])).toBe('print');
     expect(Reflect.apply(item, platform, [-1])).toBeNull();
     expect(Reflect.apply(item, platform, [2 ** 32])).toBe('screen');

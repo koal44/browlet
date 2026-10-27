@@ -1,7 +1,7 @@
 import { createStyleletTestEnvironment } from '../environment-fixture';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-import { createAsyncExecution, type TimerHost } from '../../../src/infra/execution';
+import type { TimerHost } from '../../../src/infra/tasks';
 import { Stylelet } from '../../../src/stylelet/index';
 import { CascadeEngine } from '../../../src/stylelet/engine/cascade-engine';
 import { ValueStage } from '../../../src/stylelet/value-processing/stage';
@@ -10,7 +10,7 @@ import { WholeValue } from '../../../src/stylelet/values/whole-value';
 import { serializeURL } from '../../../src/url/index';
 
 describe('Stylelet host scheduling', () => {
-  it('uses supplied execution for deferred stylesheet delivery', async () => {
+  it('uses supplied host scheduling for deferred stylesheet delivery', async () => {
     const pending = new Set<() => void>();
     const timerHost: TimerHost = {
       scheduleTimeout(milliseconds, steps) {
@@ -19,9 +19,8 @@ describe('Stylelet host scheduling', () => {
         return { remove: () => { pending.delete(steps); } };
       },
     };
-    const exec = createAsyncExecution(timerHost);
     const document = new JSDOM().window.document;
-    const sheet = Stylelet.create(document, { env: createStyleletTestEnvironment({ exec }) }).createStyleSheet();
+    const sheet = Stylelet.create(document, { env: createStyleletTestEnvironment({ timerHost }) }).createStyleSheet();
     const completed = new Promise<typeof sheet>((resolve, reject) => {
       sheet.replace('main { color: red }').observe(resolve, reject);
     });

@@ -138,19 +138,19 @@ function createReader() {
   if (!(controller instanceof ReadableStreamDefaultControllerImpl)) throw new Error('Expected a default controller');
   const implementation = stream.getReader();
   const reader = getBindingContext(realm).project(ReadableStreamDefaultReaderImpl, implementation);
-  const failure = new realm.intrinsics.typeError('source failed');
+  const failure = new realm.TypeError('source failed');
   return { browlet, realm, stream, controller, implementation, reader, failure };
 }
 
 type ReaderFixture = ReturnType<typeof createReader>;
 
 function observe(fixture: ReaderFixture, result: Promise<unknown>): unknown[] {
-  expect(result).toBeInstanceOf(fixture.realm.intrinsics.promise.constructor);
+  expect(result).toBeInstanceOf(fixture.realm.NativePromise);
   const trace: unknown[] = [];
   const record = fixture.realm.createFunction(
     (_receiver, [value]) => { trace.push(value); }, { name: 'record', length: 1 },
   );
-  Reflect.apply(fixture.realm.intrinsics.promise.then, result, [record, record]);
+  Reflect.apply(fixture.realm.promiseThen, result, [record, record]);
   return trace;
 }
 
@@ -169,7 +169,7 @@ function expectResult(
     expect(result).toBe(fixture.failure);
   } else {
     expect(result).toEqual({ value: mode === 'chunk' ? 'chunk' : undefined, done: mode === 'close' });
-    expect(Object.getPrototypeOf(result)).toBe(fixture.realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(result)).toBe(fixture.realm.objectPrototype);
   }
 }
 

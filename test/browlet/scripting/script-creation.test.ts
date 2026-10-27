@@ -37,7 +37,7 @@ describe('create a classic script', () => {
     const { env, baseURL, options } = fixture();
     const script = new ClassicScript(source, env, baseURL, options);
     expect(script.record).toBeNull();
-    expect(script.parseError).toBeInstanceOf(env.realm.intrinsics.syntaxError);
+    expect(script.parseError).toBeInstanceOf(env.realm.SyntaxError);
     expect(script.errorToRethrow).toBe(script.parseError);
   });
 
@@ -59,13 +59,13 @@ describe('create a classic script', () => {
     expect(disabled.record).toBeInstanceOf(JSScriptRecord);
     expect(disabled.parseError).toBeNull();
     expect(bypassed.record).toBeNull();
-    expect(bypassed.parseError).toBeInstanceOf(env.realm.intrinsics.syntaxError);
+    expect(bypassed.parseError).toBeInstanceOf(env.realm.SyntaxError);
   });
 
   it('takes the first parser error and does not absorb internal compiler failures', () => {
     const { env, baseURL, options } = fixture();
-    const first = new env.realm.intrinsics.syntaxError('first');
-    const second = new env.realm.intrinsics.syntaxError('second');
+    const first = new env.realm.SyntaxError('first');
+    const second = new env.realm.SyntaxError('second');
     const parse = vi.spyOn(env.realm, 'parseScript').mockReturnValue([first, second]);
     const script = new ClassicScript('', env, baseURL, options);
     expect(script.parseError).toBe(first);
@@ -82,8 +82,8 @@ describe('create synthetic module scripts', () => {
     await browser.evaluate(() => { JSON.parse = () => { throw new Error('replaced'); }; });
     const script = new JSONModuleScript('{"items":[1]}', env);
     const value = script.record!.defaultExport as { items: number[]; };
-    expect(Object.getPrototypeOf(value)).toBe(env.realm.intrinsics.objectPrototype);
-    expect(Object.getPrototypeOf(value.items)).toBe(env.realm.intrinsics.array.prototype);
+    expect(Object.getPrototypeOf(value)).toBe(env.realm.objectPrototype);
+    expect(Object.getPrototypeOf(value.items)).toBe(env.realm.Array.prototype);
     expect(value.items[0]).toBe(1);
     expect(script.record).toBeInstanceOf(JSSyntheticModuleRecord);
     expect(script.record!.script).toBe(script);
@@ -105,7 +105,7 @@ describe('create synthetic module scripts', () => {
     const { env } = fixture();
     const script = new JSONModuleScript('{', env);
     expect(script.record).toBeNull();
-    expect(script.parseError).toBeInstanceOf(env.realm.intrinsics.syntaxError);
+    expect(script.parseError).toBeInstanceOf(env.realm.SyntaxError);
     expect(script.errorToRethrow).toBeNull();
   });
 
@@ -138,7 +138,7 @@ describe('create synthetic module scripts', () => {
 
   it('retains a replacement exception, but propagates implementation failures', () => {
     const { env } = fixture();
-    const failure = new env.exec.DOMException('replacement failed', 'NotAllowedError');
+    const failure = new env.DOMException('replacement failed', 'NotAllowedError');
     const replace = vi.spyOn(CSSStyleSheetImpl.prototype, 'replaceSync').mockImplementation(() => { throw failure; });
     const script = new CSSModuleScript('', env);
     expect(script.record).toBeNull();
@@ -179,8 +179,8 @@ describe('module parser handoffs', () => {
 
   it('retains only the first module syntax error, leaving rethrow to graph loading', () => {
     const { env, baseURL, options } = fixture();
-    const first = new env.realm.intrinsics.syntaxError('first');
-    vi.spyOn(env.realm, 'parseModule').mockReturnValue([first, new env.realm.intrinsics.syntaxError('second')]);
+    const first = new env.realm.SyntaxError('first');
+    vi.spyOn(env.realm, 'parseModule').mockReturnValue([first, new env.realm.SyntaxError('second')]);
     const script = new JavaScriptModuleScript('', env, baseURL, options);
     expect(script.record).toBeNull();
     expect(script.parseError).toBe(first);
@@ -206,7 +206,7 @@ describe('module parser handoffs', () => {
 
   it('retains a WebAssembly parse exception without hiding a missing parser', () => {
     const { env, baseURL, options } = fixture();
-    const failure = new env.realm.intrinsics.error('bad module');
+    const failure = new env.realm.Error('bad module');
     const parse = vi.spyOn(env.realm, 'parseWebAssemblyModule').mockImplementation(() => { throw failure; });
     const script = new WebAssemblyModuleScript(new Uint8Array(), env, baseURL, options);
     expect(script.record).toBeNull();

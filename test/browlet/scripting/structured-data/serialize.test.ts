@@ -8,7 +8,7 @@ import {
 } from '../../../../src/web-idl/index';
 import { DOMExceptionImpl } from '../../../../src/web-idl/core/dom-exception';
 import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletExecution } from '../../../../src/browlet/bindings';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import type {
   SerializedRecord,
@@ -560,7 +560,7 @@ describe('HTML structured serialization', () => {
     });
     const bindings = new BindingWorld<BrowletEnvironment>([containerIDL]);
     const realm = createManualRealm();
-    const ctx = bindings.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+    const ctx = bindings.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
     const container = ctx.createPlatformRecord(containerIDL.name)!;
     const implInst = ctx.unwrap(container.platformObject, ContainerImpl)!;
     implInst.child = container.platformObject;
@@ -611,7 +611,7 @@ function createContext(options: {
     options.crossOriginIsolated ? 'concrete' : 'none',
   );
   agentCluster.add(realm.agent);
-  const ctx = bindings.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+  const ctx = bindings.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
   ctx.install(realm.globalObject);
   return ctx;
 }

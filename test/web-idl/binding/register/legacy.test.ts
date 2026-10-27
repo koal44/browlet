@@ -58,8 +58,8 @@ describe('Web IDL legacy property registration', () => {
       const namedItem = Reflect.get(collection, name) as (name: unknown) => object | null;
       expect(namedItem.call(collection, { toString: () => 'first' })).toBe(first);
       expect(namedItem.call(collection, 'missing')).toBeNull();
-      expect(() => { Reflect.apply(namedItem, collection, []); }).toThrow(realm.intrinsics.typeError);
-      expect(() => namedItem.call(collection, Symbol())).toThrow(realm.intrinsics.typeError);
+      expect(() => { Reflect.apply(namedItem, collection, []); }).toThrow(realm.TypeError);
+      expect(() => namedItem.call(collection, Symbol())).toThrow(realm.TypeError);
 
       const otherRealm = installTestBindings(world);
       const otherCollection = Reflect.get(otherRealm.globalObject, 'Collection') as { prototype: object; };

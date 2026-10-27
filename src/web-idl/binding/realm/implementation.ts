@@ -110,7 +110,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       object,
       assembled.parentAssembled
         ? realmBinding.getImplementationBinding(assembled.parentAssembled).getInterfaceObject()
-        : realmBinding.realm.intrinsics.functionPrototype,
+        : realmBinding.realm.functionPrototype,
     );
 
     defineProperty(object, 'prototype', {
@@ -210,7 +210,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
     if (this.namespaceObject) return this.namespaceObject;
 
     const object = realmBinding.realm.createOrdinaryObject(
-      realmBinding.realm.intrinsics.objectPrototype,
+      realmBinding.realm.objectPrototype,
     );
     this.namespaceObject = object;
     this.defineAttributes(object, 'regular');
@@ -254,8 +254,8 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
       : assembled.parentAssembled
         ? realmBinding.getImplementationBinding(assembled.parentAssembled).getInterfacePrototypeObject()
         : assembled.primary.name === 'DOMException'
-          ? realmBinding.realm.intrinsics.errorPrototype
-          : realmBinding.realm.intrinsics.objectPrototype;
+          ? realmBinding.realm.errorPrototype
+          : realmBinding.realm.objectPrototype;
     const allocated = realmBinding.globalAllocation?.prototypes.get(assembled.primary.name);
     const prototype = allocated ?? ((!realmBinding.realm.isGlobalPrototypeChainMutable && realmBinding.assembly.interfaces.isOnGlobalPrototypeChain(assembled))
       ? realmBinding.globalPlatformObjects.createPrototypeObject(parentPrototype)
@@ -442,7 +442,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
   ): object {
     const realmBinding = this.binding;
     const result = realmBinding.realm.createOrdinaryObject(
-      realmBinding.realm.intrinsics.objectPrototype,
+      realmBinding.realm.objectPrototype,
     );
 
     for (const entry of this.#getDefaultToJSONAttributes()) {
@@ -538,7 +538,7 @@ export class ImplementationBinding<Assembled extends BoundConstruct = BoundConst
 
     const parent = assembled.parentAssembled
       ? realmBinding.getImplementationBinding(assembled.parentAssembled).getInterfacePrototypeObject()
-      : realmBinding.realm.intrinsics.objectPrototype;
+      : realmBinding.realm.objectPrototype;
     const object = realmBinding.globalPlatformObjects.createNamedPropertiesObject(
       assembled,
       parent,

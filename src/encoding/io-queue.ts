@@ -102,8 +102,8 @@ export class IOQueue<T extends QueueChunk> {
 
   /** Wait only at a chunk boundary, using the caller's execution owner. */
   waitFor(count: number, env: JSEnvironment): InternalPromise<void> {
-    if (this.#canRead(count)) return env.exec.Promise.try(() => undefined, idlType.undefined);
-    const result = env.exec.Promise.withResolvers(idlType.undefined);
+    if (this.#canRead(count)) return env.InternalPromise.try(() => undefined, idlType.undefined);
+    const result = env.InternalPromise.withResolvers(idlType.undefined);
     (this.#waiters ??= []).push({ count, resolve: () => { result.resolve(); } });
     return result.promise;
   }
@@ -138,9 +138,7 @@ export class IOQueue<T extends QueueChunk> {
     for (let node = head; node; node = node.next) {
       length += node.data.length - node.offset;
     }
-    const bytes = env
-      ? env.exec.buffers.createView('Uint8Array', env.exec.buffers.allocateArrayBuffer(length))
-      : new Uint8Array(length);
+    const bytes = env ? new env.realm.Uint8Array(length) : new Uint8Array(length);
     let offset = 0;
     for (let node = head; node; node = node.next) {
       const chunk = node.offset === 0 ? node.data : node.data.subarray(node.offset);
@@ -218,7 +216,7 @@ export function processQueue<T extends QueueChunk, Error>(
     const result = steps();
     return result === 'waiting' ? input.waitFor(1, env).then(run, undefined, resultType) : result;
   };
-  return env.exec.Promise.try(run, resultType);
+  return env.InternalPromise.try(run, resultType);
 }
 
 function sliceChunk<T extends QueueChunk>(chunk: T, start: number): T {

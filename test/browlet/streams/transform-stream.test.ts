@@ -220,7 +220,7 @@ describe('transform-stream implementation', () => {
     await expect(observe(reader.read(stream.env))).resolves
       .toEqual(readResult(undefined, true));
     await expect(observe(writer.closed)).rejects
-      .toBeInstanceOf(Reflect.get(stream.readable.env.exec.global, 'TypeError'));
+      .toBeInstanceOf(Reflect.get(stream.readable.env.realm.globalObject, 'TypeError'));
   });
 });
 
@@ -242,7 +242,7 @@ describe('transform-stream projection', () => {
   it('waits for a private asynchronous transform after releasing backpressure', async () => {
     const binding = createTestContext();
     const env = binding.getEnvironment();
-    const completion = env.exec.Promise.withResolvers(internalType<void>());
+    const completion = env.InternalPromise.withResolvers(internalType<void>());
     const transform = new TransformStreamImpl(null, {}, {}, env);
     transform.setUp((chunk) => {
       transform.enqueue(chunk);

@@ -691,7 +691,7 @@ describe('Headers realm allocation', () => {
     const { realm: foreignRealm, context: foreign } = createFetchFixture(fixture.bindings);
     const createObject = (context: BindingContext<ClientEnvironment>) => name === 'Request'
       ? context.project(RequestImpl, context.construct(
-        RequestImpl, [createFetchRequest(), 'request', context.getEnvironment().exec.createAbortController().signal],
+        RequestImpl, [createFetchRequest(), 'request', context.getEnvironment().createAbortController().signal],
       ))
       : context.project(ResponseImpl, context.construct(ResponseImpl, [new FetchResponse(), 'response']));
     const receiver = createObject(fixture.context);
@@ -720,8 +720,8 @@ describe('Headers realm allocation', () => {
     const method = Reflect.get(Constructor.prototype, 'getSetCookie');
     const headers = context.project(HeadersImpl, new HeadersImpl(new FetchHeaders([['Set-Cookie', 'a=1']])));
     const cookies = Reflect.apply(method, headers, []);
-    expect(cookies).toBeInstanceOf(receiverRealm.intrinsics.array);
-    expect(cookies).not.toBeInstanceOf(methodRealm.intrinsics.array);
+    expect(cookies).toBeInstanceOf(receiverRealm.Array);
+    expect(cookies).not.toBeInstanceOf(methodRealm.Array);
     expect(cookies).toEqual(['a=1']);
   });
 });

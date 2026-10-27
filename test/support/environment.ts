@@ -1,10 +1,9 @@
 import { deserialize, serialize } from 'node:v8';
 
-import type { AbortController } from '../../src/infra/execution';
-import type { JSEnvironment } from '../../src/js-engine/index';
-import type { FileExecution } from '../../src/file/index';
-import { TestRealm } from '../support/web-idl-realm';
-import { BindingWorld, type BindingContext, type WebIDLEnvironment, type WebIDLExecution } from '../../src/web-idl/index';
+import type { AbortController } from '../../src/infra/abort';
+import type { FileEnvironment } from '../../src/file/index';
+import { TestRealm } from './web-idl-realm';
+import { BindingWorld, type BindingContext, type WebIDLEnvironment, type DOMExceptionConstructor } from '../../src/web-idl/index';
 import { readableStreamReadResultIDL } from '../../src/streams/index';
 
 /** A standalone realm environment with facilities supplied by the unit host. */
@@ -14,29 +13,11 @@ export function createEnvironment(realm = new TestRealm(), binding?: BindingCont
     return new BindingWorld<TestEnvironment>([readableStreamReadResultIDL])
       .register(realm, (ctx) => createEnvironment(realm, ctx)).getEnvironment();
   }
-  return { realm, exec: createExecution(realm, binding) };
-}
-
-export interface TestEnvironment extends JSEnvironment, WebIDLEnvironment {
-  realm: TestRealm;
-  exec: TestExecution;
-}
-
-export interface TestExecution extends FileExecution, WebIDLExecution {}
-
-/** Real engine facilities; task, abort, and structured-data effects controlled by the unit host. */
-export function createExecution(realm = new TestRealm(), binding?: BindingContext): TestExecution {
-  if (!binding) return createEnvironment(realm).exec;
   return {
-    global: realm.globalObject,
+    realm,
     nativeLineEnding: '\n',
-    Promise: binding.Promise,
-    NativePromise: realm.intrinsics.promise.constructor,
-    TypeError: realm.intrinsics.typeError,
-    RangeError: realm.intrinsics.rangeError,
+    InternalPromise: binding.InternalPromise,
     get DOMException() { return binding.DOMException; },
-    buffers: realm.createRuntimeBuffers(),
-    queueMicrotask: (steps) => { realm.queueMicrotask(steps); },
     runInParallel: (steps) => { setImmediate(steps); },
     queueTask(_source, steps) {
       const task = setImmediate(steps);
@@ -46,16 +27,15 @@ export function createExecution(realm = new TestRealm(), binding?: BindingContex
     createDependentAbortSignal() {
       throw new Error('Dependent-signal tests require the DOM runtime');
     },
-    parseJSON: (text) => realm.parseJSON(text),
-    stringifyJSON: (value) => realm.stringifyJSON(value),
-    serializeJavaScriptValueToJSONString: (value) => realm.serializeJavaScriptValueToJSONString(value),
-    parseJSONStringToInfra: (input) => realm.parseJSONStringToInfra(input),
-    serializeInfraValueToJSONString: (value) => realm.serializeInfraValueToJSONString(value),
-    convertInfraValueToJavaScript: (value) => realm.convertInfraValueToJavaScript(value),
     clone: (value, transferList = []) => structuredClone(value, { transfer: transferList }),
     serialize,
     deserialize: (record): unknown => deserialize(record as Uint8Array),
   };
+}
+
+export interface TestEnvironment extends FileEnvironment, WebIDLEnvironment {
+  realm: TestRealm;
+  DOMException: DOMExceptionConstructor;
 }
 
 function createAbortController(): AbortController {

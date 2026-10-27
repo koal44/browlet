@@ -31,7 +31,7 @@ describe('HTML scripting enablement', () => {
   it('distinguishes settings from Nodes and Windows without a browsing context', () => {
     const { env, document } = fixture();
     const node = document.createElement('div');
-    const event = env.exec.createEvent();
+    const event = env.createEvent();
     expect(env.isScriptingEnabledFor(node)).toBe(true);
     expect(env.isScriptingEnabledFor(env.window)).toBe(true);
 
@@ -65,7 +65,7 @@ describe('HTML scripting enablement', () => {
   it('reads the Window\'s currently associated document when checking sandbox policy', () => {
     const { env, document } = fixture();
     document.activeSandboxingFlagSet.add('sandboxed-scripts');
-    const replacement = env.exec.createDocument();
+    const replacement = env.createDocument();
     env.window.setAssociatedDocument(replacement);
     expect(env.isScriptingEnabled()).toBe(true);
     replacement.activeSandboxingFlagSet.add('sandboxed-scripts');
@@ -87,7 +87,7 @@ describe('check if we can run script', () => {
   it('checks document activity before consulting scripting policy', () => {
     const { env, document } = fixture();
     const navigable = document.getNodeNavigable()!;
-    const replacement = env.exec.createDocument();
+    const replacement = env.createDocument();
     replacement.browsingContext = document.browsingContext;
     navigable.activeSessionHistoryEntry = createSessionHistoryEntry(createDocumentState(replacement));
     const scripting = vi.spyOn(env, 'isScriptingEnabled');

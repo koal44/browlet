@@ -13,10 +13,10 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 | Module | Responsibility |
 | --- | --- |
-| [realm.ts](realm.ts) | `JSRealm`, captured intrinsics, JSON, classic compilation/evaluation, function/object allocation, runtime buffers, and global-object integration |
+| [realm.ts](realm.ts) | `JSRealm`, captured built-ins, JSON, classic compilation/evaluation, function/object allocation, buffers, and global-object integration |
 | [runtime.ts](runtime.ts) | Isolate associations, microtask queues, realm lookup, Promise observation, and host-hook adaptation |
 | [node-addons.ts](node-addons.ts) | Typed optional backend operations, bound once when loaded |
-| [environment.ts](environment.ts), [realm-execution.ts](realm-execution.ts) | Portable environment and execution contracts supplied to implementations |
+| [environment.ts](environment.ts) | Portable realm, internal Promise, and scheduling requirements on existing environments |
 | [buffers.ts](buffers.ts) | Buffer/view brands, slot inspection, and byte operations |
 | [abstract-operations.ts](abstract-operations.ts), [built-in-primitives.ts](built-in-primitives.ts) | Shared JavaScript operations and bounded built-in state inspection |
 | [byte-string.ts](byte-string.ts), [crypto.ts](crypto.ts) | Native byte/string conversion, digest computation, and UUID generation |
@@ -24,27 +24,39 @@ the [roadmap](ROADMAP.md) identifies remaining engine/HTML integration work.
 
 ## Environments and allocation
 
-`JSEnvironment` supplies `realm: JSRealm` and `exec: RealmExecution`. The environment
-can be HTML settings, sandbox execution, or another host's standalone owner;
+`JSEnvironment` supplies `realm: JSRealm`, `InternalPromise`, `runInParallel()`,
+and `queueTask()`. The environment can be HTML settings, a sandbox, or another host's owner;
 the portable contract requires no browser state. Fetch owns its additional
 contract for task delivery to an explicit global or parallel queue.
 
-Pass the existing `env` to implementations and derived objects. Use `env.exec`
-for Promises, errors, buffers, JSON, microtasks, background work, and task delivery.
-Subsystems add Infra's `AbortExecution` and `StructuredDataExecution` contracts
-where needed; those requirements are absent from `RealmExecution`.
-Browser composition supplies the DOM/HTML operations on the same `env.exec`.
-Binding Context and projection stay outside `exec`.
-Web IDL's `DOMException` constructor belongs to its separate Core execution
-contract; higher layers combine it with `RealmExecution` on the same object.
-JS Engine has no Web IDL dependency.
+Pass the existing `env` to implementations and derived objects. Use `env.realm`
+for buffer allocation, JSON string operations, and the live global object. Its
+captured constructors are direct fields, such as `realm.TypeError`,
+`realm.ArrayBuffer`, and `realm.Uint8Array`. `realm.NativePromise` is the original
+JavaScript constructor; `realm.InternalPromise` supplies realm-aware observation
+for implementation promises. Binding extends the latter with result conversion.
+Writable built-in methods and prototypes are captured separately, so later
+author replacements do not affect internal operations. `env.InternalPromise`
+retains Binding's result conversion as well as the realm's observation behavior.
+Microtask queues remain on realms and event loops. Subsystem environment interfaces
+add the DOM abort and HTML structured-data operations they require directly to
+the same owner. Browser composition supplies binding-dependent functions during
+environment construction; implementations never receive the Binding Context.
+Web IDL Core owns the `DOMExceptionConstructor` type used by higher-level
+environment contracts. JS Engine has no Web IDL dependency.
 
-`JSRealm.createRuntimeBuffers()` provides realm-owned operations without exposing
-the realm. `allocateArrayBuffer()` creates zeroed fixed storage. `createView()`
-uses the supplied buffer without copying it; its length counts elements for
-typed arrays and bytes for DataView. Omitted length uses the remaining range
-and tracks resizing where applicable. The view's realm does not change the
-buffer's identity.
+Use `new realm.ArrayBuffer(length)` or `new realm.Uint8Array(length)` for zeroed
+storage. `new realm.Uint8Array(bytes)` copies a byte array, while
+`new realm.Uint8Array(buffer, offset, length)` shares the supplied buffer.
+`createView(name, buffer, offset, length)` retains that operation for dynamically
+selected view types. Length counts elements for typed arrays and bytes for
+DataView; omitting it uses the remaining range and tracks resizing where
+applicable. The view's realm does not change the buffer's identity.
+
+`copyArrayBuffer()`, `copySharedArrayBuffer()`, and `copyArrayBufferView()` copy
+raw bytes into fresh storage. In particular, `copyArrayBufferView('Uint16Array',
+bytes)` preserves the bytes rather than converting each source byte into a
+16-bit element, as the typed-array constructor would.
 
 `JSRealm.cloneSharedArrayBuffer()` allocates a distinct object in the destination
 realm while sharing the original backing store, including its growability.
@@ -72,7 +84,7 @@ performs the immediate operation.
 ## JSON
 
 JSRealm implements Infra §6's JSON string and object-conversion algorithms;
-`RealmExecution` exposes them through the owning environment's `exec`. Infra
+implementations call them through the owning environment's `realm`. Infra
 retains the `JSONValue`/`InfraValue` types and the realm-independent conversion to
 maps and lists.
 Captured JSON intrinsics preserve parse errors and ignore author replacements of
@@ -150,9 +162,9 @@ can differ from a handlerless reaction's null specification realm. Returning
 false preserves the original V8 queue. Generic/timeout enqueue hooks transfer
 all scheduling and have no per-job fallback. HTML chooses settings and task policy.
 
-Each realm supplies a `Promise` constructor extending
+Each realm supplies an `InternalPromise` constructor extending
 Infra's [`InternalPromise`](../infra/promises.ts) with realm-owned observation. Static creation
-methods and instance chaining retain that constructor. `Promise.fromInternal()`
+methods and instance chaining retain that constructor. `InternalPromise.fromInternal()`
 selects the consumer's reaction destination while sharing the existing native
 backing, source conversion, and private fulfillment storage. Private values stay
 on their original internal Promise; the native backing signals completion without
@@ -164,6 +176,11 @@ Binding extends the realm's constructor with declared-result conversion.
 [Declared results](../web-idl/README.md#promises-iteration-and-exceptions) share
 one native Promise between implementation and author code. JS Engine's own
 constructor has no binding conversion and continues to serve private work.
+It is available without an environment or Binding; registration builds the
+binding constructor before composing its environment. Browser implementations
+use that binding constructor through `env.InternalPromise`, including for private
+results, rather than choosing `realm.InternalPromise` to bypass conversion. Neither
+internal constructor is the captured native `realm.NativePromise`.
 
 Native observation installs reactions in the observer's realm; plain Node uses
 the captured `then` intrinsic. Their constructor/species differences and the

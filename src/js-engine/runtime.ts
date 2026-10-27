@@ -72,7 +72,7 @@ export function observePromise(
 ): void {
   if (addon.observePromise) {
     void addon.observePromise(
-      promise, realm.intrinsics.promise.constructor, onFulfilled, onRejected,
+      promise, realm.NativePromise, onFulfilled, onRejected,
     );
   } else {
     /*
@@ -80,7 +80,7 @@ export function observePromise(
      * observation. The captured intrinsic bypasses an overridden then, but
      * still consults constructor/@@species and creates a derived promise.
      */
-    Reflect.apply(realm.intrinsics.promise.then, promise, [onFulfilled, onRejected]);
+    Reflect.apply(realm.promiseThen, promise, [onFulfilled, onRejected]);
   }
 }
 

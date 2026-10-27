@@ -8,7 +8,7 @@ export {
 export type { FetchEnvironment, FetchController, FetchResponse } from '../../src/fetch/index';
 export type {
   CSSStyleSheetInit, DOMException, DOMExceptionConstructor, DOMExceptionName, Encoding,
-  StyleletEnvironment, StyleletExecution, StyleletOptions, StyleletUserAgent,
+  StyleletEnvironment, StyleletOptions, StyleletUserAgent,
   AbsoluteColor, ValueContext,
   StyleSheetLoad,
 } from '../../src/stylelet/index';

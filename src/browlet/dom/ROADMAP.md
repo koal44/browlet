@@ -130,7 +130,7 @@ instead create `class=""` and queue an attributes record with a null old value.
 Browlet follows DOM and WebKit: an absent attribute remains absent, with no
 mutation record queued. Keep the clash marker until the implementations converge.
 
-The [2026-10-10 comparison](../../../scratch/DOM-7-PROBE.mjs) covers 207 cases
+The [2026-10-10 comparison](../../../node-compat/experimental/browser-probes/dom/token-list.mjs) covers 207 cases
 across raw attribute values, operations, validation order, mutation records,
 iteration, conversion, and forwarding. WebKit matched all 207; Chromium and
 Firefox each differed only on the absent-attribute, zero-argument `add()` case.

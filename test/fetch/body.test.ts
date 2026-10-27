@@ -33,7 +33,7 @@ describe('Fetch byte sequences as bodies', () => {
     const fixture = createBodyFixture();
     const body = FetchBody.fromBytes(Uint8Array.of(1, 2), fixture.env);
     const reader = body.stream.getReader({ mode: 'byob' });
-    const view = fixture.context.realm.createArrayBufferView('Uint8Array', [0, 0, 0, 0]);
+    const view = fixture.context.realm.copyArrayBufferView('Uint8Array', [0, 0, 0, 0]);
     const buffer = getBufferSourceUnderlyingBuffer(view);
     const reading = reader.read(view, { min: 1 }, fixture.env);
     fixture.runTask();
@@ -293,7 +293,7 @@ describe('Fetch incremental body reading', () => {
   it('accepts a Uint8Array from another realm', () => {
     const fixture = createBodyFixture();
     const other = createBodyFixture();
-    const chunk = other.context.realm.createArrayBufferView('Uint8Array', [1, 2]);
+    const chunk = other.context.realm.copyArrayBufferView('Uint8Array', [1, 2]);
     const body = fixture.createBody([chunk]);
     body.stream.close();
     const process = vi.fn();

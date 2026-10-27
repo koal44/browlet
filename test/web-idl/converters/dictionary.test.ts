@@ -51,7 +51,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s dictionary conversion
     ]);
 
     const output = idlToJS(dictionary, binding.getConverter(binding.assembly.getIDLType(reference('Options')))) as Record<string, unknown>;
-    expect(Object.getPrototypeOf(output)).toBe(binding.realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(output)).toBe(binding.realm.objectPrototype);
     expect(output).toMatchObject({ a: 1, b: true, y: 4, z: 2 });
   });
 
@@ -160,7 +160,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s dictionary conversion
     expect(steps).toEqual(['get a', 'convert a', 'get b', 'get c', 'get d']);
     const result = idlToJS(converted, binding.getConverter(binding.assembly.getIDLType(type)));
     expect(result).toEqual({ a: 3, b: undefined, d: 7 });
-    expect(Object.getPrototypeOf(result)).toBe(binding.realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(result)).toBe(binding.realm.objectPrototype);
     expect(Object.hasOwn(result as object, 'b')).toBe(true);
     expect(Object.hasOwn(result as object, 'c')).toBe(false);
 
@@ -190,7 +190,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s dictionary conversion
     expect(Object.getOwnPropertyDescriptor(dictionary.record, 'constructor')?.value).toBe('constructor');
     expect(Object.getOwnPropertyDescriptor(dictionary.record, 'toString')?.value).toBe(7);
     const output = idlToJS(dictionary, converter) as object;
-    expect(Object.getPrototypeOf(output)).toBe(binding.realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(output)).toBe(binding.realm.objectPrototype);
     expect(Object.getOwnPropertyDescriptor(output, '__proto__')?.value).toBe(prototypeValue);
     if (!required) {
       const empty = jsToIDL(null, converter) as IDLDictionary;

@@ -10,9 +10,8 @@ export * from './built-in-primitives';
 export * from './buffers';
 export { codeUnitsToString, isomorphicDecode, isomorphicEncode } from './byte-string';
 export { computeHash, randomUUID } from './crypto';
-export type { RealmExecution } from './realm-execution';
 export type {
-  GlobalAllocation, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSIntrinsics, JSIteratorResult,
+  GlobalAllocation, GlobalObject, GlobalProxy, GlobalThis, JSFunction, JSIteratorResult,
   JSMethod, RealmFunctionOptions, RealmFunctionSteps,
 } from './realm';
 export type {

@@ -77,7 +77,7 @@ runScenarios('external stylesheet association', 'normal', BROWSER_NAMES.flatMap(
         await browlet.evaluate(insertInstruction, { data: comparison.data, after: comparison.after ?? false });
       }
       await expect.poll(() => env.fetchGroup.fetchRecords.every((record) => record.request.done)).toBe(true);
-      await new Promise<void>((resolve) => env.exec.queueTask('network', resolve));
+      await new Promise<void>((resolve) => env.queueTask('network', resolve));
       expect({ requests: requests.length, ...await browlet.evaluate(readResult, comparison.events ?? false) }).toEqual(expected);
 
       requests.length = 0;

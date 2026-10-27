@@ -72,7 +72,7 @@ insertion/surrounding failures, shadow isolation, UTF-16 stringification, and
 cross-realm allocation. The 2026-10-10 browser probe compared 2,109 nested XML
 content-operation cases per engine: Chromium 149.0.7827.55 and Firefox 151.0 matched;
 WebKit 26.5 differed only in the two cases below. The reproducible probe remains
-in `scratch/dom-5-probe.mjs`.
+in `node-compat/experimental/browser-probes/dom/range-contents.mjs`.
 
 Coverage should exercise boundary points through public Range objects, then
 mutate their tree through public node and CharacterData operations. Tests which

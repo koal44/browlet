@@ -34,7 +34,7 @@ Stylelet imports label lookup and `decode` from the full subsystem. CSS selects
 the fallback encoding; Encoding applies BOM override and replacement decoding.
 Complete-input UTF-8 helpers live in `codecs/utf-8.ts` and are exported by Encoding.
 `utf8Encode` returns internal bytes without an environment. TextEncoder and
-TextEncoderStream allocate their own final buffers through `env.exec.buffers`
+TextEncoderStream allocate their own final buffers through `env.realm`
 and use the UTF-8 writer to fill them, so author-visible
 results need no intermediate allocation or copy. Streaming codecs retain their
 Node fast paths and queue state.
@@ -46,7 +46,7 @@ Neither Infra nor JS Engine depends on Encoding.
 
 `decode` and `encode` accept complete inputs and return complete results.
 Their `*Queue` counterparts retain supplied output and return `InternalPromise`
-completion through the trailing JSEnvironment and its exec facilities. `encodeOrFailSync` provides the
+completion through the trailing JSEnvironment and its `InternalPromise` constructor. `encodeOrFailSync` provides the
 immediate operation used by URL processing; it requires complete input and
 retains the supplied encoder's state across failures.
 
@@ -73,7 +73,7 @@ completed encodings are not interchangeable with one streaming encoding.
 strings. Queues retain chunks, so their bytes must not be mutated while queued.
 An empty open queue differs from the persistent `endOfQueue` token. `restore`
 prepends unread input in order. Collection reads currently available output;
-`takeBytes(exec)` allocates and fills the final result in that runtime.
+`takeBytes(env)` allocates and fills the final result in that environment's realm.
 `bomSniff` peeks without consuming and needs three bytes or EOF: streaming callers
 wait for that lookahead rather than repeatedly retrying a shorter prefix.
 

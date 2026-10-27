@@ -1,7 +1,7 @@
 import { createManualRealm } from '../support/browlet-agent';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { browletBindingWorld, createBrowletExecution } from '../../src/browlet/bindings';
+import { browletBindingWorld, createBrowletEnvironmentInit } from '../../src/browlet/bindings';
 import { getBindingContext, getRelevantRealm, unwrap } from '../support/browlet-binding';
 import { Browlet } from '../../src/browlet/browlet';
 import { WindowImpl } from '../../src/browlet/browsing/window/window';
@@ -365,6 +365,7 @@ describe('Browlet DOM binding', () => {
       'doctype',
       'documentElement',
       'documentURI',
+      'domain',
       'embeds',
       'firstElementChild',
       'forms',
@@ -646,13 +647,13 @@ describe('Browlet DOM binding', () => {
     expect(getRelevantRealm(fragment)).toBe(getRelevantRealm(object));
   });
 
-  it('retains execution-allocated node and signal ownership before first projection in another realm', () => {
+  it('retains environment-allocated node and signal ownership before first projection in another realm', () => {
     const first = createBrowlet();
     const second = createBrowlet();
     const sourceRealm = getRelevantRealm(first.window);
-    const { exec } = sourceRealm.env;
-    const text = exec.createDocument().createTextNode('owned');
-    const signal = exec.createAbortSignal();
+    const { env } = sourceRealm;
+    const text = env.createDocument().createTextNode('owned');
+    const signal = env.createAbortSignal();
     const foreignBinding = getBindingContext(getRelevantRealm(second.window));
 
     expect(getRelevantRealm(text)).toBe(sourceRealm);
@@ -681,7 +682,7 @@ describe('Browlet DOM binding', () => {
   it('filters DOM constructors for the host exposure set', () => {
     const realm = createManualRealm({ globalNames: ['Worker'] });
     const bindings = browletBindingWorld.register(realm, (context) =>
-      new SandboxEnvironment(realm, createBrowletExecution(context)),
+      new SandboxEnvironment(realm, createBrowletEnvironmentInit(context)),
     );
 
     bindings.install(realm.globalObject);
@@ -712,7 +713,7 @@ describe('Browlet DOM binding', () => {
     const realm = createManualRealm();
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(123.5);
     const bindings = browletBindingWorld.register(realm, (context) =>
-      new SandboxEnvironment(realm, createBrowletExecution(context)),
+      new SandboxEnvironment(realm, createBrowletEnvironmentInit(context)),
     );
     bindings.install(realm.globalObject);
     const Event_ = Reflect.get(realm.globalObject, 'Event') as typeof Event;
@@ -744,7 +745,7 @@ describe('Browlet DOM binding', () => {
     const realm = getRelevantRealm(browlet.window);
     const ctx = getBindingContext(realm);
     vi.spyOn(realm, 'eventTimeStamp').mockReturnValue(456);
-    const document = realm.env.exec.createDocument();
+    const document = realm.env.createDocument();
     const event = document.createTrustedEvent();
 
     expect(event.timeStamp).toBe(456);

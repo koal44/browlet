@@ -107,7 +107,7 @@ export function getMethod(
   const method = getV(value, key, realm);
   if (method === undefined || method === null) return;
   if (!isCallable(method)) {
-    throw new realm.intrinsics.typeError(`${String(key)} is not callable`);
+    throw new realm.TypeError(`${String(key)} is not callable`);
   }
   return method;
 }
@@ -115,12 +115,12 @@ export function getMethod(
 /** ECMAScript GetV, with primitive boxing in the supplied realm. */
 export function getV(value: unknown, key: PropertyKey, realm: JSRealm): unknown {
   if (value === undefined || value === null) {
-    throw new realm.intrinsics.typeError(
+    throw new realm.TypeError(
       'Cannot get a property from null or undefined',
     );
   }
   if (isObject(value)) return (value as Record<PropertyKey, unknown>)[key];
-  const object = realm.intrinsics.object(value) as object;
+  const object = realm.Object(value) as object;
   // Primitive boxing selects the realm's prototype, but the getter's receiver
   // must remain the original primitive rather than the temporary box.
   return Reflect.get(object, key, value) as unknown;

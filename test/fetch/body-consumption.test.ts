@@ -43,10 +43,10 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const api = projectBody(fixture, kind, body);
     expect(api.bodyUsed).toBe(false);
     const result = api.text();
-    expect(result).toBeInstanceOf(fixture.realm.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(fixture.realm.NativePromise);
     expect(api.bodyUsed).toBe(true);
     expect(await result).toBe('é\ufffd');
-    await expect(api.text()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api.text()).rejects.toBeInstanceOf(fixture.realm.TypeError);
   });
 
   it('returns fresh empty results for a null body without marking it used', async () => {
@@ -62,8 +62,8 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     expect(a).not.toBe(b);
     expect((await api.arrayBuffer()).byteLength).toBe(0);
     expect((await api.blob()).size).toBe(0);
-    await expect(api.json()).rejects.toBeInstanceOf(fixture.realm.intrinsics.syntaxError);
-    await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api.json()).rejects.toBeInstanceOf(fixture.realm.SyntaxError);
+    await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.TypeError);
     expect(api.bodyUsed).toBe(false);
   });
 
@@ -74,11 +74,11 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const api = projectBody(fixture, kind, FetchBody.fromBytes(source, fixture.env));
     const foreign = projectBody(other, kind, null);
     const result = method === 'arrayBuffer' ? foreign.arrayBuffer.call(api) : foreign.bytes.call(api);
-    expect(result).toBeInstanceOf(fixture.realm.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(fixture.realm.NativePromise);
     const value = await result;
     const constructor = method === 'arrayBuffer'
-      ? fixture.realm.intrinsics.bufferSource.arrayBuffer
-      : fixture.realm.intrinsics.bufferSource.views.Uint8Array!;
+      ? fixture.realm.ArrayBuffer
+      : fixture.realm.Uint8Array;
     expect(value).toBeInstanceOf(constructor);
     expect(getBufferSourceCopy(value)).toEqual(source);
     new Uint8Array(method === 'arrayBuffer' ? value as ArrayBuffer : (value as Uint8Array).buffer)[0] = 99;
@@ -93,7 +93,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     expect(fixture.bindings.getRealm(result)).toBe(fixture.realm);
     expect(result.type).toBe('text/plain;charset=utf-8');
     expect(result.size).toBe(2);
-    expect(await result.arrayBuffer()).toBeInstanceOf(fixture.realm.intrinsics.bufferSource.arrayBuffer);
+    expect(await result.arrayBuffer()).toBeInstanceOf(fixture.realm.ArrayBuffer);
   });
 
   it('parses JSON with captured receiver-realm intrinsics, including nested values', async () => {
@@ -106,15 +106,15 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     Reflect.set(json, 'parse', () => { throw new Error('Author replacement must not run'); });
     const value = await foreign.json.call(api) as { items: { answer: number; }[]; };
     expect(value).toEqual({ items: [{ answer: 42 }] });
-    expect(Object.getPrototypeOf(value)).toBe(fixture.realm.intrinsics.objectPrototype);
-    expect(value.items).toBeInstanceOf(fixture.realm.intrinsics.array);
-    expect(Object.getPrototypeOf(value.items[0])).toBe(fixture.realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(value)).toBe(fixture.realm.objectPrototype);
+    expect(value.items).toBeInstanceOf(fixture.realm.Array);
+    expect(Object.getPrototypeOf(value.items[0])).toBe(fixture.realm.objectPrototype);
   });
 
   it('rejects malformed JSON with a receiver-realm SyntaxError', async () => {
     const fixture = createFetchFixture();
     const api = projectBody(fixture, kind, FetchBody.fromBytes(utf8Encode('{'), fixture.env));
-    await expect(api.json()).rejects.toBeInstanceOf(fixture.realm.intrinsics.syntaxError);
+    await expect(api.json()).rejects.toBeInstanceOf(fixture.realm.SyntaxError);
     expect(api.bodyUsed).toBe(true);
   });
 
@@ -134,7 +134,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
   it.each([null, 'text/plain', 'multipart/form-data'])('rejects formData for Content-Type %j after consuming', async (type) => {
     const fixture = createFetchFixture();
     const api = projectBody(fixture, kind, FetchBody.fromBytes(utf8Encode('data'), fixture.env), type);
-    await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.TypeError);
     expect(api.bodyUsed).toBe(true);
   });
 
@@ -164,7 +164,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const body = fixture.createBody();
     const reader = body.stream.getDefaultReader();
     const api = projectBody(fixture, kind, body);
-    await expect(api[method]()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api[method]()).rejects.toBeInstanceOf(fixture.realm.TypeError);
     expect(api.bodyUsed).toBe(false);
     reader.release(fixture.env);
     body.stream.close();
@@ -185,7 +185,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const body = fixture.createBody();
     body.stream.enqueueChunk('not bytes');
     const api = projectBody(fixture, kind, body);
-    await expect(api.text()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api.text()).rejects.toBeInstanceOf(fixture.realm.TypeError);
   });
 
   it('decodes a text stream incrementally across split UTF-8 and BOM bytes', async () => {
@@ -205,7 +205,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     body.stream.close();
     expect(await reader.read()).toEqual({ value: '\ufffd', done: false });
     expect(await reader.read()).toEqual({ value: undefined, done: true });
-    await expect(api.text()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api.text()).rejects.toBeInstanceOf(fixture.realm.TypeError);
   });
 
   it('returns a closed default text stream for a null body', async () => {
@@ -243,7 +243,7 @@ describe.each(['Request', 'Response'] as const)('%s Body consumption', (kind) =>
     const body = fixture.createBody();
     body.stream.getDefaultReader();
     const api = projectBody(fixture, kind, body);
-    expect(() => api.textStream()).toThrow(fixture.realm.intrinsics.typeError);
+    expect(() => api.textStream()).toThrow(fixture.realm.TypeError);
   });
 });
 
@@ -277,7 +277,7 @@ describe.each(['Request', 'Response'] as const)('%s multipart consumption', (kin
     const fixture = createFetchFixture();
     const api = projectBody(fixture, kind,
       FetchBody.fromBytes(utf8Encode('--boundary\r\n'), fixture.env), 'multipart/form-data; boundary=boundary');
-    await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.intrinsics.typeError);
+    await expect(api.formData()).rejects.toBeInstanceOf(fixture.realm.TypeError);
   });
 });
 
@@ -297,7 +297,7 @@ function projectBody(
   if (type !== null) record.headerList.set('Content-Type', type);
   const platform = kind === 'Request'
     ? fixture.context.project(RequestImpl, fixture.createRequest(
-      record as ReturnType<typeof createFetchRequest>, fixture.env.exec.createAbortController().signal,
+      record as ReturnType<typeof createFetchRequest>, fixture.env.createAbortController().signal,
     ))
     : fixture.context.project(ResponseImpl, fixture.createResponse(record as FetchResponse));
   return platform as unknown as BodyAPI;

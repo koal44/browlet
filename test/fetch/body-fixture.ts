@@ -1,6 +1,6 @@
 import { expect, vi } from 'vitest';
 import { FetchBody } from '../../src/fetch/body';
-import type { TaskSourceKey } from '../../src/infra/execution';
+import type { TaskSourceKey } from '../../src/infra/tasks';
 import { ParallelQueue } from '../../src/infra/parallel-queue';
 import { createTestContext } from '../browlet/streams/environment';
 import { ReadableStreamImpl } from '../../src/streams/index';
@@ -14,22 +14,19 @@ export function createBodyFixture() {
   const client = createClientEnvironment(undefined, context.getEnvironment());
   const env = {
     ...client,
-    exec: {
-      ...client.exec,
-      runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
-      queueTask(source: TaskSourceKey, steps: () => void) {
-        expect(source).toBe('network');
-        const task = { global: context.realm.globalObject, steps };
-        tasks.push(task);
-        return {
-          remove() {
-            const index = tasks.indexOf(task);
-            if (index !== -1) tasks.splice(index, 1);
-          },
-        };
-      },
-      queueGlobalFetchTask,
+    runInParallel: vi.fn((steps: () => void) => { parallelSteps.push(steps); }),
+    queueTask(source: TaskSourceKey, steps: () => void) {
+      expect(source).toBe('network');
+      const task = { global: context.realm.globalObject, steps };
+      tasks.push(task);
+      return {
+        remove() {
+          const index = tasks.indexOf(task);
+          if (index !== -1) tasks.splice(index, 1);
+        },
+      };
     },
+    queueGlobalFetchTask,
   };
   return {
     context,
@@ -43,7 +40,7 @@ export function createBodyFixture() {
       for (const chunk of chunks) stream.enqueueChunk(chunk);
       return new FetchBody(stream, env);
     },
-    createParallelQueue: () => new ParallelQueue(env.exec.runInParallel),
+    createParallelQueue: () => new ParallelQueue(env.runInParallel),
     runTask: () => tasks.shift()!.steps(),
     runParallel: () => parallelSteps.shift()!(),
   };

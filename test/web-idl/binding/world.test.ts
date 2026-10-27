@@ -8,7 +8,7 @@ import {
 } from '../../../src/web-idl/index';
 
 import { TestRealm as Realm } from '../../support/web-idl-realm';
-import { createEnvironment, type TestEnvironment } from '../../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../../support/environment';
 
 describe('Web IDL binding worlds and realm registration', () => {
   it('composes the environment once per realm registration', () => {
@@ -19,7 +19,7 @@ describe('Web IDL binding worlds and realm registration', () => {
       expect(context.realm).toBe(realm);
       expect(world.getBindingContext(realm)).toBeUndefined();
       expect(world.getRealmBinding(realm)).toBeUndefined();
-      env.exec.Promise = context.Promise;
+      env.InternalPromise = context.InternalPromise;
       return env;
     });
     const first = world.register(realm, compose);
@@ -31,7 +31,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(compose).toHaveBeenCalledOnce();
     expect(compose.mock.calls[0]![0]).toBe(first);
     expect(first.getEnvironment()).toBe(env);
-    expect(first.getEnvironment().exec.Promise).toBe(first.Promise);
+    expect(first.getEnvironment().InternalPromise).toBe(first.InternalPromise);
   });
 
   it('keeps installed-object bookkeeping out of the public installation result', () => {
@@ -166,7 +166,7 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(Reflect.apply(descriptor.get!, object, [])).toBe('first');
     expect(Reflect.apply(echo, object, [object])).toBe(object);
     expect(received).toBe(handle);
-    expect(() => Reflect.apply(echo, object, [{}])).toThrow(realmA.intrinsics.typeError);
+    expect(() => Reflect.apply(echo, object, [{}])).toThrow(realmA.TypeError);
     expect(Object.hasOwn(realmA.globalObject, 'ProxyObject')).toBe(false);
     expect(Object.hasOwn(realmB.globalObject, 'ProxyObject')).toBe(false);
 
@@ -180,7 +180,7 @@ describe('Web IDL binding worlds and realm registration', () => {
 
     target = undefined;
     expect(binding.isPlatformObject(object)).toBe(true);
-    expect(() => { Reflect.apply(descriptor.get!, object, []); }).toThrow(realmA.intrinsics.typeError);
+    expect(() => { Reflect.apply(descriptor.get!, object, []); }).toThrow(realmA.TypeError);
   });
 
   it('preserves the origin of a lazily projected implementation', () => {
@@ -347,8 +347,8 @@ describe('Web IDL binding worlds and realm registration', () => {
     expect(setterValue).toBe(token);
 
     const fail = Reflect.get(Constructor.prototype, 'fail') as CallableFunction;
-    expect(() => { Reflect.apply(fail, object, []); }).toThrow(methodRealm.intrinsics.typeError);
-    expect(() => { Reflect.apply(fail, object, []); }).not.toThrow(receiverRealm.intrinsics.typeError);
+    expect(() => { Reflect.apply(fail, object, []); }).toThrow(methodRealm.TypeError);
+    expect(() => { Reflect.apply(fail, object, []); }).not.toThrow(receiverRealm.TypeError);
   });
 
   it.each([
@@ -387,8 +387,8 @@ describe('Web IDL binding worlds and realm registration', () => {
         return exception;
       }
       expect(kind).toBe('Promise<long>');
-      expect(result).toBeInstanceOf(receiverRealm.intrinsics.promise.constructor);
-      expect(result).not.toBeInstanceOf(methodRealm.intrinsics.promise.constructor);
+      expect(result).toBeInstanceOf(receiverRealm.NativePromise);
+      expect(result).not.toBeInstanceOf(methodRealm.NativePromise);
       return (result as Promise<unknown>).then(
         () => { throw new Error('Expected the getter promise to reject'); },
         (reason: unknown) => reason,
@@ -396,9 +396,9 @@ describe('Web IDL binding worlds and realm registration', () => {
     };
 
     const exception = await readFailure();
-    expect(exception).toBeInstanceOf(methodRealm.intrinsics.typeError);
-    expect(exception).not.toBeInstanceOf(receiverRealm.intrinsics.typeError);
-    const authorError = new receiverRealm.intrinsics.typeError('Author failure');
+    expect(exception).toBeInstanceOf(methodRealm.TypeError);
+    expect(exception).not.toBeInstanceOf(receiverRealm.TypeError);
+    const authorError = new receiverRealm.TypeError('Author failure');
     failure = authorError;
     expect(await readFailure()).toBe(authorError);
   });

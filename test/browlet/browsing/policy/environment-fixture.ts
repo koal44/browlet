@@ -20,7 +20,7 @@ export function createPolicyEnvironment(
     topLevelCreationURL: parent?.topLevelCreationURL ?? creationURL,
     topLevelOrigin: parent?.topLevelOrigin ?? origin,
   });
-  const document = env.exec.createDocument();
+  const document = env.createDocument();
   document.url = creationURL;
   document.origin = origin;
   document.browsingContext = new BrowsingContext(env.realm.windowProxy);

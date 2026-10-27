@@ -8,7 +8,7 @@ import {
   atArg, ctor, defineInterface, idlType, impl, implementationType, op, promise, reference, roAttr,
 } from '../../../src/web-idl/index';
 
-import { createEnvironment, type TestEnvironment } from '../../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../../support/environment';
 import { TestRealm } from '../../support/web-idl-realm';
 
 describe('InternalPromise result projection', () => {
@@ -66,22 +66,22 @@ describe('InternalPromise result projection', () => {
     const second = new TestRealm();
     const firstBinding = bindings.register(first, (ctx) => ({ realm: ctx.realm }));
     const secondBinding = bindings.register(second, (ctx) => ({ realm: ctx.realm }));
-    const implementation = new ResultOwnerImpl(firstBinding.Promise);
+    const implementation = new ResultOwnerImpl(firstBinding.InternalPromise);
     const owner = firstBinding.project(ResultOwnerImpl, implementation);
-    const foreign = secondBinding.project(ResultOwnerImpl, new ResultOwnerImpl(secondBinding.Promise));
+    const foreign = secondBinding.project(ResultOwnerImpl, new ResultOwnerImpl(secondBinding.InternalPromise));
     const foreignPrototype = Object.getPrototypeOf(foreign) as object;
     const result = Reflect.get(owner, 'result') as Promise<unknown>;
     expect(Reflect.get(foreignPrototype, 'result', owner)).toBe(result);
     expect(Reflect.get(owner, 'result')).toBe(result);
-    expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
-    expect(result).not.toBeInstanceOf(second.intrinsics.promise.constructor);
+    expect(result).toBeInstanceOf(first.NativePromise);
+    expect(result).not.toBeInstanceOf(second.NativePromise);
     const observed = result.catch((reason: unknown) => reason);
     const child = new ResultChildImpl();
     if (mode === 'fulfill') implementation.pending.resolve(child);
     else implementation.pending.reject(new TypeErrorRequest('read failed'));
     const value = await observed;
     if (mode === 'fulfill') expect(value).toBe(bindings.project(child));
-    else expect(value).toBeInstanceOf(first.intrinsics.typeError);
+    else expect(value).toBeInstanceOf(first.TypeError);
     expect(Reflect.get(owner, 'result')).toBe(result);
   });
 });
@@ -101,12 +101,12 @@ class CountReaderImpl {
   constructor(public env: JSEnvironment) {}
 
   read(): InternalPromise<number> {
-    return this.env.exec.Promise.resolve(undefined, idlType.undefined)
+    return this.env.InternalPromise.resolve(undefined, idlType.undefined)
       .then(() => this.#readCount(), undefined, idlType.long);
   }
 
   #readCount(): InternalPromise<number> {
-    return this.env.exec.Promise.resolve(7, internalType<number>());
+    return this.env.InternalPromise.resolve(7, internalType<number>());
   }
 }
 
@@ -114,7 +114,7 @@ function createFixture() {
   const bindings = new BindingWorld([ownerIDL, childIDL]);
   const realm = new TestRealm();
   const binding = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
-  const implementation = new ResultOwnerImpl(binding.Promise);
+  const implementation = new ResultOwnerImpl(binding.InternalPromise);
   const owner = binding.project(ResultOwnerImpl, implementation);
   return { binding, implementation, owner };
 }

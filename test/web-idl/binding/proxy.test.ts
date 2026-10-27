@@ -79,7 +79,7 @@ describe('Web IDL proxy handle binding', () => {
     expect(implementation.source).toBeNull();
     expect(consumer.source).toBeNull();
     expect(new Consumer({}).source).toBeNull();
-    expect(() => { consumer.source = handle; }).toThrow(realm.intrinsics.typeError);
-    expect(() => new Consumer({ source: {} })).toThrow(realm.intrinsics.typeError);
+    expect(() => { consumer.source = handle; }).toThrow(realm.TypeError);
+    expect(() => new Consumer({ source: {} })).toThrow(realm.TypeError);
   });
 });

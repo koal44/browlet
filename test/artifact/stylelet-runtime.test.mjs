@@ -24,12 +24,11 @@ for (const [format, api] of [['ESM', esm], ['CommonJS', cjs]]) {
     });
   });
 
-  test(`Stylelet ${format} retains supplied execution for stylesheet replacement`, async () => {
+  test(`Stylelet ${format} retains the supplied environment for stylesheet replacement`, async () => {
     const env = createStyleletTestEnvironment();
-    const exec = env.exec;
     const styles = api.Stylelet.create(createDocument(), { env });
     const sheet = styles.createStyleSheet({ baseURL: '../styles/' });
-    assert.equal(styles.context.env.exec, exec);
+    assert.equal(styles.context.env, env);
     assert.deepEqual(sheet.baseURL.path, ['styles', '']);
     const completed = await new Promise((resolve, reject) => {
       sheet.replace('main { color: red }').observe(resolve, reject);

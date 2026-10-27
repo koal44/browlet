@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createManualRealm } from '../../../support/browlet-agent';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletExecution } from '../../../../src/browlet/bindings';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
 import {
   structuredSerialize, structuredSerializeForStorage,
 } from '../../../../src/browlet/scripting/structured-data/serialize';
@@ -232,7 +232,7 @@ function createContexts() {
   function register(agentCluster = cluster, globalNames = ['ResourceTest', 'HiddenTest']) {
     const realm = createManualRealm({ globalNames, crossOriginIsolated: true });
     agentCluster.add(realm.agent);
-    return world.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+    return world.register(realm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
   }
   const source = register();
   return {

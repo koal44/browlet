@@ -63,7 +63,7 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
         ? this.record.invokeAsAsync('next', [], this.record.syncRealm).promise
         : Reflect.apply(this.record.nextMethod, this.record.iterator, []);
       if (!isObject(nextResult)) {
-        throw new realm.intrinsics.typeError('Iterator result is not an object');
+        throw new realm.TypeError('Iterator result is not an object');
       }
     } catch (exception) {
       return IDLPromise.rejected(exception, anyType, realm);
@@ -73,7 +73,7 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
     return nextPromise.react(anyType, {
       fulfilled: (iterationResult) => {
         if (!isObject(iterationResult)) {
-          throw new realm.intrinsics.typeError('Iterator result is not an object');
+          throw new realm.TypeError('Iterator result is not an object');
         }
         const iteration = iterationResult as { done?: unknown; value?: unknown; };
         if (iteration.done) return endOfIteration;
@@ -102,7 +102,7 @@ export class AsyncSequenceIterator<Element extends IDLType = IDLType> {
     return returnPromise.react(undefinedType, {
       fulfilled: (result) => {
         if (!isObject(result)) {
-          throw new realm.intrinsics.typeError('Iterator return result is not an object');
+          throw new realm.TypeError('Iterator return result is not an object');
         }
         return undefined;
       },
@@ -131,11 +131,11 @@ class IteratorRecord {
   static fromMethod(object: object, method: JSMethod, realm: WebIDLRealm): IteratorRecord {
     const iterator = Reflect.apply(method, object, []);
     if (!isObject(iterator)) {
-      throw new realm.intrinsics.typeError('Iterator method did not return an object');
+      throw new realm.TypeError('Iterator method did not return an object');
     }
     const nextMethod = getMethod(iterator, 'next', realm);
     if (nextMethod === undefined) {
-      throw new realm.intrinsics.typeError('Iterator has no next method');
+      throw new realm.TypeError('Iterator has no next method');
     }
     return new IteratorRecord(iterator, nextMethod);
   }
@@ -151,7 +151,7 @@ class IteratorRecord {
       }
       const result = Reflect.apply(method, this.iterator, args);
       if (!isObject(result)) {
-        throw new realm.intrinsics.typeError('Iterator result is not an object');
+        throw new realm.TypeError('Iterator result is not an object');
       }
       const iteration = result as { done?: unknown; value?: unknown; };
       const done = Boolean(iteration.done);

@@ -35,7 +35,7 @@ describe('speculation rules parse results', () => {
 
   it('retains the original parse exception without reporting it during creation', () => {
     const { env, window, document } = fixture();
-    const error = new env.exec.TypeError('The top-level value must be an object');
+    const error = new env.realm.TypeError('The top-level value must be an object');
     const listener = vi.fn();
     window.addEventListener('error', listener);
     const report = vi.spyOn(env, 'reportException');
@@ -75,7 +75,7 @@ describe('register speculation rules', () => {
   it('reports an initial parse error synchronously at the registering Window', () => {
     const source = fixture();
     const target = fixture();
-    const error = new source.env.exec.TypeError('Invalid speculation rules');
+    const error = new source.env.realm.TypeError('Invalid speculation rules');
     const result = failedResult(source.document, error);
     const events: ErrorEvent[] = [];
     target.window.addEventListener('error', (event) => {
@@ -101,7 +101,7 @@ describe('register speculation rules', () => {
 
   it('queues requested errors as DOM manipulation tasks instead of dispatching during registration', () => {
     const { env, window, global, document, loop } = fixture();
-    const error = new env.exec.TypeError('Invalid speculation rules');
+    const error = new env.realm.TypeError('Invalid speculation rules');
     const result = failedResult(document, error);
     const events: ErrorEvent[] = [];
     window.addEventListener('error', (event) => {
@@ -155,7 +155,7 @@ describe('unregister speculation rules', () => {
 
   it('ignores a failed parse result without reporting it again or considering loads', () => {
     const { env, global, document, loop } = fixture();
-    const result = failedResult(document, new env.exec.TypeError('Invalid rules'));
+    const result = failedResult(document, new env.realm.TypeError('Invalid rules'));
     const report = vi.spyOn(env, 'reportException');
     const consider = vi.spyOn(document, 'considerSpeculativeLoads');
 
@@ -190,7 +190,7 @@ describe('update speculation rules', () => {
     const { env, window, global, document, loop } = fixture();
     const oldResult = parsedResult(document);
     global.registerSpeculationRules(oldResult);
-    const error = new env.exec.TypeError('Invalid replacement rules');
+    const error = new env.realm.TypeError('Invalid replacement rules');
     const newResult = failedResult(document, error);
     const events: ErrorEvent[] = [];
     window.addEventListener('error', (event) => {
@@ -213,7 +213,7 @@ describe('update speculation rules', () => {
 
   it('can replace a failed result with a successful one without reporting the old error', () => {
     const { env, global, document, loop } = fixture();
-    const oldResult = failedResult(document, new env.exec.TypeError('Invalid old rules'));
+    const oldResult = failedResult(document, new env.realm.TypeError('Invalid old rules'));
     const newResult = parsedResult(document);
     const report = vi.spyOn(env, 'reportException');
     const consider = vi.spyOn(document, 'considerSpeculativeLoads');

@@ -7,7 +7,7 @@ import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/na
 import { Duration } from
   '../../../src/browlet/timing/clock';
 import type { EventLoop } from '../../../src/browlet/scripting/event-loop';
-import type { TaskHandle, TimerHost } from '../../../src/infra/execution';
+import type { TaskHandle, TimerHost } from '../../../src/infra/tasks';
 
 describe('HTML timers', () => {
   it('counts only fully-active time before completing a timeout', () => {

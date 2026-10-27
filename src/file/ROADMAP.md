@@ -20,7 +20,7 @@ files, workers, MediaSource, and the final conformance audit.
 | [Fetch](../fetch/README.md) | Blob scheme responses/ranges and multipart body consumption |
 
 Portable File implementations receive the existing owner as `FileEnvironment`.
-Its `exec` combines Streams facilities with host-supplied `nativeLineEnding`;
+It combines Streams facilities with host-supplied `nativeLineEnding`;
 backing `BlobData` retains no realm. Browser integration supplies events,
 file-reading tasks, settings, and UserAgent lifetime. Web IDL performs author
 conversion and projection. Import through [index.ts](index.ts).
@@ -40,7 +40,7 @@ an implementation of file selection or filesystem access.
 
 Blob/File retain `env`; slices preserve it and deserialization uses the target
 environment. Background reads deliver bytes/failure/completion through
-`env.exec.queueTask('file', steps)`. Promise reads use the owner's internal
+`env.queueTask('file', steps)`. Promise reads use the owner's internal
 Promise facility; `textStream()` pipes through TextDecoderStream's associated TransformStream.
 Blob text is UTF-8; FileReader text instead applies label/MIME/BOM rules.
 

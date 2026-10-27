@@ -363,7 +363,7 @@ describe('Web IDL implementation callback conversion', () => {
     expect(owner.construct(callback)).toBe(4);
     expect(prototypeReads.count).toBe(1);
     Reflect.set(callbackRealm.globalObject, 'fail', true);
-    expect(() => owner.construct(callback)).toThrow(callbackRealm.intrinsics.typeError);
+    expect(() => owner.construct(callback)).toThrow(callbackRealm.TypeError);
     expect(prototypeReads.count).toBe(2);
     expect(prepareCallback.mock.calls).toEqual([[firstContext], [secondContext]]);
     expect(cleanCallback.mock.calls).toEqual(prepareCallback.mock.calls);
@@ -371,7 +371,7 @@ describe('Web IDL implementation callback conversion', () => {
     expect(cleanScript).toHaveBeenCalledTimes(2);
 
     const arrow = callbackRealm.evaluate('() => ({})', 'adapted-non-constructor.js');
-    expect(() => owner.construct(arrow)).toThrow(realm.intrinsics.typeError);
+    expect(() => owner.construct(arrow)).toThrow(realm.TypeError);
     expect(prepareScript).toHaveBeenCalledTimes(2);
   });
 
@@ -408,7 +408,7 @@ describe('Web IDL implementation callback conversion', () => {
 
     // The callback is not converted again when another realm's method constructs it.
     // https://webidl.spec.whatwg.org/#construct-a-callback-function
-    expect(() => OtherConstructor.prototype.construct.call(owner)).toThrow(constructionRealm.intrinsics.typeError);
+    expect(() => OtherConstructor.prototype.construct.call(owner)).toThrow(constructionRealm.TypeError);
     expect(prepareScript).not.toHaveBeenCalled();
   });
 });

@@ -6,8 +6,6 @@ export {
   type DOMException, type DOMExceptionConstructor, type DOMExceptionName,
 } from './dom-exception';
 
-export type { WebIDLExecution } from './execution';
-
 export {
   allowSharedBufferSourceIDL, arrayBufferViewIDL, bufferSourceIDL,
   functionIDL, voidFunctionIDL, webIDLCommonDefinitions,

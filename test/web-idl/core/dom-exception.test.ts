@@ -70,7 +70,7 @@ describe('DOMException recognition', () => {
       const Constructor = Reflect.get(ctx.realm.globalObject, 'DOMException') as typeof DOMException;
       const exception = new Constructor('projected', 'AbortError');
 
-      expect(exception).toBeInstanceOf(ctx.realm.intrinsics.error);
+      expect(exception).toBeInstanceOf(ctx.realm.Error);
       expect(types.isNativeError(exception)).toBe(true);
       expect(DOMExceptionStamper.is(exception)).toBe(true);
       expect(isDOMException(exception, 'AbortError')).toBe(true);
@@ -94,7 +94,7 @@ describe('DOMException recognition', () => {
     ) => DOMException;
     const exception = new Constructor('full', { quota: 10, requested: 12 });
 
-    expect(exception).toBeInstanceOf(ctx.realm.intrinsics.error);
+    expect(exception).toBeInstanceOf(ctx.realm.Error);
     expect(types.isNativeError(exception)).toBe(true);
     expect(DOMExceptionStamper.is(exception)).toBe(true);
     expect(isDOMException(exception, 'QuotaExceededError')).toBe(true);

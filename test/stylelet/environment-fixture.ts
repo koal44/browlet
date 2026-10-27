@@ -1,12 +1,13 @@
 import { standardDOM, type DOMOperations } from '../../src/infra/index';
-import { createAsyncExecution, nativeTimerHost } from '../../src/infra/execution';
-import type { StyleletEnvironment, StyleletExecution, SystemColorPalette } from '../../src/stylelet/index';
+import { nativeTimerHost, type TimerHost } from '../../src/infra/tasks';
+import type { StyleletEnvironment, SystemColorPalette } from '../../src/stylelet/index';
 import { createClientEnvironment } from '../fetch/client-fixture';
+import { createTestScheduling } from '../support/scheduling';
 
-/** A test host with real realm execution and controlled Fetch/DOM capabilities. */
+/** A test host with a real realm and controlled Fetch/DOM capabilities. */
 export function createStyleletTestEnvironment(options: {
   dom?: DOMOperations;
-  exec?: Partial<StyleletExecution>;
+  timerHost?: TimerHost;
   systemColors?: SystemColorPalette;
 } = {}): StyleletEnvironment {
   const env = createClientEnvironment();
@@ -22,7 +23,7 @@ export function createStyleletTestEnvironment(options: {
       systemColors: options.systemColors,
     },
     // Direct implementation tests retain internal results; Browlet tests cover CSSOM projection.
-    exec: { ...env.exec, ...createAsyncExecution(nativeTimerHost), ...options.exec },
+    ...createTestScheduling(options.timerHost ?? nativeTimerHost),
     getAssociatedDocument: () => null,
   };
 }

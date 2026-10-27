@@ -98,7 +98,7 @@ export class BrowsingContext {
     });
     const { window, realm } = env;
     browsingContext.initializeWindowProxy(realm.windowProxy);
-    const document = env.exec.createDocument();
+    const document = env.createDocument();
 
     document.type = 'html';
     document.contentType = 'text/html';

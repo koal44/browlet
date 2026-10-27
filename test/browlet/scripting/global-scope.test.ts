@@ -127,7 +127,7 @@ describe('WindowOrWorkerGlobalScope', () => {
     expect(Reflect.apply(getter, insecure.window, [])).toBe(false);
     expect(Reflect.apply(getter, secure.window, [])).toBe(true);
     expect(() => { Reflect.apply(getter, {}, []); })
-      .toThrow(getRelevantRealm(secure.window).intrinsics.typeError);
+      .toThrow(getRelevantRealm(secure.window).TypeError);
   });
 });
 

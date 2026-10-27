@@ -85,10 +85,10 @@ describe('Promise and async sequence implementation conversion', () => {
     const observed = Promise.withResolvers<string[]>();
     result.observe(observed.resolve, observed.reject);
 
-    await expect(observed.promise).rejects.toBeInstanceOf(sourceRealm.intrinsics.typeError);
+    await expect(observed.promise).rejects.toBeInstanceOf(sourceRealm.TypeError);
     expect(coerce).toHaveBeenCalledOnce();
     expect(result.backing).toBe(value.promise);
-    expect(result.backing).toBeInstanceOf(sourceRealm.intrinsics.promise.constructor);
+    expect(result.backing).toBeInstanceOf(sourceRealm.NativePromise);
   });
 
   it('allows repeated observations of one async iteration result containing a callback', async () => {

@@ -352,7 +352,7 @@ function throwTypeError(
   binding: RealmBinding,
   message: string,
 ): never {
-  throw new binding.realm.intrinsics.typeError(message);
+  throw new binding.realm.TypeError(message);
 }
 
 type DistinguishingResolution<Callable extends AssembledCallable> = {

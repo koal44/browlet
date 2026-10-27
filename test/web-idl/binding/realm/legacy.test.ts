@@ -63,7 +63,7 @@ describe('Web IDL legacy platform objects', () => {
     });
     expect(Object.keys(object)).toEqual(['0', '1']);
     expect(Reflect.get(Interface.prototype, Symbol.iterator)).toBe(
-      realm.intrinsics.iteration.arrayValues,
+      realm.arrayValues,
     );
     expect(Array.from(object as Iterable<unknown>)).toEqual(['zero', 'one']);
     expect(call(Interface.prototype, 'item', object, 1)).toBe('one');

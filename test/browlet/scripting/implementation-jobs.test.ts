@@ -20,7 +20,7 @@ describe('implementation Promise delivery', () => {
   it('keeps runtime instrumentation on Node during projected construction', async () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm, exec: { Promise: ctx.Promise } })).install(realm.globalObject);
+    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm, InternalPromise: ctx.InternalPromise })).install(realm.globalObject);
     const constructor = Reflect.get(browlet.window, 'InitializationProbe') as new () => object;
     const unrelated = new AsyncLocalStorage<string>();
     let reported: string | undefined;
@@ -42,7 +42,7 @@ describe('implementation Promise delivery', () => {
   itPassesWith('explicitQueues')('completes initialization started by a projected constructor', () => {
     const browlet = new Browlet({ route: () => '' });
     const realm = getRelevantRealm(browlet.window);
-    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm, exec: { Promise: ctx.Promise } })).install(realm.globalObject);
+    new BindingWorld([initializationIDL]).register(realm, (ctx) => ({ realm: ctx.realm, InternalPromise: ctx.InternalPromise })).install(realm.globalObject);
     const trace: string[] = [];
     Reflect.set(realm.globalObject, 'record', (value: string) => { trace.push(value); });
     realm.evaluate('new InitializationProbe().ready.then(value => record(value))', 'construct.js');
@@ -135,7 +135,7 @@ describe('implementation Promise delivery', () => {
 
   itPassesWith('explicitQueues').each(['pending', 'settled'] as const)('converts a %s promise argument for the receiver of a borrowed method', (state) => {
     const { a, b, trace } = createFixture();
-    const pending = new a.realm.intrinsics.promise.constructor<string>((resolve) => {
+    const pending = new a.realm.NativePromise<string>((resolve) => {
       a.expose('settle', () => { resolve('input'); });
     });
     if (state === 'settled') (Reflect.get(a.realm.globalThis, 'settle') as () => void)();
@@ -168,7 +168,7 @@ function createFixture(sharedAgent = false) {
     };
     const binding = bindings.register(realm, (ctx) => ({ realm: ctx.realm }));
     const implementation = new OwnershipProbeImpl(
-      name, binding.Promise.fromNative(pending.promise, String, idlType.DOMString), trace, binding.Promise,
+      name, binding.InternalPromise.fromNative(pending.promise, String, idlType.DOMString), trace, binding.InternalPromise,
     );
     const object = binding.project(OwnershipProbeImpl, implementation);
     expose('record', (value: string) => {
@@ -253,9 +253,9 @@ class InitializationProbeImpl {
 //   constructor();
 //   readonly attribute Promise<DOMString> ready;
 // };
-const initializationIDL = defineInterface<WebIDLEnvironment & { exec: { Promise: typeof InternalPromise; }; }>({
+const initializationIDL = defineInterface<WebIDLEnvironment & { InternalPromise: typeof InternalPromise; }>({
   name: 'InitializationProbe', exposed: '*', implementation: impl(InitializationProbeImpl, {
-    constructWith: [atArg(0, (env) => env.exec.Promise)],
+    constructWith: [atArg(0, (env) => env.InternalPromise)],
   }),
   members: [ctor(), roAttr('ready', promise(idlType.DOMString))],
 });

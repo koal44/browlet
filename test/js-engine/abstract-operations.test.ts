@@ -28,9 +28,9 @@ describe('ECMAScript abstract operations', () => {
     expect(getMethod({ method: null }, 'method', realm)).toBeUndefined();
     expect(getMethod('value', 'toString', realm)).toBeTypeOf('function');
     expect(() => getMethod({ method: 1 }, 'method', realm))
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
     expect(() => getMethod(null, 'method', realm))
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 
   itPassesWith('htmlDDA')('preserves an undetectable receiver through GetV', () => {
@@ -52,7 +52,7 @@ describe('ECMAScript abstract operations', () => {
     expect(getV(object, 'value', realm)).toBe(3);
     expect(receivers).toEqual([object, object]);
 
-    const prototype = Object.getPrototypeOf(realm.intrinsics.object('text')) as object;
+    const prototype = Object.getPrototypeOf(realm.Object('text')) as object;
     Object.defineProperty(prototype, 'receiver', { get() { return this as unknown; } });
     expect(getV('text', 'receiver', realm)).toBe('text');
   });

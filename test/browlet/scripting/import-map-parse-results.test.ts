@@ -33,7 +33,7 @@ describe('import map parse results', () => {
 
   it('retains the original parse exception without reporting it during creation', () => {
     const { env, window } = fixture();
-    const error = new env.exec.TypeError('The top-level value must be an object');
+    const error = new env.realm.TypeError('The top-level value must be an object');
     vi.spyOn(ImportMaps.ImportMap, 'parse').mockImplementation(() => { throw error; });
     const listener = vi.fn();
     window.addEventListener('error', listener);
@@ -73,7 +73,7 @@ describe('register an import map', () => {
   it('reports a parse error at the registering Window without merging or changing its map', () => {
     const source = fixture();
     const target = fixture();
-    const error = new source.env.realm.intrinsics.syntaxError('Invalid import map JSON');
+    const error = new source.env.realm.SyntaxError('Invalid import map JSON');
     vi.spyOn(ImportMaps.ImportMap, 'parse').mockImplementation(() => { throw error; });
     const merge = vi.spyOn(target.global, 'mergeImportMap');
     const result = new ImportMaps.ImportMapParseResult('{', source.env.apiBaseURL, source.env);
@@ -100,7 +100,7 @@ describe('register an import map', () => {
 
   it('reports an uncanceled parse error to the console', () => {
     const { env, global } = fixture();
-    const error = new env.exec.TypeError('Invalid scopes');
+    const error = new env.realm.TypeError('Invalid scopes');
     vi.spyOn(ImportMaps.ImportMap, 'parse').mockImplementation(() => { throw error; });
     const output = vi.spyOn(console, 'error').mockImplementation(() => {});
     const result = new ImportMaps.ImportMapParseResult('{"scopes":[]}', env.apiBaseURL, env);

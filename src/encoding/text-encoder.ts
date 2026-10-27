@@ -41,9 +41,9 @@ export class TextEncoderImpl {
   /** Encode directly into the returned typed array in the receiver's realm. */
   encode(input: string): Uint8Array {
     const length = utf8ByteLength(input);
-    const buffer = this.#env.exec.buffers.allocateArrayBuffer(length);
+    const buffer = new this.#env.realm.ArrayBuffer(length);
     writeUTF8(input, buffer, 0, length);
-    return this.#env.exec.buffers.createView('Uint8Array', buffer);
+    return new this.#env.realm.Uint8Array(buffer);
   }
 
   encodeInto(

@@ -10,9 +10,9 @@ describe('Infra §6: JSON bytes', () => {
     env.realm.evaluate('JSON.parse = () => { throw new Error("replacement parser"); };', 'json-test.js');
     const input = utf8Encode('{"items":[{"key":1}]}');
     const value = env.parseJSONBytes(input) as { items: object[]; };
-    expect(Object.getPrototypeOf(value)).toBe(env.realm.intrinsics.objectPrototype);
-    expect(Object.getPrototypeOf(value.items)).toBe(env.realm.intrinsics.array.prototype);
-    expect(Object.getPrototypeOf(value.items[0])).toBe(env.realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(value)).toBe(env.realm.objectPrototype);
+    expect(Object.getPrototypeOf(value.items)).toBe(env.realm.Array.prototype);
+    expect(Object.getPrototypeOf(value.items[0])).toBe(env.realm.objectPrototype);
     expect(env.parseJSONBytesToInfra(input)).toEqual(new Map([
       ['items', [new Map([['key', 1]])]],
     ]));
@@ -26,15 +26,15 @@ describe('Infra §6: JSON bytes', () => {
     expect(env.parseJSONBytesToInfra(input)).toEqual(new Map([['x', '\ufffd']]));
     const doubleBOM = Uint8Array.of(0xef, 0xbb, 0xbf, 0xef, 0xbb, 0xbf, 0x30);
     for (const method of ['parseJSONBytes', 'parseJSONBytesToInfra'] as const) {
-      expect(() => env[method](doubleBOM)).toThrow(env.realm.intrinsics.syntaxError);
-      expect(() => env[method](new Uint8Array())).toThrow(env.realm.intrinsics.syntaxError);
+      expect(() => env[method](doubleBOM)).toThrow(env.realm.SyntaxError);
+      expect(() => env[method](new Uint8Array())).toThrow(env.realm.SyntaxError);
     }
   });
 
   it.each([undefined, Symbol('value'), () => {}, { toJSON: () => undefined }])(
     'throws the supplied realm\'s TypeError for a value without JSON representation', (value) => {
       const env = createSandboxEnvironment();
-      expect(() => env.serializeJavaScriptValueToJSONBytes(value)).toThrow(env.exec.TypeError);
+      expect(() => env.serializeJavaScriptValueToJSONBytes(value)).toThrow(env.realm.TypeError);
     },
   );
 

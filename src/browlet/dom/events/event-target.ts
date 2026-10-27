@@ -102,7 +102,7 @@ export class EventTargetImpl {
   /** Create a trusted event in the environment supplied at construction. */
   // https://dom.spec.whatwg.org/#concept-event-create
   createTrustedEvent(eventConstructor?: EventImplConstructor): EventImpl {
-    return this.env.exec.createEvent(eventConstructor);
+    return this.env.createEvent(eventConstructor);
   }
 
   /** Remove every listener and its associated abort registration. */

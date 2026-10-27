@@ -128,7 +128,7 @@ describe('Web IDL undetectable callable objects', () => {
     Reflect.set(value, Symbol.toPrimitive, () => 'collection');
     expect(consumer.echoString(value)).toBe('collection');
     expect(() => consumer.echoString({ [Symbol.toPrimitive]: () => value }))
-      .toThrow(context.realm.intrinsics.typeError);
+      .toThrow(context.realm.TypeError);
   });
 
   itPassesWith('htmlDDA').each(['iterator', 'next'] as const)('accepts an undetectable %s method during sequence conversion', async (method) => {

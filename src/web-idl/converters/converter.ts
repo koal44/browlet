@@ -43,14 +43,14 @@ export abstract class Converter<Type extends IDLType = IDLType> {
 
   /** Throw a new TypeError in this conversion's allocation realm. */
   throwTypeError(message: string): never {
-    throw new this.realm.intrinsics.typeError(message);
+    throw new this.realm.TypeError(message);
   }
 
   /** Realize internal coercion failures in this realm; preserve author-thrown exceptions. */
   throwConversionError(error: unknown): never {
-    if (InternalTypeError.is(error)) throw new this.realm.intrinsics.typeError(error.message);
-    if (InternalRangeError.is(error)) throw new this.realm.intrinsics.rangeError(error.message);
-    if (InternalSyntaxError.is(error)) throw new this.realm.intrinsics.syntaxError(error.message);
+    if (InternalTypeError.is(error)) throw new this.realm.TypeError(error.message);
+    if (InternalRangeError.is(error)) throw new this.realm.RangeError(error.message);
+    if (InternalSyntaxError.is(error)) throw new this.realm.SyntaxError(error.message);
     throw error;
   }
 

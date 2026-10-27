@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { structuredSerialize } from '../../../../src/browlet/scripting/structured-data/serialize';
 import { structuredSerializeWithTransfer } from '../../../../src/browlet/scripting/structured-data/transfer';
 import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletExecution } from '../../../../src/browlet/bindings';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
 import {
   DetachedTransferableStamper,
 } from '../../../../src/browlet/scripting/structured-data/transferable';
@@ -202,7 +202,7 @@ describe('HTML structured-data platform contracts', () => {
       implementation: impl(ChildImpl), members: [],
     });
     const world = new BindingWorld<BrowletEnvironment>([parent, child]);
-    const ctx = world.register(createManualRealm(), (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+    const ctx = world.register(createManualRealm(), (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
     const value = ctx.createPlatformRecord(child.name)!.platformObject;
 
     expect(() => structuredSerialize(value, ctx)).toThrow(expect.objectContaining({ name: 'DataCloneError' }));

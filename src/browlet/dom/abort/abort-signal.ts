@@ -34,7 +34,7 @@ export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
   constructor(env: BrowletEnvironment) {
     super(env);
     this.#env = env;
-    const global = env.exec.global;
+    const global = env.realm.globalObject;
     let retainedSignals = AbortSignalRetentionStamper.get(global);
     if (!retainedSignals) {
       retainedSignals = new Set<AbortSignalImpl>();
@@ -51,7 +51,7 @@ export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
     reason: unknown = undefined,
   ): AbortSignalImpl {
     signal.#setAbortReason(
-      reason === undefined ? new signal.#env.exec.DOMException('', DOMExceptionNames.abort) : reason,
+      reason === undefined ? new signal.#env.DOMException('', DOMExceptionNames.abort) : reason,
     );
     return signal;
   }
@@ -65,7 +65,7 @@ export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
   ): AbortSignalImpl {
     queueTimeoutTask(
       milliseconds,
-      () => signal.signalAbort(new signal.#env.exec.DOMException('', DOMExceptionNames.timeout)),
+      () => signal.signalAbort(new signal.#env.DOMException('', DOMExceptionNames.timeout)),
     );
     return signal;
   }
@@ -142,7 +142,7 @@ export class AbortSignalImpl extends EventTargetImpl implements AbortSignal {
     // SPEC_CLASH(abort-default-reason-realm): Follow Web IDL/Chromium's method realm.
     // Gecko/WebKit use the signal realm. Binding supplies env for author calls.
     this.#setAbortReason(
-      reason === undefined ? new env.exec.DOMException('', DOMExceptionNames.abort) : reason,
+      reason === undefined ? new env.DOMException('', DOMExceptionNames.abort) : reason,
     );
     const dependents: AbortSignalImpl[] = [];
     for (const dependent of this.#dependentSignals.values()) {
@@ -250,7 +250,7 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
     staticOp('abort', reference('AbortSignal'),
       [arg('reason', idlType.any, { optional: true })],
       {
-        ...invokeWith(atArg(0, (env) => env.exec.createAbortSignal())),
+        ...invokeWith(atArg(0, (env) => env.createAbortSignal())),
         ...xattr('NewObject'),
       },
     ),
@@ -258,12 +258,12 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
       [arg('milliseconds', idlType.unsignedLongLong, xattr('EnforceRange'))],
       {
         ...invokeWith(
-          atArg(0, (env) => env.exec.createAbortSignal()),
+          atArg(0, (env) => env.createAbortSignal()),
           atArg(2, (env) => {
             const timers = env.getWindowOrWorkerGlobalScopeMixin().timers;
             return (milliseconds: number, steps: () => void) => {
               timers.runStepsAfterTimeout('AbortSignal-timeout', milliseconds, () => {
-                env.exec.queueTask('timer', steps);
+                env.queueTask('timer', steps);
               });
             };
           }),
@@ -274,7 +274,7 @@ export const abortSignalIDL = defineInterface<BrowletEnvironment>({
     staticOp('any', reference('AbortSignal'),
       [arg('signals', sequence(reference('AbortSignal')))],
       {
-        ...invokeWith(atArg(0, (env) => env.exec.createAbortSignal())),
+        ...invokeWith(atArg(0, (env) => env.createAbortSignal())),
         ...xattr('NewObject'),
       },
     ),

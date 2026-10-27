@@ -184,7 +184,7 @@ function createWindow(siblingOf?: WindowRealm) {
     });
     realm = sibling.realm;
     const proxy = realm.windowProxy;
-    const document = realm.env.exec.createDocument();
+    const document = realm.env.createDocument();
     document.browsingContext = new BrowsingContext(proxy);
     sibling.window.setAssociatedDocument(document);
     proxy.setAssociatedWindow(realm.globalObject);

@@ -55,7 +55,7 @@ describe('Cached converters', () => {
     expect(clamp.type).toMatchObject({ kind: 'integer', integerMode: 'clamp' });
     expect(range.type).toMatchObject({ kind: 'integer', integerMode: 'enforce-range' });
     expect(clamp.jsToIDL(300)).toBe(127);
-    expect(() => range.jsToIDL(300)).toThrow(realm.intrinsics.typeError);
+    expect(() => range.jsToIDL(300)).toThrow(realm.TypeError);
   });
 
   it('retains use-specific rules without changing the underlying descriptor', () => {
@@ -95,9 +95,9 @@ describe('Cached converters', () => {
     expect(converter.type.legacyCallback).toBe(binding.getConverter(binding.assembly.getIDLType(type)).type.legacyCallback);
     expect(binding.assembly.getIDLType(reference('Handler'))).not.toHaveProperty('legacyCallback');
     expect(binding.assembly.getIDLType(sequence(type))).not.toHaveProperty('legacyCallback');
-    expect(() => convert(5)).toThrow(realm.intrinsics.typeError);
-    expect(() => convert({})).toThrow(realm.intrinsics.typeError);
-    expect(() => converter.jsToIDL(5)).toThrow(realm.intrinsics.typeError);
+    expect(() => convert(5)).toThrow(realm.TypeError);
+    expect(() => convert({})).toThrow(realm.TypeError);
+    expect(() => converter.jsToIDL(5)).toThrow(realm.TypeError);
     expect(convert(null)).toBeNull();
     expect(converter.getJSToIDLSteps()).toBe(convert);
   });
@@ -111,8 +111,8 @@ describe('Conversion realm and implementation ownership', () => {
     call(owner, 'send', callback);
 
     const values = Reflect.get(second.globalObject, 'received') as object[];
-    expect(values).toBeInstanceOf(second.intrinsics.array);
-    expect(values).not.toBeInstanceOf(first.intrinsics.array);
+    expect(values).toBeInstanceOf(second.Array);
+    expect(values).not.toBeInstanceOf(first.Array);
     expect(values[0]).toBeInstanceOf(Reflect.get(first.globalObject, 'Child'));
     expect(values[0]).not.toBeInstanceOf(Reflect.get(second.globalObject, 'Child'));
   });
@@ -123,8 +123,8 @@ describe('Conversion realm and implementation ownership', () => {
     let reason: unknown;
     try { call(owner, 'invokeNumber', callback); } catch (error) { reason = error; }
 
-    expect(reason).toBeInstanceOf(second.intrinsics.typeError);
-    expect(reason).not.toBeInstanceOf(first.intrinsics.typeError);
+    expect(reason).toBeInstanceOf(second.TypeError);
+    expect(reason).not.toBeInstanceOf(first.TypeError);
   });
 
   it('converts callback promise fulfillment in B while returning an operation promise in A', async () => {
@@ -133,9 +133,9 @@ describe('Conversion realm and implementation ownership', () => {
     const result = call(owner, 'invokePromise', callback) as Promise<unknown>;
     const reason = await result.catch((error: unknown) => error);
 
-    expect(result).toBeInstanceOf(first.intrinsics.promise.constructor);
-    expect(reason).toBeInstanceOf(second.intrinsics.typeError);
-    expect(reason).not.toBeInstanceOf(first.intrinsics.typeError);
+    expect(result).toBeInstanceOf(first.NativePromise);
+    expect(reason).toBeInstanceOf(second.TypeError);
+    expect(reason).not.toBeInstanceOf(first.TypeError);
   });
 
   it('uses A for a direct promise argument even when the original JavaScript promise belongs to B', async () => {
@@ -144,8 +144,8 @@ describe('Conversion realm and implementation ownership', () => {
     const result = call(owner, 'consume', input) as Promise<unknown>;
     const reason = await result.catch((error: unknown) => error);
 
-    expect(reason).toBeInstanceOf(first.intrinsics.typeError);
-    expect(reason).not.toBeInstanceOf(second.intrinsics.typeError);
+    expect(reason).toBeInstanceOf(first.TypeError);
+    expect(reason).not.toBeInstanceOf(second.TypeError);
   });
 
   it('keeps a declared promise and its values in A when passed to a callback in B', async () => {
@@ -155,8 +155,8 @@ describe('Conversion realm and implementation ownership', () => {
     const pending = Reflect.get(second.globalObject, 'received') as Promise<object[]>;
     const values = await pending;
 
-    expect(pending).toBeInstanceOf(first.intrinsics.promise.constructor);
-    expect(values).toBeInstanceOf(first.intrinsics.array);
+    expect(pending).toBeInstanceOf(first.NativePromise);
+    expect(values).toBeInstanceOf(first.Array);
     expect(values[0]).toBeInstanceOf(Reflect.get(first.globalObject, 'Child'));
     expect(values[0]).not.toBeInstanceOf(Reflect.get(second.globalObject, 'Child'));
   });
@@ -168,9 +168,9 @@ describe('Conversion realm and implementation ownership', () => {
     const pending = Reflect.get(second.globalObject, 'received') as Promise<unknown>;
     const reason = await pending;
 
-    expect(pending).toBeInstanceOf(first.intrinsics.promise.constructor);
-    expect(reason).toBeInstanceOf(first.intrinsics.typeError);
-    expect(reason).not.toBeInstanceOf(second.intrinsics.typeError);
+    expect(pending).toBeInstanceOf(first.NativePromise);
+    expect(reason).toBeInstanceOf(first.TypeError);
+    expect(reason).not.toBeInstanceOf(second.TypeError);
   });
 });
 
@@ -178,7 +178,7 @@ function fixture() {
   const world = new BindingWorld(definitions);
   const { realm: first, context } = installTestBindings(world);
   const { realm: second } = installTestBindings(world);
-  const owner = context.project(SourceImpl, new SourceImpl(context.Promise));
+  const owner = context.project(SourceImpl, new SourceImpl(context.InternalPromise));
   return { first, second, owner, binding: world.getRealmBinding(first)! };
 }
 

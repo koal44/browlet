@@ -9,7 +9,7 @@ import {
   utf8DecodeWithoutBOMQueue, utf8DecodeWithoutBOMOrFailQueue, utf8EncodeQueue,
 } from '../../src/encoding/codecs/utf-8';
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 
 describe('Encoding Standard UTF-8 hooks', () => {
   it('encodes and decodes scalar values', () => {

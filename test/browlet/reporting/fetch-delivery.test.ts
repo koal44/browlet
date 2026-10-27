@@ -174,7 +174,7 @@ describe('Reporting through Fetch', () => {
       const body = request.body as FetchBody;
       expect(body.stream.env).toBe(userAgent.sandbox);
       expect(body.stream.env).not.toBe(env);
-      const sandboxRealm = BrowletRealm.getAssociatedRealm(body.stream.env.exec.global)!;
+      const sandboxRealm = BrowletRealm.getAssociatedRealm(body.stream.env.realm.globalObject)!;
       expect(sandboxRealm.agent).not.toBe(realm.agent);
       expect(sandboxRealm.getAssociatedDocument()).toBeNull();
       expect(request.client).toBeNull();

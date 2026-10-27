@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest';
 
 import { decode, encode, encodeOrFail, getDecoder, getEncoder } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { expectBytesEqual } from '../support/bytes';
 import { chineseDecodeDigests } from './gen/chinese-vectors';
 

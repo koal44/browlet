@@ -149,12 +149,12 @@ describe('Implementation arrays', () => {
     expect(q.quote.call(block)).toBe('SECOND');
     expect(q.self.call(block) === block).toBe(true);
     expect(world.getRealm(block)).toBe(second.realm);
-    expect(() => q.quote.call({})).toThrow(first.realm.intrinsics.typeError);
+    expect(() => q.quote.call({})).toThrow(first.realm.TypeError);
     // Lookup failures still cross the invoking member's exception boundary.
     Object.defineProperty(second.getObjectRecord(block)!.implInst, 'quote', {
       get() { throw new InternalTypeError('implementation lookup failed'); },
     });
-    expect(() => q.quote.call(block)).toThrow(first.realm.intrinsics.typeError);
+    expect(() => q.quote.call(block)).toThrow(first.realm.TypeError);
   });
 
   it('looks up the method after argument conversion and dependency injection', () => {
@@ -283,8 +283,8 @@ describe('Implementation arrays', () => {
           get() { throw new InternalTypeError('implementation lookup failed'); },
         });
       }
-      expect(() => [...platform]).toThrow(context.realm.intrinsics.typeError);
-      expect(() => String(platform)).toThrow(context.realm.intrinsics.typeError);
+      expect(() => [...platform]).toThrow(context.realm.TypeError);
+      expect(() => String(platform)).toThrow(context.realm.TypeError);
     }
   });
 

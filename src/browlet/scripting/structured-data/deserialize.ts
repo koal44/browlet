@@ -47,22 +47,22 @@ class StructuredDeserializer {
       case 'primitive':
         return serialized.value;
       case 'Boolean':
-        value = Reflect.construct(realm.intrinsics.boolean, [serialized.value]);
+        value = Reflect.construct(realm.Boolean, [serialized.value]);
         break;
       case 'Number':
-        value = Reflect.construct(realm.intrinsics.number, [serialized.value]);
+        value = Reflect.construct(realm.Number, [serialized.value]);
         break;
       case 'BigInt':
-        value = Reflect.apply(realm.intrinsics.object, undefined, [serialized.value]);
+        value = Reflect.apply(realm.Object, undefined, [serialized.value]);
         break;
       case 'String':
-        value = Reflect.construct(realm.intrinsics.string, [serialized.value]);
+        value = Reflect.construct(realm.String, [serialized.value]);
         break;
       case 'Date':
-        value = Reflect.construct(realm.intrinsics.date, [serialized.value]);
+        value = Reflect.construct(realm.Date, [serialized.value]);
         break;
       case 'RegExp':
-        value = Reflect.construct(realm.intrinsics.regExp, [serialized.source, serialized.flags]);
+        value = Reflect.construct(realm.RegExp, [serialized.source, serialized.flags]);
         break;
       case 'SharedArrayBuffer':
       case 'GrowableSharedArrayBuffer':
@@ -80,9 +80,9 @@ class StructuredDeserializer {
       case 'Set':
         return this.#deserializeSet(serialized);
       case 'Array':
-        return this.#deserializeProperties(serialized, new realm.intrinsics.array<unknown>(serialized.length));
+        return this.#deserializeProperties(serialized, new realm.Array<unknown>(serialized.length));
       case 'Object':
-        return this.#deserializeProperties(serialized, realm.createOrdinaryObject(realm.intrinsics.objectPrototype));
+        return this.#deserializeProperties(serialized, realm.createOrdinaryObject(realm.objectPrototype));
       case 'Error':
         return this.#deserializeError(serialized);
       case 'platform-object':
@@ -99,7 +99,7 @@ class StructuredDeserializer {
   // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
   #deserializeArrayBuffer(serialized: SerializedArrayBuffer): ArrayBuffer {
     try {
-      return this.#ctx.realm.createArrayBuffer(
+      return this.#ctx.realm.copyArrayBuffer(
         serialized.bytes,
         serialized.maxByteLength,
       );
@@ -130,7 +130,7 @@ class StructuredDeserializer {
   // StructuredDeserialize: deep deserialization of [[MapData]].
   // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
   #deserializeMap(serialized: SerializedMap): Map<unknown, unknown> {
-    const value = new this.#ctx.realm.intrinsics.map<unknown, unknown>();
+    const value = new this.#ctx.realm.Map<unknown, unknown>();
     this.#memory.set(serialized, value);
     for (const entry of serialized.entries) {
       appendMapData(value, this.deserialize(entry.key), this.deserialize(entry.value));
@@ -141,7 +141,7 @@ class StructuredDeserializer {
   // StructuredDeserialize: deep deserialization of [[SetData]].
   // https://html.spec.whatwg.org/multipage/structured-data.html#structureddeserialize
   #deserializeSet(serialized: SerializedSet): Set<unknown> {
-    const value = new this.#ctx.realm.intrinsics.set<unknown>();
+    const value = new this.#ctx.realm.Set<unknown>();
     this.#memory.set(serialized, value);
     for (const entry of serialized.entries) {
       appendSetData(value, this.deserialize(entry));
@@ -184,15 +184,15 @@ class StructuredDeserializer {
   }
 
   #getErrorConstructor(name: SerializedErrorName): ErrorConstructor {
-    const { intrinsics } = this.#ctx.realm;
+    const { realm } = this.#ctx;
     switch (name) {
-      case 'EvalError': return intrinsics.evalError;
-      case 'RangeError': return intrinsics.rangeError;
-      case 'ReferenceError': return intrinsics.referenceError;
-      case 'SyntaxError': return intrinsics.syntaxError;
-      case 'TypeError': return intrinsics.typeError;
-      case 'URIError': return intrinsics.uriError;
-      default: return intrinsics.error;
+      case 'EvalError': return realm.EvalError;
+      case 'RangeError': return realm.RangeError;
+      case 'ReferenceError': return realm.ReferenceError;
+      case 'SyntaxError': return realm.SyntaxError;
+      case 'TypeError': return realm.TypeError;
+      case 'URIError': return realm.URIError;
+      default: return realm.Error;
     }
   }
 

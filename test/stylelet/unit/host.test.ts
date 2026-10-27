@@ -1,10 +1,10 @@
-import { styleletEnv, createStyleletTestEnvironment } from '../environment-fixture';
+import { createStyleletTestEnvironment } from '../environment-fixture';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { createRequire } from 'node:module';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 import { DOMExceptionImpl } from '../../../src/web-idl/core/index';
-import { CSSStyleDeclarationImpl, Stylelet, type InternalPromise, type StyleletExecution } from '../../../src/stylelet/index';
+import { CSSStyleDeclarationImpl, Stylelet, type InternalPromise } from '../../../src/stylelet/index';
 import {
   standardDOM, XML_NAMESPACE, type DOMOperations, type DOMNode, type DOMDocument, type DOMElement, type DOMDocumentFragment,
 } from '../../../src/infra/index';
@@ -352,16 +352,14 @@ describe('Stylelet execution', () => {
     const document = new JSDOM().window.document;
     const work: (() => void)[] = [];
     const tasks: (() => void)[] = [];
-    const exec: StyleletExecution = {
-      ...styleletEnv.exec,
-      runInParallel: (steps) => { work.push(steps); },
-      queueTask(source, steps) {
-        expect(source).toBe('dom-manipulation');
-        tasks.push(steps);
-        return { remove: () => { tasks.splice(tasks.indexOf(steps), 1); } };
-      },
+    const env = createStyleletTestEnvironment();
+    env.runInParallel = (steps) => { work.push(steps); };
+    env.queueTask = (source, steps) => {
+      expect(source).toBe('dom-manipulation');
+      tasks.push(steps);
+      return { remove: () => { tasks.splice(tasks.indexOf(steps), 1); } };
     };
-    const sheet = Stylelet.create(document, { env: createStyleletTestEnvironment({ exec }) }).createStyleSheet();
+    const sheet = Stylelet.create(document, { env }).createStyleSheet();
     const completed = observe(sheet.replace('.first {} .second {}'));
     const rejected = expect(observe(sheet.replace('.wrong {}')))
       .rejects.toMatchObject({ name: 'NotAllowedError' });

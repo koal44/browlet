@@ -23,7 +23,7 @@ export class IDLPromise<Type extends IDLType = IDLType> {
   constructor(type: Type, realm: WebIDLRealm, realizeException?: ExceptionRealizer) {
     let resolve: PromiseSettlement | undefined;
     let reject: PromiseSettlement | undefined;
-    this.promise = new realm.intrinsics.promise.constructor((resolve_, reject_) => {
+    this.promise = new realm.NativePromise((resolve_, reject_) => {
       resolve = resolve_;
       reject = reject_;
     });

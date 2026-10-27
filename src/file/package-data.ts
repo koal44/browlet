@@ -26,9 +26,9 @@ export function packageData(
       return packageText(bytes, mimeType, encodingLabel);
     case 'ArrayBuffer':
       try {
-        return env.exec.buffers.copyArrayBuffer(bytes);
+        return env.realm.copyArrayBuffer(bytes);
       } catch (error) {
-        if (!(error instanceof env.exec.RangeError)) throw error;
+        if (!(error instanceof env.realm.RangeError)) throw error;
         // SPEC_CLASH(filereader-allocation-error): retain a DOMException for allocation failure.
         // Follow WebKit's NotReadableError mapping; see the File API roadmap.
         throw new DOMExceptionImpl('', DOMExceptionNames.notReadable);

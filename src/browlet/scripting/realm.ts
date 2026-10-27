@@ -33,7 +33,7 @@ export function createBrowletRealm(
 
 /** Adds HTML ownership, callback lifecycle, and task routing to an engine realm. */
 // https://html.spec.whatwg.org/multipage/webappapis.html#realms-settings-objects-global-objects
-// The attached environment owns the composed execution, available as realm.env.exec.
+// The attached environment owns binding-aware promises, allocations, and task delivery.
 export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
   /** Browlet agent whose event loop serves this realm. */
   agent: Agent;
@@ -180,7 +180,7 @@ export class BrowletRealm extends JSRealm implements WebIDLRealm, DOMRealm {
     try {
       const globalObject = customizations.createGlobalObject
         ? customizations.createGlobalObject(this)
-        : this.createOrdinaryObject(this.intrinsics.objectPrototype);
+        : this.createOrdinaryObject(this.objectPrototype);
       const globalThis = customizations.createGlobalThisValue
         ? customizations.createGlobalThisValue(this, globalObject)
         : globalObject;

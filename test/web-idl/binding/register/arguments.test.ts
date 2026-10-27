@@ -9,7 +9,7 @@ import { BindingWorld } from '../../../../src/web-idl/binding/world';
 
 import { installTestBindings } from '../../../support/web-idl-binding';
 import { TestRealm as Realm } from '../../../support/web-idl-realm';
-import { createEnvironment, type TestEnvironment } from '../../../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../../../support/environment';
 
 describe('Web IDL implementation argument conversion', () => {
   it('keeps conversion attributes local to arguments across repeated and variadic calls', () => {
@@ -99,7 +99,7 @@ describe('Web IDL implementation argument conversion', () => {
         ),
         staticOp('later', promiseType(reference('RenamedValue')),
           [arg('value', reference(ValueImpl))],
-          { invoke(env, value) { return env.exec.Promise.resolve(value, reference(ValueImpl)); } },
+          { invoke(env, value) { return env.InternalPromise.resolve(value, reference(ValueImpl)); } },
         ),
       ],
     });
@@ -121,7 +121,7 @@ describe('Web IDL implementation argument conversion', () => {
     expect(Consumer.read('text')).toBe('TEXT');
     expect(Consumer.echo(value)).toBe(value);
     expect(Consumer.echo(null)).toBeNull();
-    expect(() => Consumer.echo({ value: 'fake' })).toThrow(realm.intrinsics.typeError);
+    expect(() => Consumer.echo({ value: 'fake' })).toThrow(realm.TypeError);
     expect(Consumer.describe(value)).toBe('value');
     expect(Consumer.describe('text')).toBe('text');
     expect(await Consumer.later(value)).toBe(value);

@@ -23,7 +23,7 @@ export function expectRealmTypeError(
   try {
     callback();
   } catch (error) {
-    expect(error).toBeInstanceOf(realm.intrinsics.typeError);
+    expect(error).toBeInstanceOf(realm.TypeError);
     expect(error).not.toBeInstanceOf(TypeError);
     return;
   }

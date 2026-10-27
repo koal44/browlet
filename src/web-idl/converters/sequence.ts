@@ -55,7 +55,7 @@ export class SequenceConverter<Type extends IDLSequenceType | IDLFrozenArrayType
     const convert = this.element.getIDLToJSSteps();
     return (value) => {
       if (!Array.isArray(value)) throw new InternalError('IDL sequence is not an array');
-      const result: unknown[] = new this.realm.intrinsics.array();
+      const result: unknown[] = new this.realm.Array();
       for (let i = 0; i < value.length; i++) defineDataProperty(result, String(i), convert(value[i]));
       return result;
     };

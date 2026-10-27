@@ -34,7 +34,7 @@ describe('DOMStringList', () => {
     expect(Object.keys(platform)).toEqual(['0', '1']);
     expect(Object.getOwnPropertyDescriptor(platform, '0'))
       .toEqual({ value: '', writable: false, enumerable: true, configurable: true });
-    expect(Reflect.get(platform, Symbol.iterator)).toBe(getRelevantRealm(browser.window).intrinsics.array.prototype.values);
+    expect(Reflect.get(platform, Symbol.iterator)).toBe(getRelevantRealm(browser.window).Array.prototype.values);
     expect([...platform]).toEqual(strings);
     expect(Reflect.set(platform, '0', 'replacement')).toBe(false);
     expect(Reflect.set(platform, 'length', 0)).toBe(false);
@@ -54,7 +54,7 @@ describe('DOMStringList', () => {
   it('uses Web IDL argument conversion and receiver checks', () => {
     const { browser, platform } = projectList(['first', 'null']);
     const { item, contains } = browser.window.DOMStringList.prototype;
-    const TypeError_ = getRelevantRealm(browser.window).intrinsics.typeError;
+    const TypeError_ = getRelevantRealm(browser.window).TypeError;
     expect(Reflect.apply(item, platform, [2 ** 32])).toBe('first');
     expect(Reflect.apply(item, platform, [1.9])).toBe('null');
     expect(Reflect.apply(item, platform, [-1])).toBeNull();
@@ -83,7 +83,7 @@ describe('DOMStringList', () => {
     const foreignItem = other.window.DOMStringList.prototype.item;
     expect(Reflect.apply(foreignItem, platform, [0])).toBeNull();
     expect(() => { Reflect.apply(foreignItem, platform, []); })
-      .toThrow(getRelevantRealm(other.window).intrinsics.typeError);
+      .toThrow(getRelevantRealm(other.window).TypeError);
     expect(await browser.evaluate(() => {
       try { Reflect.construct(DOMStringList, []); return false; }
       catch (error) { return error instanceof TypeError; }

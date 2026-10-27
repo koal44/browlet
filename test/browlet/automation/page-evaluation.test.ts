@@ -89,7 +89,7 @@ describe('local page evaluation', () => {
     await page.evaluate(() => 0);
 
     await new Promise<void>((resolve) => {
-      document.env.exec.queueTask('automation', () => {
+      document.env.queueTask('automation', () => {
         document.destroy();
         resolve();
       });

@@ -139,7 +139,7 @@ describe('HTMLDocumentParser', () => {
   it('checkpoints pending microtasks before running a parser script', async () => {
     const { document, env, drain } = createParserDocument();
     const order: string[] = [];
-    env.exec.queueMicrotask(() => { order.push('microtask'); });
+    env.realm.queueMicrotask(() => { order.push('microtask'); });
     new HTMLDocumentParser(document, () => { order.push('script'); })
       .parse('<script></script>').observe(
         () => { order.push('complete'); },
@@ -152,7 +152,7 @@ describe('HTMLDocumentParser', () => {
 
   it.each([false, true])('waits for an internal script result (rejection: %s)', async (reject) => {
     const { document, realm, env, drain } = createParserDocument();
-    const ready = env.exec.Promise.withResolvers(idlType.undefined);
+    const ready = env.InternalPromise.withResolvers(idlType.undefined);
     const failure = new Error('script preparation failed');
     let complete = false;
     const errors: unknown[] = [];
@@ -262,7 +262,7 @@ describe('HTMLDocumentParser response bytes', () => {
 
   it.each(['input', 'script'])('cancels its response reader and stops parsing while waiting for %s', async (waiting) => {
     const { document, realm, env, drain } = createParserDocument();
-    const ready = env.exec.Promise.withResolvers(idlType.undefined);
+    const ready = env.InternalPromise.withResolvers(idlType.undefined);
     let canceled = 0;
     const stream = ReadableStreamImpl.createDefault(undefined, () => { canceled++; }, 0, () => 1, env);
     stream.enqueueChunk(utf8Encode(waiting === 'script'

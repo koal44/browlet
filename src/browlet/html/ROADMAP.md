@@ -680,7 +680,7 @@ Detached documents and documents without an HTTP(S) cookie URL still return
 empty and ignore writes. Chromium additionally throws for initial opaque blank
 and data: documents; Browlet retains HTML/Firefox/WebKit's empty/no-op behavior
 when there is no inherited cookie URL. The local
-`scratch/RESOURCE-METADATA-PROBE.mjs` records these cases.
+`node-compat/experimental/browser-probes/html/resource-metadata.mjs` records these cases.
 Relevant source owners are [Blink Document](https://chromium.googlesource.com/chromium/src/+/main/third_party/blink/renderer/core/dom/document.cc),
 [Gecko Document](https://searchfox.org/mozilla-central/source/dom/base/Document.cpp),
 and [WebKit Document](https://github.com/WebKit/WebKit/blob/main/Source/WebCore/dom/Document.cpp).
@@ -705,7 +705,7 @@ The retained evidence for the approved choice and any future upstream report:
   [2024 WebKit fix](https://github.com/WebKit/WebKit/commit/4973ae3a5e854e1e056dedcbced9c1db450bc6f0)
   also adopted the inherited cookie URL for Cookie Store API access from
   about:blank/srcdoc frames. This is maintained behavior, not just an old accident.
-- The local `scratch/COOKIE-INHERITANCE-PROBE.mjs` confirms the common behavior
+- The local `node-compat/experimental/browser-probes/html/cookies.mjs` confirms the common behavior
   in Chromium 149.0.7827.55, Firefox 151.0, and Windows WebKit 26.5. From a
   parent at `/a/page`, both inherited frames read `/a` cookies, see subsequent
   shared-store updates, and use `/a` as the default path for writes. A `<base>`
@@ -898,7 +898,7 @@ delivery remains the shared missing binding dependency.
 Approved 2026-10-16: follow HTML's written named-property rules despite the
 following disagreements in Chromium 149.0.7827.55, Firefox 151.0, and Windows
 WebKit 26.5. The local
-`scratch/DOCUMENT-TREE-ACCESSORS-PROBE.mjs` preserves the focused probe; its
+`node-compat/experimental/browser-probes/html/document-tree-accessors.mjs` preserves the focused probe; its
 expectations remain the specification results, including the disagreeing cases.
 
 - `SPEC_CLASH(document-named-scope)`: Chromium, Firefox, and WebKit omit these
@@ -1040,7 +1040,7 @@ single annotation, sole overload, and empty argument list.
 | Reject the active constructor itself and unregistered new targets | Constructor identity is checked before observing the author prototype; ordinary function calls have no new target and also throw TypeError. |
 | Select the registry and definition | The current WindowAgent's active-constructor map takes precedence over the current Document registry. Definitions match constructor identity, without falling back after a selected registry has no match. |
 | Validate autonomous and customized built-in bases | Autonomous definitions require HTMLElement; customized definitions use the same `localNames` metadata as element-interface selection, including multi-name interfaces and obsolete aliases. |
-| Fresh construction | Web IDL selects the new-target prototype. Document selects the implementation, document, namespace, prefix, local name, registry and is value, allocating through `env.exec.constructNode()`; construction sets custom state and definition, then projects the platform object. |
+| Fresh construction | Web IDL selects the new-target prototype. Document selects the implementation, document, namespace, prefix, local name, registry and is value, allocating through `env.constructNode()`; construction sets custom state and definition, then projects the platform object. |
 | Upgrade construction | Reuse the last stack element, reject the already-constructed marker, set its platform prototype, and replace only that entry. The upgrade owner must later finish state changes and pop the stack. |
 | Author-controlled prototype and realms | The empty/nonempty branch is chosen before prototype access, while the last entry is read afterward. Exceptions propagate; non-object prototypes fall back to the matching interface in newTarget's function realm. Allocation still belongs to the invoking constructor's realm/current Document. |
 | Non-extensible upgrade | Follow HTML/Chromium's ignored false prototype-set result; retain the approved [SPEC_CLASH and browser evidence](../dom/nodes/html/custom-elements/ROADMAP.md#non-extensible-upgrade-clash). |
@@ -1640,7 +1640,7 @@ This is a source-based explanation, not a debugger trace of the installed build.
 
 `attributes/translate.test.ts` retains the mode, binding, inventory, conditional
 input, namespace, and explicit-dependency regressions. The reproducible local
-`scratch/TRANSLATE-PROBE.mjs` keeps the spec expectation and reports the Firefox
+`node-compat/experimental/browser-probes/html/translate.mjs` keeps the spec expectation and reports the Firefox
 failure without preventing the other engines from running.
 
 ### Section 3.2.6.4 dir
@@ -1737,7 +1737,7 @@ Follow-up investigation on 2026-10-18 supports keeping all three choices:
   WebKit updates after each mutation. These are observations and source-based
   explanations, not evidence of an agreed competing standard. Keep the written
   scan; do not reproduce Chromium's mutation-order dependence. The manual
-  `scratch/DIR-MUTATIONS-PROBE.mjs` reproduces these differences; Browlet and
+  `node-compat/experimental/browser-probes/html/directionality-mutations.mjs` reproduces these differences; Browlet and
   standardDOM regressions retain the correct mutation behavior.
 
 `attributes/dir.test.ts` covers reflection/bindings, root identity, inheritance,

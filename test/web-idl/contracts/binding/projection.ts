@@ -5,17 +5,13 @@ import {
   type PlatformRecord, type WebIDLEnvironment, type WebIDLRealm,
 } from '../../../../src/web-idl/index';
 import type { JSEnvironment } from '../../../../src/js-engine/environment';
-import type { RealmExecution } from '../../../../src/js-engine/index';
 
 interface HostRealm extends WebIDLRealm {
   eventTimeStamp(): number;
 }
-interface HostExecution extends RealmExecution {
-  createEvent(): object;
-}
 interface HostEnvironment extends WebIDLEnvironment, JSEnvironment {
   realm: HostRealm;
-  exec: HostExecution;
+  createEvent(): object;
 }
 declare const env: HostEnvironment;
 declare const hostRealm: HostRealm;
@@ -32,7 +28,7 @@ const definition = defineInterface<HostEnvironment>({
   implementation: impl(Example, {
     constructWith: [atArg(0, (env) => env.realm.eventTimeStamp())],
     initializeImplementation(env, value) {
-      env.exec.createEvent();
+      env.createEvent();
       value.value = env.realm.eventTimeStamp();
       // @ts-expect-error Initializers receive the implementation's fields, not arbitrary properties.
       value.missing;
@@ -52,7 +48,7 @@ const definition = defineInterface<HostEnvironment>({
       [],
       {
         invoke(env) {
-          env.exec.createEvent();
+          env.createEvent();
           return env.realm.eventTimeStamp();
         },
       },
@@ -79,7 +75,7 @@ const ctx = world.register(hostRealm, (context) => {
 });
 ctx.realm.eventTimeStamp();
 world.getBindingContext(hostRealm)?.realm.eventTimeStamp();
-world.getBindingContext(hostRealm)?.getEnvironment().exec.createEvent();
+world.getBindingContext(hostRealm)?.getEnvironment().createEvent();
 world.register(env.realm, () => env);
 const record = ctx.createPlatformRecord(definition.name);
 // @ts-expect-error Allocation resolves the interface name inside the binding world.
@@ -136,8 +132,8 @@ const weakened: BindingWorld<WebIDLEnvironment> = world;
 
 const minimal = new BindingWorld([]).register(minimalRealm, (ctx) => ({ realm: ctx.realm }));
 minimal.getEnvironment().realm.globalObject;
-// @ts-expect-error A realm-only environment has no execution contract.
-minimal.getEnvironment().exec;
+// @ts-expect-error A realm-only environment has no internal Promise constructor.
+minimal.getEnvironment().InternalPromise;
 const portable: BindingContext = ctx;
 portable.getEnvironment().realm.globalObject;
 // @ts-expect-error The getter does not allow callers to assert a different environment.

@@ -12,7 +12,7 @@ export {
   fileIDL, FileImpl, filePropertyBagIDL,
   type FilePropertyBag, type FileSerializationState, type HostFileMetadata,
 } from './file';
-export type { FileEnvironment, FileExecution } from './environment';
+export type { FileEnvironment } from './environment';
 export { fileListIDL, FileListImpl } from './file-list';
 export { packageData, type FileReadType } from './package-data';
 export { fileIDLDefinitions } from './web-idl';

@@ -154,8 +154,8 @@ describe('File API §6.2: FileReader reads', () => {
       const env = getContext(window).getEnvironment();
       const tasks = queues[index]!;
       return [
-        vi.spyOn(env.exec, 'runInParallel').mockImplementation((steps) => { steps(); }),
-        vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps) => {
+        vi.spyOn(env, 'runInParallel').mockImplementation((steps) => { steps(); }),
+        vi.spyOn(env, 'queueTask').mockImplementation((source, steps) => {
           expect(source).toBe('file');
           tasks.push(steps);
           return {
@@ -383,19 +383,16 @@ describe('File API §6.2: FileReader reads', () => {
     const clock = vi.spyOn(monotonicClock, 'unsafeCurrentTime')
       .mockImplementation(() => new UnsafeMoment(monotonicClock, now));
     const blob = BlobImpl.create(BlobData.fromOwnedBytes(new Uint8Array(size)), '', undefined, {
-      realm: env.realm,
-      exec: {
-        ...env.exec,
-        queueTask(source, steps) {
-          expect(source).toBe('file');
-          // Three 64 KiB chunks, one final byte, then stream close.
-          // Control delivery time, rather than assuming backing-read delays survive queuing.
-          const time = deliveryTimes[deliveryIndex++]!;
-          return env.exec.queueTask(source, () => {
-            now = time;
-            steps();
-          });
-        },
+      ...env,
+      queueTask(source, steps) {
+        expect(source).toBe('file');
+        // Three 64 KiB chunks, one final byte, then stream close.
+        // Control delivery time, rather than assuming backing-read delays survive queuing.
+        const time = deliveryTimes[deliveryIndex++]!;
+        return env.queueTask(source, () => {
+          now = time;
+          steps();
+        });
       },
     });
     const reader = createReader(context);
@@ -589,8 +586,8 @@ describe('File API §6.2: FileReader reads', () => {
     for (const name of ['load', 'error', 'loadend']) {
       reader.addEventListener(name, () => { events.push(name); });
     }
-    const allocation = vi.spyOn(env.exec.buffers, 'copyArrayBuffer').mockImplementationOnce(() => {
-      throw new env.exec.RangeError('injected result-buffer allocation failure');
+    const allocation = vi.spyOn(env.realm, 'copyArrayBuffer').mockImplementationOnce(() => {
+      throw new env.realm.RangeError('injected result-buffer allocation failure');
     });
 
     try {
@@ -655,8 +652,8 @@ describe('File API §6.2: FileReader reads', () => {
       reader.onerror = () => { events.push('error'); };
       reader.onloadend = () => { events.push('loadend'); };
       const taskErrors: unknown[] = [];
-      const queueTask = env.exec.queueTask.bind(env.exec);
-      const taskDelivery = vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps) =>
+      const queueTask = env.queueTask.bind(env);
+      const taskDelivery = vi.spyOn(env, 'queueTask').mockImplementation((source, steps) =>
         queueTask(source, () => {
           try { steps(); }
           catch (error) { taskErrors.push(error); }
@@ -668,8 +665,8 @@ describe('File API §6.2: FileReader reads', () => {
         read: () => kind === 'source' ? Promise.reject(failure) : Promise.resolve(Uint8Array.of(65)),
       };
       const data = BlobData.fromSource(source);
-      const allocation = vi.spyOn(env.exec.buffers, 'copyArrayBuffer');
-      const eventCreation = vi.spyOn(env.exec, 'createEvent');
+      const allocation = vi.spyOn(env.realm, 'copyArrayBuffer');
+      const eventCreation = vi.spyOn(env, 'createEvent');
       if (kind === 'packaging') allocation.mockImplementationOnce(() => { throw failure; });
       if (kind === 'load event') {
         reader.onprogress = () => {
@@ -700,8 +697,8 @@ describe('File API §6.2: FileReader reads', () => {
     const env = context.getEnvironment();
     const reader = createReader(context);
     const taskErrors: unknown[] = [];
-    const queueTask = env.exec.queueTask.bind(env.exec);
-    const taskDelivery = vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps) =>
+    const queueTask = env.queueTask.bind(env);
+    const taskDelivery = vi.spyOn(env, 'queueTask').mockImplementation((source, steps) =>
       queueTask(source, () => {
         try { steps(); }
         catch (error) { taskErrors.push(error); }

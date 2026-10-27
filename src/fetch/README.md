@@ -67,15 +67,14 @@ CSP language and browser policy state remain with their browser owners.
 The execution owner (`env: FetchEnvironment`), initiating client
 (`request.client`), and callback destination are distinct. The client may be
 null; it does not supply every execution facility. The supplied environment
-provides `exec` for promises, Streams, allocation, and abort handling.
-`FetchExecution` extends File/Streams execution with exception allocation and
-Fetch task delivery. Abort and structured-data contracts live in Infra's
-`execution.ts`; Browlet supplies their DOM/HTML implementations. Fetch's
+provides `realm` for JavaScript allocation and the live global, plus `InternalPromise`,
+task delivery, and abort handling directly. `FetchEnvironment` extends File/Streams
+requirements with exception allocation and Fetch task delivery. Streams declares
+the abort and structured-data operations; Browlet supplies their DOM/HTML implementations. Fetch's
 `queueFetchTask()` selects a parallel queue or delegates global delivery to
-`exec.queueGlobalFetchTask()`. Pass the existing environment; do not manufacture
+`env.queueGlobalFetchTask()`. Pass the existing environment; do not manufacture
 a substitute browser settings object. Bodies, requests, and responses retain
-the same `FetchEnvironment`. `FetchExecution` combines JS Engine's facilities,
-Web IDL Core's `DOMException` constructor, and the global task-delivery contract.
+the same `FetchEnvironment`, including Web IDL Core's `DOMException` constructor type.
 Abort fallback exceptions retain their destination realm.
 
 `FetchEnvironment` also requires `parseJSONBytes()` and

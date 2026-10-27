@@ -1,6 +1,6 @@
 import type { DOMDocument, DOMOperations } from '../infra/index';
 import type { URLUserAgent } from '../url/index';
-import type { FetchEnvironment, FetchExecution, FetchUserAgent } from '../fetch/index';
+import type { FetchEnvironment, FetchUserAgent } from '../fetch/index';
 
 import type { SystemColorPalette } from './engine/index';
 
@@ -19,9 +19,6 @@ export interface StyleletUserAgent extends FetchUserAgent, URLUserAgent {
   /** Complete host-selected palette; omitted uses the engine's independent light palette. */
   systemColors?: SystemColorPalette;
 }
-
-/** The owning host's execution facilities, shared with Fetch. */
-export type StyleletExecution = FetchExecution;
 
 /** The host supplying this document's execution, DOM access, and resource loading. */
 export type StyleletOptions = {

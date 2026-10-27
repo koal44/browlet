@@ -85,7 +85,7 @@ both recursive directions. WebKit 26.5 lost the outer reference; recursive
 `previousNode()` returned null instead of throwing. Chromium did not complete;
 Playwright reported `Target crashed` after the probe's timeout, so the exact
 failure mechanism remains unconfirmed. Source/probe details are in
-[`scratch/DOM-4C-ITERATOR-REENTRANCY.md`](../../../../scratch/DOM-4C-ITERATOR-REENTRANCY.md).
+[`node-compat/experimental/browser-probes/dom/ITERATOR-REENTRANCY.md`](../../../../node-compat/experimental/browser-probes/dom/ITERATOR-REENTRANCY.md).
 
 The [NodeIterator regressions](../../../../test/browlet/dom/traversal/node-iterator.test.ts)
 cover both recursive directions, caught and uncaught errors, cursor preservation,
@@ -104,7 +104,7 @@ first-child descent does follow DOM's non-reject rule.
 Browlet follows DOM and Firefox.
 `SPEC_CLASH(treewalker-unrecognized-filter-result)` records the continuing
 browser disagreement. The
-[2026-10-10 probe](../../../../scratch/DOM-6-PROBE.mjs) compared 168 combinations
+[2026-10-10 probe](../../../../node-compat/experimental/browser-probes/dom/tree-walker.mjs) compared 168 combinations
 of operation, filter result, and callback mutation. Firefox 151 matched all 168;
 Chromium 149.0.7827.55 and WebKit 26.5 differed only in these eight sibling-entry
 cases. The ordinary accept/reject/skip cases agreed across all three browsers.

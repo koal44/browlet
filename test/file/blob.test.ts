@@ -4,7 +4,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, convertLineEndingsToNative,
   type BlobByteSource,
 } from '../../src/file';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { InternalError } from '../../src/infra/internal-error';
 
 const crlf = '\r\n';
@@ -36,13 +36,13 @@ describe('File API §3: Blob', () => {
       await new BlobImpl(parts, options, env).data.read(),
     )).toBe('a\nb\nc\nd');
     expect(new TextDecoder().decode(
-      await new BlobImpl(parts, options, { ...env, exec: { ...env.exec, nativeLineEnding: crlf } }).data.read(),
+      await new BlobImpl(parts, options, { ...env, nativeLineEnding: crlf }).data.read(),
     )).toBe('a\r\nb\r\nc\r\nd');
   });
 
   it('leaves transparent line endings unchanged', async () => {
     const blob = new BlobImpl(
-      ['a\rb\nc\r\nd'], {}, { ...env, exec: { ...env.exec, nativeLineEnding: crlf } },
+      ['a\rb\nc\r\nd'], {}, { ...env, nativeLineEnding: crlf },
     );
 
     expect(new TextDecoder().decode(await blob.data.read()))
@@ -197,9 +197,7 @@ describe('File API §3.1: native line ending conversion', () => {
     expect(convertLineEndingsToNative('\r\n', env)).toBe('\n');
     expect(convertLineEndingsToNative('\r\n', {
       ...env,
-      exec: {
-        ...env.exec, nativeLineEnding: crlf,
-      },
+      nativeLineEnding: crlf,
     })).toBe(crlf);
   });
 });

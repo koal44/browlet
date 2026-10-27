@@ -39,7 +39,7 @@ export const abortControllerIDL = defineInterface<BrowletEnvironment>({
   name: 'AbortController',
   exposed: '*',
   implementation: impl(AbortControllerImpl, {
-    constructWith: [atArg(0, (env) => env.exec.createAbortSignal())],
+    constructWith: [atArg(0, (env) => env.createAbortSignal())],
   }),
   members: [
     ctor(),

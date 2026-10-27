@@ -83,7 +83,7 @@ describe('Web IDL namespace objects', () => {
     const Nested = requireObject(Reflect.get(tools, 'Nested'));
 
     expect([...installed.keys()]).toEqual(['Tools']);
-    expect(Reflect.getPrototypeOf(tools)).toBe(realm.intrinsics.objectPrototype);
+    expect(Reflect.getPrototypeOf(tools)).toBe(realm.objectPrototype);
     expect(Object.prototype.toString.call(tools)).toBe('[object Tools]');
     expect(Reflect.get(tools, 'version')).toBe('1.0');
     expect(Reflect.apply(

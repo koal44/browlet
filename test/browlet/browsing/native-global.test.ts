@@ -6,7 +6,7 @@ import { unwrap, project } from '../../support/browlet-binding';
 import { BrowsingContext } from '../../../src/browlet/browsing/navigation/browsing-context';
 import { WindowImpl } from '../../../src/browlet/browsing/window/window';
 import type { DocumentImpl } from '../../../src/browlet/dom/nodes/document';
-import { WindowAgent } from '../../../src/browlet/scripting/agents';
+import { AgentCluster, WindowAgent } from '../../../src/browlet/scripting/agents';
 import type { WindowRealm } from '../../../src/browlet/scripting/realm';
 import { createWindowEnvironment } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
@@ -33,7 +33,7 @@ describe('Window global allocation', () => {
     expect(prototypeChain[0]).toBe(windowPrototype);
     expect(prototypeChain[1]).toBe(namedProperties);
     expect(prototypeChain[2]).toBe(eventTargetPrototype);
-    expect(Object.getPrototypeOf(eventTargetPrototype)).toBe(realm.intrinsics.objectPrototype);
+    expect(Object.getPrototypeOf(eventTargetPrototype)).toBe(realm.objectPrototype);
     expect(realm.evaluate('this === window && window === globalThis', 'identity.js')).toBe(true);
     expect(realm.evaluate('this.document === document', 'document.js')).toBe(true);
     expect(realm.evaluate('Object.getPrototypeOf(this) === Window.prototype', 'prototype.js')).toBe(true);
@@ -75,7 +75,7 @@ describe('Window global allocation', () => {
     expect(second.realm.windowProxy).toBe(handle);
     expect(second.realm.globalThis).toBe(proxy);
     expect(second.platformWindow).not.toBe(first.platformWindow);
-    expect(second.realm.intrinsics.object).not.toBe(first.realm.intrinsics.object);
+    expect(second.realm.Object).not.toBe(first.realm.Object);
     expect(oldClosure()).toBe(42);
     expect(unwrap(oldDocument())).toBe(first.document);
     expect(oldState()).toEqual([2, proxy]);
@@ -160,6 +160,11 @@ describe('Window global allocation', () => {
 
 function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const agent = previous?.agent ?? new WindowAgent(createManualEventLoop());
+  if (!previous) {
+    const cluster = new AgentCluster();
+    cluster.isOriginKeyed = true;
+    cluster.add(agent);
+  }
   const creationURL = parseURL('https://example.test/').url!;
   const origin = createOpaqueOrigin();
   const env = createWindowEnvironment({
@@ -171,7 +176,7 @@ function createNativeWindow(previous?: NativeWindow): NativeWindow {
   const proxy = realm.windowProxy;
   const context = previous?.context ?? new BrowsingContext(proxy);
   const platformWindow = project(window) as StampedPlatformObject<Window>;
-  const document = realm.env.exec.createDocument();
+  const document = realm.env.createDocument();
   document.browsingContext = context;
   window.setAssociatedDocument(document);
   proxy.setAssociatedWindow(window.env.realm.globalObject);

@@ -20,13 +20,13 @@
 integration and is also used by FileReader. It imports DOM's shared event
 machinery; DOM does not collect its declarations.
 
-[`DOMEnvironment`](../environment.ts) pairs `DOMRealm` with `DOMExecution` for
+[`DOMEnvironment`](../environment.ts) requires a `DOMRealm` and `createEvent()` for
 the whole DOM subsystem. The realm supplies timestamps and the associated-document
 query; `WindowDOMRealm` adds current-event operations and the shared Window Agent.
 Non-Window globals return null for the associated document; Window-exposed node
 constructors use the Window's document. HTML's realms implement these alongside
-Web IDL's independent realm contract. `DOMExecution` supplies event allocation;
-Browlet composes it with `RealmExecution` on the same `env.exec` object. These
+Web IDL's independent realm contract. The environment supplies event allocation
+directly through a function provided by Browlet's binding composition. These
 contracts describe existing owners, not additional runtime objects.
 Binding supplies the listener's associated realm, which can differ from the
 event target's realm.
@@ -34,7 +34,7 @@ The listener adapter handles author invocation and exception reporting;
 dispatch manages event state around that call.
 
 Targets receive their owning environment during construction. Window composition
-prepares the environment and execution before constructing its implementation.
+prepares the environment before constructing its implementation.
 
 The public Browlet tests already cover realm-specific constructors, trusted
 event creation, callback-interface identity, legacy `Window.event`, exception

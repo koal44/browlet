@@ -66,7 +66,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s built-in conversion',
   it('realizes BigInt syntax failures without replacing author SyntaxErrors', () => {
     const { binding, realm } = createBinding();
     expect(() => jsToIDL('not an integer', binding.getConverter(binding.assembly.getIDLType(idlType.bigint))))
-      .toThrow(realm.intrinsics.syntaxError);
+      .toThrow(realm.SyntaxError);
 
     const authorError = new SyntaxError('author conversion');
     let caught: unknown;

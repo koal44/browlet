@@ -215,7 +215,7 @@ export class CSPList implements FetchCSPList {
   #reportRequestViolation(policy: ContentSecurityPolicy, request: FetchRequest): void {
     const client = request.client;
     if (client === null) throw new InternalError('CSP violation reporting requires a client');
-    client.exec.reportCSPViolation(policy, request);
+    client.reportCSPViolation(policy, request);
   }
 }
 

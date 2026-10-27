@@ -124,7 +124,7 @@ Stylelet imports URL parsing and Encoding directly. `StyleletEnvironment` extend
 `FetchEnvironment`; Browlet supplies its existing Fetch state and execution.
 The stylesheet loader reads the supplied `DocumentImpl`'s URL, origin, policy container,
 live encoding, and quirks mode directly and uses `document.env`.
-`env.exec` supplies promises, background work, and owner task delivery.
+`env` supplies promises, background work, and owner task delivery.
 There is no separate document execution adapter. Sheet, declaration, and adoption
 failures use DOMException implementations and Binding realization.
 

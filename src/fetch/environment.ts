@@ -2,12 +2,12 @@ import { ParallelQueue } from '../infra/parallel-queue';
 import type { JSONValue } from '../infra/json';
 import type { InternalPromise } from '../infra/promises';
 import type { GlobalObject } from '../js-engine/index';
-import type { WebIDLExecution } from '../web-idl/core/index';
+import type { DOMExceptionConstructor } from '../web-idl/core/index';
 import type { BlobURLEntry, Host, Origin, URLRecord } from '../url/index';
 import type { CookieStore } from '../http/index';
 import type { StorageEnvironment, StorageUserAgent } from '../storage/index';
 import type { MIMEType } from '../mime/index';
-import type { BlobImpl, FileEnvironment, FileExecution } from '../file/index';
+import type { BlobImpl, FileEnvironment } from '../file/index';
 
 import type { FetchController } from './controller';
 import type { Destination } from './destination';
@@ -31,7 +31,7 @@ export function queueFetchTask(
   if (destination instanceof ParallelQueue) {
     destination.enqueue(steps);
   } else {
-    env.exec.queueGlobalFetchTask(destination, steps);
+    env.queueGlobalFetchTask(destination, steps);
   }
 }
 
@@ -46,8 +46,12 @@ export function isOffline(env: FetchEnvironment): boolean {
 export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment {
   /** Shared user agent owning this environment's networking state. */
   userAgent: FetchUserAgent;
-  /** Execution, body handling, aborts, and task delivery for this environment. */
-  exec: FetchExecution;
+  /** DOMException constructor owned by this environment's binding. */
+  DOMException: DOMExceptionConstructor;
+  /** Queue on the destination global's networking task source, which can differ from the body owner's. */
+  queueGlobalFetchTask(global: GlobalObject, steps: () => void): void;
+  /** Report for this client; the composed CSP implementation validates the opaque policy. */
+  reportCSPViolation(policy: unknown, request: FetchRequest): void;
   /** Whether this environment's global is a Window. */
   isWindow: boolean;
   /** Whether this global is a ServiceWorkerGlobalScope, which cannot intercept its own fetches. */
@@ -98,14 +102,6 @@ export interface FetchEnvironment extends FetchEnvironmentBase, FileEnvironment 
   policyContainer: FetchPolicyContainer;
   /** Submit a policy report for this client, retaining each field's JSON value type. */
   queueReport(type: string, endpoint: string, body: Record<string, string | boolean>): void;
-}
-
-/** File/stream facilities, abort exceptions, policy reporting, and global task delivery. */
-export interface FetchExecution extends FileExecution, WebIDLExecution {
-  /** Queue on the destination global's networking task source, which can differ from the body owner's. */
-  queueGlobalFetchTask(global: GlobalObject, steps: () => void): void;
-  /** Report for this client; the composed CSP implementation validates the opaque policy. */
-  reportCSPViolation(policy: unknown, request: FetchRequest): void;
 }
 
 /** An opaque reference to the HTML traversable selected for user prompts. */

@@ -41,16 +41,16 @@ describe('Runtime buffer ownership', () => {
   });
 
   it('allocates final storage and shares it between target-realm views', () => {
-    const { realm, buffers } = createFixture();
-    const buffer = buffers.allocateArrayBuffer(8);
-    const bytes = buffers.createView('Uint8Array', buffer);
-    const words = buffers.createView('Uint16Array', buffer, 2, 2);
-    const data = buffers.createView('DataView', buffer, 2, 4);
+    const realm = new JSRealm();
+    const buffer = new realm.ArrayBuffer(8);
+    const bytes = new realm.Uint8Array(buffer);
+    const words = new realm.Uint16Array(buffer, 2, 2);
+    const data = new realm.DataView(buffer, 2, 4);
 
-    expect(buffer).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
-    expect(bytes).toBeInstanceOf(realm.intrinsics.bufferSource.views.Uint8Array!);
-    expect(words).toBeInstanceOf(realm.intrinsics.bufferSource.views.Uint16Array!);
-    expect(data).toBeInstanceOf(realm.intrinsics.bufferSource.views.DataView!);
+    expect(buffer).toBeInstanceOf(realm.ArrayBuffer);
+    expect(bytes).toBeInstanceOf(realm.Uint8Array);
+    expect(words).toBeInstanceOf(realm.Uint16Array);
+    expect(data).toBeInstanceOf(realm.DataView);
     expect(Array.from(bytes)).toEqual(Array(8).fill(0));
     expect(words.buffer).toBe(buffer);
     expect(data.buffer).toBe(buffer);
@@ -59,29 +59,29 @@ describe('Runtime buffer ownership', () => {
 
     data.setUint8(0, 73);
     expect(bytes[2]).toBe(73);
-    expect(() => buffers.createView('Uint16Array', buffer, 1, 2))
-      .toThrow(realm.intrinsics.rangeError);
-    expect(() => buffers.createView('DataView', buffer, 7, 2))
-      .toThrow(realm.intrinsics.rangeError);
+    expect(() => new realm.Uint16Array(buffer, 1, 2))
+      .toThrow(realm.RangeError);
+    expect(() => new realm.DataView(buffer, 7, 2))
+      .toThrow(realm.RangeError);
   });
 
   it('creates a foreign view without replacing or copying its supplied buffer', () => {
-    const { realm, buffers } = createFixture();
+    const realm = new JSRealm();
     const source = Uint8Array.of(1, 2, 3);
-    const view = buffers.createView('Uint8Array', source.buffer, 1, 2);
+    const view = new realm.Uint8Array(source.buffer, 1, 2);
 
-    expect(view).toBeInstanceOf(realm.intrinsics.bufferSource.views.Uint8Array!);
+    expect(view).toBeInstanceOf(realm.Uint8Array);
     expect(view.buffer).toBe(source.buffer);
     view[0] = 19;
     expect(Array.from(source)).toEqual([1, 19, 3]);
   });
 
   it('preserves the backing buffer type when allocating views', () => {
-    const { buffers } = createFixture();
-    const ordinary = buffers.createView('Uint8Array', new ArrayBuffer(2));
+    const realm = new JSRealm();
+    const ordinary = new realm.Uint8Array(new ArrayBuffer(2));
     const sharedBuffer = new SharedArrayBuffer(2);
-    const shared = buffers.createView('Uint8Array', sharedBuffer);
-    const data = buffers.createView('DataView', sharedBuffer);
+    const shared = new realm.Uint8Array(sharedBuffer);
+    const data = new realm.DataView(sharedBuffer);
     expectTypeOf(ordinary).toEqualTypeOf<Uint8Array<ArrayBuffer>>();
     expectTypeOf(shared).toEqualTypeOf<Uint8Array<SharedArrayBuffer>>();
     expectTypeOf(data).toEqualTypeOf<DataView<SharedArrayBuffer>>();
@@ -93,39 +93,39 @@ describe('Runtime buffer ownership', () => {
   });
 
   it('transfers owned storage and preserves retained identity after mutation and detachment', () => {
-    const { realm, buffers } = createFixture();
+    const realm = new JSRealm();
     const source = Uint8Array.of(7, 11, 13, 17);
     const alias = source.subarray(1, 3);
-    const buffer = buffers.transferArrayBuffer(source.buffer);
-    const view = buffers.createView('Uint8Array', buffer, 1, 2);
+    const buffer = realm.transferArrayBuffer(source.buffer);
+    const view = new realm.Uint8Array(buffer, 1, 2);
 
-    expect(buffer).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
+    expect(buffer).toBeInstanceOf(realm.ArrayBuffer);
     expect(source.byteLength).toBe(0);
     expect(alias.byteLength).toBe(0);
     expect(Array.from(view)).toEqual([11, 13]);
     const retained = buffer;
     view[0] = 19;
-    expect(buffers.createView('Uint8Array', retained)[1]).toBe(19);
+    expect(new realm.Uint8Array(retained)[1]).toBe(19);
 
-    const next = buffers.transferArrayBuffer(buffer);
+    const next = realm.transferArrayBuffer(buffer);
     expect(retained).toBe(buffer);
     expect(retained.byteLength).toBe(0);
     expect(view.byteLength).toBe(0);
-    expect(buffers.createView('Uint8Array', next)[1]).toBe(19);
-    expect(() => buffers.transferArrayBuffer(buffer))
-      .toThrow(realm.intrinsics.typeError);
+    expect(new realm.Uint8Array(next)[1]).toBe(19);
+    expect(() => realm.transferArrayBuffer(buffer))
+      .toThrow(realm.TypeError);
   });
 
   it('copies only borrowed bytes and leaves their original allocation intact', () => {
-    const { realm, buffers } = createFixture();
+    const realm = new JSRealm();
     const source = Uint8Array.of(90, 1, 2, 91);
     const borrowed = source.subarray(1, 3);
-    const buffer = buffers.copyArrayBuffer(borrowed);
-    const bytes = buffers.copyUint8Array(borrowed);
+    const buffer = realm.copyArrayBuffer(borrowed);
+    const bytes = new realm.Uint8Array(borrowed);
 
-    expect(buffer).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
-    expect(bytes).toBeInstanceOf(realm.intrinsics.bufferSource.views.Uint8Array!);
-    expect(bytes.buffer).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
+    expect(buffer).toBeInstanceOf(realm.ArrayBuffer);
+    expect(bytes).toBeInstanceOf(realm.Uint8Array);
+    expect(bytes.buffer).toBeInstanceOf(realm.ArrayBuffer);
     expect(buffer.byteLength).toBe(2);
     expect(bytes.buffer.byteLength).toBe(2);
     expect(Array.from(new Uint8Array(buffer))).toEqual([1, 2]);
@@ -136,12 +136,12 @@ describe('Runtime buffer ownership', () => {
   });
 
   it('distinguishes fixed and length-tracking views of resizable storage', () => {
-    const { buffers } = createFixture();
+    const realm = new JSRealm();
     const source = new ArrayBuffer(8, { maxByteLength: 16 });
-    const buffer = buffers.transferArrayBuffer(source);
-    const tracking = buffers.createView('Uint8Array', buffer, 2);
-    const fixed = buffers.createView('Uint8Array', buffer, 2, 2);
-    const data = buffers.createView('DataView', buffer, 2);
+    const buffer = realm.transferArrayBuffer(source);
+    const tracking = new realm.Uint8Array(buffer, 2);
+    const fixed = new realm.Uint8Array(buffer, 2, 2);
+    const data = new realm.DataView(buffer, 2);
 
     expect(buffer.resizable).toBe(true);
     expect(buffer.maxByteLength).toBe(16);
@@ -152,7 +152,7 @@ describe('Runtime buffer ownership', () => {
   });
 
   it('uses captured intrinsics after author globals have been replaced', () => {
-    const { realm, buffers } = createFixture();
+    const realm = new JSRealm();
     realm.evaluate(`
       globalThis.ArrayBuffer = globalThis.Uint8Array = function () {
         throw new Error('replaced constructor');
@@ -160,13 +160,13 @@ describe('Runtime buffer ownership', () => {
     `, 'replace-buffer-constructors.js');
 
     const source = Uint8Array.of(3, 5);
-    const buffer = buffers.allocateArrayBuffer(2);
-    const view = buffers.createView('Uint8Array', buffer);
+    const buffer = new realm.ArrayBuffer(2);
+    const view = new realm.Uint8Array(buffer);
     view.set(source);
-    const transferred = buffers.transferArrayBuffer(buffer);
-    expect(transferred).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
-    expect(Array.from(buffers.createView('Uint8Array', transferred))).toEqual([3, 5]);
-    expect(Array.from(buffers.copyUint8Array(source))).toEqual([3, 5]);
+    const transferred = realm.transferArrayBuffer(buffer);
+    expect(transferred).toBeInstanceOf(realm.ArrayBuffer);
+    expect(Array.from(new realm.Uint8Array(transferred))).toEqual([3, 5]);
+    expect(Array.from(new realm.Uint8Array(source))).toEqual([3, 5]);
   });
 });
 
@@ -254,7 +254,7 @@ describe('JavaScript ArrayBuffer primitives', () => {
 
   it.each(['DataView', 'Uint8Array'] as const)('reads current lengths as a %s moves in and out of bounds', (name) => {
     const realm = new JSRealm();
-    const buffer = realm.allocateArrayBuffer(8, 16);
+    const buffer = new realm.ArrayBuffer(8, { maxByteLength: 16 });
     const fixed = realm.createView(name, buffer, 2, 4);
     const tracking = realm.createView(name, buffer, 2);
 
@@ -313,11 +313,11 @@ describe('JavaScript ArrayBuffer primitives', () => {
 
   it.each([false, true])('reports accessible lengths after detachment (resizable=%s)', (resizable) => {
     const realm = new JSRealm();
-    const buffer = realm.allocateArrayBuffer(4, resizable ? 8 : undefined);
-    const data = realm.createView('DataView', buffer, 1, 2);
-    const typed = realm.createView('Uint8Array', buffer, 1, 2);
-    const dataToEnd = realm.createView('DataView', buffer, 1);
-    const typedToEnd = realm.createView('Uint8Array', buffer, 1);
+    const buffer = new realm.ArrayBuffer(4, { maxByteLength: resizable ? 8 : undefined });
+    const data = new realm.DataView(buffer, 1, 2);
+    const typed = new realm.Uint8Array(buffer, 1, 2);
+    const dataToEnd = new realm.DataView(buffer, 1);
+    const typedToEnd = new realm.Uint8Array(buffer, 1);
 
     expect([buffer, data, typed, dataToEnd, typedToEnd].map(getBufferSourceByteLength))
       .toEqual([4, 2, 2, 3, 3]);
@@ -350,22 +350,20 @@ describe('JavaScript ArrayBuffer primitives', () => {
 describe('Realm buffer creation and transfer', () => {
   it('creates and writes target-realm buffers and views', () => {
     const realm = new JSRealm();
-    const buffer = realm.createArrayBuffer(Uint8Array.from([1, 2, 3, 4]));
+    const buffer = realm.copyArrayBuffer(Uint8Array.from([1, 2, 3, 4]));
 
-    expect(buffer).toBeInstanceOf(realm.intrinsics.bufferSource.arrayBuffer);
+    expect(buffer).toBeInstanceOf(realm.ArrayBuffer);
     expect(getBufferSourceByteLength(buffer)).toBe(4);
     expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 2, 3, 4]));
 
     writeArrayBuffer(buffer, [8, 9], 1);
     expect(getBufferSourceCopy(buffer)).toEqual(Uint8Array.from([1, 8, 9, 4]));
 
-    const view = realm.createArrayBufferView(
+    const view = realm.copyArrayBufferView(
       'Uint16Array',
       [1, 2, 3, 4],
     );
-    const Uint16Array_ = realm.intrinsics.bufferSource.views.Uint16Array;
-    if (!Uint16Array_) throw new Error('Missing Uint16Array intrinsic');
-    expect(view).toBeInstanceOf(Uint16Array_);
+    expect(view).toBeInstanceOf(realm.Uint16Array);
     expect(getBufferSourceByteLength(view)).toBe(4);
     expect(getBufferSourceCopy(view)).toEqual(Uint8Array.from([1, 2, 3, 4]));
 
@@ -375,14 +373,14 @@ describe('Realm buffer creation and transfer', () => {
       getBufferSourceUnderlyingBuffer(view),
     )).toBe(4);
 
-    expect(() => realm.createArrayBufferView('Uint16Array', [1]))
+    expect(() => realm.copyArrayBufferView('Uint16Array', [1]))
       .toThrow(/multiple/);
   });
 
   it('creates shared buffers and copies their bytes', () => {
     const realm = new JSRealm();
-    const buffer = realm.createSharedArrayBuffer([1, 2]);
-    const SharedArrayBuffer_ = realm.intrinsics.bufferSource.sharedArrayBuffer;
+    const buffer = realm.copySharedArrayBuffer([1, 2]);
+    const SharedArrayBuffer_ = realm.SharedArrayBuffer;
 
     if (!SharedArrayBuffer_) throw new Error('Missing SharedArrayBuffer intrinsic');
     expect(buffer).toBeInstanceOf(SharedArrayBuffer_);
@@ -392,8 +390,8 @@ describe('Realm buffer creation and transfer', () => {
   it.each([false, true])('clones shared storage into the target realm (growable=%s)', (growable) => {
     const source = new JSRealm();
     const target = new JSRealm();
-    const buffer = source.createSharedArrayBuffer([1, 2], growable ? 4 : undefined);
-    const constructor = target.intrinsics.bufferSource.sharedArrayBuffer;
+    const buffer = source.copySharedArrayBuffer([1, 2], growable ? 4 : undefined);
+    const constructor = target.SharedArrayBuffer;
     assert(constructor);
     Reflect.set(target.globalObject, 'SharedArrayBuffer', () => { throw new Error('replaced constructor'); });
     for (const name of ['constructor', 'byteLength', 'maxByteLength', 'growable']) {
@@ -466,25 +464,20 @@ describe('Realm buffer creation and transfer', () => {
   it('detects detachment and transfers into the target realm', () => {
     const firstRealm = new JSRealm();
     const secondRealm = new JSRealm();
-    const detached = firstRealm.createArrayBuffer([1, 2]);
+    const detached = firstRealm.copyArrayBuffer([1, 2]);
 
     firstRealm.detachArrayBuffer(detached);
     expect(isBufferSourceDetached(detached)).toBe(true);
     expect(getBufferSourceCopy(detached)).toEqual(new Uint8Array());
     expect(() => firstRealm.detachArrayBuffer(detached)).not.toThrow();
 
-    const source = firstRealm.createArrayBuffer([3, 4]);
+    const source = firstRealm.copyArrayBuffer([3, 4]);
     const transferred = secondRealm.transferArrayBuffer(source);
 
     expect(isBufferSourceDetached(source)).toBe(true);
     expect(transferred).toBeInstanceOf(
-      secondRealm.intrinsics.bufferSource.arrayBuffer,
+      secondRealm.ArrayBuffer,
     );
     expect(getBufferSourceCopy(transferred)).toEqual(Uint8Array.from([3, 4]));
   });
 });
-
-function createFixture() {
-  const realm = new JSRealm();
-  return { realm, buffers: realm.createRuntimeBuffers() };
-}

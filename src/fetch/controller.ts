@@ -61,9 +61,9 @@ export class FetchController {
     const error = args.length === 1 ? fallbackError : args[0];
     let serializedError: object;
     try {
-      serializedError = env.exec.serialize(error);
+      serializedError = env.serialize(error);
     } catch {
-      serializedError = env.exec.serialize(fallbackError);
+      serializedError = env.serialize(fallbackError);
     }
     this.serializedAbortReason = serializedError;
     this.#cancelOperations();
@@ -88,10 +88,10 @@ export function deserializeAbortReason(
   abortReason: object | null,
   env: FetchEnvironment,
 ): unknown {
-  const fallbackError = new env.exec.DOMException('', 'AbortError');
+  const fallbackError = new env.DOMException('', 'AbortError');
   if (abortReason !== null) {
     try {
-      const error = env.exec.deserialize(abortReason);
+      const error = env.deserialize(abortReason);
       return error === undefined ? fallbackError : error;
     } catch {
       return fallbackError;

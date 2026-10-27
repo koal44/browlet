@@ -41,9 +41,9 @@ export class FetchBody {
   static fromBytes(bytes: Uint8Array, env: FetchEnvironment): FetchBody {
     const stream = ReadableStreamImpl.createWithByteReadingSupport(undefined, undefined, 0, env);
     // The bytes are already available; only delivery to the owning loop is deferred.
-    env.exec.queueTask('network', () => {
+    env.queueTask('network', () => {
       if (bytes.length > 0 && !stream.isErrored) {
-        stream.enqueueChunk(env.exec.buffers.copyUint8Array(bytes));
+        stream.enqueueChunk(new env.realm.Uint8Array(bytes));
       }
       stream.close();
     });
@@ -116,7 +116,7 @@ export class FetchBody {
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
     const env = this.#env;
-    const destination = taskDestination ?? new ParallelQueue(env.exec.runInParallel);
+    const destination = taskDestination ?? new ParallelQueue(env.runInParallel);
     const reader = this.stream.getDefaultReader();
     const readLoop = (): void => {
       this.readChunk(reader, destination, (bytes) => {
@@ -166,7 +166,7 @@ export class FetchBody {
     taskDestination: GlobalObject | ParallelQueue | null = null,
   ): void {
     const env = this.#env;
-    const destination = taskDestination ?? new ParallelQueue(env.exec.runInParallel);
+    const destination = taskDestination ?? new ParallelQueue(env.runInParallel);
     const successSteps = (bytes: Uint8Array<ArrayBuffer>) =>
       queueFetchTask(() => processBody(bytes), destination, env);
     const errorSteps = (error?: unknown) =>
@@ -237,7 +237,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-arraybuffer
   arrayBuffer(): InternalPromise<ArrayBuffer> {
-    return this.#consume(idlType.ArrayBuffer, (bytes) => this.#env.exec.buffers.copyArrayBuffer(bytes));
+    return this.#consume(idlType.ArrayBuffer, (bytes) => this.#env.realm.copyArrayBuffer(bytes));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-blob
@@ -251,7 +251,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#dom-body-bytes
   bytes(): InternalPromise<Uint8Array> {
-    return this.#consume(idlType.Uint8Array, (bytes) => this.#env.exec.buffers.copyUint8Array(bytes));
+    return this.#consume(idlType.Uint8Array, (bytes) => new this.#env.realm.Uint8Array(bytes));
   }
 
   // https://fetch.spec.whatwg.org/#dom-body-formdata
@@ -309,7 +309,7 @@ export class BodyMixin {
 
   // https://fetch.spec.whatwg.org/#concept-body-consume-body
   #consume<Result>(type: PromiseResultType<Result>, convert: (bytes: Uint8Array<ArrayBuffer>) => NoInfer<Result>): InternalPromise<Result> {
-    const { Promise: P } = this.#env.exec;
+    const { InternalPromise: P } = this.#env;
     if (this.unusable) return P.reject(new TypeError('Body is disturbed or locked'), type);
     const result = P.withResolvers(type);
     const success = (bytes: Uint8Array<ArrayBuffer>) => {
@@ -321,7 +321,7 @@ export class BodyMixin {
     };
     const body = this.getBody();
     if (body === null) success(new Uint8Array());
-    else body.readAll(success, result.reject, this.#env.exec.global);
+    else body.readAll(success, result.reject, this.#env.realm.globalObject);
     return result.promise;
   }
 }

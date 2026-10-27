@@ -34,7 +34,7 @@ describe('HTML reflected element associations', () => {
     owner.append(targets[0]!);
     owner.quoteTargets = targets;
     expect(owner.quoteTargets).toEqual(targets);
-    expect(() => { owner.quoteTarget = wrongType; }).toThrow(realm.intrinsics.typeError);
+    expect(() => { owner.quoteTarget = wrongType; }).toThrow(realm.TypeError);
   });
 
   it('uses a declared common base to filter targets across concrete element implementations', () => {
@@ -87,7 +87,7 @@ describe('HTML reflected element associations', () => {
     expect(owner.aliasTarget).toBe(second);
     owner.setAttribute('typedtargets', 'duplicate duplicate');
     expect(owner.typedTargets).toEqual([second, second]);
-    expect(() => Reflect.set(owner, 'typedTarget', first)).toThrow(fixture.realm.intrinsics.typeError);
+    expect(() => Reflect.set(owner, 'typedTarget', first)).toThrow(fixture.realm.TypeError);
     owner.setAttribute('targets', 'duplicate\tmissing duplicate root');
     expect(owner.targets).toEqual([first, first, owner]);
     owner.prepend(second);
@@ -160,7 +160,7 @@ describe('HTML reflected element associations', () => {
     const empty = owner.targets;
     expect(empty).toEqual([]);
     expect(Object.isFrozen(empty)).toBe(true);
-    expect(empty).toBeInstanceOf(realm.intrinsics.array);
+    expect(empty).toBeInstanceOf(realm.Array);
     owner.setAttribute('targets', 'missing');
     expect(owner.targets).toBe(empty);
     const target = child().platform;
@@ -187,7 +187,7 @@ describe('HTML reflected element associations', () => {
     expect(owner.targets).toEqual([target]);
     expect(owner.targets).not.toBe(input);
     const previous = owner.targets;
-    expect(() => Reflect.set(owner, 'targets', [target, {}])).toThrow(realm.intrinsics.typeError);
+    expect(() => Reflect.set(owner, 'targets', [target, {}])).toThrow(realm.TypeError);
     expect(owner.targets).toBe(previous);
     expect(owner.getAttribute('targets')).toBe('');
   });
@@ -201,7 +201,7 @@ describe('HTML reflected element associations', () => {
     descriptor.set!.call(owner.platform, [foreign.platform]);
     const array = descriptor.get!.call(owner.platform) as NonNullable<typeof owner.platform.targets>;
     expect(array).toBe(owner.platform.targets);
-    expect(Object.getPrototypeOf(array)).toBe(owner.realm.intrinsics.array.prototype);
+    expect(Object.getPrototypeOf(array)).toBe(owner.realm.Array.prototype);
     expect(array[0]).toBe(foreign.platform);
     expect(foreign.element.env).toBe(foreign.env);
     expect(foreign.element.nodeDocument).toBe(owner.document);

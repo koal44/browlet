@@ -118,7 +118,7 @@ export class BlobImpl {
   // https://w3c.github.io/FileAPI/#arraybuffer-method-algo
   /** Read into a new ArrayBuffer in the owning realm. */
   arrayBuffer(): InternalPromise<ArrayBuffer> {
-    return this.#read().then((bytes) => this.#env.exec.buffers.copyArrayBuffer(bytes), undefined, idlType.ArrayBuffer);
+    return this.#read().then((bytes) => this.#env.realm.copyArrayBuffer(bytes), undefined, idlType.ArrayBuffer);
   }
 
   /** File API §3.3.6, pipe through the decoder's associated transform. */
@@ -132,7 +132,7 @@ export class BlobImpl {
 
   // https://w3c.github.io/FileAPI/#bytes-method-algo
   bytes(): InternalPromise<Uint8Array> {
-    return this.#read().then((bytes) => this.#env.exec.buffers.copyUint8Array(bytes));
+    return this.#read().then((bytes) => new this.#env.realm.Uint8Array(bytes));
   }
 
   getSerializationState(): BlobSerializationState {
@@ -153,7 +153,7 @@ export class BlobImpl {
 
   /** File API §3.3.3–5, promise-based reads using Streams §9.1.2 callbacks. */
   #read(): InternalPromise<Uint8Array> {
-    const result = this.#env.exec.Promise.withResolvers(idlType.Uint8Array);
+    const result = this.#env.InternalPromise.withResolvers(idlType.Uint8Array);
     const reader = this.stream().getDefaultReader();
     reader.readAllBytes(result.resolve, result.reject);
     return result.promise;
@@ -235,7 +235,7 @@ export function convertLineEndingsToNative(
   value: string,
   env: FileEnvironment,
 ): string {
-  return value.replace(lineEndingPattern, env.exec.nativeLineEnding);
+  return value.replace(lineEndingPattern, env.nativeLineEnding);
 }
 
 function normalizeSlicePosition(

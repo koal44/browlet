@@ -74,8 +74,8 @@ describe('HTML reflected values through Web IDL', () => {
     element.positiveFloat = 2.5;
     element.positiveFloat = 0;
     expect(element.getAttribute('positivefloat')).toBe('2.5');
-    expect(() => { element.floating = Infinity; }).toThrow(realm.intrinsics.typeError);
-    expect(() => { element.floating = NaN; }).toThrow(realm.intrinsics.typeError);
+    expect(() => { element.floating = Infinity; }).toThrow(realm.TypeError);
+    expect(() => { element.floating = NaN; }).toThrow(realm.TypeError);
     expect(element.hasAttribute('floating')).toBe(false);
   });
 
@@ -114,7 +114,7 @@ describe('HTML reflected values through Web IDL', () => {
     empty.add('custom');
     expect(element.getAttribute('plaintokens')).toBe('custom');
     expect(element.getAttribute('emptytokens')).toBe('custom');
-    expect(() => plain.supports('custom')).toThrow(realm.intrinsics.typeError);
+    expect(() => plain.supports('custom')).toThrow(realm.TypeError);
     expect(empty.supports('custom')).toBe(false);
     element.setAttribute('plaintokens', 'updated');
     expect(element.plainTokens).toBe(plain);

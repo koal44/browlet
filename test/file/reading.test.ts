@@ -3,7 +3,7 @@ import {
   BlobData, BlobImpl, BlobReadFailure, packageData,
 } from '../../src/file/index';
 import type { InternalPromise } from '../../src/infra/promises';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { expectBytesEqual } from '../support/bytes';
 
 describe('File reading implementation', () => {
@@ -26,8 +26,8 @@ describe('File reading implementation', () => {
   it.each(['text', 'bytes', 'arrayBuffer'] as const)('transforms the completed read in a Promise reaction for %s', async (method) => {
     const env = createEnvironment();
     const tasks: (() => void)[] = [];
-    env.exec.runInParallel = (steps) => { steps(); };
-    env.exec.queueTask = (source, steps) => {
+    env.runInParallel = (steps) => { steps(); };
+    env.queueTask = (source, steps) => {
       expect(source).toBe('file');
       tasks.push(steps);
       return { remove() {} };
@@ -42,7 +42,7 @@ describe('File reading implementation', () => {
     }, completed.reject);
     expect(tasks).toHaveLength(1);
     tasks[0]!();
-    env.exec.queueMicrotask(() => { trace.push('after reading'); });
+    env.realm.queueMicrotask(() => { trace.push('after reading'); });
     await completed.promise;
     expect(trace).toEqual(['after reading', 'result']);
   });

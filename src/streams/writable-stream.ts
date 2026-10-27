@@ -1,4 +1,4 @@
-import type { AbortController, AbortSignal } from '../infra/execution';
+import type { AbortController, AbortSignal } from '../infra/abort';
 import type { InternalPromise, InternalPromiseWithResolvers } from '../infra/promises';
 import { RangeError, TypeError } from '../infra/exceptions';
 import { InternalError } from '../infra/internal-error';
@@ -102,9 +102,9 @@ export class WritableStreamImpl {
   ): WritableStreamImpl {
     return WritableStreamImpl.create(
       () => undefined,
-      (chunk) => env.exec.Promise.try(() => writeAlgorithm(chunk), idlType.undefined),
-      () => env.exec.Promise.try(() => closeAlgorithm?.(), idlType.undefined),
-      (reason) => env.exec.Promise.try(() => abortAlgorithm?.(reason), idlType.undefined),
+      (chunk) => env.InternalPromise.try(() => writeAlgorithm(chunk), idlType.undefined),
+      () => env.InternalPromise.try(() => closeAlgorithm?.(), idlType.undefined),
+      (reason) => env.InternalPromise.try(() => abortAlgorithm?.(reason), idlType.undefined),
       highWaterMark,
       sizeAlgorithm,
       env,
@@ -148,7 +148,7 @@ export class WritableStreamImpl {
   /** Streams §5.2.4, abort(reason). */
   abort(reason?: unknown): InternalPromise<void> {
     if (this.locked) {
-      return this.env.exec.Promise.reject(new TypeError(
+      return this.env.InternalPromise.reject(new TypeError(
         'Cannot abort a stream that already has a writer',
       ), idlType.undefined);
     }
@@ -158,12 +158,12 @@ export class WritableStreamImpl {
   /** Streams §5.2.4, close(). */
   close(): InternalPromise<void> {
     if (this.locked) {
-      return this.env.exec.Promise.reject(new TypeError(
+      return this.env.InternalPromise.reject(new TypeError(
         'Cannot close a stream that already has a writer',
       ), idlType.undefined);
     }
     if (this.closeQueuedOrInFlight) {
-      return this.env.exec.Promise.reject(new TypeError(
+      return this.env.InternalPromise.reject(new TypeError(
         'Cannot close an already-closing stream',
       ), idlType.undefined);
     }
@@ -179,17 +179,17 @@ export class WritableStreamImpl {
   abortInternal(reason: unknown): InternalPromise<void> {
     const { state } = this;
     if (this.#isFinished()) {
-      return this.env.exec.Promise.resolve(undefined, idlType.undefined);
+      return this.env.InternalPromise.resolve(undefined, idlType.undefined);
     }
 
     this.controller.state.abortController.abort(reason);
     if (this.#isFinished()) {
-      return this.env.exec.Promise.resolve(undefined, idlType.undefined);
+      return this.env.InternalPromise.resolve(undefined, idlType.undefined);
     }
     if (state.pendingAbortRequest) return state.pendingAbortRequest.promise.promise;
 
     const wasAlreadyErroring = state.state === 'erroring';
-    const promise = this.env.exec.Promise.withResolvers(idlType.undefined);
+    const promise = this.env.InternalPromise.withResolvers(idlType.undefined);
     state.pendingAbortRequest = {
       promise,
       reason: wasAlreadyErroring ? undefined : reason,
@@ -203,7 +203,7 @@ export class WritableStreamImpl {
   closeInternal(): InternalPromise<void> {
     const { state } = this;
     if (state.state === 'closed' || state.state === 'errored') {
-      return this.env.exec.Promise.reject(new TypeError(
+      return this.env.InternalPromise.reject(new TypeError(
         `A stream in the ${state.state} state cannot be closed`,
       ), idlType.undefined);
     }
@@ -211,7 +211,7 @@ export class WritableStreamImpl {
       throw new InternalError('Writable stream already has a close operation');
     }
 
-    const promise = this.env.exec.Promise.withResolvers(idlType.undefined);
+    const promise = this.env.InternalPromise.withResolvers(idlType.undefined);
     state.closeRequest = promise;
     if (state.writer && state.backpressure && state.state === 'writable') {
       state.writer.state.readyPromise.resolve();
@@ -356,7 +356,7 @@ export class WritableStreamImpl {
     if (state.writer && backpressure !== state.backpressure) {
       const writerState = state.writer.state;
       if (backpressure) {
-        writerState.readyPromise = this.env.exec.Promise.withResolvers(idlType.undefined);
+        writerState.readyPromise = this.env.InternalPromise.withResolvers(idlType.undefined);
       } else {
         writerState.readyPromise.resolve();
       }
@@ -543,9 +543,9 @@ export class WritableStreamDefaultControllerImpl {
   ): void {
     const { start, write, close, abort } = sink;
     const startAlgorithm = () => start && Reflect.apply(start, sink, [this]);
-    const writeAlgorithm = (chunk: unknown) => stream.env.exec.Promise.try(() => write?.call(sink, chunk, this), idlType.undefined);
-    const closeAlgorithm = () => stream.env.exec.Promise.try(() => close?.call(sink), idlType.undefined);
-    const abortAlgorithm = (reason: unknown) => stream.env.exec.Promise.try(() => abort?.call(sink, reason), idlType.undefined);
+    const writeAlgorithm = (chunk: unknown) => stream.env.InternalPromise.try(() => write?.call(sink, chunk, this), idlType.undefined);
+    const closeAlgorithm = () => stream.env.InternalPromise.try(() => close?.call(sink), idlType.undefined);
+    const abortAlgorithm = (reason: unknown) => stream.env.InternalPromise.try(() => abort?.call(sink, reason), idlType.undefined);
 
     this.setUp(
       stream,
@@ -593,7 +593,7 @@ export class WritableStreamDefaultControllerImpl {
     }
     const state: WritableStreamDefaultControllerState = {
       abortAlgorithm,
-      abortController: stream.env.exec.createAbortController(),
+      abortController: stream.env.createAbortController(),
       closeAlgorithm,
       queue: new QueueWithSizes(),
       started: false,
@@ -606,7 +606,7 @@ export class WritableStreamDefaultControllerImpl {
     streamState.controller = this;
 
     stream.updateBackpressure(this.backpressure);
-    const startPromise = stream.env.exec.Promise.fromValue(startAlgorithm(), stream.env.exec.NativePromise, idlType.any);
+    const startPromise = stream.env.InternalPromise.fromValue(startAlgorithm(), stream.env.realm.NativePromise, idlType.any);
     void startPromise.then(() => {
       state.started = true;
       this.advanceQueueIfNeeded();
@@ -872,8 +872,8 @@ export class WritableStreamDefaultWriterImpl {
     }
 
     const streamState = stream.state;
-    const readyPromise = stream.env.exec.Promise.withResolvers(idlType.undefined);
-    const closedPromise = stream.env.exec.Promise.withResolvers(idlType.undefined);
+    const readyPromise = stream.env.InternalPromise.withResolvers(idlType.undefined);
+    const closedPromise = stream.env.InternalPromise.withResolvers(idlType.undefined);
     if (streamState.state === 'writable' || streamState.state === 'closed') {
       if (streamState.state === 'closed' ||
         stream.closeQueuedOrInFlight || !streamState.backpressure) {
@@ -888,7 +888,7 @@ export class WritableStreamDefaultWriterImpl {
       closedPromise.reject(streamState.storedError);
       void closedPromise.promise.then(undefined, () => {});
     }
-    this.state = { closedPromise, readyPromise, stream, Promise: stream.env.exec.Promise };
+    this.state = { closedPromise, readyPromise, stream, Promise: stream.env.InternalPromise };
     streamState.writer = this;
   }
 
@@ -934,7 +934,7 @@ export class WritableStreamDefaultWriterImpl {
       throw new InternalError('Writable stream is locked by another writer');
     }
 
-    const releasedError = new env.exec.TypeError(
+    const releasedError = new env.realm.TypeError(
       'Writer was released and can no longer monitor the stream',
     );
     this.ensureReadyPromiseRejected(releasedError);

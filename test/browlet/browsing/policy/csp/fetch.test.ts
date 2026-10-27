@@ -39,7 +39,7 @@ describe('Fetch CSP integration', () => {
     'delegates %s violations to the client without requiring a browser environment', (phase) => {
       const env = createClientEnvironment();
       const reportCSPViolation = vi.fn();
-      env.exec.reportCSPViolation = reportCSPViolation;
+      env.reportCSPViolation = reportCSPViolation;
       const response = responseAt('https://resource.test/page');
       const header = phase === 'monitored request' ? 'Content-Security-Policy-Report-Only' : 'Content-Security-Policy';
       response.headerList.append(header, "img-src 'none'");

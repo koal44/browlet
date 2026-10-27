@@ -1,7 +1,7 @@
 import { SandboxEnvironment, type BrowletEnvironment } from '../../src/browlet/environment';
 import { vi } from 'vitest';
 
-import { createBrowletExecution } from '../../src/browlet/bindings';
+import { createBrowletEnvironmentInit } from '../../src/browlet/bindings';
 import { createManualUserAgent, createManualRealm } from '../support/browlet-agent';
 import { getBindingContext, getRelevantRealm } from '../support/browlet-binding';
 import { TopLevelTraversable } from '../../src/browlet/browsing/navigation/navigable';
@@ -12,7 +12,7 @@ import type { FetchController } from '../../src/fetch/controller';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import type { FetchRequest } from '../../src/fetch/request';
 import type { FetchResponse } from '../../src/fetch/response';
-import type { TaskCreationOptions } from '../../src/infra/execution';
+import type { TaskCreationOptions } from '../../src/infra/tasks';
 import type { JSEnvironment } from '../../src/js-engine/environment';
 import { BindingWorld, type BindingContext } from '../../src/web-idl/index';
 import { createControllerFixture } from '../fetch/controller-fixture';
@@ -41,8 +41,8 @@ export function createFetchOperation(request: FetchRequest, env: FetchEnvironmen
 /** Capture an invariant failure thrown on Fetch's owning task, without changing ordinary task delivery. */
 export function nextFetchTaskError(env: JSEnvironment) {
   const failure = Promise.withResolvers<unknown>();
-  const queue = env.exec.queueTask.bind(env.exec);
-  const spy = vi.spyOn(env.exec, 'queueTask').mockImplementation((source, steps, options?: TaskCreationOptions) => {
+  const queue = env.queueTask.bind(env);
+  const spy = vi.spyOn(env, 'queueTask').mockImplementation((source, steps, options?: TaskCreationOptions) => {
     if (source === 'timer' && options !== undefined) return queue(source, steps, options);
     if (source !== 'network') return queue(source, steps);
     return queue(source, () => {
@@ -64,7 +64,7 @@ export function createFetchWindow(userAgent = createManualUserAgent()) {
     realm,
     document: traversable.activeDocument,
     queueTask(steps: () => void) {
-      context.getEnvironment().exec.queueTask('network', steps);
+      context.getEnvironment().queueTask('network', steps);
     },
     networkingTasks() {
       return [...eventLoop.getTaskQueue(networkingTaskSource)];
@@ -79,7 +79,7 @@ export function createIsolatedFetchRealm() {
   const realm = createManualRealm({ crossOriginIsolated: true });
   new AgentCluster('concrete').add(realm.agent);
   const registration = new BindingWorld<BrowletEnvironment>([]).register(realm, (context) =>
-    new SandboxEnvironment(realm, createBrowletExecution(context)),
+    new SandboxEnvironment(realm, createBrowletEnvironmentInit(context)),
   );
   registration.install(realm.globalObject);
   return createFetchRealmFixture(registration);

@@ -5,7 +5,7 @@ import { createManualEventLoop } from '../../support/browlet-agent';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { createScriptState } from '../../support/script-state';
 import { installHostHooks } from '../../../src/browlet/scripting/host-hooks';
-import { createBrowletExecution, browletBindingWorld } from '../../../src/browlet/bindings';
+import { createBrowletEnvironmentInit, browletBindingWorld } from '../../../src/browlet/bindings';
 import { UserAgent } from '../../../src/browlet/user-agent';
 
 import { createOpaqueOrigin } from '../../../src/url/origin';
@@ -103,7 +103,7 @@ describe('HTML callback and script-entry lifecycle', () => {
     try {
       const context = createBrowletRealm(agent, {
         createGlobalObject: (realm) => new Proxy(
-          realm.createOrdinaryObject(realm.intrinsics.objectPrototype),
+          realm.createOrdinaryObject(realm.objectPrototype),
           {
             deleteProperty(target, key) {
               if (key === 'SharedArrayBuffer') deletionContexts.push(loop.runningExecutionContext);
@@ -589,7 +589,7 @@ function createTestRealm(
     topLevelOrigin: null,
   });
   const context = browletBindingWorld.register(realm, (binding) =>
-    new TestEnvironment(realm, baseEnv, createBrowletExecution(binding)),
+    new TestEnvironment(realm, baseEnv, createBrowletEnvironmentInit(binding)),
   );
   const env = realm.env;
   return { realm, env, context };

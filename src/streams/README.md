@@ -23,16 +23,16 @@ with attribution in [LICENSE.WHATWG.md](./LICENSE.WHATWG.md).
 ## Runtime and bindings
 
 A stream retains one trailing `StreamsEnvironment` and passes it to derived streams.
-Its `StreamsExecution` combines `RealmExecution` with Infra's `AbortExecution` and
-`StructuredDataExecution` on the same `env.exec` object. Operations needing
+That environment declares internal Promise creation, scheduling, DOM abort creation,
+and HTML structured-data operations directly on the existing owner. Operations needing
 only JavaScript facilities, such as reader release, still accept `JSEnvironment`.
 Its `InternalPromise` chains retain their execution destination. Streams use that
 facility for asynchronous work; native `async`/`await` and global microtask
 scheduling are excluded by ESLint. Native backend I/O enters through explicit
 tasks or Promise imports.
 
-Buffer allocation, views, transfer, and copying use `exec.buffers`. Ordinary
-tee with cloning uses `exec.clone`; public `tee()` shares ordinary chunks,
+Buffer allocation, views, transfer, and copying use `env.realm`. Ordinary
+tee with cloning uses `env.clone`; public `tee()` shares ordinary chunks,
 while byte tee copies bytes. Writable controllers obtain their AbortController
 from the runtime.
 

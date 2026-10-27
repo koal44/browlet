@@ -223,7 +223,7 @@ function fixture() {
   vi.spyOn(JSEngine, 'getPromiseResult').mockImplementation((promise) => states.get(promise)!.reason);
   const output = vi.spyOn(console, 'error').mockImplementation(() => {});
   function reject(reason: unknown) {
-    const promise = new env.exec.NativePromise<unknown>(() => {});
+    const promise = new env.realm.NativePromise<unknown>(() => {});
     const state = { handled: false, reason };
     states.set(promise, state);
     env.trackPromiseRejection(promise, 'reject');

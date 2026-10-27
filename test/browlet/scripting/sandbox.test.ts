@@ -13,8 +13,8 @@ describe('Browser-owned sandbox execution', () => {
     const first = new UserAgent();
     const second = new UserAgent();
     const env = first.sandbox;
-    const realm = BrowletRealm.getAssociatedRealm(env.exec.global)!;
-    const other = BrowletRealm.getAssociatedRealm(second.sandbox.exec.global)!;
+    const realm = BrowletRealm.getAssociatedRealm(env.realm.globalObject)!;
+    const other = BrowletRealm.getAssociatedRealm(second.sandbox.realm.globalObject)!;
     expect(first.sandbox).toBe(env);
     expect(realm).not.toBe(other);
     expect(realm.agent).toBeInstanceOf(SandboxAgent);
@@ -22,7 +22,7 @@ describe('Browser-owned sandbox execution', () => {
     expect(realm.getAssociatedDocument()).toBeNull();
     expect(realm.hasEnvironment).toBe(false);
     expect(realm.globalNames.size).toBe(0);
-    expect(Reflect.has(env.exec.global, 'Window')).toBe(false);
+    expect(Reflect.has(env.realm.globalObject, 'Window')).toBe(false);
     expect(getBindingContext(realm).getEnvironment()).toBe(env);
     expect(first.browsingContextGroupSet.size).toBe(0);
   });
@@ -31,7 +31,7 @@ describe('Browser-owned sandbox execution', () => {
     const userAgent = new UserAgent();
     const env = userAgent.sandbox;
     expect(env.userAgent).toBe(userAgent);
-    expect(env.global).toBe(env.exec.global);
+    expect(env.global).toBe(env.realm.globalObject);
     expect(env.topLevelOrigin).toBeNull();
     expect(env.topLevelCreationURL).toBeNull();
     expect(env.getReferrerSource()).toBeNull();
@@ -63,8 +63,8 @@ describe('Browser-owned sandbox execution', () => {
 
   it('runs owner tasks and their Promise continuations without manual checkpoints', async () => {
     const env = new UserAgent().sandbox;
-    const realm = BrowletRealm.getAssociatedRealm(env.exec.global)!;
-    const pending = env.exec.Promise.withResolvers(idlType.double);
+    const realm = BrowletRealm.getAssociatedRealm(env.realm.globalObject)!;
+    const pending = env.InternalPromise.withResolvers(idlType.double);
     const done = Promise.withResolvers<number>();
     const trace: string[] = [];
     pending.promise.observe((value) => {
@@ -82,13 +82,13 @@ describe('Browser-owned sandbox execution', () => {
 
   it('allocates and reads a Fetch body through its running owner', async () => {
     const env = new UserAgent().sandbox;
-    const realm = BrowletRealm.getAssociatedRealm(env.exec.global)!;
-    const allocation = vi.spyOn(env.exec.buffers, 'copyUint8Array');
+    const realm = BrowletRealm.getAssociatedRealm(env.realm.globalObject)!;
     const body = FetchBody.fromBytes(Uint8Array.of(1, 2, 3), env);
+    const enqueue = vi.spyOn(body.stream, 'enqueueChunk');
     const done = Promise.withResolvers<Uint8Array>();
-    body.readAll(done.resolve, done.reject, env.exec.global);
+    body.readAll(done.resolve, done.reject, env.realm.globalObject);
     expect([...(await done.promise)]).toEqual([1, 2, 3]);
-    const chunk = allocation.mock.results[0]!.value as Uint8Array;
+    const chunk = enqueue.mock.calls[0]![0] as Uint8Array;
     expect(BrowletRealm.getAssociatedRealm(chunk)).toBe(realm);
   });
 });

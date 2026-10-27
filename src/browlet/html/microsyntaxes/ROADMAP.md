@@ -85,7 +85,7 @@ list recovery, empty members, and unit categorization. Together with slice A,
 #### Numeric specification choices and browser evidence
 
 The 2026-10-10 probe used Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5.
-The reproducer is [HTML-NUMBERS-PROBE.mjs](../../../../scratch/HTML-NUMBERS-PROBE.mjs).
+The reproducer is [numbers.mjs](../../../../node-compat/experimental/browser-probes/html/numbers.mjs).
 Frameset results below are observed widths in a 1,000px viewport; source inspection
 separately identifies the parser behavior. No frameset layout is implemented here.
 
@@ -181,7 +181,7 @@ while also narrowing the year and fraction contracts.
 #### Date/time specification choices and browser evidence
 
 The 2026-10-10 probe used Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5;
-the reproducer is [HTML-DATES-PROBE.mjs](../../../../scratch/HTML-DATES-PROBE.mjs).
+the reproducer is [dates.mjs](../../../../node-compat/experimental/browser-probes/html/dates.mjs).
 This installed WebKit build falls back to text inputs for date/time controls,
 so its unchanged values are not evidence of date/time parsing. Source inspection
 supplies its fractional-second limit instead.
@@ -202,7 +202,7 @@ supplies its fractional-second limit instead.
   [shortest time spelling](https://html.spec.whatwg.org/multipage/common-microsyntaxes.html#valid-normalised-local-date-and-time-string)
   and Chromium: `.010` becomes `.01`. Firefox retains `.010`. Both tested
   engines omit zero seconds and replace the separating space with `T`.
-  The 2026-10-11 [review probe](../../../../scratch/HTML-MICROSYNTAX-REVIEW-PROBE.mjs)
+  The 2026-10-11 [review probe](../../../../node-compat/experimental/browser-probes/html/microsyntaxes.mjs)
   confirms that Firefox preserves supplied fractional spelling rather than
   padding to three digits: `.1`, `.10`, and `.100` all remain as supplied.
   Chromium normalizes those three to `.1` for `datetime-local`; both browsers
@@ -290,7 +290,7 @@ Typecheck, focused lint, and the Stylelet/Browlet builds pass without warnings.
 
 #### Legacy-color specification choices and browser evidence
 
-The 2026-10-10 [probe](../../../../scratch/HTML-COLORS-PROBE.mjs) used Chromium
+The 2026-10-10 [probe](../../../../node-compat/experimental/browser-probes/html/colors.mjs) used Chromium
 149.0.7827.55, Firefox 151.0, and WebKit 26.5. It reads a font element's computed
 color under a parent colored `rgb(1, 2, 3)`; inheritance therefore distinguishes
 parsing failure from a parsed black value. Unlike the date/time probe, all three
@@ -326,7 +326,7 @@ and [WebKit HTMLElement](https://github.com/WebKit/WebKit/blob/main/Source/WebCo
 
 #### Comma-token consumer evidence
 
-The 2026-10-11 [review probe](../../../../scratch/HTML-MICROSYNTAX-REVIEW-PROBE.mjs)
+The 2026-10-11 [review probe](../../../../node-compat/experimental/browser-probes/html/microsyntaxes.mjs)
 tested `input[type=email][multiple]` in Chromium 149.0.7827.55, Firefox 151.0,
 and WebKit 26.5. All three preserve the trailing comma in `a@example.com,`
 and report `validity.typeMismatch`; leading and interior empty entries likewise

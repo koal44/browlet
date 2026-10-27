@@ -34,7 +34,7 @@ describe.each(['direct', 'prepared'] as const)('Web IDL %s output exception valu
       return mode === 'direct' ? converter.idlToJS(value) : converter.getIDLToJSSteps()(value);
     });
     const expected = outputs[0];
-    expect(expected).toBeInstanceOf(realm.intrinsics.typeError);
+    expect(expected).toBeInstanceOf(realm.TypeError);
     expect(expected).not.toBe(request);
     expect(expected).toHaveProperty('message', 'failure as a value');
     for (const output of outputs.slice(1, 4)) expect(output).toBe(expected);

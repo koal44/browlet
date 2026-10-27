@@ -67,7 +67,7 @@ export class ObservableArrayBinding {
     const setSteps = steps?.set;
     const handle = createObservableArray({
       backingList,
-      array: this.#binding.realm.intrinsics.array,
+      array: this.#binding.realm.Array,
       convert: inputConverter.getJSToIDLSteps(),
       delete: deleteSteps
         ? (value, index) => this.#binding.callImplementation(
@@ -76,8 +76,8 @@ export class ObservableArrayBinding {
           [value, index],
         )
         : undefined,
-      rangeError: this.#binding.realm.intrinsics.rangeError,
-      typeError: this.#binding.realm.intrinsics.typeError,
+      rangeError: this.#binding.realm.RangeError,
+      typeError: this.#binding.realm.TypeError,
       set: setSteps
         ? (value, index) => this.#binding.callImplementation(
           setSteps,

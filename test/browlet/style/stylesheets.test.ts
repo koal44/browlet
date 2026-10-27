@@ -29,8 +29,8 @@ describe('stylesheet integration', () => {
   it('replaces sheets through the existing environment and its owner task queue', async () => {
     const document = createTestDocument();
     const { env } = document;
-    const background = vi.spyOn(env.exec, 'runInParallel');
-    const delivery = vi.spyOn(env.exec, 'queueTask');
+    const background = vi.spyOn(env, 'runInParallel');
+    const delivery = vi.spyOn(env, 'queueTask');
     const styles = document.getStyleEngine();
     const sheet = styles.createStyleSheet();
 

@@ -297,7 +297,7 @@ function createWindow(userAgent: UserAgent, origin: Origin, parent: WindowImpl |
     topLevelCreationURL: creationURL, topLevelOrigin: origin,
   });
   const { window } = env;
-  const document = env.exec.createDocument();
+  const document = env.createDocument();
   document.origin = origin;
   document.url = creationURL;
   window.setAssociatedDocument(document);

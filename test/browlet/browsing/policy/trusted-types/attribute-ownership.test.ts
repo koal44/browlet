@@ -79,7 +79,7 @@ describe('Trusted Types attribute ownership', () => {
     expect(() => element.setAttribute('srcdoc', 'blocked')).toThrow(window.TypeError);
     expect(runTask()).toBe(true);
     // Reuse the Window for a replacement Document, as initial about:blank navigation can do.
-    const replacement = env.exec.createDocument();
+    const replacement = env.createDocument();
     document.getRelevantGlobalObject()!.setAssociatedDocument(replacement);
     element.setAttribute('srcdoc', 'allowed');
     expect(element.getAttribute('srcdoc')).toBe('allowed');

@@ -112,7 +112,7 @@ describe('worklet module response sharing', () => {
     const dispatched = Promise.withResolvers<HTTPTransportListener>();
     const transport = mockHTTPTransport(fetchClient.userAgent, (_request, listener) => dispatched.resolve(listener));
     const queued: (() => void)[] = [];
-    const delivery = vi.spyOn(second.env.exec, 'queueTask').mockImplementation((source, steps) => {
+    const delivery = vi.spyOn(second.env, 'queueTask').mockImplementation((source, steps) => {
       expect(source).toBe('network');
       queued.push(steps);
       return { remove() {} };
@@ -137,7 +137,7 @@ describe('worklet module response sharing', () => {
     await second.started;
 
     // A new global replays the cached response without another download or pending-response task.
-    const laterDelivery = vi.spyOn(later.env.exec, 'queueTask');
+    const laterDelivery = vi.spyOn(later.env, 'queueTask');
     later.env.fetchWorkletScriptGraph(url, fetchClient, 'paintworklet', 'omit', responses, completeLater);
     expect(later.load).toHaveBeenCalledOnce();
     expect(laterDelivery).not.toHaveBeenCalled();
@@ -243,7 +243,7 @@ async function createModule() {
   const script: JavaScriptModuleScript = createScriptState(env);
   const record = new JSSourceTextModuleRecord(script);
   script.record = record;
-  const loading = env.exec.Promise.withResolvers(internalType<void>());
+  const loading = env.InternalPromise.withResolvers(internalType<void>());
   const started = Promise.withResolvers<ModuleGraphLoadingState>();
   const load = vi.spyOn(record, 'loadRequestedModules').mockImplementation((state) => {
     started.resolve(state);

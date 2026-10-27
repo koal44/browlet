@@ -49,7 +49,7 @@ describe('Web IDL extended-attribute integration', () => {
     expect(invocations).toEqual([first.env, first.env, first.env]);
     expect(second.implementation.value).toBe(3);
     expect(first.object.label).toBe('ordinary');
-    expect(() => { borrowed.get!.call({}); }).toThrow(second.env.realm.intrinsics.typeError);
+    expect(() => { borrowed.get!.call({}); }).toThrow(second.env.realm.TypeError);
     expect(preparations).toBe(1);
 
     // Preparation must not replace the declaration's type or mutate shared getter/setter metadata.

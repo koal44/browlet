@@ -19,7 +19,7 @@ describe('Web IDL promises', () => {
     const promise = requireIDLPromise(value);
     const javaScriptValue = ctx.getConverter(ctx.assembly.getIDLType(promiseType(idlType.DOMString)), ctx.realm).idlToJS(promise);
 
-    expect(javaScriptValue).toBeInstanceOf(realm.intrinsics.promise.constructor);
+    expect(javaScriptValue).toBeInstanceOf(realm.NativePromise);
     expect(javaScriptValue).not.toBeInstanceOf(Promise);
     expect(ctx.getConverter(ctx.assembly.getIDLType(promiseType(idlType.DOMString)), ctx.realm).idlToJS(promise)).toBe(javaScriptValue);
     await expect(javaScriptValue).resolves.toBe('fulfilled');
@@ -63,7 +63,7 @@ describe('Web IDL promises', () => {
 
     const failedConversion = ctx.jsToImpl('😞', implementationType<InternalPromise<string>>(promiseType(idlType.ByteString)));
     await expect(new Promise((resolve, reject) => failedConversion.observe(resolve, reject))).rejects
-      .toBeInstanceOf(ctx.realm.intrinsics.typeError);
+      .toBeInstanceOf(ctx.realm.TypeError);
   });
 
   it.each(['fulfilled', 'rejected'] as const)('rejects a thrown %s reaction', async (reaction) => {
@@ -153,10 +153,10 @@ describe('Web IDL promises', () => {
     promise.resolve(jsValue);
     const value = await promise.promise;
 
-    expect(promise.promise).toBeInstanceOf(first.realm.intrinsics.promise.constructor);
+    expect(promise.promise).toBeInstanceOf(first.realm.NativePromise);
     expect(value).toEqual([1, 2]);
-    expect(value).toBeInstanceOf(second.realm.intrinsics.array);
-    expect(value).not.toBeInstanceOf(first.realm.intrinsics.array);
+    expect(value).toBeInstanceOf(second.realm.Array);
+    expect(value).not.toBeInstanceOf(first.realm.Array);
   });
 
   it.each(['fulfilled', 'rejected'] as const)('preserves a %s reaction result while keeping the source promise realm', async (reaction) => {
@@ -172,10 +172,10 @@ describe('Web IDL promises', () => {
     }, second.realm);
     const value = await result.promise;
 
-    expect(result.promise).toBeInstanceOf(first.realm.intrinsics.promise.constructor);
+    expect(result.promise).toBeInstanceOf(first.realm.NativePromise);
     expect(value).toBe(converted);
-    expect(value).toBeInstanceOf(second.realm.intrinsics.array);
-    expect(value).not.toBeInstanceOf(first.realm.intrinsics.array);
+    expect(value).toBeInstanceOf(second.realm.Array);
+    expect(value).not.toBeInstanceOf(first.realm.Array);
   });
 
   itPassesWith('v26+', 'explicitQueues')('reacts without consulting author-defined Promise constructors', async () => {
@@ -203,7 +203,7 @@ describe('Web IDL promises', () => {
     const values = await toJavaScriptPromise(aggregate);
 
     expect(values).toEqual([2, 1]);
-    expect(values).toBeInstanceOf(realm.intrinsics.array);
+    expect(values).toBeInstanceOf(realm.Array);
 
     let synchronous = true;
     const empty = new Promise<void>((resolve, reject) => {

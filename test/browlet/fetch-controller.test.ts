@@ -20,7 +20,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
 
   it('uses AbortError for a missing record and for serialized undefined', () => {
     const target = createFetchWindow();
-    for (const record of [null, target.env.exec.serialize(undefined)]) {
+    for (const record of [null, target.env.serialize(undefined)]) {
       expectAbortError(target.deserialize(record), target);
     }
   });
@@ -40,8 +40,8 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
     expect(restored.value).toEqual(['original']);
     expect(restored.self).toBe(restored);
     expect(restored).not.toBe(reason);
-    expect(Object.getPrototypeOf(restored)).toBe(target.realm.intrinsics.object.prototype);
-    expect(Object.getPrototypeOf(restored.value)).toBe(target.realm.intrinsics.array.prototype);
+    expect(Object.getPrototypeOf(restored)).toBe(target.realm.Object.prototype);
+    expect(Object.getPrototypeOf(restored.value)).toBe(target.realm.Array.prototype);
   });
 
   it.each([
@@ -68,7 +68,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
     const source = createIsolatedFetchRealm();
     const target = createFetchWindow();
     // StructuredSerialize allows shared data; StructuredSerializeForStorage does not.
-    const SharedBuffer = source.realm.intrinsics.bufferSource.sharedArrayBuffer!;
+    const SharedBuffer = source.realm.SharedArrayBuffer!;
     source.abort(new SharedBuffer(4));
     expect(source.controller.serializedAbortReason).toMatchObject({ type: 'SharedArrayBuffer' });
 
@@ -76,7 +76,7 @@ describe('Fetch controller abort reasons through HTML structured data', () => {
   });
 });
 
-describe('RealmExecution structured serialization', () => {
+describe('environment structured serialization', () => {
   it('reuses a snapshot to reconstruct independent graphs in destination realms', () => {
     const source = createFetchWindow();
     const target = createFetchWindow();
@@ -86,16 +86,16 @@ describe('RealmExecution structured serialization', () => {
     const bytes = new window.Uint8Array([1, 2]);
     const value = Object.assign(new window.Object(), { bytes, alias: bytes }) as Value;
     value.self = value;
-    const record = source.env.exec.serialize(value);
+    const record = source.env.serialize(value);
     value.bytes[0] = 9;
 
-    const first = target.env.exec.deserialize(record) as Value;
-    const second = other.env.exec.deserialize(record) as Value;
+    const first = target.env.deserialize(record) as Value;
+    const second = other.env.deserialize(record) as Value;
     for (const [restored, destination] of [[first, target], [second, other]] as const) {
       expect([...restored.bytes]).toEqual([1, 2]);
       expect(restored.self).toBe(restored);
       expect(restored.alias).toBe(restored.bytes);
-      expect(Object.getPrototypeOf(restored)).toBe(destination.realm.intrinsics.object.prototype);
+      expect(Object.getPrototypeOf(restored)).toBe(destination.realm.Object.prototype);
       const destinationWindow = destination.realm.globalObject as unknown as typeof globalThis;
       expect(Object.getPrototypeOf(restored.bytes)).toBe(destinationWindow.Uint8Array.prototype);
       expect(Object.getPrototypeOf(restored.bytes.buffer)).toBe(destinationWindow.ArrayBuffer.prototype);

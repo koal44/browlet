@@ -8,7 +8,7 @@ export function parseHTMLDocument(
   source = '',
   env: BrowletEnvironment,
 ): DocumentImpl {
-  const document = env.exec.createDocument();
+  const document = env.createDocument();
   document.type = 'html';
   document.contentType = 'text/html';
   return new HTMLTreeAdapter(document).parse(source);

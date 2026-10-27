@@ -1,4 +1,4 @@
-export type { StreamsEnvironment, StreamsExecution } from './environment';
+export type { StreamsEnvironment } from './environment';
 export {
   extractHighWaterMark, extractSizeAlgorithm, type QueuingStrategy,
 } from './queuing-strategy';

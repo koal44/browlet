@@ -14,7 +14,7 @@ export function createSiblingWindow(first: Browlet): Window {
     topLevelCreationURL: env.creationURL, topLevelOrigin: env.origin,
   });
   const { window, realm } = siblingEnv;
-  window.setAssociatedDocument(realm.env.exec.createDocument());
+  window.setAssociatedDocument(realm.env.createDocument());
   const proxy = realm.windowProxy;
   proxy.setAssociatedWindow(window.env.realm.globalObject);
   return proxy.platform;

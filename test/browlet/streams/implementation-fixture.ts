@@ -1,4 +1,4 @@
-import { createEnvironment } from '../../js-engine/execution-fixture';
+import { createEnvironment } from '../../support/environment';
 import type { InternalPromise } from '../../../src/infra/promises';
 import { TestRealm } from '../../support/web-idl-realm';
 import {
@@ -24,7 +24,7 @@ export function createWritableStream(
 }
 
 export function createPromiseConstructor() {
-  return new TestRealm().Promise;
+  return new TestRealm().InternalPromise;
 }
 
 /** Observe an implementation result on the unit harness's queue. */

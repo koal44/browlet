@@ -76,7 +76,7 @@ export class AsyncIterableBinding {
     if (implementationBinding.asyncIteratorPrototype) return implementationBinding.asyncIteratorPrototype;
 
     const prototype = this.#binding.realm.createOrdinaryObject(
-      this.#binding.realm.intrinsics.iteration.asyncIteratorPrototype,
+      this.#binding.realm.asyncIteratorPrototype,
     );
     defineDataProperty(prototype, 'next', this.#binding.realm.createFunction(
       (thisArgument) => this.#next(assembled, thisArgument),
@@ -149,7 +149,7 @@ export class AsyncIterableBinding {
   }
 
   #throwTypeError(message: string): never {
-    throw new this.#binding.realm.intrinsics.typeError(message);
+    throw new this.#binding.realm.TypeError(message);
   }
 }
 
@@ -311,7 +311,7 @@ class AsyncIteratorRecord {
     );
     try {
       if (promise instanceof InternalPromise) {
-        methodBinding.realm.Promise.fromInternal(promise).observe(onFulfilled, onRejected);
+        methodBinding.realm.InternalPromise.fromInternal(promise).observe(onFulfilled, onRejected);
       } else {
         methodBinding.realm.observePromise(promise, onFulfilled, onRejected);
       }
@@ -339,7 +339,7 @@ class AsyncIteratorRecord {
     if (this.kind === 'key') return key;
     if (this.kind === 'value') return value;
 
-    const pair = Reflect.construct(methodBinding.realm.intrinsics.array, [2]);
+    const pair = Reflect.construct(methodBinding.realm.Array, [2]);
     defineDataProperty(pair, '0', key);
     defineDataProperty(pair, '1', value);
     return pair;

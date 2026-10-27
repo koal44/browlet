@@ -25,16 +25,13 @@ describe('Fetch controller lifecycle', () => {
     const env = createClientEnvironment();
     const { controller, abort } = createControllerFixture({
       ...env,
-      exec: {
-        ...env.exec,
-        serialize(value) {
-          expect(controller.state).toBe('aborted');
-          expect(controller.serializedAbortReason).toBeNull();
-          expect(value).toBe(error);
-          return record;
-        },
-        deserialize: vi.fn(),
+      serialize(value) {
+        expect(controller.state).toBe('aborted');
+        expect(controller.serializedAbortReason).toBeNull();
+        expect(value).toBe(error);
+        return record;
       },
+      deserialize: vi.fn(),
     });
     abort(error);
     expect(controller.serializedAbortReason).toBe(record);
@@ -71,11 +68,8 @@ describe('Fetch controller lifecycle', () => {
     const env = createClientEnvironment();
     const { controller, abort } = createControllerFixture({
       ...env,
-      exec: {
-        ...env.exec,
-        serialize: (value) => ({ value }),
-        deserialize: vi.fn(),
-      },
+      serialize: (value) => ({ value }),
+      deserialize: vi.fn(),
     });
     controller.terminate();
     abort('first');
@@ -88,7 +82,7 @@ describe('Fetch controller lifecycle', () => {
     const serialize = vi.fn((value: unknown) => ({ value }));
     const env = createClientEnvironment();
     const { abort } = createControllerFixture({
-      ...env, exec: { ...env.exec, serialize, deserialize: vi.fn() },
+      ...env, serialize, deserialize: vi.fn(),
     });
 
     abort();
@@ -101,11 +95,8 @@ describe('Fetch controller lifecycle', () => {
     const env = createClientEnvironment();
     const { deserialize } = createControllerFixture({
       ...env,
-      exec: {
-        ...env.exec,
-        serialize: vi.fn(),
-        deserialize: () => { throw new Error('Unavailable serialized type'); },
-      },
+      serialize: vi.fn(),
+      deserialize: () => { throw new Error('Unavailable serialized type'); },
     });
     const reason = deserialize({});
     expect(reason).toMatchObject({ name: 'AbortError', message: '' });
@@ -116,9 +107,9 @@ describe('Fetch controller lifecycle', () => {
     (mode) => {
       const env = createClientEnvironment();
       const other = createClientEnvironment();
-      const DOMException = env.exec.DOMException;
+      const DOMException = env.DOMException;
       Reflect.set(env.realm.globalObject, 'DOMException', () => { throw new Error('Replaced constructor'); });
-      env.exec.deserialize = () => {
+      env.deserialize = () => {
         if (mode === 'throws') throw new Error('Unavailable serialized type');
         return undefined;
       };
@@ -126,7 +117,7 @@ describe('Fetch controller lifecycle', () => {
       const reason = deserializeAbortReason(mode === 'absent' ? null : {}, env);
 
       expect(reason).toBeInstanceOf(DOMException);
-      expect(reason).not.toBeInstanceOf(other.exec.DOMException);
+      expect(reason).not.toBeInstanceOf(other.DOMException);
       expect(reason).toMatchObject({ name: 'AbortError', message: '' });
     },
   );
@@ -188,7 +179,7 @@ describe('Fetch networking task destinations', () => {
     const algorithm = vi.fn();
     const queueGlobalFetchTask = vi.fn();
     const env = createClientEnvironment();
-    env.exec.queueGlobalFetchTask = queueGlobalFetchTask;
+    env.queueGlobalFetchTask = queueGlobalFetchTask;
 
     queueFetchTask(algorithm, global, env);
 
@@ -201,7 +192,7 @@ describe('Fetch networking task destinations', () => {
     const queue = new ParallelQueue((steps) => drains.push(steps));
     const queueGlobalFetchTask = vi.fn();
     const env = createClientEnvironment();
-    env.exec.queueGlobalFetchTask = queueGlobalFetchTask;
+    env.queueGlobalFetchTask = queueGlobalFetchTask;
     const order: number[] = [];
 
     queueFetchTask(() => {

@@ -23,7 +23,7 @@ export function observeBrowletPromise<Result>(
 ): Promise<Result> {
   const realm = getRelevantRealm(global);
   const completion = Promise.withResolvers<Result>();
-  Reflect.apply(realm.intrinsics.promise.then, promise, [
+  Reflect.apply(realm.promiseThen, promise, [
     completion.resolve,
     completion.reject,
   ]);

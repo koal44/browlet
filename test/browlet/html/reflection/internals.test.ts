@@ -190,7 +190,7 @@ describe('ElementInternals reflection', () => {
     input.pop();
     const result = platform.targets;
     expect(result).toEqual([first.platform, first.platform, second.platform]);
-    expect(result).toBeInstanceOf(realm.intrinsics.array);
+    expect(result).toBeInstanceOf(realm.Array);
     expect(Object.isFrozen(result)).toBe(true);
     expect(platform.targets).toBe(result);
     expect(host.getAssociatedElements('targets', [ElementImpl], true)).toEqual([second.element]);

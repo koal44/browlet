@@ -3,7 +3,7 @@ import { runInNewContext } from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
 import { endOfQueue, IOQueue } from '../../src/encoding/io-queue';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { TestRealm } from '../support/web-idl-realm';
 
 describe('Encoding §3: I/O queues', () => {
@@ -127,7 +127,7 @@ describe('Encoding §3: I/O queues', () => {
     const bytes = queue.takeBytes(createEnvironment(realm));
     expect([...bytes]).toEqual([...source.subarray(count ? 1 : 0, count * 2)]);
     expect(Object.getPrototypeOf(bytes)).toBe(realm.evaluate('Uint8Array.prototype', 'queue-test.js'));
-    expect(Object.getPrototypeOf(bytes.buffer)).toBe(realm.intrinsics.bufferSource.arrayBuffer.prototype);
+    expect(Object.getPrototypeOf(bytes.buffer)).toBe(realm.ArrayBuffer.prototype);
     source.fill(99);
     if (count) expect(bytes[0]).toBe(1);
     expect(queue.readAvailable()).toBe(endOfQueue);

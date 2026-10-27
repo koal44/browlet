@@ -48,7 +48,7 @@ and task-end hooks leave Long Tasks/Long Animation Frames to their owners.
 Rendering's independent producer records an opportunity and queues the ordered
 update pipeline; the host refresh source does not run author callbacks directly.
 
-`env.exec.queueTask(source, steps, options?)` queues work for the execution owner
+`env.queueTask(source, steps, options?)` queues work for the execution owner
 using the shared source keys in Infra. `scripting/tasks.ts` maps those keys to HTML
 source identities. `BrowletRealm.queueGlobalTask()` captures the global's associated
 Document and routes through its Agent. Options carry timer nesting metadata.
@@ -58,7 +58,7 @@ not its current node document after adoption. Avoid implied-loop/Document calls.
 
 Fetch has an explicit callback destination, which can differ from the body
 stream's owner. Fetch's `queueFetchTask()` selects a parallel queue or calls
-`FetchExecution.queueGlobalFetchTask()`, composed in `bindings.ts` to route through
+`env.queueGlobalFetchTask()`, implemented on BrowletEnvironment to route through
 the destination global's BrowletRealm.
 Work performed in parallel re-enters the intended owner's task before touching
 realm-bound state.
@@ -95,9 +95,9 @@ without incumbent skip counters. Direct evaluation still supplies null HostDefin
 the creating/calling algorithms must attach the HTML script, and job hooks must
 later preserve it across asynchronous entry.
 
-The environment still owns its composed facilities as `env.exec`; its associated
-`JSRealm` owns the Node/V8 context used for evaluation. Neither is the new record.
-These facility names remain unchanged during the experiment. HTML's per-global
+The environment owns its binding-aware promises, allocation functions, and task
+delivery directly; its associated `JSRealm` owns the Node/V8 context used for
+evaluation. Neither is the modeled execution-context record. HTML's per-global
 state is held by global implementations under `BrowletGlobalObject`, not by the
 settings object or by EventTarget generally.
 Custom engine hooks capture callback registration,
@@ -114,6 +114,59 @@ stylesheet/readiness wait. The current adapter requests that checkpoint and
 resumes synchronous handlers in the same task; asynchronous continuations return
 through networking tasks. Complete script preparation and readiness remain with
 [the parser](../html/parser/ROADMAP.md).
+
+## Execution-context consumers
+
+The HTML source inventory distinguishes context records from engine frames and
+from the environment's execution facilities. The [scripting roadmap](ROADMAP.md)
+records implementation status; this inventory describes the consumers to preserve.
+
+| Record state | HTML use |
+| --- | --- |
+| Realm | Retained settings context, entry/current/incumbent selection, and captured job contexts |
+| Function | Set to null in the context created by HostMakeJobCallback; HTML otherwise does not inspect this field in the audited source |
+| ScriptOrModule | Find the topmost script-having context and follow its HostDefined to the HTML script |
+| Incumbent skip counter | Initially zero on each context; adjusted around callbacks and consulted by incumbent selection |
+
+Window, worker, and worklet setup retain the realm's context. Script preparation
+pushes that identity beneath the evaluated script's context and records settings
+on the current task; cleanup pops the matching entry and checkpoints when the
+stack empties. Ordinary JavaScript calls do not each invoke HTML preparation.
+
+| Derived answer | Consumers and distinctions |
+| --- | --- |
+| Current realm/settings | SharedArrayBuffer serialization policy; HTML/Image/Audio/Option construction; cross-origin Window/Location checks, frameElement, and access reporting; module resolution/import without a referrer; importScripts and pause timing. Capture the intended settings before parallel work. |
+| Entry settings | window.open source/base selection, Location access, document.open origin checks, origin extraction, and download request clients |
+| Incumbent settings | postMessage source/default origin, Location navigation source and activation, window.close checks, and JobCallback capture |
+| Active script | Topmost non-null ScriptOrModule, independent of incumbent skip counters. JobCallback and string-timer capture preserve script provenance and fetch options for later imports. |
+| Running script | The running context's ScriptOrModule: rejected-Promise tracking and exception reporting consult its settings and muted-errors state |
+| Relevant realm | Platform-object ownership, supplied by Web IDL rather than selected from this stack |
+
+`import.meta` receives its module record directly. `document.currentScript` is
+Document/script-element state, not an alias for ScriptOrModule.
+
+The remaining consumers have distinct effects:
+
+- HostMakeJobCallback captures incumbent settings and active-script provenance
+  separately. HostCallJobCallback restores the captured context inside callback
+  preparation/cleanup. Promise and finalization jobs need both scheduling and
+  callback provenance; supplying a queue alone does not establish the latter.
+- Navigation API entry-list/commit algorithms and Document reveal bracket work
+  with script preparation to control checkpoints between handlers and rendering.
+- The HTML parser checkpoints before custom-element construction when the stack
+  is empty, and at script end tags when permitted by speculative-parser state.
+- Event-handler compilation directly pushes/pops the retained realm context;
+  the resulting function's ScriptOrModule is null, avoiding accidental inheritance
+  from the script that triggered compilation.
+- Host-initiated serialization must establish entry before invoking author
+  accessors. An ordinary synchronous author API call already has that entry.
+- Spinning the event loop requires saving/restoring context identities across a
+  real suspension. Copying the modeled array cannot suspend native frames, and
+  clearing it cannot implement script abortion or suppress author finally blocks.
+
+The [runtime boundary](#node-v8-execution-contexts) retains the limits of manually
+supplied records and the unresolved callback-observer translation. Actual script
+termination remains unsupported; see [the killing-scripts audit](ROADMAP.md#html-8145-killing-scripts).
 
 ## Host commands and callback completion
 

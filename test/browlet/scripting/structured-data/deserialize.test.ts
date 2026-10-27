@@ -11,7 +11,7 @@ import {
 } from '../../../../src/web-idl/core/dom-exception';
 import type { BrowletRealm } from '../../../../src/browlet/scripting/realm';
 import { SandboxEnvironment, type BrowletEnvironment } from '../../../../src/browlet/environment';
-import { createBrowletExecution } from '../../../../src/browlet/bindings';
+import { createBrowletEnvironmentInit } from '../../../../src/browlet/bindings';
 import { AgentCluster } from '../../../../src/browlet/scripting/agents';
 import {
   structuredDeserialize,
@@ -186,12 +186,12 @@ describe('HTML structured deserialization', () => {
     const { source, sourceRealm, target, targetRealm } = createContexts({
       agentCluster,
     });
-    const buffer = sourceRealm.createSharedArrayBuffer([1, 2, 3, 4], growable ? 8 : undefined);
-    const graph = { buffer, again: buffer, view: sourceRealm.createView('Uint8Array', buffer, 0, 1) };
+    const buffer = sourceRealm.copySharedArrayBuffer([1, 2, 3, 4], growable ? 8 : undefined);
+    const graph = { buffer, again: buffer, view: new sourceRealm.Uint8Array(buffer, 0, 1) };
     const copy = cloneValue(graph, source, target) as typeof graph;
     const clone = copy.buffer;
-    const TargetSharedArrayBuffer = targetRealm.intrinsics.bufferSource.sharedArrayBuffer!;
-    const SourceSharedArrayBuffer = sourceRealm.intrinsics.bufferSource.sharedArrayBuffer!;
+    const TargetSharedArrayBuffer = targetRealm.SharedArrayBuffer!;
+    const SourceSharedArrayBuffer = sourceRealm.SharedArrayBuffer!;
 
     expect(copy.again).toBe(clone);
     expect(copy.view.buffer).toBe(clone);
@@ -439,8 +439,8 @@ describe('HTML structured deserialization', () => {
     const bindings = new BindingWorld<BrowletEnvironment>([containerIDL]);
     const sourceRealm = createManualRealm();
     const targetRealm = createManualRealm();
-    const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
-    const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+    const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
+    const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
     const original = source.createPlatformRecord(containerIDL.name)!;
     source.unwrap(original.platformObject, ContainerImpl)!.child = original.platformObject;
 
@@ -479,8 +479,8 @@ function createContexts(options: {
   const bindings = new BindingWorld<BrowletEnvironment>([]);
   const sourceRealm = createManualRealm({ crossOriginIsolated: true });
   const targetRealm = createManualRealm({ crossOriginIsolated: true });
-  const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
-  const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletExecution(ctx)));
+  const source = bindings.register(sourceRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
+  const target = bindings.register(targetRealm, (ctx) => new SandboxEnvironment(ctx.realm, createBrowletEnvironmentInit(ctx)));
   source.install(sourceRealm.globalObject);
   target.install(targetRealm.globalObject);
   const agentCluster = options.agentCluster ?? new AgentCluster('concrete');

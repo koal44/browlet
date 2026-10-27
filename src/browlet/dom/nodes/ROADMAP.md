@@ -167,6 +167,30 @@ Keep the existing attribute/NamedNodeMap tests and
 [`reflection/`](../../../../test/browlet/html/reflection/) as behavioral constraints
 when changing either representation. Neither optimization is selected yet.
 
+## Collection and lookup performance
+
+The DOM 4F review left these measurement questions, not established bottlenecks:
+
+- Compare implementation iteration with projected NodeList access. Repeated
+  `length`/`item()` refresh checks may be avoidable, but mutation between iterator
+  steps must remain visible. Measure cold materialization, warm reads, and reads
+  after unrelated mutations separately before changing document-wide invalidation.
+- Measure named-property enumeration separately: collecting supported IDs/names
+  allocates even when the underlying live collection is already current.
+- Check class-name lookup's query parsing, quirks-only lowercasing, and per-element
+  tokenization. Include empty queries and adoption; preserve ASCII-only quirks rules.
+- Check whether static selector results need a second array copy. Establish
+  ownership first; Selectlet also supports a NodeList-like result representation.
+  Preserve each document's engine reuse and static-result semantics.
+- Compare namespace strings with alternative representations only with arbitrary
+  and dynamically supplied URIs. Include interning/conversion costs at DOM,
+  parser, Web IDL, and selector boundaries; constant-only comparisons are insufficient.
+
+The [isolated traversal comparison](../../../../node-compat/experimental/dom-traversal/README.md)
+measures pointer walks, generators, and arrays, not these collection/projection
+costs. Existing collections, lookups, selectors, and tree-mixin tests constrain
+any optimization; profiling must justify additional caches or ownership layers.
+
 ## Collections, tree mixins, and selectors (4F)
 
 `Node.childNodes` and `ParentNode.children` retain stable collection objects.
@@ -465,7 +489,7 @@ The approved choices are retained beside the implementation:
   tree keep their ordinary tree-order update; previous slots in other trees are
   refreshed afterward. The regression covers the list, event path, and notification.
 
-The browser probe is retained in `scratch/dom-4h-probe.mjs` for these disagreements.
+The browser probe is retained in `node-compat/experimental/browser-probes/dom/shadow-slots.mjs` for these disagreements.
 
 ## Node and Document completion (4I)
 
@@ -520,7 +544,7 @@ The 2026-10-10 probe used Chromium 149.0.7827.55, Firefox 151.0, and WebKit 26.5
   None of the installed engines exposes the new pseudo-attribute API, so this
   choice has public Browlet regressions but no browser oracle yet.
 
-Both choices were reviewed and approved. `scratch/dom-4i-probe.mjs` retains the probe.
+Both choices were reviewed and approved. `node-compat/experimental/browser-probes/dom/processing-instructions.mjs` retains the probe.
 The XML stylesheet parser represents pseudo-attributes as an ordered
 `Map<string, string>` and signals a parse error with null. ProcessingInstruction
 owns the map directly and replaces malformed input with an empty map; parsing

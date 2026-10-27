@@ -24,22 +24,22 @@ export function prepareCustomElementConstructor(
 
   return (ctx, newTarget, activeFunction) => {
     const env = ctx.getEnvironment();
-    if (newTarget === activeFunction) throw new env.exec.TypeError('Illegal constructor');
+    if (newTarget === activeFunction) throw new env.realm.TypeError('Illegal constructor');
 
     const activeRegistry = newTarget === undefined ? undefined :
       env.realm.agent.activeCustomElementConstructorMap.get(newTarget);
     const registry = activeRegistry ?? env.window.getAssociatedDocument().customElementRegistry;
     const definition = registry?.getDefinitionForConstructor(newTarget);
     if (definition === undefined || newTarget === undefined) {
-      throw new env.exec.TypeError('No custom element definition for this constructor');
+      throw new env.realm.TypeError('No custom element definition for this constructor');
     }
 
     let isValue: string | null = null;
     if (definition.localName === definition.name) {
-      if (!autonomous) throw new env.exec.TypeError('Autonomous custom elements must extend HTMLElement');
+      if (!autonomous) throw new env.realm.TypeError('Autonomous custom elements must extend HTMLElement');
     } else {
       if (!validLocalNames.has(definition.localName)) {
-        throw new env.exec.TypeError('Custom element local name does not use this interface');
+        throw new env.realm.TypeError('Custom element local name does not use this interface');
       }
       isValue = definition.name;
     }
@@ -62,7 +62,7 @@ export function prepareCustomElementConstructor(
 
     // Upgrade owns pushing/popping; reentrant prototype access can change the last entry.
     const element = stack[stack.length - 1]!;
-    if (element === alreadyConstructed) throw new env.exec.TypeError('Custom element is already constructed');
+    if (element === alreadyConstructed) throw new env.realm.TypeError('Custom element is already constructed');
     const platform = ctx.project(ElementImpl, element);
     // SPEC_CLASH(html-constructor-nonextensible-upgrade): follow HTML and Chromium; Firefox/WebKit throw on false.
     Reflect.setPrototypeOf(platform, prototype);

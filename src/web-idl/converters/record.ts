@@ -32,7 +32,7 @@ export class RecordConverter<Type extends IDLRecordType = IDLRecordType> extends
     const convertValue = this.forType(type.valueType).getIDLToJSSteps();
     return (value) => {
       if (!isObject(value)) throw new InternalError('IDL record is not an object');
-      const result = this.realm.createOrdinaryObject(this.realm.intrinsics.objectPrototype);
+      const result = this.realm.createOrdinaryObject(this.realm.objectPrototype);
       if (isMap(value)) {
         for (const [key, entryValue] of value) {
           defineDataProperty(result, key, convertValue(entryValue));

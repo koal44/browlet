@@ -80,7 +80,7 @@ describe('Web IDL global platform objects', () => {
     const names = ['label', 'read', 'toString'];
     const descriptors = names.map((name) => Object.getOwnPropertyDescriptor(global, name));
     expect(Reflect.getOwnPropertyDescriptor(global, 'label')?.get)
-      .toBeInstanceOf(realm.intrinsics.function);
+      .toBeInstanceOf(realm.Function);
 
     binding.install(global);
     expect(names.map((name) => Object.getOwnPropertyDescriptor(global, name))).toEqual(descriptors);
@@ -143,7 +143,7 @@ describe('Web IDL global platform objects', () => {
     getMemberBinding(interfaceBinding, namedItem).namedPropertySteps = {
       getSupportedPropertyNames: () => new Set(values.keys()),
     };
-    const implementation = Reflect.construct(realm.intrinsics.object, []);
+    const implementation = Reflect.construct(realm.Object, []);
     const record = binding.projectGlobalRecord(implementation, binding.resolveInterface('Window'));
     const global = record.platformObject!;
     const exposed = binding.getExposedGlobalProperties();
@@ -243,7 +243,7 @@ describe('Web IDL global platform objects', () => {
       getSupportedPropertyNames: () => new Set(['named']),
     };
     const global = binding.projectGlobalRecord(
-      Reflect.construct(realm.intrinsics.object, []),
+      Reflect.construct(realm.Object, []),
       binding.resolveInterface('Window'),
     ).platformObject!;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
@@ -296,7 +296,7 @@ describe('Web IDL global platform objects', () => {
     getMemberBinding(interfaceBinding, forwarded).attributeSteps = {
       get: () => forwardedTarget,
     };
-    const implementation = Reflect.construct(realm.intrinsics.object, []);
+    const implementation = Reflect.construct(realm.Object, []);
     values.set(implementation, 'initial');
     const global = binding.projectGlobalRecord(
       implementation,
@@ -339,7 +339,7 @@ describe('Web IDL global platform objects', () => {
     );
     getMemberBinding(binding.getImplementationBinding(binding.resolveInterface(definition.name)), stringifier).stringificationBehavior = () => 'global stringifier';
     const global = binding.projectGlobalRecord(
-      Reflect.construct(realm.intrinsics.object, []),
+      Reflect.construct(realm.Object, []),
       binding.resolveInterface('Window'),
     ).platformObject!;
     const toString = Reflect.get(global, 'toString') as unknown;
@@ -349,15 +349,15 @@ describe('Web IDL global platform objects', () => {
 
     expect(Reflect.apply(toString, global, [])).toBe('global stringifier');
     expect(() => { Reflect.apply(toString, null, []); })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
     expect(() => { Reflect.apply(toString, undefined, []); })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 
   it('uses immutable prototype exotics by default', () => {
     const { binding, realm } = createGlobalBinding();
     const record = binding.projectGlobalRecord(
-      Reflect.construct(realm.intrinsics.object, []),
+      Reflect.construct(realm.Object, []),
       binding.resolveInterface('TestGlobal'),
     );
     const global = record.platformObject!;
@@ -397,7 +397,7 @@ describe('Web IDL global platform objects', () => {
       (ctx) => ({ realm: ctx.realm }),
     );
     const global = binding.projectGlobalRecord(
-      Reflect.construct(realm.intrinsics.object, []),
+      Reflect.construct(realm.Object, []),
       binding.resolveInterface('PlainGlobal'),
     ).platformObject!;
     const globalPrototype = requireObject(Reflect.getPrototypeOf(global));
@@ -432,7 +432,7 @@ describe('Web IDL global platform objects', () => {
       getSupportedPropertyNames: () => new Set(['answer']),
     };
     const global = binding.projectGlobalRecord(
-      Reflect.construct(realm.intrinsics.object, []),
+      Reflect.construct(realm.Object, []),
       binding.resolveInterface('PartialGlobal'),
     ).platformObject!;
 
@@ -442,7 +442,7 @@ describe('Web IDL global platform objects', () => {
   it('allows prototype changes when the realm opts into them', () => {
     const { binding, realm } = createGlobalBinding(true);
     const record = binding.projectGlobalRecord(
-      Reflect.construct(realm.intrinsics.object, []),
+      Reflect.construct(realm.Object, []),
       binding.resolveInterface('TestGlobal'),
     );
     const global = record.platformObject!;
@@ -547,7 +547,7 @@ function requireAccessor(
 
 function classString(realm: Realm, value: object): string {
   const toString = Reflect.get(
-    realm.intrinsics.objectPrototype,
+    realm.objectPrototype,
     'toString',
   ) as (this: unknown) => string;
   return Reflect.apply(toString, value, []);

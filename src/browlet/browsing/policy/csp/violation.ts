@@ -78,7 +78,7 @@ export class CSPViolation {
     let target = this.element;
     // SPEC_CLASH(csp-violation-task-source): CSP leaves the source unnamed;
     // WebKit uses DOM manipulation, Blink networking. Follow WebKit here.
-    env.exec.queueTask('dom-manipulation', () => {
+    env.queueTask('dom-manipulation', () => {
       const document = this.#document;
       if (target !== null && target.getShadowIncludingRoot() !== document) target = null;
       const body = new CSPViolationReportBodyImpl(this);

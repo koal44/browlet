@@ -150,7 +150,7 @@ export class ResourceReader {
     if (body === null) {
       complete.resolve(undefined);
     } else {
-      body.stream.env.exec.queueTask('network', () => {
+      body.stream.env.queueTask('network', () => {
         try {
           body.stream.cancelInternal(reason).observe(complete.resolve, complete.reject);
           this.#releaseStreamReader();
@@ -176,11 +176,11 @@ export class ResourceReader {
       return result.promise;
     }
     const env = body.stream.env;
-    env.exec.queueTask('network', () => {
+    env.queueTask('network', () => {
       if (this.#end !== undefined) return;
       try {
         this.#streamReader ??= body.stream.getDefaultReader();
-        body.readChunk(this.#streamReader, env.exec.global,
+        body.readChunk(this.#streamReader, env.realm.globalObject,
           (chunk) => {
             // Fetch may have queued this delivery before cancellation began.
             if (this.#end !== undefined) return;

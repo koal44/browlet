@@ -70,9 +70,9 @@ describe('Web IDL initial objects', () => {
     );
 
     expect(() => Reflect.apply(Interface, undefined, []))
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
     expect(() => Reflect.construct(Interface, []))
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 
   it('keeps a legacy-hidden interface prototype accessible through instances', () => {
@@ -154,7 +154,7 @@ describe('Web IDL initial objects', () => {
     expect(Reflect.apply(requireFunction(Reflect.get(first, 'toString')), first, [])).toBe('changed');
     expect(Reflect.get(second, 'label')).toBe('hidden');
     expect(Reflect.getOwnPropertyDescriptor(first, 'label')?.get)
-      .toBeInstanceOf(realm.intrinsics.function);
+      .toBeInstanceOf(realm.Function);
 
     ctx.install(realm.globalObject);
     expect(Object.getOwnPropertyDescriptors(first)).toEqual(firstDescriptors);
@@ -192,8 +192,8 @@ describe('Web IDL initial objects', () => {
       const field = name === 'label' ? 'get' : 'value';
       const method: unknown = Reflect.get(descriptor, field);
       const foreignMethod: unknown = Reflect.get(foreignDescriptor, field);
-      expect(method).toBeInstanceOf(firstRealm.intrinsics.function);
-      expect(foreignMethod).toBeInstanceOf(secondRealm.intrinsics.function);
+      expect(method).toBeInstanceOf(firstRealm.Function);
+      expect(foreignMethod).toBeInstanceOf(secondRealm.Function);
       expect(foreignMethod).not.toBe(method);
     }
     Reflect.set(constructed, 'label', 'changed');
@@ -279,7 +279,7 @@ describe('Web IDL initial objects', () => {
     );
     const object = Reflect.construct(LegacyWidget, [7]);
 
-    expect(LegacyWidget).toBeInstanceOf(realm.intrinsics.function);
+    expect(LegacyWidget).toBeInstanceOf(realm.Function);
     expect({ length: LegacyWidget.length, name: LegacyWidget.name }).toEqual({
       length: 1,
       name: 'LegacyWidget',
@@ -297,7 +297,7 @@ describe('Web IDL initial objects', () => {
     expect(() => {
       Reflect.apply(LegacyWidget, undefined, [7]);
     })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 
   it('includes legacy factory functions declared on partial interfaces', () => {
@@ -381,7 +381,7 @@ describe('Web IDL initial objects', () => {
       const factory = requireFunction(Reflect.get(realm.globalObject, 'LegacyWidget'));
       factories.push(factory);
 
-      expect(factory).toBeInstanceOf(realm.intrinsics.function);
+      expect(factory).toBeInstanceOf(realm.Function);
       expect(factory.length).toBe(1);
       expect(factory.prototype).toBe(binding.getImplementationBinding(assembled).getInterfacePrototypeObject());
       expect(Reflect.get(Reflect.construct(factory, [2 ** 32 + 7]), 'value')).toBe(`${name}:number:7`);
@@ -516,7 +516,7 @@ describe('Web IDL initial objects', () => {
       length: declaredToString.length,
       name: declaredToString.name,
     }).toEqual({ length: 0, name: 'toString' });
-    expect(declaredToString).toBeInstanceOf(realm.intrinsics.function);
+    expect(declaredToString).toBeInstanceOf(realm.Function);
     expect(Reflect.getOwnPropertyDescriptor(
       Reflect.getPrototypeOf(declared) as object,
       'toString',
@@ -528,7 +528,7 @@ describe('Web IDL initial objects', () => {
     expect(() => {
       Reflect.apply(declaredToString, {}, []);
     })
-      .toThrow(realm.intrinsics.typeError);
+      .toThrow(realm.TypeError);
   });
 });
 

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import { BlobImpl, FileImpl, FileListImpl } from '../../src/file/index';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 
 const env = createEnvironment();
 

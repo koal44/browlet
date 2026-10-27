@@ -1,5 +1,5 @@
-import { createEnvironment } from '../js-engine/execution-fixture';
-import type { AbortSignal } from '../../src/infra/execution';
+import { createEnvironment } from '../support/environment';
+import type { AbortSignal } from '../../src/infra/abort';
 import type { FetchEnvironment } from '../../src/fetch/environment';
 import { fetchIDLDefinitions } from '../../src/fetch/index';
 import { fetchGlobalScopeIDL } from '../../src/fetch/fetch-global';

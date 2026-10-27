@@ -105,7 +105,7 @@ export class BlobData {
           // eslint-disable-next-line no-restricted-syntax -- Resume on Node's queue before queuing the file-reading task below.
           const bytes = await this.read(offset, byteLength);
           offset += bytes.length;
-          env.exec.queueTask('file', () => {
+          env.queueTask('file', () => {
             if (canceled) return;
             try {
               // Byte-stream enqueue transfers this read's storage into the stream runtime.
@@ -117,19 +117,19 @@ export class BlobData {
           });
         }
         if (!canceled) {
-          env.exec.queueTask('file', () => {
+          env.queueTask('file', () => {
             if (!canceled) stream.close();
           });
         }
       } catch (error) {
-        env.exec.queueTask('file', () => {
+        env.queueTask('file', () => {
           if (canceled) return;
           canceled = true;
           stream.error(error instanceof BlobReadFailure ? createReadException(error) : error);
         });
       }
     };
-    env.exec.runInParallel(() => { void readChunks(); });
+    env.runInParallel(() => { void readChunks(); });
     return stream;
   }
 

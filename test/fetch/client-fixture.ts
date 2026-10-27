@@ -2,7 +2,7 @@ import { idlType } from '../../src/web-idl/core/index';
 import { internalType } from '../../src/infra/promises';
 import { NodePromise, queueNodeTask } from '../../src/browlet/integration/node';
 import type {
-  FetchEnvironment, FetchExecution, FetchPolicyContainer, FetchUserAgent,
+  FetchEnvironment, FetchPolicyContainer, FetchUserAgent,
 } from '../../src/fetch/environment';
 import { FetchGroup } from '../../src/fetch/group';
 import { HTTPCacheStore } from '../../src/fetch/cache-http';
@@ -12,20 +12,21 @@ import { CookieStore } from '../../src/http/index';
 import { utf8Decode, utf8Encode } from '../../src/encoding/index';
 import { obtainSite, type Origin } from '../../src/url/index';
 import { obtainURLOrigin, parseURL } from '../../src/url/url';
-import { createEnvironment, type TestEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment, type TestEnvironment } from '../support/environment';
 import type { TestRealm } from '../support/web-idl-realm';
 
 export function createClientEnvironment(
   url = 'https://example.test/', env: TestEnvironment = createEnvironment(),
 ): ClientEnvironment {
   const topLevelCreationURL = parseURL(url).url!;
-  const queueGlobalFetchTask: FetchExecution['queueGlobalFetchTask'] = (_global, steps) => { setImmediate(steps); };
-  const reportCSPViolation: FetchExecution['reportCSPViolation'] = () => {
+  const queueGlobalFetchTask: FetchEnvironment['queueGlobalFetchTask'] = (_global, steps) => { setImmediate(steps); };
+  const reportCSPViolation: FetchEnvironment['reportCSPViolation'] = () => {
     throw new Error('This fixture has no CSP reporting implementation');
   };
   return {
     ...env,
-    exec: Object.assign(env.exec, { queueGlobalFetchTask, reportCSPViolation }),
+    queueGlobalFetchTask,
+    reportCSPViolation,
     isWindow: false,
     isServiceWorker: false,
     isTopLevelWindow: false,
@@ -35,8 +36,8 @@ export function createClientEnvironment(
     markResourceTiming() {},
     consumePreloadedResource: () => false,
     parseURL(input, base, encoding) { return this.userAgent.parseURL(input, base, encoding); },
-    parseJSONBytes(bytes) { return this.exec.parseJSON(utf8Decode(bytes)); },
-    serializeJavaScriptValueToJSONBytes(value) { return utf8Encode(this.exec.serializeJavaScriptValueToJSONString(value)); },
+    parseJSONBytes(bytes) { return this.realm.parseJSON(utf8Decode(bytes)); },
+    serializeJavaScriptValueToJSONBytes(value) { return utf8Encode(this.realm.serializeJavaScriptValueToJSONString(value)); },
     apiBaseURL: topLevelCreationURL,
     creationURL: topLevelCreationURL,
     origin: obtainURLOrigin(topLevelCreationURL),
@@ -59,7 +60,6 @@ export function createClientEnvironment(
 // These test clients have known origins; reserved-record derivation is tested in HTML.
 export interface ClientEnvironment extends FetchEnvironment, TestEnvironment {
   realm: TestRealm;
-  exec: FetchExecution;
   topLevelOrigin: Origin;
 }
 

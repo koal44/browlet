@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import type { Encoding } from '../../src/encoding/encodings';
 import { endOfQueue, IOQueue, processQueue } from '../../src/encoding/io-queue';
 import { getSingleByteCodec } from '../../src/encoding/codecs/single-byte';
-import { createEnvironment } from '../js-engine/execution-fixture';
+import { createEnvironment } from '../support/environment';
 import { singleByteDecodeDigests } from './gen/single-byte-vectors';
 
 const encodings = Object.keys(singleByteDecodeDigests) as (keyof typeof singleByteDecodeDigests)[];

@@ -145,7 +145,7 @@ export function readErrorStack(
   if (!descriptor) return;
   if ('value' in descriptor) return descriptor.value;
 
-  const getter = realm.intrinsics.errorStack;
+  const getter = realm.errorStack;
   if (!getter || descriptor.get !== getter) return;
   try {
     return Reflect.apply(getter, value, []);
