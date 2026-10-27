@@ -5,7 +5,7 @@ import { matchesExposure } from '../web-idl/index';
 import type { SelectletEnvironment } from '../selectlet/index';
 import { utf8Decode, utf8Encode, type Encoding } from '../encoding/index';
 import {
-  obtainSite, obtainURLOrigin, serializeURL, urlsEqual,
+  obtainSite, obtainURLOrigin, serializeURL, urlsEqual, URLImpl,
   type Origin, type URLRecord,
 } from '../url/index';
 import {
@@ -34,10 +34,14 @@ import type { ReportImpl } from './reporting/index';
 import { InsecureRequestsPolicy, type PolicyContainer } from './browsing/policy/index';
 import type { AbortSignalImpl } from './dom/abort/index';
 import { NodeImpl, type DocumentImpl } from './dom/nodes/index';
+import { HTMLAnchorElementImpl } from './dom/nodes/html/text/index';
+import { HTMLAreaElementImpl } from './dom/nodes/html/embedded/index';
 import type { DOMEnvironment, DOMExecution } from './dom/index';
 import { generateReport } from './reporting/generate';
+import { WindowImpl } from './browsing/window/index';
+import { MessageEventImpl } from './communication/index';
+import { OriginImpl } from './browsing/index';
 import type { WindowOrWorkerGlobalScopeMixin } from './global-scope';
-import type { WindowImpl } from './browsing/window/index';
 import type { BrowsingContext, Traversable } from './browsing/navigation/index';
 import type { UserAgent } from './user-agent';
 import type { ModuleResponsesMap } from './worklets/index';
@@ -221,6 +225,18 @@ export abstract class BrowletEnvironment extends BrowletEnvironmentBase implemen
   /** The owning global's Document, when this is a Window environment. */
   getAssociatedDocument(): DocumentImpl | null {
     return this.realm.getAssociatedDocument();
+  }
+
+  /** Extract an origin using this environment for the caller's access check. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#extract-an-origin
+  extractOrigin(value: unknown): Origin | null {
+    if (OriginImpl.is(value)) return value.extractOrigin();
+    if (URLImpl.is(value)) return value.getOrigin();
+    if (WindowImpl.is(value)) return value.extractOrigin(this);
+    if (HTMLAnchorElementImpl.is(value) || HTMLAreaElementImpl.is(value) || MessageEventImpl.is(value)) {
+      return value.extractOrigin();
+    }
+    return null;
   }
 
   /** Report an exception at this environment's global, unless its error event is canceled. */

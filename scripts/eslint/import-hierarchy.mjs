@@ -55,11 +55,13 @@ export const layers = [
   ['browlet/html/reflection'],
   ['browlet/dom/abort', 'browlet/dom/nodes'],
   ['browlet/dom', 'browlet/performance'],
-  ['browlet/reporting/generate'],
+  ['browlet/reporting/generate', 'browlet/browsing/window', 'browlet/communication'],
+  // Origin declarations name the platform implementations; environments dispatch their extraction.
+  ['browlet/browsing'],
   // Full browser settings and global APIs compose the lower facilities.
   ['browlet/environment', 'browlet/global-scope'],
   ['browlet/html/parser', 'browlet/scripting/structured-data'],
-  ['browlet/html', 'browlet/browsing/window', 'browlet/workers', 'browlet/automation'],
+  ['browlet/html', 'browlet/workers', 'browlet/automation'],
   // Navigation composes resource consumption with document creation and parsing.
   ['browlet/loader'],
   ['browlet/browsing/navigation'],

@@ -1,4 +1,4 @@
-import type { Domain, Host } from './host';
+import type { Host } from './host';
 
 /*
  * Origins are defined by HTML, while the URL Standard defines how a URL's
@@ -16,12 +16,13 @@ export type OpaqueOrigin = {
   potentiallyTrustworthy: boolean;
 };
 
+// https://html.spec.whatwg.org/multipage/browsers.html#concept-origin-tuple
 export type TupleOrigin = {
   kind: 'tuple';
   scheme: string;
   host: Host;
   port: number | null;
-  domain: Domain | null;
+  domain: Host | null;
 };
 
 export type SchemeAndHost = [scheme: string, host: Host];

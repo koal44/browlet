@@ -370,7 +370,7 @@ They belong with their consuming subsystem rather than in one miscellaneous
 
 | Owner | Supporting Web IDL surface | Timing |
 | --- | --- | --- |
-| `text/hyperlink.ts` | `HyperlinkElementUtils` and `HTMLHyperlinkElementUtils`, shared by `a` and `area` | Add with the first complete anchor implementation |
+| `text/hyperlink.ts` | `HyperlinkElementUtils` and `HTMLHyperlinkElementUtils`, shared by `a` and `area` | Both mixin declarations/includes and hreflang/type/target reflection are registered. Nullable URL state and origin extraction are present for §7.1.1.3. `setURL()` is an explicit stub; creation, href/base changes, reinitialization, and the public URL members await §4.6. |
 | `embedded/media.ts` with [`media/`](../../../media/ROADMAP.md) support types | HTMLMediaElement stays with elements; MediaError, TimeRanges, tracks/lists, and media state belong to the shared media area | Deferred to the media roadmap; Blob URL integration proceeds independently with Blob support |
 | `forms/` | `ValidityState`, `SelectionMode`, `SubmitEvent`, `FormDataEvent`, and their dictionaries; consume rather than redefine the external `FormData` API | Add with form association, validation, and submission |
 | `scripting/slot.ts` | `AssignedNodesOptions` | Present beside slot behavior; it does not require a runtime class |

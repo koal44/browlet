@@ -4,6 +4,7 @@ import {
   arg, onError, defineInterfaceMixin, definePartialInterfaceMixin, defineTypedef,
   emptyDictionary, idlType, integer, op, reference, roAttr, tsType, union, xattr, type VoidFunction,
 } from '../web-idl/core/index';
+import { areSameOriginDomain, type Origin } from '../url/index';
 import { fetchForGlobal, type FetchRequestInfo, type FetchRequestInit, type FetchResponse, type ResponseImpl } from '../fetch/index';
 
 import { GlobalTimers, type TimerAction } from './scripting/index';
@@ -62,6 +63,16 @@ export class WindowOrWorkerGlobalScopeMixin {
   // https://html.spec.whatwg.org/multipage/webappapis.html#dom-issecurecontext
   get isSecureContext(): boolean {
     return this.env.isSecureContext;
+  }
+
+  // https://html.spec.whatwg.org/multipage/webappapis.html#dom-crossoriginisolated
+  get crossOriginIsolated(): boolean {
+    return this.env.crossOriginIsolatedCapability;
+  }
+
+  // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
+  extractOrigin(entryEnv: BrowletEnvironment): Origin | null {
+    return areSameOriginDomain(this.env.origin, entryEnv.origin) ? this.env.origin : null;
   }
 
   setTimeout(
@@ -221,6 +232,7 @@ export const windowOrWorkerGlobalScopeIDL = defineInterfaceMixin({
   name: 'WindowOrWorkerGlobalScope',
   members: [
     roAttr('isSecureContext', idlType.boolean),
+    roAttr('crossOriginIsolated', idlType.boolean),
     op('reportError', idlType.undefined, [arg('e', idlType.any)]),
     op('setTimeout', idlType.long, [
       arg('handler', reference('TimerHandler'), onError('report')),

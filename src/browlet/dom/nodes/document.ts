@@ -11,7 +11,8 @@ import {
 import { createSelectlet, type Selectlet } from '../../../selectlet/index';
 import { decode, getEncoding, utf8DecodeWithoutBOM, utf8Encode, type Encoding } from '../../../encoding/index';
 import {
-  aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, serializeOrigin, serializeURL,
+  aboutBlankURL, areSameOrigin, areSameSite, copyURL, createOpaqueOrigin, effectiveDomain,
+  isRegistrableDomainSuffixOfOrEqualTo, parseHost, serializeHost, serializeOrigin, serializeURL,
   type Origin, type URLRecord,
 } from '../../../url/index';
 import { HTTPCookie, parseHTTPDate, parseLinkHeader, type CookieHost } from '../../../http/index';
@@ -42,9 +43,9 @@ import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } f
 // The observer retains registrations; rendering input and scheduled notification remain provisional.
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
 import type { NavigationTimingRecord } from '../../performance/index';
+import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { DocumentParser } from '../../html/parser/index';
-import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
 import type {
   BrowsingContext, Navigable, NotRestoredReasonDetails, NavigationParams,
 } from '../../browsing/navigation/index';
@@ -318,6 +319,34 @@ export class DocumentImpl extends NodeImpl {
   // https://html.spec.whatwg.org/#dom-document-defaultview
   get defaultView(): WindowProxyHandle | null {
     return this.browsingContext?.windowProxy ?? null;
+  }
+
+  /** Effective security domain; assignment can relax a site-keyed tuple origin. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#dom-document-domain
+  get domain(): string {
+    const domain = effectiveDomain(this.origin);
+    return domain === null ? '' : serializeHost(domain);
+  }
+
+  set domain(value: string) {
+    if (this.browsingContext === null) {
+      throw new DOMExceptionImpl('A document without a browsing context cannot set its domain', DOMExceptionNames.security);
+    }
+    if (this.activeSandboxingFlagSet.has('sandboxed-document-domain')) {
+      throw new DOMExceptionImpl('The document is sandboxed against domain relaxation', DOMExceptionNames.security);
+    }
+    const origin = this.origin;
+    const domain = effectiveDomain(origin);
+    if (origin.kind === 'opaque' || domain === null) {
+      throw new DOMExceptionImpl('An opaque-origin document cannot set its domain', DOMExceptionNames.security);
+    }
+    if (!isRegistrableDomainSuffixOfOrEqualTo(value, domain)) {
+      throw new DOMExceptionImpl('The value is not a registrable domain suffix or equal host', DOMExceptionNames.security);
+    }
+    const cluster = this.env.realm.agent.agentCluster;
+    if (cluster === null) throw new InternalError('Document domain relaxation requires an agent cluster');
+    if (cluster.isOriginKeyed) return;
+    origin.domain = parseHost(value).host!;
   }
 
   /** Whether this document cannot participate in the document.cookie API. */
@@ -2036,7 +2065,8 @@ export const htmlDocumentIDL = definePartialInterface({
   // The complete member/dependency inventory is in html/ROADMAP.md#section-311-document-state-and-declarations.
   members: [
     // TODO(HTML §§8.5–8.6): parseHTMLUnsafe and parseHTML need parser/sanitizer option types and algorithms.
-    // TODO(HTML §7.2): location and domain need relevant-document navigation/security algorithms.
+    // TODO(HTML §7.2): location needs relevant-document navigation/security algorithms.
+    attr('domain', idlType.USVString),
     roAttr('referrer', idlType.USVString),
     attr('cookie', idlType.USVString),
     roAttr('lastModified', idlType.DOMString),

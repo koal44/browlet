@@ -113,6 +113,11 @@ released; the draft does not settle retry policy.
 
 ## Remaining work
 
+- Support HTML COOP reports addressed to a response URL without a live global.
+  Retain response/redirect endpoint configuration and its lifetime; do not select
+  another document's current endpoints. [COOP](../browsing/policy/ROADMAP.md#html-713-cross-origin-opener-policies)
+  supplies explicit unfinished navigation/access producers. COOP reports are not
+  observable through ReportingObserver.
 - Connect automatic collection of live globals' queues and periodic retirement.
   A task scheduler alone does not choose those policies.
 - Integrate worker globals, source URLs, endpoint initialization, and termination

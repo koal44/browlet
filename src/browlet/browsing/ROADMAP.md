@@ -6,20 +6,113 @@ owns the browsing-context and session-history lifecycle.
 
 ## Present
 
-- `origin.ts` implements the origin/site comparisons currently required by
-  agents, navigation, and Window security decisions.
+- URL's [`origin.ts`](../../url/origin.ts) implements the shared origin/site
+  operations used by agents, navigation, Fetch, and storage.
 - `navigation/browsing-context.ts` and `navigation/navigable.ts` form the
   bounded top-level navigation spine.
 - `navigation/navigable.ts` derives a node's navigable and a top-level Document's
   fully-active status from the navigable's active session-history entry.
 
+## HTML origins and sites audit
+
+Reviewed the Section 7 and 7.1 preambles, §7.1.1 Origins, and §7.1.1.1 Sites
+against HTML revision [`9396777`](https://github.com/whatwg/html/tree/939677714df7379fee3667040113b41c91c851e7)
+and the host dependencies in URL revision
+[`845bafc`](https://github.com/whatwg/url/tree/845bafca22fb0c5a42c4bf384a9bdea525a2f10d).
+This pass stops before §7.1.1.2, relaxing the same-origin restriction.
+
+| Requirement | Owner and result |
+| --- | --- |
+| Applicability and security motivation | Section 7 applies to Browlet's headless user agent. The introductory cross-origin DOM-access example still needs Window/Location enforcement; see the [Window roadmap](window/ROADMAP.md). |
+| Origin records and equality | URL [core/origin.ts](../../url/core/origin.ts) defines opaque identity and tuple fields. `domain` accepts any Host or null, including IP addresses. `areSameOrigin()` supplies origin value equality. URL parsing supplies valid ASCII schemes and ports. |
+| Shared origins and mutation | Origin records may be shared; opaque copies retain their identity symbol. The domain override is the mutable tuple component; its `document.domain` producer belongs to the next subsection. The Secure Contexts trust flag does not affect opaque equality or serialization. |
+| Effective domain and origin serialization | URL's `effectiveDomain()` and `serializeOrigin()` implement the algorithms, using the host serializer and the stored port. Serialization ignores the domain override and returns `"null"` for opaque origins. The historical Unicode serializer requires no implementation. |
+| Same origin and same origin-domain | URL's comparison functions preserve opaque identity, structural host equality, scheme/port matching, and the separate null/non-null domain branches. |
+| Site records, derivation, equality, and serialization | URL defines `SchemeAndHost` and `Site`; `obtainSite()`, `sitesAreSameSite()`, and `serializeSite()` implement their algorithms. Opaque sites retain origin identity; other sites use the registrable domain or original host. |
+| Origin same-site comparisons | `areSchemelesslySameSite()` and `areSameSite()` implement both comparisons, ignoring ports and domain overrides. Schemeful comparison retains the scheme distinction. |
+
+URL supplies [host equality and suffix lookup](../../url/host.ts) and
+[host serialization](../../url/core/host.ts). The installed `tldts` dependency
+includes private suffixes; Browlet's adapter preserves trailing dots and returns
+null for non-domain hosts. Site and origin strings can have identical syntax;
+consumers must retain which kind they represent. Same-site comparisons do not
+replace same-origin security checks, and PSL data can differ between clients.
+
+[Origin tests](../../../test/url/origin.test.ts) cover the comparison branches,
+IP domain overrides, opaque identity, ASCII/IP serialization, schemeful and
+schemeless sites, and ignored port/domain state.
+The same-site example matrix uses `github.io` for the specification's assumed
+`wildlife.museum` public suffix; the bundled PSL now treats `museum` as that
+host's suffix. [Host tests](../../../test/url/host.test.ts) cover the actual
+private-suffix and trailing-dot dependencies. These pure algorithms do not
+establish WindowProxy/Location access enforcement. The following pass adds the
+`document.domain` accessor.
+
+## Same-origin relaxation, Origin, and origin-keyed clusters
+
+Audited HTML §§7.1.1.2–7.1.2 against the same HTML and URL revisions above.
+This pass stops before §7.1.3, cross-origin opener policies.
+
+| Requirement | Owner and result |
+| --- | --- |
+| `document.domain` getter | [Document](../dom/nodes/document.ts) serializes the effective host, including IP addresses, or returns the empty string for opaque origins. |
+| `document.domain` setter | Document checks browsing-context presence, sandbox flags, opaque origins, and registrable suffix validity before the origin-keyed no-op. Successful assignments change only the retained origin's domain override. USVString conversion and realm-owned exceptions remain Binding work. |
+| Registrable suffix or equal host | URL's existing helper covers parsing, equal IP hosts, label boundaries, public/private suffix restrictions, and significant trailing dots. The complete specification example table and invalid inputs are tested. |
+| Legacy security warning | Relaxation requires both origins to opt in and can ignore different ports. The accessor does not provide cross-origin DOM access enforcement; Window/Location checks remain separate. Messaging alternatives require the unfinished messaging subsystem. |
+| `Origin` construction and comparisons | HTML's [origin.ts](origin.ts) owns the declaration and implementation; URL retains the shared origin records and algorithms. Construction, comparisons, absolute URL strings, and copying retain their behavior. Copies preserve origin identity while allocating distinct platform objects in the called operation's realm. |
+| Platform `extract an origin` operation | `BrowletEnvironment.extractOrigin(value)` dispatches to Origin, URL, Window, anchor, area, and MessageEvent extraction. The member binding unwraps known platform inputs and resolves WindowProxy through its retained handle. Other inputs reach the default null result without probing author properties. Hyperlink and message producers remain unfinished below. |
+| `Origin-Agent-Cluster` header | [NavigationParams](navigation/params.ts) uses Fetch's structured-item parser and accepts only a boolean true bare item, including valid parameters. Invalid, absent, false, or non-boolean items do not request origin keying. |
+| Secure-context gate | [Navigable](navigation/navigable.ts) uses the reserved environment's fixed security decision. The supplied-response path now reserves that environment using Window creation's origin-and-parent decision, retaining `SPEC_CLASH(secure-context-top-level-url)`. Full navigation reservation/redirect/discard lifecycle remains §7.5 work. |
+| Cluster selection and reported state | Existing BrowsingContextGroup selection keeps the first decision per origin, shares site keys where permitted, and always origin-keys opaque or cross-origin-isolated groups. `Window.originAgentCluster` now exposes the selected cluster state. The header need not match the getter after an earlier same-origin navigation. |
+| Cross-cluster consequences | Domain relaxation is suppressed. WebAssembly.Module cloning and delivery are not implemented; the existing generic same-cluster serialization restriction is only part of that dependency. Modeled clusters do not isolate native execution or host-injected references. |
+
+Extraction dependencies now have code owners:
+
+- [WindowOrWorkerGlobalScopeMixin](../global-scope.ts) compares the relevant
+  origin with the entry environment's origin using same-origin-domain. Window
+  forwards to it. The binding selects the modeled entry environment, including
+  borrowed operations; direct host calls without an HTML entry use the operation
+  environment. The selected entry environment owns `extractOrigin(value)`;
+  passing an environment is an ordinary implementation dependency, not a
+  signature mismatch. `OriginImpl.from` retains the specified static operation's
+  string parsing and result allocation. Worker globals still need their
+  implementation and settings lifecycle.
+- [HyperlinkElementUtilsMixin](../dom/nodes/html/text/hyperlink.ts) owns the
+  nullable URL slot and extraction, composed by anchor and area. Both hyperlink
+  mixin declarations and their includes are registered, with hreflang/type/target
+  reflection. `setURL()` is an explicit unfinished operation. Element creation,
+  href changes, document base changes, and URL reinitialization still need to populate/update that slot;
+  author hyperlinks with href therefore remain incomplete.
+- [MessageEventImpl](../communication/message-event.ts) retains an origin,
+  string, or null, serializes the public origin getter, and extracts only origin
+  records. Its partial declaration has no author constructor yet. Initialization,
+  source/port types, and delivery remain explicit TODOs in the owner. Internal
+  allocation can supply a retained origin without losing opaque identity.
+
+`Origin` remains declared `[Exposed=*]`; actual worker exposure awaits those
+global implementations. Ordinary Web IDL proxy conversion is unchanged.
+
+[Domain tests](../../../test/browlet/browsing/document-domain.test.ts),
+[Origin API tests](../../../test/browlet/browsing/origin.test.ts), and
+[header/cluster tests](../../../test/browlet/browsing/origin-agent-cluster.test.ts)
+exercise the projected APIs and navigation path. They complement the existing
+[allocation tests](../../../test/browlet/scripting/agents.test.ts).
+
+## Cross-origin opener policies
+
+The [§7.1.3 audit](policy/ROADMAP.md#html-713-cross-origin-opener-policies) covers
+headers, group switching, and reporting, with §7.1.4.1's COEP parser included as
+a dependency. Supplied-response navigation now applies COOP, switches actual or
+virtual groups, and uses logical isolation for same-origin-plus-COEP. Reporting
+operations and their unfinished owner dependencies are explicit in code and the
+policy roadmap. The next section is §7.1.4; §7.1.3 reporting is audited but not
+implemented end to end.
+
 ## Missing structural concepts
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| existing `origin.ts` and Document integration | Complete opaque/tuple origin and site operations, `Origin`, and the constrained `document.domain` setter | HTML §7.1.1 |
-| `site.ts` if origin.ts becomes crowded | Sites and schemeless same-site operations | HTML §7.1.1.1 |
-| `agent-cluster-key.ts` only if it no longer belongs in scripting | Origin-keyed agent-cluster selection | HTML §7.1.2 |
+| existing `origin.ts`, hyperlink and communication owners above | Worker extraction and the unfinished hyperlink/message origin producers | HTML §7.1.1.3 |
 | `navigation/browsing-context-group.ts` if group behavior outgrows browsing-context.ts | Browsing-context groups and related group switching | HTML §§7.1 and 7.3.2 |
 | existing `navigation/navigable.ts` | Child/related navigables, destruction, container association, active/current-entry invariants, and fully-active recursion through the container Document | HTML §§7.3.1–7.3.3 |
 | `navigation/target.ts` | Choosing/naming browsing contexts and navigables | HTML §7.3.1 |

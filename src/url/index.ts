@@ -1,14 +1,14 @@
 export * from './core/index';
 export { URLImpl, URLSearchParamsImpl } from './api';
 export { urlIDLDefinitions } from './web-idl';
-export { originIDL } from './origin-api';
 export {
-  aboutBlankURL, getDefaultPort, isSpecialURL, obtainURLOrigin, parseURL, stripURLForReporting,
+  aboutBlankURL, getDefaultPort, isSpecialURL, obtainURLOrigin, parseBasicURL, parseURL, stripURLForReporting,
   setURLUsername, setURLPassword,
   type URLUserAgent, type URLParseResult,
 } from './url';
 export {
-  areSameOrigin, areSameOriginDomain, areSameSite, areSchemelesslySameSite, createOpaqueOrigin, isOrigin,
+  areSameOrigin, areSameOriginDomain, areSameSite, areSchemelesslySameSite, createOpaqueOrigin, effectiveDomain,
+  isOrigin, isRegistrableDomainSuffixOfOrEqualTo,
   obtainSite, serializeOrigin, serializeSite, sitesAreSameSite,
 } from './origin';
 export { hostsEqual, obtainPublicSuffix, parseHost } from './host';

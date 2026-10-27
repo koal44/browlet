@@ -8,7 +8,7 @@ import {
 } from '../web-idl/index';
 import { streamsIDLDefinitions } from '../streams/index';
 import { encodingIDLDefinitions } from '../encoding/index';
-import { urlIDLDefinitions, originIDL, serializeURL } from '../url/index';
+import { urlIDLDefinitions, serializeURL } from '../url/index';
 import { fileIDLDefinitions } from '../file/index';
 import { xhrIDLDefinitions } from '../xhr/index';
 import { fetchIDLDefinitions } from '../fetch/index';
@@ -44,6 +44,12 @@ import { svgIDLDefinitions } from './dom/nodes/svg/index';
 import { domIDLDefinitions } from './dom/index';
 import { performanceIDL } from './performance/index';
 import {
+  locationIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
+  WindowProxyHandle, windowProxyDefinition,
+} from './browsing/window/index';
+import { messageEventIDL } from './communication/index';
+import { originIDL } from './browsing/index';
+import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
   type BrowletExecution,
 } from './environment';
@@ -55,10 +61,6 @@ import {
   structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
   structuredClone,
 } from './scripting/structured-data/index';
-import {
-  locationIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
-  WindowProxyHandle, windowProxyDefinition,
-} from './browsing/window/index';
 import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
 import { htmlExtendedAttributeHooks } from './integration/web-idl/index';
 import { fileReaderIDL, objectURLIDL } from './integration/file/index';
@@ -256,6 +258,7 @@ export const browletDefinitions = [
   eventHandlerIDL,
   errorEventIDL,
   errorEventInitIDL,
+  messageEventIDL,
   promiseRejectionEventIDL,
   promiseRejectionEventInitIDL,
   structuredSerializeOptionsIDL,

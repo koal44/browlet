@@ -3,7 +3,7 @@ export {
   coepViolationReportBodyIDL,
 } from './coep';
 export { PolicyContainer } from './container';
-export { OpenerPolicy, type OpenerPolicyValue } from './coop';
+export { OpenerPolicy, sanitizeURLForReport, type OpenerPolicyValue } from './coop';
 export { HSTSStore, HSTSPolicy, type HSTSHost } from './hsts';
 export {
   IntegrityPolicy, IntegrityViolationReportBodyImpl, integrityViolationReportBodyIDL,

@@ -9,6 +9,9 @@ declare const window: WindowProxy;
 
 const global: Window = window.window;
 const document: Document = global.document;
+const originAgentCluster: boolean = window.originAgentCluster;
+const domain: string = document.domain;
+document.domain = domain;
 const element: Element = document.createElement('div');
 const node: Node = element;
 const tokens: Platform.DOMTokenList = element.classList;
@@ -97,8 +100,8 @@ new window.Window();
 // @ts-expect-error the public Promise carries a Blob's string result
 const wrong: Promise<number> = blob.text();
 if (element instanceof window.HTMLElement) {
-  // @ts-expect-error CSSOM's provisional object declaration does not describe its members
-  element.style.cssText;
+  const cssText: string = element.style.cssText;
+  element.style.cssText = cssText;
 }
 // @ts-expect-error a type export does not create an exported runtime constructor
 new Platform.URL('https://example.test/');

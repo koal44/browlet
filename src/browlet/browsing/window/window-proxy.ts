@@ -14,6 +14,7 @@ import type { WindowImpl } from './window';
 // plain-Node forwarding proxy, neither of which inherits from this class.
 // PROVISIONAL: the traps implement fallback forwarding, not HTML's complete
 // exotic internal methods or cross-origin access checks; see ROADMAP.md.
+// TODO: cross-origin property access must call BrowsingContext.checkAccessShouldBeReported().
 export class WindowProxyHandle implements ProxyHandler<object> {
   // V8 global proxies lose private-field stamps when reused for another realm.
   static #handles = new WeakMap<WindowProxy, WindowProxyHandle>();

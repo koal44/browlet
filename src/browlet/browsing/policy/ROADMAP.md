@@ -10,13 +10,89 @@ their owning integrations. [CSP](csp/ROADMAP.md) owns its language and violation
 
 | Owner | Missing contract |
 | --- | --- |
-| Agent selection / loader | Origin-Agent-Cluster header processing, historical keys, and cluster consequences (HTML §7.1.2) |
-| `coop.ts` | Response enforcement, group switching, and reporting (HTML §7.1.3) |
-| `coep.ts` | Complete response processing/inheritance and navigation enforcement; Fetch already applies credentials/CORP checks (HTML §7.1.4) |
+| Agent selection / loader | Native isolation and WebAssembly.Module cloning/delivery consequences; OAC header processing and historical keys exist (HTML §7.1.2) |
+| `coop.ts` / navigation / Reporting | Redirect-loop integration, URL-scoped reports, and cross-window access reports; supplied-response enforcement and group switching exist (HTML §7.1.3) |
+| `coep.ts` | Complete inheritance and navigation enforcement; header parsing and Fetch credentials/CORP checks exist (HTML §7.1.4) |
 | Sandbox / iframe / navigation | Container-flag propagation and navigation checks; token parsing and combined CSP restrictions exist (HTML §7.1.5) |
 | Document ancestry / iframe | Referrer inheritance, ancestor-origin lists, and real srcdoc container association (HTML §7.1.6) |
 | `permissions.ts` | Declared, inherited, and container policies plus feature definitions/default allowlists (Permissions Policy; HTML §2.2) |
 | `container.ts` / navigation | Complete policy-container selection, response association, and history/local-URL inheritance (HTML §7.1.7) |
+
+## HTML 7.1.3 cross-origin opener policies
+
+Audited the complete [COOP section](https://html.spec.whatwg.org/multipage/browsers.html#cross-origin-opener-policies),
+including its reporting algorithms, against HTML revision
+[`9396777`](https://github.com/whatwg/html/tree/939677714df7379fee3667040113b41c91c851e7)
+(26 October 2026). The COEP compatibility predicate and §7.1.4.1 header parser
+are included as direct dependencies; the rest of §7.1.4 remains the next audit.
+
+| Requirement | Owner and result |
+| --- | --- |
+| Policy values and matching | `OpenerPolicy` retains both values and nullable endpoints. Matching uses strict origin equality, including opaque identity, and ignores domain relaxation. Two unsafe-none values match across origins. |
+| Header processing | `OpenerPolicy.obtain()` uses Fetch's structured-item parser and the reserved environment's security decision. It accepts only tokens, applies string report-to parameters, rejects lists/quoted strings, and preserves the specified difference between enforced and report-only noopener-allow-popups. |
+| COEP dependency | `EmbedderPolicy.obtain()` parses both dispositions. Enforced COOP promotion uses enforced COEP; report-only promotion accepts either COEP disposition. The internal same-origin-plus-COEP value is not accepted as a header token. |
+| Popup and ordinary navigation comparisons | Static policy operations implement each branch, including the unsafe-none popup allowances and matching report-only suppression. Actual popup creation still needs creator/opener inheritance. |
+| Response enforcement | `BrowsingContext.enforceResponseOpenerPolicy()` carries both accumulated switch flags, URL, origin, policy, and navigation-source state through repeated response checks. It retains the first initial URL and requests navigation reports only when another context shares the group. |
+| Navigation integration | The supplied-response path reserves the destination environment, parses its policies, and computes enforcement before creating the document. Existing prepared results are retained. The Fetch navigation loop must call enforcement at every redirect and supply its actual source state. |
+| Group selection | Required switches create a new top-level context/group; report-only switches change only the virtual group identifier. Final sandbox flags are cloned. Old contexts remain available to history. Optional cross-site/browser-UI/singleton swaps are not taken. Nested destinations retain their context. |
+| Isolation capability | same-origin-plus-COEP selects logical isolation. Agent clusters become origin-keyed, but the host does not provide physical isolation. The WindowOrWorkerGlobalScope crossOriginIsolated member now forwards the existing environment capability; logical isolation reports false. |
+| Report URL sanitization | `sanitizeURLForReport()` copies the URL, removes credentials, and excludes the fragment without applying Fetch's different non-HTTP stripping rule. |
+| Navigation reports | `queueNavigationToReport()` and `queueNavigationFromReport()` are explicit unfinished operations. They return for an absent disposition endpoint and otherwise throw for the missing URL-scoped Reporting queue. Body construction, disclosure rules, and delivery remain unfinished. |
+| Access reports | `BrowsingContext.checkAccessShouldBeReported()` is an explicit unfinished operation. WindowProxy/Location security hooks must invoke it with the accessing environment. All six body producers and their dispatcher remain required, as detailed below. |
+
+Reporting dependencies are deliberately not routed through an arbitrary active
+global. A response report can belong to an earlier redirect, a future document,
+or a document that no longer owns a live global. Reporting must retain the URL's
+endpoint configuration and lifetime, and accept that URL without rediscovering
+an environment. COOP reports are not exposed to ReportingObserver.
+
+Navigation-to bodies still need disposition, effectivePolicy, previousResponseURL,
+referrer, and type. The previous URL is disclosed only for same-origin responses.
+Navigation-from bodies need nextResponseURL, disclosed only for same-origin
+responses or when the COOP response initiated the navigation. Referrer uses its
+specified serialization; it is not replaced by a sanitized unrelated URL.
+
+Access reporting must filter cross-origin-accessible property names, require
+fully active documents, reject cross-origin ancestor chains, compare top-level
+virtual group identities, and classify accessor-is-opener, accessor-is-openee,
+or neither. The dispatcher must produce both directions for opener, openee,
+and unrelated-window accesses, with the specified report-only same-origin gate.
+Body disclosure depends on current/initial URLs, opener origins at creation,
+referrers, and exact same-origin checks. The accessing environment must supply
+source URL, line, and column. Ancestor navigation, creator/opener state,
+WindowProxy/Location access interception, source-location capture, and URL-scoped
+Reporting are still missing consumers/producers; none is treated as complete by
+the policy comparison tests.
+
+The sandbox/COOP network-error path remains a throwing dependency in navigation.
+Failed preparation must eventually discard its reservation through the full
+navigation lifecycle. COOP group changes do not establish WindowProxy cross-origin
+security, opener severance across author-held references, or history disposal.
+
+### Specification conflicts
+
+- `SPEC_CLASH(coop-report-endpoint)`: the reporting algorithms always name the
+  enforced endpoint, including for the reporting disposition, despite defining
+  a separate report-only endpoint. Eric approved selecting the endpoint for each
+  disposition. This agrees with WebKit's
+  [`reportingEndpointForDisposition()`](https://github.com/WebKit/WebKit/blob/713192fabebfdd2955aa596c262c33bfbf3d50be/Source/WebCore/loader/CrossOriginOpenerPolicy.h)
+  and its navigation-report callers. This is local source evidence, not a live
+  browser delivery test.
+- `SPEC_CLASH(coop-noopener-navigation)`: the noopener-allow-popups description
+  says to force a new group regardless of the predecessor policy. The explicit
+  ordinary-navigation algorithm instead allows matching same-origin values.
+  Browlet follows that algorithm; initial-about:blank popup processing always
+  switches for a noopener-allow-popups response.
+- `SPEC_CLASH(coop-access-report-type)`: all six access-report body tables use
+  access-to-opener, including operations headed access from an opener, access
+  to/from an openee, and access to/from another window. The body type choice is
+  pending review with access reporting; no fabricated type is emitted.
+
+[COOP tests](../../../../test/browlet/browsing/policy/coop.test.ts) cover headers,
+origin/policy comparisons, accumulated enforcement, navigation and virtual group
+changes, logical isolation, endpoint selection, and URL sanitization. Reporting
+calls in the enforcement test are intercepted to inspect their conditions; they
+are not evidence of report-body generation or delivery.
 
 ## Policy state and composition
 
@@ -27,7 +103,7 @@ self origin, COEP/referrer state, and both Integrity Policy dispositions.
 A container without a known resource origin has no CSP list yet.
 
 The bounded response-bearing Document creation path initializes CSP, sandbox,
-upgrade policy, and Reporting endpoints. It is not the complete
+COOP, COEP, upgrade policy, and Reporting endpoints. It is not the complete
 navigation state machine. Worker top-level responses and worklet creation must
 supply their specified inheritance rather than copying whichever fields are
 convenient at realm setup.

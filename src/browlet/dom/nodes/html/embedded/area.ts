@@ -1,9 +1,11 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { ctor, defineIncludes, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import type { Origin } from '../../../../../url/index';
 
 import { ElementTag, ContentCategory } from '../../element-definitions/index';
 
 import { HTMLElementImpl } from '../html-element';
+import { HyperlinkElementUtilsMixin } from '../text/index';
 
 /** Image-map area identity used by Document links. */
 // https://html.spec.whatwg.org/multipage/image-maps.html#the-area-element
@@ -13,6 +15,16 @@ export class HTMLAreaElementImpl extends HTMLElementImpl {
     this.prototype.categories = [];
     this.prototype.translatableAttributes = [...this.prototype.translatableAttributes, 'alt', 'download'];
     this.prototype.directionalityAttributes = [...this.prototype.directionalityAttributes, 'alt'];
+  }
+
+  #hyperlinkElementUtilsMixin = new HyperlinkElementUtilsMixin();
+
+  static override is(value: unknown): value is HTMLAreaElementImpl {
+    return typeof value === 'object' && value !== null && #hyperlinkElementUtilsMixin in value;
+  }
+
+  extractOrigin(): Origin | null {
+    return this.#hyperlinkElementUtilsMixin.extractOrigin();
   }
 
   override hasCategory(category: ContentCategory): boolean {
@@ -56,4 +68,12 @@ export const htmlAreaElementIDL = defineInterface({
   members: [
     ctor([], xattr('HTMLConstructor')),
   ],
+});
+
+export const htmlAreaElementIncludesHyperlinkElementUtilsIDL = defineIncludes({
+  interface: 'HTMLAreaElement', mixin: 'HyperlinkElementUtils',
+});
+
+export const htmlAreaElementIncludesHTMLHyperlinkElementUtilsIDL = defineIncludes({
+  interface: 'HTMLAreaElement', mixin: 'HTMLHyperlinkElementUtils',
 });

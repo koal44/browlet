@@ -1,11 +1,13 @@
 import { HTML_NAMESPACE } from '../../../../../infra/index';
-import { ctor, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import { ctor, defineIncludes, defineInterface, impl, xattr } from '../../../../../web-idl/core/index';
+import type { Origin } from '../../../../../url/index';
 
 import {
   ElementTag, ContentCategory, transparentContent, SanitizationCategory,
 } from '../../element-definitions/index';
 
 import { HTMLElementImpl } from '../html-element';
+import { HyperlinkElementUtilsMixin } from './hyperlink';
 
 /** Anchor identity used by link and named collections. */
 // https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-a-element
@@ -33,6 +35,16 @@ export class HTMLAnchorElementImpl extends HTMLElementImpl {
       defaultAttributes: ['href', 'hreflang', 'type'],
       navigatingURLAttributes: ['href'],
     };
+  }
+
+  #hyperlinkElementUtilsMixin = new HyperlinkElementUtilsMixin();
+
+  static override is(value: unknown): value is HTMLAnchorElementImpl {
+    return typeof value === 'object' && value !== null && #hyperlinkElementUtilsMixin in value;
+  }
+
+  extractOrigin(): Origin | null {
+    return this.#hyperlinkElementUtilsMixin.extractOrigin();
   }
 
   override hasCategory(category: ContentCategory): boolean {
@@ -75,4 +87,12 @@ export const htmlAnchorElementIDL = defineInterface({
   members: [
     ctor([], xattr('HTMLConstructor')),
   ],
+});
+
+export const htmlAnchorElementIncludesHyperlinkElementUtilsIDL = defineIncludes({
+  interface: 'HTMLAnchorElement', mixin: 'HyperlinkElementUtils',
+});
+
+export const htmlAnchorElementIncludesHTMLHyperlinkElementUtilsIDL = defineIncludes({
+  interface: 'HTMLAnchorElement', mixin: 'HTMLHyperlinkElementUtils',
 });

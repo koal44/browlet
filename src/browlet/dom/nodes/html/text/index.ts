@@ -1,4 +1,8 @@
-export { HTMLAnchorElementImpl, htmlAnchorElementIDL } from './anchor';
+export {
+  HTMLAnchorElementImpl, htmlAnchorElementIDL,
+  htmlAnchorElementIncludesHyperlinkElementUtilsIDL, htmlAnchorElementIncludesHTMLHyperlinkElementUtilsIDL,
+} from './anchor';
+export { HyperlinkElementUtilsMixin, hyperlinkElementUtilsIDL, htmlHyperlinkElementUtilsIDL } from './hyperlink';
 export { HTMLEmElementImpl } from './em';
 export { HTMLStrongElementImpl } from './strong';
 export { HTMLSmallElementImpl } from './small';

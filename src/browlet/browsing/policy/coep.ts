@@ -1,7 +1,8 @@
 import { defineInterface, idlType, impl, op, roAttr, xattr } from '../../../web-idl/core/index';
-import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue } from '../../../fetch/index';
+import type { FetchEmbedderPolicy, FetchEmbedderPolicyValue, FetchResponse } from '../../../fetch/index';
 
 import { ReportBodyImpl } from '../../reporting/index';
+import type { BrowletEnvironmentBase } from '../../environment';
 
 /** Cross-origin embedding requirements and their reporting endpoints. */
 // https://html.spec.whatwg.org/multipage/browsers.html#embedder-policy
@@ -14,6 +15,32 @@ export class EmbedderPolicy implements FetchEmbedderPolicy {
   reportOnlyValue: EmbedderPolicyValue = 'unsafe-none';
   /** Reporting endpoint name for report-only violations. */
   reportOnlyReportingEndpoint = '';
+
+  // https://html.spec.whatwg.org/multipage/browsers.html#obtain-an-embedder-policy
+  static obtain(response: FetchResponse, env: BrowletEnvironmentBase): EmbedderPolicy {
+    const policy = new EmbedderPolicy();
+    if (!env.isSecureContext) return policy;
+    for (const reportOnly of [false, true]) {
+      const header = reportOnly ? 'Cross-Origin-Embedder-Policy-Report-Only' : 'Cross-Origin-Embedder-Policy';
+      const item = response.headerList.getStructuredFieldValue(header, 'item');
+      if (item?.bareItem.type !== 'token' || !EmbedderPolicy.isCompatibleWithCrossOriginIsolation(item.bareItem.value)) continue;
+      const parameter = item.parameters.get('report-to');
+      const endpoint = parameter?.type === 'string' ? parameter.value : '';
+      if (reportOnly) {
+        policy.reportOnlyValue = item.bareItem.value;
+        policy.reportOnlyReportingEndpoint = endpoint;
+      } else {
+        policy.value = item.bareItem.value;
+        policy.reportingEndpoint = endpoint;
+      }
+    }
+    return policy;
+  }
+
+  // https://html.spec.whatwg.org/multipage/browsers.html#compatible-with-cross-origin-isolation
+  static isCompatibleWithCrossOriginIsolation(value: string): value is 'require-corp' | 'credentialless' {
+    return value === 'require-corp' || value === 'credentialless';
+  }
 
   /** Copy the enforced and report-only settings independently of their current owner. */
   clone(): EmbedderPolicy {

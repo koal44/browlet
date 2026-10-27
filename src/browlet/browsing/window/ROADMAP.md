@@ -19,6 +19,13 @@
 | existing `window-proxy.ts` | Complete exotic internal methods and same-origin/cross-origin switching | HTML §7.2.3 |
 | existing `location.ts` | Complete navigation setters/methods, ancestor origins, and exotic internal methods | HTML §7.2.4 |
 
+Cross-origin access hooks must call
+`BrowsingContext.checkAccessShouldBeReported()` with the accessor, accessed
+context, property, and accessing environment. That operation currently throws:
+fully-active ancestor checks, opener relationships, source-location capture, and
+COOP's URL-scoped reports remain explicit [policy dependencies](../policy/ROADMAP.md#html-713-cross-origin-opener-policies).
+Group switching alone does not implement these traps or author-reference severance.
+
 HTML §2.6.5's `DOMStringList` is available, and Document's initialized ancestor
 origins retain that implementation. `Location.ancestorOrigins` is still absent:
 Location needs relevant-Document selection, its retained empty DOMStringList for

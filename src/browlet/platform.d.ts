@@ -778,7 +778,9 @@ export interface HTMLDivElementConstructor extends Ctor<HTMLElementConstructor> 
 }
 
 export interface HTMLAnchorElement extends HTMLElement {
-
+  hreflang: string;
+  type: string;
+  target: string;
 }
 
 export interface HTMLAnchorElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -958,7 +960,9 @@ export interface HTMLMapElementConstructor extends Ctor<HTMLElementConstructor> 
 }
 
 export interface HTMLAreaElement extends HTMLElement {
-
+  hreflang: string;
+  type: string;
+  target: string;
 }
 
 export interface HTMLAreaElementConstructor extends Ctor<HTMLElementConstructor> {
@@ -1519,6 +1523,15 @@ export interface ErrorEventConstructor extends Ctor<EventConstructor> {
   new (type: string, eventInitDict?: ErrorEventInit): ErrorEvent;
 }
 
+export interface MessageEvent extends Event {
+  readonly origin: string;
+}
+
+export interface MessageEventConstructor extends Ctor<EventConstructor> {
+  readonly prototype: MessageEvent;
+  [Symbol.hasInstance](value: unknown): value is MessageEvent;
+}
+
 export interface PromiseRejectionEvent extends Event {
   readonly promise: object;
   readonly reason: any;
@@ -1537,10 +1550,12 @@ export interface Window extends EventTarget {
   readonly document: Document;
   get location(): Location;
   set location(value: string);
+  readonly originAgentCluster: boolean;
   get event(): Event | undefined;
   set event(value: unknown);
   getComputedStyle(elt: Element, pseudoElt?: string | null): CSSStyleProperties;
   readonly isSecureContext: boolean;
+  readonly crossOriginIsolated: boolean;
   reportError(e: any): void;
   setTimeout(handler: string | Function, timeout?: number, ...arguments_: Array<any>): number;
   clearTimeout(id?: number): void;
@@ -1648,6 +1663,7 @@ export interface Window extends EventTarget {
   ReportingObserver: ReportingObserverConstructor;
   Performance: PerformanceConstructor;
   ErrorEvent: ErrorEventConstructor;
+  MessageEvent: MessageEventConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Window: WindowConstructor;
   Event: EventConstructor;
@@ -2276,6 +2292,7 @@ export interface Document extends Node {
   createRange(): Range;
   createNodeIterator(root: Node, whatToShow?: number, filter?: NodeFilter | null): NodeIterator;
   createTreeWalker(root: Node, whatToShow?: number, filter?: NodeFilter | null): TreeWalker;
+  domain: string;
   readonly referrer: string;
   cookie: string;
   readonly lastModified: string;

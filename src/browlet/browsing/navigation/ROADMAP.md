@@ -17,6 +17,11 @@ outside consumers use its index, while its modules import each other directly.
   top-level traversable; `document-state.ts` retains their document/reload state.
 - `params.ts` carries response, policies, and timing. The destination is the
   Navigable receiving those inputs, so params need no reference back to it.
+- Supplied responses reserve the destination environment and apply COOP before
+  document creation. Required switches create a new context/group; report-only
+  switches change its virtual identifier. The complete enforcement result can
+  carry accumulated decisions across redirects. The [policy audit](../policy/ROADMAP.md#html-713-cross-origin-opener-policies)
+  records reporting dependencies and the logical-isolation choice.
 
 The navigable survives changes of Document, Window, and environment. Preparing
 a response can create a new environment while the old document remains active;
@@ -48,6 +53,14 @@ Failed/aborted navigation and cross-origin redirect replacement must run
 `reservedEnv.discard()` before releasing the reserved environment. The operation
 now implements the Service Workers client discarded flag; the incomplete
 navigation and redirect algorithms still need to call it.
+
+The Fetch navigation loop must obtain and enforce COOP for each top-level
+response, preserve both accumulated switch flags, and supply whether the
+preceding response initiated the navigation. The supplied-response adapter
+starts from the active document and browser-UI source state; it cannot reconstruct
+redirect policies from a final response alone. Sandboxed non-unsafe-none COOP
+responses require network-error processing, currently an explicit guard.
+Local-URL policy inheritance and popup creator state remain unfinished.
 
 Document now retains the §3.1.5 `previousDocumentUnloadTiming` record with zero
 defaults. The unloading/navigation algorithms must capture the old document's

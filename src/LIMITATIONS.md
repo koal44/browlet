@@ -551,3 +551,29 @@ cloning remain with [browsing](browlet/browsing/ROADMAP.md) and
 identity is present; reactions and upgrade behavior remain with
 [custom elements](browlet/dom/nodes/html/custom-elements/ROADMAP.md). Fetch's remaining
 work and provisional consumer hooks stay in its [single roadmap](fetch/ROADMAP.md).
+
+`document.domain` now validates and records relaxation, and origin-keyed clusters
+suppress valid assignments. This does not implement WindowProxy/Location's
+cross-origin access enforcement. The OAC header and `originAgentCluster` expose
+modeled cluster selection, without native execution isolation or WebAssembly.Module
+cloning/delivery. `Origin.from()` supports strings, URL, Origin, and Window
+objects, including WindowProxy and entry-origin access checks. Direct host calls
+without an HTML entry use the operation environment. Worker globals remain
+unfinished. Anchor and area have nullable URL slots and extraction, but their
+href/base URL lifecycle is still a stub. MessageEvent has origin state and
+extraction, but no public constructor, complete event initialization, or delivery.
+These producers remain incomplete even though extraction can consume their
+internally supplied records. The
+[origin audit](browlet/browsing/ROADMAP.md#same-origin-relaxation-origin-and-origin-keyed-clusters)
+records each missing owner and integration.
+
+Supplied-response navigation applies COOP headers and required context/group
+changes. Report-only policies can change the virtual group identifier without
+moving the document. COOP plus COEP selects logical isolation: agent keying changes,
+while `crossOriginIsolated` remains false. This supplies neither physical isolation
+nor complete WindowProxy/Location access security or opener-reference severance.
+Fetch redirect-loop integration, popup inheritance, and sandboxed COOP network
+errors remain unfinished. COOP navigation reporting throws when a configured
+endpoint needs a report in a group shared with another context; the required
+URL-scoped queue and access reports are explicit dependencies in the
+[policy audit](browlet/browsing/policy/ROADMAP.md#html-713-cross-origin-opener-policies).

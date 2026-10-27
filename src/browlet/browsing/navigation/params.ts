@@ -26,8 +26,8 @@ export class NavigationParams {
   fetchController: FetchController | null = null;
   /** Commit work retained from early hints after creating the document. */
   commitEarlyHints: ((document: DocumentImpl) => void) | null = null;
-  /** Whether COOP requires changing the destination's browsing context group. */
-  coopEnforcementResult: OpenerPolicyEnforcementResult = { needsBrowsingContextGroupSwitch: false };
+  /** Accumulated COOP response checks, or null before response policy preparation. */
+  coopEnforcementResult: OpenerPolicyEnforcementResult | null = null;
   /** Environment prepared for the destination document before constructing its realm. */
   reservedEnv: BrowletEnvironmentBase | null = null;
   /** Origin selected for the new document. */
@@ -79,15 +79,20 @@ export class NavigationParams {
     return this.fetchController?.extractFullTimingInfo().startTime ?? this.#startTime;
   }
 
-  /** Whether the response requests an origin-keyed agent cluster. */
+  /** Whether the response requests origin keying; navigation applies the secure-context gate. */
+  // https://html.spec.whatwg.org/multipage/document-lifecycle.html#create-and-initialize-a-document-object
   requestsOriginAgentCluster(): boolean {
-    if (this.response.headerList.get('Origin-Agent-Cluster') !== null) {
-      throw new InternalError('Origin-Agent-Cluster header parsing is not implemented');
-    }
-    return false;
+    const item = this.response.headerList.getStructuredFieldValue('Origin-Agent-Cluster', 'item');
+    return item?.bareItem.type === 'boolean' && item.bareItem.value;
   }
 }
 
+// https://html.spec.whatwg.org/multipage/browsers.html#coop-enforcement-result
 export type OpenerPolicyEnforcementResult = {
   needsBrowsingContextGroupSwitch: boolean;
+  wouldNeedBrowsingContextGroupSwitchDueToReportOnly: boolean;
+  url: URLRecord;
+  origin: Origin;
+  openerPolicy: OpenerPolicy;
+  currentContextIsNavigationSource: boolean;
 };

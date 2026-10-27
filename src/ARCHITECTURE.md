@@ -119,6 +119,11 @@ Portable contracts describe that behavior without making Fetch depend on HTML.
 Use the same approach for other owners; introduce inheritance or a mixin only
 for an actual shared implementation, not to simulate multiple class inheritance.
 
+HTML origin extraction is `BrowletEnvironment.extractOrigin(value)`, invoked on
+the entry environment for global access checks. `Origin.from()` selects that
+environment through the modeled execution stack, then retains its specified
+string parsing and result allocation. Each object's owner supplies its extraction rule.
+
 HTML's script-fetch algorithms are grouped in `browlet/scripting/script-fetching.ts`.
 BrowletEnvironment forwards its fetch methods there with itself as the target
 settings. Its module map, integrity lookup, and realm-specific permissions remain

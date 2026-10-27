@@ -24,6 +24,8 @@ import {
   HTMLSampElementImpl, HTMLSmallElementImpl, HTMLStrongElementImpl, HTMLSubElementImpl,
   HTMLSupElementImpl, HTMLUElementImpl, HTMLVarElementImpl, HTMLWBRElementImpl, htmlAnchorElementIDL,
   htmlDataElementIDL, htmlTimeElementIDL, htmlSpanElementIDL, htmlBRElementIDL, htmlModElementIDL,
+  hyperlinkElementUtilsIDL, htmlHyperlinkElementUtilsIDL,
+  htmlAnchorElementIncludesHyperlinkElementUtilsIDL, htmlAnchorElementIncludesHTMLHyperlinkElementUtilsIDL,
 } from './text/index';
 import { HTMLSummaryElementImpl, htmlDetailsElementIDL, htmlDialogElementIDL } from './interactive/index';
 import {
@@ -49,6 +51,7 @@ import {
   htmlImageElementIDL, htmlIFrameElementIDL, htmlMediaElementIDL, htmlAudioElementIDL,
   htmlVideoElementIDL, htmlEmbedElementIDL, htmlObjectElementIDL, htmlMapElementIDL, htmlAreaElementIDL,
   htmlPictureElementIDL, htmlSourceElementIDL, htmlTrackElementIDL,
+  htmlAreaElementIncludesHyperlinkElementUtilsIDL, htmlAreaElementIncludesHTMLHyperlinkElementUtilsIDL,
 } from './embedded/index';
 import {
   htmlTableElementIDL, htmlTableCaptionElementIDL, htmlTableColElementIDL, htmlTableSectionElementIDL,
@@ -256,6 +259,10 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlDListElementIDL,
   htmlDivElementIDL,
   htmlAnchorElementIDL,
+  hyperlinkElementUtilsIDL,
+  htmlHyperlinkElementUtilsIDL,
+  htmlAnchorElementIncludesHyperlinkElementUtilsIDL,
+  htmlAnchorElementIncludesHTMLHyperlinkElementUtilsIDL,
   htmlQuoteElementIDL,
   htmlDataElementIDL,
   htmlTimeElementIDL,
@@ -274,6 +281,8 @@ export const htmlIDLDefinitions: Definition[] = [
   htmlTrackElementIDL,
   htmlMapElementIDL,
   htmlAreaElementIDL,
+  htmlAreaElementIncludesHyperlinkElementUtilsIDL,
+  htmlAreaElementIncludesHTMLHyperlinkElementUtilsIDL,
   htmlTableElementIDL,
   htmlTableCaptionElementIDL,
   htmlTableColElementIDL,

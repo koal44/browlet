@@ -3,12 +3,13 @@ import { areSameOrigin, areSameOriginDomain, copyURL, createOpaqueOrigin, urlsEq
 import { FetchResponse, type FetchPromptTarget, type fetchPromptTargetBrand } from '../../../fetch/index';
 
 import { coarsenedSharedCurrentTime } from '../../timing/index';
-import { PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
+import { EmbedderPolicy, OpenerPolicy, PermissionsPolicy, SandboxingFlagSet } from '../policy/index';
 import { CSPList } from '../policy/csp/index';
 import type { DocumentImpl, DocumentVisibilityState, ElementImpl } from '../../dom/nodes/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
-import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { WindowImpl, WindowProxyHandle } from '../window/index';
+import { BrowletEnvironmentBase } from '../../environment';
+import { HTMLDocumentParser, type ScriptHandler } from '../../html/parser/index';
 import type { ResourceReader } from '../../loader/index';
 import type { UserAgent } from '../../user-agent';
 
@@ -147,7 +148,7 @@ export class Navigable {
     for (const flag of params.policyContainer.cspList.getSandboxingFlags()) params.finalSandboxingFlagSet.add(flag);
     if (params.finalSandboxingFlagSet.has('sandboxed-origin')) params.origin = createOpaqueOrigin();
     // Full navigation policy-container selection (history/local URL inheritance,
-    // COEP, referrer, and integrity delivery) remains with the Fetch-backed loader.
+    // referrer and integrity delivery) remains with the Fetch-backed loader.
     return params;
   }
 
@@ -203,6 +204,7 @@ export class Navigable {
     type: 'html' | 'xml', contentType: string, params: NavigationParams,
   ): DocumentImpl {
     const { response } = params;
+    this.#prepareResponsePolicy(params);
     const browsingContext = this.#obtainBrowsingContext(params);
     const permissionsPolicy = this.#createPermissionsPolicy(params);
     const creationURL = params.request?.currentURL ?? params.url;
@@ -214,12 +216,16 @@ export class Navigable {
     } else {
       const group = browsingContext.group;
       if (group === null) throw new InternalError('Navigation browsing context has no group');
-      const agent = group.obtainSimilarOriginWindowAgent(params.origin, params.requestsOriginAgentCluster());
+      const parent = this.parent?.activeWindow ?? null;
+      const isSecureContext = params.reservedEnv!.isSecureContext;
+      const agent = group.obtainSimilarOriginWindowAgent(
+        params.origin, params.requestsOriginAgentCluster() && isSecureContext,
+      );
       window = group.userAgent.createWindowEnvironment({
         agent, userAgent: group.userAgent,
         creationURL,
         origin: params.origin,
-        parent: this.parent?.activeWindow ?? null,
+        parent,
         topLevelCreationURL: creationURL,
         topLevelOrigin: params.origin,
         reservedEnv: params.reservedEnv,
@@ -366,14 +372,69 @@ export class Navigable {
     void userInvolvement;
   }
 
-  /** Select the browsing context in which the response will create a document. */
-  #obtainBrowsingContext(params: NavigationParams): BrowsingContext {
-    if (params.coopEnforcementResult.needsBrowsingContextGroupSwitch) {
-      throw new InternalError('COOP browsing-context group switching is not implemented');
-    }
+  /** Prepare a supplied response; Fetch navigation must carry this state across each redirect. */
+  #prepareResponsePolicy(params: NavigationParams): void {
     const browsingContext = this.activeBrowsingContext;
     if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
-    return browsingContext;
+    const activeDocument = browsingContext.activeDocument;
+    const userAgent = activeDocument.env.userAgent;
+    const parent = this.parent?.activeWindow ?? null;
+    params.reservedEnv ??= new BrowletEnvironmentBase({
+      userAgent,
+      creationURL: params.request?.currentURL ?? params.url,
+      topLevelCreationURL: parent?.env.topLevelCreationURL ?? params.url,
+      topLevelOrigin: parent?.env.topLevelOrigin ?? params.origin,
+      targetBrowsingContext: browsingContext,
+      isSecureContext: userAgent.isOriginPotentiallyTrustworthy(params.origin) && (parent === null || parent.isSecureContext),
+    });
+    if (params.coopEnforcementResult !== null) return;
+    params.policyContainer.embedderPolicy = EmbedderPolicy.obtain(params.response, params.reservedEnv);
+    params.coopEnforcementResult = {
+      needsBrowsingContextGroupSwitch: false,
+      wouldNeedBrowsingContextGroupSwitchDueToReportOnly: false,
+      url: activeDocument.url,
+      origin: activeDocument.origin,
+      openerPolicy: activeDocument.openerPolicy,
+      // Supplied-response navigation currently originates in the host/browser UI.
+      currentContextIsNavigationSource: false,
+    };
+    if (this.isTopLevelTraversable) {
+      params.openerPolicy = OpenerPolicy.obtain(params.response, params.reservedEnv);
+      params.coopEnforcementResult = browsingContext.enforceResponseOpenerPolicy(
+        params.url, params.origin, params.openerPolicy, params.coopEnforcementResult, params.request?.referrer,
+      );
+      if (params.finalSandboxingFlagSet.size > 0 && params.openerPolicy.value !== 'unsafe-none') {
+        // TODO: Fetch navigation must replace this response with a network error.
+        throw new InternalError('Sandboxed COOP navigation requires network-error processing');
+      }
+    }
+  }
+
+  /** Select the browsing context in which the response will create a document. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#obtain-browsing-context-navigation
+  #obtainBrowsingContext(params: NavigationParams): BrowsingContext {
+    const browsingContext = this.activeBrowsingContext;
+    if (browsingContext === null) throw new InternalError('Navigation requires an active browsing context');
+    if (this.parent !== null) return browsingContext;
+    const result = params.coopEnforcementResult!;
+    // Optional cross-site and singleton-group swaps are not used.
+    if (!result.needsBrowsingContextGroupSwitch) {
+      if (result.wouldNeedBrowsingContextGroupSwitchDueToReportOnly) browsingContext.resetVirtualBrowsingContextGroupID();
+      return browsingContext;
+    }
+    const [newBrowsingContext] = BrowsingContext.createTopLevel(browsingContext.activeWindow.env.userAgent);
+    if (params.openerPolicy.value === 'same-origin-plus-COEP') {
+      // Logical isolation keys agents without granting capabilities that require physical isolation.
+      newBrowsingContext.group!.crossOriginIsolationMode = 'logical';
+    }
+    if (params.finalSandboxingFlagSet.size > 0) {
+      if (params.openerPolicy.value !== 'unsafe-none') {
+        throw new InternalError('A sandboxed group switch requires an unsafe-none opener policy');
+      }
+      newBrowsingContext.popupSandboxingFlagSet = new SandboxingFlagSet(params.finalSandboxingFlagSet);
+    }
+    params.reservedEnv!.targetBrowsingContext = newBrowsingContext;
+    return newBrowsingContext;
   }
 
   /** Combine response and container permissions for the destination document. */

@@ -534,7 +534,8 @@ are all its members and contributions, with the current implementation boundary:
 | --- | --- |
 | `DocumentReadyState`, `DocumentVisibilityState`, `HTMLOrSVGScriptElement` | Registered in this slice; SVG script's remaining URI/attribute/execution dependencies are in its [roadmap](../dom/nodes/svg/ROADMAP.md). |
 | `parseHTMLUnsafe`, `parseHTML` | Missing §8.5 parsing and §8.6 sanitization algorithms. `ParseHTMLUnsafeOptions`, `TrustedHTMLParserOptions`, and `SetHTMLOptions` remain undeclared dependencies. TrustedHTML values already exist; parser-specific policy/options processing does not. |
-| `location`, `domain` | Missing §7.2 relevant-document, navigation, and origin/security behavior. Existing Location is still a URL snapshot; retain PutForwards/LegacyUnforgeable requirements when connecting it. |
+| `location` | Missing §7.2 relevant-document and navigation/security behavior. Existing Location is still a URL snapshot; retain PutForwards/LegacyUnforgeable requirements when connecting it. |
+| `domain` | §7.1.1.2 getter, validation, and origin-keyed no-op are implemented; cross-origin DOM enforcement remains with Window/Location. See the [browsing audit](../browsing/ROADMAP.md#same-origin-relaxation-origin-and-origin-keyed-clusters). |
 | `referrer` | Implemented projection over existing Document state. |
 | `cookie`, `lastModified` | Implemented §3.1.4 accessors over the shared cookie store and retained source metadata; file metadata awaits its loader. |
 | `readyState` | Implemented projection and §3.1.5 readiness-update algorithm. |

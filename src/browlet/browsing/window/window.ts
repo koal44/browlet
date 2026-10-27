@@ -5,6 +5,7 @@ import {
   defineIncludes, defineInterface, definePartialInterface, idlType,
   impl, roAttr, reference, union, xattr, type VoidFunction,
 } from '../../../web-idl/core/index';
+import type { Origin } from '../../../url/index';
 import type { FetchRequestInfo, FetchRequestInit, ResponseImpl } from '../../../fetch/index';
 import type { CSSStylePropertiesImpl } from '../../../stylelet/index';
 
@@ -16,7 +17,7 @@ import { type EventImpl, EventTargetImpl } from '../../dom/events/index';
 import type { TrustedTypePolicyFactoryImpl } from '../policy/trusted-types/index';
 import type { DocumentImpl, ElementImpl } from '../../dom/nodes/index';
 import type { PerformanceImpl } from '../../performance/index';
-import type { WindowEnvironment } from '../../environment';
+import type { BrowletEnvironment, WindowEnvironment } from '../../environment';
 import type { WindowOrWorkerGlobalScopeMixin, TimerHandler } from '../../global-scope';
 import type { StructuredSerializeOptions } from '../../scripting/structured-data/index';
 
@@ -50,7 +51,6 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   }
 
   /** Recognize a Window implementation by its private brand. */
-  // UNUSED
   static is(value: unknown): value is WindowImpl {
     return typeof value === 'object' && value !== null && #document in value;
   }
@@ -75,6 +75,18 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
     return this.getWindowOrWorkerGlobalScopeMixin().isSecureContext;
   }
 
+  get crossOriginIsolated(): boolean {
+    return this.getWindowOrWorkerGlobalScopeMixin().crossOriginIsolated;
+  }
+
+  /** Whether this Window's agent cluster is keyed by origin. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#dom-originAgentCluster
+  get originAgentCluster(): boolean {
+    const cluster = this.env.realm.agent.agentCluster;
+    if (cluster === null) throw new InternalError('Window origin keying requires an agent cluster');
+    return cluster.isOriginKeyed;
+  }
+
   /** Performance object sharing this Window's environment and time origin. */
   get performance(): PerformanceImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().performance;
@@ -83,6 +95,11 @@ export class WindowImpl extends EventTargetImpl implements BrowletGlobalObject {
   /** Policy factory owned by this Window's global-scope mixin. */
   get trustedTypes(): TrustedTypePolicyFactoryImpl {
     return this.getWindowOrWorkerGlobalScopeMixin().trustedTypes;
+  }
+
+  // https://html.spec.whatwg.org/multipage/webappapis.html#windoworworkerglobalscope
+  extractOrigin(entryEnv: BrowletEnvironment): Origin | null {
+    return this.getWindowOrWorkerGlobalScopeMixin().extractOrigin(entryEnv);
   }
 
   /** Retrieve an element's computed style through the associated document's style engine. */
@@ -389,6 +406,7 @@ export const windowIDL = defineInterface({
     roAttr('location', reference('Location'),
       xattr(['PutForwards', 'href'], 'LegacyUnforgeable'),
     ),
+    roAttr('originAgentCluster', idlType.boolean),
     {
       kind: 'named-getter', method: 'getNamedProperty',
       returns: reference('Element'), serializedType: idlType.object,

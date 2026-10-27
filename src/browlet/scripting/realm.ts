@@ -10,8 +10,8 @@ import { coarsenedSharedCurrentTime, type DOMHighResTimeStamp } from '../timing/
 import type { EventImpl } from '../dom/events/index';
 import type { DocumentImpl } from '../dom/nodes/index';
 import type { DOMRealm, WindowDOMRealm } from '../dom/index';
-import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from '../environment';
 import type { WindowImpl, WindowProxyHandle } from '../browsing/window/index';
+import type { BrowletEnvironment, BrowletEnvironmentBase, WindowEnvironment } from '../environment';
 
 import { SandboxAgent, type Agent, type WindowAgent } from './agents';
 import { JSExecutionContext } from './execution-context';

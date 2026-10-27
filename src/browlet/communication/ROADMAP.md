@@ -5,6 +5,17 @@ machinery becomes foundational as soon as Browlet adds child navigables or
 workers. It is also the first public consumer that must prove structured
 transfer and cross-agent task delivery together.
 
+## Origin extraction dependency
+
+The §7.1.1.3 audit added [MessageEventImpl](message-event.ts) with its internal
+origin slot, origin serialization, extraction, and a partial Event-derived
+declaration. An origin record retains identity; strings and null do not extract
+an origin. The public constructor, MessageEventInit, initMessageEvent, data,
+lastEventId, source, and ports remain explicitly unfinished. Source needs
+WindowProxy, MessagePort, and ServiceWorker; delivery must populate the internal
+origin with the value required by its producing algorithm. The current internal
+constructor accepts that value for allocation and focused tests.
+
 ## Constraints to preserve early
 
 - Sending serializes synchronously in the sender's script context; delivery
@@ -34,7 +45,7 @@ transfer and cross-agent task delivery together.
 
 | Planned source | Contract | Specification |
 | --- | --- | --- |
-| `message-event.ts` | `MessageEvent`, initialization, origin serialization, source identity, and transferred-port arrays | HTML §9.1 |
+| existing `message-event.ts` | Complete MessageEvent initialization, source identity, data, and transferred-port arrays around the origin-state skeleton | HTML §9.1 |
 | `window-messaging.ts` | Window `postMessage()`, incumbent settings, target-origin checks, WindowProxy source identity, and posted-message tasks | HTML §9.3 |
 | `message-channel.ts` | `MessageChannel` construction and endpoint identity | HTML §9.4.2 |
 | `message-port.ts` | `MessagePort`, `MessageEventTarget`, entanglement, port task sources, transfer/receiving steps, start/close, and lifecycle cleanup | HTML §§9.4.3–9.4.5 |

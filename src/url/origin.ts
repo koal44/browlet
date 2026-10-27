@@ -58,6 +58,8 @@ export function areSameOriginDomain(a: Origin, b: Origin): boolean {
   return a.domain === null && b.domain === null && areSameOrigin(a, b);
 }
 
+/** Whether the parsed suffix is an equal host or a permissible domain relaxation. */
+// https://html.spec.whatwg.org/multipage/browsers.html#is-a-registrable-domain-suffix-of-or-is-equal-to
 export function isRegistrableDomainSuffixOfOrEqualTo(
   hostSuffixString: string,
   originalHost: Host,

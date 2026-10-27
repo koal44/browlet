@@ -1,6 +1,9 @@
 export { findImageMap } from './image-map';
 export { HTMLMapElementImpl, htmlMapElementIDL } from './map';
-export { HTMLAreaElementImpl, htmlAreaElementIDL } from './area';
+export {
+  HTMLAreaElementImpl, htmlAreaElementIDL,
+  htmlAreaElementIncludesHyperlinkElementUtilsIDL, htmlAreaElementIncludesHTMLHyperlinkElementUtilsIDL,
+} from './area';
 export { HTMLImageElementImpl, htmlImageElementIDL } from './image';
 export { HTMLIFrameElementImpl, htmlIFrameElementIDL } from './iframe';
 export { HTMLEmbedElementImpl, htmlEmbedElementIDL } from './embed';

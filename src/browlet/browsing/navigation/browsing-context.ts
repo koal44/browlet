@@ -8,17 +8,21 @@ import { unsafeSharedCurrentTime } from '../../timing/index';
 import {
   AgentCluster, WindowAgent, type AgentClusterKey, type CrossOriginIsolationMode,
 } from '../../scripting/index';
-import { PermissionsPolicy, SandboxingFlagSet, InsecureRequestsPolicy } from '../policy/index';
+import { OpenerPolicy, PermissionsPolicy, SandboxingFlagSet, InsecureRequestsPolicy } from '../policy/index';
 import { DocumentMode, type DocumentImpl, type ElementImpl } from '../../dom/nodes/index';
 import { CustomElementRegistryImpl } from '../../dom/nodes/html/custom-elements/index';
 import type { WindowProxyHandle, WindowImpl } from '../window/index';
+import type { BrowletEnvironment } from '../../environment';
 import type { UserAgent } from '../../user-agent';
 
 import type { Navigable } from './navigable';
+import type { OpenerPolicyEnforcementResult } from './params';
 
 /** Retains a WindowProxy and the sequence of documents presented through it. */
 // https://html.spec.whatwg.org/multipage/document-sequences.html#browsing-context
 export class BrowsingContext {
+  static #nextVirtualGroupID = 0;
+
   /** Sandbox restrictions inherited when this context was opened as a popup. */
   popupSandboxingFlagSet = new SandboxingFlagSet();
   /** Browsing context that opened this one, if it retains an opener. */
@@ -204,6 +208,62 @@ export class BrowsingContext {
       throw new InternalError('Embedded browsing-context sandboxing is not implemented');
     }
     return new SandboxingFlagSet(this.popupSandboxingFlagSet);
+  }
+
+  /** Assign a fresh identity when a report-only policy would split this group. */
+  resetVirtualBrowsingContextGroupID(): void {
+    this.virtualBrowsingContextGroupID = ++BrowsingContext.#nextVirtualGroupID;
+  }
+
+  /** Carry enforced and report-only isolation decisions across response redirects. */
+  // https://html.spec.whatwg.org/multipage/browsers.html#coop-enforce
+  enforceResponseOpenerPolicy(
+    responseURL: URLRecord, responseOrigin: Origin, responseCOOP: OpenerPolicy,
+    current: OpenerPolicyEnforcementResult, referrer: URLRecord | null | undefined,
+  ): OpenerPolicyEnforcementResult {
+    const result: OpenerPolicyEnforcementResult = {
+      needsBrowsingContextGroupSwitch: current.needsBrowsingContextGroupSwitch,
+      wouldNeedBrowsingContextGroupSwitchDueToReportOnly: current.wouldNeedBrowsingContextGroupSwitchDueToReportOnly,
+      url: responseURL,
+      origin: responseOrigin,
+      openerPolicy: responseCOOP,
+      currentContextIsNavigationSource: true,
+    };
+    const isInitialAboutBlank = this.activeDocument.isInitialAboutBlank;
+    if (isInitialAboutBlank && this.initialURL === null) this.initialURL = responseURL;
+    const group = this.group;
+    if (group === null) throw new InternalError('COOP enforcement requires a browsing context group');
+    const reportSwitch = (disposition: 'enforce' | 'reporting'): void => {
+      if (group.browsingContextSet.size <= 1) return;
+      responseCOOP.queueNavigationToReport(
+        disposition, responseURL, current.url, current.origin, responseOrigin, referrer,
+      );
+      current.openerPolicy.queueNavigationFromReport(
+        disposition, current.url, responseURL, current.origin, responseOrigin, current.currentContextIsNavigationSource,
+      );
+    };
+    if (OpenerPolicy.requiresGroupSwitch(
+      isInitialAboutBlank, responseOrigin, current.origin, responseCOOP.value, current.openerPolicy.value,
+    )) {
+      result.needsBrowsingContextGroupSwitch = true;
+      reportSwitch('enforce');
+    }
+    if (OpenerPolicy.reportOnlyRequiresGroupSwitch(
+      isInitialAboutBlank, responseOrigin, current.origin, responseCOOP, current.openerPolicy,
+    )) {
+      result.wouldNeedBrowsingContextGroupSwitchDueToReportOnly = true;
+      reportSwitch('reporting');
+    }
+    return result;
+  }
+
+  // https://html.spec.whatwg.org/multipage/browsers.html#coop-check-access-report
+  checkAccessShouldBeReported(_accessed: BrowsingContext, _property: string | symbol, _env: BrowletEnvironment): void {
+    // TODO: connect WindowProxy/Location access hooks, validate active ancestor
+    // origins, classify opener relationships, and queue the six access reports.
+    // Source location and URL-scoped Reporting configuration are still required.
+    // SPEC_CLASH(coop-access-report-type): HTML gives all six access bodies the type "access-to-opener"; pending review.
+    throw new InternalError('COOP access reporting is not implemented');
   }
 
   /** Associate the navigation owner, rejecting a different existing owner. */
