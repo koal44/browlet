@@ -928,7 +928,7 @@ HTML's separate `[ReflectDefault]` and `[ReflectRange]` syntax. They carry enume
 and token-list definitions as `unknown`; declaration tests check those definitions
 and reflection constraints. Browlet supplies
 `htmlExtendedAttributeHooks` from `integration/web-idl/` when constructing its
-`BindingWorld`. Its `prepareReflectedAttribute` hook prepares accessors once after resolving declaration
+`BindingWorld`. Its `prepareAttribute` hook prepares accessors once after resolving declaration
 types, retaining them across realm registrations without mutating declarations.
 `BindingWorld` alone owns the prepared-accessor map. Realm registration retrieves
 accessors from that world; `RealmBinding` does not retain another map reference.
@@ -939,6 +939,8 @@ need no Element/ElementInternals discriminator at invocation.
 Declaration tests check the owner contracts. Shared mixins retain one preparation
 and projected-array cache across their includers.
 Generic Web IDL supplies the extension point; HTML owns the reflection rules.
+The same attribute hook retains MessageEvent's frozen ports array in its receiver
+realm, replacing it only when initialization supplies a new implementation snapshot.
 The same composition supplies `prepareHTMLConstructor`: HTML selects definitions
 and consumes construction stacks, while Web IDL retains the prepared overrides,
 passes constructor identities, selects platform prototypes, and projects objects.

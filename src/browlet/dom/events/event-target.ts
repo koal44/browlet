@@ -82,7 +82,7 @@ export class EventTargetImpl {
     }
 
     event.isTrusted = false;
-    return this.#dispatch(event);
+    return this.dispatch(event);
   }
 
   /** Create and dispatch a trusted event, returning false if canceled. */
@@ -96,7 +96,7 @@ export class EventTargetImpl {
     const event = this.createTrustedEvent(eventConstructor);
     event.type = name;
     initialize?.(event);
-    return this.#dispatch(event, legacyTargetOverride);
+    return this.dispatch(event, legacyTargetOverride);
   }
 
   /** Create a trusted event in the environment supplied at construction. */
@@ -224,18 +224,9 @@ export class EventTargetImpl {
 
   runLegacyCanceledActivationBehavior(): void {}
 
-  protected isDefaultPassiveTarget(): boolean {
-    return false;
-  }
-
-  protected addingEventListener(_type: string): void {}
-
-  protected removingEventListener(_type: string): void {}
-
-  protected eventListenerListChanged(_type: string): void {}
-
+  /** Dispatch an internally created event without changing its trusted flag. */
   // https://dom.spec.whatwg.org/#concept-event-dispatch
-  #dispatch(
+  dispatch(
     event: EventImpl,
     legacyTargetOverride = false,
   ): boolean {
@@ -384,6 +375,16 @@ export class EventTargetImpl {
 
     return !event.defaultPrevented;
   }
+
+  protected isDefaultPassiveTarget(): boolean {
+    return false;
+  }
+
+  protected addingEventListener(_type: string): void {}
+
+  protected removingEventListener(_type: string): void {}
+
+  protected eventListenerListChanged(_type: string): void {}
 
   /** Invoke this target's listeners for one entry in the event's dispatch path. */
   // https://dom.spec.whatwg.org/#concept-event-listener-invoke

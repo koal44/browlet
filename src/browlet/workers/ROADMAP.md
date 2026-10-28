@@ -8,6 +8,9 @@ structured-clone implementation.
 
 ## Present
 
+- `service-worker.ts` supplies a non-constructible, secure-context ServiceWorker
+  identity for MessageEventSource. Its registration, state, messaging, and
+  AbstractWorker members remain unfinished; this is separate from the global scope.
 - `BrowletEnvironment.fetchClassicWorkerScript()` supplies request setup, the custom fetch
   hook, response validation, and UTF-8 decoding up to the explicitly unfinished
   classic-script creation method. Its tests use existing Window settings to

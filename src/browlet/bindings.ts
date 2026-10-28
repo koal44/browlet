@@ -49,7 +49,9 @@ import {
   locationIDL, barPropIDL, WindowImpl, windowEventIDL, windowIDL, windowIncludesWindowOrWorkerGlobalScopeIDL,
   WindowProxyHandle, windowProxyDefinition,
 } from './browsing/window/index';
-import { messageEventIDL } from './communication/index';
+import {
+  messageEventIDL, messageEventInitIDL, messageEventSourceIDL, messagePortIDL, eventSourceIDL, eventSourceInitIDL,
+} from './communication/index';
 import { originIDL } from './browsing/index';
 import {
   type WindowEnvironmentInit, BrowletEnvironmentBase, SandboxEnvironment, WindowEnvironment, type BrowletEnvironment,
@@ -63,6 +65,7 @@ import {
   structuredSerializeOptionsIDL, structuredDeserialize, type SerializedRecord, structuredSerialize,
   structuredClone,
 } from './scripting/structured-data/index';
+import { serviceWorkerIDL } from './workers/index';
 import { progressEventIDL, progressEventInitIDL } from './integration/xhr/index';
 import { htmlExtendedAttributeHooks } from './integration/web-idl/index';
 import { fileReaderIDL, objectURLIDL } from './integration/file/index';
@@ -240,6 +243,12 @@ export const browletDefinitions = [
   errorEventIDL,
   errorEventInitIDL,
   messageEventIDL,
+  messageEventInitIDL,
+  messageEventSourceIDL,
+  messagePortIDL,
+  eventSourceIDL,
+  eventSourceInitIDL,
+  serviceWorkerIDL,
   promiseRejectionEventIDL,
   promiseRejectionEventInitIDL,
   structuredSerializeOptionsIDL,

@@ -14,7 +14,7 @@ describe('Web IDL extended-attribute integration', () => {
     let preparations = 0;
     const invocations: WebIDLEnvironment[] = [];
     const extendedAttributes: ExtendedAttributeHooks = {
-      prepareReflectedAttribute(member, owners) {
+      prepareAttribute(member, owners) {
         if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
         preparations++;
         expect(member.type.kind).toBe('integer');
@@ -72,7 +72,7 @@ describe('Web IDL extended-attribute integration', () => {
       defineIncludes({ interface: 'Second', mixin: 'Shared' }),
     ], {
       extendedAttributes: {
-        prepareReflectedAttribute(member, owners) {
+        prepareAttribute(member, owners) {
           if (!hasExtendedAttribute(member.extendedAttributes, 'Reflect')) return;
           preparations++;
           expect(owners.map((owner) => owner.implementations.map(({ implClass }) => implClass))).toEqual([[FirstImpl], [SecondImpl]]);
@@ -98,7 +98,7 @@ describe('Web IDL extended-attribute integration', () => {
     const failure = new Error('Invalid extended attribute');
     expect(() => new BindingWorld(definitions, {
       extendedAttributes: {
-        prepareReflectedAttribute(member) {
+        prepareAttribute(member) {
           if (hasExtendedAttribute(member.extendedAttributes, 'Reflect')) throw failure;
         },
       },

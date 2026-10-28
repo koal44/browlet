@@ -60,7 +60,7 @@ extended attribute.
 `BindingWorld` accepts Browlet's `ExtendedAttributeHooks` integration, used
 for preparing reflection accessors and HTML constructor overrides. Extend that explicit
 composition seam for reaction wrapping when implementing this slice; the current
-`prepareReflectedAttribute` hook does not wrap operations, setters, or deleters. Preserve
+`prepareAttribute` hook does not wrap operations, setters, or deleters. Preserve
 the receiver's relevant agent when a method is borrowed across realms.
 
 Continue with `Document.createElement*`, definitions and upgrade, then tree

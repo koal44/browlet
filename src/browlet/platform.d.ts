@@ -55,6 +55,8 @@ export type EpochTimeStamp = number;
 
 export type EventHandler = EventHandlerNonNull | null;
 
+export type MessageEventSource = WindowProxy | MessagePort | ServiceWorker;
+
 export type TimerHandler = string | Function;
 
 export type CSSOMString = string;
@@ -129,6 +131,21 @@ export interface ErrorEventInit {
   filename?: string;
   lineno?: number;
   message?: string;
+}
+
+export interface MessageEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  data?: any;
+  lastEventId?: string;
+  origin?: string;
+  ports?: Iterable<MessagePort>;
+  source?: WindowProxy | MessagePort | ServiceWorker | null;
+}
+
+export interface EventSourceInit {
+  withCredentials?: boolean;
 }
 
 export interface PromiseRejectionEventInit {
@@ -1541,12 +1558,58 @@ export interface ErrorEventConstructor extends Ctor<EventConstructor> {
 }
 
 export interface MessageEvent extends Event {
+  readonly data: any;
   readonly origin: string;
+  readonly lastEventId: string;
+  readonly source: WindowProxy | MessagePort | ServiceWorker | null;
+  readonly ports: ReadonlyArray<MessagePort>;
+  initMessageEvent(type: string, bubbles?: boolean, cancelable?: boolean, data?: any, origin?: string, lastEventId?: string, source?: WindowProxy | MessagePort | ServiceWorker | null, ports?: Iterable<MessagePort>): void;
 }
 
 export interface MessageEventConstructor extends Ctor<EventConstructor> {
   readonly prototype: MessageEvent;
   [Symbol.hasInstance](value: unknown): value is MessageEvent;
+  new (type: string, eventInitDict?: MessageEventInit): MessageEvent;
+}
+
+export interface MessagePort extends EventTarget {
+
+}
+
+export interface MessagePortConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: MessagePort;
+  [Symbol.hasInstance](value: unknown): value is MessagePort;
+}
+
+export interface EventSource extends EventTarget {
+  readonly url: string;
+  readonly withCredentials: boolean;
+  readonly CONNECTING: 0;
+  readonly OPEN: 1;
+  readonly CLOSED: 2;
+  readonly readyState: number;
+  onopen: EventHandlerNonNull | null;
+  onmessage: EventHandlerNonNull | null;
+  onerror: EventHandlerNonNull | null;
+  close(): void;
+}
+
+export interface EventSourceConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: EventSource;
+  [Symbol.hasInstance](value: unknown): value is EventSource;
+  new (url: string, eventSourceInitDict?: EventSourceInit): EventSource;
+  readonly CONNECTING: 0;
+  readonly OPEN: 1;
+  readonly CLOSED: 2;
+}
+
+export interface ServiceWorker extends EventTarget {
+
+}
+
+export interface ServiceWorkerConstructor extends Ctor<EventTargetConstructor> {
+  readonly prototype: ServiceWorker;
+  [Symbol.hasInstance](value: unknown): value is ServiceWorker;
 }
 
 export interface PromiseRejectionEvent extends Event {
@@ -1709,6 +1772,9 @@ export interface Window extends EventTarget {
   Performance: PerformanceConstructor;
   ErrorEvent: ErrorEventConstructor;
   MessageEvent: MessageEventConstructor;
+  MessagePort: MessagePortConstructor;
+  EventSource: EventSourceConstructor;
+  ServiceWorker: ServiceWorkerConstructor;
   PromiseRejectionEvent: PromiseRejectionEventConstructor;
   Window: WindowConstructor;
   Event: EventConstructor;

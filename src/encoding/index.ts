@@ -12,4 +12,5 @@ export {
   utf8DecodeWithoutBOMOrFailQueue, utf8EncodeQueue,
 } from './codecs/utf-8';
 export { TextDecoderStreamImpl } from './text-decoder-stream';
+export { TextDecoderImpl } from './text-decoder';
 export { encodingIDLDefinitions } from './web-idl';

@@ -12,6 +12,7 @@ import { ReportingEndpoint, type ReportImpl, type ReportingObserverImpl } from '
 import { TrustedTypePolicyFactoryImpl } from './browsing/policy/trusted-types/index';
 import type { DocumentImpl } from './dom/nodes/index';
 import { PerformanceImpl } from './performance/index';
+import type { EventSourceImpl } from './communication/index';
 import type { BrowletEnvironment } from './environment';
 import type { StructuredSerializeOptions } from './scripting/structured-data/index';
 
@@ -29,9 +30,8 @@ export class WindowOrWorkerGlobalScopeMixin {
   /** WebTransports registered for cleanup in this global. */
   // PROVISIONAL: WebTransport creation and registration are not implemented.
   webTransports: { cleanup(): void; }[] = [];
-  /** EventSources registered for cleanup in this global. */
-  // PROVISIONAL: EventSource creation and registration are not implemented.
-  eventSources: { close(): void; }[] = [];
+  /** Active EventSources, retained until close or permanent document cleanup. */
+  eventSources = new Set<EventSourceImpl>();
   /** Named Reporting destinations configured by this global's resource response. */
   reportingEndpoints: ReportingEndpoint[] = [];
   /** Reports awaiting delivery for this global, independent of other globals. */

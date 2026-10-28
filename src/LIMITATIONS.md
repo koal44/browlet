@@ -470,6 +470,11 @@ explicit standard content-handler list used for sink metadata.
   an author-catchable exception. See the
   [clock contract](../node-compat/README.md#temporal-clock).
 
+- **EventSource lifetime is conservative.** Active sources remain retained until
+  `close()` or permanent Document cleanup; listener-sensitive collection is not
+  implemented. Worker globals and navigation-driven destruction remain separate
+  integration gates. See the [communication roadmap](browlet/communication/ROADMAP.md#92-eventsource).
+
 - **HTML element identities do not imply complete element APIs.** All specified
   HTML names now select their concrete or intentionally generic interface,
   including HTML-namespace elements in XML documents. Many interfaces expose

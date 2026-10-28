@@ -7,10 +7,10 @@ import type { PlatformRecord } from './platform';
 import type { BindingContext } from './world';
 import type { SecurityCheckType } from './realm';
 
-/** Specification-owned annotation behavior supplied when composing a binding world. */
+/** Specification-owned binding behavior supplied when composing a binding world. */
 export type ExtendedAttributeHooks<Env extends WebIDLEnvironment = WebIDLEnvironment> = {
-  /** Prepare reflected accessors once, after type resolution, for each declaring or including interface. */
-  prepareReflectedAttribute?: (
+  /** Prepare accessors once, after type resolution, for each declaring or including interface. */
+  prepareAttribute?: (
     attribute: IDLAttribute, owners: AssembledInterface[],
   ) => Map<AssembledInterface, AttributeBinding<Env>> | undefined;
   /** Prepare HTML's overridden constructor steps for an annotated interface. */

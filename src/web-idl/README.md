@@ -410,7 +410,7 @@ after assembly. Dictionaries retain their members in conversion order;
 callback interfaces index their operation declarations.
 
 The optional second constructor argument accepts `{ extendedAttributes }`.
-Its `ExtendedAttributeHooks<Env>.prepareReflectedAttribute(member, owners)` receives
+Its `ExtendedAttributeHooks<Env>.prepareAttribute(member, owners)` receives
 each assembled interface attribute once, together with every declaring or including
 interface, and can return a map from those owners to binding accessors. Shared
 mixins include all their owners in that single preparation. Types are already
@@ -426,8 +426,9 @@ then erases that narrower receiver type at its entry to the generic registry.
 HTML checks these internal declaration contracts in tests, including every mixin
 includer, and selects attribute storage during preparation rather than invocation.
 Ordinary binding still validates and unwraps the receiver at invocation.
-Unclaimed annotations retain ordinary binding. Browlet supplies HTML reflection
-through this seam; Web IDL itself does not import HTML or interpret `[Reflect]`.
+Unclaimed attributes retain ordinary binding. Browlet supplies HTML reflection
+and MessageEvent's cached ports array through this seam; Web IDL itself does not
+import HTML or interpret `[Reflect]`.
 Operation and reaction-boundary wrapping are not implemented by this hook yet.
 
 The `prepareHTMLConstructor(owner)` hook receives Browlet's
@@ -632,7 +633,8 @@ Converter methods take the value; type and ownership come from the receiver.
 read by overload or union resolution. `FrozenArrayConverter` reuses iteration
 and element conversion, then projects and freezes the converted entries.
 `BindingContext.createFrozenArray(values, type)` exposes the same projection for
-bindings that must retain array identity, such as HTML element-array reflection.
+bindings that must retain array identity, such as HTML element-array reflection
+and MessageEvent's ports.
 It accepts only an assembled `IDLFrozenArrayType`; declaration types are resolved
 before binding preparation.
 The binding supplies implementation entries and caches the returned platform

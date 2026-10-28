@@ -34,7 +34,7 @@ export class BindingWorld<in out Env extends WebIDLEnvironment = WebIDLEnvironme
       // Assembly itself only combines declarations; it does not invoke the callbacks.
       ...(definitions as Definition[]),
     ]);
-    const prepare = options.extendedAttributes?.prepareReflectedAttribute;
+    const prepare = options.extendedAttributes?.prepareAttribute;
     if (prepare) {
       // A shared mixin member must be prepared against all its includers, not just the first.
       const owners = new Map<IDLAttribute, AssembledInterface[]>();

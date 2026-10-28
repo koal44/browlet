@@ -45,6 +45,8 @@ import { NodeIteratorImpl, TreeWalkerImpl, SHOW_ALL, type NodeFilterCallback } f
 import { IntersectionObserverImpl, type IntersectionObserverEntryImpl } from '../intersection-observer/index';
 import type { NavigationTimingRecord } from '../../performance/index';
 import type { WindowImpl, WindowProxyHandle } from '../../browsing/window/index';
+// eslint-disable-next-line browlet/dependency-direction -- DOM's legacy event factory includes HTML-defined event interfaces.
+import { MessageEventImpl } from '../../communication/index';
 import type { BrowletEnvironment } from '../../environment';
 import type { DocumentParser } from '../../html/parser/index';
 import type { SerializedRecord } from '../../scripting/structured-data/index';
@@ -878,11 +880,9 @@ export class DocumentImpl extends NodeImpl {
   /** Legacy author event construction; the result must be initialized before dispatch. */
   // https://dom.spec.whatwg.org/#dom-document-createevent
   createEvent(name: string): EventImpl {
-    const normalized = asciiLower(name);
-    const constructor = normalized === 'customevent' ? CustomEventImpl
-      : normalized === 'event' || normalized === 'events' || normalized === 'htmlevents' ? EventImpl : null;
+    const constructor = legacyEventConstructors.get(asciiLower(name));
     // Other entries in DOM's legacy table are not exposed by Browlet yet.
-    if (constructor === null) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
+    if (constructor === undefined) throw new DOMExceptionImpl('', DOMExceptionNames.notSupported);
     const event = this.env.createEvent(constructor);
     event.isTrusted = false;
     event.initialized = false;
@@ -1867,6 +1867,12 @@ export class DocumentImpl extends NodeImpl {
     }
   }
 }
+
+// Supported entries in DOM's legacy createEvent table.
+const legacyEventConstructors = new Map([
+  ['event', EventImpl], ['events', EventImpl], ['htmlevents', EventImpl],
+  ['customevent', CustomEventImpl], ['messageevent', MessageEventImpl],
+]);
 
 /*
  * [Exposed=Window]

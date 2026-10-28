@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { UserAgent } from '../../../src/browlet/user-agent';
+import { EventSourceImpl } from '../../../src/browlet/communication/event-source';
 import { getRelevantRealm } from '../../support/browlet-binding';
 import { TopLevelTraversable } from '../../../src/browlet/browsing/navigation/navigable';
 import { ReportingObserverImpl } from '../../../src/browlet/reporting/observer';
@@ -77,13 +78,13 @@ describe('Document destruction', () => {
     const disentangle = vi.fn();
     const makeDisappear = vi.fn();
     const cleanup = vi.fn();
-    const close = vi.fn();
+    const source = new EventSourceImpl('data:text/event-stream,', { withCredentials: false }, env);
+    const close = vi.spyOn(source, 'close');
     const terminate = vi.fn();
     const ownerSet = new Set([document, otherDocument]);
     global.messagePorts.push({ disentangle });
     global.webSockets.push({ makeDisappear });
     global.webTransports.push({ cleanup });
-    global.eventSources.push({ close });
     document.ownedWorkers.push({ ownerSet });
     document.workletGlobalScopes.push({ terminate });
 

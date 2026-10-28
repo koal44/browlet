@@ -209,7 +209,9 @@ arguments through those provisional contracts.
 Implemented: document salvageability/blocking-reason state,
 `EventLoop.removeTasksForDocument()`, `GlobalTimers.clear()`, and global
 `clearReportingState()`. Blob URL unloading cleanup removes registrations by
-creator environment. The bounded HTML loader registers its active parser and
+creator environment. EventSource registers live connections for global cleanup;
+document destruction closes them and cancels their retries. The bounded HTML loader
+registers its active parser and
 cancels input/resumptions on abort. Focused tests cover these paths, task ownership,
 queued/delayed timer cancellation, and isolation of report state between globals.
 
@@ -219,7 +221,7 @@ queued/delayed timer cancellation, and isolation of report state between globals
 | `parser.abort()` | Active registration and input cancellation exist. Complete §13.2's readiness events, open-element cleanup, speculative-parser cancellation, and full parser lifecycle. |
 | `userAgent.webDriverBiDiNavigationAborted()` | A no-op until BiDi sessions exist. The lifecycle call supplies the navigation ID, canceled status, URL, and navigable. UserAgent also owns the environment-scoped BiDi queries. |
 | Global `messagePorts` | Messaging must maintain relevant-global membership and disentangle those ports. MessagePort itself is not implemented. |
-| Global `webSockets`, `webTransports`, `eventSources` | Those subsystems must own their live objects and cleanup operations. They are not current runnable producers. |
+| Global `webSockets`, `webTransports` | Those subsystems must own their live objects and cleanup operations. They are not current runnable producers. |
 | `document.ownedWorkers` / `workletGlobalScopes` | Worker and Worklet integration must maintain actual ownership, remove the Document from worker owner sets, and terminate document-owned worklets. |
 
 The global collections and inline structural types are deliberately minimal.

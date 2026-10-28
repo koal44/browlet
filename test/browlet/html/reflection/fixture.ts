@@ -98,9 +98,9 @@ export function createReflectionWorld(additionalDefinitions: Definition[] = []) 
   ], {
     extendedAttributes: {
       ...htmlExtendedAttributeHooks,
-      prepareReflectedAttribute(member, owners) {
+      prepareAttribute(member, owners) {
         validateReflectedAttribute(member, owners);
-        return htmlExtendedAttributeHooks.prepareReflectedAttribute!(member, owners);
+        return htmlExtendedAttributeHooks.prepareAttribute!(member, owners);
       },
     },
   });
